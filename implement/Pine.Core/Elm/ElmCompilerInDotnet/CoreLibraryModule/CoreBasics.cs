@@ -194,141 +194,253 @@ public class CoreBasics
         return functionName switch
         {
             // (+) : number -> number -> number
-            "add" => new CoreFunctionInfo(
-                [TypeInference.InferredType.Number(), TypeInference.InferredType.Number(), TypeInference.InferredType.Number()],
+            "add" =>
+            new CoreFunctionInfo(
+                [
+                TypeInference.InferredType.Number(),
+                TypeInference.InferredType.Number(),
+                TypeInference.InferredType.Number()
+                ],
                 args => Generic_Add(args[0], args[1])),
 
             // (-) : number -> number -> number
-            "sub" => new CoreFunctionInfo(
-                [TypeInference.InferredType.Number(), TypeInference.InferredType.Number(), TypeInference.InferredType.Number()],
+            "sub" =>
+            new CoreFunctionInfo(
+                [
+                TypeInference.InferredType.Number(),
+                TypeInference.InferredType.Number(),
+                TypeInference.InferredType.Number()
+                ],
                 args => Generic_Sub(args[0], args[1])),
 
             // (*) : number -> number -> number
-            "mul" => new CoreFunctionInfo(
-                [TypeInference.InferredType.Number(), TypeInference.InferredType.Number(), TypeInference.InferredType.Number()],
+            "mul" =>
+            new CoreFunctionInfo(
+                [
+                TypeInference.InferredType.Number(),
+                TypeInference.InferredType.Number(),
+                TypeInference.InferredType.Number()
+                ],
                 args => Generic_Mul(args[0], args[1])),
 
             // (//) : Int -> Int -> Int
-            "idiv" => new CoreFunctionInfo(
+            "idiv" =>
+            new CoreFunctionInfo(
                 [TypeInference.InferredType.Int(), TypeInference.InferredType.Int(), TypeInference.InferredType.Int()],
                 args => Int_div(args[0], args[1])),
 
             // modBy : Int -> Int -> Int
-            "modBy" => new CoreFunctionInfo(
+            "modBy" =>
+            new CoreFunctionInfo(
                 [TypeInference.InferredType.Int(), TypeInference.InferredType.Int(), TypeInference.InferredType.Int()],
                 args => Int_modBy(args[0], args[1])),
 
             // remainderBy : Int -> Int -> Int
-            "remainderBy" => new CoreFunctionInfo(
+            "remainderBy" =>
+            new CoreFunctionInfo(
                 [TypeInference.InferredType.Int(), TypeInference.InferredType.Int(), TypeInference.InferredType.Int()],
                 args => Int_remainderBy(args[0], args[1])),
 
             // (==) : a -> a -> Bool
-            "eq" => new CoreFunctionInfo(
-                [new TypeInference.InferredType.UnknownType(), new TypeInference.InferredType.UnknownType(), TypeInference.InferredType.Bool()],
+            "eq" =>
+            new CoreFunctionInfo(
+                [
+                new TypeInference.InferredType.UnknownType(),
+                new TypeInference.InferredType.UnknownType(),
+                TypeInference.InferredType.Bool()
+                ],
                 args => Generic_Eq(args[0], args[1])),
 
             // (/=) : a -> a -> Bool
-            "neq" => new CoreFunctionInfo(
-                [new TypeInference.InferredType.UnknownType(), new TypeInference.InferredType.UnknownType(), TypeInference.InferredType.Bool()],
+            "neq" =>
+            new CoreFunctionInfo(
+                [
+                new TypeInference.InferredType.UnknownType(),
+                new TypeInference.InferredType.UnknownType(),
+                TypeInference.InferredType.Bool()
+                ],
                 args => Generic_Neq(args[0], args[1])),
 
             // compare : comparable -> comparable -> Order
-            "compare" => new CoreFunctionInfo(
-                [new TypeInference.InferredType.UnknownType(), new TypeInference.InferredType.UnknownType(), new TypeInference.InferredType.UnknownType()],
+            "compare" =>
+            new CoreFunctionInfo(
+                [
+                new TypeInference.InferredType.UnknownType(),
+                new TypeInference.InferredType.UnknownType(),
+                new TypeInference.InferredType.UnknownType()
+                ],
                 args => Generic_Compare(args[0], args[1])),
 
             // (<) : comparable -> comparable -> Bool
-            "lt" => new CoreFunctionInfo(
-                [new TypeInference.InferredType.UnknownType(), new TypeInference.InferredType.UnknownType(), TypeInference.InferredType.Bool()],
+            "lt" =>
+            new CoreFunctionInfo(
+                [
+                new TypeInference.InferredType.UnknownType(),
+                new TypeInference.InferredType.UnknownType(),
+                TypeInference.InferredType.Bool()
+                ],
                 args => Generic_Lt(args[0], args[1])),
 
             // (>) : comparable -> comparable -> Bool
-            "gt" => new CoreFunctionInfo(
-                [new TypeInference.InferredType.UnknownType(), new TypeInference.InferredType.UnknownType(), TypeInference.InferredType.Bool()],
+            "gt" =>
+            new CoreFunctionInfo(
+                [
+                new TypeInference.InferredType.UnknownType(),
+                new TypeInference.InferredType.UnknownType(),
+                TypeInference.InferredType.Bool()
+                ],
                 args => Generic_Gt(args[0], args[1])),
 
             // (<=) : comparable -> comparable -> Bool
-            "le" => new CoreFunctionInfo(
-                [new TypeInference.InferredType.UnknownType(), new TypeInference.InferredType.UnknownType(), TypeInference.InferredType.Bool()],
+            "le" =>
+            new CoreFunctionInfo(
+                [
+                new TypeInference.InferredType.UnknownType(),
+                new TypeInference.InferredType.UnknownType(),
+                TypeInference.InferredType.Bool()
+                ],
                 args => Generic_Le(args[0], args[1])),
 
             // (>=) : comparable -> comparable -> Bool
-            "ge" => new CoreFunctionInfo(
-                [new TypeInference.InferredType.UnknownType(), new TypeInference.InferredType.UnknownType(), TypeInference.InferredType.Bool()],
+            "ge" =>
+            new CoreFunctionInfo(
+                [
+                new TypeInference.InferredType.UnknownType(),
+                new TypeInference.InferredType.UnknownType(),
+                TypeInference.InferredType.Bool()
+                ],
                 args => Generic_Ge(args[0], args[1])),
 
             // (&&) : Bool -> Bool -> Bool
-            "and" => new CoreFunctionInfo(
-                [TypeInference.InferredType.Bool(), TypeInference.InferredType.Bool(), TypeInference.InferredType.Bool()],
+            "and" =>
+            new CoreFunctionInfo(
+                [
+                TypeInference.InferredType.Bool(),
+                TypeInference.InferredType.Bool(),
+                TypeInference.InferredType.Bool()
+                ],
                 args => Generic_And(args[0], args[1])),
 
             // (||) : Bool -> Bool -> Bool
-            "or" => new CoreFunctionInfo(
-                [TypeInference.InferredType.Bool(), TypeInference.InferredType.Bool(), TypeInference.InferredType.Bool()],
+            "or" =>
+            new CoreFunctionInfo(
+                [
+                TypeInference.InferredType.Bool(),
+                TypeInference.InferredType.Bool(),
+                TypeInference.InferredType.Bool()
+                ],
                 args => Generic_Or(args[0], args[1])),
 
             // xor : Bool -> Bool -> Bool
-            "xor" => new CoreFunctionInfo(
-                [TypeInference.InferredType.Bool(), TypeInference.InferredType.Bool(), TypeInference.InferredType.Bool()],
+            "xor" =>
+            new CoreFunctionInfo(
+                [
+                TypeInference.InferredType.Bool(),
+                TypeInference.InferredType.Bool(),
+                TypeInference.InferredType.Bool()
+                ],
                 args => Generic_Xor(args[0], args[1])),
 
             // not : Bool -> Bool
-            "not" => new CoreFunctionInfo(
+            "not" =>
+            new CoreFunctionInfo(
                 [TypeInference.InferredType.Bool(), TypeInference.InferredType.Bool()],
                 args => Generic_Not(args[0])),
 
             // negate : number -> number
-            "negate" => new CoreFunctionInfo(
+            "negate" =>
+            new CoreFunctionInfo(
                 [TypeInference.InferredType.Number(), TypeInference.InferredType.Number()],
                 args => Generic_Negate(args[0])),
 
             // min : comparable -> comparable -> comparable
-            "min" => new CoreFunctionInfo(
-                [new TypeInference.InferredType.UnknownType(), new TypeInference.InferredType.UnknownType(), new TypeInference.InferredType.UnknownType()],
+            "min" =>
+            new CoreFunctionInfo(
+                [
+                new TypeInference.InferredType.UnknownType(),
+                new TypeInference.InferredType.UnknownType(),
+                new TypeInference.InferredType.UnknownType()
+                ],
                 args => Generic_Min(args[0], args[1])),
 
             // max : comparable -> comparable -> comparable
-            "max" => new CoreFunctionInfo(
-                [new TypeInference.InferredType.UnknownType(), new TypeInference.InferredType.UnknownType(), new TypeInference.InferredType.UnknownType()],
+            "max" =>
+            new CoreFunctionInfo(
+                [
+                new TypeInference.InferredType.UnknownType(),
+                new TypeInference.InferredType.UnknownType(),
+                new TypeInference.InferredType.UnknownType()
+                ],
                 args => Generic_Max(args[0], args[1])),
 
             // identity : a -> a
-            "identity" => new CoreFunctionInfo(
+            "identity" =>
+            new CoreFunctionInfo(
                 [new TypeInference.InferredType.UnknownType(), new TypeInference.InferredType.UnknownType()],
                 args => Generic_Identity(args[0])),
 
             // always : a -> b -> a
-            "always" => new CoreFunctionInfo(
-                [new TypeInference.InferredType.UnknownType(), new TypeInference.InferredType.UnknownType(), new TypeInference.InferredType.UnknownType()],
+            "always" =>
+            new CoreFunctionInfo(
+                [
+                new TypeInference.InferredType.UnknownType(),
+                new TypeInference.InferredType.UnknownType(),
+                new TypeInference.InferredType.UnknownType()
+                ],
                 args => Generic_Always(args[0], args[1])),
 
             // apL : (a -> b) -> a -> b  (i.e. (<|) f x = f x)
-            "apL" => new CoreFunctionInfo(
-                [new TypeInference.InferredType.UnknownType(), new TypeInference.InferredType.UnknownType(), new TypeInference.InferredType.UnknownType()],
+            "apL" =>
+            new CoreFunctionInfo(
+                [
+                new TypeInference.InferredType.UnknownType(),
+                new TypeInference.InferredType.UnknownType(),
+                new TypeInference.InferredType.UnknownType()
+                ],
                 args => Generic_ApL(args[0], args[1])),
 
             // apR : a -> (a -> b) -> b  (i.e. (|>) x f = f x)
-            "apR" => new CoreFunctionInfo(
-                [new TypeInference.InferredType.UnknownType(), new TypeInference.InferredType.UnknownType(), new TypeInference.InferredType.UnknownType()],
+            "apR" =>
+            new CoreFunctionInfo(
+                [
+                new TypeInference.InferredType.UnknownType(),
+                new TypeInference.InferredType.UnknownType(),
+                new TypeInference.InferredType.UnknownType()
+                ],
                 args => Generic_ApR(args[0], args[1])),
 
             // (++) : appendable -> appendable -> appendable
-            "append" => new CoreFunctionInfo(
-                [new TypeInference.InferredType.UnknownType(), new TypeInference.InferredType.UnknownType(), new TypeInference.InferredType.UnknownType()],
+            "append" =>
+            new CoreFunctionInfo(
+                [
+                new TypeInference.InferredType.UnknownType(),
+                new TypeInference.InferredType.UnknownType(),
+                new TypeInference.InferredType.UnknownType()
+                ],
                 args => Generic_Append(args[0], args[1])),
 
             // composeR : (a -> b) -> (b -> c) -> (a -> c)  (i.e. (>>) f g x = g (f x))
-            "composeR" => new CoreFunctionInfo(
-                [new TypeInference.InferredType.UnknownType(), new TypeInference.InferredType.UnknownType(), new TypeInference.InferredType.UnknownType()],
+            "composeR" =>
+            new CoreFunctionInfo(
+                [
+                new TypeInference.InferredType.UnknownType(),
+                new TypeInference.InferredType.UnknownType(),
+                new TypeInference.InferredType.UnknownType()
+                ],
                 args => Generic_ComposeR(args[0], args[1])),
 
             // composeL : (b -> c) -> (a -> b) -> (a -> c)  (i.e. (<<) g f x = g (f x))
-            "composeL" => new CoreFunctionInfo(
-                [new TypeInference.InferredType.UnknownType(), new TypeInference.InferredType.UnknownType(), new TypeInference.InferredType.UnknownType()],
+            "composeL" =>
+            new CoreFunctionInfo(
+                [
+                new TypeInference.InferredType.UnknownType(),
+                new TypeInference.InferredType.UnknownType(),
+                new TypeInference.InferredType.UnknownType()
+                ],
                 args => Generic_ComposeL(args[0], args[1])),
 
-            _ => null
+            _ =>
+            null
         };
     }
 
@@ -356,7 +468,9 @@ public class CoreBasics
             "++" => "append",
             ">>" => "composeR",
             "<<" => "composeL",
-            _ => null
+
+            _ =>
+            null
         };
     }
 
@@ -467,8 +581,7 @@ public class CoreBasics
                 minuend,
                 BuiltinMul(
                     LiteralInt(-1),
-                    subtrahend)
-                );
+                    subtrahend));
     }
 
     /// <summary>
@@ -1156,10 +1269,11 @@ public class CoreBasics
         // g(f(x))
         var gfx = new Expression.ParseAndEval(encoded: gCaptured, environment: fx);
 
-        return FunctionValueBuilder.EmitFunctionExpression(
-            gfx,
-            parameterCount: 1,
-            envFunctionsExprs: [f, g]);
+        return
+            FunctionValueBuilder.EmitFunctionExpression(
+                gfx,
+                parameterCount: 1,
+                envFunctionsExprs: [f, g]);
     }
 
     /// <summary>
@@ -1197,10 +1311,11 @@ public class CoreBasics
         // g(f(x))
         var gfx = new Expression.ParseAndEval(encoded: gCaptured, environment: fx);
 
-        return FunctionValueBuilder.EmitFunctionExpression(
-            gfx,
-            parameterCount: 1,
-            envFunctionsExprs: [g, f]);
+        return
+            FunctionValueBuilder.EmitFunctionExpression(
+                gfx,
+                parameterCount: 1,
+                envFunctionsExprs: [g, f]);
     }
 
     private static Expression Internal_Int_div(
@@ -1222,6 +1337,7 @@ public class CoreBasics
         * */
 
         var zero = LiteralInt(0);
+
         var negativeOne = LiteralInt(-1);
 
         // Check if divisor is 0
@@ -1230,6 +1346,7 @@ public class CoreBasics
 
         // Check signs: int_is_sorted_asc [0, x] means 0 <= x (x is non-negative)
         var dividendNonNegative = BuiltinIntIsSortedAsc(zero, dividend);
+
         var divisorNonNegative = BuiltinIntIsSortedAsc(zero, divisor);
 
         // Absolute values
@@ -1259,10 +1376,11 @@ public class CoreBasics
                 falseBranch: BuiltinMul(absQuotient, negativeOne));
 
         // Final result: 0 if divisor is 0, otherwise the computed quotient
-        return Expression.ConditionalInstance(
-            condition: divisorIsZero,
-            trueBranch: zero,
-            falseBranch: signedQuotient);
+        return
+            Expression.ConditionalInstance(
+                condition: divisorIsZero,
+                trueBranch: zero,
+                falseBranch: signedQuotient);
     }
 
     /// <summary>
@@ -1321,8 +1439,12 @@ public class CoreBasics
         // env[0] = envFunctions list, env[0][0] = self (idivHelper)
         // env[1] = args list, env[1][0] = dividend, env[1][1] = divisor, env[1][2] = quotient
 
-        var envFunctionsExpr = ExpressionBuilder.BuildExpressionForPathInExpression([0], Expression.EnvironmentInstance);
-        var selfFunctionExpr = ExpressionBuilder.BuildExpressionForPathInExpression([0, 0], Expression.EnvironmentInstance);
+        var envFunctionsExpr =
+            ExpressionBuilder.BuildExpressionForPathInExpression([0], Expression.EnvironmentInstance);
+
+        var selfFunctionExpr =
+            ExpressionBuilder.BuildExpressionForPathInExpression([0, 0], Expression.EnvironmentInstance);
+
         var dividendExpr = ExpressionBuilder.BuildExpressionForPathInExpression([1, 0], Expression.EnvironmentInstance);
         var divisorExpr = ExpressionBuilder.BuildExpressionForPathInExpression([1, 1], Expression.EnvironmentInstance);
         var quotientExpr = ExpressionBuilder.BuildExpressionForPathInExpression([1, 2], Expression.EnvironmentInstance);
@@ -1344,14 +1466,17 @@ public class CoreBasics
             Expression quotient)
         {
             // Build environment: [envFunctions, [dividend, divisor, quotient]]
-            var newEnv = Expression.ListInstance([
-                envFuncs,
-                Expression.ListInstance([dividend, divisor, quotient])
-            ]);
+            var newEnv =
+                Expression.ListInstance(
+                    [
+                    envFuncs,
+                    Expression.ListInstance([dividend, divisor, quotient])
+                    ]);
 
-            return new Expression.ParseAndEval(
-                encoded: selfFunc,
-                environment: newEnv);
+            return
+                new Expression.ParseAndEval(
+                    encoded: selfFunc,
+                    environment: newEnv);
         }
 
         // Case 1: scaledDivisor <= dividend (use scaling approach)
@@ -1363,9 +1488,10 @@ public class CoreBasics
 
         // remainder = dividend - scaledQuotient * scaledDivisor
         //           = dividend + (-1) * scaledQuotient * scaledDivisor
-        var remainder = BuiltinAdd(
-            dividendExpr,
-            BuiltinMul(scaledQuotient, BuiltinMul(scaledDivisor, negativeOne)));
+        var remainder =
+            BuiltinAdd(
+                dividendExpr,
+                BuiltinMul(scaledQuotient, BuiltinMul(scaledDivisor, negativeOne)));
 
         // remainderQuotient = idivHelper remainder divisor 0
         var remainderQuotient = RecursiveCall(selfFunctionExpr, envFunctionsExpr, remainder, divisorExpr, zero);
@@ -1393,15 +1519,17 @@ public class CoreBasics
 
         // int_is_sorted_asc [a, b] means a <= b
         var scaledDivisorLeDividend = BuiltinIntIsSortedAsc(scaledDivisor, dividendExpr);
+
         var divisorLeDividend = BuiltinIntIsSortedAsc(divisorExpr, dividendExpr);
 
-        var innerBody = Expression.ConditionalInstance(
-            condition: scaledDivisorLeDividend,
-            trueBranch: scalingResult,
-            falseBranch: Expression.ConditionalInstance(
-                condition: divisorLeDividend,
-                trueBranch: subtractResult,
-                falseBranch: baseCase));
+        var innerBody =
+            Expression.ConditionalInstance(
+                condition: scaledDivisorLeDividend,
+                trueBranch: scalingResult,
+                falseBranch: Expression.ConditionalInstance(
+                    condition: divisorLeDividend,
+                    trueBranch: subtractResult,
+                    falseBranch: baseCase));
 
         // Encode the function body as a value
         var encodedBody = ExpressionEncoding.EncodeExpressionAsValue(innerBody);
@@ -1412,12 +1540,14 @@ public class CoreBasics
 
         // Create a self-referential structure by putting the encoded body in envFunctions
         var envFunctions = Expression.ListInstance([Expression.LiteralInstance(encodedBody)]);
+
         var initialArgs = Expression.ListInstance([absDividend, absDivisor, zero]);
         var initialEnv = Expression.ListInstance([envFunctions, initialArgs]);
 
-        return new Expression.ParseAndEval(
-            encoded: Expression.LiteralInstance(encodedBody),
-            environment: initialEnv);
+        return
+            new Expression.ParseAndEval(
+                encoded: Expression.LiteralInstance(encodedBody),
+                environment: initialEnv);
     }
 
     /// <summary>
@@ -1447,6 +1577,7 @@ public class CoreBasics
          * */
 
         var zero = Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(0));
+
         var one = Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(1));
 
         // Check if divisor is 1
@@ -1466,10 +1597,11 @@ public class CoreBasics
                 falseBranch: BuiltinAdd(remainder, divisor));
 
         // If divisor is 1, return 0; otherwise return adjusted remainder
-        return Expression.ConditionalInstance(
-            condition: divisorIsOne,
-            trueBranch: zero,
-            falseBranch: adjustedRemainder);
+        return
+            Expression.ConditionalInstance(
+                condition: divisorIsOne,
+                trueBranch: zero,
+                falseBranch: adjustedRemainder);
     }
 
     private static Expression Internal_Int_remainderBy(
@@ -1495,6 +1627,7 @@ public class CoreBasics
          * */
 
         var zero = Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(0));
+
         var one = Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(1));
         var negativeOne = Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(-1));
 
@@ -1514,10 +1647,11 @@ public class CoreBasics
                     BuiltinMul(divisor, quotient)));
 
         // If divisor is 1, return 0; otherwise return remainder
-        return Expression.ConditionalInstance(
-            condition: divisorIsOne,
-            trueBranch: zero,
-            falseBranch: remainder);
+        return
+            Expression.ConditionalInstance(
+                condition: divisorIsOne,
+                trueBranch: zero,
+                falseBranch: remainder);
     }
 
     /// <summary>
@@ -1567,6 +1701,7 @@ public class CoreBasics
         // numerator is at path head(head(skip(1, n)))
         // denominator is at path head(skip(1, head(skip(1, n))))
         var tagArgs = BuiltinHelpers.ApplyBuiltinHead(BuiltinHelpers.ApplyBuiltinSkip(1, n));
+
         var numerator = BuiltinHelpers.ApplyBuiltinHead(tagArgs);
         var denominator = BuiltinHelpers.ApplyBuiltinHead(BuiltinHelpers.ApplyBuiltinSkip(1, tagArgs));
 
@@ -1580,8 +1715,8 @@ public class CoreBasics
         var negatedFloat =
             Expression.ListInstance(
                 [
-                    s_elmFloatTypeTagNameLiteral,
-                    Expression.ListInstance([negatedNumerator, denominator])
+                s_elmFloatTypeTagNameLiteral,
+                Expression.ListInstance([negatedNumerator, denominator])
                 ]);
 
         // For non-float: just multiply by -1
@@ -1629,11 +1764,13 @@ public class CoreBasics
 
         // Extract float components for augend
         var augendTagArgs = BuiltinHelpers.ApplyBuiltinHead(BuiltinHelpers.ApplyBuiltinSkip(1, augend));
+
         var augendNumerator = BuiltinHelpers.ApplyBuiltinHead(augendTagArgs);
         var augendDenominator = BuiltinHelpers.ApplyBuiltinHead(BuiltinHelpers.ApplyBuiltinSkip(1, augendTagArgs));
 
         // Extract float components for addend
         var addendTagArgs = BuiltinHelpers.ApplyBuiltinHead(BuiltinHelpers.ApplyBuiltinSkip(1, addend));
+
         var addendNumerator = BuiltinHelpers.ApplyBuiltinHead(addendTagArgs);
         var addendDenominator = BuiltinHelpers.ApplyBuiltinHead(BuiltinHelpers.ApplyBuiltinSkip(1, addendTagArgs));
 
@@ -1662,6 +1799,7 @@ public class CoreBasics
             BuiltinAdd(
                 BuiltinMul(augend, addendDenominator),
                 addendNumerator);
+
         var intFloatResult = NormalizeFloatResult(intFloatNumerator, addendDenominator);
 
         // When augend is float
@@ -1714,28 +1852,37 @@ public class CoreBasics
 
         // Extract float components for multiplicand
         var multiplicandTagArgs = BuiltinHelpers.ApplyBuiltinHead(BuiltinHelpers.ApplyBuiltinSkip(1, left));
+
         var multiplicandNumerator = BuiltinHelpers.ApplyBuiltinHead(multiplicandTagArgs);
-        var multiplicandDenominator = BuiltinHelpers.ApplyBuiltinHead(BuiltinHelpers.ApplyBuiltinSkip(1, multiplicandTagArgs));
+
+        var multiplicandDenominator =
+            BuiltinHelpers.ApplyBuiltinHead(BuiltinHelpers.ApplyBuiltinSkip(1, multiplicandTagArgs));
 
         // Extract float components for multiplier
         var multiplierTagArgs = BuiltinHelpers.ApplyBuiltinHead(BuiltinHelpers.ApplyBuiltinSkip(1, right));
+
         var multiplierNumerator = BuiltinHelpers.ApplyBuiltinHead(multiplierTagArgs);
-        var multiplierDenominator = BuiltinHelpers.ApplyBuiltinHead(BuiltinHelpers.ApplyBuiltinSkip(1, multiplierTagArgs));
+
+        var multiplierDenominator =
+            BuiltinHelpers.ApplyBuiltinHead(BuiltinHelpers.ApplyBuiltinSkip(1, multiplierTagArgs));
 
         // Int * Int case: use builtin multiplication
         var intMultiplication = BuiltinMul(left, right);
 
         // Float * Float case: (numA * numB) / (denomA * denomB)
         var floatFloatNumerator = BuiltinMul(multiplicandNumerator, multiplierNumerator);
+
         var floatFloatDenominator = BuiltinMul(multiplicandDenominator, multiplierDenominator);
         var floatFloatResult = NormalizeFloatResult(floatFloatNumerator, floatFloatDenominator);
 
         // Float * Int case: (numA * intB) / denomA
         var floatIntNumerator = BuiltinMul(multiplicandNumerator, right);
+
         var floatIntResult = NormalizeFloatResult(floatIntNumerator, multiplicandDenominator);
 
         // Int * Float case: (intA * numB) / denomB
         var intFloatNumerator = BuiltinMul(left, multiplierNumerator);
+
         var intFloatResult = NormalizeFloatResult(intFloatNumerator, multiplierDenominator);
 
         // When multiplicand is float
@@ -1788,13 +1935,17 @@ public class CoreBasics
 
         // Extract float components for minuend
         var minuendTagArgs = BuiltinHelpers.ApplyBuiltinHead(BuiltinHelpers.ApplyBuiltinSkip(1, minuend));
+
         var minuendNumerator = BuiltinHelpers.ApplyBuiltinHead(minuendTagArgs);
         var minuendDenominator = BuiltinHelpers.ApplyBuiltinHead(BuiltinHelpers.ApplyBuiltinSkip(1, minuendTagArgs));
 
         // Extract float components for subtrahend
         var subtrahendTagArgs = BuiltinHelpers.ApplyBuiltinHead(BuiltinHelpers.ApplyBuiltinSkip(1, subtrahend));
+
         var subtrahendNumerator = BuiltinHelpers.ApplyBuiltinHead(subtrahendTagArgs);
-        var subtrahendDenominator = BuiltinHelpers.ApplyBuiltinHead(BuiltinHelpers.ApplyBuiltinSkip(1, subtrahendTagArgs));
+
+        var subtrahendDenominator =
+            BuiltinHelpers.ApplyBuiltinHead(BuiltinHelpers.ApplyBuiltinSkip(1, subtrahendTagArgs));
 
         // Int - Int case (original implementation)
         var intSubtraction =
@@ -1832,6 +1983,7 @@ public class CoreBasics
                 BuiltinMul(
                     LiteralInt(-1),
                     subtrahendNumerator));
+
         var intFloatResult = NormalizeFloatResult(intFloatNumerator, subtrahendDenominator);
 
         // When minuend is float
@@ -1951,6 +2103,7 @@ public class CoreBasics
 
         // Compute remainder of numerator / denominator to check if it divides evenly
         var remainder = Internal_Int_remainderBy(denominator, numerator);
+
         var dividesEvenly = BuiltinHelpers.ApplyBuiltinEqualBinary(remainder, LiteralInt(0));
 
         // Compute the quotient (numerator / denominator) for when it divides evenly
@@ -1960,20 +2113,21 @@ public class CoreBasics
         var floatResult =
             Expression.ListInstance(
                 [
-                    s_elmFloatTypeTagNameLiteral,
-                    Expression.ListInstance([numerator, denominator])
+                s_elmFloatTypeTagNameLiteral,
+                Expression.ListInstance([numerator, denominator])
                 ]);
 
         // If denominator is 1, just return numerator as integer
         // If it divides evenly, return the quotient as integer
         // Otherwise, return the float structure
-        return Expression.ConditionalInstance(
-            condition: denominatorIsOne,
-            trueBranch: numerator,
-            falseBranch: Expression.ConditionalInstance(
-                condition: dividesEvenly,
-                trueBranch: quotient,
-                falseBranch: floatResult));
+        return
+            Expression.ConditionalInstance(
+                condition: denominatorIsOne,
+                trueBranch: numerator,
+                falseBranch: Expression.ConditionalInstance(
+                    condition: dividesEvenly,
+                    trueBranch: quotient,
+                    falseBranch: floatResult));
     }
 
     private static Expression.ParseAndEval ApplyUnary(
@@ -2098,11 +2252,13 @@ public class CoreBasics
 
         // Extract float components for left
         var leftTagArgs = BuiltinHelpers.ApplyBuiltinHead(BuiltinHelpers.ApplyBuiltinSkip(1, left));
+
         var leftNumerator = BuiltinHelpers.ApplyBuiltinHead(leftTagArgs);
         var leftDenominator = BuiltinHelpers.ApplyBuiltinHead(BuiltinHelpers.ApplyBuiltinSkip(1, leftTagArgs));
 
         // Extract float components for right
         var rightTagArgs = BuiltinHelpers.ApplyBuiltinHead(BuiltinHelpers.ApplyBuiltinSkip(1, right));
+
         var rightNumerator = BuiltinHelpers.ApplyBuiltinHead(rightTagArgs);
         var rightDenominator = BuiltinHelpers.ApplyBuiltinHead(BuiltinHelpers.ApplyBuiltinSkip(1, rightTagArgs));
 
@@ -2130,7 +2286,9 @@ public class CoreBasics
 
         // Float vs Float: compare cross-products (numA * denomB == numB * denomA)
         var floatFloatLeftProduct = BuiltinMul(leftNumerator, rightDenominator);
+
         var floatFloatRightProduct = BuiltinMul(rightNumerator, leftDenominator);
+
         var floatFloatEqual =
             Expression.ConditionalInstance(
                 condition: BuiltinHelpers.ApplyBuiltinEqualBinary(floatFloatLeftProduct, floatFloatRightProduct),
@@ -2227,6 +2385,7 @@ public class CoreBasics
         // String representation: ["String", [bytes]]
         // So we need: head(head(skip(1, value))) to get the bytes blob
         var leftStringWrapper = BuiltinHelpers.ApplyBuiltinHead(BuiltinHelpers.ApplyBuiltinSkip(1, left));
+
         var leftStringContent = BuiltinHelpers.ApplyBuiltinHead(leftStringWrapper);
         var rightStringWrapper = BuiltinHelpers.ApplyBuiltinHead(BuiltinHelpers.ApplyBuiltinSkip(1, right));
         var rightStringContent = BuiltinHelpers.ApplyBuiltinHead(rightStringWrapper);
@@ -2248,30 +2407,36 @@ public class CoreBasics
 
         // Extract float components for left
         var leftTagArgs = BuiltinHelpers.ApplyBuiltinHead(BuiltinHelpers.ApplyBuiltinSkip(1, left));
+
         var leftNumerator = BuiltinHelpers.ApplyBuiltinHead(leftTagArgs);
         var leftDenominator = BuiltinHelpers.ApplyBuiltinHead(BuiltinHelpers.ApplyBuiltinSkip(1, leftTagArgs));
 
         // Extract float components for right
         var rightTagArgs = BuiltinHelpers.ApplyBuiltinHead(BuiltinHelpers.ApplyBuiltinSkip(1, right));
+
         var rightNumerator = BuiltinHelpers.ApplyBuiltinHead(rightTagArgs);
         var rightDenominator = BuiltinHelpers.ApplyBuiltinHead(BuiltinHelpers.ApplyBuiltinSkip(1, rightTagArgs));
 
         // Float vs Float comparison: compare (numA * denomB) with (numB * denomA)
         var floatFloatLeftProduct = BuiltinMul(leftNumerator, rightDenominator);
+
         var floatFloatRightProduct = BuiltinMul(rightNumerator, leftDenominator);
         var floatFloatCompare = CompareIntegers(floatFloatLeftProduct, floatFloatRightProduct);
 
         // Float vs Int: compare numA with (intB * denomA)
         var floatIntRightProduct = BuiltinMul(right, leftDenominator);
+
         var floatIntCompare = CompareIntegers(leftNumerator, floatIntRightProduct);
 
         // Int vs Float: compare (intA * denomB) with numB
         var intFloatLeftProduct = BuiltinMul(left, rightDenominator);
+
         var intFloatCompare = CompareIntegers(intFloatLeftProduct, rightNumerator);
 
         // Check if left is a Pine list using isPineList: take(0, a) == []
         // isPineList a = Pine_kernel.equal [ Pine_kernel.take [ 0, a ], [] ]
         var emptyList = Expression.ListInstance([]);
+
         var leftTakeZero = BuiltinHelpers.ApplyBuiltinTake(0, left);
         var leftIsList = BuiltinHelpers.ApplyBuiltinEqualBinary(leftTakeZero, emptyList);
 
@@ -2359,8 +2524,12 @@ public class CoreBasics
         // Build recursive function for string comparison
         // Environment structure: [envFunctions, [offset, stringA, stringB]]
 
-        var envFunctionsExpr = ExpressionBuilder.BuildExpressionForPathInExpression([0], Expression.EnvironmentInstance);
-        var selfFunctionExpr = ExpressionBuilder.BuildExpressionForPathInExpression([0, 0], Expression.EnvironmentInstance);
+        var envFunctionsExpr =
+            ExpressionBuilder.BuildExpressionForPathInExpression([0], Expression.EnvironmentInstance);
+
+        var selfFunctionExpr =
+            ExpressionBuilder.BuildExpressionForPathInExpression([0, 0], Expression.EnvironmentInstance);
+
         var offsetExpr = ExpressionBuilder.BuildExpressionForPathInExpression([1, 0], Expression.EnvironmentInstance);
         var stringAExpr = ExpressionBuilder.BuildExpressionForPathInExpression([1, 1], Expression.EnvironmentInstance);
         var stringBExpr = ExpressionBuilder.BuildExpressionForPathInExpression([1, 2], Expression.EnvironmentInstance);
@@ -2375,6 +2544,7 @@ public class CoreBasics
 
         // Check lengths
         var charALength = BuiltinHelpers.ApplyBuiltinLength(charA);
+
         var charBLength = BuiltinHelpers.ApplyBuiltinLength(charB);
         var charAEmpty = BuiltinHelpers.ApplyBuiltinEqualBinary(charALength, zero);
         var charBEmpty = BuiltinHelpers.ApplyBuiltinEqualBinary(charBLength, zero);
@@ -2384,6 +2554,7 @@ public class CoreBasics
 
         // For comparison: prepend 0 to each character for proper signed comparison
         var charAWithSign = BuiltinHelpers.ApplyBuiltinConcat([zero, charA]);
+
         var charBWithSign = BuiltinHelpers.ApplyBuiltinConcat([zero, charB]);
         var charALessThanB = BuiltinIntIsSortedAsc(charAWithSign, charBWithSign);
 
@@ -2397,13 +2568,17 @@ public class CoreBasics
             Expression strA,
             Expression strB)
         {
-            var newEnv = Expression.ListInstance([
-                envFuncs,
-                Expression.ListInstance([offset, strA, strB])
-            ]);
-            return new Expression.ParseAndEval(
-                encoded: selfFunc,
-                environment: newEnv);
+            var newEnv =
+                Expression.ListInstance(
+                    [
+                    envFuncs,
+                    Expression.ListInstance([offset, strA, strB])
+                    ]);
+
+            return
+                new Expression.ParseAndEval(
+                    encoded: selfFunc,
+                    environment: newEnv);
         }
 
         var recursiveCompare = RecursiveCall(selfFunctionExpr, envFunctionsExpr, newOffset, stringAExpr, stringBExpr);
@@ -2416,40 +2591,46 @@ public class CoreBasics
         // else if charA < charB: LT
         // else: GT
 
-        var charAEmptyResult = Expression.ConditionalInstance(
-            condition: charBEmpty,
-            trueBranch: s_orderEQ,
-            falseBranch: s_orderLT);
+        var charAEmptyResult =
+            Expression.ConditionalInstance(
+                condition: charBEmpty,
+                trueBranch: s_orderEQ,
+                falseBranch: s_orderLT);
 
-        var charsNotEmpty = Expression.ConditionalInstance(
-            condition: charsEqual,
-            trueBranch: recursiveCompare,
-            falseBranch: Expression.ConditionalInstance(
-                condition: charALessThanB,
-                trueBranch: s_orderLT,
-                falseBranch: s_orderGT));
+        var charsNotEmpty =
+            Expression.ConditionalInstance(
+                condition: charsEqual,
+                trueBranch: recursiveCompare,
+                falseBranch: Expression.ConditionalInstance(
+                    condition: charALessThanB,
+                    trueBranch: s_orderLT,
+                    falseBranch: s_orderGT));
 
-        var charBNotEmpty = Expression.ConditionalInstance(
-            condition: charBEmpty,
-            trueBranch: s_orderGT,
-            falseBranch: charsNotEmpty);
+        var charBNotEmpty =
+            Expression.ConditionalInstance(
+                condition: charBEmpty,
+                trueBranch: s_orderGT,
+                falseBranch: charsNotEmpty);
 
-        var innerBody = Expression.ConditionalInstance(
-            condition: charAEmpty,
-            trueBranch: charAEmptyResult,
-            falseBranch: charBNotEmpty);
+        var innerBody =
+            Expression.ConditionalInstance(
+                condition: charAEmpty,
+                trueBranch: charAEmptyResult,
+                falseBranch: charBNotEmpty);
 
         // Encode the function body
         var encodedBody = ExpressionEncoding.EncodeExpressionAsValue(innerBody);
 
         // Create the initial invocation with offset = 0
         var envFunctions = Expression.ListInstance([Expression.LiteralInstance(encodedBody)]);
+
         var initialArgs = Expression.ListInstance([zero, leftString, rightString]);
         var initialEnv = Expression.ListInstance([envFunctions, initialArgs]);
 
-        return new Expression.ParseAndEval(
-            encoded: Expression.LiteralInstance(encodedBody),
-            environment: initialEnv);
+        return
+            new Expression.ParseAndEval(
+                encoded: Expression.LiteralInstance(encodedBody),
+                environment: initialEnv);
     }
 
     /// <summary>
@@ -2479,8 +2660,12 @@ public class CoreBasics
         // Environment structure: [envFunctions, [listA, listB]]
         // envFunctions[0] = compareList (self)
 
-        var envFunctionsExpr = ExpressionBuilder.BuildExpressionForPathInExpression([0], Expression.EnvironmentInstance);
-        var selfFunctionExpr = ExpressionBuilder.BuildExpressionForPathInExpression([0, 0], Expression.EnvironmentInstance);
+        var envFunctionsExpr =
+            ExpressionBuilder.BuildExpressionForPathInExpression([0], Expression.EnvironmentInstance);
+
+        var selfFunctionExpr =
+            ExpressionBuilder.BuildExpressionForPathInExpression([0, 0], Expression.EnvironmentInstance);
+
         var listAExpr = ExpressionBuilder.BuildExpressionForPathInExpression([1, 0], Expression.EnvironmentInstance);
         var listBExpr = ExpressionBuilder.BuildExpressionForPathInExpression([1, 1], Expression.EnvironmentInstance);
 
@@ -2488,12 +2673,14 @@ public class CoreBasics
 
         // Check if lists are empty
         var listALength = BuiltinHelpers.ApplyBuiltinLength(listAExpr);
+
         var listBLength = BuiltinHelpers.ApplyBuiltinLength(listBExpr);
         var listAEmpty = BuiltinHelpers.ApplyBuiltinEqualBinary(listALength, zero);
         var listBEmpty = BuiltinHelpers.ApplyBuiltinEqualBinary(listBLength, zero);
 
         // Get heads and tails
         var headA = BuiltinHelpers.ApplyBuiltinHead(listAExpr);
+
         var headB = BuiltinHelpers.ApplyBuiltinHead(listBExpr);
         var tailA = BuiltinHelpers.ApplyBuiltinSkip(1, listAExpr);
         var tailB = BuiltinHelpers.ApplyBuiltinSkip(1, listBExpr);
@@ -2501,16 +2688,18 @@ public class CoreBasics
         // Compare heads using simple integer comparison
         // For head equality, check first and then compare
         var headsEqual = BuiltinHelpers.ApplyBuiltinEqualBinary(headA, headB);
+
         var headALessThanB = BuiltinIntIsSortedAsc(headA, headB);
 
         // headOrder: if headsEqual then EQ, else if headA < headB then LT else GT
-        var headOrder = Expression.ConditionalInstance(
-            condition: headsEqual,
-            trueBranch: s_orderEQ,
-            falseBranch: Expression.ConditionalInstance(
-                condition: headALessThanB,
-                trueBranch: s_orderLT,
-                falseBranch: s_orderGT));
+        var headOrder =
+            Expression.ConditionalInstance(
+                condition: headsEqual,
+                trueBranch: s_orderEQ,
+                falseBranch: Expression.ConditionalInstance(
+                    condition: headALessThanB,
+                    trueBranch: s_orderLT,
+                    falseBranch: s_orderGT));
 
         var headOrderIsEQ = BuiltinHelpers.ApplyBuiltinEqualBinary(headOrder, s_orderEQ);
 
@@ -2521,51 +2710,63 @@ public class CoreBasics
             Expression listA,
             Expression listB)
         {
-            var newEnv = Expression.ListInstance([
-                envFuncs,
-                Expression.ListInstance([listA, listB])
-            ]);
-            return new Expression.ParseAndEval(
-                encoded: selfFunc,
-                environment: newEnv);
+            var newEnv =
+                Expression.ListInstance(
+                    [
+                    envFuncs,
+                    Expression.ListInstance([listA, listB])
+                    ]);
+
+            return
+                new Expression.ParseAndEval(
+                    encoded: selfFunc,
+                    environment: newEnv);
         }
 
         var recursiveCompare = RecursiveListCall(selfFunctionExpr, envFunctionsExpr, tailA, tailB);
 
         // Build the conditional logic
-        var listAEmptyResult = Expression.ConditionalInstance(
-            condition: listBEmpty,
-            trueBranch: s_orderEQ,
-            falseBranch: s_orderLT);
+        var listAEmptyResult =
+            Expression.ConditionalInstance(
+                condition: listBEmpty,
+                trueBranch: s_orderEQ,
+                falseBranch: s_orderLT);
 
-        var compareHeadsResult = Expression.ConditionalInstance(
-            condition: headOrderIsEQ,
-            trueBranch: recursiveCompare,
-            falseBranch: headOrder);
+        var compareHeadsResult =
+            Expression.ConditionalInstance(
+                condition: headOrderIsEQ,
+                trueBranch: recursiveCompare,
+                falseBranch: headOrder);
 
-        var listBNotEmpty = Expression.ConditionalInstance(
-            condition: listBEmpty,
-            trueBranch: s_orderGT,
-            falseBranch: compareHeadsResult);
+        var listBNotEmpty =
+            Expression.ConditionalInstance(
+                condition: listBEmpty,
+                trueBranch: s_orderGT,
+                falseBranch: compareHeadsResult);
 
-        var innerBody = Expression.ConditionalInstance(
-            condition: listAEmpty,
-            trueBranch: listAEmptyResult,
-            falseBranch: listBNotEmpty);
+        var innerBody =
+            Expression.ConditionalInstance(
+                condition: listAEmpty,
+                trueBranch: listAEmptyResult,
+                falseBranch: listBNotEmpty);
 
         // Encode the function body
         var encodedBody = ExpressionEncoding.EncodeExpressionAsValue(innerBody);
 
         // Create the initial invocation
-        var envFunctions = Expression.ListInstance([
-            Expression.LiteralInstance(encodedBody)
-        ]);
+        var envFunctions =
+            Expression.ListInstance(
+                [
+                Expression.LiteralInstance(encodedBody)
+                ]);
+
         var initialArgs = Expression.ListInstance([leftList, rightList]);
         var initialEnv = Expression.ListInstance([envFunctions, initialArgs]);
 
-        return new Expression.ParseAndEval(
-            encoded: Expression.LiteralInstance(encodedBody),
-            environment: initialEnv);
+        return
+            new Expression.ParseAndEval(
+                encoded: Expression.LiteralInstance(encodedBody),
+                environment: initialEnv);
     }
 
     private static Expression CompareIntegers(Expression left, Expression right)
@@ -2635,6 +2836,7 @@ public class CoreBasics
         */
 
         var directEqual = BuiltinHelpers.ApplyBuiltinEqualBinary(left, right);
+
         var compareResult = Internal_Compare(left, right);
 
         return
@@ -2661,6 +2863,7 @@ public class CoreBasics
         */
 
         var directEqual = BuiltinHelpers.ApplyBuiltinEqualBinary(left, right);
+
         var compareResult = Internal_Compare(left, right);
 
         return
@@ -2786,6 +2989,7 @@ public class CoreBasics
         // String representation: ["String", [contentBlob]]
         // Content is at: head(head(skip(1, value)))
         var leftStringWrapper = BuiltinHelpers.ApplyBuiltinHead(BuiltinHelpers.ApplyBuiltinSkip(1, left));
+
         var leftStringContent = BuiltinHelpers.ApplyBuiltinHead(leftStringWrapper);
         var rightStringWrapper = BuiltinHelpers.ApplyBuiltinHead(BuiltinHelpers.ApplyBuiltinSkip(1, right));
         var rightStringContent = BuiltinHelpers.ApplyBuiltinHead(rightStringWrapper);
@@ -2797,8 +3001,8 @@ public class CoreBasics
         var stringResult =
             Expression.ListInstance(
                 [
-                    s_elmStringTypeTagNameLiteral,
-                    Expression.ListInstance([concattedStringContent])
+                s_elmStringTypeTagNameLiteral,
+                Expression.ListInstance([concattedStringContent])
                 ]);
 
         // List case: just concat the two lists

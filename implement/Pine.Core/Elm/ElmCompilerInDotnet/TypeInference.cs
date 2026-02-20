@@ -1,8 +1,9 @@
+using Pine.Core.Elm.ElmSyntax.SyntaxModel;
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
-using Pine.Core.Elm.ElmSyntax.SyntaxModel;
+
 using SyntaxTypes = Pine.Core.Elm.ElmSyntax.Stil4mElmSyntax7;
 
 namespace Pine.Core.Elm.ElmCompilerInDotnet;
@@ -114,11 +115,17 @@ public static class TypeInference
     }
 
     private static readonly InferredType.IntType s_intType = new();
+
     private static readonly InferredType.FloatType s_floatType = new();
+
     private static readonly InferredType.StringType s_stringType = new();
+
     private static readonly InferredType.CharType s_charType = new();
+
     private static readonly InferredType.BoolType s_boolType = new();
+
     private static readonly InferredType.NumberType s_numberType = new();
+
     private static readonly InferredType.UnknownType s_unknownType = new();
 
     /// <summary>
@@ -134,6 +141,7 @@ public static class TypeInference
         // Unknown can unify with anything - return the other type
         if (type1 is InferredType.UnknownType)
             return type2;
+
         if (type2 is InferredType.UnknownType)
             return type1;
 
@@ -141,12 +149,14 @@ public static class TypeInference
         // Int is more specific than number
         if (type1 is InferredType.NumberType && type2 is InferredType.IntType)
             return type2;
+
         if (type1 is InferredType.IntType && type2 is InferredType.NumberType)
             return type1;
 
         // Float is more specific than number
         if (type1 is InferredType.NumberType && type2 is InferredType.FloatType)
             return type2;
+
         if (type1 is InferredType.FloatType && type2 is InferredType.NumberType)
             return type1;
 
@@ -168,10 +178,12 @@ public static class TypeInference
             tuple1.ElementTypes.Count == tuple2.ElementTypes.Count)
         {
             var unifiedElements = new List<InferredType>();
+
             for (var i = 0; i < tuple1.ElementTypes.Count; i++)
             {
                 unifiedElements.Add(UnifyTypes(tuple1.ElementTypes[i], tuple2.ElementTypes[i]));
             }
+
             return new InferredType.TupleType(unifiedElements);
         }
 
@@ -192,6 +204,7 @@ public static class TypeInference
 
             // Check if all fields from record1 exist in record2 and unify their types
             var unifiedFields = new List<(string FieldName, InferredType FieldType)>();
+
             foreach (var field1 in record1.Fields)
             {
                 if (!record2FieldsByName.TryGetValue(field1.FieldName, out var field2Type))
@@ -200,14 +213,17 @@ public static class TypeInference
                     // Return type1 as fallback since we can't unify incompatible record types
                     return type1;
                 }
+
                 unifiedFields.Add((field1.FieldName, UnifyTypes(field1.FieldType, field2Type)));
             }
+
             return new InferredType.RecordType(unifiedFields);
         }
 
         // Type variables can unify with any type - return the concrete type
         if (type1 is InferredType.TypeVariable)
             return type2;
+
         if (type2 is InferredType.TypeVariable)
             return type1;
 
@@ -218,10 +234,12 @@ public static class TypeInference
             choice1.TypeArguments.Count == choice2.TypeArguments.Count)
         {
             var unifiedArgs = new List<InferredType>();
+
             for (var i = 0; i < choice1.TypeArguments.Count; i++)
             {
                 unifiedArgs.Add(UnifyTypes(choice1.TypeArguments[i], choice2.TypeArguments[i]));
             }
+
             return new InferredType.ChoiceType(choice1.ModuleName, choice1.TypeName, unifiedArgs);
         }
 
@@ -251,6 +269,7 @@ public static class TypeInference
                 // Unify with existing substitution
                 substitutions[typeVar.Name] = UnifyTypes(existingType, actual);
             }
+
             return;
         }
 
@@ -267,20 +286,24 @@ public static class TypeInference
                 break;
 
             case (InferredType.TupleType expTuple, InferredType.TupleType actTuple)
-                when expTuple.ElementTypes.Count == actTuple.ElementTypes.Count:
+            when expTuple.ElementTypes.Count == actTuple.ElementTypes.Count:
+
                 for (var i = 0; i < expTuple.ElementTypes.Count; i++)
                 {
                     CollectTypeVariableSubstitutions(expTuple.ElementTypes[i], actTuple.ElementTypes[i], substitutions);
                 }
+
                 break;
 
             case (InferredType.ChoiceType expChoice, InferredType.ChoiceType actChoice)
-                when expChoice.TypeName == actChoice.TypeName &&
+            when expChoice.TypeName == actChoice.TypeName &&
                      expChoice.TypeArguments.Count == actChoice.TypeArguments.Count:
+
                 for (var i = 0; i < expChoice.TypeArguments.Count; i++)
                 {
                     CollectTypeVariableSubstitutions(expChoice.TypeArguments[i], actChoice.TypeArguments[i], substitutions);
                 }
+
                 break;
         }
     }
@@ -298,31 +321,33 @@ public static class TypeInference
         return type switch
         {
             InferredType.TypeVariable typeVar when substitutions.TryGetValue(typeVar.Name, out var subst) =>
-                subst,
+            subst,
 
             InferredType.ListType listType =>
-                new InferredType.ListType(ApplyTypeSubstitutions(listType.ElementType, substitutions)),
+            new InferredType.ListType(ApplyTypeSubstitutions(listType.ElementType, substitutions)),
 
             InferredType.FunctionType funcType =>
-                new InferredType.FunctionType(
-                    ApplyTypeSubstitutions(funcType.ArgumentType, substitutions),
-                    ApplyTypeSubstitutions(funcType.ReturnType, substitutions)),
+            new InferredType.FunctionType(
+                ApplyTypeSubstitutions(funcType.ArgumentType, substitutions),
+                ApplyTypeSubstitutions(funcType.ReturnType, substitutions)),
 
             InferredType.TupleType tupleType =>
-                new InferredType.TupleType(
-                    [.. tupleType.ElementTypes.Select(et => ApplyTypeSubstitutions(et, substitutions))]),
+            new InferredType.TupleType(
+                [.. tupleType.ElementTypes.Select(et => ApplyTypeSubstitutions(et, substitutions))]),
 
             InferredType.ChoiceType choiceType =>
-                new InferredType.ChoiceType(
-                    choiceType.ModuleName,
-                    choiceType.TypeName,
-                    [.. choiceType.TypeArguments.Select(ta => ApplyTypeSubstitutions(ta, substitutions))]),
+            new InferredType.ChoiceType(
+                choiceType.ModuleName,
+                choiceType.TypeName,
+                [.. choiceType.TypeArguments.Select(ta => ApplyTypeSubstitutions(ta, substitutions))]),
 
             InferredType.RecordType recordType =>
-                new InferredType.RecordType(
-                    recordType.Fields.Select(f => (f.FieldName, ApplyTypeSubstitutions(f.FieldType, substitutions))).ToList()),
+            new InferredType.RecordType(
+                recordType.Fields
+                .Select(f => (f.FieldName, ApplyTypeSubstitutions(f.FieldType, substitutions))).ToList()),
 
-            _ => type
+            _ =>
+            type
         };
     }
 
@@ -351,6 +376,7 @@ public static class TypeInference
             {
                 // Partial application - build a function type from remaining types
                 var remainingTypes = functionTypeList.Skip(appliedArgCount).ToList();
+
                 return BuildFunctionTypeFromList(remainingTypes);
             }
         }
@@ -399,11 +425,13 @@ public static class TypeInference
 
         // Partial application - build a function type with specialized types
         var remainingTypes = new List<InferredType>();
+
         for (var i = appliedArgCount; i < functionTypeList.Count; i++)
         {
             // Replace NumberType with the specialized type in remaining types
             remainingTypes.Add(functionTypeList[i] is InferredType.NumberType ? specializedType : functionTypeList[i]);
         }
+
         return BuildFunctionTypeFromList(remainingTypes);
     }
 
@@ -418,26 +446,27 @@ public static class TypeInference
     /// <summary>
     /// Maps operators to their type constraints.
     /// </summary>
-    private static readonly Dictionary<string, OperatorTypeConstraints> s_operatorConstraints = new()
-    {
-        // Integer division forces Int type
-        ["//"] = new(ResultType: s_intType, LeftOperandType: s_intType, RightOperandType: s_intType),
+    private static readonly Dictionary<string, OperatorTypeConstraints> s_operatorConstraints =
+        new()
+        {
+            // Integer division forces Int type
+            ["//"] = new(ResultType: s_intType, LeftOperandType: s_intType, RightOperandType: s_intType),
 
-        // Float division forces Float type
-        ["/"] = new(ResultType: s_floatType, LeftOperandType: s_floatType, RightOperandType: s_floatType),
+            // Float division forces Float type
+            ["/"] = new(ResultType: s_floatType, LeftOperandType: s_floatType, RightOperandType: s_floatType),
 
-        // Comparison operators force Bool result
-        ["=="] = new(ResultType: s_boolType),
-        ["/="] = new(ResultType: s_boolType),
-        ["<"] = new(ResultType: s_boolType),
-        [">"] = new(ResultType: s_boolType),
-        ["<="] = new(ResultType: s_boolType),
-        [">="] = new(ResultType: s_boolType),
+            // Comparison operators force Bool result
+            ["=="] = new(ResultType: s_boolType),
+            ["/="] = new(ResultType: s_boolType),
+            ["<"] = new(ResultType: s_boolType),
+            [">"] = new(ResultType: s_boolType),
+            ["<="] = new(ResultType: s_boolType),
+            [">="] = new(ResultType: s_boolType),
 
-        // Logical operators force Bool on everything
-        ["&&"] = new(ResultType: s_boolType, LeftOperandType: s_boolType, RightOperandType: s_boolType),
-        ["||"] = new(ResultType: s_boolType, LeftOperandType: s_boolType, RightOperandType: s_boolType),
-    };
+            // Logical operators force Bool on everything
+            ["&&"] = new(ResultType: s_boolType, LeftOperandType: s_boolType, RightOperandType: s_boolType),
+            ["||"] = new(ResultType: s_boolType, LeftOperandType: s_boolType, RightOperandType: s_boolType),
+        };
 
     /// <summary>
     /// Converts an Elm type annotation to an inferred type.
@@ -509,7 +538,8 @@ public static class TypeInference
             }
 
             // Handle custom types (including those with type arguments)
-            var typeArguments = typed.TypeArguments
+            var typeArguments =
+                typed.TypeArguments
                 .Select(arg => TypeAnnotationToInferredType(arg.Value))
                 .ToList();
 
@@ -747,6 +777,7 @@ public static class TypeInference
         {
             // Build the qualified name
             string qualifiedFuncName;
+
             if (funcOrValueRef.ModuleName.Count > 0)
             {
                 qualifiedFuncName = string.Join(".", funcOrValueRef.ModuleName) + "." + funcOrValueRef.Name;
@@ -769,24 +800,47 @@ public static class TypeInference
         // Operator application - infer from operands
         if (expression is SyntaxTypes.Expression.OperatorApplication operatorApp)
         {
-            return InferOperatorApplicationType(operatorApp, parameterNames, parameterTypes, localBindingTypes, currentModuleName, functionReturnTypes);
+            return
+                InferOperatorApplicationType(
+                    operatorApp,
+                    parameterNames,
+                    parameterTypes,
+                    localBindingTypes,
+                    currentModuleName,
+                    functionReturnTypes);
         }
 
         // Tuple expression - infer type from element types
         if (expression is SyntaxTypes.Expression.TupledExpression tupledExpr)
         {
             var elementTypes = new List<InferredType>();
+
             foreach (var elem in tupledExpr.Elements)
             {
-                elementTypes.Add(InferExpressionType(elem.Value, parameterNames, parameterTypes, localBindingTypes, currentModuleName, functionReturnTypes));
+                elementTypes.Add(
+                    InferExpressionType(
+                        elem.Value,
+                        parameterNames,
+                        parameterTypes,
+                        localBindingTypes,
+                        currentModuleName,
+                        functionReturnTypes));
             }
+
             return new InferredType.TupleType(elementTypes);
         }
 
         // Parenthesized expression - infer from inner expression
         if (expression is SyntaxTypes.Expression.ParenthesizedExpression parenExpr)
         {
-            return InferExpressionType(parenExpr.Expression.Value, parameterNames, parameterTypes, localBindingTypes, currentModuleName, functionReturnTypes);
+            return
+                InferExpressionType(
+                    parenExpr.Expression.Value,
+                    parameterNames,
+                    parameterTypes,
+                    localBindingTypes,
+                    currentModuleName,
+                    functionReturnTypes);
         }
 
         // Function application - infer from the function's return type
@@ -808,27 +862,39 @@ public static class TypeInference
                         // FunctionType contains [arg1Type, arg2Type, ..., returnType]
                         // We need to compute the result type after applying the given arguments
                         var appliedArgCount = application.Arguments.Count - 1; // Exclude the function itself
+
                         var functionTypes = basicsFuncInfo.FunctionType;
                         var totalArgCount = functionTypes.Count - 1; // Last element is return type
 
                         // Infer actual argument types to specialize polymorphic (NumberType) results
                         var actualArgTypes = new List<InferredType>();
+
                         for (var i = 0; i < appliedArgCount && i < totalArgCount; i++)
                         {
                             var argExpr = application.Arguments[i + 1].Value; // +1 to skip the function itself
-                            actualArgTypes.Add(InferExpressionType(argExpr, parameterNames, parameterTypes, localBindingTypes, currentModuleName, functionReturnTypes));
+
+                            actualArgTypes.Add(
+                                InferExpressionType(
+                                    argExpr,
+                                    parameterNames,
+                                    parameterTypes,
+                                    localBindingTypes,
+                                    currentModuleName,
+                                    functionReturnTypes));
                         }
 
-                        return SpecializeNumericFunctionResultType(
-                            functionTypes,
-                            actualArgTypes,
-                            appliedArgCount,
-                            totalArgCount);
+                        return
+                            SpecializeNumericFunctionResultType(
+                                functionTypes,
+                                actualArgTypes,
+                                appliedArgCount,
+                                totalArgCount);
                     }
                 }
 
                 // Build the qualified function name
                 string qualifiedName;
+
                 if (funcRef.ModuleName.Count > 0)
                 {
                     qualifiedName = string.Join(".", funcRef.ModuleName) + "." + funcRef.Name;
@@ -853,13 +919,22 @@ public static class TypeInference
                     // For a function type A -> B -> C with 2 arguments, the return type is C
                     // Also infer type variable substitutions from argument types
                     var appliedArgCount = application.Arguments.Count - 1; // Exclude the function itself
+
                     var resultType = funcType;
 
                     for (var i = 0; i < appliedArgCount && resultType is InferredType.FunctionType ft; i++)
                     {
                         // Infer the actual argument type
                         var argExpr = application.Arguments[i + 1].Value; // +1 to skip the function itself
-                        var actualArgType = InferExpressionType(argExpr, parameterNames, parameterTypes, localBindingTypes, currentModuleName, functionReturnTypes);
+
+                        var actualArgType =
+                            InferExpressionType(
+                                argExpr,
+                                parameterNames,
+                                parameterTypes,
+                                localBindingTypes,
+                                currentModuleName,
+                                functionReturnTypes);
 
                         // Collect type variable substitutions from matching expected vs actual arg types
                         CollectTypeVariableSubstitutions(ft.ArgumentType, actualArgType, substitution);
@@ -882,22 +957,33 @@ public static class TypeInference
                     {
                         // FunctionType contains [arg1Type, arg2Type, ..., returnType]
                         var appliedArgCount = application.Arguments.Count - 1; // Exclude the operator itself
+
                         var functionTypes = basicsFuncInfo.FunctionType;
                         var totalArgCount = functionTypes.Count - 1;
 
                         // Infer actual argument types to specialize polymorphic (NumberType) results
                         var actualArgTypes = new List<InferredType>();
+
                         for (var i = 0; i < appliedArgCount && i < totalArgCount; i++)
                         {
                             var argExpr = application.Arguments[i + 1].Value; // +1 to skip the operator itself
-                            actualArgTypes.Add(InferExpressionType(argExpr, parameterNames, parameterTypes, localBindingTypes, currentModuleName, functionReturnTypes));
+
+                            actualArgTypes.Add(
+                                InferExpressionType(
+                                    argExpr,
+                                    parameterNames,
+                                    parameterTypes,
+                                    localBindingTypes,
+                                    currentModuleName,
+                                    functionReturnTypes));
                         }
 
-                        return SpecializeNumericFunctionResultType(
-                            functionTypes,
-                            actualArgTypes,
-                            appliedArgCount,
-                            totalArgCount);
+                        return
+                            SpecializeNumericFunctionResultType(
+                                functionTypes,
+                                actualArgTypes,
+                                appliedArgCount,
+                                totalArgCount);
                     }
                 }
             }
@@ -907,14 +993,25 @@ public static class TypeInference
         if (expression is SyntaxTypes.Expression.RecordExpr recordExpr)
         {
             var fields = new List<(string FieldName, InferredType FieldType)>();
+
             foreach (var field in recordExpr.Fields)
             {
                 var fieldName = field.Value.fieldName.Value;
-                var fieldType = InferExpressionType(field.Value.valueExpr.Value, parameterNames, parameterTypes, localBindingTypes, currentModuleName, functionReturnTypes);
+
+                var fieldType =
+                    InferExpressionType(
+                        field.Value.valueExpr.Value,
+                        parameterNames,
+                        parameterTypes,
+                        localBindingTypes,
+                        currentModuleName,
+                        functionReturnTypes);
+
                 fields.Add((fieldName, fieldType));
             }
             // Sort fields alphabetically by field name
             fields.Sort((a, b) => string.Compare(a.FieldName, b.FieldName, StringComparison.Ordinal));
+
             return new InferredType.RecordType(fields);
         }
 
@@ -931,26 +1028,29 @@ public static class TypeInference
                 {
                     var funcName = letFunc.Function.Declaration.Value.Name.Value;
 
-                    var funcType = InferExpressionType(
-                        letFunc.Function.Declaration.Value.Expression.Value,
-                        parameterNames,
-                        parameterTypes,
-                        extendedLocalBindings,
-                        currentModuleName,
-                        functionReturnTypes);
+                    var funcType =
+                        InferExpressionType(
+                            letFunc.Function.Declaration.Value.Expression.Value,
+                            parameterNames,
+                            parameterTypes,
+                            extendedLocalBindings,
+                            currentModuleName,
+                            functionReturnTypes);
+
                     extendedLocalBindings = extendedLocalBindings.SetItem(funcName, funcType);
                 }
                 else if (decl.Value is SyntaxTypes.Expression.LetDeclaration.LetDestructuring letDestr)
                 {
                     // For destructuring, we would need pattern matching support
                     // For now, just recurse into the expression
-                    var exprType = InferExpressionType(
-                        letDestr.Expression.Value,
-                        parameterNames,
-                        parameterTypes,
-                        extendedLocalBindings,
-                        currentModuleName,
-                        functionReturnTypes);
+                    var exprType =
+                        InferExpressionType(
+                            letDestr.Expression.Value,
+                            parameterNames,
+                            parameterTypes,
+                            extendedLocalBindings,
+                            currentModuleName,
+                            functionReturnTypes);
 
                     // Try to extract binding names from the pattern
                     foreach (var binding in ExtractBindingsFromPattern(letDestr.Pattern.Value))
@@ -961,13 +1061,14 @@ public static class TypeInference
             }
 
             // The type of the let expression is the type of its body
-            return InferExpressionType(
-                letExpr.Value.Expression.Value,
-                parameterNames,
-                parameterTypes,
-                extendedLocalBindings,
-                currentModuleName,
-                functionReturnTypes);
+            return
+                InferExpressionType(
+                    letExpr.Value.Expression.Value,
+                    parameterNames,
+                    parameterTypes,
+                    extendedLocalBindings,
+                    currentModuleName,
+                    functionReturnTypes);
         }
 
         // List expression - infer type from element types
@@ -980,13 +1081,14 @@ public static class TypeInference
             }
 
             // Infer type from first element
-            var firstElementType = InferExpressionType(
-                listExpr.Elements[0].Value,
-                parameterNames,
-                parameterTypes,
-                localBindingTypes,
-                currentModuleName,
-                functionReturnTypes);
+            var firstElementType =
+                InferExpressionType(
+                    listExpr.Elements[0].Value,
+                    parameterNames,
+                    parameterTypes,
+                    localBindingTypes,
+                    currentModuleName,
+                    functionReturnTypes);
 
             return new InferredType.ListType(firstElementType);
         }
@@ -994,21 +1096,23 @@ public static class TypeInference
         // If-block expression - unify types from all branches
         if (expression is SyntaxTypes.Expression.IfBlock ifBlock)
         {
-            var thenType = InferExpressionType(
-                ifBlock.ThenBlock.Value,
-                parameterNames,
-                parameterTypes,
-                localBindingTypes,
-                currentModuleName,
-                functionReturnTypes);
+            var thenType =
+                InferExpressionType(
+                    ifBlock.ThenBlock.Value,
+                    parameterNames,
+                    parameterTypes,
+                    localBindingTypes,
+                    currentModuleName,
+                    functionReturnTypes);
 
-            var elseType = InferExpressionType(
-                ifBlock.ElseBlock.Value,
-                parameterNames,
-                parameterTypes,
-                localBindingTypes,
-                currentModuleName,
-                functionReturnTypes);
+            var elseType =
+                InferExpressionType(
+                    ifBlock.ElseBlock.Value,
+                    parameterNames,
+                    parameterTypes,
+                    localBindingTypes,
+                    currentModuleName,
+                    functionReturnTypes);
 
             // Unify types: If one branch is more specific (e.g., Int vs number), use the more specific type
             return UnifyTypes(thenType, elseType);
@@ -1023,24 +1127,26 @@ public static class TypeInference
             }
 
             // Start with the type of the first case arm
-            var unifiedType = InferExpressionType(
-                caseExpr.CaseBlock.Cases[0].Expression.Value,
-                parameterNames,
-                parameterTypes,
-                localBindingTypes,
-                currentModuleName,
-                functionReturnTypes);
-
-            // Unify with remaining case arm types
-            for (var i = 1; i < caseExpr.CaseBlock.Cases.Count; i++)
-            {
-                var armType = InferExpressionType(
-                    caseExpr.CaseBlock.Cases[i].Expression.Value,
+            var unifiedType =
+                InferExpressionType(
+                    caseExpr.CaseBlock.Cases[0].Expression.Value,
                     parameterNames,
                     parameterTypes,
                     localBindingTypes,
                     currentModuleName,
                     functionReturnTypes);
+
+            // Unify with remaining case arm types
+            for (var i = 1; i < caseExpr.CaseBlock.Cases.Count; i++)
+            {
+                var armType =
+                    InferExpressionType(
+                        caseExpr.CaseBlock.Cases[i].Expression.Value,
+                        parameterNames,
+                        parameterTypes,
+                        localBindingTypes,
+                        currentModuleName,
+                        functionReturnTypes);
 
                 unifiedType = UnifyTypes(unifiedType, armType);
             }
@@ -1071,6 +1177,7 @@ public static class TypeInference
                         yield return binding;
                     }
                 }
+
                 break;
 
             case SyntaxTypes.Pattern.RecordPattern record:
@@ -1078,14 +1185,17 @@ public static class TypeInference
                 {
                     yield return field.Value;
                 }
+
                 break;
 
             case SyntaxTypes.Pattern.AsPattern asPattern:
                 yield return asPattern.Name.Value;
+
                 foreach (var binding in ExtractBindingsFromPattern(asPattern.Pattern.Value))
                 {
                     yield return binding;
                 }
+
                 break;
 
             case SyntaxTypes.Pattern.ParenthesizedPattern paren:
@@ -1093,6 +1203,7 @@ public static class TypeInference
                 {
                     yield return binding;
                 }
+
                 break;
         }
     }
@@ -1120,8 +1231,23 @@ public static class TypeInference
         }
 
         // For operators without explicit constraints, infer from operands
-        var leftType = InferExpressionType(operatorApp.Left.Value, parameterNames, parameterTypes, localBindingTypes, currentModuleName, functionReturnTypes);
-        var rightType = InferExpressionType(operatorApp.Right.Value, parameterNames, parameterTypes, localBindingTypes, currentModuleName, functionReturnTypes);
+        var leftType =
+            InferExpressionType(
+                operatorApp.Left.Value,
+                parameterNames,
+                parameterTypes,
+                localBindingTypes,
+                currentModuleName,
+                functionReturnTypes);
+
+        var rightType =
+            InferExpressionType(
+                operatorApp.Right.Value,
+                parameterNames,
+                parameterTypes,
+                localBindingTypes,
+                currentModuleName,
+                functionReturnTypes);
 
         // For arithmetic operators without explicit constraints (+, -, *, etc.), 
         // resolve the type based on concrete operand types
@@ -1163,10 +1289,11 @@ public static class TypeInference
         if (constructorArgumentTypes is null)
             return existingConstraints;
 
-        return ExtractTypeConstraintsFromTagApplicationsInternal(
-            expression,
-            constructorArgumentTypes,
-            existingConstraints);
+        return
+            ExtractTypeConstraintsFromTagApplicationsInternal(
+                expression,
+                constructorArgumentTypes,
+                existingConstraints);
     }
 
     private static ImmutableDictionary<string, InferredType> ExtractTypeConstraintsFromTagApplicationsInternal(
@@ -1177,6 +1304,7 @@ public static class TypeInference
         switch (expression)
         {
             case SyntaxTypes.Expression.Application application:
+
                 // Check if this is a tag constructor application
                 // Applications have the form [func, arg1, arg2, ...], so we need at least 2 elements
                 // (the tag constructor and at least one argument)
@@ -1206,7 +1334,8 @@ public static class TypeInference
                             }
 
                             // Recurse into the argument expression
-                            constraints = ExtractTypeConstraintsFromTagApplicationsInternal(argExpr, constructorArgumentTypes, constraints);
+                            constraints =
+                                ExtractTypeConstraintsFromTagApplicationsInternal(argExpr, constructorArgumentTypes, constraints);
                         }
                     }
                 }
@@ -1214,19 +1343,31 @@ public static class TypeInference
                 // Recurse into all arguments
                 foreach (var arg in application.Arguments)
                 {
-                    constraints = ExtractTypeConstraintsFromTagApplicationsInternal(arg.Value, constructorArgumentTypes, constraints);
+                    constraints =
+                        ExtractTypeConstraintsFromTagApplicationsInternal(arg.Value, constructorArgumentTypes, constraints);
                 }
+
                 return constraints;
 
             case SyntaxTypes.Expression.OperatorApplication opApp:
-                constraints = ExtractTypeConstraintsFromTagApplicationsInternal(opApp.Left.Value, constructorArgumentTypes, constraints);
-                constraints = ExtractTypeConstraintsFromTagApplicationsInternal(opApp.Right.Value, constructorArgumentTypes, constraints);
+                constraints =
+                    ExtractTypeConstraintsFromTagApplicationsInternal(opApp.Left.Value, constructorArgumentTypes, constraints);
+
+                constraints =
+                    ExtractTypeConstraintsFromTagApplicationsInternal(opApp.Right.Value, constructorArgumentTypes, constraints);
+
                 return constraints;
 
             case SyntaxTypes.Expression.IfBlock ifBlock:
-                constraints = ExtractTypeConstraintsFromTagApplicationsInternal(ifBlock.Condition.Value, constructorArgumentTypes, constraints);
-                constraints = ExtractTypeConstraintsFromTagApplicationsInternal(ifBlock.ThenBlock.Value, constructorArgumentTypes, constraints);
-                constraints = ExtractTypeConstraintsFromTagApplicationsInternal(ifBlock.ElseBlock.Value, constructorArgumentTypes, constraints);
+                constraints =
+                    ExtractTypeConstraintsFromTagApplicationsInternal(ifBlock.Condition.Value, constructorArgumentTypes, constraints);
+
+                constraints =
+                    ExtractTypeConstraintsFromTagApplicationsInternal(ifBlock.ThenBlock.Value, constructorArgumentTypes, constraints);
+
+                constraints =
+                    ExtractTypeConstraintsFromTagApplicationsInternal(ifBlock.ElseBlock.Value, constructorArgumentTypes, constraints);
+
                 return constraints;
 
             case SyntaxTypes.Expression.LetExpression letExpr:
@@ -1235,23 +1376,37 @@ public static class TypeInference
                     switch (decl.Value)
                     {
                         case SyntaxTypes.Expression.LetDeclaration.LetFunction letFunc:
-                            constraints = ExtractTypeConstraintsFromTagApplicationsInternal(letFunc.Function.Declaration.Value.Expression.Value, constructorArgumentTypes, constraints);
+                            constraints =
+                                ExtractTypeConstraintsFromTagApplicationsInternal(
+                                    letFunc.Function.Declaration.Value.Expression.Value,
+                                    constructorArgumentTypes,
+                                    constraints);
+
                             break;
 
                         case SyntaxTypes.Expression.LetDeclaration.LetDestructuring letDestr:
-                            constraints = ExtractTypeConstraintsFromTagApplicationsInternal(letDestr.Expression.Value, constructorArgumentTypes, constraints);
+                            constraints =
+                                ExtractTypeConstraintsFromTagApplicationsInternal(letDestr.Expression.Value, constructorArgumentTypes, constraints);
+
                             break;
                     }
                 }
-                constraints = ExtractTypeConstraintsFromTagApplicationsInternal(letExpr.Value.Expression.Value, constructorArgumentTypes, constraints);
+
+                constraints =
+                    ExtractTypeConstraintsFromTagApplicationsInternal(letExpr.Value.Expression.Value, constructorArgumentTypes, constraints);
+
                 return constraints;
 
             case SyntaxTypes.Expression.CaseExpression caseExpr:
-                constraints = ExtractTypeConstraintsFromTagApplicationsInternal(caseExpr.CaseBlock.Expression.Value, constructorArgumentTypes, constraints);
+                constraints =
+                    ExtractTypeConstraintsFromTagApplicationsInternal(caseExpr.CaseBlock.Expression.Value, constructorArgumentTypes, constraints);
+
                 foreach (var caseItem in caseExpr.CaseBlock.Cases)
                 {
-                    constraints = ExtractTypeConstraintsFromTagApplicationsInternal(caseItem.Expression.Value, constructorArgumentTypes, constraints);
+                    constraints =
+                        ExtractTypeConstraintsFromTagApplicationsInternal(caseItem.Expression.Value, constructorArgumentTypes, constraints);
                 }
+
                 return constraints;
 
             case SyntaxTypes.Expression.ParenthesizedExpression parenExpr:
@@ -1260,21 +1415,26 @@ public static class TypeInference
             case SyntaxTypes.Expression.ListExpr listExpr:
                 foreach (var elem in listExpr.Elements)
                 {
-                    constraints = ExtractTypeConstraintsFromTagApplicationsInternal(elem.Value, constructorArgumentTypes, constraints);
+                    constraints =
+                        ExtractTypeConstraintsFromTagApplicationsInternal(elem.Value, constructorArgumentTypes, constraints);
                 }
+
                 return constraints;
 
             case SyntaxTypes.Expression.TupledExpression tupleExpr:
                 foreach (var elem in tupleExpr.Elements)
                 {
-                    constraints = ExtractTypeConstraintsFromTagApplicationsInternal(elem.Value, constructorArgumentTypes, constraints);
+                    constraints =
+                        ExtractTypeConstraintsFromTagApplicationsInternal(elem.Value, constructorArgumentTypes, constraints);
                 }
+
                 return constraints;
 
             case SyntaxTypes.Expression.Negation negation:
                 return ExtractTypeConstraintsFromTagApplicationsInternal(negation.Expression.Value, constructorArgumentTypes, constraints);
 
             default:
+
                 // Other expression types that don't introduce constraints
                 return constraints;
         }
@@ -1300,11 +1460,12 @@ public static class TypeInference
         if (functionParameterTypes is null)
             return existingConstraints;
 
-        return ExtractTypeConstraintsFromFunctionApplicationsInternal(
-            expression,
-            functionParameterTypes,
-            currentModuleName,
-            existingConstraints);
+        return
+            ExtractTypeConstraintsFromFunctionApplicationsInternal(
+                expression,
+                functionParameterTypes,
+                currentModuleName,
+                existingConstraints);
     }
 
     private static ImmutableDictionary<string, InferredType> ExtractTypeConstraintsFromFunctionApplicationsInternal(
@@ -1316,15 +1477,19 @@ public static class TypeInference
         switch (expression)
         {
             case SyntaxTypes.Expression.Application application:
+
                 // Check if this is a function application (not a tag constructor)
                 if (application.Arguments.Count >= 2 &&
                     application.Arguments[0].Value is SyntaxTypes.Expression.FunctionOrValue funcRef &&
                     !ElmValueEncoding.StringIsValidTagName(funcRef.Name))
                 {
                     // Build qualified function name
-                    var qualifiedFuncName = funcRef.ModuleName.Count > 0
-                        ? string.Join(".", funcRef.ModuleName) + "." + funcRef.Name
-                        : currentModuleName + "." + funcRef.Name;
+                    var qualifiedFuncName =
+                        funcRef.ModuleName.Count > 0
+                        ?
+                        string.Join(".", funcRef.ModuleName) + "." + funcRef.Name
+                        :
+                        currentModuleName + "." + funcRef.Name;
 
                     // First, check if this is a Basics module function with known types
                     IReadOnlyList<InferredType>? paramTypes = null;
@@ -1402,19 +1567,43 @@ public static class TypeInference
                 // Recurse into all arguments to find nested function applications
                 foreach (var arg in application.Arguments)
                 {
-                    constraints = ExtractTypeConstraintsFromFunctionApplicationsInternal(arg.Value, functionParameterTypes, currentModuleName, constraints);
+                    constraints =
+                        ExtractTypeConstraintsFromFunctionApplicationsInternal(arg.Value, functionParameterTypes, currentModuleName, constraints);
                 }
+
                 return constraints;
 
             case SyntaxTypes.Expression.OperatorApplication opApp:
-                constraints = ExtractTypeConstraintsFromFunctionApplicationsInternal(opApp.Left.Value, functionParameterTypes, currentModuleName, constraints);
-                constraints = ExtractTypeConstraintsFromFunctionApplicationsInternal(opApp.Right.Value, functionParameterTypes, currentModuleName, constraints);
+                constraints =
+                    ExtractTypeConstraintsFromFunctionApplicationsInternal(opApp.Left.Value, functionParameterTypes, currentModuleName, constraints);
+
+                constraints =
+                    ExtractTypeConstraintsFromFunctionApplicationsInternal(opApp.Right.Value, functionParameterTypes, currentModuleName, constraints);
+
                 return constraints;
 
             case SyntaxTypes.Expression.IfBlock ifBlock:
-                constraints = ExtractTypeConstraintsFromFunctionApplicationsInternal(ifBlock.Condition.Value, functionParameterTypes, currentModuleName, constraints);
-                constraints = ExtractTypeConstraintsFromFunctionApplicationsInternal(ifBlock.ThenBlock.Value, functionParameterTypes, currentModuleName, constraints);
-                constraints = ExtractTypeConstraintsFromFunctionApplicationsInternal(ifBlock.ElseBlock.Value, functionParameterTypes, currentModuleName, constraints);
+                constraints =
+                    ExtractTypeConstraintsFromFunctionApplicationsInternal(
+                        ifBlock.Condition.Value,
+                        functionParameterTypes,
+                        currentModuleName,
+                        constraints);
+
+                constraints =
+                    ExtractTypeConstraintsFromFunctionApplicationsInternal(
+                        ifBlock.ThenBlock.Value,
+                        functionParameterTypes,
+                        currentModuleName,
+                        constraints);
+
+                constraints =
+                    ExtractTypeConstraintsFromFunctionApplicationsInternal(
+                        ifBlock.ElseBlock.Value,
+                        functionParameterTypes,
+                        currentModuleName,
+                        constraints);
+
                 return constraints;
 
             case SyntaxTypes.Expression.LetExpression letExpr:
@@ -1423,46 +1612,92 @@ public static class TypeInference
                     switch (decl.Value)
                     {
                         case SyntaxTypes.Expression.LetDeclaration.LetFunction letFunc:
-                            constraints = ExtractTypeConstraintsFromFunctionApplicationsInternal(letFunc.Function.Declaration.Value.Expression.Value, functionParameterTypes, currentModuleName, constraints);
+                            constraints =
+                                ExtractTypeConstraintsFromFunctionApplicationsInternal(
+                                    letFunc.Function.Declaration.Value.Expression.Value,
+                                    functionParameterTypes,
+                                    currentModuleName,
+                                    constraints);
+
                             break;
 
                         case SyntaxTypes.Expression.LetDeclaration.LetDestructuring letDestr:
-                            constraints = ExtractTypeConstraintsFromFunctionApplicationsInternal(letDestr.Expression.Value, functionParameterTypes, currentModuleName, constraints);
+                            constraints =
+                                ExtractTypeConstraintsFromFunctionApplicationsInternal(
+                                    letDestr.Expression.Value,
+                                    functionParameterTypes,
+                                    currentModuleName,
+                                    constraints);
+
                             break;
                     }
                 }
-                constraints = ExtractTypeConstraintsFromFunctionApplicationsInternal(letExpr.Value.Expression.Value, functionParameterTypes, currentModuleName, constraints);
+
+                constraints =
+                    ExtractTypeConstraintsFromFunctionApplicationsInternal(
+                        letExpr.Value.Expression.Value,
+                        functionParameterTypes,
+                        currentModuleName,
+                        constraints);
+
                 return constraints;
 
             case SyntaxTypes.Expression.CaseExpression caseExpr:
-                constraints = ExtractTypeConstraintsFromFunctionApplicationsInternal(caseExpr.CaseBlock.Expression.Value, functionParameterTypes, currentModuleName, constraints);
+                constraints =
+                    ExtractTypeConstraintsFromFunctionApplicationsInternal(
+                        caseExpr.CaseBlock.Expression.Value,
+                        functionParameterTypes,
+                        currentModuleName,
+                        constraints);
+
                 foreach (var caseItem in caseExpr.CaseBlock.Cases)
                 {
-                    constraints = ExtractTypeConstraintsFromFunctionApplicationsInternal(caseItem.Expression.Value, functionParameterTypes, currentModuleName, constraints);
+                    constraints =
+                        ExtractTypeConstraintsFromFunctionApplicationsInternal(
+                            caseItem.Expression.Value,
+                            functionParameterTypes,
+                            currentModuleName,
+                            constraints);
                 }
+
                 return constraints;
 
             case SyntaxTypes.Expression.ParenthesizedExpression parenExpr:
-                return ExtractTypeConstraintsFromFunctionApplicationsInternal(parenExpr.Expression.Value, functionParameterTypes, currentModuleName, constraints);
+                return
+                    ExtractTypeConstraintsFromFunctionApplicationsInternal(
+                        parenExpr.Expression.Value,
+                        functionParameterTypes,
+                        currentModuleName,
+                        constraints);
 
             case SyntaxTypes.Expression.ListExpr listExpr:
                 foreach (var elem in listExpr.Elements)
                 {
-                    constraints = ExtractTypeConstraintsFromFunctionApplicationsInternal(elem.Value, functionParameterTypes, currentModuleName, constraints);
+                    constraints =
+                        ExtractTypeConstraintsFromFunctionApplicationsInternal(elem.Value, functionParameterTypes, currentModuleName, constraints);
                 }
+
                 return constraints;
 
             case SyntaxTypes.Expression.TupledExpression tupleExpr:
                 foreach (var elem in tupleExpr.Elements)
                 {
-                    constraints = ExtractTypeConstraintsFromFunctionApplicationsInternal(elem.Value, functionParameterTypes, currentModuleName, constraints);
+                    constraints =
+                        ExtractTypeConstraintsFromFunctionApplicationsInternal(elem.Value, functionParameterTypes, currentModuleName, constraints);
                 }
+
                 return constraints;
 
             case SyntaxTypes.Expression.Negation negation:
-                return ExtractTypeConstraintsFromFunctionApplicationsInternal(negation.Expression.Value, functionParameterTypes, currentModuleName, constraints);
+                return
+                    ExtractTypeConstraintsFromFunctionApplicationsInternal(
+                        negation.Expression.Value,
+                        functionParameterTypes,
+                        currentModuleName,
+                        constraints);
 
             default:
+
                 // Other expression types that don't introduce constraints
                 return constraints;
         }
@@ -1482,6 +1717,7 @@ public static class TypeInference
         switch (expression)
         {
             case SyntaxTypes.Expression.FunctionOrValue varRef:
+
                 // Simple variable reference - constrain its type if not already constrained
                 if (varRef.ModuleName.Count is 0 &&
                     !ElmValueEncoding.StringIsValidTagName(varRef.Name) &&
@@ -1489,9 +1725,11 @@ public static class TypeInference
                 {
                     constraints = constraints.SetItem(varRef.Name, targetType);
                 }
+
                 return constraints;
 
             case SyntaxTypes.Expression.OperatorApplication opApp:
+
                 // For arithmetic operators where result type is known, propagate to operands
                 if (targetType is InferredType.IntType)
                 {
@@ -1512,9 +1750,11 @@ public static class TypeInference
                         constraints = ExtractTypeConstraintsFromExpression(opApp.Right.Value, targetType, constraints);
                     }
                 }
+
                 return constraints;
 
             case SyntaxTypes.Expression.Application application:
+
                 // Handle canonicalized operators (Basics.add, Basics.sub, Basics.mul)
                 // After canonicalization, `x + 7` becomes `Basics.add x 7`
                 if (application.Arguments.Count >= 3 &&
@@ -1527,21 +1767,26 @@ public static class TypeInference
                     {
                         for (var i = 1; i < application.Arguments.Count; i++)
                         {
-                            constraints = ExtractTypeConstraintsFromExpression(application.Arguments[i].Value, targetType, constraints);
+                            constraints =
+                                ExtractTypeConstraintsFromExpression(application.Arguments[i].Value, targetType, constraints);
                         }
                     }
                 }
+
                 return constraints;
 
             case SyntaxTypes.Expression.ParenthesizedExpression parenExpr:
+
                 // Propagate through parentheses
                 return ExtractTypeConstraintsFromExpression(parenExpr.Expression.Value, targetType, constraints);
 
             case SyntaxTypes.Expression.Negation negation:
+
                 // Negation preserves numeric type
                 return ExtractTypeConstraintsFromExpression(negation.Expression.Value, targetType, constraints);
 
             default:
+
                 // Other expression types - no additional constraints to extract
                 return constraints;
         }
@@ -1556,7 +1801,9 @@ public static class TypeInference
         IReadOnlyDictionary<string, InferredType> parameterTypes,
         IReadOnlyDictionary<string, InferredType>? localBindingTypes = null)
     {
-        return InferExpressionType(expression, parameterNames, parameterTypes, localBindingTypes) is InferredType.IntType;
+        return
+            InferExpressionType(expression, parameterNames, parameterTypes, localBindingTypes) is
+            InferredType.IntType;
     }
 
     /// <summary>
@@ -1583,33 +1830,40 @@ public static class TypeInference
         switch (pattern)
         {
             case SyntaxTypes.Pattern.VarPattern varPattern:
+
                 // Simple variable binding - convert the type annotation to inferred type
                 return bindings.SetItem(varPattern.Name, TypeAnnotationToInferredType(typeAnnotation));
 
             case SyntaxTypes.Pattern.TuplePattern tuplePattern:
+
                 // Tuple pattern - match against Tupled type annotation
                 if (typeAnnotation is SyntaxTypes.TypeAnnotation.Tupled tupledType &&
                     tupledType.TypeAnnotations.Count == tuplePattern.Elements.Count)
                 {
                     for (var i = 0; i < tuplePattern.Elements.Count; i++)
                     {
-                        bindings = ExtractPatternBindingTypesInternal(
-                            tuplePattern.Elements[i].Value,
-                            tupledType.TypeAnnotations[i].Value,
-                            bindings);
+                        bindings =
+                            ExtractPatternBindingTypesInternal(
+                                tuplePattern.Elements[i].Value,
+                                tupledType.TypeAnnotations[i].Value,
+                                bindings);
                     }
                 }
+
                 return bindings;
 
             case SyntaxTypes.Pattern.ParenthesizedPattern parenthesized:
+
                 // Unwrap parenthesized pattern and recurse
                 return ExtractPatternBindingTypesInternal(parenthesized.Pattern.Value, typeAnnotation, bindings);
 
             case SyntaxTypes.Pattern.AllPattern:
+
                 // Wildcard pattern - no bindings
                 return bindings;
 
             default:
+
                 // Additional patterns can be added as needed
                 return bindings;
         }
@@ -1642,34 +1896,42 @@ public static class TypeInference
         switch (pattern)
         {
             case SyntaxTypes.Pattern.NamedPattern namedPattern:
+
                 // NamedPattern - look up constructor argument types
                 if (constructorArgumentTypes.TryGetValue(namedPattern.Name.Name, out var argTypes) &&
                     argTypes.Count == namedPattern.Arguments.Count)
                 {
                     for (var i = 0; i < namedPattern.Arguments.Count; i++)
                     {
-                        bindings = ExtractPatternBindingTypesFromInferredInternal(
-                            namedPattern.Arguments[i].Value,
-                            argTypes[i],
-                            bindings,
-                            constructorArgumentTypes);
+                        bindings =
+                            ExtractPatternBindingTypesFromInferredInternal(
+                                namedPattern.Arguments[i].Value,
+                                argTypes[i],
+                                bindings,
+                                constructorArgumentTypes);
                     }
                 }
+
                 return bindings;
 
             case SyntaxTypes.Pattern.ParenthesizedPattern parenthesized:
+
                 // Unwrap parenthesized pattern and recurse
                 return ExtractPatternBindingTypesWithConstructorsInternal(parenthesized.Pattern.Value, constructorArgumentTypes, bindings);
 
             case SyntaxTypes.Pattern.TuplePattern tuplePattern:
+
                 // Recurse into tuple elements (they might contain NamedPatterns)
                 foreach (var elem in tuplePattern.Elements)
                 {
-                    bindings = ExtractPatternBindingTypesWithConstructorsInternal(elem.Value, constructorArgumentTypes, bindings);
+                    bindings =
+                        ExtractPatternBindingTypesWithConstructorsInternal(elem.Value, constructorArgumentTypes, bindings);
                 }
+
                 return bindings;
 
             default:
+
                 // Other patterns don't introduce type constraints from constructors without type annotation
                 return bindings;
         }
@@ -1719,34 +1981,41 @@ public static class TypeInference
         switch (pattern)
         {
             case SyntaxTypes.Pattern.VarPattern varPattern:
+
                 // Simple variable binding
                 return bindings.SetItem(varPattern.Name, inferredType);
 
             case SyntaxTypes.Pattern.TuplePattern tuplePattern:
+
                 // Tuple pattern - match against TupleType
                 if (inferredType is InferredType.TupleType tupleType &&
                     tupleType.ElementTypes.Count == tuplePattern.Elements.Count)
                 {
                     for (var i = 0; i < tuplePattern.Elements.Count; i++)
                     {
-                        bindings = ExtractPatternBindingTypesFromInferredInternal(
-                            tuplePattern.Elements[i].Value,
-                            tupleType.ElementTypes[i],
-                            bindings,
-                            constructorArgumentTypes);
+                        bindings =
+                            ExtractPatternBindingTypesFromInferredInternal(
+                                tuplePattern.Elements[i].Value,
+                                tupleType.ElementTypes[i],
+                                bindings,
+                                constructorArgumentTypes);
                     }
                 }
+
                 return bindings;
 
             case SyntaxTypes.Pattern.ParenthesizedPattern parenthesized:
+
                 // Unwrap parenthesized pattern and recurse
-                return ExtractPatternBindingTypesFromInferredInternal(
-                    parenthesized.Pattern.Value,
-                    inferredType,
-                    bindings,
-                    constructorArgumentTypes);
+                return
+                    ExtractPatternBindingTypesFromInferredInternal(
+                        parenthesized.Pattern.Value,
+                        inferredType,
+                        bindings,
+                        constructorArgumentTypes);
 
             case SyntaxTypes.Pattern.NamedPattern namedPattern:
+
                 // NamedPattern - look up constructor argument types
                 if (constructorArgumentTypes is not null &&
                     constructorArgumentTypes.TryGetValue(namedPattern.Name.Name, out var argTypes) &&
@@ -1754,20 +2023,24 @@ public static class TypeInference
                 {
                     for (var i = 0; i < namedPattern.Arguments.Count; i++)
                     {
-                        bindings = ExtractPatternBindingTypesFromInferredInternal(
-                            namedPattern.Arguments[i].Value,
-                            argTypes[i],
-                            bindings,
-                            constructorArgumentTypes);
+                        bindings =
+                            ExtractPatternBindingTypesFromInferredInternal(
+                                namedPattern.Arguments[i].Value,
+                                argTypes[i],
+                                bindings,
+                                constructorArgumentTypes);
                     }
                 }
+
                 return bindings;
 
             case SyntaxTypes.Pattern.AllPattern:
+
                 // Wildcard pattern - no bindings
                 return bindings;
 
             default:
+
                 // Additional patterns can be added as needed
                 return bindings;
         }
@@ -1804,7 +2077,8 @@ public static class TypeInference
                 var typeName = choiceTypeDecl.TypeDeclaration.Name.Value;
 
                 // Get the type parameters (generics) for this type
-                var typeParams = choiceTypeDecl.TypeDeclaration.Generics
+                var typeParams =
+                    choiceTypeDecl.TypeDeclaration.Generics
                     .Select(g => g.Value)
                     .ToList();
 
@@ -1816,14 +2090,16 @@ public static class TypeInference
 
                     // The constructor result type is the choice type with type variables as arguments
                     // e.g., for `type ChoiceType a b = ...`, the result type is `ChoiceType a b`
-                    var typeArguments = typeParams
+                    var typeArguments =
+                        typeParams
                         .Select(p => (InferredType)new InferredType.TypeVariable(p))
                         .ToList();
 
-                    InferredType resultType = new InferredType.ChoiceType(
-                        ModuleName: [],
-                        TypeName: typeName,
-                        TypeArguments: typeArguments);
+                    InferredType resultType =
+                        new InferredType.ChoiceType(
+                            ModuleName: [],
+                            TypeName: typeName,
+                            TypeArguments: typeArguments);
 
                     // Build the constructor type: arg1 -> arg2 -> ... -> ResultType
                     var constructorType = resultType;
@@ -1844,6 +2120,7 @@ public static class TypeInference
                 // Type alias record constructors - if the type alias is for a record type,
                 // it creates an implicit constructor: FieldType1 -> FieldType2 -> ... -> { field1: T1, field2: T2, ... }
                 var aliasName = aliasDecl.TypeAlias.Name.Value;
+
                 var qualifiedAliasName = moduleName + "." + aliasName;
 
                 // Check if the type annotation is a record type
@@ -1893,6 +2170,7 @@ public static class TypeInference
     {
         // Build parameter names dictionary
         var parameterNames = new Dictionary<string, int>();
+
         for (var i = 0; i < arguments.Count; i++)
         {
             if (arguments[i].Value is SyntaxTypes.Pattern.VarPattern varPattern)
@@ -1902,20 +2180,22 @@ public static class TypeInference
         }
 
         // Infer parameter types from usage context (function applications)
-        var parameterTypes = InferParameterTypesFromUsage(
-            expression,
-            parameterNames,
-            functionSignatures);
+        var parameterTypes =
+            InferParameterTypesFromUsage(
+                expression,
+                parameterNames,
+                functionSignatures);
 
         var localBindingTypes = ImmutableDictionary<string, InferredType>.Empty;
 
-        var returnType = InferExpressionType(
-            expression,
-            parameterNames,
-            parameterTypes,
-            localBindingTypes,
-            moduleName,
-            functionSignatures);
+        var returnType =
+            InferExpressionType(
+                expression,
+                parameterNames,
+                parameterTypes,
+                localBindingTypes,
+                moduleName,
+                functionSignatures);
 
         return (returnType, parameterTypes);
     }
@@ -1982,6 +2262,7 @@ public static class TypeInference
 
         // Build from right to left: t1 -> (t2 -> (... -> tN))
         var result = types[^1];
+
         for (var i = types.Count - 2; i >= 0; i--)
         {
             result = new InferredType.FunctionType(types[i], result);
@@ -2005,7 +2286,8 @@ public static class TypeInference
         var parameterTypes = ImmutableDictionary<string, InferredType>.Empty;
 
         // Recursively scan expressions to find function applications
-        parameterTypes = ScanExpressionForParameterTypes(expression, parameterNames, functionSignatures, parameterTypes);
+        parameterTypes =
+            ScanExpressionForParameterTypes(expression, parameterNames, functionSignatures, parameterTypes);
 
         return parameterTypes;
     }
@@ -2039,16 +2321,20 @@ public static class TypeInference
         switch (expression)
         {
             case SyntaxTypes.Expression.Application app when app.Arguments.Count >= 2:
+
                 // Check if first argument is a function reference with known signature
                 if (app.Arguments[0].Value is SyntaxTypes.Expression.FunctionOrValue funcRef)
                 {
                     var qualifiedName =
                         funcRef.ModuleName.Count > 0
-                        ? string.Join(".", funcRef.ModuleName) + "." + funcRef.Name
-                        : funcRef.Name;
+                        ?
+                        string.Join(".", funcRef.ModuleName) + "." + funcRef.Name
+                        :
+                        funcRef.Name;
 
                     // Try both qualified and unqualified names
                     InferredType? funcType = null;
+
                     if (functionSignatures.TryGetValue(qualifiedName, out var ft))
                     {
                         funcType = ft;
@@ -2088,13 +2374,22 @@ public static class TypeInference
                 // Recurse into application arguments
                 foreach (var arg in app.Arguments)
                 {
-                    parameterTypes = ScanExpressionForParameterTypes(arg.Value, parameterNames, functionSignatures, parameterTypes, localBindingDefinitions);
+                    parameterTypes =
+                        ScanExpressionForParameterTypes(
+                            arg.Value,
+                            parameterNames,
+                            functionSignatures,
+                            parameterTypes,
+                            localBindingDefinitions);
                 }
+
                 break;
 
             case SyntaxTypes.Expression.LetExpression letExpr:
+
                 // Build a map of local binding definitions for constraint propagation
                 var extendedLocalBindings = localBindingDefinitions;
+
                 foreach (var decl in letExpr.Value.Declarations)
                 {
                     if (decl.Value is SyntaxTypes.Expression.LetDeclaration.LetFunction letFunc)
@@ -2102,54 +2397,113 @@ public static class TypeInference
                         var bindingName = letFunc.Function.Declaration.Value.Name.Value;
                         var bindingExpr = letFunc.Function.Declaration.Value.Expression.Value;
                         extendedLocalBindings = extendedLocalBindings.SetItem(bindingName, bindingExpr);
-                        parameterTypes = ScanExpressionForParameterTypes(bindingExpr, parameterNames, functionSignatures, parameterTypes, extendedLocalBindings);
+
+                        parameterTypes =
+                            ScanExpressionForParameterTypes(
+                                bindingExpr,
+                                parameterNames,
+                                functionSignatures,
+                                parameterTypes,
+                                extendedLocalBindings);
                     }
                     else if (decl.Value is SyntaxTypes.Expression.LetDeclaration.LetDestructuring letDestr)
                     {
-                        parameterTypes = ScanExpressionForParameterTypes(letDestr.Expression.Value, parameterNames, functionSignatures, parameterTypes, extendedLocalBindings);
+                        parameterTypes =
+                            ScanExpressionForParameterTypes(
+                                letDestr.Expression.Value,
+                                parameterNames,
+                                functionSignatures,
+                                parameterTypes,
+                                extendedLocalBindings);
                     }
                 }
-                parameterTypes = ScanExpressionForParameterTypes(letExpr.Value.Expression.Value, parameterNames, functionSignatures, parameterTypes, extendedLocalBindings);
+
+                parameterTypes =
+                    ScanExpressionForParameterTypes(
+                        letExpr.Value.Expression.Value,
+                        parameterNames,
+                        functionSignatures,
+                        parameterTypes,
+                        extendedLocalBindings);
+
                 break;
 
             case SyntaxTypes.Expression.IfBlock ifBlock:
-                parameterTypes = ScanExpressionForParameterTypes(ifBlock.Condition.Value, parameterNames, functionSignatures, parameterTypes, localBindingDefinitions);
-                parameterTypes = ScanExpressionForParameterTypes(ifBlock.ThenBlock.Value, parameterNames, functionSignatures, parameterTypes, localBindingDefinitions);
-                parameterTypes = ScanExpressionForParameterTypes(ifBlock.ElseBlock.Value, parameterNames, functionSignatures, parameterTypes, localBindingDefinitions);
+                parameterTypes =
+                    ScanExpressionForParameterTypes(
+                        ifBlock.Condition.Value,
+                        parameterNames,
+                        functionSignatures,
+                        parameterTypes,
+                        localBindingDefinitions);
+
+                parameterTypes =
+                    ScanExpressionForParameterTypes(
+                        ifBlock.ThenBlock.Value,
+                        parameterNames,
+                        functionSignatures,
+                        parameterTypes,
+                        localBindingDefinitions);
+
+                parameterTypes =
+                    ScanExpressionForParameterTypes(
+                        ifBlock.ElseBlock.Value,
+                        parameterNames,
+                        functionSignatures,
+                        parameterTypes,
+                        localBindingDefinitions);
+
                 break;
 
             case SyntaxTypes.Expression.CaseExpression caseExpr:
-                parameterTypes = ScanExpressionForParameterTypes(caseExpr.CaseBlock.Expression.Value, parameterNames, functionSignatures, parameterTypes, localBindingDefinitions);
+                parameterTypes =
+                    ScanExpressionForParameterTypes(
+                        caseExpr.CaseBlock.Expression.Value,
+                        parameterNames,
+                        functionSignatures,
+                        parameterTypes,
+                        localBindingDefinitions);
+
                 foreach (var caseCase in caseExpr.CaseBlock.Cases)
                 {
-                    parameterTypes = ScanExpressionForParameterTypes(caseCase.Expression.Value, parameterNames, functionSignatures, parameterTypes, localBindingDefinitions);
+                    parameterTypes =
+                        ScanExpressionForParameterTypes(
+                            caseCase.Expression.Value,
+                            parameterNames,
+                            functionSignatures,
+                            parameterTypes,
+                            localBindingDefinitions);
                 }
+
                 break;
 
             case SyntaxTypes.Expression.OperatorApplication opApp:
+
                 // Check if the operator forces specific operand types
                 if (s_operatorConstraints.TryGetValue(opApp.Operator, out var constraints))
                 {
                     // If the operator forces left operand type, constrain any parameter variables
                     if (constraints.LeftOperandType is not null)
                     {
-                        parameterTypes = ExtractTypeConstraintFromExpression(
-                            opApp.Left.Value,
-                            constraints.LeftOperandType,
-                            parameterNames,
-                            parameterTypes,
-                            localBindingDefinitions);
+                        parameterTypes =
+                            ExtractTypeConstraintFromExpression(
+                                opApp.Left.Value,
+                                constraints.LeftOperandType,
+                                parameterNames,
+                                parameterTypes,
+                                localBindingDefinitions);
                     }
 
                     // If the operator forces right operand type, constrain any parameter variables
                     if (constraints.RightOperandType is not null)
                     {
-                        parameterTypes = ExtractTypeConstraintFromExpression(
-                            opApp.Right.Value,
-                            constraints.RightOperandType,
-                            parameterNames,
-                            parameterTypes,
-                            localBindingDefinitions);
+                        parameterTypes =
+                            ExtractTypeConstraintFromExpression(
+                                opApp.Right.Value,
+                                constraints.RightOperandType,
+                                parameterNames,
+                                parameterTypes,
+                                localBindingDefinitions);
                     }
                 }
 
@@ -2160,57 +2514,108 @@ public static class TypeInference
                     // Check if left operand is a Float literal
                     if (opApp.Left.Value is SyntaxTypes.Expression.Floatable)
                     {
-                        parameterTypes = ExtractTypeConstraintFromExpression(
-                            opApp.Right.Value,
-                            s_floatType,
-                            parameterNames,
-                            parameterTypes,
-                            localBindingDefinitions);
+                        parameterTypes =
+                            ExtractTypeConstraintFromExpression(
+                                opApp.Right.Value,
+                                s_floatType,
+                                parameterNames,
+                                parameterTypes,
+                                localBindingDefinitions);
                     }
 
                     // Check if right operand is a Float literal
                     if (opApp.Right.Value is SyntaxTypes.Expression.Floatable)
                     {
-                        parameterTypes = ExtractTypeConstraintFromExpression(
-                            opApp.Left.Value,
-                            s_floatType,
-                            parameterNames,
-                            parameterTypes,
-                            localBindingDefinitions);
+                        parameterTypes =
+                            ExtractTypeConstraintFromExpression(
+                                opApp.Left.Value,
+                                s_floatType,
+                                parameterNames,
+                                parameterTypes,
+                                localBindingDefinitions);
                     }
                 }
 
-                parameterTypes = ScanExpressionForParameterTypes(opApp.Left.Value, parameterNames, functionSignatures, parameterTypes, localBindingDefinitions);
-                parameterTypes = ScanExpressionForParameterTypes(opApp.Right.Value, parameterNames, functionSignatures, parameterTypes, localBindingDefinitions);
+                parameterTypes =
+                    ScanExpressionForParameterTypes(
+                        opApp.Left.Value,
+                        parameterNames,
+                        functionSignatures,
+                        parameterTypes,
+                        localBindingDefinitions);
+
+                parameterTypes =
+                    ScanExpressionForParameterTypes(
+                        opApp.Right.Value,
+                        parameterNames,
+                        functionSignatures,
+                        parameterTypes,
+                        localBindingDefinitions);
+
                 break;
 
             case SyntaxTypes.Expression.ParenthesizedExpression paren:
-                parameterTypes = ScanExpressionForParameterTypes(paren.Expression.Value, parameterNames, functionSignatures, parameterTypes, localBindingDefinitions);
+                parameterTypes =
+                    ScanExpressionForParameterTypes(
+                        paren.Expression.Value,
+                        parameterNames,
+                        functionSignatures,
+                        parameterTypes,
+                        localBindingDefinitions);
+
                 break;
 
             case SyntaxTypes.Expression.LambdaExpression lambda:
-                parameterTypes = ScanExpressionForParameterTypes(lambda.Lambda.Expression.Value, parameterNames, functionSignatures, parameterTypes, localBindingDefinitions);
+                parameterTypes =
+                    ScanExpressionForParameterTypes(
+                        lambda.Lambda.Expression.Value,
+                        parameterNames,
+                        functionSignatures,
+                        parameterTypes,
+                        localBindingDefinitions);
+
                 break;
 
             case SyntaxTypes.Expression.TupledExpression tuple:
                 foreach (var elem in tuple.Elements)
                 {
-                    parameterTypes = ScanExpressionForParameterTypes(elem.Value, parameterNames, functionSignatures, parameterTypes, localBindingDefinitions);
+                    parameterTypes =
+                        ScanExpressionForParameterTypes(
+                            elem.Value,
+                            parameterNames,
+                            functionSignatures,
+                            parameterTypes,
+                            localBindingDefinitions);
                 }
+
                 break;
 
             case SyntaxTypes.Expression.ListExpr list:
                 foreach (var elem in list.Elements)
                 {
-                    parameterTypes = ScanExpressionForParameterTypes(elem.Value, parameterNames, functionSignatures, parameterTypes, localBindingDefinitions);
+                    parameterTypes =
+                        ScanExpressionForParameterTypes(
+                            elem.Value,
+                            parameterNames,
+                            functionSignatures,
+                            parameterTypes,
+                            localBindingDefinitions);
                 }
+
                 break;
 
             case SyntaxTypes.Expression.RecordExpr record:
                 foreach (var field in record.Fields)
                 {
-                    parameterTypes = ScanExpressionForParameterTypes(field.Value.valueExpr.Value, parameterNames, functionSignatures, parameterTypes, localBindingDefinitions);
+                    parameterTypes =
+                        ScanExpressionForParameterTypes(
+                            field.Value.valueExpr.Value,
+                            parameterNames,
+                            functionSignatures,
+                            parameterTypes,
+                            localBindingDefinitions);
                 }
+
                 break;
         }
 
@@ -2250,6 +2655,7 @@ public static class TypeInference
         switch (expression)
         {
             case SyntaxTypes.Expression.FunctionOrValue varRef:
+
                 // If this is a parameter variable, constrain its type
                 if (varRef.ModuleName.Count is 0 &&
                     parameterNames.ContainsKey(varRef.Name) &&
@@ -2263,27 +2669,55 @@ public static class TypeInference
                 {
                     // Unify with existing constraint if present
                     var unifiedType = UnifyTypes(existingType, targetType);
+
                     parameterTypes = parameterTypes.SetItem(varRef.Name, unifiedType);
                 }
                 // If this is a local binding, look up its definition and propagate the constraint
                 else if (varRef.ModuleName.Count is 0 &&
                     localBindingDefinitions.TryGetValue(varRef.Name, out var bindingExpr))
                 {
-                    parameterTypes = ExtractTypeConstraintFromExpression(
-                        bindingExpr, targetType, parameterNames, parameterTypes, localBindingDefinitions);
+                    parameterTypes =
+                        ExtractTypeConstraintFromExpression(
+                            bindingExpr,
+                            targetType,
+                            parameterNames,
+                            parameterTypes,
+                            localBindingDefinitions);
                 }
+
                 return parameterTypes;
 
             case SyntaxTypes.Expression.ParenthesizedExpression paren:
-                return ExtractTypeConstraintFromExpression(paren.Expression.Value, targetType, parameterNames, parameterTypes, localBindingDefinitions);
+                return
+                    ExtractTypeConstraintFromExpression(
+                        paren.Expression.Value,
+                        targetType,
+                        parameterNames,
+                        parameterTypes,
+                        localBindingDefinitions);
 
             case SyntaxTypes.Expression.OperatorApplication nestedOpApp:
+
                 // For arithmetic operators that preserve numeric type, propagate constraints to operands
                 if (nestedOpApp.Operator is "+" or "-" or "*" or "/" or "//" or "%" or "^")
                 {
-                    parameterTypes = ExtractTypeConstraintFromExpression(nestedOpApp.Left.Value, targetType, parameterNames, parameterTypes, localBindingDefinitions);
-                    parameterTypes = ExtractTypeConstraintFromExpression(nestedOpApp.Right.Value, targetType, parameterNames, parameterTypes, localBindingDefinitions);
+                    parameterTypes =
+                        ExtractTypeConstraintFromExpression(
+                            nestedOpApp.Left.Value,
+                            targetType,
+                            parameterNames,
+                            parameterTypes,
+                            localBindingDefinitions);
+
+                    parameterTypes =
+                        ExtractTypeConstraintFromExpression(
+                            nestedOpApp.Right.Value,
+                            targetType,
+                            parameterNames,
+                            parameterTypes,
+                            localBindingDefinitions);
                 }
+
                 return parameterTypes;
 
             default:

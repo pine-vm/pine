@@ -28,61 +28,61 @@ public class ExpressionCompiler
         expression switch
         {
             SyntaxTypes.Expression.UnitExpr =>
-                Expression.LiteralInstance(PineValue.EmptyList),
+            Expression.LiteralInstance(PineValue.EmptyList),
 
             SyntaxTypes.Expression.Integer expr =>
-                CompileInteger(expr),
+            CompileInteger(expr),
 
             SyntaxTypes.Expression.Hex expr =>
-                CompileHex(expr),
+            CompileHex(expr),
 
             SyntaxTypes.Expression.Literal expr =>
-                CompileLiteral(expr),
+            CompileLiteral(expr),
 
             SyntaxTypes.Expression.CharLiteral expr =>
-                CompileCharLiteral(expr),
+            CompileCharLiteral(expr),
 
             SyntaxTypes.Expression.FunctionOrValue expr =>
-                CompileFunctionOrValue(expr, context),
+            CompileFunctionOrValue(expr, context),
 
             SyntaxTypes.Expression.Application expr =>
-                CompileApplication(expr, context),
+            CompileApplication(expr, context),
 
             SyntaxTypes.Expression.ListExpr expr =>
-                CompileListExpr(expr, context),
+            CompileListExpr(expr, context),
 
             SyntaxTypes.Expression.TupledExpression expr =>
-                CompileTupledExpression(expr, context),
+            CompileTupledExpression(expr, context),
 
             SyntaxTypes.Expression.RecordExpr expr =>
-                CompileRecordExpr(expr, context),
+            CompileRecordExpr(expr, context),
 
             SyntaxTypes.Expression.OperatorApplication expr =>
-                CompileOperatorApplication(expr, context),
+            CompileOperatorApplication(expr, context),
 
             SyntaxTypes.Expression.ParenthesizedExpression expr =>
-                CompileParenthesizedExpression(expr, context),
+            CompileParenthesizedExpression(expr, context),
 
             SyntaxTypes.Expression.PrefixOperator expr =>
-                CompilePrefixOperator(expr),
+            CompilePrefixOperator(expr),
 
             SyntaxTypes.Expression.Negation expr =>
-                CompileNegation(expr, context),
+            CompileNegation(expr, context),
 
             SyntaxTypes.Expression.IfBlock expr =>
-                CompileIfBlock(expr, context),
+            CompileIfBlock(expr, context),
 
             SyntaxTypes.Expression.CaseExpression expr =>
-                CompileCaseExpression(expr, context),
+            CompileCaseExpression(expr, context),
 
             SyntaxTypes.Expression.LetExpression expr =>
-                CompileLetExpression(expr, context),
+            CompileLetExpression(expr, context),
 
             SyntaxTypes.Expression.RecordUpdateExpression expr =>
-                CompileRecordUpdateExpression(expr, context),
+            CompileRecordUpdateExpression(expr, context),
 
             SyntaxTypes.Expression.RecordAccess expr =>
-                CompileRecordAccess(expr, context),
+            CompileRecordAccess(expr, context),
 
             _ =>
             CompilationError.UnsupportedExpression(expression.GetType().Name)
@@ -210,9 +210,10 @@ public class ExpressionCompiler
                 return err;
             }
 
-            return Expression.KernelApplicationInstance(
-                kernelFunc.Name,
-                compiledInputResult.IsOkOrNull()!);
+            return
+                Expression.KernelApplicationInstance(
+                    kernelFunc.Name,
+                    compiledInputResult.IsOkOrNull()!);
         }
 
         // Compile all arguments
@@ -272,14 +273,15 @@ public class ExpressionCompiler
                 // Arguments are in declaration order (same as fieldNamesInDeclOrder)
                 // We need to construct a record with fields sorted alphabetically
 
-                var argumentCount = expr.Arguments.Count - 1;  // First arg is the constructor itself
+                var argumentCount = expr.Arguments.Count - 1; // First arg is the constructor itself
 
                 if (argumentCount != fieldNamesInDeclOrder.Count)
                 {
                     // Partial application not supported yet - fall through to other handling
                     // For now, only handle full application
-                    return CompilationError.UnsupportedExpression(
-                        $"Record constructor partial application not supported: {funcRef.Name} expects {fieldNamesInDeclOrder.Count} arguments but got {argumentCount}");
+                    return
+                        CompilationError.UnsupportedExpression(
+                            $"Record constructor partial application not supported: {funcRef.Name} expects {fieldNamesInDeclOrder.Count} arguments but got {argumentCount}");
                 }
 
                 // Create pairs of (fieldName, argExpression) in declaration order
@@ -289,51 +291,58 @@ public class ExpressionCompiler
                     .ToList();
 
                 // Sort pairs alphabetically by field name for the record representation
-                var sortedPairs = fieldArgPairs
+                var sortedPairs =
+                    fieldArgPairs
                     .OrderBy(pair => pair.fieldName, StringComparer.Ordinal)
                     .ToList();
 
                 // Build the record field expressions
-                var recordFieldExprs = sortedPairs
-                    .Select(pair => Expression.ListInstance(
-                    [
-                        Expression.LiteralInstance(StringEncoding.ValueFromString(pair.fieldName)),
-                        pair.expr
-                    ]))
+                var recordFieldExprs =
+                    sortedPairs
+                    .Select(
+                        pair => Expression.ListInstance(
+                            [
+                            Expression.LiteralInstance(StringEncoding.ValueFromString(pair.fieldName)),
+                            pair.expr
+                            ]))
                     .ToList();
 
                 // Build the record: [ElmRecordTag, [[field1, field2, ...]]]
                 return
                     Expression.ListInstance(
-                    [
+                        [
                         Expression.LiteralInstance(ElmValue.ElmRecordTypeTagNameAsValue),
                         Expression.ListInstance([Expression.ListInstance(recordFieldExprs)])
-                    ]);
+                        ]);
             }
 
             // Check if this is a choice type tag application
             if (ElmValueEncoding.StringIsValidTagName(funcRef.Name))
             {
                 var tagNameValue = Expression.LiteralInstance(StringEncoding.ValueFromString(funcRef.Name));
-                var expectedArgCount = context.ModuleCompilationContext.TryGetChoiceTypeConstructorArgumentCount(funcRef.Name);
+
+                var expectedArgCount =
+                    context.ModuleCompilationContext.TryGetChoiceTypeConstructorArgumentCount(funcRef.Name);
 
                 // If we know the expected argument count and have all arguments, build the value directly
                 if (expectedArgCount is null || compiledArguments.Length >= expectedArgCount.Value)
                 {
                     // Full application: build the choice type value directly
-                    return Expression.ListInstance(
-                    [
-                        tagNameValue,
-                        Expression.ListInstance(compiledArguments)
-                    ]);
+                    return
+                        Expression.ListInstance(
+                            [
+                            tagNameValue,
+                            Expression.ListInstance(compiledArguments)
+                            ]);
                 }
 
                 // Partial application: we have fewer arguments than expected
                 // Build an expression that evaluates to a function value
-                return EmitChoiceTypeTagPartialApplicationExpression(
-                    funcRef.Name,
-                    expectedArgCount.Value,
-                    compiledArguments);
+                return
+                    EmitChoiceTypeTagPartialApplicationExpression(
+                        funcRef.Name,
+                        expectedArgCount.Value,
+                        compiledArguments);
             }
 
             // Check if the function is a parameter or local binding (higher-order function application)
@@ -351,6 +360,7 @@ public class ExpressionCompiler
                 {
                     // Apply arguments to the function value from parameter using generic application
                     var funcExpr = BuiltinHelpers.BuildPathToParameter(paramIndex);
+
                     return CompileGenericFunctionApplication(funcExpr, compiledArguments);
                 }
             }
@@ -380,8 +390,10 @@ public class ExpressionCompiler
                         // Use integer-specific implementation
                         if (funcRef.Name is "add")
                             return BuiltinHelpers.ApplyBuiltinIntAdd(compiledArguments);
+
                         if (funcRef.Name is "sub")
                             return CoreLibraryModule.CoreBasics.Int_sub(compiledArguments[0], compiledArguments[1]);
+
                         if (funcRef.Name is "mul")
                             return BuiltinHelpers.ApplyBuiltinIntMul(compiledArguments);
                     }
@@ -405,9 +417,10 @@ public class ExpressionCompiler
                 if (funcRef.ModuleName.Count is 1 && funcRef.ModuleName[0] is "Basics" &&
                     CoreLibraryModule.CoreBasics.GetFunctionValue(funcRef.Name) is { } basicsFuncValue)
                 {
-                    return CompileGenericFunctionApplication(
-                        Expression.LiteralInstance(basicsFuncValue),
-                        compiledArguments);
+                    return
+                        CompileGenericFunctionApplication(
+                            Expression.LiteralInstance(basicsFuncValue),
+                            compiledArguments);
                 }
 
                 return new CompilationError.FunctionNotInDependencyLayout(qualifiedFunctionName);
@@ -428,9 +441,10 @@ public class ExpressionCompiler
             {
                 // Full or over-application: use optimized [[envFuncs], [arg0, arg1, ...]] structure
                 // for the first paramCount arguments
-                var functionRef = ExpressionBuilder.BuildExpressionForPathInExpression(
-                    [0, functionIndex],
-                    Expression.EnvironmentInstance);
+                var functionRef =
+                    ExpressionBuilder.BuildExpressionForPathInExpression(
+                        [0, functionIndex],
+                        Expression.EnvironmentInstance);
 
                 // Build the environment for the called function
                 Expression callEnvFunctions;
@@ -508,7 +522,8 @@ public class ExpressionCompiler
             if (compileFunctionExprResult.IsOkOrNull() is not { } funcOk)
             {
                 throw new NotImplementedException(
-                    "Unexpected result type when compiling function part of application: " + compileFunctionExprResult.GetType());
+                    "Unexpected result type when compiling function part of application: " +
+                    compileFunctionExprResult.GetType());
             }
 
             // Apply provided arguments using generic application
@@ -599,30 +614,34 @@ public class ExpressionCompiler
             var fieldValueExpr = field.Value.valueExpr.Value;
 
             var compiledValue = Compile(fieldValueExpr, context);
+
             if (compiledValue.IsErrOrNull() is { } err)
             {
                 return err;
             }
 
             // Each field is encoded as [fieldName, fieldValue]
-            var fieldPair = Expression.ListInstance(
-            [
-                Expression.LiteralInstance(StringEncoding.ValueFromString(fieldName)),
-                compiledValue.IsOkOrNull()!
-            ]);
+            var fieldPair =
+                Expression.ListInstance(
+                    [
+                    Expression.LiteralInstance(StringEncoding.ValueFromString(fieldName)),
+                    compiledValue.IsOkOrNull()!
+                    ]);
 
             compiledFieldPairs.Add(fieldPair);
         }
 
         // A record is encoded as [recordTypeTag, [[field1, field2, ...]]]
         var fieldsListExpr = Expression.ListInstance(compiledFieldPairs);
+
         var innerListExpr = Expression.ListInstance([fieldsListExpr]);
 
-        return Expression.ListInstance(
-        [
-            Expression.LiteralInstance(ElmValue.ElmRecordTypeTagNameAsValue),
-            innerListExpr
-        ]);
+        return
+            Expression.ListInstance(
+                [
+                Expression.LiteralInstance(ElmValue.ElmRecordTypeTagNameAsValue),
+                innerListExpr
+                ]);
     }
 
     private static Result<CompilationError, Expression> CompileRecordUpdateExpression(
@@ -666,18 +685,21 @@ public class ExpressionCompiler
         // This ordering is required because the runtime update function relies on both 
         // the record fields and updates being sorted in the same order to efficiently 
         // merge them in a single pass.
-        var sortedFields = expr.Fields
+        var sortedFields =
+            expr.Fields
             .OrderBy(f => f.Value.fieldName.Value, StringComparer.Ordinal)
             .ToList();
 
         // Compile update values
         var compiledUpdateValues = new List<(string fieldName, Expression valueExpr)>();
+
         foreach (var field in sortedFields)
         {
             var fieldName = field.Value.fieldName.Value;
             var fieldValueExpr = field.Value.valueExpr.Value;
 
             var compiledValue = Compile(fieldValueExpr, context);
+
             if (compiledValue.IsErrOrNull() is { } err)
             {
                 return err;
@@ -690,7 +712,8 @@ public class ExpressionCompiler
         if (recordType is not null)
         {
             // Build a map of field name to index
-            var fieldIndices = recordType.Fields
+            var fieldIndices =
+                recordType.Fields
                 .Select((field, idx) => (field.FieldName, idx))
                 .ToDictionary(x => x.FieldName, x => x.idx);
 
@@ -700,23 +723,26 @@ public class ExpressionCompiler
             if (allFieldsKnown)
             {
                 // Use compile-time field index computation
-                return CompileRecordUpdateWithKnownIndices(
-                    recordExpr,
-                    recordType.Fields.Count,
-                    compiledUpdateValues.Select(u => (fieldIndices[u.fieldName], u.valueExpr)).ToList());
+                return
+                    CompileRecordUpdateWithKnownIndices(
+                        recordExpr,
+                        recordType.Fields.Count,
+                        compiledUpdateValues.Select(u => (fieldIndices[u.fieldName], u.valueExpr)).ToList());
             }
         }
 
         // Fall back to runtime field update when type is not known
         var compiledUpdates = new List<Expression>();
+
         foreach (var (fieldName, valueExpr) in compiledUpdateValues)
         {
             // Each update is encoded as [fieldName, newValue]
-            var updatePair = Expression.ListInstance(
-            [
-                Expression.LiteralInstance(StringEncoding.ValueFromString(fieldName)),
-                valueExpr
-            ]);
+            var updatePair =
+                Expression.ListInstance(
+                    [
+                    Expression.LiteralInstance(StringEncoding.ValueFromString(fieldName)),
+                    valueExpr
+                    ]);
 
             compiledUpdates.Add(updatePair);
         }
@@ -727,9 +753,10 @@ public class ExpressionCompiler
         // The environment for the function is: [record, updates]
         var callEnv = Expression.ListInstance([recordExpr, updatesListExpr]);
 
-        return new Expression.ParseAndEval(
-            encoded: Expression.LiteralInstance(RecordRuntime.PineFunctionForRecordUpdateAsValue),
-            environment: callEnv);
+        return
+            new Expression.ParseAndEval(
+                encoded: Expression.LiteralInstance(RecordRuntime.PineFunctionForRecordUpdateAsValue),
+                environment: callEnv);
     }
 
     /// <summary>
@@ -751,8 +778,9 @@ public class ExpressionCompiler
         var recordTagExpr = BuiltinHelpers.ApplyBuiltinHead(recordExpr);
 
         // Get record[1] (skip tag)
-        var recordContentExpr = BuiltinHelpers.ApplyBuiltinHead(
-            BuiltinHelpers.ApplyBuiltinSkip(1, recordExpr));
+        var recordContentExpr =
+            BuiltinHelpers.ApplyBuiltinHead(
+                BuiltinHelpers.ApplyBuiltinSkip(1, recordExpr));
 
         // Get record[1][0] = [field1, field2, ...]
         var fieldsListExpr = BuiltinHelpers.ApplyBuiltinHead(recordContentExpr);
@@ -762,6 +790,7 @@ public class ExpressionCompiler
         var updatesDict = updates.ToDictionary(u => u.fieldIndex, u => u.newValue);
 
         var updatedFieldExprs = new List<Expression>();
+
         for (var i = 0; i < totalFieldCount; i++)
         {
             Expression fieldPairExpr;
@@ -773,8 +802,9 @@ public class ExpressionCompiler
             }
             else
             {
-                fieldPairExpr = BuiltinHelpers.ApplyBuiltinHead(
-                    BuiltinHelpers.ApplyBuiltinSkip(i, fieldsListExpr));
+                fieldPairExpr =
+                    BuiltinHelpers.ApplyBuiltinHead(
+                        BuiltinHelpers.ApplyBuiltinSkip(i, fieldsListExpr));
             }
 
             if (updatesDict.TryGetValue(i, out var newValueExpr))
@@ -795,11 +825,13 @@ public class ExpressionCompiler
 
         // Construct the new record: [tag, [[updatedFields]]]
         var updatedFieldsListExpr = Expression.ListInstance(updatedFieldExprs);
-        return Expression.ListInstance(
-        [
-            recordTagExpr,
-            Expression.ListInstance([updatedFieldsListExpr])
-        ]);
+
+        return
+            Expression.ListInstance(
+                [
+                recordTagExpr,
+                Expression.ListInstance([updatedFieldsListExpr])
+                ]);
     }
 
     private static Result<CompilationError, Expression> CompileRecordAccess(
@@ -808,6 +840,7 @@ public class ExpressionCompiler
     {
         // Compile the record expression
         var recordResult = Compile(expr.Record.Value, context);
+
         if (recordResult.IsErrOrNull() is { } err)
         {
             return err;
@@ -818,11 +851,13 @@ public class ExpressionCompiler
 
         // Try to get the record type to compute field index at compile time
         var recordType = TryGetRecordType(expr.Record.Value, context);
+
         if (recordType is not null)
         {
             // We know the record field layout at compile time
             // Find the index of the field in the sorted field list
-            var fieldIndex = recordType.Fields
+            var fieldIndex =
+                recordType.Fields
                 .Select((field, idx) => (field.FieldName, idx))
                 .FirstOrDefault(x => x.FieldName == fieldName);
 
@@ -839,15 +874,17 @@ public class ExpressionCompiler
         // Fall back to runtime field lookup when type is not known
         // Build the call to the record access function
         // The environment for the function is: [record, fieldName]
-        var callEnv = Expression.ListInstance(
-        [
-            recordExpr,
-            Expression.LiteralInstance(StringEncoding.ValueFromString(fieldName))
-        ]);
+        var callEnv =
+            Expression.ListInstance(
+                [
+                recordExpr,
+                Expression.LiteralInstance(StringEncoding.ValueFromString(fieldName))
+                ]);
 
-        return new Expression.ParseAndEval(
-            encoded: Expression.LiteralInstance(RecordRuntime.PineFunctionForRecordAccessAsValue),
-            environment: callEnv);
+        return
+            new Expression.ParseAndEval(
+                encoded: Expression.LiteralInstance(RecordRuntime.PineFunctionForRecordAccessAsValue),
+                environment: callEnv);
     }
 
     /// <summary>
@@ -865,27 +902,31 @@ public class ExpressionCompiler
         // record[1][0][N][1] = fieldValue_N
 
         // Get record[1] (skip tag)
-        var recordContentExpr = BuiltinHelpers.ApplyBuiltinHead(
-            BuiltinHelpers.ApplyBuiltinSkip(1, recordExpr));
+        var recordContentExpr =
+            BuiltinHelpers.ApplyBuiltinHead(
+                BuiltinHelpers.ApplyBuiltinSkip(1, recordExpr));
 
         // Get record[1][0] (unwrap the inner list)
         var fieldsListExpr = BuiltinHelpers.ApplyBuiltinHead(recordContentExpr);
 
         // Get field at index N
         Expression fieldPairExpr;
+
         if (fieldIndex is 0)
         {
             fieldPairExpr = BuiltinHelpers.ApplyBuiltinHead(fieldsListExpr);
         }
         else
         {
-            fieldPairExpr = BuiltinHelpers.ApplyBuiltinHead(
-                BuiltinHelpers.ApplyBuiltinSkip(fieldIndex, fieldsListExpr));
+            fieldPairExpr =
+                BuiltinHelpers.ApplyBuiltinHead(
+                    BuiltinHelpers.ApplyBuiltinSkip(fieldIndex, fieldsListExpr));
         }
 
         // Get the field value (index 1 in the pair)
-        return BuiltinHelpers.ApplyBuiltinHead(
-            BuiltinHelpers.ApplyBuiltinSkip(1, fieldPairExpr));
+        return
+            BuiltinHelpers.ApplyBuiltinHead(
+                BuiltinHelpers.ApplyBuiltinSkip(1, fieldPairExpr));
     }
 
     /// <summary>
@@ -957,6 +998,7 @@ public class ExpressionCompiler
         }
 
         var innerResult = Compile(expr.Expression.Value, context);
+
         if (innerResult.IsErrOrNull() is { } err)
         {
             return err;
@@ -971,27 +1013,31 @@ public class ExpressionCompiler
         ExpressionCompilationContext context)
     {
         var conditionResult = Compile(expr.Condition.Value, context);
+
         if (conditionResult.IsErrOrNull() is { } condErr)
         {
             return condErr;
         }
 
         var trueBranchResult = Compile(expr.ThenBlock.Value, context);
+
         if (trueBranchResult.IsErrOrNull() is { } trueErr)
         {
             return trueErr;
         }
 
         var falseBranchResult = Compile(expr.ElseBlock.Value, context);
+
         if (falseBranchResult.IsErrOrNull() is { } falseErr)
         {
             return falseErr;
         }
 
-        return Expression.ConditionalInstance(
-            condition: conditionResult.IsOkOrNull()!,
-            falseBranch: falseBranchResult.IsOkOrNull()!,
-            trueBranch: trueBranchResult.IsOkOrNull()!);
+        return
+            Expression.ConditionalInstance(
+                condition: conditionResult.IsOkOrNull()!,
+                falseBranch: falseBranchResult.IsOkOrNull()!,
+                trueBranch: trueBranchResult.IsOkOrNull()!);
     }
 
     private static Result<CompilationError, Expression> CompileCaseExpression(
@@ -1009,9 +1055,13 @@ public class ExpressionCompiler
         ExpressionCompilationContext context)
     {
         var newBindings = new Dictionary<string, Expression>();
-        var newBindingTypes = context.LocalBindingTypes is { } existingBindingTypes
-            ? existingBindingTypes.ToImmutableDictionary()
-            : [];
+
+        var newBindingTypes =
+            context.LocalBindingTypes is { } existingBindingTypes
+            ?
+            existingBindingTypes.ToImmutableDictionary()
+            :
+            [];
 
         if (context.LocalBindings is { } existingBindings)
         {
@@ -1048,6 +1098,7 @@ public class ExpressionCompiler
         }
 
         var allBoundNames = new HashSet<string>();
+
         foreach (var info in declarationInfos)
         {
             foreach (var name in info.names)
@@ -1057,6 +1108,7 @@ public class ExpressionCompiler
         }
 
         var sortedIndicesResult = TopologicalSortDeclarations(declarationInfos);
+
         if (sortedIndicesResult.IsErrOrNull() is { } sortErr)
         {
             return sortErr;
@@ -1080,13 +1132,14 @@ public class ExpressionCompiler
                     {
                         // Infer the type of the bound expression BEFORE compiling
                         // This allows us to propagate types from parameters through let bindings
-                        var bindingType = TypeInference.InferExpressionType(
-                            funcBody,
-                            context.ParameterNames,
-                            context.ParameterTypes,
-                            newBindingTypes.Count > 0 ? newBindingTypes : null,
-                            context.CurrentModuleName,
-                            context.FunctionReturnTypes);
+                        var bindingType =
+                            TypeInference.InferExpressionType(
+                                funcBody,
+                                context.ParameterNames,
+                                context.ParameterTypes,
+                                newBindingTypes.Count > 0 ? newBindingTypes : null,
+                                context.CurrentModuleName,
+                                context.FunctionReturnTypes);
 
                         newBindingTypes = newBindingTypes.SetItem(funcName, bindingType);
 
@@ -1106,36 +1159,42 @@ public class ExpressionCompiler
                     {
                         return new CompilationError.UnsupportedLetFunctionWithParameters(funcName);
                     }
+
                     break;
 
                 case SyntaxTypes.Expression.LetDeclaration.LetDestructuring letDestructuring:
+
                     // Infer the type of the expression being destructured
-                    var destructuredExprType = TypeInference.InferExpressionType(
-                        letDestructuring.Expression.Value,
-                        context.ParameterNames,
-                        context.ParameterTypes,
-                        newBindingTypes.Count > 0 ? newBindingTypes : null,
-                        context.CurrentModuleName,
-                        context.FunctionReturnTypes);
+                    var destructuredExprType =
+                        TypeInference.InferExpressionType(
+                            letDestructuring.Expression.Value,
+                            context.ParameterNames,
+                            context.ParameterTypes,
+                            newBindingTypes.Count > 0 ? newBindingTypes : null,
+                            context.CurrentModuleName,
+                            context.FunctionReturnTypes);
 
                     // Extract binding types from the pattern using the inferred type
-                    newBindingTypes = TypeInference.ExtractPatternBindingTypesFromInferred(
-                        letDestructuring.Pattern.Value,
-                        destructuredExprType,
-                        newBindingTypes);
+                    newBindingTypes =
+                        TypeInference.ExtractPatternBindingTypesFromInferred(
+                            letDestructuring.Pattern.Value,
+                            destructuredExprType,
+                            newBindingTypes);
 
                     // Update the let context with the new types
                     letContext = letContext.WithReplacedLocalBindingsAndTypes(newBindings, newBindingTypes);
 
                     var destructuredResult = Compile(letDestructuring.Expression.Value, letContext);
+
                     if (destructuredResult.IsErrOrNull() is { } destrErr)
                     {
                         return destrErr;
                     }
 
-                    var patternBindings = PatternCompiler.ExtractPatternBindings(
-                        letDestructuring.Pattern.Value,
-                        destructuredResult.IsOkOrNull()!);
+                    var patternBindings =
+                        PatternCompiler.ExtractPatternBindings(
+                            letDestructuring.Pattern.Value,
+                            destructuredResult.IsOkOrNull()!);
 
                     foreach (var kvp in patternBindings)
                     {
@@ -1144,6 +1203,7 @@ public class ExpressionCompiler
 
                     // Update the let context with the new bindings
                     letContext = letContext.WithReplacedLocalBindingsAndTypes(newBindings, newBindingTypes);
+
                     break;
             }
         }
@@ -1164,6 +1224,7 @@ public class ExpressionCompiler
                 {
                     refs.Add(funcOrVal.Name);
                 }
+
                 break;
 
             case SyntaxTypes.Expression.Application app:
@@ -1171,6 +1232,7 @@ public class ExpressionCompiler
                 {
                     CollectExpressionReferences(arg.Value, refs);
                 }
+
                 break;
 
             case SyntaxTypes.Expression.ListExpr listExpr:
@@ -1178,6 +1240,7 @@ public class ExpressionCompiler
                 {
                     CollectExpressionReferences(elem.Value, refs);
                 }
+
                 break;
 
             case SyntaxTypes.Expression.OperatorApplication opApp:
@@ -1201,6 +1264,7 @@ public class ExpressionCompiler
 
             case SyntaxTypes.Expression.LetExpression letExpr:
                 var localNames = new HashSet<string>();
+
                 foreach (var decl in letExpr.Value.Declarations)
                 {
                     switch (decl.Value)
@@ -1216,6 +1280,7 @@ public class ExpressionCompiler
                 }
 
                 var innerRefs = new HashSet<string>();
+
                 foreach (var decl in letExpr.Value.Declarations)
                 {
                     switch (decl.Value)
@@ -1229,6 +1294,7 @@ public class ExpressionCompiler
                             break;
                     }
                 }
+
                 CollectExpressionReferences(letExpr.Value.Expression.Value, innerRefs);
 
                 foreach (var innerRef in innerRefs)
@@ -1238,6 +1304,7 @@ public class ExpressionCompiler
                         refs.Add(innerRef);
                     }
                 }
+
                 break;
         }
     }
@@ -1337,10 +1404,12 @@ public class ExpressionCompiler
 
         if (result.Count != declarationCount)
         {
-            var cycleNames = declarations
+            var cycleNames =
+                declarations
                 .Where((_, i) => !result.Contains(i))
                 .SelectMany(d => d.names)
                 .ToList();
+
             return (result, cycleNames);
         }
 
@@ -1403,19 +1472,22 @@ public class ExpressionCompiler
             // Zero-parameter value declaration: invoke the body immediately
             // to produce the actual value rather than returning an unevaluated function wrapper.
             var envFuncsListExpr = Expression.ListInstance(envFunctionsExprs);
+
             var callEnvironment =
                 Expression.ListInstance([envFuncsListExpr, Expression.EmptyList]);
 
-            return (Result<CompilationError, Expression>)new Expression.ParseAndEval(
-                encoded: encodedBodyExpr,
-                environment: callEnvironment);
+            return
+                (Result<CompilationError, Expression>)new Expression.ParseAndEval(
+                    encoded: encodedBodyExpr,
+                    environment: callEnvironment);
         }
 
         // Emit the function value expression using FunctionValueBuilder
-        return FunctionValueBuilder.EmitFunctionExpressionFromEncodedBody(
-            encodedBodyExpr,
-            paramCount,
-            envFunctionsExprs);
+        return
+            FunctionValueBuilder.EmitFunctionExpressionFromEncodedBody(
+                encodedBodyExpr,
+                paramCount,
+                envFunctionsExprs);
     }
 
     /// <summary>
@@ -1437,11 +1509,13 @@ public class ExpressionCompiler
         {
             // All arguments are already captured - just build the value directly
             var tagNameValue = Expression.LiteralInstance(StringEncoding.ValueFromString(tagName));
-            return Expression.ListInstance(
-            [
-                tagNameValue,
-                Expression.ListInstance(capturedArgExpressions)
-            ]);
+
+            return
+                Expression.ListInstance(
+                    [
+                    tagNameValue,
+                    Expression.ListInstance(capturedArgExpressions)
+                    ]);
         }
 
         // Build the inner expression that constructs the choice type value.
@@ -1476,19 +1550,21 @@ public class ExpressionCompiler
         }
 
         // Build the choice type value expression
-        var choiceTypeValueExpr = Expression.ListInstance(
-        [
-            tagNameLiteral,
-            Expression.ListInstance(allArgExpressions)
-        ]);
+        var choiceTypeValueExpr =
+            Expression.ListInstance(
+                [
+                tagNameLiteral,
+                Expression.ListInstance(allArgExpressions)
+                ]);
 
         // Use EmitFunctionExpressionFromEncodedBody to build a function value with the captured args
         // stored in the "env functions" slot. This allows the captured args to be evaluated at
         // the point where the partial application expression is evaluated, not when it's compiled.
-        return FunctionValueBuilder.EmitFunctionExpression(
-            choiceTypeValueExpr,
-            remainingArgCount,
-            capturedArgExpressions);
+        return
+            FunctionValueBuilder.EmitFunctionExpression(
+                choiceTypeValueExpr,
+                remainingArgCount,
+                capturedArgExpressions);
     }
 
     /// <summary>
@@ -1518,16 +1594,18 @@ public class ExpressionCompiler
         var tagNameExpr = Expression.LiteralInstance(StringEncoding.ValueFromString(tagName));
 
         // Build the choice type value expression for when all arguments are collected
-        var choiceTypeValueExpr = Expression.ListInstance(
-        [
-            tagNameExpr,
-            Expression.ListInstance(argExpressions)
-        ]);
+        var choiceTypeValueExpr =
+            Expression.ListInstance(
+                [
+                tagNameExpr,
+                Expression.ListInstance(argExpressions)
+                ]);
 
         // Build the function value that wraps this expression
-        var functionValue = FunctionValueBuilder.EmitFunctionValueWithoutEnvFunctions(
-            choiceTypeValueExpr,
-            argCount);
+        var functionValue =
+            FunctionValueBuilder.EmitFunctionValueWithoutEnvFunctions(
+                choiceTypeValueExpr,
+                argCount);
 
         return Expression.LiteralInstance(functionValue);
     }
@@ -1554,9 +1632,10 @@ public class ExpressionCompiler
             // ParseAndEval where:
             // - encoded = the function value (which is an encoded expression)
             // - environment = the argument value
-            result = new Expression.ParseAndEval(
-                encoded: result,
-                environment: argument);
+            result =
+                new Expression.ParseAndEval(
+                    encoded: result,
+                    environment: argument);
         }
 
         return result;

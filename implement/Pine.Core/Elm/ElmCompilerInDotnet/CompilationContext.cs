@@ -51,8 +51,10 @@ public record FunctionScc(
     /// </summary>
     public IReadOnlyList<string> GetLayout() =>
         AdditionalDependencies.Count is 0
-            ? Members
-            : Members.AddRange(AdditionalDependencies);
+        ?
+        Members
+        :
+        Members.AddRange(AdditionalDependencies);
 }
 
 /// <summary>
@@ -83,7 +85,8 @@ public record ModuleCompilationContext(
     public ModuleCompilationContext WithCompiledFunction(string name, PineValue value, PineValue encodedBody, IReadOnlyList<string> dependencyLayout) =>
         this with
         {
-            CompiledFunctionsCache = CompiledFunctionsCache.SetItem(name, new CompiledFunctionInfo(value, encodedBody, dependencyLayout))
+            CompiledFunctionsCache =
+            CompiledFunctionsCache.SetItem(name, new CompiledFunctionInfo(value, encodedBody, dependencyLayout))
         };
 
     /// <summary>
@@ -154,6 +157,7 @@ public record ModuleCompilationContext(
             info = result;
             return true;
         }
+
         info = default;
         return false;
     }
@@ -283,6 +287,7 @@ public record ExpressionCompilationContext(
             type = t;
             return true;
         }
+
         type = null;
         return false;
     }
@@ -300,6 +305,7 @@ public record ExpressionCompilationContext(
             expression = expr;
             return true;
         }
+
         expression = null;
         return false;
     }

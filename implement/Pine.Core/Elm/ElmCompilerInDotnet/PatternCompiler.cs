@@ -67,6 +67,7 @@ public class PatternCompiler
         ExpressionCompilationContext context)
     {
         var scrutineeResult = ExpressionCompiler.Compile(caseBlock.Expression.Value, context);
+
         if (scrutineeResult.IsErrOrNull() is { } scrutineeErr)
         {
             return scrutineeErr;
@@ -76,13 +77,14 @@ public class PatternCompiler
         Expression? result = null;
 
         // Infer the type of the scrutinee for pattern type extraction
-        var scrutineeType = TypeInference.InferExpressionType(
-            caseBlock.Expression.Value,
-            context.ParameterNames,
-            context.ParameterTypes,
-            context.LocalBindingTypes,
-            context.CurrentModuleName,
-            context.FunctionReturnTypes);
+        var scrutineeType =
+            TypeInference.InferExpressionType(
+                caseBlock.Expression.Value,
+                context.ParameterNames,
+                context.ParameterTypes,
+                context.LocalBindingTypes,
+                context.CurrentModuleName,
+                context.FunctionReturnTypes);
 
         for (var i = caseBlock.Cases.Count - 1; i >= 0; i--)
         {
@@ -92,28 +94,37 @@ public class PatternCompiler
             var patternBindings = ExtractPatternBindings(pattern, scrutinee);
 
             // Extract binding types from the pattern
-            var patternBindingTypes = TypeInference.ExtractPatternBindingTypesFromInferred(
-                pattern,
-                scrutineeType,
-                [],
-                context.ModuleCompilationContext.ChoiceTagArgumentTypes);
+            var patternBindingTypes =
+                TypeInference.ExtractPatternBindingTypesFromInferred(
+                    pattern,
+                    scrutineeType,
+                    [],
+                    context.ModuleCompilationContext.ChoiceTagArgumentTypes);
 
             // Create case context with both bindings and binding types
             var caseContext = context;
+
             if (patternBindings.Count > 0)
             {
                 caseContext = caseContext.WithLocalBindings(patternBindings);
             }
+
             if (patternBindingTypes.Count > 0)
             {
                 // Merge existing binding types with new pattern binding types
-                var mergedBindingTypes = context.LocalBindingTypes is { } existingTypes
-                    ? existingTypes.ToImmutableDictionary().SetItems(patternBindingTypes)
-                    : patternBindingTypes;
-                caseContext = caseContext.WithReplacedLocalBindingsAndTypes(caseContext.LocalBindings, mergedBindingTypes);
+                var mergedBindingTypes =
+                    context.LocalBindingTypes is { } existingTypes
+                    ?
+                    existingTypes.ToImmutableDictionary().SetItems(patternBindingTypes)
+                    :
+                    patternBindingTypes;
+
+                caseContext =
+                    caseContext.WithReplacedLocalBindingsAndTypes(caseContext.LocalBindings, mergedBindingTypes);
             }
 
             var caseBodyResult = ExpressionCompiler.Compile(caseItem.Expression.Value, caseContext);
+
             if (caseBodyResult.IsErrOrNull() is { } caseErr)
             {
                 return caseErr;
@@ -128,10 +139,11 @@ public class PatternCompiler
             }
             else
             {
-                result = Expression.ConditionalInstance(
-                    condition: conditionExpr,
-                    trueBranch: caseBody,
-                    falseBranch: result ?? caseBody);
+                result =
+                    Expression.ConditionalInstance(
+                        condition: conditionExpr,
+                        trueBranch: caseBody,
+                        falseBranch: result ?? caseBody);
             }
         }
 
@@ -160,46 +172,51 @@ public class PatternCompiler
             SyntaxTypes.Pattern.AllPattern => PatternAnalysis.Empty,
 
             SyntaxTypes.Pattern.VarPattern varPattern =>
-                PatternAnalysis.WithBinding(varPattern.Name, scrutinee),
+            PatternAnalysis.WithBinding(varPattern.Name, scrutinee),
 
             SyntaxTypes.Pattern.ParenthesizedPattern parenthesized =>
-                AnalyzePatternRecursive(parenthesized.Pattern.Value, scrutinee),
+            AnalyzePatternRecursive(parenthesized.Pattern.Value, scrutinee),
 
             SyntaxTypes.Pattern.IntPattern intPattern =>
-                PatternAnalysis.WithCondition(new PatternCondition.ValueEquals(
+            PatternAnalysis.WithCondition(
+                new PatternCondition.ValueEquals(
                     Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(intPattern.Value)))),
 
             SyntaxTypes.Pattern.HexPattern hexPattern =>
-                PatternAnalysis.WithCondition(new PatternCondition.ValueEquals(
+            PatternAnalysis.WithCondition(
+                new PatternCondition.ValueEquals(
                     Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(hexPattern.Value)))),
 
             SyntaxTypes.Pattern.CharPattern charPattern =>
-                PatternAnalysis.WithCondition(new PatternCondition.ValueEquals(
+            PatternAnalysis.WithCondition(
+                new PatternCondition.ValueEquals(
                     Expression.LiteralInstance(ElmValueEncoding.ElmCharAsPineValue(charPattern.Value)))),
 
             SyntaxTypes.Pattern.StringPattern stringPattern =>
-                PatternAnalysis.WithCondition(new PatternCondition.ValueEquals(
+            PatternAnalysis.WithCondition(
+                new PatternCondition.ValueEquals(
                     Expression.LiteralInstance(ElmValueEncoding.StringAsPineValue(stringPattern.Value)))),
 
             SyntaxTypes.Pattern.AsPattern asPattern =>
-                AnalyzeAsPattern(asPattern, scrutinee),
+            AnalyzeAsPattern(asPattern, scrutinee),
 
             SyntaxTypes.Pattern.ListPattern listPattern =>
-                AnalyzeListPattern(listPattern, scrutinee),
+            AnalyzeListPattern(listPattern, scrutinee),
 
             SyntaxTypes.Pattern.UnConsPattern unConsPattern =>
-                AnalyzeUnConsPattern(unConsPattern, scrutinee),
+            AnalyzeUnConsPattern(unConsPattern, scrutinee),
 
             SyntaxTypes.Pattern.TuplePattern tuplePattern =>
-                AnalyzeTuplePattern(tuplePattern, scrutinee),
+            AnalyzeTuplePattern(tuplePattern, scrutinee),
 
             SyntaxTypes.Pattern.NamedPattern namedPattern =>
-                AnalyzeNamedPattern(namedPattern, scrutinee),
+            AnalyzeNamedPattern(namedPattern, scrutinee),
 
             SyntaxTypes.Pattern.RecordPattern recordPattern =>
-                AnalyzeRecordPattern(recordPattern, scrutinee),
+            AnalyzeRecordPattern(recordPattern, scrutinee),
 
-            _ => throw new NotImplementedException($"Pattern type not yet supported: {pattern.GetType().Name}")
+            _ =>
+            throw new NotImplementedException($"Pattern type not yet supported: {pattern.GetType().Name}")
         };
     }
 
@@ -214,14 +231,16 @@ public class PatternCompiler
 
         if (AsConstantPattern(listPattern) is { } constantValue)
         {
-            return PatternAnalysis.WithCondition(
-                new PatternCondition.ValueEquals(Expression.LiteralInstance(constantValue)));
+            return
+                PatternAnalysis.WithCondition(
+                    new PatternCondition.ValueEquals(Expression.LiteralInstance(constantValue)));
         }
 
-        var conditions = new List<PatternCondition>
-        {
-            new PatternCondition.LengthEquals(listPattern.Elements.Count)
-        };
+        var conditions =
+            new List<PatternCondition>
+            {
+                new PatternCondition.LengthEquals(listPattern.Elements.Count)
+            };
 
         var allBindings = ImmutableDictionary<string, Expression>.Empty;
 
@@ -236,9 +255,11 @@ public class PatternCompiler
             if (elementAnalysis.Condition is not PatternCondition.Always)
             {
                 var index = i;
-                conditions.Add(new PatternCondition.ItemCondition(
-                    s => GetListElementExpression(s, index),
-                    elementAnalysis.Condition));
+
+                conditions.Add(
+                    new PatternCondition.ItemCondition(
+                        s => GetListElementExpression(s, index),
+                        elementAnalysis.Condition));
             }
         }
 
@@ -262,32 +283,39 @@ public class PatternCompiler
         var headAnalysis = AnalyzePatternRecursive(unConsPattern.Head.Value, headExpr);
         var tailAnalysis = AnalyzePatternRecursive(unConsPattern.Tail.Value, tailExpr);
 
-        var allBindings = ImmutableDictionary<string, Expression>.Empty
+        var allBindings =
+            ImmutableDictionary<string, Expression>.Empty
             .SetItems(headAnalysis.Bindings)
             .SetItems(tailAnalysis.Bindings);
 
-        var conditions = new List<PatternCondition>
-        {
-            new PatternCondition.NotEmpty()
-        };
+        var conditions =
+            new List<PatternCondition>
+            {
+                new PatternCondition.NotEmpty()
+            };
 
         if (headAnalysis.Condition is not PatternCondition.Always)
         {
-            conditions.Add(new PatternCondition.ItemCondition(
-                BuiltinHelpers.ApplyBuiltinHead,
-                headAnalysis.Condition));
+            conditions.Add(
+                new PatternCondition.ItemCondition(
+                    BuiltinHelpers.ApplyBuiltinHead,
+                    headAnalysis.Condition));
         }
 
         if (tailAnalysis.Condition is not PatternCondition.Always)
         {
-            conditions.Add(new PatternCondition.ItemCondition(
-                s => BuiltinHelpers.ApplyBuiltinSkip(1, s),
-                tailAnalysis.Condition));
+            conditions.Add(
+                new PatternCondition.ItemCondition(
+                    s => BuiltinHelpers.ApplyBuiltinSkip(1, s),
+                    tailAnalysis.Condition));
         }
 
-        var finalCondition = conditions.Count is 1
-            ? conditions[0]
-            : new PatternCondition.Conjunction(conditions);
+        var finalCondition =
+            conditions.Count is 1
+            ?
+            conditions[0]
+            :
+            new PatternCondition.Conjunction(conditions);
 
         return new PatternAnalysis(allBindings, finalCondition);
     }
@@ -298,14 +326,16 @@ public class PatternCompiler
     {
         if (AsConstantPattern(tuplePattern) is { } constantValue)
         {
-            return PatternAnalysis.WithCondition(
-                new PatternCondition.ValueEquals(Expression.LiteralInstance(constantValue)));
+            return
+                PatternAnalysis.WithCondition(
+                    new PatternCondition.ValueEquals(Expression.LiteralInstance(constantValue)));
         }
 
-        var conditions = new List<PatternCondition>
-        {
-            new PatternCondition.LengthEquals(tuplePattern.Elements.Count)
-        };
+        var conditions =
+            new List<PatternCondition>
+            {
+                new PatternCondition.LengthEquals(tuplePattern.Elements.Count)
+            };
 
         var allBindings = ImmutableDictionary<string, Expression>.Empty;
 
@@ -320,15 +350,20 @@ public class PatternCompiler
             if (elementAnalysis.Condition is not PatternCondition.Always)
             {
                 var index = i;
-                conditions.Add(new PatternCondition.ItemCondition(
-                    s => GetListElementExpression(s, index),
-                    elementAnalysis.Condition));
+
+                conditions.Add(
+                    new PatternCondition.ItemCondition(
+                        s => GetListElementExpression(s, index),
+                        elementAnalysis.Condition));
             }
         }
 
-        var finalCondition = conditions.Count is 1
-            ? conditions[0]
-            : new PatternCondition.Conjunction(conditions);
+        var finalCondition =
+            conditions.Count is 1
+            ?
+            conditions[0]
+            :
+            new PatternCondition.Conjunction(conditions);
 
         return new PatternAnalysis(allBindings, finalCondition);
     }
@@ -341,17 +376,20 @@ public class PatternCompiler
 
         if (AsConstantPattern(namedPattern) is { } constantValue)
         {
-            return PatternAnalysis.WithCondition(
-                new PatternCondition.ValueEquals(Expression.LiteralInstance(constantValue)));
+            return
+                PatternAnalysis.WithCondition(
+                    new PatternCondition.ValueEquals(Expression.LiteralInstance(constantValue)));
         }
 
         var expectedTagName = Expression.LiteralInstance(StringEncoding.ValueFromString(tagName));
-        var conditions = new List<PatternCondition>
-        {
-            new PatternCondition.ItemCondition(
-                s => GetListElementExpression(s, 0),
-                new PatternCondition.ValueEquals(expectedTagName))
-        };
+
+        var conditions =
+            new List<PatternCondition>
+            {
+                new PatternCondition.ItemCondition(
+                    s => GetListElementExpression(s, 0),
+                    new PatternCondition.ValueEquals(expectedTagName))
+            };
 
         var allBindings = ImmutableDictionary<string, Expression>.Empty;
 
@@ -359,9 +397,10 @@ public class PatternCompiler
         {
             var argsListExpr = GetListElementExpression(scrutinee, 1);
 
-            conditions.Add(new PatternCondition.ItemCondition(
-                s => GetListElementExpression(s, 1),
-                new PatternCondition.LengthEquals(namedPattern.Arguments.Count)));
+            conditions.Add(
+                new PatternCondition.ItemCondition(
+                    s => GetListElementExpression(s, 1),
+                    new PatternCondition.LengthEquals(namedPattern.Arguments.Count)));
 
             for (var i = 0; i < namedPattern.Arguments.Count; i++)
             {
@@ -374,16 +413,21 @@ public class PatternCompiler
                 if (argAnalysis.Condition is not PatternCondition.Always)
                 {
                     var index = i;
-                    conditions.Add(new PatternCondition.ItemCondition(
-                        s => GetListElementExpression(GetListElementExpression(s, 1), index),
-                        argAnalysis.Condition));
+
+                    conditions.Add(
+                        new PatternCondition.ItemCondition(
+                            s => GetListElementExpression(GetListElementExpression(s, 1), index),
+                            argAnalysis.Condition));
                 }
             }
         }
 
-        var finalCondition = conditions.Count is 1
-            ? conditions[0]
-            : new PatternCondition.Conjunction(conditions);
+        var finalCondition =
+            conditions.Count is 1
+            ?
+            conditions[0]
+            :
+            new PatternCondition.Conjunction(conditions);
 
         return new PatternAnalysis(allBindings, finalCondition);
     }
@@ -394,12 +438,14 @@ public class PatternCompiler
     {
         var fieldsListExpr = GetListElementExpression(GetListElementExpression(scrutinee, 1), 0);
 
-        var patternFieldNames = recordPattern.Fields
+        var patternFieldNames =
+            recordPattern.Fields
             .Select(f => f.Value)
             .OrderBy(name => name, StringComparer.Ordinal)
             .ToList();
 
         var bindings = ImmutableDictionary<string, Expression>.Empty;
+
         for (var i = 0; i < patternFieldNames.Count; i++)
         {
             var fieldName = patternFieldNames[i];
@@ -436,25 +482,25 @@ public class PatternCompiler
             PatternCondition.Always => null,
 
             PatternCondition.ValueEquals equals =>
-                BuiltinHelpers.ApplyBuiltinEqualBinary(scrutinee, equals.Expected),
+            BuiltinHelpers.ApplyBuiltinEqualBinary(scrutinee, equals.Expected),
 
             PatternCondition.LengthEquals lengthEquals =>
-                BuiltinHelpers.ApplyBuiltinEqualBinary(
-                    BuiltinHelpers.ApplyBuiltinLength(scrutinee),
-                    Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(lengthEquals.ExpectedLength))),
+            BuiltinHelpers.ApplyBuiltinEqualBinary(
+                BuiltinHelpers.ApplyBuiltinLength(scrutinee),
+                Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(lengthEquals.ExpectedLength))),
 
             PatternCondition.NotEmpty =>
+            BuiltinHelpers.ApplyBuiltinEqualBinary(
                 BuiltinHelpers.ApplyBuiltinEqualBinary(
-                    BuiltinHelpers.ApplyBuiltinEqualBinary(
-                        BuiltinHelpers.ApplyBuiltinLength(scrutinee),
-                        Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(0))),
-                    Expression.LiteralInstance(KernelFunction.ValueFromBool(false))),
+                    BuiltinHelpers.ApplyBuiltinLength(scrutinee),
+                    Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(0))),
+                Expression.LiteralInstance(KernelFunction.ValueFromBool(false))),
 
             PatternCondition.ItemCondition itemCondition =>
-                CompileConditionToExpression(itemCondition.SubCondition, itemCondition.Accessor(scrutinee)),
+            CompileConditionToExpression(itemCondition.SubCondition, itemCondition.Accessor(scrutinee)),
 
             PatternCondition.Conjunction conjunction =>
-                CompileConjunction(conjunction.Conditions, scrutinee),
+            CompileConjunction(conjunction.Conditions, scrutinee),
 
             _ =>
             throw new NotImplementedException(
@@ -481,10 +527,11 @@ public class PatternCompiler
             }
             else
             {
-                result = Expression.ConditionalInstance(
-                    condition: conditionExpr,
-                    trueBranch: result,
-                    falseBranch: Expression.LiteralInstance(KernelFunction.ValueFromBool(false)));
+                result =
+                    Expression.ConditionalInstance(
+                        condition: conditionExpr,
+                        trueBranch: result,
+                        falseBranch: Expression.LiteralInstance(KernelFunction.ValueFromBool(false)));
             }
         }
 
@@ -540,43 +587,43 @@ public class PatternCompiler
         return pattern switch
         {
             SyntaxTypes.Pattern.IntPattern intPattern =>
-                IntegerEncoding.EncodeSignedInteger(intPattern.Value),
+            IntegerEncoding.EncodeSignedInteger(intPattern.Value),
 
             SyntaxTypes.Pattern.HexPattern hexPattern =>
-                IntegerEncoding.EncodeSignedInteger(hexPattern.Value),
+            IntegerEncoding.EncodeSignedInteger(hexPattern.Value),
 
             SyntaxTypes.Pattern.CharPattern charPattern =>
-                ElmValueEncoding.ElmCharAsPineValue(charPattern.Value),
+            ElmValueEncoding.ElmCharAsPineValue(charPattern.Value),
 
             SyntaxTypes.Pattern.StringPattern stringPattern =>
-                ElmValueEncoding.StringAsPineValue(stringPattern.Value),
+            ElmValueEncoding.StringAsPineValue(stringPattern.Value),
 
             SyntaxTypes.Pattern.ParenthesizedPattern p =>
-                AsConstantPattern(p.Pattern.Value),
+            AsConstantPattern(p.Pattern.Value),
 
             SyntaxTypes.Pattern.AllPattern =>
-                null, // Wildcard pattern contains no constant value
+            null, // Wildcard pattern contains no constant value
 
             SyntaxTypes.Pattern.VarPattern =>
-                null, // Variable pattern is not constant
+            null, // Variable pattern is not constant
 
             SyntaxTypes.Pattern.ListPattern listPattern =>
-                AsConstantListPattern(listPattern),
+            AsConstantListPattern(listPattern),
 
             SyntaxTypes.Pattern.TuplePattern tuplePattern =>
-                AsConstantTuplePattern(tuplePattern),
+            AsConstantTuplePattern(tuplePattern),
 
             SyntaxTypes.Pattern.NamedPattern namedPattern =>
-                AsConstantNamedPattern(namedPattern),
+            AsConstantNamedPattern(namedPattern),
 
             SyntaxTypes.Pattern.UnConsPattern =>
-                null, // UnCons pattern always binds variables
+            null, // UnCons pattern always binds variables
 
             SyntaxTypes.Pattern.RecordPattern =>
-                null, // Record pattern always binds variables
+            null, // Record pattern always binds variables
 
             SyntaxTypes.Pattern.AsPattern =>
-                null, // As pattern always binds a variable
+            null, // As pattern always binds a variable
 
             _ =>
             throw new NotImplementedException(
@@ -625,8 +672,10 @@ public class PatternCompiler
         for (var i = 0; i < namedPattern.Arguments.Count; i++)
         {
             var argValue = AsConstantPattern(namedPattern.Arguments[i].Value);
+
             if (argValue is null)
                 return null;
+
             arguments[i] = argValue;
         }
 
@@ -651,6 +700,7 @@ public class PatternCompiler
                 {
                     CollectPatternNames(elem.Value, names);
                 }
+
                 break;
 
             case SyntaxTypes.Pattern.ParenthesizedPattern parenthesized:
@@ -662,6 +712,7 @@ public class PatternCompiler
                 {
                     CollectPatternNames(elem.Value, names);
                 }
+
                 break;
 
             case SyntaxTypes.Pattern.UnConsPattern unConsPattern:
@@ -679,6 +730,7 @@ public class PatternCompiler
                 {
                     CollectPatternNames(arg.Value, names);
                 }
+
                 break;
 
             case SyntaxTypes.Pattern.RecordPattern recordPattern:
@@ -686,6 +738,7 @@ public class PatternCompiler
                 {
                     names.Add(field.Value);
                 }
+
                 break;
         }
     }
