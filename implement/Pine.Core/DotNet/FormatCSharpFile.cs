@@ -1370,14 +1370,42 @@ public static class FormatCSharpFile
                 // Normalize when clause whitespace
                 if (fmtCp.WhenClause is { } wc)
                 {
-                    var fmtCond = (ExpressionSyntax)FormatNode(wc.Condition, indent);
+                    // Check if placing when on same line as pattern exceeds line length.
+                    // Use raw condition text to measure BEFORE formatting (which may break it).
+                    var condText = wc.Condition.ToString().Trim();
+                    var patternText = fmtCp.Pattern.ToString().TrimEnd();
+                    var singleLineWidth =
+                        indent * IndentSize + ("case " + patternText + " when " + condText + ":").Length;
 
-                    fmtCp =
-                        fmtCp.WithPattern(fmtCp.Pattern.WithTrailingTrivia(s_space))
-                        .WithWhenClause(
-                            wc
-                            .WithWhenKeyword(wc.WhenKeyword.WithLeadingTrivia().WithTrailingTrivia(s_space))
-                            .WithCondition(fmtCond.WithLeadingTrivia().WithTrailingTrivia()));
+                    if (singleLineWidth > MaximumLineLength)
+                    {
+                        // Break when to a new line. Use the unformatted condition text
+                        // here because FormatNode would see the original (long-line)
+                        // position and might incorrectly break the condition.
+                        // Multi-pass convergence will format it in subsequent passes.
+                        var fmtCond = wc.Condition.WithLeadingTrivia().WithTrailingTrivia();
+
+                        fmtCp =
+                            fmtCp.WithPattern(fmtCp.Pattern.WithTrailingTrivia())
+                            .WithWhenClause(
+                                wc
+                                .WithWhenKeyword(
+                                    wc.WhenKeyword
+                                    .WithLeadingTrivia(s_lineFeed, Indent(indent))
+                                    .WithTrailingTrivia(s_space))
+                                .WithCondition(fmtCond));
+                    }
+                    else
+                    {
+                        var fmtCond = (ExpressionSyntax)FormatNode(wc.Condition, indent);
+
+                        fmtCp =
+                            fmtCp.WithPattern(fmtCp.Pattern.WithTrailingTrivia(s_space))
+                            .WithWhenClause(
+                                wc
+                                .WithWhenKeyword(wc.WhenKeyword.WithLeadingTrivia().WithTrailingTrivia(s_space))
+                                .WithCondition(fmtCond.WithLeadingTrivia().WithTrailingTrivia()));
+                    }
                 }
 
                 labels.Add(fmtCp);
@@ -1426,6 +1454,13 @@ public static class FormatCSharpFile
                 origBreaks += CountLineBreaks(colonToken.TrailingTrivia);
 
             var minBreaks = origBreaks >= 2 ? 2 : 1;
+
+            // When the formatted label spans multiple lines (e.g., when clause
+            // was broken to a new line), add a blank line before the statements.
+            var lastFmtLabel = labels[^1];
+
+            if (SpansMultipleLines(lastFmtLabel) && minBreaks < 2)
+                minBreaks = 2;
 
             // Count leading line breaks BEFORE the first non-whitespace content
             // (not total line breaks, since breaks after comments count differently).
@@ -1532,6 +1567,17 @@ public static class FormatCSharpFile
     {
         if (node.Expression is null)
             return node;
+
+        // Switch expressions keep "return expr switch" on the same line when at
+        // indent >= 1 to avoid pushing switch arms to deeper nesting levels.
+        if (node.Expression is SwitchExpressionSyntax && indent >= 1)
+        {
+            var fmtSwitch = (ExpressionSyntax)FormatNode(node.Expression, indent);
+
+            return
+                node.WithReturnKeyword(node.ReturnKeyword.WithTrailingTrivia(s_space))
+                .WithExpression(fmtSwitch.WithLeadingTrivia());
+        }
 
         var fmtExpr = (ExpressionSyntax)FormatNode(node.Expression, indent + 1);
         // Strip leading whitespace from expression
@@ -1976,8 +2022,14 @@ public static class FormatCSharpFile
         var fmtExpr = (ExpressionSyntax)FormatNode(node.Expression, indent);
         fmtExpr = fmtExpr.WithTrailingTrivia();
 
-        var withKw = node.WithKeyword.WithLeadingTrivia(s_space).WithTrailingTrivia();
         var fmtInit = FormatInitializerExpression(node.Initializer, indent);
+
+        // Add trailing space after 'with' only when the initializer stays on the same line.
+        // Use the string overload because the node overload would check the original tree
+        // position, which may not reflect the formatted layout.
+        var initIsMultiLine = SpansMultipleLines(fmtInit.ToFullString());
+        var withTrailing = initIsMultiLine ? new SyntaxTriviaList() : new SyntaxTriviaList(s_space);
+        var withKw = node.WithKeyword.WithLeadingTrivia(s_space).WithTrailingTrivia(withTrailing);
 
         return node.Update(fmtExpr, withKw, fmtInit);
     }
@@ -1995,11 +2047,27 @@ public static class FormatCSharpFile
         var ci = indent + 1;
         var exprs = new List<SyntaxNode>();
 
+        var origInitSeps = node.Expressions.GetSeparators().ToList();
+
         for (var i = 0; i < node.Expressions.Count; i++)
         {
             var origLeading = node.Expressions[i].GetLeadingTrivia();
+            var minBreaks = 1;
+
+            // Preserve existing blank lines from original source
+            if (i > 0)
+            {
+                var origBreaks = CountLineBreaks(origLeading);
+
+                if (i - 1 < origInitSeps.Count)
+                    origBreaks += CountLineBreaks(origInitSeps[i - 1].TrailingTrivia);
+
+                if (origBreaks >= 2)
+                    minBreaks = 2;
+            }
+
             var e = (ExpressionSyntax)FormatNode(node.Expressions[i], ci);
-            e = e.WithLeadingTrivia(EnsureLeadingBreaks(origLeading, 1, ci));
+            e = e.WithLeadingTrivia(EnsureLeadingBreaks(origLeading, minBreaks, ci));
             e = e.WithTrailingTrivia();
             exprs.Add(e);
         }
@@ -2309,30 +2377,19 @@ public static class FormatCSharpFile
 
         if (exprEnd != dotLine)
         {
-            // Dot is already on a separate line — determine correct indent level.
-            // If the expression is single-line and complex, check if a single-line version
-            // would exceed the max line length. If so, the break is for line-length reasons
-            // and the dot should be at indent+1.
-            // Start from the original dot column when available, floored at indent.
-            var dotLoc = node.OperatorToken.GetLocation();
-
+            // Dot is already on a separate line — preserve the original dot
+            // indent if it is within [indent, indent+1]. When the original column
+            // is deeper (e.g. code was relocated from a different context), fall
+            // back to indent.
             var dotIndent = indent;
+            var dotLoc = node.OperatorToken.GetLocation();
 
             if (dotLoc != Location.None)
             {
-                var dotCol = dotLoc.GetLineSpan().StartLinePosition.Character;
-                dotIndent = Math.Max(indent, dotCol / IndentSize);
-            }
+                var dotColIndent = dotLoc.GetLineSpan().StartLinePosition.Character / IndentSize;
 
-            if (!SpansMultipleLines(node.Expression) &&
-                node.Expression is InvocationExpressionSyntax or MemberAccessExpressionSyntax or
-                    ElementAccessExpressionSyntax or ConditionalAccessExpressionSyntax)
-            {
-                var exprLen = fmtExpr.ToFullString().Trim().Length;
-                var nameLen = node.OperatorToken.Text.Length + node.Name.ToString().Length;
-
-                if (dotIndent * IndentSize + exprLen + nameLen > MaximumLineLength)
-                    dotIndent = Math.Max(dotIndent, indent + 1);
+                if (dotColIndent <= indent + 1)
+                    dotIndent = Math.Max(indent, dotColIndent);
             }
 
             return node.WithExpression(fmtExpr.WithTrailingTrivia(StripWhitespace(node.Expression.GetTrailingTrivia())))
@@ -2344,14 +2401,21 @@ public static class FormatCSharpFile
         // Check line length — only break at dots after complex expressions (chains)
         if (LineEndColumn(node) > MaximumLineLength)
         {
-            // If the member access expression itself would fit at the current indent
-            // and the parent is NOT an invocation (which would add arguments making the
-            // line longer), skip the break — let the parent context handle line breaking.
-            if (node.Parent is not InvocationExpressionSyntax)
+            // If the full chain (walking up through invocations and member accesses)
+            // would fit at the current indent, skip the break.
             {
-                var nodeWidth = node.ToString().Trim().Length;
+                SyntaxNode checkNode = node;
+                var current = node.Parent;
 
-                if (indent * IndentSize + nodeWidth <= MaximumLineLength)
+                while (current is InvocationExpressionSyntax or MemberAccessExpressionSyntax)
+                {
+                    checkNode = current;
+                    current = current.Parent;
+                }
+
+                var checkWidth = checkNode.ToString().Trim().Length;
+
+                if (indent * IndentSize + checkWidth <= MaximumLineLength)
                     return node.WithExpression(fmtExpr);
             }
 

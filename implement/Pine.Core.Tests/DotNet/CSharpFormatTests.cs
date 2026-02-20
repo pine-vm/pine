@@ -4099,4 +4099,187 @@ public class CSharpFormatTests
 
         AssertFormattedSyntax(input, input, scriptMode: true);
     }
+
+    [Fact]
+    public void Formats_switch_section_when_clause()
+    {
+        var input =
+            """"
+            switch ((expected, actual))
+            {
+                case (InferredType.TupleType expTuple, InferredType.TupleType actTuple) when expTuple.ElementTypes.Count == actTuple.ElementTypes.Count:
+                    for (var i = 0; i < expTuple.ElementTypes.Count; i++)
+                    {
+                        CollectTypeVariableSubstitutions(expTuple.ElementTypes[i], actTuple.ElementTypes[i], substitutions);
+                    }
+                    break;
+
+            }
+            """";
+
+        var expected =
+            """"
+            switch ((expected, actual))
+            {
+                case (InferredType.TupleType expTuple, InferredType.TupleType actTuple)
+                when expTuple.ElementTypes.Count == actTuple.ElementTypes.Count:
+
+                    for (var i = 0; i < expTuple.ElementTypes.Count; i++)
+                    {
+                        CollectTypeVariableSubstitutions(expTuple.ElementTypes[i], actTuple.ElementTypes[i], substitutions);
+                    }
+
+                    break;
+
+            }
+            """";
+
+        AssertFormattedSyntax(input, expected, scriptMode: true);
+    }
+
+    [Fact]
+    public void Preserves_empty_lines_in_object_initializer()
+    {
+        var input =
+            """"
+            private static readonly Dictionary<string, OperatorTypeConstraints> s_operatorConstraints =
+                new()
+                {
+                    // Integer division forces Int type
+                    ["//"] = new(ResultType: s_intType, LeftOperandType: s_intType, RightOperandType: s_intType),
+
+                    // Float division forces Float type
+                    ["/"] = new(ResultType: s_floatType, LeftOperandType: s_floatType, RightOperandType: s_floatType),
+
+                    // Logical operators force Bool on everything
+                    ["&&"] = new(ResultType: s_boolType, LeftOperandType: s_boolType, RightOperandType: s_boolType),
+                    ["||"] = new(ResultType: s_boolType, LeftOperandType: s_boolType, RightOperandType: s_boolType),
+                };
+            """";
+
+        AssertFormattedSyntax(input, input, scriptMode: true);
+    }
+
+    [Fact]
+    public void Preserves_return_with_on_single_line()
+    {
+        var input =
+            """"
+            return module with { Declarations = newDeclarations };
+            """";
+
+        AssertFormattedSyntax(input, input, scriptMode: true);
+    }
+
+    [Fact]
+    public void Formats_invocation_exceeding_line_length_with_argument_chain_to_preserve()
+    {
+        var input =
+            """"
+            var isRecursive = IsRecursiveFunction(funcKey, funcInfo.Function, functions, ImmutableHashSet<(ModuleName, string)>.Empty.WithComparer(s_moduleNameTupleComparer));
+            """";
+
+        var expected =
+            """"
+            var isRecursive =
+                IsRecursiveFunction(
+                    funcKey,
+                    funcInfo.Function,
+                    functions,
+                    ImmutableHashSet<(ModuleName, string)>.Empty.WithComparer(s_moduleNameTupleComparer));
+            """";
+
+        AssertFormattedSyntax(input, expected, scriptMode: true);
+    }
+
+    [Fact]
+    public void Formats_collection_exceeding_line_length_containing_member_access_invocations()
+    {
+        var input =
+            """"
+            public static CoreFunctionInfo? GetBasicsFunctionInfo(string functionName)
+            {
+                return functionName switch
+                {
+                    // (+) : number -> number -> number
+                    "add" => new CoreFunctionInfo(
+                        [TypeInference.InferredType.Number(), TypeInference.InferredType.Number(), TypeInference.InferredType.Number()],
+                        args => Generic_Add(args[0], args[1])),
+                };
+            }
+            """";
+
+        var expected =
+            """"
+            public static CoreFunctionInfo? GetBasicsFunctionInfo(string functionName)
+            {
+                return functionName switch
+                {
+                    // (+) : number -> number -> number
+                    "add" =>
+                    new CoreFunctionInfo(
+                        [
+                        TypeInference.InferredType.Number(),
+                        TypeInference.InferredType.Number(),
+                        TypeInference.InferredType.Number()
+                        ],
+                        args => Generic_Add(args[0], args[1])),
+                };
+            }
+            """";
+
+        AssertFormattedSyntax(input, expected, scriptMode: true);
+    }
+
+    [Fact]
+    public void Formats_switch_arm_containing_chain_spanning_multiple_lines()
+    {
+        var input =
+            """"
+            private static CanonicalizationResult<Node<SyntaxTypes.Expression>> CanonicalizeExpressionNode(
+                Node<SyntaxTypes.Expression> exprNode,
+                CanonicalizationContext context)
+            {
+                var expr = exprNode.Value;
+
+                var canonicalizedExpr =
+                    expr switch
+                    {
+                        SyntaxTypes.Expression.Integer integer =>
+                            NoErrors((SyntaxTypes.Expression)integer),
+
+                        SyntaxTypes.Expression.ListExpr list =>
+                            CanonicalizationResultExtensions.ConcatMap(list.Elements, e => CanonicalizeExpressionNode(e, context))
+                                .MapValue(elements => (SyntaxTypes.Expression)new SyntaxTypes.Expression.ListExpr([.. elements])),
+                    };
+
+                return canonicalizedExpr.MapValue(expr => new Node<SyntaxTypes.Expression>(exprNode.Range, expr));
+            }
+            """";
+
+        var expected =
+            """"
+            private static CanonicalizationResult<Node<SyntaxTypes.Expression>> CanonicalizeExpressionNode(
+                Node<SyntaxTypes.Expression> exprNode,
+                CanonicalizationContext context)
+            {
+                var expr = exprNode.Value;
+
+                var canonicalizedExpr =
+                    expr switch
+                    {
+                        SyntaxTypes.Expression.Integer integer =>
+                        NoErrors((SyntaxTypes.Expression)integer),
+
+                        SyntaxTypes.Expression.ListExpr list =>
+                        CanonicalizationResultExtensions.ConcatMap(list.Elements, e => CanonicalizeExpressionNode(e, context))
+                        .MapValue(elements => (SyntaxTypes.Expression)new SyntaxTypes.Expression.ListExpr([.. elements])),
+                    };
+
+                return canonicalizedExpr.MapValue(expr => new Node<SyntaxTypes.Expression>(exprNode.Range, expr));
+            }
+            """";
+
+        AssertFormattedSyntax(input, expected, scriptMode: true);
+    }
 }
