@@ -46,29 +46,28 @@ public class CoreMaybeFunctionTests
         .First(m => m.moduleName is "Maybe")
         .moduleContent.FunctionDeclarations[name];
 
+    private static readonly Core.Interpreter.IntermediateVM.PineVM s_vm =
+        ElmCompilerTestHelper.PineVMForProfiling(_ => { });
+
     private static ElmValue ApplyBinary(
         PineValue functionValue, ElmValue arg1, ElmValue arg2) =>
-        CoreLibraryTestHelper.ApplyGeneric(functionValue, [arg1, arg2]);
+        CoreLibraryTestHelper.ApplyBinary(functionValue, arg1, arg2, s_vm);
 
-    private static ElmValue I(long i) =>
+    private static ElmValue Integer(long i) =>
         ElmValue.Integer(i);
 
     private static ElmValue JustOf(ElmValue inner) =>
         ElmValue.TagInstance("Just", [inner]);
 
-    private static readonly ElmValue Nothing =
+    private static readonly ElmValue s_nothing =
         ElmValue.TagInstance("Nothing", []);
 
     private static PineValue ToPine(ElmValue value) =>
         ElmValueEncoding.ElmValueAsPineValue(value);
 
-    private static ElmValue FromPine(PineValue value) =>
-        ElmValueEncoding.PineValueAsElmValue(value, null, null)
-        .Extract(err => throw new Exception("Failed decode as Elm value: " + err));
-
     private static ElmValue ApplyWithPineArgs(
         PineValue functionValue, params PineValue[] pineArgs) =>
-        FromPine(CoreLibraryTestHelper.ApplyGenericPine(functionValue, pineArgs));
+        CoreLibraryTestHelper.ApplyWithPineArgs(s_vm, functionValue, pineArgs);
 
     private static PineValue GetNegateFunction() =>
         Core.Elm.ElmCompilerInDotnet.CoreLibraryModule.CoreBasics.GetFunctionValue("negate")!;
@@ -84,18 +83,18 @@ public class CoreMaybeFunctionTests
     public void WithDefault_Just_42()
     {
         var result =
-            ApplyBinary(GetMaybeFunction("withDefault"), I(100), JustOf(I(42)));
+            ApplyBinary(GetMaybeFunction("withDefault"), Integer(100), JustOf(Integer(42)));
 
-        result.Should().Be(I(42));
+        result.Should().Be(Integer(42));
     }
 
     [Fact]
     public void WithDefault_Nothing()
     {
         var result =
-            ApplyBinary(GetMaybeFunction("withDefault"), I(100), Nothing);
+            ApplyBinary(GetMaybeFunction("withDefault"), Integer(100), s_nothing);
 
-        result.Should().Be(I(100));
+        result.Should().Be(Integer(100));
     }
 
     // ========== Tests for map ==========
@@ -109,9 +108,9 @@ public class CoreMaybeFunctionTests
             ApplyWithPineArgs(
                 GetMaybeFunction("map"),
                 GetNegateFunction(),
-                ToPine(JustOf(I(9))));
+                ToPine(JustOf(Integer(9))));
 
-        result.Should().Be(JustOf(I(-9)));
+        result.Should().Be(JustOf(Integer(-9)));
     }
 
     [Fact]
@@ -121,9 +120,9 @@ public class CoreMaybeFunctionTests
             ApplyWithPineArgs(
                 GetMaybeFunction("map"),
                 GetNegateFunction(),
-                ToPine(Nothing));
+                ToPine(s_nothing));
 
-        result.Should().Be(Nothing);
+        result.Should().Be(s_nothing);
     }
 
     // ========== Tests for map2 ==========
@@ -138,10 +137,10 @@ public class CoreMaybeFunctionTests
             ApplyWithPineArgs(
                 GetMaybeFunction("map2"),
                 GetAddFunction(),
-                ToPine(JustOf(I(3))),
-                ToPine(JustOf(I(4))));
+                ToPine(JustOf(Integer(3))),
+                ToPine(JustOf(Integer(4))));
 
-        result.Should().Be(JustOf(I(7)));
+        result.Should().Be(JustOf(Integer(7)));
     }
 
     [Fact]
@@ -151,10 +150,10 @@ public class CoreMaybeFunctionTests
             ApplyWithPineArgs(
                 GetMaybeFunction("map2"),
                 GetAddFunction(),
-                ToPine(JustOf(I(3))),
-                ToPine(Nothing));
+                ToPine(JustOf(Integer(3))),
+                ToPine(s_nothing));
 
-        result.Should().Be(Nothing);
+        result.Should().Be(s_nothing);
     }
 
     [Fact]
@@ -164,10 +163,10 @@ public class CoreMaybeFunctionTests
             ApplyWithPineArgs(
                 GetMaybeFunction("map2"),
                 GetAddFunction(),
-                ToPine(Nothing),
-                ToPine(JustOf(I(4))));
+                ToPine(s_nothing),
+                ToPine(JustOf(Integer(4))));
 
-        result.Should().Be(Nothing);
+        result.Should().Be(s_nothing);
     }
 
     // ========== Tests for map3 ==========
@@ -180,11 +179,11 @@ public class CoreMaybeFunctionTests
             ApplyWithPineArgs(
                 GetMaybeFunction("map3"),
                 GetAddFunction(),
-                ToPine(Nothing),
-                ToPine(JustOf(I(2))),
-                ToPine(JustOf(I(3))));
+                ToPine(s_nothing),
+                ToPine(JustOf(Integer(2))),
+                ToPine(JustOf(Integer(3))));
 
-        result.Should().Be(Nothing);
+        result.Should().Be(s_nothing);
     }
 
     [Fact]
@@ -194,11 +193,11 @@ public class CoreMaybeFunctionTests
             ApplyWithPineArgs(
                 GetMaybeFunction("map3"),
                 GetAddFunction(),
-                ToPine(JustOf(I(1))),
-                ToPine(Nothing),
-                ToPine(JustOf(I(3))));
+                ToPine(JustOf(Integer(1))),
+                ToPine(s_nothing),
+                ToPine(JustOf(Integer(3))));
 
-        result.Should().Be(Nothing);
+        result.Should().Be(s_nothing);
     }
 
     [Fact]
@@ -208,11 +207,11 @@ public class CoreMaybeFunctionTests
             ApplyWithPineArgs(
                 GetMaybeFunction("map3"),
                 GetAddFunction(),
-                ToPine(JustOf(I(1))),
-                ToPine(JustOf(I(2))),
-                ToPine(Nothing));
+                ToPine(JustOf(Integer(1))),
+                ToPine(JustOf(Integer(2))),
+                ToPine(s_nothing));
 
-        result.Should().Be(Nothing);
+        result.Should().Be(s_nothing);
     }
 
     // ========== Tests for map4 ==========
@@ -225,12 +224,12 @@ public class CoreMaybeFunctionTests
             ApplyWithPineArgs(
                 GetMaybeFunction("map4"),
                 GetAddFunction(),
-                ToPine(Nothing),
-                ToPine(JustOf(I(2))),
-                ToPine(JustOf(I(3))),
-                ToPine(JustOf(I(4))));
+                ToPine(s_nothing),
+                ToPine(JustOf(Integer(2))),
+                ToPine(JustOf(Integer(3))),
+                ToPine(JustOf(Integer(4))));
 
-        result.Should().Be(Nothing);
+        result.Should().Be(s_nothing);
     }
 
     [Fact]
@@ -240,12 +239,12 @@ public class CoreMaybeFunctionTests
             ApplyWithPineArgs(
                 GetMaybeFunction("map4"),
                 GetAddFunction(),
-                ToPine(JustOf(I(1))),
-                ToPine(Nothing),
-                ToPine(JustOf(I(3))),
-                ToPine(JustOf(I(4))));
+                ToPine(JustOf(Integer(1))),
+                ToPine(s_nothing),
+                ToPine(JustOf(Integer(3))),
+                ToPine(JustOf(Integer(4))));
 
-        result.Should().Be(Nothing);
+        result.Should().Be(s_nothing);
     }
 
     [Fact]
@@ -255,12 +254,12 @@ public class CoreMaybeFunctionTests
             ApplyWithPineArgs(
                 GetMaybeFunction("map4"),
                 GetAddFunction(),
-                ToPine(JustOf(I(1))),
-                ToPine(JustOf(I(2))),
-                ToPine(Nothing),
-                ToPine(JustOf(I(4))));
+                ToPine(JustOf(Integer(1))),
+                ToPine(JustOf(Integer(2))),
+                ToPine(s_nothing),
+                ToPine(JustOf(Integer(4))));
 
-        result.Should().Be(Nothing);
+        result.Should().Be(s_nothing);
     }
 
     [Fact]
@@ -270,12 +269,12 @@ public class CoreMaybeFunctionTests
             ApplyWithPineArgs(
                 GetMaybeFunction("map4"),
                 GetAddFunction(),
-                ToPine(JustOf(I(1))),
-                ToPine(JustOf(I(2))),
-                ToPine(JustOf(I(3))),
-                ToPine(Nothing));
+                ToPine(JustOf(Integer(1))),
+                ToPine(JustOf(Integer(2))),
+                ToPine(JustOf(Integer(3))),
+                ToPine(s_nothing));
 
-        result.Should().Be(Nothing);
+        result.Should().Be(s_nothing);
     }
 
     // ========== Tests for map5 ==========
@@ -288,13 +287,13 @@ public class CoreMaybeFunctionTests
             ApplyWithPineArgs(
                 GetMaybeFunction("map5"),
                 GetAddFunction(),
-                ToPine(Nothing),
-                ToPine(JustOf(I(2))),
-                ToPine(JustOf(I(3))),
-                ToPine(JustOf(I(4))),
-                ToPine(JustOf(I(5))));
+                ToPine(s_nothing),
+                ToPine(JustOf(Integer(2))),
+                ToPine(JustOf(Integer(3))),
+                ToPine(JustOf(Integer(4))),
+                ToPine(JustOf(Integer(5))));
 
-        result.Should().Be(Nothing);
+        result.Should().Be(s_nothing);
     }
 
     [Fact]
@@ -304,13 +303,13 @@ public class CoreMaybeFunctionTests
             ApplyWithPineArgs(
                 GetMaybeFunction("map5"),
                 GetAddFunction(),
-                ToPine(JustOf(I(1))),
-                ToPine(JustOf(I(2))),
-                ToPine(Nothing),
-                ToPine(JustOf(I(4))),
-                ToPine(JustOf(I(5))));
+                ToPine(JustOf(Integer(1))),
+                ToPine(JustOf(Integer(2))),
+                ToPine(s_nothing),
+                ToPine(JustOf(Integer(4))),
+                ToPine(JustOf(Integer(5))));
 
-        result.Should().Be(Nothing);
+        result.Should().Be(s_nothing);
     }
 
     [Fact]
@@ -320,13 +319,13 @@ public class CoreMaybeFunctionTests
             ApplyWithPineArgs(
                 GetMaybeFunction("map5"),
                 GetAddFunction(),
-                ToPine(JustOf(I(1))),
-                ToPine(JustOf(I(2))),
-                ToPine(JustOf(I(3))),
-                ToPine(JustOf(I(4))),
-                ToPine(Nothing));
+                ToPine(JustOf(Integer(1))),
+                ToPine(JustOf(Integer(2))),
+                ToPine(JustOf(Integer(3))),
+                ToPine(JustOf(Integer(4))),
+                ToPine(s_nothing));
 
-        result.Should().Be(Nothing);
+        result.Should().Be(s_nothing);
     }
 
     // ========== Tests for andThen ==========
@@ -341,8 +340,8 @@ public class CoreMaybeFunctionTests
             ApplyWithPineArgs(
                 GetMaybeFunction("andThen"),
                 GetNegateFunction(),
-                ToPine(Nothing));
+                ToPine(s_nothing));
 
-        result.Should().Be(Nothing);
+        result.Should().Be(s_nothing);
     }
 }

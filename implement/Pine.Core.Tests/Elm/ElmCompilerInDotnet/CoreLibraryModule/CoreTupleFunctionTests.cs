@@ -46,17 +46,13 @@ public class CoreTupleFunctionTests
         .First(m => m.moduleName is "Tuple")
         .moduleContent.FunctionDeclarations[name];
 
-    private static ElmValue ApplyUnary(PineValue functionValue, ElmValue argument) =>
-        CoreLibraryTestHelper.ApplyDirectUnary(functionValue, argument);
+    private static readonly Core.Interpreter.IntermediateVM.PineVM s_vm =
+        ElmCompilerTestHelper.PineVMForProfiling(_ => { });
 
-    private static ElmValue ApplyBinary(
-        PineValue functionValue, ElmValue arg1, ElmValue arg2) =>
-        CoreLibraryTestHelper.ApplyGeneric(functionValue, [arg1, arg2]);
-
-    private static ElmValue S(string s) =>
+    private static ElmValue String(string s) =>
         ElmValue.StringInstance(s);
 
-    private static ElmValue I(long i) =>
+    private static ElmValue Integer(long i) =>
         ElmValue.Integer(i);
 
     private static ElmValue ElmList(params ElmValue[] items) =>
@@ -65,16 +61,17 @@ public class CoreTupleFunctionTests
     private static PineValue ToPine(ElmValue value) =>
         ElmValueEncoding.ElmValueAsPineValue(value);
 
-    private static ElmValue FromPine(PineValue value) =>
-        ElmValueEncoding.PineValueAsElmValue(value, null, null)
-        .Extract(err => throw new Exception("Failed decode as Elm value: " + err));
-
-    private static ElmValue ApplyWithPineArgs(
-        PineValue functionValue, params PineValue[] pineArgs) =>
-        FromPine(CoreLibraryTestHelper.ApplyGenericPine(functionValue, pineArgs));
-
     private static PineValue GetNegateFunction() =>
         Core.Elm.ElmCompilerInDotnet.CoreLibraryModule.CoreBasics.GetFunctionValue("negate")!;
+
+    private static ElmValue ApplyUnary(PineValue functionValue, ElmValue argument) =>
+        CoreLibraryTestHelper.ApplyUnary(functionValue, argument, s_vm);
+
+    private static ElmValue ApplyBinary(PineValue functionValue, ElmValue arg1, ElmValue arg2) =>
+        CoreLibraryTestHelper.ApplyBinary(functionValue, arg1, arg2, s_vm);
+
+    private static ElmValue ApplyWithPineArgs(PineValue functionValue, params PineValue[] pineArgs) =>
+        CoreLibraryTestHelper.ApplyWithPineArgs(s_vm, functionValue, pineArgs);
 
     // ========== Tests for pair ==========
     // pair 3 4 == (3, 4)
@@ -82,8 +79,8 @@ public class CoreTupleFunctionTests
     [Fact]
     public void Pair_3_4()
     {
-        var result = ApplyBinary(GetTupleFunction("pair"), I(3), I(4));
-        result.Should().Be(ElmList(I(3), I(4)));
+        var result = ApplyBinary(GetTupleFunction("pair"), Integer(3), Integer(4));
+        result.Should().Be(ElmList(Integer(3), Integer(4)));
     }
 
     // ========== Tests for first ==========
@@ -93,15 +90,15 @@ public class CoreTupleFunctionTests
     [Fact]
     public void First_3_4()
     {
-        var result = ApplyUnary(GetTupleFunction("first"), ElmList(I(3), I(4)));
-        result.Should().Be(I(3));
+        var result = ApplyUnary(GetTupleFunction("first"), ElmList(Integer(3), Integer(4)));
+        result.Should().Be(Integer(3));
     }
 
     [Fact]
     public void First_john_doe()
     {
-        var result = ApplyUnary(GetTupleFunction("first"), ElmList(S("john"), S("doe")));
-        result.Should().Be(S("john"));
+        var result = ApplyUnary(GetTupleFunction("first"), ElmList(String("john"), String("doe")));
+        result.Should().Be(String("john"));
     }
 
     // ========== Tests for second ==========
@@ -111,15 +108,15 @@ public class CoreTupleFunctionTests
     [Fact]
     public void Second_3_4()
     {
-        var result = ApplyUnary(GetTupleFunction("second"), ElmList(I(3), I(4)));
-        result.Should().Be(I(4));
+        var result = ApplyUnary(GetTupleFunction("second"), ElmList(Integer(3), Integer(4)));
+        result.Should().Be(Integer(4));
     }
 
     [Fact]
     public void Second_john_doe()
     {
-        var result = ApplyUnary(GetTupleFunction("second"), ElmList(S("john"), S("doe")));
-        result.Should().Be(S("doe"));
+        var result = ApplyUnary(GetTupleFunction("second"), ElmList(String("john"), String("doe")));
+        result.Should().Be(String("doe"));
     }
 
     // ========== Tests for mapFirst ==========
@@ -134,9 +131,9 @@ public class CoreTupleFunctionTests
             ApplyWithPineArgs(
                 GetTupleFunction("mapFirst"),
                 negateFn,
-                ToPine(ElmList(I(3), I(4))));
+                ToPine(ElmList(Integer(3), Integer(4))));
 
-        result.Should().Be(ElmList(I(-3), I(4)));
+        result.Should().Be(ElmList(Integer(-3), Integer(4)));
     }
 
     // ========== Tests for mapSecond ==========
@@ -151,9 +148,9 @@ public class CoreTupleFunctionTests
             ApplyWithPineArgs(
                 GetTupleFunction("mapSecond"),
                 negateFn,
-                ToPine(ElmList(I(3), I(4))));
+                ToPine(ElmList(Integer(3), Integer(4))));
 
-        result.Should().Be(ElmList(I(3), I(-4)));
+        result.Should().Be(ElmList(Integer(3), Integer(-4)));
     }
 
     // ========== Tests for mapBoth ==========
@@ -169,8 +166,8 @@ public class CoreTupleFunctionTests
                 GetTupleFunction("mapBoth"),
                 negateFn,
                 negateFn,
-                ToPine(ElmList(I(3), I(4))));
+                ToPine(ElmList(Integer(3), Integer(4))));
 
-        result.Should().Be(ElmList(I(-3), I(-4)));
+        result.Should().Be(ElmList(Integer(-3), Integer(-4)));
     }
 }

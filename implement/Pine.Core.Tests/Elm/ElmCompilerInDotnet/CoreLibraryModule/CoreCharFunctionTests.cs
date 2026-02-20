@@ -47,8 +47,11 @@ public class CoreCharFunctionTests
         .First(m => m.moduleName is "Char")
         .moduleContent.FunctionDeclarations[name];
 
+    private static readonly Core.Interpreter.IntermediateVM.PineVM s_vm =
+        ElmCompilerTestHelper.PineVMForProfiling(_ => { });
+
     private static ElmValue ApplyUnary(PineValue functionValue, ElmValue argument) =>
-        CoreLibraryTestHelper.ApplyDirectUnary(functionValue, argument);
+        CoreLibraryTestHelper.ApplyUnary(functionValue, argument, s_vm);
 
     // ========== Tests for toCode ==========
 

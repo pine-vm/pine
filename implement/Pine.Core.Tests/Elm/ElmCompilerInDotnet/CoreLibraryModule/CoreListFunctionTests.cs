@@ -46,24 +46,16 @@ public class CoreListFunctionTests
         .First(m => m.moduleName is "List")
         .moduleContent.FunctionDeclarations[name];
 
-    private static ElmValue ApplyUnary(PineValue functionValue, ElmValue argument) =>
-        CoreLibraryTestHelper.ApplyDirectUnary(functionValue, argument);
+    private static readonly Core.Interpreter.IntermediateVM.PineVM s_vm =
+        ElmCompilerTestHelper.PineVMForProfiling(_ => { });
 
-    private static ElmValue ApplyBinary(
-        PineValue functionValue, ElmValue arg1, ElmValue arg2) =>
-        CoreLibraryTestHelper.ApplyGeneric(functionValue, [arg1, arg2]);
-
-    private static ElmValue ApplyTernary(
-        PineValue functionValue, ElmValue arg1, ElmValue arg2, ElmValue arg3) =>
-        CoreLibraryTestHelper.ApplyGeneric(functionValue, [arg1, arg2, arg3]);
-
-    private static ElmValue I(long i) =>
+    private static ElmValue Integer(long i) =>
         ElmValue.Integer(i);
 
     private static ElmValue JustOf(ElmValue inner) =>
         ElmValue.TagInstance("Just", [inner]);
 
-    private static readonly ElmValue Nothing =
+    private static readonly ElmValue s_nothing =
         ElmValue.TagInstance("Nothing", []);
 
     private static ElmValue ElmList(params ElmValue[] items) =>
@@ -72,19 +64,20 @@ public class CoreListFunctionTests
     private static PineValue ToPine(ElmValue value) =>
         ElmValueEncoding.ElmValueAsPineValue(value);
 
-    private static ElmValue FromPine(PineValue value) =>
-        ElmValueEncoding.PineValueAsElmValue(value, null, null)
-        .Extract(err => throw new Exception("Failed decode as Elm value: " + err));
-
-    private static ElmValue ApplyWithPineArgs(
-        PineValue functionValue, params PineValue[] pineArgs) =>
-        FromPine(CoreLibraryTestHelper.ApplyGenericPine(functionValue, pineArgs));
-
     private static PineValue GetNegateFunction() =>
         Core.Elm.ElmCompilerInDotnet.CoreLibraryModule.CoreBasics.GetFunctionValue("negate")!;
 
     private static PineValue GetAddFunction() =>
         Core.Elm.ElmCompilerInDotnet.CoreLibraryModule.CoreBasics.GetFunctionValue("add")!;
+
+    private static ElmValue ApplyUnary(PineValue functionValue, ElmValue argument) =>
+        CoreLibraryTestHelper.ApplyUnary(functionValue, argument, s_vm);
+
+    private static ElmValue ApplyBinary(PineValue functionValue, ElmValue arg1, ElmValue arg2) =>
+        CoreLibraryTestHelper.ApplyBinary(functionValue, arg1, arg2, s_vm);
+
+    private static ElmValue ApplyWithPineArgs(PineValue functionValue, params PineValue[] pineArgs) =>
+        CoreLibraryTestHelper.ApplyWithPineArgs(s_vm, functionValue, pineArgs);
 
     // ========== Tests for singleton ==========
     // singleton 1234 == [1234]
@@ -92,8 +85,8 @@ public class CoreListFunctionTests
     [Fact]
     public void Singleton_1234()
     {
-        var result = ApplyUnary(GetListFunction("singleton"), I(1234));
-        result.Should().Be(ElmList(I(1234)));
+        var result = ApplyUnary(GetListFunction("singleton"), Integer(1234));
+        result.Should().Be(ElmList(Integer(1234)));
     }
 
     // ========== Tests for repeat ==========
@@ -102,8 +95,8 @@ public class CoreListFunctionTests
     [Fact]
     public void Repeat_3_1()
     {
-        var result = ApplyBinary(GetListFunction("repeat"), I(3), I(1));
-        result.Should().Be(ElmList(I(1), I(1), I(1)));
+        var result = ApplyBinary(GetListFunction("repeat"), Integer(3), Integer(1));
+        result.Should().Be(ElmList(Integer(1), Integer(1), Integer(1)));
     }
 
     // ========== Tests for range ==========
@@ -114,21 +107,21 @@ public class CoreListFunctionTests
     [Fact]
     public void Range_3_6()
     {
-        var result = ApplyBinary(GetListFunction("range"), I(3), I(6));
-        result.Should().Be(ElmList(I(3), I(4), I(5), I(6)));
+        var result = ApplyBinary(GetListFunction("range"), Integer(3), Integer(6));
+        result.Should().Be(ElmList(Integer(3), Integer(4), Integer(5), Integer(6)));
     }
 
     [Fact]
     public void Range_3_3()
     {
-        var result = ApplyBinary(GetListFunction("range"), I(3), I(3));
-        result.Should().Be(ElmList(I(3)));
+        var result = ApplyBinary(GetListFunction("range"), Integer(3), Integer(3));
+        result.Should().Be(ElmList(Integer(3)));
     }
 
     [Fact]
     public void Range_6_3()
     {
-        var result = ApplyBinary(GetListFunction("range"), I(6), I(3));
+        var result = ApplyBinary(GetListFunction("range"), Integer(6), Integer(3));
         result.Should().Be(ElmList());
     }
 
@@ -138,8 +131,8 @@ public class CoreListFunctionTests
     [Fact]
     public void Length_3()
     {
-        var result = ApplyUnary(GetListFunction("length"), ElmList(I(1), I(2), I(3)));
-        result.Should().Be(I(3));
+        var result = ApplyUnary(GetListFunction("length"), ElmList(Integer(1), Integer(2), Integer(3)));
+        result.Should().Be(Integer(3));
     }
 
     // ========== Tests for reverse ==========
@@ -149,9 +142,9 @@ public class CoreListFunctionTests
     public void Reverse_1234()
     {
         var result =
-            ApplyUnary(GetListFunction("reverse"), ElmList(I(1), I(2), I(3), I(4)));
+            ApplyUnary(GetListFunction("reverse"), ElmList(Integer(1), Integer(2), Integer(3), Integer(4)));
 
-        result.Should().Be(ElmList(I(4), I(3), I(2), I(1)));
+        result.Should().Be(ElmList(Integer(4), Integer(3), Integer(2), Integer(1)));
     }
 
     // ========== Tests for member ==========
@@ -162,7 +155,7 @@ public class CoreListFunctionTests
     public void Member_9_not_found()
     {
         var result =
-            ApplyBinary(GetListFunction("member"), I(9), ElmList(I(1), I(2), I(3), I(4)));
+            ApplyBinary(GetListFunction("member"), Integer(9), ElmList(Integer(1), Integer(2), Integer(3), Integer(4)));
 
         result.Should().Be(ElmValue.FalseValue);
     }
@@ -171,7 +164,7 @@ public class CoreListFunctionTests
     public void Member_4_found()
     {
         var result =
-            ApplyBinary(GetListFunction("member"), I(4), ElmList(I(1), I(2), I(3), I(4)));
+            ApplyBinary(GetListFunction("member"), Integer(4), ElmList(Integer(1), Integer(2), Integer(3), Integer(4)));
 
         result.Should().Be(ElmValue.TrueValue);
     }
@@ -183,15 +176,15 @@ public class CoreListFunctionTests
     [Fact]
     public void Maximum_1_4_2()
     {
-        var result = ApplyUnary(GetListFunction("maximum"), ElmList(I(1), I(4), I(2)));
-        result.Should().Be(JustOf(I(4)));
+        var result = ApplyUnary(GetListFunction("maximum"), ElmList(Integer(1), Integer(4), Integer(2)));
+        result.Should().Be(JustOf(Integer(4)));
     }
 
     [Fact]
     public void Maximum_empty()
     {
         var result = ApplyUnary(GetListFunction("maximum"), ElmList());
-        result.Should().Be(Nothing);
+        result.Should().Be(s_nothing);
     }
 
     // ========== Tests for minimum ==========
@@ -201,15 +194,15 @@ public class CoreListFunctionTests
     [Fact]
     public void Minimum_3_2_1()
     {
-        var result = ApplyUnary(GetListFunction("minimum"), ElmList(I(3), I(2), I(1)));
-        result.Should().Be(JustOf(I(1)));
+        var result = ApplyUnary(GetListFunction("minimum"), ElmList(Integer(3), Integer(2), Integer(1)));
+        result.Should().Be(JustOf(Integer(1)));
     }
 
     [Fact]
     public void Minimum_empty()
     {
         var result = ApplyUnary(GetListFunction("minimum"), ElmList());
-        result.Should().Be(Nothing);
+        result.Should().Be(s_nothing);
     }
 
     // ========== Tests for sum ==========
@@ -220,22 +213,22 @@ public class CoreListFunctionTests
     [Fact]
     public void Sum_1_2_3()
     {
-        var result = ApplyUnary(GetListFunction("sum"), ElmList(I(1), I(2), I(3)));
-        result.Should().Be(I(6));
+        var result = ApplyUnary(GetListFunction("sum"), ElmList(Integer(1), Integer(2), Integer(3)));
+        result.Should().Be(Integer(6));
     }
 
     [Fact]
     public void Sum_1_1_1()
     {
-        var result = ApplyUnary(GetListFunction("sum"), ElmList(I(1), I(1), I(1)));
-        result.Should().Be(I(3));
+        var result = ApplyUnary(GetListFunction("sum"), ElmList(Integer(1), Integer(1), Integer(1)));
+        result.Should().Be(Integer(3));
     }
 
     [Fact]
     public void Sum_empty()
     {
         var result = ApplyUnary(GetListFunction("sum"), ElmList());
-        result.Should().Be(I(0));
+        result.Should().Be(Integer(0));
     }
 
     // ========== Tests for product ==========
@@ -246,22 +239,22 @@ public class CoreListFunctionTests
     [Fact]
     public void Product_2_2_2()
     {
-        var result = ApplyUnary(GetListFunction("product"), ElmList(I(2), I(2), I(2)));
-        result.Should().Be(I(8));
+        var result = ApplyUnary(GetListFunction("product"), ElmList(Integer(2), Integer(2), Integer(2)));
+        result.Should().Be(Integer(8));
     }
 
     [Fact]
     public void Product_3_3_3()
     {
-        var result = ApplyUnary(GetListFunction("product"), ElmList(I(3), I(3), I(3)));
-        result.Should().Be(I(27));
+        var result = ApplyUnary(GetListFunction("product"), ElmList(Integer(3), Integer(3), Integer(3)));
+        result.Should().Be(Integer(27));
     }
 
     [Fact]
     public void Product_empty()
     {
         var result = ApplyUnary(GetListFunction("product"), ElmList());
-        result.Should().Be(I(1));
+        result.Should().Be(Integer(1));
     }
 
     // ========== Tests for append ==========
@@ -273,10 +266,10 @@ public class CoreListFunctionTests
         var result =
             ApplyBinary(
                 GetListFunction("append"),
-                ElmList(I(1), I(1), I(2)),
-                ElmList(I(3), I(5), I(8)));
+                ElmList(Integer(1), Integer(1), Integer(2)),
+                ElmList(Integer(3), Integer(5), Integer(8)));
 
-        result.Should().Be(ElmList(I(1), I(1), I(2), I(3), I(5), I(8)));
+        result.Should().Be(ElmList(Integer(1), Integer(1), Integer(2), Integer(3), Integer(5), Integer(8)));
     }
 
     // ========== Tests for concat ==========
@@ -289,11 +282,11 @@ public class CoreListFunctionTests
             ApplyUnary(
                 GetListFunction("concat"),
                 ElmList(
-                    ElmList(I(1), I(2)),
-                    ElmList(I(3)),
-                    ElmList(I(4), I(5))));
+                    ElmList(Integer(1), Integer(2)),
+                    ElmList(Integer(3)),
+                    ElmList(Integer(4), Integer(5))));
 
-        result.Should().Be(ElmList(I(1), I(2), I(3), I(4), I(5)));
+        result.Should().Be(ElmList(Integer(1), Integer(2), Integer(3), Integer(4), Integer(5)));
     }
 
     // ========== Tests for intersperse ==========
@@ -305,10 +298,10 @@ public class CoreListFunctionTests
         var result =
             ApplyBinary(
                 GetListFunction("intersperse"),
-                I(0),
-                ElmList(I(1), I(2), I(3)));
+                Integer(0),
+                ElmList(Integer(1), Integer(2), Integer(3)));
 
-        result.Should().Be(ElmList(I(1), I(0), I(2), I(0), I(3)));
+        result.Should().Be(ElmList(Integer(1), Integer(0), Integer(2), Integer(0), Integer(3)));
     }
 
     // ========== Tests for sort ==========
@@ -318,9 +311,9 @@ public class CoreListFunctionTests
     public void Sort_3_1_5()
     {
         var result =
-            ApplyUnary(GetListFunction("sort"), ElmList(I(3), I(1), I(5)));
+            ApplyUnary(GetListFunction("sort"), ElmList(Integer(3), Integer(1), Integer(5)));
 
-        result.Should().Be(ElmList(I(1), I(3), I(5)));
+        result.Should().Be(ElmList(Integer(1), Integer(3), Integer(5)));
     }
 
     // ========== Tests for isEmpty ==========
@@ -336,7 +329,7 @@ public class CoreListFunctionTests
     [Fact]
     public void IsEmpty_non_empty_list()
     {
-        var result = ApplyUnary(GetListFunction("isEmpty"), ElmList(I(1)));
+        var result = ApplyUnary(GetListFunction("isEmpty"), ElmList(Integer(1)));
         result.Should().Be(ElmValue.FalseValue);
     }
 
@@ -348,16 +341,16 @@ public class CoreListFunctionTests
     public void Head_1_2_3()
     {
         var result =
-            ApplyUnary(GetListFunction("head"), ElmList(I(1), I(2), I(3)));
+            ApplyUnary(GetListFunction("head"), ElmList(Integer(1), Integer(2), Integer(3)));
 
-        result.Should().Be(JustOf(I(1)));
+        result.Should().Be(JustOf(Integer(1)));
     }
 
     [Fact]
     public void Head_empty()
     {
         var result = ApplyUnary(GetListFunction("head"), ElmList());
-        result.Should().Be(Nothing);
+        result.Should().Be(s_nothing);
     }
 
     // ========== Tests for tail ==========
@@ -368,16 +361,16 @@ public class CoreListFunctionTests
     public void Tail_1_2_3()
     {
         var result =
-            ApplyUnary(GetListFunction("tail"), ElmList(I(1), I(2), I(3)));
+            ApplyUnary(GetListFunction("tail"), ElmList(Integer(1), Integer(2), Integer(3)));
 
-        result.Should().Be(JustOf(ElmList(I(2), I(3))));
+        result.Should().Be(JustOf(ElmList(Integer(2), Integer(3))));
     }
 
     [Fact]
     public void Tail_empty()
     {
         var result = ApplyUnary(GetListFunction("tail"), ElmList());
-        result.Should().Be(Nothing);
+        result.Should().Be(s_nothing);
     }
 
     // ========== Tests for take ==========
@@ -389,10 +382,10 @@ public class CoreListFunctionTests
         var result =
             ApplyBinary(
                 GetListFunction("take"),
-                I(2),
-                ElmList(I(1), I(2), I(3), I(4)));
+                Integer(2),
+                ElmList(Integer(1), Integer(2), Integer(3), Integer(4)));
 
-        result.Should().Be(ElmList(I(1), I(2)));
+        result.Should().Be(ElmList(Integer(1), Integer(2)));
     }
 
     // ========== Tests for drop ==========
@@ -404,10 +397,10 @@ public class CoreListFunctionTests
         var result =
             ApplyBinary(
                 GetListFunction("drop"),
-                I(2),
-                ElmList(I(1), I(2), I(3), I(4)));
+                Integer(2),
+                ElmList(Integer(1), Integer(2), Integer(3), Integer(4)));
 
-        result.Should().Be(ElmList(I(3), I(4)));
+        result.Should().Be(ElmList(Integer(3), Integer(4)));
     }
 
     // ========== Tests for map (higher-order) ==========
@@ -420,9 +413,9 @@ public class CoreListFunctionTests
             ApplyWithPineArgs(
                 GetListFunction("map"),
                 GetNegateFunction(),
-                ToPine(ElmList(I(1), I(2), I(3))));
+                ToPine(ElmList(Integer(1), Integer(2), Integer(3))));
 
-        result.Should().Be(ElmList(I(-1), I(-2), I(-3)));
+        result.Should().Be(ElmList(Integer(-1), Integer(-2), Integer(-3)));
     }
 
     // ========== Tests for foldl (higher-order) ==========
@@ -435,10 +428,10 @@ public class CoreListFunctionTests
             ApplyWithPineArgs(
                 GetListFunction("foldl"),
                 GetAddFunction(),
-                ToPine(I(0)),
-                ToPine(ElmList(I(1), I(2), I(3))));
+                ToPine(Integer(0)),
+                ToPine(ElmList(Integer(1), Integer(2), Integer(3))));
 
-        result.Should().Be(I(6));
+        result.Should().Be(Integer(6));
     }
 
     // ========== Tests for foldr (higher-order) ==========
@@ -451,10 +444,10 @@ public class CoreListFunctionTests
             ApplyWithPineArgs(
                 GetListFunction("foldr"),
                 GetAddFunction(),
-                ToPine(I(0)),
-                ToPine(ElmList(I(1), I(2), I(3))));
+                ToPine(Integer(0)),
+                ToPine(ElmList(Integer(1), Integer(2), Integer(3))));
 
-        result.Should().Be(I(6));
+        result.Should().Be(Integer(6));
     }
 
     // ========== Tests for sortBy (higher-order) ==========
@@ -467,9 +460,9 @@ public class CoreListFunctionTests
             ApplyWithPineArgs(
                 GetListFunction("sortBy"),
                 GetNegateFunction(),
-                ToPine(ElmList(I(1), I(3), I(2))));
+                ToPine(ElmList(Integer(1), Integer(3), Integer(2))));
 
-        result.Should().Be(ElmList(I(3), I(2), I(1)));
+        result.Should().Be(ElmList(Integer(3), Integer(2), Integer(1)));
     }
 
     // ========== Tests for concatMap (higher-order) ==========
@@ -482,8 +475,8 @@ public class CoreListFunctionTests
             ApplyWithPineArgs(
                 GetListFunction("concatMap"),
                 GetListFunction("singleton"),
-                ToPine(ElmList(I(1), I(2), I(3))));
+                ToPine(ElmList(Integer(1), Integer(2), Integer(3))));
 
-        result.Should().Be(ElmList(I(1), I(2), I(3)));
+        result.Should().Be(ElmList(Integer(1), Integer(2), Integer(3)));
     }
 }

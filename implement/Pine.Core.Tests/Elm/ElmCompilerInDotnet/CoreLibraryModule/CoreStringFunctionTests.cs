@@ -51,24 +51,27 @@ public class CoreStringFunctionTests
         .First(m => m.moduleName is "Char")
         .moduleContent.FunctionDeclarations[name];
 
+    private static readonly Core.Interpreter.IntermediateVM.PineVM s_vm =
+        ElmCompilerTestHelper.PineVMForProfiling(_ => { });
+
     private static ElmValue ApplyUnary(PineValue functionValue, ElmValue argument) =>
-        CoreLibraryTestHelper.ApplyDirectUnary(functionValue, argument);
+        CoreLibraryTestHelper.ApplyUnary(functionValue, argument, s_vm);
 
     private static ElmValue ApplyBinary(
         PineValue functionValue, ElmValue arg1, ElmValue arg2) =>
-        CoreLibraryTestHelper.ApplyGeneric(functionValue, [arg1, arg2]);
+        CoreLibraryTestHelper.ApplyBinary(functionValue, arg1, arg2, s_vm);
 
     private static ElmValue ApplyTernary(
         PineValue functionValue, ElmValue arg1, ElmValue arg2, ElmValue arg3) =>
-        CoreLibraryTestHelper.ApplyGeneric(functionValue, [arg1, arg2, arg3]);
+        CoreLibraryTestHelper.ApplyTernary(functionValue, arg1, arg2, arg3, s_vm);
 
-    private static ElmValue S(string s) =>
+    private static ElmValue String(string s) =>
         ElmValue.StringInstance(s);
 
-    private static ElmValue I(long i) =>
+    private static ElmValue Integer(long i) =>
         ElmValue.Integer(i);
 
-    private static ElmValue C(char c) =>
+    private static ElmValue Char(char c) =>
         ElmValue.CharInstance(c);
 
     private static ElmValue JustOf(ElmValue inner) =>
@@ -83,13 +86,9 @@ public class CoreStringFunctionTests
     private static PineValue ToPine(ElmValue value) =>
         ElmValueEncoding.ElmValueAsPineValue(value);
 
-    private static ElmValue FromPine(PineValue value) =>
-        ElmValueEncoding.PineValueAsElmValue(value, null, null)
-        .Extract(err => throw new Exception("Failed decode as Elm value: " + err));
-
     private static ElmValue ApplyWithPineArgs(
         PineValue functionValue, params PineValue[] pineArgs) =>
-        FromPine(CoreLibraryTestHelper.ApplyGenericPine(functionValue, pineArgs));
+        CoreLibraryTestHelper.ApplyWithPineArgs(s_vm, functionValue, pineArgs);
 
     // ========== Tests for isEmpty ==========
     // isEmpty "" == True
@@ -98,14 +97,14 @@ public class CoreStringFunctionTests
     [Fact]
     public void IsEmpty_empty_string()
     {
-        var result = ApplyUnary(GetStringFunction("isEmpty"), S(""));
+        var result = ApplyUnary(GetStringFunction("isEmpty"), String(""));
         result.Should().Be(ElmValue.TrueValue);
     }
 
     [Fact]
     public void IsEmpty_non_empty_string()
     {
-        var result = ApplyUnary(GetStringFunction("isEmpty"), S("the world"));
+        var result = ApplyUnary(GetStringFunction("isEmpty"), String("the world"));
         result.Should().Be(ElmValue.FalseValue);
     }
 
@@ -116,15 +115,15 @@ public class CoreStringFunctionTests
     [Fact]
     public void Length_innumerable()
     {
-        var result = ApplyUnary(GetStringFunction("length"), S("innumerable"));
-        result.Should().Be(I(11));
+        var result = ApplyUnary(GetStringFunction("length"), String("innumerable"));
+        result.Should().Be(Integer(11));
     }
 
     [Fact]
     public void Length_empty()
     {
-        var result = ApplyUnary(GetStringFunction("length"), S(""));
-        result.Should().Be(I(0));
+        var result = ApplyUnary(GetStringFunction("length"), String(""));
+        result.Should().Be(Integer(0));
     }
 
     // ========== Tests for reverse ==========
@@ -133,8 +132,8 @@ public class CoreStringFunctionTests
     [Fact]
     public void Reverse_stressed()
     {
-        var result = ApplyUnary(GetStringFunction("reverse"), S("stressed"));
-        result.Should().Be(S("desserts"));
+        var result = ApplyUnary(GetStringFunction("reverse"), String("stressed"));
+        result.Should().Be(String("desserts"));
     }
 
     // ========== Tests for repeat ==========
@@ -143,8 +142,8 @@ public class CoreStringFunctionTests
     [Fact]
     public void Repeat_3_ha()
     {
-        var result = ApplyBinary(GetStringFunction("repeat"), I(3), S("ha"));
-        result.Should().Be(S("hahaha"));
+        var result = ApplyBinary(GetStringFunction("repeat"), Integer(3), String("ha"));
+        result.Should().Be(String("hahaha"));
     }
 
     // ========== Tests for replace ==========
@@ -157,11 +156,11 @@ public class CoreStringFunctionTests
         var result =
             ApplyTernary(
                 GetStringFunction("replace"),
-                S("."),
-                S("-"),
-                S("Json.Decode.succeed"));
+                String("."),
+                String("-"),
+                String("Json.Decode.succeed"));
 
-        result.Should().Be(S("Json-Decode-succeed"));
+        result.Should().Be(String("Json-Decode-succeed"));
     }
 
     [Fact]
@@ -170,11 +169,11 @@ public class CoreStringFunctionTests
         var result =
             ApplyTernary(
                 GetStringFunction("replace"),
-                S(","),
-                S("/"),
-                S("a,b,c,d,e"));
+                String(","),
+                String("/"),
+                String("a,b,c,d,e"));
 
-        result.Should().Be(S("a/b/c/d/e"));
+        result.Should().Be(String("a/b/c/d/e"));
     }
 
     // ========== Tests for append ==========
@@ -184,9 +183,9 @@ public class CoreStringFunctionTests
     public void Append_butterfly()
     {
         var result =
-            ApplyBinary(GetStringFunction("append"), S("butter"), S("fly"));
+            ApplyBinary(GetStringFunction("append"), String("butter"), String("fly"));
 
-        result.Should().Be(S("butterfly"));
+        result.Should().Be(String("butterfly"));
     }
 
     // ========== Tests for concat ==========
@@ -198,9 +197,9 @@ public class CoreStringFunctionTests
         var result =
             ApplyUnary(
                 GetStringFunction("concat"),
-                ElmList(S("never"), S("the"), S("less")));
+                ElmList(String("never"), String("the"), String("less")));
 
-        result.Should().Be(S("nevertheless"));
+        result.Should().Be(String("nevertheless"));
     }
 
     // ========== Tests for split ==========
@@ -211,18 +210,18 @@ public class CoreStringFunctionTests
     public void Split_comma()
     {
         var result =
-            ApplyBinary(GetStringFunction("split"), S(","), S("cat,dog,cow"));
+            ApplyBinary(GetStringFunction("split"), String(","), String("cat,dog,cow"));
 
-        result.Should().Be(ElmList(S("cat"), S("dog"), S("cow")));
+        result.Should().Be(ElmList(String("cat"), String("dog"), String("cow")));
     }
 
     [Fact]
     public void Split_slash_trailing()
     {
         var result =
-            ApplyBinary(GetStringFunction("split"), S("/"), S("home/evan/Desktop/"));
+            ApplyBinary(GetStringFunction("split"), String("/"), String("home/evan/Desktop/"));
 
-        result.Should().Be(ElmList(S("home"), S("evan"), S("Desktop"), S("")));
+        result.Should().Be(ElmList(String("home"), String("evan"), String("Desktop"), String("")));
     }
 
     // ========== Tests for join ==========
@@ -236,10 +235,10 @@ public class CoreStringFunctionTests
         var result =
             ApplyBinary(
                 GetStringFunction("join"),
-                S("a"),
-                ElmList(S("H"), S("w"), S("ii"), S("n")));
+                String("a"),
+                ElmList(String("H"), String("w"), String("ii"), String("n")));
 
-        result.Should().Be(S("Hawaiian"));
+        result.Should().Be(String("Hawaiian"));
     }
 
     [Fact]
@@ -248,10 +247,10 @@ public class CoreStringFunctionTests
         var result =
             ApplyBinary(
                 GetStringFunction("join"),
-                S(" "),
-                ElmList(S("cat"), S("dog"), S("cow")));
+                String(" "),
+                ElmList(String("cat"), String("dog"), String("cow")));
 
-        result.Should().Be(S("cat dog cow"));
+        result.Should().Be(String("cat dog cow"));
     }
 
     [Fact]
@@ -260,10 +259,10 @@ public class CoreStringFunctionTests
         var result =
             ApplyBinary(
                 GetStringFunction("join"),
-                S("/"),
-                ElmList(S("home"), S("evan"), S("Desktop")));
+                String("/"),
+                ElmList(String("home"), String("evan"), String("Desktop")));
 
-        result.Should().Be(S("home/evan/Desktop"));
+        result.Should().Be(String("home/evan/Desktop"));
     }
 
     // ========== Tests for words ==========
@@ -275,9 +274,9 @@ public class CoreStringFunctionTests
         var result =
             ApplyUnary(
                 GetStringFunction("words"),
-                S("How are \t you? \n Good?"));
+                String("How are \t you? \n Good?"));
 
-        result.Should().Be(ElmList(S("How"), S("are"), S("you?"), S("Good?")));
+        result.Should().Be(ElmList(String("How"), String("are"), String("you?"), String("Good?")));
     }
 
     // ========== Tests for lines ==========
@@ -289,9 +288,9 @@ public class CoreStringFunctionTests
         var result =
             ApplyUnary(
                 GetStringFunction("lines"),
-                S("How are you?\nGood?"));
+                String("How are you?\nGood?"));
 
-        result.Should().Be(ElmList(S("How are you?"), S("Good?")));
+        result.Should().Be(ElmList(String("How are you?"), String("Good?")));
     }
 
     // ========== Tests for slice ==========
@@ -306,11 +305,11 @@ public class CoreStringFunctionTests
         var result =
             ApplyTernary(
                 GetStringFunction("slice"),
-                I(7),
-                I(9),
-                S("snakes on a plane!"));
+                Integer(7),
+                Integer(9),
+                String("snakes on a plane!"));
 
-        result.Should().Be(S("on"));
+        result.Should().Be(String("on"));
     }
 
     [Fact]
@@ -319,11 +318,11 @@ public class CoreStringFunctionTests
         var result =
             ApplyTernary(
                 GetStringFunction("slice"),
-                I(0),
-                I(6),
-                S("snakes on a plane!"));
+                Integer(0),
+                Integer(6),
+                String("snakes on a plane!"));
 
-        result.Should().Be(S("snakes"));
+        result.Should().Be(String("snakes"));
     }
 
     [Fact]
@@ -332,11 +331,11 @@ public class CoreStringFunctionTests
         var result =
             ApplyTernary(
                 GetStringFunction("slice"),
-                I(0),
-                I(-7),
-                S("snakes on a plane!"));
+                Integer(0),
+                Integer(-7),
+                String("snakes on a plane!"));
 
-        result.Should().Be(S("snakes on a"));
+        result.Should().Be(String("snakes on a"));
     }
 
     [Fact]
@@ -345,11 +344,11 @@ public class CoreStringFunctionTests
         var result =
             ApplyTernary(
                 GetStringFunction("slice"),
-                I(-6),
-                I(-1),
-                S("snakes on a plane!"));
+                Integer(-6),
+                Integer(-1),
+                String("snakes on a plane!"));
 
-        result.Should().Be(S("plane"));
+        result.Should().Be(String("plane"));
     }
 
     // ========== Tests for left ==========
@@ -359,9 +358,9 @@ public class CoreStringFunctionTests
     public void Left_2()
     {
         var result =
-            ApplyBinary(GetStringFunction("left"), I(2), S("Mulder"));
+            ApplyBinary(GetStringFunction("left"), Integer(2), String("Mulder"));
 
-        result.Should().Be(S("Mu"));
+        result.Should().Be(String("Mu"));
     }
 
     // ========== Tests for right ==========
@@ -371,9 +370,9 @@ public class CoreStringFunctionTests
     public void Right_2()
     {
         var result =
-            ApplyBinary(GetStringFunction("right"), I(2), S("Scully"));
+            ApplyBinary(GetStringFunction("right"), Integer(2), String("Scully"));
 
-        result.Should().Be(S("ly"));
+        result.Should().Be(String("ly"));
     }
 
     // ========== Tests for dropLeft ==========
@@ -385,10 +384,10 @@ public class CoreStringFunctionTests
         var result =
             ApplyBinary(
                 GetStringFunction("dropLeft"),
-                I(2),
-                S("The Lone Gunmen"));
+                Integer(2),
+                String("The Lone Gunmen"));
 
-        result.Should().Be(S("e Lone Gunmen"));
+        result.Should().Be(String("e Lone Gunmen"));
     }
 
     // ========== Tests for dropRight ==========
@@ -400,10 +399,10 @@ public class CoreStringFunctionTests
         var result =
             ApplyBinary(
                 GetStringFunction("dropRight"),
-                I(2),
-                S("Cigarette Smoking Man"));
+                Integer(2),
+                String("Cigarette Smoking Man"));
 
-        result.Should().Be(S("Cigarette Smoking M"));
+        result.Should().Be(String("Cigarette Smoking M"));
     }
 
     // ========== Tests for contains ==========
@@ -415,7 +414,7 @@ public class CoreStringFunctionTests
     public void Contains_the_in_theory()
     {
         var result =
-            ApplyBinary(GetStringFunction("contains"), S("the"), S("theory"));
+            ApplyBinary(GetStringFunction("contains"), String("the"), String("theory"));
 
         result.Should().Be(ElmValue.TrueValue);
     }
@@ -424,7 +423,7 @@ public class CoreStringFunctionTests
     public void Contains_hat_in_theory()
     {
         var result =
-            ApplyBinary(GetStringFunction("contains"), S("hat"), S("theory"));
+            ApplyBinary(GetStringFunction("contains"), String("hat"), String("theory"));
 
         result.Should().Be(ElmValue.FalseValue);
     }
@@ -433,7 +432,7 @@ public class CoreStringFunctionTests
     public void Contains_THE_in_theory()
     {
         var result =
-            ApplyBinary(GetStringFunction("contains"), S("THE"), S("theory"));
+            ApplyBinary(GetStringFunction("contains"), String("THE"), String("theory"));
 
         result.Should().Be(ElmValue.FalseValue);
     }
@@ -448,8 +447,8 @@ public class CoreStringFunctionTests
         var result =
             ApplyBinary(
                 GetStringFunction("startsWith"),
-                S("the"),
-                S("theory"));
+                String("the"),
+                String("theory"));
 
         result.Should().Be(ElmValue.TrueValue);
     }
@@ -460,8 +459,8 @@ public class CoreStringFunctionTests
         var result =
             ApplyBinary(
                 GetStringFunction("startsWith"),
-                S("ory"),
-                S("theory"));
+                String("ory"),
+                String("theory"));
 
         result.Should().Be(ElmValue.FalseValue);
     }
@@ -476,8 +475,8 @@ public class CoreStringFunctionTests
         var result =
             ApplyBinary(
                 GetStringFunction("endsWith"),
-                S("the"),
-                S("theory"));
+                String("the"),
+                String("theory"));
 
         result.Should().Be(ElmValue.FalseValue);
     }
@@ -488,8 +487,8 @@ public class CoreStringFunctionTests
         var result =
             ApplyBinary(
                 GetStringFunction("endsWith"),
-                S("ory"),
-                S("theory"));
+                String("ory"),
+                String("theory"));
 
         result.Should().Be(ElmValue.TrueValue);
     }
@@ -505,10 +504,10 @@ public class CoreStringFunctionTests
         var result =
             ApplyBinary(
                 GetStringFunction("indexes"),
-                S("i"),
-                S("Mississippi"));
+                String("i"),
+                String("Mississippi"));
 
-        result.Should().Be(ElmList(I(1), I(4), I(7), I(10)));
+        result.Should().Be(ElmList(Integer(1), Integer(4), Integer(7), Integer(10)));
     }
 
     [Fact]
@@ -517,10 +516,10 @@ public class CoreStringFunctionTests
         var result =
             ApplyBinary(
                 GetStringFunction("indexes"),
-                S("ss"),
-                S("Mississippi"));
+                String("ss"),
+                String("Mississippi"));
 
-        result.Should().Be(ElmList(I(2), I(5)));
+        result.Should().Be(ElmList(Integer(2), Integer(5)));
     }
 
     [Fact]
@@ -529,8 +528,8 @@ public class CoreStringFunctionTests
         var result =
             ApplyBinary(
                 GetStringFunction("indexes"),
-                S("needle"),
-                S("haystack"));
+                String("needle"),
+                String("haystack"));
 
         result.Should().Be(ElmList());
     }
@@ -543,10 +542,10 @@ public class CoreStringFunctionTests
         var result =
             ApplyBinary(
                 GetStringFunction("indices"),
-                S("i"),
-                S("Mississippi"));
+                String("i"),
+                String("Mississippi"));
 
-        result.Should().Be(ElmList(I(1), I(4), I(7), I(10)));
+        result.Should().Be(ElmList(Integer(1), Integer(4), Integer(7), Integer(10)));
     }
 
     // ========== Tests for toInt ==========
@@ -558,28 +557,28 @@ public class CoreStringFunctionTests
     [Fact]
     public void ToInt_123()
     {
-        var result = ApplyUnary(GetStringFunction("toInt"), S("123"));
-        result.Should().Be(JustOf(I(123)));
+        var result = ApplyUnary(GetStringFunction("toInt"), String("123"));
+        result.Should().Be(JustOf(Integer(123)));
     }
 
     [Fact]
     public void ToInt_neg42()
     {
-        var result = ApplyUnary(GetStringFunction("toInt"), S("-42"));
-        result.Should().Be(JustOf(I(-42)));
+        var result = ApplyUnary(GetStringFunction("toInt"), String("-42"));
+        result.Should().Be(JustOf(Integer(-42)));
     }
 
     [Fact]
     public void ToInt_3_1()
     {
-        var result = ApplyUnary(GetStringFunction("toInt"), S("3.1"));
+        var result = ApplyUnary(GetStringFunction("toInt"), String("3.1"));
         result.Should().Be(s_nothing);
     }
 
     [Fact]
     public void ToInt_31a()
     {
-        var result = ApplyUnary(GetStringFunction("toInt"), S("31a"));
+        var result = ApplyUnary(GetStringFunction("toInt"), String("31a"));
         result.Should().Be(s_nothing);
     }
 
@@ -590,15 +589,15 @@ public class CoreStringFunctionTests
     [Fact]
     public void FromInt_123()
     {
-        var result = ApplyUnary(GetStringFunction("fromInt"), I(123));
-        result.Should().Be(S("123"));
+        var result = ApplyUnary(GetStringFunction("fromInt"), Integer(123));
+        result.Should().Be(String("123"));
     }
 
     [Fact]
     public void FromInt_neg42()
     {
-        var result = ApplyUnary(GetStringFunction("fromInt"), I(-42));
-        result.Should().Be(S("-42"));
+        var result = ApplyUnary(GetStringFunction("fromInt"), Integer(-42));
+        result.Should().Be(String("-42"));
     }
 
     // ========== Tests for toFloat ==========
@@ -610,7 +609,7 @@ public class CoreStringFunctionTests
     [Fact]
     public void ToFloat_123()
     {
-        var result = ApplyUnary(GetStringFunction("toFloat"), S("123"));
+        var result = ApplyUnary(GetStringFunction("toFloat"), String("123"));
         var justTag = result as ElmValue.ElmTag;
         justTag.Should().NotBeNull();
         justTag!.TagName.Should().Be("Just");
@@ -619,7 +618,7 @@ public class CoreStringFunctionTests
     [Fact]
     public void ToFloat_neg42()
     {
-        var result = ApplyUnary(GetStringFunction("toFloat"), S("-42"));
+        var result = ApplyUnary(GetStringFunction("toFloat"), String("-42"));
         var justTag = result as ElmValue.ElmTag;
         justTag.Should().NotBeNull();
         justTag!.TagName.Should().Be("Just");
@@ -628,7 +627,7 @@ public class CoreStringFunctionTests
     [Fact]
     public void ToFloat_3_1()
     {
-        var result = ApplyUnary(GetStringFunction("toFloat"), S("3.1"));
+        var result = ApplyUnary(GetStringFunction("toFloat"), String("3.1"));
         var justTag = result as ElmValue.ElmTag;
         justTag.Should().NotBeNull();
         justTag!.TagName.Should().Be("Just");
@@ -637,7 +636,7 @@ public class CoreStringFunctionTests
     [Fact]
     public void ToFloat_31a()
     {
-        var result = ApplyUnary(GetStringFunction("toFloat"), S("31a"));
+        var result = ApplyUnary(GetStringFunction("toFloat"), String("31a"));
         result.Should().Be(s_nothing);
     }
 
@@ -649,15 +648,15 @@ public class CoreStringFunctionTests
     [Fact]
     public void FromFloat_123()
     {
-        var result = ApplyUnary(GetStringFunction("fromFloat"), I(123));
-        result.Should().Be(S("123"));
+        var result = ApplyUnary(GetStringFunction("fromFloat"), Integer(123));
+        result.Should().Be(String("123"));
     }
 
     [Fact]
     public void FromFloat_neg42()
     {
-        var result = ApplyUnary(GetStringFunction("fromFloat"), I(-42));
-        result.Should().Be(S("-42"));
+        var result = ApplyUnary(GetStringFunction("fromFloat"), Integer(-42));
+        result.Should().Be(String("-42"));
     }
 
     // ========== Tests for toList ==========
@@ -666,8 +665,8 @@ public class CoreStringFunctionTests
     [Fact]
     public void ToList_abc()
     {
-        var result = ApplyUnary(GetStringFunction("toList"), S("abc"));
-        result.Should().Be(ElmList(C('a'), C('b'), C('c')));
+        var result = ApplyUnary(GetStringFunction("toList"), String("abc"));
+        result.Should().Be(ElmList(Char('a'), Char('b'), Char('c')));
     }
 
     // ========== Tests for fromList ==========
@@ -679,9 +678,9 @@ public class CoreStringFunctionTests
         var result =
             ApplyUnary(
                 GetStringFunction("fromList"),
-                ElmList(C('a'), C('b'), C('c')));
+                ElmList(Char('a'), Char('b'), Char('c')));
 
-        result.Should().Be(S("abc"));
+        result.Should().Be(String("abc"));
     }
 
     // ========== Tests for fromChar ==========
@@ -690,8 +689,8 @@ public class CoreStringFunctionTests
     [Fact]
     public void FromChar_a()
     {
-        var result = ApplyUnary(GetStringFunction("fromChar"), C('a'));
-        result.Should().Be(S("a"));
+        var result = ApplyUnary(GetStringFunction("fromChar"), Char('a'));
+        result.Should().Be(String("a"));
     }
 
     // ========== Tests for cons ==========
@@ -703,10 +702,10 @@ public class CoreStringFunctionTests
         var result =
             ApplyBinary(
                 GetStringFunction("cons"),
-                C('T'),
-                S("he truth is out there"));
+                Char('T'),
+                String("he truth is out there"));
 
-        result.Should().Be(S("The truth is out there"));
+        result.Should().Be(String("The truth is out there"));
     }
 
     // ========== Tests for uncons ==========
@@ -716,14 +715,14 @@ public class CoreStringFunctionTests
     [Fact]
     public void Uncons_abc()
     {
-        var result = ApplyUnary(GetStringFunction("uncons"), S("abc"));
-        result.Should().Be(JustOf(ElmList(C('a'), S("bc"))));
+        var result = ApplyUnary(GetStringFunction("uncons"), String("abc"));
+        result.Should().Be(JustOf(ElmList(Char('a'), String("bc"))));
     }
 
     [Fact]
     public void Uncons_empty()
     {
-        var result = ApplyUnary(GetStringFunction("uncons"), S(""));
+        var result = ApplyUnary(GetStringFunction("uncons"), String(""));
         result.Should().Be(s_nothing);
     }
 
@@ -733,8 +732,8 @@ public class CoreStringFunctionTests
     [Fact]
     public void ToUpper_skinner()
     {
-        var result = ApplyUnary(GetStringFunction("toUpper"), S("skinner"));
-        result.Should().Be(S("SKINNER"));
+        var result = ApplyUnary(GetStringFunction("toUpper"), String("skinner"));
+        result.Should().Be(String("SKINNER"));
     }
 
     // ========== Tests for toLower ==========
@@ -743,8 +742,8 @@ public class CoreStringFunctionTests
     [Fact]
     public void ToLower_XFILES()
     {
-        var result = ApplyUnary(GetStringFunction("toLower"), S("X-FILES"));
-        result.Should().Be(S("x-files"));
+        var result = ApplyUnary(GetStringFunction("toLower"), String("X-FILES"));
+        result.Should().Be(String("x-files"));
     }
 
     // ========== Tests for pad ==========
@@ -758,11 +757,11 @@ public class CoreStringFunctionTests
         var result =
             ApplyTernary(
                 GetStringFunction("pad"),
-                I(5),
-                C(' '),
-                S("1"));
+                Integer(5),
+                Char(' '),
+                String("1"));
 
-        result.Should().Be(S("  1  "));
+        result.Should().Be(String("  1  "));
     }
 
     [Fact]
@@ -771,11 +770,11 @@ public class CoreStringFunctionTests
         var result =
             ApplyTernary(
                 GetStringFunction("pad"),
-                I(5),
-                C(' '),
-                S("11"));
+                Integer(5),
+                Char(' '),
+                String("11"));
 
-        result.Should().Be(S("  11 "));
+        result.Should().Be(String("  11 "));
     }
 
     [Fact]
@@ -784,11 +783,11 @@ public class CoreStringFunctionTests
         var result =
             ApplyTernary(
                 GetStringFunction("pad"),
-                I(5),
-                C(' '),
-                S("121"));
+                Integer(5),
+                Char(' '),
+                String("121"));
 
-        result.Should().Be(S(" 121 "));
+        result.Should().Be(String(" 121 "));
     }
 
     // ========== Tests for padLeft ==========
@@ -802,11 +801,11 @@ public class CoreStringFunctionTests
         var result =
             ApplyTernary(
                 GetStringFunction("padLeft"),
-                I(5),
-                C('.'),
-                S("1"));
+                Integer(5),
+                Char('.'),
+                String("1"));
 
-        result.Should().Be(S("....1"));
+        result.Should().Be(String("....1"));
     }
 
     [Fact]
@@ -815,11 +814,11 @@ public class CoreStringFunctionTests
         var result =
             ApplyTernary(
                 GetStringFunction("padLeft"),
-                I(5),
-                C('.'),
-                S("11"));
+                Integer(5),
+                Char('.'),
+                String("11"));
 
-        result.Should().Be(S("...11"));
+        result.Should().Be(String("...11"));
     }
 
     [Fact]
@@ -828,11 +827,11 @@ public class CoreStringFunctionTests
         var result =
             ApplyTernary(
                 GetStringFunction("padLeft"),
-                I(5),
-                C('.'),
-                S("121"));
+                Integer(5),
+                Char('.'),
+                String("121"));
 
-        result.Should().Be(S("..121"));
+        result.Should().Be(String("..121"));
     }
 
     // ========== Tests for padRight ==========
@@ -846,11 +845,11 @@ public class CoreStringFunctionTests
         var result =
             ApplyTernary(
                 GetStringFunction("padRight"),
-                I(5),
-                C('.'),
-                S("1"));
+                Integer(5),
+                Char('.'),
+                String("1"));
 
-        result.Should().Be(S("1...."));
+        result.Should().Be(String("1...."));
     }
 
     [Fact]
@@ -859,11 +858,11 @@ public class CoreStringFunctionTests
         var result =
             ApplyTernary(
                 GetStringFunction("padRight"),
-                I(5),
-                C('.'),
-                S("11"));
+                Integer(5),
+                Char('.'),
+                String("11"));
 
-        result.Should().Be(S("11..."));
+        result.Should().Be(String("11..."));
     }
 
     [Fact]
@@ -872,11 +871,11 @@ public class CoreStringFunctionTests
         var result =
             ApplyTernary(
                 GetStringFunction("padRight"),
-                I(5),
-                C('.'),
-                S("121"));
+                Integer(5),
+                Char('.'),
+                String("121"));
 
-        result.Should().Be(S("121.."));
+        result.Should().Be(String("121.."));
     }
 
     // ========== Tests for trim ==========
@@ -886,9 +885,9 @@ public class CoreStringFunctionTests
     public void Trim_whitespace()
     {
         var result =
-            ApplyUnary(GetStringFunction("trim"), S("  hats  \n"));
+            ApplyUnary(GetStringFunction("trim"), String("  hats  \n"));
 
-        result.Should().Be(S("hats"));
+        result.Should().Be(String("hats"));
     }
 
     // ========== Tests for trimLeft ==========
@@ -898,9 +897,9 @@ public class CoreStringFunctionTests
     public void TrimLeft_whitespace()
     {
         var result =
-            ApplyUnary(GetStringFunction("trimLeft"), S("  hats  \n"));
+            ApplyUnary(GetStringFunction("trimLeft"), String("  hats  \n"));
 
-        result.Should().Be(S("hats  \n"));
+        result.Should().Be(String("hats  \n"));
     }
 
     // ========== Tests for trimRight ==========
@@ -910,9 +909,9 @@ public class CoreStringFunctionTests
     public void TrimRight_whitespace()
     {
         var result =
-            ApplyUnary(GetStringFunction("trimRight"), S("  hats  \n"));
+            ApplyUnary(GetStringFunction("trimRight"), String("  hats  \n"));
 
-        result.Should().Be(S("  hats"));
+        result.Should().Be(String("  hats"));
     }
 
     // ========== Tests for map ==========
@@ -928,9 +927,9 @@ public class CoreStringFunctionTests
             ApplyWithPineArgs(
                 GetStringFunction("map"),
                 toUpperFn,
-                ToPine(S("abc")));
+                ToPine(String("abc")));
 
-        result.Should().Be(S("ABC"));
+        result.Should().Be(String("ABC"));
     }
 
     // ========== Tests for filter ==========
@@ -945,9 +944,9 @@ public class CoreStringFunctionTests
             ApplyWithPineArgs(
                 GetStringFunction("filter"),
                 isDigitFn,
-                ToPine(S("R2-D2")));
+                ToPine(String("R2-D2")));
 
-        result.Should().Be(S("22"));
+        result.Should().Be(String("22"));
     }
 
     // ========== Tests for foldl ==========
@@ -962,10 +961,10 @@ public class CoreStringFunctionTests
             ApplyWithPineArgs(
                 GetStringFunction("foldl"),
                 consFn,
-                ToPine(S("")),
-                ToPine(S("time")));
+                ToPine(String("")),
+                ToPine(String("time")));
 
-        result.Should().Be(S("emit"));
+        result.Should().Be(String("emit"));
     }
 
     // ========== Tests for foldr ==========
@@ -980,10 +979,10 @@ public class CoreStringFunctionTests
             ApplyWithPineArgs(
                 GetStringFunction("foldr"),
                 consFn,
-                ToPine(S("")),
-                ToPine(S("time")));
+                ToPine(String("")),
+                ToPine(String("time")));
 
-        result.Should().Be(S("time"));
+        result.Should().Be(String("time"));
     }
 
     // ========== Tests for any ==========
@@ -1000,7 +999,7 @@ public class CoreStringFunctionTests
             ApplyWithPineArgs(
                 GetStringFunction("any"),
                 isDigitFn,
-                ToPine(S("90210")));
+                ToPine(String("90210")));
 
         result.Should().Be(ElmValue.TrueValue);
     }
@@ -1014,7 +1013,7 @@ public class CoreStringFunctionTests
             ApplyWithPineArgs(
                 GetStringFunction("any"),
                 isDigitFn,
-                ToPine(S("R2-D2")));
+                ToPine(String("R2-D2")));
 
         result.Should().Be(ElmValue.TrueValue);
     }
@@ -1028,7 +1027,7 @@ public class CoreStringFunctionTests
             ApplyWithPineArgs(
                 GetStringFunction("any"),
                 isDigitFn,
-                ToPine(S("heart")));
+                ToPine(String("heart")));
 
         result.Should().Be(ElmValue.FalseValue);
     }
@@ -1047,7 +1046,7 @@ public class CoreStringFunctionTests
             ApplyWithPineArgs(
                 GetStringFunction("all"),
                 isDigitFn,
-                ToPine(S("90210")));
+                ToPine(String("90210")));
 
         result.Should().Be(ElmValue.TrueValue);
     }
@@ -1061,7 +1060,7 @@ public class CoreStringFunctionTests
             ApplyWithPineArgs(
                 GetStringFunction("all"),
                 isDigitFn,
-                ToPine(S("R2-D2")));
+                ToPine(String("R2-D2")));
 
         result.Should().Be(ElmValue.FalseValue);
     }
@@ -1075,7 +1074,7 @@ public class CoreStringFunctionTests
             ApplyWithPineArgs(
                 GetStringFunction("all"),
                 isDigitFn,
-                ToPine(S("heart")));
+                ToPine(String("heart")));
 
         result.Should().Be(ElmValue.FalseValue);
     }

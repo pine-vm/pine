@@ -79,7 +79,7 @@ public class CoreBasicsFunctionTests
     public void Number_negate_17()
     {
         var resultValue =
-            ApplyDirectUnary(
+            ApplyUnary(
                 CoreBasics.Negate_FunctionValue(),
                 ElmValue.Integer(17));
 
@@ -90,7 +90,7 @@ public class CoreBasicsFunctionTests
     public void Number_negate_minus_17()
     {
         var resultValue =
-            ApplyDirectUnary(
+            ApplyUnary(
                 CoreBasics.Negate_FunctionValue(),
                 ElmValue.Integer(-17));
 
@@ -101,7 +101,7 @@ public class CoreBasicsFunctionTests
     public void Number_negate_float_17_point_3()
     {
         var resultValue =
-            ApplyDirectUnary(
+            ApplyUnary(
                 CoreBasics.Negate_FunctionValue(),
                 ElmValue.ElmFloat.Convert(17.3));
 
@@ -1374,7 +1374,7 @@ public class CoreBasicsFunctionTests
     public void Not_true()
     {
         var resultValue =
-            ApplyDirectUnary(
+            ApplyUnary(
                 CoreBasics.Not_FunctionValue(),
                 ElmValue.TrueValue);
 
@@ -1385,7 +1385,7 @@ public class CoreBasicsFunctionTests
     public void Not_false()
     {
         var resultValue =
-            ApplyDirectUnary(
+            ApplyUnary(
                 CoreBasics.Not_FunctionValue(),
                 ElmValue.FalseValue);
 
@@ -1398,7 +1398,7 @@ public class CoreBasicsFunctionTests
     public void Negate_positive_int()
     {
         var resultValue =
-            ApplyDirectUnary(
+            ApplyUnary(
                 CoreBasics.Negate_FunctionValue(),
                 ElmValue.Integer(42));
 
@@ -1409,7 +1409,7 @@ public class CoreBasicsFunctionTests
     public void Negate_negative_int()
     {
         var resultValue =
-            ApplyDirectUnary(
+            ApplyUnary(
                 CoreBasics.Negate_FunctionValue(),
                 ElmValue.Integer(-42));
 
@@ -1420,7 +1420,7 @@ public class CoreBasicsFunctionTests
     public void Negate_zero()
     {
         var resultValue =
-            ApplyDirectUnary(
+            ApplyUnary(
                 CoreBasics.Negate_FunctionValue(),
                 ElmValue.Integer(0));
 
@@ -1521,7 +1521,7 @@ public class CoreBasicsFunctionTests
     public void Identity_int()
     {
         var resultValue =
-            ApplyDirectUnary(
+            ApplyUnary(
                 CoreBasics.Identity_FunctionValue(),
                 ElmValue.Integer(42));
 
@@ -1532,7 +1532,7 @@ public class CoreBasicsFunctionTests
     public void Identity_string()
     {
         var resultValue =
-            ApplyDirectUnary(
+            ApplyUnary(
                 CoreBasics.Identity_FunctionValue(),
                 ElmValue.StringInstance("hello"));
 
@@ -1876,19 +1876,22 @@ public class CoreBasicsFunctionTests
 
     #endregion
 
+    private static readonly Core.Interpreter.IntermediateVM.PineVM s_vm =
+        ElmCompilerTestHelper.PineVMForProfiling(_ => { });
+
     private static (ElmValue value, EvaluationReport profile) ApplyDirectBinary(
         System.Func<Expression, Expression, Expression> function,
         ElmValue left,
         ElmValue right) =>
         CoreLibraryTestHelper.ApplyDirectBinary(function, left, right);
 
-    private static ElmValue ApplyDirectUnary(
+    private static ElmValue ApplyUnary(
         PineValue functionValue,
         ElmValue argument) =>
-        CoreLibraryTestHelper.ApplyDirectUnary(functionValue, argument);
+        CoreLibraryTestHelper.ApplyUnary(functionValue, argument, s_vm);
 
     private static ElmValue ApplyGeneric(
         PineValue functionValue,
         ElmValue[] arguments) =>
-        CoreLibraryTestHelper.ApplyGeneric(functionValue, arguments);
+        CoreLibraryTestHelper.ApplyGeneric(functionValue, arguments, s_vm);
 }
