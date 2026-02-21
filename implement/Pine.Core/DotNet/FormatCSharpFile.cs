@@ -269,10 +269,10 @@ public static class FormatCSharpFile
 
             var trimmed = lines[i].TrimStart();
 
-            if (trimmed.Length > 0)
+            if (trimmed.Length > 0 && trimmed[0] == '*')
                 sb.Append(newIndentStr).Append(trimmed);
             else
-                sb.Append(lines[i]); // preserve empty lines as-is
+                sb.Append(lines[i]); // preserve non-* lines and empty lines as-is
         }
 
         return SyntaxFactory.Comment(sb.ToString());
@@ -310,6 +310,29 @@ public static class FormatCSharpFile
         return [.. r];
     }
 
+    /// <summary>
+    /// Given a trivia list (typically from <see cref="StripWhitespace"/>), ensures a space
+    /// exists before each comment and strips trailing line breaks so that the next token's
+    /// leading trivia provides the break.
+    /// </summary>
+    private static SyntaxTriviaList EnsureSpaceBeforeComments(SyntaxTriviaList stripped)
+    {
+        if (!stripped.Any(IsComment))
+            return stripped;
+
+        var adjusted = new List<SyntaxTrivia>();
+
+        foreach (var t in stripped)
+        {
+            if (IsComment(t))
+                adjusted.Add(s_space);
+
+            if (!IsLineBreak(t))
+                adjusted.Add(t);
+        }
+
+        return new SyntaxTriviaList(adjusted);
+    }
 
     /// <summary>
     /// Rebuilds separator tokens (commas), preserving any trailing comments from the originals.
@@ -542,7 +565,19 @@ public static class FormatCSharpFile
         if (members.Count > 0)
         {
             var last = members.Last();
-            members = members.Replace(last, last.WithTrailingTrivia(s_lineFeed));
+            var lastComments = StripWhitespace(last.GetTrailingTrivia());
+
+            if (lastComments.Any(IsComment))
+            {
+                // Preserve trailing comments, ending with a single newline
+                members = members.Replace(
+                    last,
+                    last.WithTrailingTrivia(EnsureSpaceBeforeComments(lastComments).Add(s_lineFeed)));
+            }
+            else
+            {
+                members = members.Replace(last, last.WithTrailingTrivia(s_lineFeed));
+            }
         }
         else if (usings.Count > 0)
         {
@@ -595,7 +630,8 @@ public static class FormatCSharpFile
 
                 // Preserve any comments from the original leading trivia
                 // (skip line breaks — they are re-added by the leading break logic below)
-                var origComments = StripWhitespace(u.GetLeadingTrivia())
+                var origComments =
+                    StripWhitespace(u.GetLeadingTrivia())
                     .Where(t => !IsLineBreak(t)).ToList();
 
                 if (result.Count is 0 && i is 0)
@@ -702,8 +738,11 @@ public static class FormatCSharpFile
 
             foreach (var c in trailingComments)
             {
-                trailingList.Add(s_space);
-                trailingList.Add(c);
+                if (IsComment(c))
+                {
+                    trailingList.Add(s_space);
+                    trailingList.Add(c);
+                }
             }
 
             trailingList.Add(s_lineFeed);
@@ -717,6 +756,17 @@ public static class FormatCSharpFile
     /// <summary>Determines if one blank line is needed between two adjacent members.</summary>
     private static bool NeedsOneBlankLine(MemberDeclarationSyntax prev, MemberDeclarationSyntax current)
     {
+        // In script mode, consecutive single-line statements may be parsed as a mix
+        // of GlobalStatementSyntax and FieldDeclarationSyntax. Don't insert blank
+        // lines between them when neither spans multiple lines.
+        if (prev is GlobalStatementSyntax && !SpansMultipleLines(prev) &&
+            current is FieldDeclarationSyntax && !SpansMultipleLines(current))
+            return false;
+
+        if (prev is FieldDeclarationSyntax && !SpansMultipleLines(prev) &&
+            current is GlobalStatementSyntax && !SpansMultipleLines(current))
+            return false;
+
         if (current is BaseTypeDeclarationSyntax or MethodDeclarationSyntax or
             ConstructorDeclarationSyntax or PropertyDeclarationSyntax or
             EventDeclarationSyntax or IndexerDeclarationSyntax or
@@ -768,12 +818,17 @@ public static class FormatCSharpFile
         {
             var first = members[0];
             var leading = first.GetLeadingTrivia();
+            var existingBreaks = CountLineBreaks(leading);
 
-            members =
-                members.Replace(
-                    first,
-                    first.WithLeadingTrivia(
-                        EnsureLeadingBreaks(leading, 1, indent)));
+            // Only add breaks if FormatMemberList didn't already provide enough
+            if (existingBreaks < 1)
+            {
+                members =
+                    members.Replace(
+                        first,
+                        first.WithLeadingTrivia(
+                            EnsureLeadingBreaks(leading, 1, indent)));
+            }
         }
 
         return node.WithUsings(usings).WithMembers(members);
@@ -1114,7 +1169,7 @@ public static class FormatCSharpFile
             .WithOpenParenToken(node.OpenParenToken.WithLeadingTrivia().WithTrailingTrivia())
             .WithCloseParenToken(
                 node.CloseParenToken.WithLeadingTrivia()
-                .WithTrailingTrivia(StripWhitespace(node.CloseParenToken.TrailingTrivia)))
+                .WithTrailingTrivia(EnsureSpaceBeforeComments(StripWhitespace(node.CloseParenToken.TrailingTrivia))))
             .WithStatement(body);
 
         if (node.Else is not null)
@@ -1442,13 +1497,16 @@ public static class FormatCSharpFile
             var origBreaks = CountLineBreaks(node.Statements[0].GetLeadingTrivia());
             var lastLabel = node.Labels.Last();
 
-            SyntaxToken colonToken = lastLabel switch
-            {
-                CaseSwitchLabelSyntax cs => cs.ColonToken,
-                CasePatternSwitchLabelSyntax cp => cp.ColonToken,
-                DefaultSwitchLabelSyntax ds => ds.ColonToken,
-                _ => default
-            };
+            SyntaxToken colonToken =
+                lastLabel switch
+                {
+                    CaseSwitchLabelSyntax cs => cs.ColonToken,
+                    CasePatternSwitchLabelSyntax cp => cp.ColonToken,
+                    DefaultSwitchLabelSyntax ds => ds.ColonToken,
+
+                    _ =>
+                    default
+                };
 
             if (colonToken != default)
                 origBreaks += CountLineBreaks(colonToken.TrailingTrivia);
@@ -1773,7 +1831,8 @@ public static class FormatCSharpFile
                 var firstLine = argText.Split('\n')[0];
                 var lineLen = argIndent * IndentSize + firstLine.TrimEnd().Length;
 
-                if (lineLen > MaximumLineLength)
+                if (lineLen > MaximumLineLength ||
+                    (argSyntax.Expression is CollectionExpressionSyntax && SpansMultipleLines(argText)))
                 {
                     var nc = nameColon.WithTrailingTrivia();
                     var expr = argSyntax.Expression.WithLeadingTrivia(s_lineFeed, Indent(argIndent));
@@ -1983,6 +2042,7 @@ public static class FormatCSharpFile
     private static CollectionExpressionSyntax FormatCollectionMultiLine(CollectionExpressionSyntax node, int indent)
     {
         var elems = new List<SyntaxNode>();
+        var origSeps = node.Elements.GetSeparators().ToList();
 
         for (var i = 0; i < node.Elements.Count; i++)
         {
@@ -1991,13 +2051,27 @@ public static class FormatCSharpFile
 
             if (e is ExpressionElementSyntax ee)
                 e = ee.WithExpression((ExpressionSyntax)FormatNode(ee.Expression, indent));
+            else if (e is SpreadElementSyntax se)
+                e = se.WithExpression((ExpressionSyntax)FormatNode(se.Expression, indent));
 
-            e = e.WithLeadingTrivia(EnsureLeadingBreaks(origLeading, 1, indent));
+            // Preserve blank lines between elements by counting original breaks.
+            // Subtract comment count because EnsureLeadingBreaks adds a break
+            // after each comment, ensuring stable output across multiple passes.
+            var minBreaks = 1;
+
+            if (i > 0 && i - 1 < origSeps.Count)
+            {
+                var sepTrailingBreaks = CountLineBreaks(origSeps[i - 1].TrailingTrivia);
+                var elemLeadingBreaks = CountLineBreaks(origLeading);
+                var commentCount = origLeading.Count(IsComment);
+                minBreaks = Math.Max(1, sepTrailingBreaks + elemLeadingBreaks - commentCount);
+            }
+
+            e = e.WithLeadingTrivia(EnsureLeadingBreaks(origLeading, minBreaks, indent));
             e = e.WithTrailingTrivia(StripWhitespace(node.Elements[i].GetTrailingTrivia()));
             elems.Add(e);
         }
 
-        var origSeps = node.Elements.GetSeparators().ToList();
         var seps = RebuildSeparators(origSeps, node.Elements.Count - 1);
 
         if (origSeps.Count >= node.Elements.Count)
@@ -2103,9 +2177,26 @@ public static class FormatCSharpFile
 
         if (arrowLine != exprLine)
         {
+            var origLeading = node.Expression.GetLeadingTrivia();
+
+            // Multiline comments have specific internal formatting (blank lines,
+            // non-standard indentation) that should be preserved as-is.
+            if (origLeading.Any(t => t.IsKind(SyntaxKind.MultiLineCommentTrivia)))
+            {
+                var leading = origLeading;
+
+                // Ensure a line break between => and the comment if there isn't one already
+                if (origLeading.Count is 0 || !IsLineBreak(origLeading[0]))
+                    leading = new SyntaxTriviaList(s_lineFeed).AddRange(origLeading);
+
+                return
+                    node.WithArrowToken(node.ArrowToken.WithTrailingTrivia())
+                    .WithExpression(fmtExpr.WithLeadingTrivia(leading));
+            }
+
             fmtExpr =
                 fmtExpr.WithLeadingTrivia(
-                    EnsureLeadingBreaks(node.Expression.GetLeadingTrivia(), 1, indent + 1));
+                    EnsureLeadingBreaks(origLeading, 1, indent + 1));
 
             return node.WithArrowToken(node.ArrowToken.WithTrailingTrivia()).WithExpression(fmtExpr);
         }
@@ -2392,8 +2483,10 @@ public static class FormatCSharpFile
                     dotIndent = Math.Max(indent, dotColIndent);
             }
 
-            return node.WithExpression(fmtExpr.WithTrailingTrivia(StripWhitespace(node.Expression.GetTrailingTrivia())))
-                .WithOperatorToken(node.OperatorToken
+            return
+                node.WithExpression(fmtExpr.WithTrailingTrivia(StripWhitespace(node.Expression.GetTrailingTrivia())))
+                .WithOperatorToken(
+                    node.OperatorToken
                     .WithLeadingTrivia(EnsureLeadingBreaks(node.OperatorToken.LeadingTrivia, 1, dotIndent))
                     .WithTrailingTrivia());
         }
@@ -2450,23 +2543,31 @@ public static class FormatCSharpFile
 
                     // Still too long — break the dot at the chain's indent level
                     return
-                        node.WithExpression(fmtExpr.WithTrailingTrivia(StripWhitespace(node.Expression.GetTrailingTrivia())))
+                        node.WithExpression(
+                            fmtExpr.WithTrailingTrivia(StripWhitespace(node.Expression.GetTrailingTrivia())))
                         .WithOperatorToken(
                             node.OperatorToken
                             .WithLeadingTrivia(EnsureLeadingBreaks(node.OperatorToken.LeadingTrivia, 1, indent))
                             .WithTrailingTrivia());
                 }
 
-                // Determine indent for the dot break based on expression type:
-                // Invocations represent complete call chains and get indent+1,
-                // simple member accesses (property chains) stay at the same indent.
-                var dotBreakIndent =
-                    node.Expression is InvocationExpressionSyntax or
-                        ElementAccessExpressionSyntax or ConditionalAccessExpressionSyntax
-                    ?
-                    indent + 1
-                    :
-                    indent;
+                // Determine indent for the dot break based on expression type and context:
+                // Invocation chains use indent+1, unless the chain is inside a
+                // conditional expression branch where branches should align.
+                var dotBreakIndent = indent;
+
+                if (node.Expression is InvocationExpressionSyntax or
+                    ElementAccessExpressionSyntax or ConditionalAccessExpressionSyntax)
+                {
+                    SyntaxNode? contextNode = node;
+
+                    // Walk up through invocation wrappers to find the actual parent context
+                    if (contextNode.Parent is InvocationExpressionSyntax)
+                        contextNode = contextNode.Parent;
+
+                    if (contextNode.Parent is not ConditionalExpressionSyntax)
+                        dotBreakIndent = indent + 1;
+                }
 
                 return
                     node.WithExpression(fmtExpr)
@@ -2667,7 +2768,7 @@ public static class FormatCSharpFile
                     var op =
                         node.OperatorToken
                         .WithLeadingTrivia(s_space)
-                        .WithTrailingTrivia(opTrailingStripped);
+                        .WithTrailingTrivia(EnsureSpaceBeforeComments(opTrailingStripped));
 
                     var r =
                         node.Right.WithLeadingTrivia(
@@ -2733,7 +2834,7 @@ public static class FormatCSharpFile
 
                 var op =
                     node.OperatorToken.WithLeadingTrivia(opLeading)
-                    .WithTrailingTrivia(opTrailingNonWhitespace);
+                    .WithTrailingTrivia(EnsureSpaceBeforeComments(opTrailingNonWhitespace));
 
                 fr = fr.WithLeadingTrivia(EnsureLeadingBreaks(node.Right.GetLeadingTrivia(), 1, rightIndent));
                 return node.WithLeft(fl).WithRight(fr).WithOperatorToken(op);
@@ -2831,7 +2932,7 @@ public static class FormatCSharpFile
                                 var op2 =
                                     node.OperatorToken
                                     .WithLeadingTrivia(s_space)
-                                    .WithTrailingTrivia(opTrailing2.Count > 0 ? opTrailing2 : new SyntaxTriviaList(s_space));
+                                    .WithTrailingTrivia(opTrailing2.Count > 0 ? EnsureSpaceBeforeComments(opTrailing2) : new SyntaxTriviaList(s_space));
 
                                 fr = fr.WithLeadingTrivia(StripWhitespace(fr.GetLeadingTrivia()));
                                 return node.WithLeft(fl).WithRight(fr).WithOperatorToken(op2);
@@ -2855,7 +2956,7 @@ public static class FormatCSharpFile
 
         var fop =
             node.OperatorToken.WithLeadingTrivia(s_space)
-            .WithTrailingTrivia(opTrailing.Count > 0 ? opTrailing : new SyntaxTriviaList(s_space));
+            .WithTrailingTrivia(opTrailing.Count > 0 ? EnsureSpaceBeforeComments(opTrailing) : new SyntaxTriviaList(s_space));
 
         return node.WithLeft(fl).WithRight(fr).WithOperatorToken(fop);
     }

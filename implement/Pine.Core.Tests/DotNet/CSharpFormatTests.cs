@@ -4282,4 +4282,273 @@ public class CSharpFormatTests
 
         AssertFormattedSyntax(input, expected, scriptMode: true);
     }
+
+    [Fact]
+    public void Preserves_empty_lines_in_collection()
+    {
+        var input =
+            """"
+            return new ElmValue.ElmRecord(
+                [
+                    ("name",
+                    ElmValue.StringInstance(exposedType.Name)),
+
+                    ("open",
+                    EncodeMaybe(EncodeRange, exposedType.Open)),
+                ]);
+            """";
+
+        var expected =
+            """"
+            return
+                new ElmValue.ElmRecord(
+                    [
+                    ("name",
+                    ElmValue.StringInstance(exposedType.Name)),
+
+                    ("open",
+                    EncodeMaybe(EncodeRange, exposedType.Open)),
+                    ]);
+            """";
+
+        AssertFormattedSyntax(input, expected, scriptMode: true);
+    }
+
+    [Fact]
+    public void Preserves_two_empty_lines_after_namespace_declaration()
+    {
+        var input =
+            """"
+            namespace Pine.Core;
+
+
+            public record ParsedComment();
+            """";
+
+        AssertFormattedSyntax(input, input, scriptMode: false);
+    }
+
+    [Fact]
+    public void Preserves_continuous_statements_after_comment()
+    {
+        var input =
+            """"
+            // Exposing on same line - format it properly
+            currentContext = currentContext.AdvanceSpaceSeparator(); // space before "exposing"
+            var exposingTokenLoc = currentContext.CurrentLocation();
+            """";
+
+        AssertFormattedSyntax(input, input, scriptMode: true);
+    }
+
+    [Fact]
+    public void Formats_conditional_containing_chains_exceeding_line_length()
+    {
+        var input =
+            """"
+            if (a is 0)
+            {
+                if (b is 0)
+                {
+                    if (c is 0)
+                    {
+                        if (i is 0)
+                        {
+                            var commentsAfterEqualsOnSameLine = constructorOnSameRowAsEquals
+                                ? commentQueries.GetOnRowBetweenColumns(equalsRow, equalsColumn, constructor.Range.Start.Column).ToList()
+                                : [.. commentQueries.GetOnRowAfterColumn(equalsRow, equalsColumn)];
+                        }
+                    }
+                }
+            }
+            """";
+
+        var expected =
+            """"
+            if (a is 0)
+            {
+                if (b is 0)
+                {
+                    if (c is 0)
+                    {
+                        if (i is 0)
+                        {
+                            var commentsAfterEqualsOnSameLine =
+                                constructorOnSameRowAsEquals
+                                ?
+                                commentQueries.GetOnRowBetweenColumns(equalsRow, equalsColumn, constructor.Range.Start.Column)
+                                .ToList()
+                                :
+                                [.. commentQueries.GetOnRowAfterColumn(equalsRow, equalsColumn)];
+                        }
+                    }
+                }
+            }
+            """";
+
+        AssertFormattedSyntax(input, expected, scriptMode: true);
+    }
+
+    [Fact]
+    public void Preserves_indent_in_multiline_comment()
+    {
+        var input =
+            """"
+            public static InfixOperatorInfo GetInfo(string symbol) =>
+                /*
+                 * module Basics:
+                 * ----
+                infix right 0 (<|) = apL
+                infix left  0 (|>) = apR
+                 * */
+
+                 1234;
+            """";
+
+        AssertFormattedSyntax(input, input, scriptMode: true);
+    }
+
+    [Fact]
+    public void Preserves_space_between_infix_operator_and_comment()
+    {
+        var input =
+            """"
+            var hasInterveningComments = allComments.Any(c =>
+                !c.Lexeme.StartsWith("{-|") && // not a doc comment
+                c.Start.Row > commentToken.End.Row && // after this doc comment
+                c.Start.Row < Peek.Start.Row); // before the declaration
+            """";
+
+        var expected =
+            """"
+            var hasInterveningComments =
+                allComments.Any(
+                    c =>
+                    !c.Lexeme.StartsWith("{-|") && // not a doc comment
+                    c.Start.Row > commentToken.End.Row && // after this doc comment
+                    c.Start.Row < Peek.Start.Row); // before the declaration
+            """";
+
+        AssertFormattedSyntax(input, expected, scriptMode: true);
+    }
+
+    [Fact]
+    public void Formats_collection_containing_lambda()
+    {
+        var input =
+            """"
+            return
+            [.. ConsumeWhileLazy(
+                token =>
+                token.Type is TokenType.Comment ||
+                token.Type is TokenType.Whitespace ||
+                token.Type is TokenType.Newline)
+            ];
+            """";
+
+        var expected =
+            """"
+            return
+                [
+                .. ConsumeWhileLazy(
+                    token =>
+                    token.Type is TokenType.Comment ||
+                    token.Type is TokenType.Whitespace ||
+                    token.Type is TokenType.Newline)
+                ];
+            """";
+
+        AssertFormattedSyntax(input, expected, scriptMode: true);
+    }
+
+    [Fact]
+    public void Indents_item_in_collection_in_case_section()
+    {
+        /*
+         * Apparently Visual Studio has a specific rule here indenting the collection item
+         * further than it does in other cases.
+         * However, we deviate here from Visual Studio for better consistency and simplicity.
+         * */
+
+        var input =
+            """"
+            private static Node<ExpressionSyntax> FormatExpression(Node<ExpressionSyntax> node)
+            {
+                var formattedValue = node.Value switch
+                {
+                    ExpressionSyntax.Application app =>
+                    FormatApplication(node.Range, app),
+
+                    ExpressionSyntax.CaseExpression caseExpr =>
+                    new ExpressionSyntax.CaseExpression(
+                        new CaseBlock(
+                            CaseTokenLocation: caseExpr.CaseBlock.CaseTokenLocation,
+                            Expression: caseExpr.CaseBlock.Expression,
+                            OfTokenLocation: caseExpr.CaseBlock.OfTokenLocation,
+                            Cases: [.. caseExpr.CaseBlock.Cases.Select(c => c with
+                            {
+                                Expression = FormatExpression(c.Expression)
+                            })])),
+
+                    ExpressionSyntax.FunctionOrValue funcOrVal =>
+                    funcOrVal,
+                };
+            }
+            """";
+
+        var expected =
+            """"
+            private static Node<ExpressionSyntax> FormatExpression(Node<ExpressionSyntax> node)
+            {
+                var formattedValue =
+                    node.Value switch
+                    {
+                        ExpressionSyntax.Application app =>
+                        FormatApplication(node.Range, app),
+
+                        ExpressionSyntax.CaseExpression caseExpr =>
+                        new ExpressionSyntax.CaseExpression(
+                            new CaseBlock(
+                                CaseTokenLocation: caseExpr.CaseBlock.CaseTokenLocation,
+                                Expression: caseExpr.CaseBlock.Expression,
+                                OfTokenLocation: caseExpr.CaseBlock.OfTokenLocation,
+                                Cases:
+                                [
+                                .. caseExpr.CaseBlock.Cases.Select(
+                                    c => c with
+                                    {
+                                        Expression = FormatExpression(c.Expression)
+                                    })
+                                ])),
+
+                        ExpressionSyntax.FunctionOrValue funcOrVal =>
+                        funcOrVal,
+                    };
+            }
+            """";
+
+        AssertFormattedSyntax(input, expected, scriptMode: true);
+    }
+
+    [Fact]
+    public void Preserves_elseif_expression_and_comment()
+    {
+        var input =
+            """"
+            foreach (var ch in text)
+            {
+                if (ch is '\n')
+                {
+                    CurrentRow++;
+                    CurrentColumn = 1;
+                }
+                else if (ch is not '\r') // Skip CR when counting position
+                {
+                    CurrentColumn++;
+                }
+            }
+            """";
+
+        AssertFormattedSyntax(input, input, scriptMode: true);
+    }
 }
