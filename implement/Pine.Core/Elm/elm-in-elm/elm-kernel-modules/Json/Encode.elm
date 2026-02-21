@@ -194,13 +194,13 @@ encodeStringUtf32ChunksFromBytes offset encodedChunks sourceBytes =
             '\t' ->
                 encodeStringUtf32ChunksFromBytes
                     (Pine_kernel.int_add [ simpleEnd, 4 ])
-                    (Pine_kernel.concat [ chunksWithSimple, [ '\\', '\t' ] ])
+                    (Pine_kernel.concat [ chunksWithSimple, [ '\\', 't' ] ])
                     sourceBytes
 
             '\n' ->
                 encodeStringUtf32ChunksFromBytes
                     (Pine_kernel.int_add [ simpleEnd, 4 ])
-                    (Pine_kernel.concat [ chunksWithSimple, [ '\\', '\n' ] ])
+                    (Pine_kernel.concat [ chunksWithSimple, [ '\\', 'n' ] ])
                     sourceBytes
 
             '\u{000C}' ->
@@ -315,8 +315,8 @@ advanceUtf32OffsetForSimpleChars sourceBytes offset =
 
 
 float : Float -> Value
-float float =
-    FloatValue (String.fromFloat float)
+float floatVal =
+    FloatValue (String.fromFloat floatVal)
 
 
 hex4 : Int -> List Int

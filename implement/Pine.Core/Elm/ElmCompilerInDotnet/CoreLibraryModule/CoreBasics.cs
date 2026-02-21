@@ -172,6 +172,9 @@ public class CoreBasics
             return "always";
         }
 
+        // Note: toFloat maps to the same function value as identity,
+        // so it will be identified as "identity" rather than "toFloat".
+
         if (functionValue == Append_FunctionValue())
         {
             return "append";
@@ -379,6 +382,12 @@ public class CoreBasics
                 [new TypeInference.InferredType.UnknownType(), new TypeInference.InferredType.UnknownType()],
                 args => Generic_Identity(args[0])),
 
+            // toFloat : Int -> Float
+            "toFloat" =>
+            new CoreFunctionInfo(
+                [TypeInference.InferredType.Int(), TypeInference.InferredType.Number()],
+                args => Generic_Identity(args[0])),
+
             // always : a -> b -> a
             "always" =>
             new CoreFunctionInfo(
@@ -536,6 +545,9 @@ public class CoreBasics
             Max_FunctionValue(),
 
             "identity" =>
+            Identity_FunctionValue(),
+
+            "toFloat" =>
             Identity_FunctionValue(),
 
             "always" =>

@@ -33,6 +33,9 @@ public class ExpressionCompiler
             SyntaxTypes.Expression.Integer expr =>
             CompileInteger(expr),
 
+            SyntaxTypes.Expression.Floatable expr =>
+            CompileFloatable(expr),
+
             SyntaxTypes.Expression.Hex expr =>
             CompileHex(expr),
 
@@ -91,6 +94,17 @@ public class ExpressionCompiler
     private static Result<CompilationError, Expression> CompileInteger(
         SyntaxTypes.Expression.Integer expr) =>
         Expression.LiteralInstance(EmitIntegerLiteral(expr.Value));
+
+    private static Result<CompilationError, Expression> CompileFloatable(
+        SyntaxTypes.Expression.Floatable expr)
+    {
+        var floatValue = ElmValue.ElmFloat.Convert(double.Parse(expr.LiteralText, System.Globalization.CultureInfo.InvariantCulture));
+
+        var pineValue =
+            ElmValueEncoding.ElmValueAsPineValue(floatValue);
+
+        return Expression.LiteralInstance(pineValue);
+    }
 
     private static Result<CompilationError, Expression> CompileHex(
         SyntaxTypes.Expression.Hex expr) =>

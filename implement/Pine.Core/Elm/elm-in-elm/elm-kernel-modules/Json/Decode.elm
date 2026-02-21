@@ -39,6 +39,7 @@ module Json.Decode exposing
     )
 
 import Array
+import Dict
 import Json.Encode exposing (Value(..))
 
 
@@ -148,8 +149,8 @@ array decoder jsonValue =
     case jsonValue of
         ArrayValue values ->
             case decodeListRecursively [] decoder values of
-                Ok list ->
-                    Ok (Array.fromList list)
+                Ok decodedList ->
+                    Ok (Array.fromList decodedList)
 
                 Err err ->
                     Err err
@@ -211,8 +212,8 @@ index targetIndex decoder jsonValue =
     case jsonValue of
         ArrayValue values ->
             case List.drop targetIndex values of
-                value :: _ ->
-                    decoder value
+                indexedValue :: _ ->
+                    decoder indexedValue
 
                 [] ->
                     Err
@@ -1638,3 +1639,66 @@ skipWhitespace strBytes offset =
 
         _ ->
             offset
+
+
+keyValuePairs : Decoder a -> Decoder (List ( String, a ))
+keyValuePairs decoder jsonValue =
+    case jsonValue of
+        ObjectValue fields ->
+            decodeKeyValuePairsRecursively [] decoder fields
+
+        _ ->
+            Err (temporaryStubErrorNotImplemented jsonValue)
+
+
+decodeKeyValuePairsRecursively : List ( String, a ) -> Decoder a -> List ( String, Value ) -> Result Error (List ( String, a ))
+decodeKeyValuePairsRecursively result decoder fields =
+    case fields of
+        [] ->
+            Ok (List.reverse result)
+
+        ( key, fieldValue ) :: rest ->
+            case decoder fieldValue of
+                Ok a ->
+                    decodeKeyValuePairsRecursively (( key, a ) :: result) decoder rest
+
+                Err err ->
+                    Err err
+
+
+dict : Decoder a -> Decoder (Dict.Dict String a)
+dict decoder jsonValue =
+    case keyValuePairs decoder jsonValue of
+        Ok pairs ->
+            Ok (Dict.fromList pairs)
+
+        Err err ->
+            Err err
+
+
+at : List String -> Decoder a -> Decoder a
+at fields decoder =
+    List.foldr field decoder fields
+
+
+oneOrMore : (a -> List a -> value) -> Decoder a -> Decoder value
+oneOrMore toValue decoder =
+    andThen (oneOrMoreHelp toValue) (list decoder)
+
+
+oneOrMoreHelp : (a -> List a -> value) -> List a -> Decoder value
+oneOrMoreHelp toValue xs =
+    case xs of
+        [] ->
+            fail "a ARRAY with at least ONE element"
+
+        y :: ys ->
+            succeed (toValue y ys)
+
+
+maybe : Decoder a -> Decoder (Maybe a)
+maybe decoder =
+    oneOf
+        [ map Just decoder
+        , succeed Nothing
+        ]
