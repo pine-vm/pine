@@ -95,12 +95,19 @@ public class Canonicalization
                 }
             }
 
-            // Build operator to function mapping from the implicit import config
-            var operatorToFunction =
-                implicitImportConfig.OperatorToFunction
-                .ToImmutableDictionary(
-                    kvp => kvp.Key,
-                    kvp => ((IReadOnlyList<string>)[.. kvp.Value.ModuleName], kvp.Value.FunctionName));
+            // Build operator to function mapping by merging the implicit import config operators
+            // with any already-collected operators (e.g., from imported module infix declarations)
+            var mergedOperatorToFunction = OperatorToFunction;
+
+            foreach (var kvp in implicitImportConfig.OperatorToFunction)
+            {
+                if (!mergedOperatorToFunction.ContainsKey(kvp.Key))
+                {
+                    mergedOperatorToFunction = mergedOperatorToFunction.Add(
+                        kvp.Key,
+                        ((IReadOnlyList<string>)[.. kvp.Value.ModuleName], kvp.Value.FunctionName));
+                }
+            }
 
             // Merge implicit module aliases into the alias map
             // This enables e.g. using "Cmd" as an alias for "Platform.Cmd"
@@ -119,7 +126,7 @@ public class Canonicalization
                 {
                     TypeImportMap = mergedTypeImportMap,
                     ValueImportMap = mergedValueImportMap,
-                    OperatorToFunction = operatorToFunction,
+                    OperatorToFunction = mergedOperatorToFunction,
                     AliasMap = mergedAliasMap
                 };
         }
@@ -304,6 +311,9 @@ public class Canonicalization
         // Build module exports map for resolving exposing (..)
         var moduleExportsMap = BuildModuleExportsMap(modules);
 
+        // Build a map of module names to their infix declarations
+        var moduleInfixMap = BuildModuleInfixMap(modules);
+
         var resultDictionary =
             new Dictionary<ModuleName, (SyntaxTypes.File File, IReadOnlyList<CanonicalizationError> Errors)>(
                 EnumerableExtensions.EqualityComparer<ModuleName>());
@@ -320,6 +330,10 @@ public class Canonicalization
             // Build set of module-level declarations (top-level names declared in this module)
             var moduleLevelDeclarations = BuildLocalDeclarations(module);
 
+            // Collect infix operators from imported modules
+            var operatorToFunction =
+                CollectImportedInfixOperators(module.Imports, moduleExportsMap, moduleInfixMap);
+
             // Create canonicalization context for this module
             var context =
                 new CanonicalizationContext(
@@ -329,7 +343,7 @@ public class Canonicalization
                     AliasMap: aliasMap,
                     ModuleLevelDeclarations: moduleLevelDeclarations,
                     LocalDeclarations: [],
-                    OperatorToFunction: ImmutableDictionary<string, (ModuleName ModuleName, string FunctionName)>.Empty)
+                    OperatorToFunction: operatorToFunction)
                 .WithDefaults(implicitImportConfig);
 
             // Canonicalize declarations and collect errors
@@ -1530,9 +1544,18 @@ public class Canonicalization
                 (left, right) => (SyntaxTypes.Expression)new SyntaxTypes.Expression.Application([funcNode, left, right]));
         }
 
-        // Operator not found in mapping - this is an error for unknown operators
-        // For now, preserve the operator application but report an error if needed
-        // This handles custom operators that might be defined in user modules
+        // Also check if the current module declares this operator via its own infix declarations
+        if (context.ModuleLevelDeclarations.Contains(opApp.Operator))
+        {
+            // The operator is declared in this module; resolve using the function name from local scope.
+            // This handles the case where a module uses its own infix operators.
+            return CanonicalizationResultExtensions.Map2(
+                leftResult,
+                rightResult,
+                (left, right) => (SyntaxTypes.Expression)new SyntaxTypes.Expression.OperatorApplication(opApp.Operator, opApp.Direction, left, right));
+        }
+
+        // Operator not found in mapping - preserve as OperatorApplication for built-in operator handling
         return CanonicalizationResultExtensions.Map2(
             leftResult,
             rightResult,
@@ -1985,5 +2008,96 @@ public class Canonicalization
         return new CanonicalizationResult<Node<T>>(
             new Node<T>(node.Range, result.Value),
             result.Errors);
+    }
+
+    /// <summary>
+    /// Builds a map of module names to their exposed infix declarations.
+    /// </summary>
+    private static ImmutableDictionary<string, ImmutableList<(string Operator, string FunctionName)>>
+        BuildModuleInfixMap(IReadOnlyList<SyntaxTypes.File> modules)
+    {
+        var builder = ImmutableDictionary.CreateBuilder<string, ImmutableList<(string, string)>>();
+
+        foreach (var module in modules)
+        {
+            var moduleName =
+                string.Join(".", SyntaxTypes.Module.GetModuleName(module.ModuleDefinition.Value).Value);
+
+            var infixDecls = ImmutableList.CreateBuilder<(string, string)>();
+
+            foreach (var decl in module.Declarations)
+            {
+                if (decl.Value is SyntaxTypes.Declaration.InfixDeclaration infixDecl)
+                {
+                    infixDecls.Add((infixDecl.Infix.Operator.Value, infixDecl.Infix.FunctionName.Value));
+                }
+            }
+
+            if (infixDecls.Count > 0)
+            {
+                builder[moduleName] = infixDecls.ToImmutable();
+            }
+        }
+
+        return builder.ToImmutable();
+    }
+
+    /// <summary>
+    /// Collects infix operators from imported modules that expose them (via exposing (..))
+    /// and returns a mapping of operator symbol to (module name, function name).
+    /// </summary>
+    private static ImmutableDictionary<string, (ModuleName ModuleName, string FunctionName)>
+        CollectImportedInfixOperators(
+            IReadOnlyList<Node<SyntaxTypes.Import>> imports,
+            ImmutableDictionary<string, ModuleExports> moduleExportsMap,
+            ImmutableDictionary<string, ImmutableList<(string Operator, string FunctionName)>> moduleInfixMap)
+    {
+        var operatorToFunction =
+            ImmutableDictionary<string, (ModuleName ModuleName, string FunctionName)>.Empty.ToBuilder();
+
+        foreach (var importNode in imports)
+        {
+            var import = importNode.Value;
+            var moduleName = import.ModuleName.Value;
+            var moduleNameStr = string.Join(".", moduleName);
+
+            if (!moduleInfixMap.TryGetValue(moduleNameStr, out var infixDecls))
+                continue;
+
+            if (import.ExposingList is null)
+                continue;
+
+            var exposing = import.ExposingList.Value;
+
+            if (exposing is SyntaxTypes.Exposing.All)
+            {
+                // exposing (..) - import all infix operators from this module
+                foreach (var (op, funcName) in infixDecls)
+                {
+                    operatorToFunction[op] = (moduleName, funcName);
+                }
+            }
+            else if (exposing is SyntaxTypes.Exposing.Explicit explicitExposing)
+            {
+                // Check if specific operators are explicitly imported
+                foreach (var exposeNode in explicitExposing.Nodes)
+                {
+                    if (exposeNode.Value is SyntaxTypes.TopLevelExpose.InfixExpose infixExpose)
+                    {
+                        var opName = infixExpose.Name;
+
+                        foreach (var (op, funcName) in infixDecls)
+                        {
+                            if (op == opName)
+                            {
+                                operatorToFunction[op] = (moduleName, funcName);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        return operatorToFunction.ToImmutable();
     }
 }

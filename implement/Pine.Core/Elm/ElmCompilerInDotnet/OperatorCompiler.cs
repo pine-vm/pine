@@ -145,6 +145,16 @@ public class OperatorCompiler
             return CoreBasics.Generic_ComposeL(leftCompiled, rightCompiled);
         }
 
+        if (operatorApp.Operator is "<|")
+        {
+            return CoreBasics.Generic_ApL(leftCompiled, rightCompiled);
+        }
+
+        if (operatorApp.Operator is "|>")
+        {
+            return CoreBasics.Generic_ApR(leftCompiled, rightCompiled);
+        }
+
         if (operatorApp.Operator is "/")
         {
             return CompilationError.UnsupportedOperator(operatorApp.Operator);

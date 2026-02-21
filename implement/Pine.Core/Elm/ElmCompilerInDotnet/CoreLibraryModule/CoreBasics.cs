@@ -477,6 +477,8 @@ public class CoreBasics
             "++" => "append",
             ">>" => "composeR",
             "<<" => "composeL",
+            "<|" => "apL",
+            "|>" => "apR",
 
             _ =>
             null
@@ -555,6 +557,12 @@ public class CoreBasics
 
             "append" =>
             Append_FunctionValue(),
+
+            "apL" =>
+            ApL_FunctionValue(),
+
+            "apR" =>
+            ApR_FunctionValue(),
 
             _ =>
             null
@@ -1205,6 +1213,17 @@ public class CoreBasics
     }
 
     /// <summary>
+    /// apL : (a -> b) -> a -> b
+    /// <para>
+    /// Returns a function value for <c>apL</c> (<c>&lt;|</c>): <c>apL f x = f x</c>
+    /// </para>
+    /// </summary>
+    public static PineValue ApL_FunctionValue()
+    {
+        return BinaryFunctionValue(Generic_ApL);
+    }
+
+    /// <summary>
     /// apR : a -> (a -> b) -> b
     /// <para>
     /// This is the function backing the <c>|&gt;</c> operator: <c>apR x f = f x</c>
@@ -1215,6 +1234,17 @@ public class CoreBasics
         Expression f)
     {
         return new Expression.ParseAndEval(encoded: f, environment: x);
+    }
+
+    /// <summary>
+    /// apR : a -> (a -> b) -> b
+    /// <para>
+    /// Returns a function value for <c>apR</c> (<c>|&gt;</c>): <c>apR x f = f x</c>
+    /// </para>
+    /// </summary>
+    public static PineValue ApR_FunctionValue()
+    {
+        return BinaryFunctionValue(Generic_ApR);
     }
 
     /// <summary>
