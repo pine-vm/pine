@@ -4282,4 +4282,419 @@ public class CSharpFormatTests
 
         AssertFormattedSyntax(input, expected, scriptMode: true);
     }
+
+    [Fact]
+    public void Preserves_empty_lines_in_collection()
+    {
+        var input =
+            """"
+            return new ElmValue.ElmRecord(
+                [
+                    ("name",
+                    ElmValue.StringInstance(exposedType.Name)),
+
+                    ("open",
+                    EncodeMaybe(EncodeRange, exposedType.Open)),
+                ]);
+            """";
+
+        var expected =
+            """"
+            return
+                new ElmValue.ElmRecord(
+                    [
+                    ("name",
+                    ElmValue.StringInstance(exposedType.Name)),
+
+                    ("open",
+                    EncodeMaybe(EncodeRange, exposedType.Open)),
+                    ]);
+            """";
+
+        AssertFormattedSyntax(input, expected, scriptMode: true);
+    }
+
+    [Fact]
+    public void Preserves_two_empty_lines_after_namespace_declaration()
+    {
+        var input =
+            """"
+            namespace Pine.Core;
+
+
+            public record ParsedComment();
+            """";
+
+        AssertFormattedSyntax(input, input, scriptMode: false);
+    }
+
+    [Fact]
+    public void Preserves_consecutive_statements_after_comment()
+    {
+        var input =
+            """"
+            // Exposing on same line - format it properly
+            currentContext = currentContext.AdvanceSpaceSeparator(); // space before "exposing"
+            var exposingTokenLoc = currentContext.CurrentLocation();
+            """";
+
+        AssertFormattedSyntax(input, input, scriptMode: true);
+    }
+
+    [Fact]
+    public void Preserves_consecutive_statements_after_comment_in_method()
+    {
+        var input =
+            """"
+            void M()
+            {
+                // Decimal integer
+                var decValue = long.Parse(literalText);
+                return new Expression.Integer(decValue);
+            }
+            """";
+
+        AssertFormattedSyntax(input, input, scriptMode: true);
+    }
+
+    [Fact]
+    public void Preserves_consecutive_statements_in_if_and_else_blocks()
+    {
+        var input =
+            """"
+            if (isFirstItem)
+            {
+                // First item - format without leading separator
+                var result = formatItem(item, currentContext);
+                allFormattedItems.Add(result.FormattedNode);
+                isFirstItem = false;
+            }
+            else
+            {
+                // Subsequent items - add separator
+                var separatorLoc = currentContext.CurrentLocation();
+                currentContext = currentContext.Advance(Keywords.Comma.Length).AdvanceSpaceSeparator();
+                var result = formatItem(item, currentContext);
+                restItems.Add((separatorLoc, result.FormattedNode));
+            }
+            """";
+
+        AssertFormattedSyntax(input, input, scriptMode: true);
+    }
+
+    [Fact]
+    public void Formats_conditional_containing_chains_exceeding_line_length()
+    {
+        var input =
+            """"
+            if (a is 0)
+            {
+                if (b is 0)
+                {
+                    if (c is 0)
+                    {
+                        if (i is 0)
+                        {
+                            var commentsAfterEqualsOnSameLine = constructorOnSameRowAsEquals
+                                ? commentQueries.GetOnRowBetweenColumns(equalsRow, equalsColumn, constructor.Range.Start.Column).ToList()
+                                : [.. commentQueries.GetOnRowAfterColumn(equalsRow, equalsColumn)];
+                        }
+                    }
+                }
+            }
+            """";
+
+        var expected =
+            """"
+            if (a is 0)
+            {
+                if (b is 0)
+                {
+                    if (c is 0)
+                    {
+                        if (i is 0)
+                        {
+                            var commentsAfterEqualsOnSameLine =
+                                constructorOnSameRowAsEquals
+                                ?
+                                commentQueries.GetOnRowBetweenColumns(equalsRow, equalsColumn, constructor.Range.Start.Column)
+                                .ToList()
+                                :
+                                [.. commentQueries.GetOnRowAfterColumn(equalsRow, equalsColumn)];
+                        }
+                    }
+                }
+            }
+            """";
+
+        AssertFormattedSyntax(input, expected, scriptMode: true);
+    }
+
+    [Fact]
+    public void Preserves_indent_in_multiline_comment()
+    {
+        var input =
+            """"
+            public static InfixOperatorInfo GetInfo(string symbol) =>
+                /*
+                 * module Basics:
+                 * ----
+                infix right 0 (<|) = apL
+                infix left  0 (|>) = apR
+                 * */
+
+                 1234;
+            """";
+
+        AssertFormattedSyntax(input, input, scriptMode: true);
+    }
+
+    [Fact]
+    public void Preserves_space_between_infix_operator_and_comment()
+    {
+        var input =
+            """"
+            var hasInterveningComments = allComments.Any(c =>
+                !c.Lexeme.StartsWith("{-|") && // not a doc comment
+                c.Start.Row > commentToken.End.Row && // after this doc comment
+                c.Start.Row < Peek.Start.Row); // before the declaration
+            """";
+
+        var expected =
+            """"
+            var hasInterveningComments =
+                allComments.Any(
+                    c =>
+                    !c.Lexeme.StartsWith("{-|") && // not a doc comment
+                    c.Start.Row > commentToken.End.Row && // after this doc comment
+                    c.Start.Row < Peek.Start.Row); // before the declaration
+            """";
+
+        AssertFormattedSyntax(input, expected, scriptMode: true);
+    }
+
+    [Fact]
+    public void Formats_collection_containing_lambda()
+    {
+        var input =
+            """"
+            return
+            [.. ConsumeWhileLazy(
+                token =>
+                token.Type is TokenType.Comment ||
+                token.Type is TokenType.Whitespace ||
+                token.Type is TokenType.Newline)
+            ];
+            """";
+
+        var expected =
+            """"
+            return
+                [
+                .. ConsumeWhileLazy(
+                    token =>
+                    token.Type is TokenType.Comment ||
+                    token.Type is TokenType.Whitespace ||
+                    token.Type is TokenType.Newline)
+                ];
+            """";
+
+        AssertFormattedSyntax(input, expected, scriptMode: true);
+    }
+
+    [Fact]
+    public void Indents_item_in_collection_in_case_section()
+    {
+        /*
+         * Apparently Visual Studio has a specific rule here indenting the collection item
+         * further than it does in other cases.
+         * However, we deviate here from Visual Studio for better consistency and simplicity.
+         * */
+
+        var input =
+            """"
+            private static Node<ExpressionSyntax> FormatExpression(Node<ExpressionSyntax> node)
+            {
+                var formattedValue = node.Value switch
+                {
+                    ExpressionSyntax.Application app =>
+                    FormatApplication(node.Range, app),
+
+                    ExpressionSyntax.CaseExpression caseExpr =>
+                    new ExpressionSyntax.CaseExpression(
+                        new CaseBlock(
+                            CaseTokenLocation: caseExpr.CaseBlock.CaseTokenLocation,
+                            Expression: caseExpr.CaseBlock.Expression,
+                            OfTokenLocation: caseExpr.CaseBlock.OfTokenLocation,
+                            Cases: [.. caseExpr.CaseBlock.Cases.Select(c => c with
+                            {
+                                Expression = FormatExpression(c.Expression)
+                            })])),
+
+                    ExpressionSyntax.FunctionOrValue funcOrVal =>
+                    funcOrVal,
+                };
+            }
+            """";
+
+        var expected =
+            """"
+            private static Node<ExpressionSyntax> FormatExpression(Node<ExpressionSyntax> node)
+            {
+                var formattedValue =
+                    node.Value switch
+                    {
+                        ExpressionSyntax.Application app =>
+                        FormatApplication(node.Range, app),
+
+                        ExpressionSyntax.CaseExpression caseExpr =>
+                        new ExpressionSyntax.CaseExpression(
+                            new CaseBlock(
+                                CaseTokenLocation: caseExpr.CaseBlock.CaseTokenLocation,
+                                Expression: caseExpr.CaseBlock.Expression,
+                                OfTokenLocation: caseExpr.CaseBlock.OfTokenLocation,
+                                Cases:
+                                [
+                                .. caseExpr.CaseBlock.Cases.Select(
+                                    c => c with
+                                    {
+                                        Expression = FormatExpression(c.Expression)
+                                    })
+                                ])),
+
+                        ExpressionSyntax.FunctionOrValue funcOrVal =>
+                        funcOrVal,
+                    };
+            }
+            """";
+
+        AssertFormattedSyntax(input, expected, scriptMode: true);
+    }
+
+    [Fact]
+    public void Preserves_elseif_expression_and_comment()
+    {
+        var input =
+            """"
+            foreach (var ch in text)
+            {
+                if (ch is '\n')
+                {
+                    CurrentRow++;
+                    CurrentColumn = 1;
+                }
+                else if (ch is not '\r') // Skip CR when counting position
+                {
+                    CurrentColumn++;
+                }
+            }
+            """";
+
+        AssertFormattedSyntax(input, input, scriptMode: true);
+    }
+
+    [Fact]
+    public void Preserves_empty_line_between_multiline_comment_and_using_directives()
+    {
+        var input =
+            """"
+            using Pine.Core.Elm.ElmSyntax.SyntaxModel;
+
+            /*
+             * Types for modelling parsed concrete syntax, based on
+             * https://github.com/stil4m/elm-syntax/tree/58671250026416cdae72100bb0c67da17dec92ee/src/Elm/Syntax
+             * */
+
+            using ModuleName = System.Collections.Generic.IReadOnlyList<string>;
+
+            namespace Pine.Core.Elm.ElmSyntax.Stil4mElmSyntax7;
+            """";
+
+        AssertFormattedSyntax(input, input, scriptMode: false);
+    }
+
+    [Fact]
+    public void Preserves_empty_line_between_arguments()
+    {
+        var input =
+            """"
+            return
+                ParseModuleName(blobContentAsString)
+                .Unpack(
+                    fromErr: _ =>
+                    Maybe<(IReadOnlyList<string> path, string content)>.nothing(),
+
+                    fromOk: moduleName =>
+                    (blobPathAndContent.path, blobContentAsString));
+            """";
+
+        AssertFormattedSyntax(input, input, scriptMode: false);
+    }
+
+    [Fact]
+    public void Indents_tuple_items_in_collection()
+    {
+        var input =
+            """"
+            t = ElmValue.TagInstance(
+                "PortModule",
+                [new ElmValue.ElmRecord(
+                    [
+                    ("exposingList",
+                    EncodeNode(EncodeExposing, moduleData.ModuleData.ExposingList)),
+                    ("moduleName",
+                    EncodeNode(EncodeModuleName, moduleData.ModuleData.ModuleName)),
+                    ])
+                ]);
+            """";
+
+        var expected =
+            """"
+            t =
+                ElmValue.TagInstance(
+                    "PortModule",
+                    [
+                    new ElmValue.ElmRecord(
+                        [
+                        ("exposingList",
+                        EncodeNode(EncodeExposing, moduleData.ModuleData.ExposingList)),
+                        ("moduleName",
+                        EncodeNode(EncodeModuleName, moduleData.ModuleData.ModuleName)),
+                        ])
+                    ]);
+            """";
+
+        AssertFormattedSyntax(input, expected, scriptMode: true);
+    }
+
+    [Fact]
+    public void Format_indents_expression_body_in_property()
+    {
+        var input =
+            """"
+            public int Count => this switch
+            {
+                Empty =>
+                0,
+
+                NonEmpty nonEmpty =>
+                1 + nonEmpty.Rest.Count,
+            };
+            """";
+
+        var expected =
+            """"
+            public int Count =>
+                this switch
+                {
+                    Empty =>
+                    0,
+
+                    NonEmpty nonEmpty =>
+                    1 + nonEmpty.Rest.Count,
+                };
+            """";
+
+        AssertFormattedSyntax(input, expected, scriptMode: true);
+    }
 }
