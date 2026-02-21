@@ -152,7 +152,7 @@ public class ElmCompiler
 
                     var implicitModuleNames =
                         ImplicitImportConfig.Default.ModuleImports
-                        .Select(m => string.Join(".", m));
+                        .Select(m => string.Join(".", m.ModuleName));
 
                     foreach (var importedName in importedNames.Concat(implicitModuleNames).Distinct())
                     {

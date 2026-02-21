@@ -106,11 +106,11 @@ public class Canonicalization
             // This enables e.g. using "Cmd" as an alias for "Platform.Cmd"
             var mergedAliasMap = AliasMap;
 
-            foreach (var (alias, moduleName) in implicitImportConfig.ModuleAliases)
+            foreach (var importedModule in implicitImportConfig.ModuleImports)
             {
-                if (!mergedAliasMap.ContainsKey(alias))
+                if (importedModule.Alias is { } alias && !mergedAliasMap.ContainsKey(alias))
                 {
-                    mergedAliasMap = mergedAliasMap.Add(alias, moduleName);
+                    mergedAliasMap = mergedAliasMap.Add(alias, importedModule.ModuleName);
                 }
             }
 

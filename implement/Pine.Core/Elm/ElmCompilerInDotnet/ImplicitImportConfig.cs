@@ -1,19 +1,85 @@
+using System;
 using System.Collections.Immutable;
+using System.Linq;
 
 namespace Pine.Core.Elm.ElmCompilerInDotnet;
 
 using ModuleName = ImmutableArray<string>;
 
 /// <summary>
+/// Represents an imported module, optionally with an alias.
+/// </summary>
+public sealed class ImportedModule : IEquatable<ImportedModule>
+{
+    /// <summary>
+    /// Canonical name of the imported module (e.g. ["Platform", "Cmd"]).
+    /// </summary>
+    public ModuleName ModuleName { get; }
+
+    /// <summary>
+    /// An optional alias for the module (e.g. "Cmd" for "Platform.Cmd").
+    /// Null when no alias is defined.
+    /// </summary>
+    public string? Alias { get; }
+
+    private ImportedModule(ModuleName moduleName, string? alias)
+    {
+        ModuleName = moduleName;
+        Alias = alias;
+    }
+
+    /// <summary>
+    /// Creates an imported module instance without an alias for the specified module name.
+    /// </summary>
+    public static ImportedModule WithoutAlias(ModuleName moduleName) =>
+        new(moduleName, alias: null);
+
+    /// <summary>
+    /// Creates a new imported module with the specified alias.
+    /// </summary>
+    public static ImportedModule WithAlias(ModuleName moduleName, string alias) =>
+        new(moduleName, alias);
+
+    /// <inheritdoc/>
+    public bool Equals(ImportedModule? other)
+    {
+        if (other is null)
+            return false;
+
+        if (ReferenceEquals(this, other))
+            return true;
+
+        return ModuleName.AsSpan().SequenceEqual(other.ModuleName.AsSpan())
+            && string.Equals(Alias, other.Alias, StringComparison.Ordinal);
+    }
+
+    /// <inheritdoc/>
+    public override bool Equals(object? obj) =>
+        Equals(obj as ImportedModule);
+
+    /// <inheritdoc/>
+    public override int GetHashCode()
+    {
+        var hash = new HashCode();
+
+        foreach (var part in ModuleName)
+            hash.Add(part);
+
+        hash.Add(Alias);
+
+        return hash.ToHashCode();
+    }
+}
+
+/// <summary>
 /// Represents the configuration for implicit module imports and the specific members they expose within the compilation
 /// context.
 /// </summary>
 public record ImplicitImportConfig(
-    ImmutableHashSet<ModuleName> ModuleImports,
+    ImmutableHashSet<ImportedModule> ModuleImports,
     IImmutableDictionary<string, ModuleName> TypeImports,
     IImmutableDictionary<string, ModuleName> ValueImports,
-    IImmutableDictionary<string, (ModuleName ModuleName, string FunctionName)> OperatorToFunction,
-    IImmutableDictionary<string, ModuleName> ModuleAliases)
+    IImmutableDictionary<string, (ModuleName ModuleName, string FunctionName)> OperatorToFunction)
 {
     /// <summary>
     /// Elm 0.19 defaults.
@@ -26,19 +92,18 @@ public record ImplicitImportConfig(
     private static ImplicitImportConfig BuildDefault()
     {
         var modules =
-            ImmutableHashSet<ModuleName>.Empty
-            .WithComparer(EnumerableExtensions.EqualityComparer<ModuleName>())
-            .Add(["Basics"])
-            .Add(["List"])
-            .Add(["Maybe"])
-            .Add(["Result"])
-            .Add(["Tuple"])
-            .Add(["Char"])
-            .Add(["String"])
-            .Add(["Debug"])
-            .Add(["Platform"])
-            .Add(["Platform", "Cmd"])
-            .Add(["Platform", "Sub"]);
+            ImmutableHashSet<ImportedModule>.Empty
+            .Add(ImportedModule.WithoutAlias(["Basics"]))
+            .Add(ImportedModule.WithoutAlias(["List"]))
+            .Add(ImportedModule.WithoutAlias(["Maybe"]))
+            .Add(ImportedModule.WithoutAlias(["Result"]))
+            .Add(ImportedModule.WithoutAlias(["Tuple"]))
+            .Add(ImportedModule.WithoutAlias(["Char"]))
+            .Add(ImportedModule.WithoutAlias(["String"]))
+            .Add(ImportedModule.WithoutAlias(["Debug"]))
+            .Add(ImportedModule.WithoutAlias(["Platform"]))
+            .Add(ImportedModule.WithAlias(["Platform", "Cmd"], "Cmd"))
+            .Add(ImportedModule.WithAlias(["Platform", "Sub"], "Sub"));
 
         var typeImports =
             ImmutableDictionary<string, ModuleName>.Empty
@@ -131,13 +196,6 @@ public record ImplicitImportConfig(
             // List operators
             .Add("::", (["List"], "cons"));
 
-        // Module name aliases for implicit imports
-        // Based on Elm 0.19 spec: Platform.Cmd is aliased as Cmd, Platform.Sub is aliased as Sub
-        var moduleAliases =
-            ImmutableDictionary<string, ModuleName>.Empty
-            .Add("Cmd", ["Platform", "Cmd"])
-            .Add("Sub", ["Platform", "Sub"]);
-
-        return new ImplicitImportConfig(modules, typeImports, valueImports, operatorToFunction, moduleAliases);
+        return new ImplicitImportConfig(modules, typeImports, valueImports, operatorToFunction);
     }
 }
