@@ -150,6 +150,24 @@ public class ExpressionCompiler
             }
         }
 
+        // Check if this is a record type alias constructor used as a function value
+        // Record constructors also have uppercase names, so check this before the tag name check
+        {
+            var qualifiedConstructorName =
+                expr.ModuleName.Count > 0
+                ?
+                string.Join(".", expr.ModuleName) + "." + expr.Name
+                :
+                context.CurrentModuleName + "." + expr.Name;
+
+            if (context.ModuleCompilationContext.TryGetRecordConstructorFieldNames(qualifiedConstructorName) is { } fieldNamesInDeclOrder)
+            {
+                // Record constructor used as a function value (no application yet)
+                // Build a function value that accepts all field arguments and constructs the record
+                return EmitRecordConstructorFunctionValue(fieldNamesInDeclOrder);
+            }
+        }
+
         // After canonicalization, tags have a module name but are still recognized
         // by having an uppercase first letter
         if (ElmValueEncoding.StringIsValidTagName(expr.Name))
@@ -289,13 +307,15 @@ public class ExpressionCompiler
 
                 var argumentCount = expr.Arguments.Count - 1; // First arg is the constructor itself
 
-                if (argumentCount != fieldNamesInDeclOrder.Count)
+                if (argumentCount < fieldNamesInDeclOrder.Count)
                 {
-                    // Partial application not supported yet - fall through to other handling
-                    // For now, only handle full application
+                    // Partial application: fewer arguments than fields
+                    // Build a function value that captures the provided arguments and
+                    // accepts the remaining ones
                     return
-                        CompilationError.UnsupportedExpression(
-                            $"Record constructor partial application not supported: {funcRef.Name} expects {fieldNamesInDeclOrder.Count} arguments but got {argumentCount}");
+                        EmitRecordConstructorPartialApplicationExpression(
+                            fieldNamesInDeclOrder,
+                            compiledArguments);
                 }
 
                 // Create pairs of (fieldName, argExpression) in declaration order
@@ -1622,6 +1642,125 @@ public class ExpressionCompiler
                 argCount);
 
         return Expression.LiteralInstance(functionValue);
+    }
+
+    /// <summary>
+    /// Builds a record value expression from field names and argument expressions.
+    /// The field names are in declaration order and are mapped to the argument expressions,
+    /// then sorted alphabetically for the record representation.
+    /// </summary>
+    private static Expression BuildRecordValueExpression(
+        IReadOnlyList<string> fieldNamesInDeclOrder,
+        IReadOnlyList<Expression> argExpressions)
+    {
+        // Pair field names (declaration order) with argument expressions, then sort alphabetically
+        var sortedPairs =
+            fieldNamesInDeclOrder
+            .Select((fieldName, index) => (fieldName, expr: argExpressions[index]))
+            .OrderBy(pair => pair.fieldName, StringComparer.Ordinal)
+            .ToList();
+
+        var recordFieldExprs =
+            sortedPairs
+            .Select(
+                pair => Expression.ListInstance(
+                    [
+                    Expression.LiteralInstance(StringEncoding.ValueFromString(pair.fieldName)),
+                    pair.expr
+                    ]))
+            .ToList();
+
+        return
+            Expression.ListInstance(
+                [
+                Expression.LiteralInstance(ElmValue.ElmRecordTypeTagNameAsValue),
+                Expression.ListInstance([Expression.ListInstance(recordFieldExprs)])
+                ]);
+    }
+
+    /// <summary>
+    /// Emits a function value for a record type alias constructor that accepts all field arguments.
+    /// This is used when the record constructor is used as a function value without any application,
+    /// e.g., passing <c>Point</c> to a higher-order function like <c>List.map2 Point xs ys</c>.
+    /// When fully applied, the function constructs the record with fields sorted alphabetically.
+    /// </summary>
+    /// <param name="fieldNamesInDeclOrder">Field names in the order they appear in the type alias declaration.</param>
+    /// <returns>An expression that evaluates to a function value.</returns>
+    private static Expression EmitRecordConstructorFunctionValue(
+        IReadOnlyList<string> fieldNamesInDeclOrder)
+    {
+        var argCount = fieldNamesInDeclOrder.Count;
+
+        // Build expressions that reference arguments from the environment.
+        // At invocation time, environment is [arg0, arg1, ..., argN]
+        var argExpressions = new Expression[argCount];
+
+        for (var i = 0; i < argCount; i++)
+        {
+            argExpressions[i] =
+                ExpressionBuilder.BuildExpressionForPathInExpression(
+                    [i],
+                    Expression.EnvironmentInstance);
+        }
+
+        // Build the record value expression
+        var recordValueExpr = BuildRecordValueExpression(fieldNamesInDeclOrder, argExpressions);
+
+        // Build the function value that wraps this expression
+        var functionValue =
+            FunctionValueBuilder.EmitFunctionValueWithoutEnvFunctions(
+                recordValueExpr,
+                argCount);
+
+        return Expression.LiteralInstance(functionValue);
+    }
+
+    /// <summary>
+    /// Emits an expression that, when evaluated, produces a function value for a partially applied 
+    /// record type alias constructor. The captured arguments are evaluated at runtime and stored 
+    /// in the function value's environment.
+    /// </summary>
+    /// <param name="fieldNamesInDeclOrder">Field names in the order they appear in the type alias declaration.</param>
+    /// <param name="capturedArgExpressions">Expressions for arguments already provided (to be evaluated at runtime).</param>
+    /// <returns>An expression that evaluates to a function value.</returns>
+    private static Expression EmitRecordConstructorPartialApplicationExpression(
+        IReadOnlyList<string> fieldNamesInDeclOrder,
+        IReadOnlyList<Expression> capturedArgExpressions)
+    {
+        var totalArgCount = fieldNamesInDeclOrder.Count;
+        var remainingArgCount = totalArgCount - capturedArgExpressions.Count;
+
+        // Build the inner expression that constructs the record.
+        // At invocation time, environment is [[capturedArgs], [remainingArgs]]
+        var allArgExpressions = new List<Expression>();
+
+        // Build expressions to get captured args from env[0]
+        for (var i = 0; i < capturedArgExpressions.Count; i++)
+        {
+            allArgExpressions.Add(
+                ExpressionBuilder.BuildExpressionForPathInExpression(
+                    [0, i],
+                    Expression.EnvironmentInstance));
+        }
+
+        // Build expressions to get remaining args from env[1]
+        for (var i = 0; i < remainingArgCount; i++)
+        {
+            allArgExpressions.Add(
+                ExpressionBuilder.BuildExpressionForPathInExpression(
+                    [1, i],
+                    Expression.EnvironmentInstance));
+        }
+
+        // Build the record value expression
+        var recordValueExpr = BuildRecordValueExpression(fieldNamesInDeclOrder, allArgExpressions);
+
+        // Use EmitFunctionExpression to build a function value with the captured args
+        return
+            FunctionValueBuilder.EmitFunctionExpression(
+                recordValueExpr,
+                remainingArgCount,
+                capturedArgExpressions);
     }
 
     /// <summary>

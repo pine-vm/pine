@@ -415,4 +415,152 @@ public class RecordConstructorTests
                     ]));
         }
     }
+
+    /// <summary>
+    /// Tests partial application of a record constructor.
+    /// type alias Point = { y : Int, x : Int }
+    /// partialPoint = Point 10
+    /// partialPoint 20 should produce { x = 20, y = 10 }
+    /// </summary>
+    [Fact]
+    public void Record_constructor_partial_application()
+    {
+        var elmModuleText =
+            """"
+            module Test exposing (..)
+
+
+            type alias Point =
+                { y : Int, x : Int }
+
+
+            partialPoint : Int -> Point
+            partialPoint =
+                Point 10
+
+
+            makePoint : Int -> Point
+            makePoint b =
+                partialPoint b
+
+            """";
+
+        var parseCache = new PineVMParseCache();
+
+        var parsedEnv =
+            ElmCompilerTestHelper.CompileElmModules(
+                [elmModuleText],
+                disableInlining: false);
+
+        var testModule =
+            parsedEnv.Modules.FirstOrDefault(c => c.moduleName is "Test");
+
+        var declValue =
+            testModule.moduleContent.FunctionDeclarations
+            .FirstOrDefault(decl => decl.Key is "makePoint");
+
+        var declParsed =
+            FunctionRecord.ParseFunctionRecordTagged(declValue.Value, parseCache)
+            .Extract(err => throw new Exception("Failed parsing " + nameof(declValue) + ": " + err));
+
+        var invokeFunction = ElmCompilerTestHelper.CreateFunctionInvocationDelegate(declParsed);
+
+        // partialPoint is (Point 10), which captures y=10
+        // Applying 20 gives x=20
+        // Result: { x = 20, y = 10 }
+        var (applyRunResult, _) =
+            invokeFunction(
+                [
+                ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(20))
+                ]);
+
+        var pineValue = applyRunResult.ReturnValue.Evaluate();
+
+        var result =
+            ElmValueEncoding.PineValueAsElmValue(pineValue, null, null)
+            .Extract(err => throw new Exception("Failed decoding result as Elm value: " + err));
+
+        result.Should().Be(
+            new ElmValue.ElmRecord(
+                [
+                ("x", ElmValue.Integer(20)),
+                ("y", ElmValue.Integer(10))
+                ]));
+    }
+
+    /// <summary>
+    /// Tests using a record constructor as a function value given to a generic higher-order function.
+    /// type alias Point = { y : Int, x : Int }
+    /// applyFunc f a b = f a b
+    /// makePoint a b = applyFunc Point a b
+    /// This tests that Point can be passed as a value to a generic function.
+    /// </summary>
+    [Fact]
+    public void Record_constructor_as_value_in_higher_order_function()
+    {
+        var elmModuleText =
+            """"
+            module Test exposing (..)
+
+
+            type alias Point =
+                { y : Int, x : Int }
+
+
+            applyFunc : (a -> b -> c) -> a -> b -> c
+            applyFunc f a b =
+                f a b
+
+
+            makePoint : Int -> Int -> Point
+            makePoint a b =
+                applyFunc Point a b
+
+            """";
+
+        var parseCache = new PineVMParseCache();
+
+        var parsedEnv =
+            ElmCompilerTestHelper.CompileElmModules(
+                [elmModuleText],
+                disableInlining: false);
+
+        var testModule =
+            parsedEnv.Modules.FirstOrDefault(c => c.moduleName is "Test");
+
+        var declValue =
+            testModule.moduleContent.FunctionDeclarations
+            .FirstOrDefault(decl => decl.Key is "makePoint");
+
+        var declParsed =
+            FunctionRecord.ParseFunctionRecordTagged(declValue.Value, parseCache)
+            .Extract(err => throw new Exception("Failed parsing " + nameof(declValue) + ": " + err));
+
+        var invokeFunction = ElmCompilerTestHelper.CreateFunctionInvocationDelegate(declParsed);
+
+        // makePoint 10 20 calls applyFunc Point 10 20
+        // Point is passed as a function value to applyFunc, which applies it: Point 10 20 -> { x = 20, y = 10 }
+        var (applyRunResult, _) =
+            invokeFunction(
+                [
+                ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(10)),
+                ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(20))
+                ]);
+
+        var pineValue = applyRunResult.ReturnValue.Evaluate();
+
+        var result =
+            ElmValueEncoding.PineValueAsElmValue(pineValue, null, null)
+            .Extract(err => throw new Exception("Failed decoding result as Elm value: " + err));
+
+        // Point 10 20 -> { x = 20, y = 10 }
+        // First argument 10 goes to 'y' (first in declaration)
+        // Second argument 20 goes to 'x' (second in declaration)
+        result.Should().Be(
+            new ElmValue.ElmRecord(
+                [
+                ("x", ElmValue.Integer(20)),
+                ("y", ElmValue.Integer(10))
+                ]));
+    }
 }
