@@ -290,7 +290,7 @@ public static class FormatCSharpFile
 
             var trimmed = lines[i].TrimStart();
 
-            if (trimmed.Length > 0 && trimmed[0] == '*')
+            if (trimmed.Length > 0 && trimmed[0] is '*')
                 sb.Append(newIndentStr).Append(trimmed);
             else
                 sb.Append(lines[i]); // preserve non-* lines and empty lines as-is
@@ -1058,7 +1058,7 @@ public static class FormatCSharpFile
     private static BlockSyntax FormatBlock(BlockSyntax node, int indent)
     {
         // Preserve completely empty single-line blocks like { } 
-        if (IsSingleLineBlock(node) && node.Statements.Count == 0)
+        if (IsSingleLineBlock(node) && node.Statements.Count is 0)
         {
             return node;
         }
@@ -1531,7 +1531,7 @@ public static class FormatCSharpFile
             var origBreaks = CountLineBreaks(node.Statements[0].GetLeadingTrivia());
             var lastLabel = node.Labels.Last();
 
-            SyntaxToken colonToken =
+            var colonToken =
                 lastLabel switch
                 {
                     CaseSwitchLabelSyntax cs => cs.ColonToken,

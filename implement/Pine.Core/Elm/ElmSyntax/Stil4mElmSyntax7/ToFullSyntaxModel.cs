@@ -1,6 +1,6 @@
+using Pine.Core.Elm.ElmSyntax.SyntaxModel;
 using System.Collections.Generic;
 using System.Linq;
-using Pine.Core.Elm.ElmSyntax.SyntaxModel;
 
 using FullTypes = Pine.Core.Elm.ElmSyntax.SyntaxModel;
 
@@ -52,21 +52,21 @@ public static class ToFullSyntaxModel
         module switch
         {
             Module.NormalModule normalModule =>
-                new FullTypes.Module.NormalModule(
-                    ModuleTokenLocation: s_defaultLocation,
-                    ModuleData: Convert(normalModule.ModuleData)),
+            new FullTypes.Module.NormalModule(
+                ModuleTokenLocation: s_defaultLocation,
+                ModuleData: Convert(normalModule.ModuleData)),
 
             Module.PortModule portModule =>
-                new FullTypes.Module.PortModule(
-                    PortTokenLocation: s_defaultLocation,
-                    ModuleTokenLocation: s_defaultLocation,
-                    ModuleData: Convert(portModule.ModuleData)),
+            new FullTypes.Module.PortModule(
+                PortTokenLocation: s_defaultLocation,
+                ModuleTokenLocation: s_defaultLocation,
+                ModuleData: Convert(portModule.ModuleData)),
 
             Module.EffectModule effectModule =>
-                new FullTypes.Module.EffectModule(
-                    EffectTokenLocation: s_defaultLocation,
-                    ModuleTokenLocation: s_defaultLocation,
-                    ModuleData: Convert(effectModule.ModuleData)),
+            new FullTypes.Module.EffectModule(
+                EffectTokenLocation: s_defaultLocation,
+                ModuleTokenLocation: s_defaultLocation,
+                ModuleData: Convert(effectModule.ModuleData)),
 
             _ =>
             throw new System.NotImplementedException(
@@ -103,13 +103,13 @@ public static class ToFullSyntaxModel
         exposing switch
         {
             Exposing.All _ =>
-                new FullTypes.Exposing.All(s_defaultRange),
+            new FullTypes.Exposing.All(s_defaultRange),
 
             Exposing.Explicit @explicit =>
-                new FullTypes.Exposing.Explicit(
-                    OpenParenLocation: s_defaultLocation,
-                    Nodes: ToSeparatedList(@explicit.Nodes, Convert),
-                    CloseParenLocation: s_defaultLocation),
+            new FullTypes.Exposing.Explicit(
+                OpenParenLocation: s_defaultLocation,
+                Nodes: ToSeparatedList(@explicit.Nodes, Convert),
+                CloseParenLocation: s_defaultLocation),
 
             _ =>
             throw new System.NotImplementedException(
@@ -124,17 +124,17 @@ public static class ToFullSyntaxModel
         expose switch
         {
             TopLevelExpose.InfixExpose infixExpose =>
-                new FullTypes.TopLevelExpose.InfixExpose(infixExpose.Name),
+            new FullTypes.TopLevelExpose.InfixExpose(infixExpose.Name),
 
             TopLevelExpose.FunctionExpose functionExpose =>
-                new FullTypes.TopLevelExpose.FunctionExpose(functionExpose.Name),
+            new FullTypes.TopLevelExpose.FunctionExpose(functionExpose.Name),
 
             TopLevelExpose.TypeOrAliasExpose typeOrAliasExpose =>
-                new FullTypes.TopLevelExpose.TypeOrAliasExpose(typeOrAliasExpose.Name),
+            new FullTypes.TopLevelExpose.TypeOrAliasExpose(typeOrAliasExpose.Name),
 
             TopLevelExpose.TypeExpose typeExpose =>
-                new FullTypes.TopLevelExpose.TypeExpose(
-                    Convert(typeExpose.ExposedType)),
+            new FullTypes.TopLevelExpose.TypeExpose(
+                Convert(typeExpose.ExposedType)),
 
             _ =>
             throw new System.NotImplementedException(
@@ -159,11 +159,15 @@ public static class ToFullSyntaxModel
             ImportTokenLocation: s_defaultLocation,
             ModuleName: ConvertNodePreserveValue(import.ModuleName),
             ModuleAlias: import.ModuleAlias is { } alias
-                ? (s_defaultLocation, ConvertNodePreserveValue(alias))
-                : null,
+            ?
+            (s_defaultLocation, ConvertNodePreserveValue(alias))
+            :
+            null,
             ExposingList: import.ExposingList is { } exposingList
-                ? (s_defaultLocation, ConvertNode(exposingList, Convert))
-                : null);
+            ?
+            (s_defaultLocation, ConvertNode(exposingList, Convert))
+            :
+            null);
 
     /// <summary>
     /// Converts a Declaration.
@@ -173,25 +177,25 @@ public static class ToFullSyntaxModel
         declaration switch
         {
             Declaration.FunctionDeclaration functionDeclaration =>
-                new FullTypes.Declaration.FunctionDeclaration(
-                    Convert(functionDeclaration.Function)),
+            new FullTypes.Declaration.FunctionDeclaration(
+                Convert(functionDeclaration.Function)),
 
             Declaration.CustomTypeDeclaration customTypeDeclaration =>
-                new FullTypes.Declaration.CustomTypeDeclaration(
-                    Convert(customTypeDeclaration.TypeDeclaration)),
+            new FullTypes.Declaration.CustomTypeDeclaration(
+                Convert(customTypeDeclaration.TypeDeclaration)),
 
             Declaration.AliasDeclaration aliasDeclaration =>
-                new FullTypes.Declaration.AliasDeclaration(
-                    Convert(aliasDeclaration.TypeAlias)),
+            new FullTypes.Declaration.AliasDeclaration(
+                Convert(aliasDeclaration.TypeAlias)),
 
             Declaration.PortDeclaration portDeclaration =>
-                new FullTypes.Declaration.PortDeclaration(
-                    PortTokenLocation: s_defaultLocation,
-                    Signature: Convert(portDeclaration.Signature)),
+            new FullTypes.Declaration.PortDeclaration(
+                PortTokenLocation: s_defaultLocation,
+                Signature: Convert(portDeclaration.Signature)),
 
             Declaration.InfixDeclaration infixDeclaration =>
-                new FullTypes.Declaration.InfixDeclaration(
-                    Convert(infixDeclaration.Infix)),
+            new FullTypes.Declaration.InfixDeclaration(
+                Convert(infixDeclaration.Infix)),
 
             _ =>
             throw new System.NotImplementedException(
@@ -236,10 +240,13 @@ public static class ToFullSyntaxModel
             Name: ConvertNodePreserveValue(typeStruct.Name),
             Generics: ConvertNodesPreserveValue(typeStruct.Generics),
             EqualsTokenLocation: s_defaultLocation,
-            Constructors: [.. typeStruct.Constructors
-                .Select((c, i) => (
-                    PipeTokenLocation: i > 0 ? s_defaultLocation : (Location?)null,
-                    Constructor: ConvertNode(c, Convert)))]);
+            Constructors:
+            [
+            .. typeStruct.Constructors
+                .Select(
+                (c, i) => (PipeTokenLocation: i > 0 ? s_defaultLocation : (Location?)null,
+                Constructor: ConvertNode(c, Convert)))
+            ]);
 
     /// <summary>
     /// Converts a ValueConstructor.
@@ -258,35 +265,35 @@ public static class ToFullSyntaxModel
         typeAnnotation switch
         {
             TypeAnnotation.GenericType genericType =>
-                new FullTypes.TypeAnnotation.GenericType(genericType.Name),
+            new FullTypes.TypeAnnotation.GenericType(genericType.Name),
 
             TypeAnnotation.Typed typed =>
-                new FullTypes.TypeAnnotation.Typed(
-                    ConvertNodePreserveValue(typed.TypeName),
-                    ConvertNodes(typed.TypeArguments, Convert)),
+            new FullTypes.TypeAnnotation.Typed(
+                ConvertNodePreserveValue(typed.TypeName),
+                ConvertNodes(typed.TypeArguments, Convert)),
 
             TypeAnnotation.Unit =>
-                new FullTypes.TypeAnnotation.Unit(),
+            new FullTypes.TypeAnnotation.Unit(),
 
             TypeAnnotation.Tupled tupled =>
-                new FullTypes.TypeAnnotation.Tupled(
-                    TypeAnnotations: ToSeparatedList(tupled.TypeAnnotations, Convert)),
+            new FullTypes.TypeAnnotation.Tupled(
+                TypeAnnotations: ToSeparatedList(tupled.TypeAnnotations, Convert)),
 
             TypeAnnotation.Record record =>
-                new FullTypes.TypeAnnotation.Record(
-                    RecordDefinition: Convert(record.RecordDefinition)),
+            new FullTypes.TypeAnnotation.Record(
+                RecordDefinition: Convert(record.RecordDefinition)),
 
             TypeAnnotation.GenericRecord genericRecord =>
-                new FullTypes.TypeAnnotation.GenericRecord(
-                    GenericName: ConvertNodePreserveValue(genericRecord.GenericName),
-                    PipeLocation: s_defaultLocation,
-                    RecordDefinition: ConvertNode(genericRecord.RecordDefinition, Convert)),
+            new FullTypes.TypeAnnotation.GenericRecord(
+                GenericName: ConvertNodePreserveValue(genericRecord.GenericName),
+                PipeLocation: s_defaultLocation,
+                RecordDefinition: ConvertNode(genericRecord.RecordDefinition, Convert)),
 
             TypeAnnotation.FunctionTypeAnnotation functionType =>
-                new FullTypes.TypeAnnotation.FunctionTypeAnnotation(
-                    ArgumentType: ConvertFunctionTypeArgument(functionType.ArgumentType),
-                    ArrowLocation: s_defaultLocation,
-                    ReturnType: ConvertNode(functionType.ReturnType, Convert)),
+            new FullTypes.TypeAnnotation.FunctionTypeAnnotation(
+                ArgumentType: ConvertFunctionTypeArgument(functionType.ArgumentType),
+                ArrowLocation: s_defaultLocation,
+                ReturnType: ConvertNode(functionType.ReturnType, Convert)),
 
             _ =>
             throw new System.NotImplementedException(
@@ -319,8 +326,10 @@ public static class ToFullSyntaxModel
         new(
             Documentation: functionStruct.Documentation is { } doc ? ConvertNodePreserveValue(doc) : null,
             Signature: functionStruct.Signature is { } sig
-                ? ConvertNode(sig, Convert)
-                : null,
+            ?
+            ConvertNode(sig, Convert)
+            :
+            null,
             Declaration: ConvertNode(functionStruct.Declaration, Convert));
 
     /// <summary>
@@ -352,61 +361,61 @@ public static class ToFullSyntaxModel
         pattern switch
         {
             Pattern.AllPattern =>
-                new FullTypes.Pattern.AllPattern(),
+            new FullTypes.Pattern.AllPattern(),
 
             Pattern.VarPattern varPattern =>
-                new FullTypes.Pattern.VarPattern(varPattern.Name),
+            new FullTypes.Pattern.VarPattern(varPattern.Name),
 
             Pattern.UnitPattern =>
-                new FullTypes.Pattern.UnitPattern(),
+            new FullTypes.Pattern.UnitPattern(),
 
             Pattern.CharPattern charPattern =>
-                new FullTypes.Pattern.CharPattern(charPattern.Value),
+            new FullTypes.Pattern.CharPattern(charPattern.Value),
 
             Pattern.StringPattern stringPattern =>
-                new FullTypes.Pattern.StringPattern(stringPattern.Value),
+            new FullTypes.Pattern.StringPattern(stringPattern.Value),
 
             Pattern.IntPattern intPattern =>
-                new FullTypes.Pattern.IntPattern(intPattern.Value),
+            new FullTypes.Pattern.IntPattern(intPattern.Value),
 
             Pattern.HexPattern hexPattern =>
-                new FullTypes.Pattern.HexPattern(hexPattern.Value),
+            new FullTypes.Pattern.HexPattern(hexPattern.Value),
 
             Pattern.FloatPattern floatPattern =>
-                new FullTypes.Pattern.FloatPattern(floatPattern.Value),
+            new FullTypes.Pattern.FloatPattern(floatPattern.Value),
 
             Pattern.TuplePattern tuplePattern =>
-                new FullTypes.Pattern.TuplePattern(
-                    Elements: ToSeparatedList(tuplePattern.Elements, Convert)),
+            new FullTypes.Pattern.TuplePattern(
+                Elements: ToSeparatedList(tuplePattern.Elements, Convert)),
 
             Pattern.RecordPattern recordPattern =>
-                new FullTypes.Pattern.RecordPattern(
-                    Fields: ToSeparatedListPreserveValue(recordPattern.Fields)),
+            new FullTypes.Pattern.RecordPattern(
+                Fields: ToSeparatedListPreserveValue(recordPattern.Fields)),
 
             Pattern.UnConsPattern unConsPattern =>
-                new FullTypes.Pattern.UnConsPattern(
-                    Head: ConvertNode(unConsPattern.Head, Convert),
-                    ConsOperatorLocation: s_defaultLocation,
-                    Tail: ConvertNode(unConsPattern.Tail, Convert)),
+            new FullTypes.Pattern.UnConsPattern(
+                Head: ConvertNode(unConsPattern.Head, Convert),
+                ConsOperatorLocation: s_defaultLocation,
+                Tail: ConvertNode(unConsPattern.Tail, Convert)),
 
             Pattern.ListPattern listPattern =>
-                new FullTypes.Pattern.ListPattern(
-                    Elements: ToSeparatedList(listPattern.Elements, Convert)),
+            new FullTypes.Pattern.ListPattern(
+                Elements: ToSeparatedList(listPattern.Elements, Convert)),
 
             Pattern.NamedPattern namedPattern =>
-                new FullTypes.Pattern.NamedPattern(
-                    Name: Convert(namedPattern.Name),
-                    Arguments: ConvertNodes(namedPattern.Arguments, Convert)),
+            new FullTypes.Pattern.NamedPattern(
+                Name: Convert(namedPattern.Name),
+                Arguments: ConvertNodes(namedPattern.Arguments, Convert)),
 
             Pattern.AsPattern asPattern =>
-                new FullTypes.Pattern.AsPattern(
-                    Pattern: ConvertNode(asPattern.Pattern, Convert),
-                    AsTokenLocation: s_defaultLocation,
-                    Name: ConvertNodePreserveValue(asPattern.Name)),
+            new FullTypes.Pattern.AsPattern(
+                Pattern: ConvertNode(asPattern.Pattern, Convert),
+                AsTokenLocation: s_defaultLocation,
+                Name: ConvertNodePreserveValue(asPattern.Name)),
 
             Pattern.ParenthesizedPattern parenthesizedPattern =>
-                new FullTypes.Pattern.ParenthesizedPattern(
-                    Pattern: ConvertNode(parenthesizedPattern.Pattern, Convert)),
+            new FullTypes.Pattern.ParenthesizedPattern(
+                Pattern: ConvertNode(parenthesizedPattern.Pattern, Convert)),
 
             _ =>
             throw new System.NotImplementedException(
@@ -430,99 +439,99 @@ public static class ToFullSyntaxModel
         expression switch
         {
             Expression.UnitExpr =>
-                new FullTypes.Expression.UnitExpr(),
+            new FullTypes.Expression.UnitExpr(),
 
             Expression.Literal literal =>
-                new FullTypes.Expression.Literal(literal.Value, literal.IsTripleQuoted),
+            new FullTypes.Expression.Literal(literal.Value, literal.IsTripleQuoted),
 
             Expression.CharLiteral charLiteral =>
-                new FullTypes.Expression.CharLiteral(charLiteral.Value),
+            new FullTypes.Expression.CharLiteral(charLiteral.Value),
 
             Expression.Integer integer =>
-                new FullTypes.Expression.Integer(integer.Value.ToString()),
+            new FullTypes.Expression.Integer(integer.Value.ToString()),
 
             Expression.Hex hex =>
-                new FullTypes.Expression.Integer(FormatHexLiteral(hex.Value)),
+            new FullTypes.Expression.Integer(FormatHexLiteral(hex.Value)),
 
             Expression.Floatable floatable =>
-                new FullTypes.Expression.Floatable(floatable.LiteralText),
+            new FullTypes.Expression.Floatable(floatable.LiteralText),
 
             Expression.Negation negation =>
-                new FullTypes.Expression.Negation(
-                    ConvertNode(negation.Expression, Convert)),
+            new FullTypes.Expression.Negation(
+                ConvertNode(negation.Expression, Convert)),
 
             Expression.ListExpr listExpr =>
-                new FullTypes.Expression.ListExpr(
-                    Elements: ToSeparatedList(listExpr.Elements, Convert)),
+            new FullTypes.Expression.ListExpr(
+                Elements: ToSeparatedList(listExpr.Elements, Convert)),
 
             Expression.FunctionOrValue functionOrValue =>
-                new FullTypes.Expression.FunctionOrValue(
-                    functionOrValue.ModuleName,
-                    functionOrValue.Name),
+            new FullTypes.Expression.FunctionOrValue(
+                functionOrValue.ModuleName,
+                functionOrValue.Name),
 
             Expression.IfBlock ifBlock =>
-                new FullTypes.Expression.IfBlock(
-                    IfTokenLocation: s_defaultLocation,
-                    Condition: ConvertNode(ifBlock.Condition, Convert),
-                    ThenTokenLocation: s_defaultLocation,
-                    ThenBlock: ConvertNode(ifBlock.ThenBlock, Convert),
-                    ElseTokenLocation: s_defaultLocation,
-                    ElseBlock: ConvertNode(ifBlock.ElseBlock, Convert)),
+            new FullTypes.Expression.IfBlock(
+                IfTokenLocation: s_defaultLocation,
+                Condition: ConvertNode(ifBlock.Condition, Convert),
+                ThenTokenLocation: s_defaultLocation,
+                ThenBlock: ConvertNode(ifBlock.ThenBlock, Convert),
+                ElseTokenLocation: s_defaultLocation,
+                ElseBlock: ConvertNode(ifBlock.ElseBlock, Convert)),
 
             Expression.PrefixOperator prefixOperator =>
-                new FullTypes.Expression.PrefixOperator(prefixOperator.Operator),
+            new FullTypes.Expression.PrefixOperator(prefixOperator.Operator),
 
             Expression.ParenthesizedExpression parenthesizedExpression =>
-                new FullTypes.Expression.ParenthesizedExpression(
-                    Expression: ConvertNode(parenthesizedExpression.Expression, Convert)),
+            new FullTypes.Expression.ParenthesizedExpression(
+                Expression: ConvertNode(parenthesizedExpression.Expression, Convert)),
 
             Expression.Application application =>
-                new FullTypes.Expression.Application(
-                    ConvertNodes(application.Arguments, Convert)),
+            new FullTypes.Expression.Application(
+                ConvertNodes(application.Arguments, Convert)),
 
             Expression.OperatorApplication operatorApplication =>
-                new FullTypes.Expression.OperatorApplication(
-                    new Node<string>(s_defaultRange, operatorApplication.Operator),
-                    operatorApplication.Direction,
-                    ConvertNode(operatorApplication.Left, Convert),
-                    ConvertNode(operatorApplication.Right, Convert)),
+            new FullTypes.Expression.OperatorApplication(
+                new Node<string>(s_defaultRange, operatorApplication.Operator),
+                operatorApplication.Direction,
+                ConvertNode(operatorApplication.Left, Convert),
+                ConvertNode(operatorApplication.Right, Convert)),
 
             Expression.TupledExpression tupledExpression =>
-                new FullTypes.Expression.TupledExpression(
-                    Elements: ToSeparatedList(tupledExpression.Elements, Convert)),
+            new FullTypes.Expression.TupledExpression(
+                Elements: ToSeparatedList(tupledExpression.Elements, Convert)),
 
             Expression.LambdaExpression lambdaExpression =>
-                new FullTypes.Expression.LambdaExpression(
-                    Convert(lambdaExpression.Lambda)),
+            new FullTypes.Expression.LambdaExpression(
+                Convert(lambdaExpression.Lambda)),
 
             Expression.CaseExpression caseExpression =>
-                new FullTypes.Expression.CaseExpression(
-                    Convert(caseExpression.CaseBlock)),
+            new FullTypes.Expression.CaseExpression(
+                Convert(caseExpression.CaseBlock)),
 
             Expression.LetExpression letExpression =>
-                new FullTypes.Expression.LetExpression(
-                    Convert(letExpression.Value)),
+            new FullTypes.Expression.LetExpression(
+                Convert(letExpression.Value)),
 
             Expression.RecordExpr recordExpr =>
-                new FullTypes.Expression.RecordExpr(
-                    Fields: ToSeparatedRecordFields(recordExpr.Fields)),
+            new FullTypes.Expression.RecordExpr(
+                Fields: ToSeparatedRecordFields(recordExpr.Fields)),
 
             Expression.RecordAccess recordAccess =>
-                new FullTypes.Expression.RecordAccess(
-                    ConvertNode(recordAccess.Record, Convert),
-                    ConvertNodePreserveValue(recordAccess.FieldName)),
+            new FullTypes.Expression.RecordAccess(
+                ConvertNode(recordAccess.Record, Convert),
+                ConvertNodePreserveValue(recordAccess.FieldName)),
 
             Expression.RecordAccessFunction recordAccessFunction =>
-                new FullTypes.Expression.RecordAccessFunction(recordAccessFunction.FunctionName),
+            new FullTypes.Expression.RecordAccessFunction(recordAccessFunction.FunctionName),
 
             Expression.RecordUpdateExpression recordUpdateExpression =>
-                new FullTypes.Expression.RecordUpdateExpression(
-                    RecordName: ConvertNodePreserveValue(recordUpdateExpression.RecordName),
-                    PipeLocation: s_defaultLocation,
-                    Fields: ToSeparatedRecordFields(recordUpdateExpression.Fields)),
+            new FullTypes.Expression.RecordUpdateExpression(
+                RecordName: ConvertNodePreserveValue(recordUpdateExpression.RecordName),
+                PipeLocation: s_defaultLocation,
+                Fields: ToSeparatedRecordFields(recordUpdateExpression.Fields)),
 
             Expression.GLSLExpression glslExpression =>
-                new FullTypes.Expression.GLSLExpression(glslExpression.ShaderCode),
+            new FullTypes.Expression.GLSLExpression(glslExpression.ShaderCode),
 
             _ =>
             throw new System.NotImplementedException(
@@ -580,18 +589,18 @@ public static class ToFullSyntaxModel
         letDeclaration switch
         {
             Expression.LetDeclaration.LetFunction letFunction =>
-                new FullTypes.Expression.LetDeclaration.LetFunction(
-                    Convert(letFunction.Function)),
+            new FullTypes.Expression.LetDeclaration.LetFunction(
+                Convert(letFunction.Function)),
 
             Expression.LetDeclaration.LetDestructuring letDestructuring =>
-                new FullTypes.Expression.LetDeclaration.LetDestructuring(
-                    ConvertNode(letDestructuring.Pattern, Convert),
-                    EqualsTokenLocation: s_defaultLocation,
-                    Expression: ConvertNode(letDestructuring.Expression, Convert)),
+            new FullTypes.Expression.LetDeclaration.LetDestructuring(
+                ConvertNode(letDestructuring.Pattern, Convert),
+                EqualsTokenLocation: s_defaultLocation,
+                Expression: ConvertNode(letDestructuring.Expression, Convert)),
 
             _ =>
-                throw new System.NotImplementedException(
-                    "Unexpected let declaration type: " + letDeclaration.GetType().Name),
+            throw new System.NotImplementedException(
+                "Unexpected let declaration type: " + letDeclaration.GetType().Name),
         };
 
     // Helper methods for converting nodes and lists
@@ -614,9 +623,13 @@ public static class ToFullSyntaxModel
             // Wrap in parentheses using Tupled with a single element
             var convertedInner = Convert(node.Value);
             var innerNode = new Node<FullTypes.TypeAnnotation>(s_defaultRange, convertedInner);
-            var tupled = new FullTypes.TypeAnnotation.Tupled(
-                TypeAnnotations: new SeparatedSyntaxList<Node<FullTypes.TypeAnnotation>>.NonEmpty(
-                    innerNode, []));
+
+            var tupled =
+                new FullTypes.TypeAnnotation.Tupled(
+                    TypeAnnotations: new SeparatedSyntaxList<Node<FullTypes.TypeAnnotation>>.NonEmpty(
+                        innerNode,
+                        []));
+
             return new Node<FullTypes.TypeAnnotation>(s_defaultRange, tupled);
         }
 
@@ -665,9 +678,11 @@ public static class ToFullSyntaxModel
             return new SeparatedSyntaxList<Node<TResult>>.Empty();
 
         var first = ConvertNode(nodes[0], converter);
-        var rest = nodes.Skip(1)
-            .Select(node => (
-                SeparatorLocation: s_defaultLocation,
+
+        var rest =
+            nodes.Skip(1)
+            .Select(
+                node => (SeparatorLocation: s_defaultLocation,
                 Node: ConvertNode(node, converter)))
             .ToList();
 
@@ -684,9 +699,11 @@ public static class ToFullSyntaxModel
             return new SeparatedSyntaxList<Node<T>>.Empty();
 
         var first = ConvertNodePreserveValue(nodes[0]);
-        var rest = nodes.Skip(1)
-            .Select(node => (
-                SeparatorLocation: s_defaultLocation,
+
+        var rest =
+            nodes.Skip(1)
+            .Select(
+                node => (SeparatorLocation: s_defaultLocation,
                 Node: ConvertNodePreserveValue(node)))
             .ToList();
 
@@ -698,22 +715,26 @@ public static class ToFullSyntaxModel
     /// </summary>
     private static SeparatedSyntaxList<RecordExprField>
         ToSeparatedRecordFields(
-            IReadOnlyList<Node<(Node<string> fieldName, Node<Expression> valueExpr)>> fields)
+        IReadOnlyList<Node<(Node<string> fieldName, Node<Expression> valueExpr)>> fields)
     {
         if (fields.Count == 0)
             return new SeparatedSyntaxList<RecordExprField>.Empty();
 
-        var convertedFields = fields.Select(field =>
-            new RecordExprField(
-                ConvertNodePreserveValue(field.Value.fieldName),
-                s_defaultLocation,  // EqualsLocation
-                ConvertNode(field.Value.valueExpr, Convert)))
+        var convertedFields =
+            fields.Select(
+                field =>
+                new RecordExprField(
+                    ConvertNodePreserveValue(field.Value.fieldName),
+                    s_defaultLocation, // EqualsLocation
+                    ConvertNode(field.Value.valueExpr, Convert)))
             .ToList();
 
         var first = convertedFields[0];
-        var rest = convertedFields.Skip(1)
-            .Select(recordField => (
-                SeparatorLocation: s_defaultLocation,
+
+        var rest =
+            convertedFields.Skip(1)
+            .Select(
+                recordField => (SeparatorLocation: s_defaultLocation,
                 Node: recordField))
             .ToList();
 
@@ -730,6 +751,7 @@ public static class ToFullSyntaxModel
         {
             return "-" + Rendering.RenderHexPattern(-value);
         }
+
         return Rendering.RenderHexPattern(value);
     }
 }

@@ -1,6 +1,7 @@
 using Pine.Core.Elm.ElmSyntax.SyntaxModel;
 using System.Collections.Generic;
 using System.Linq;
+
 using FullTypes = Pine.Core.Elm.ElmSyntax.SyntaxModel;
 
 namespace Pine.Core.Elm.ElmSyntax.Stil4mElmSyntax7;
@@ -146,8 +147,10 @@ public static class FromFullSyntaxModel
             ModuleName: import.ModuleName,
             ModuleAlias: import.ModuleAlias?.Alias,
             ExposingList: import.ExposingList is { } exposingList
-                ? ConvertNode(exposingList.ExposingList, Convert)
-                : null);
+            ?
+            ConvertNode(exposingList.ExposingList, Convert)
+            :
+            null);
 
     /// <summary>
     /// Converts a <see cref="Declaration"/>
@@ -233,32 +236,32 @@ public static class FromFullSyntaxModel
         typeAnnotation switch
         {
             FullTypes.TypeAnnotation.GenericType genericType =>
-                new TypeAnnotation.GenericType(genericType.Name),
+            new TypeAnnotation.GenericType(genericType.Name),
 
             FullTypes.TypeAnnotation.Typed typed =>
-                new TypeAnnotation.Typed(
-                    typed.TypeName,
-                    ConvertTypeAnnotationNodes(typed.TypeArguments)),
+            new TypeAnnotation.Typed(
+                typed.TypeName,
+                ConvertTypeAnnotationNodes(typed.TypeArguments)),
 
             FullTypes.TypeAnnotation.Unit =>
-                new TypeAnnotation.Unit(),
+            new TypeAnnotation.Unit(),
 
             FullTypes.TypeAnnotation.Tupled tupled =>
-                ConvertTupledTypeAnnotation(tupled),
+            ConvertTupledTypeAnnotation(tupled),
 
             FullTypes.TypeAnnotation.Record record =>
-                new TypeAnnotation.Record(
-                    Convert(record.RecordDefinition)),
+            new TypeAnnotation.Record(
+                Convert(record.RecordDefinition)),
 
             FullTypes.TypeAnnotation.GenericRecord genericRecord =>
-                new TypeAnnotation.GenericRecord(
-                    genericRecord.GenericName,
-                    ConvertNode(genericRecord.RecordDefinition, Convert)),
+            new TypeAnnotation.GenericRecord(
+                genericRecord.GenericName,
+                ConvertNode(genericRecord.RecordDefinition, Convert)),
 
             FullTypes.TypeAnnotation.FunctionTypeAnnotation functionType =>
-                new TypeAnnotation.FunctionTypeAnnotation(
-                    ConvertTypeAnnotationNode(functionType.ArgumentType),
-                    ConvertTypeAnnotationNode(functionType.ReturnType)),
+            new TypeAnnotation.FunctionTypeAnnotation(
+                ConvertTypeAnnotationNode(functionType.ArgumentType),
+                ConvertTypeAnnotationNode(functionType.ReturnType)),
 
             _ =>
             throw new System.NotImplementedException(
@@ -281,8 +284,9 @@ public static class FromFullSyntaxModel
         }
 
         // Multiple elements - keep as tuple
-        return new TypeAnnotation.Tupled(
-            ConvertSeparatedNodes(tupled.TypeAnnotations, Convert));
+        return
+            new TypeAnnotation.Tupled(
+                ConvertSeparatedNodes(tupled.TypeAnnotations, Convert));
     }
 
     /// <summary>
@@ -326,8 +330,10 @@ public static class FromFullSyntaxModel
         new(
             Documentation: functionStruct.Documentation,
             Signature: functionStruct.Signature is { } sig
-                ? ConvertNode(sig, Convert)
-                : null,
+            ?
+            ConvertNode(sig, Convert)
+            :
+            null,
             Declaration: ConvertNode(functionStruct.Declaration, Convert));
 
     /// <summary>
@@ -357,58 +363,58 @@ public static class FromFullSyntaxModel
         pattern switch
         {
             FullTypes.Pattern.AllPattern =>
-                new Pattern.AllPattern(),
+            new Pattern.AllPattern(),
 
             FullTypes.Pattern.VarPattern varPattern =>
-                new Pattern.VarPattern(varPattern.Name),
+            new Pattern.VarPattern(varPattern.Name),
 
             FullTypes.Pattern.UnitPattern =>
-                new Pattern.UnitPattern(),
+            new Pattern.UnitPattern(),
 
             FullTypes.Pattern.CharPattern charPattern =>
-                new Pattern.CharPattern(charPattern.Value),
+            new Pattern.CharPattern(charPattern.Value),
 
             FullTypes.Pattern.StringPattern stringPattern =>
-                new Pattern.StringPattern(stringPattern.Value),
+            new Pattern.StringPattern(stringPattern.Value),
 
             FullTypes.Pattern.IntPattern intPattern =>
-                new Pattern.IntPattern(intPattern.Value),
+            new Pattern.IntPattern(intPattern.Value),
 
             FullTypes.Pattern.HexPattern hexPattern =>
-                new Pattern.HexPattern(hexPattern.Value),
+            new Pattern.HexPattern(hexPattern.Value),
 
             FullTypes.Pattern.FloatPattern floatPattern =>
-                new Pattern.FloatPattern(floatPattern.Value),
+            new Pattern.FloatPattern(floatPattern.Value),
 
             FullTypes.Pattern.TuplePattern tuplePattern =>
-                new Pattern.TuplePattern(
-                    ConvertSeparatedNodes(tuplePattern.Elements, Convert)),
+            new Pattern.TuplePattern(
+                ConvertSeparatedNodes(tuplePattern.Elements, Convert)),
 
             FullTypes.Pattern.RecordPattern recordPattern =>
-                new Pattern.RecordPattern(ToList(recordPattern.Fields)),
+            new Pattern.RecordPattern(ToList(recordPattern.Fields)),
 
             FullTypes.Pattern.UnConsPattern unConsPattern =>
-                new Pattern.UnConsPattern(
-                    ConvertNode(unConsPattern.Head, Convert),
-                    ConvertNode(unConsPattern.Tail, Convert)),
+            new Pattern.UnConsPattern(
+                ConvertNode(unConsPattern.Head, Convert),
+                ConvertNode(unConsPattern.Tail, Convert)),
 
             FullTypes.Pattern.ListPattern listPattern =>
-                new Pattern.ListPattern(
-                    ConvertSeparatedNodes(listPattern.Elements, Convert)),
+            new Pattern.ListPattern(
+                ConvertSeparatedNodes(listPattern.Elements, Convert)),
 
             FullTypes.Pattern.NamedPattern namedPattern =>
-                new Pattern.NamedPattern(
-                    Convert(namedPattern.Name),
-                    ConvertNodes(namedPattern.Arguments, Convert)),
+            new Pattern.NamedPattern(
+                Convert(namedPattern.Name),
+                ConvertNodes(namedPattern.Arguments, Convert)),
 
             FullTypes.Pattern.AsPattern asPattern =>
-                new Pattern.AsPattern(
-                    ConvertNode(asPattern.Pattern, Convert),
-                    asPattern.Name),
+            new Pattern.AsPattern(
+                ConvertNode(asPattern.Pattern, Convert),
+                asPattern.Name),
 
             FullTypes.Pattern.ParenthesizedPattern parenthesizedPattern =>
-                new Pattern.ParenthesizedPattern(
-                    ConvertNode(parenthesizedPattern.Pattern, Convert)),
+            new Pattern.ParenthesizedPattern(
+                ConvertNode(parenthesizedPattern.Pattern, Convert)),
 
             _ =>
             throw new System.NotImplementedException(
@@ -543,13 +549,16 @@ public static class FromFullSyntaxModel
             node.Value switch
             {
                 FullTypes.Expression.RecordExpr recordExpr =>
-                    new Expression.RecordExpr(
-                        ConvertRecordFields(recordExpr.Fields, closeBraceLocation, isRecordUpdateExpression: false)),
+                new Expression.RecordExpr(
+                    ConvertRecordFields(recordExpr.Fields, closeBraceLocation, isRecordUpdateExpression: false)),
 
                 FullTypes.Expression.RecordUpdateExpression recordUpdateExpression =>
-                    new Expression.RecordUpdateExpression(
-                        recordUpdateExpression.RecordName,
-                        ConvertRecordFields(recordUpdateExpression.Fields, closeBraceLocation, isRecordUpdateExpression: true)),
+                new Expression.RecordUpdateExpression(
+                    recordUpdateExpression.RecordName,
+                    ConvertRecordFields(
+                        recordUpdateExpression.Fields,
+                        closeBraceLocation,
+                        isRecordUpdateExpression: true)),
 
                 // For all other expression types, use the standard conversion
                 var expr => Convert(expr)
@@ -616,17 +625,17 @@ public static class FromFullSyntaxModel
         letDeclaration switch
         {
             FullTypes.Expression.LetDeclaration.LetFunction letFunction =>
-                new Expression.LetDeclaration.LetFunction(
-                    Convert(letFunction.Function)),
+            new Expression.LetDeclaration.LetFunction(
+                Convert(letFunction.Function)),
 
             FullTypes.Expression.LetDeclaration.LetDestructuring letDestructuring =>
-                new Expression.LetDeclaration.LetDestructuring(
-                    ConvertNode(letDestructuring.Pattern, Convert),
-                    ConvertExpressionNode(letDestructuring.Expression)),
+            new Expression.LetDeclaration.LetDestructuring(
+                ConvertNode(letDestructuring.Pattern, Convert),
+                ConvertExpressionNode(letDestructuring.Expression)),
 
             _ =>
-                throw new System.NotImplementedException(
-                    "Unexpected let declaration type: " + letDeclaration.GetType().Name),
+            throw new System.NotImplementedException(
+                "Unexpected let declaration type: " + letDeclaration.GetType().Name),
         };
 
     // Helper methods for converting nodes and lists
@@ -649,9 +658,12 @@ public static class FromFullSyntaxModel
         separatedList switch
         {
             SeparatedSyntaxList<TNode>.Empty => [],
+
             SeparatedSyntaxList<TNode>.NonEmpty nonEmpty =>
-                [nonEmpty.First, .. nonEmpty.Rest.Select(r => r.Node)],
-            _ => throw new System.NotImplementedException(
+            [nonEmpty.First, .. nonEmpty.Rest.Select(r => r.Node)],
+
+            _ =>
+            throw new System.NotImplementedException(
                 "Unexpected SeparatedSyntaxList type: " + separatedList.GetType().Name),
         };
 
@@ -694,9 +706,9 @@ public static class FromFullSyntaxModel
 
     private static IReadOnlyList<Node<(Node<string> fieldName, Node<Expression> valueExpr)>>
         ConvertRecordFields(
-            SeparatedSyntaxList<RecordExprField> fields,
-            Location closeBraceLocation,
-            bool isRecordUpdateExpression = false)
+        SeparatedSyntaxList<RecordExprField> fields,
+        Location closeBraceLocation,
+        bool isRecordUpdateExpression = false)
     {
         if (fields is not SeparatedSyntaxList<RecordExprField>.NonEmpty nonEmpty)
         {
@@ -716,14 +728,18 @@ public static class FromFullSyntaxModel
         {
             var convertedValueExpr = ConvertExpressionNode(nonEmpty.First.ValueExpr);
             Location fieldRangeEnd;
+
             if (isSingleField)
             {
                 // Single-field records:
                 // - RecordUpdateExpression: use closing brace position
                 // - RecordExpr: use expression end
-                fieldRangeEnd = isRecordUpdateExpression
-                    ? closeBraceLocation
-                    : convertedValueExpr.Range.End;
+                fieldRangeEnd =
+                    isRecordUpdateExpression
+                    ?
+                    closeBraceLocation
+                    :
+                    convertedValueExpr.Range.End;
             }
             else if (isMultiLine)
             {
@@ -748,9 +764,11 @@ public static class FromFullSyntaxModel
                 // Single-line, first of multiple fields: use expression end
                 fieldRangeEnd = convertedValueExpr.Range.End;
             }
-            result.Add(new Node<(Node<string> fieldName, Node<Expression> valueExpr)>(
-                new Range(nonEmpty.First.FieldName.Range.Start, fieldRangeEnd),
-                (nonEmpty.First.FieldName, convertedValueExpr)));
+
+            result.Add(
+                new Node<(Node<string> fieldName, Node<Expression> valueExpr)>(
+                    new Range(nonEmpty.First.FieldName.Range.Start, fieldRangeEnd),
+                    (nonEmpty.First.FieldName, convertedValueExpr)));
         }
 
         // Process remaining fields
@@ -761,6 +779,7 @@ public static class FromFullSyntaxModel
 
             var isLastField = i == nonEmpty.Rest.Count - 1;
             Location fieldRangeEnd;
+
             if (isLastField)
             {
                 // Last field always uses closing brace position
@@ -777,9 +796,10 @@ public static class FromFullSyntaxModel
                 fieldRangeEnd = convertedValueExpr.Range.End;
             }
 
-            result.Add(new Node<(Node<string> fieldName, Node<Expression> valueExpr)>(
-                new Range(field.FieldName.Range.Start, fieldRangeEnd),
-                (field.FieldName, convertedValueExpr)));
+            result.Add(
+                new Node<(Node<string> fieldName, Node<Expression> valueExpr)>(
+                    new Range(field.FieldName.Range.Start, fieldRangeEnd),
+                    (field.FieldName, convertedValueExpr)));
         }
 
         return result;

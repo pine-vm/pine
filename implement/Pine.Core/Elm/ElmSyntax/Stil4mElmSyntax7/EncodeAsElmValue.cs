@@ -1,6 +1,6 @@
+using Pine.Core.Elm.ElmSyntax.SyntaxModel;
 using System;
 using System.Linq;
-using Pine.Core.Elm.ElmSyntax.SyntaxModel;
 
 namespace Pine.Core.Elm.ElmSyntax.Stil4mElmSyntax7;
 
@@ -40,7 +40,8 @@ public class EncodeAsElmValue
             Module.NormalModule moduleData =>
             ElmValue.TagInstance(
                 "NormalModule",
-                [new ElmValue.ElmRecord(
+                [
+                new ElmValue.ElmRecord(
                     [
                     ("exposingList",
                     EncodeNode(EncodeExposing, moduleData.ModuleData.ExposingList)),
@@ -51,43 +52,49 @@ public class EncodeAsElmValue
                 ]),
 
             Module.PortModule moduleData =>
-                ElmValue.TagInstance(
-                    "PortModule",
-                    [new ElmValue.ElmRecord(
-                        [
-                        ("exposingList",
-                        EncodeNode(EncodeExposing, moduleData.ModuleData.ExposingList)),
-                        ("moduleName",
-                        EncodeNode(EncodeModuleName, moduleData.ModuleData.ModuleName)),
-                        ])
-                    ]),
+            ElmValue.TagInstance(
+                "PortModule",
+                [
+                new ElmValue.ElmRecord(
+                    [
+                    ("exposingList",
+                    EncodeNode(EncodeExposing, moduleData.ModuleData.ExposingList)),
+                    ("moduleName",
+                    EncodeNode(EncodeModuleName, moduleData.ModuleData.ModuleName)),
+                    ])
+                ]),
 
             Module.EffectModule moduleData =>
-                ElmValue.TagInstance(
-                    "EffectModule",
-                    [new ElmValue.ElmRecord(
-                        [
-                        ("command",
-                        moduleData.ModuleData.Command is not { } moduleCommand
-                            ? s_maybeNothingInstance
-                            : ElmValue.TagInstance(
-                                "Just",
-                                [EncodeNode(EncodeString, moduleCommand)])),
+            ElmValue.TagInstance(
+                "EffectModule",
+                [
+                new ElmValue.ElmRecord(
+                    [
+                    ("command",
+                    moduleData.ModuleData.Command is not { } moduleCommand
+                    ?
+                    s_maybeNothingInstance
+                    :
+                    ElmValue.TagInstance(
+                        "Just",
+                        [EncodeNode(EncodeString, moduleCommand)])),
 
-                        ("exposingList",
-                        EncodeNode(EncodeExposing, moduleData.ModuleData.ExposingList)),
+                    ("exposingList",
+                    EncodeNode(EncodeExposing, moduleData.ModuleData.ExposingList)),
 
-                        ("moduleName",
-                        EncodeNode(EncodeModuleName, moduleData.ModuleData.ModuleName)),
+                    ("moduleName",
+                    EncodeNode(EncodeModuleName, moduleData.ModuleData.ModuleName)),
 
-                        ("subscription",
-                        moduleData.ModuleData.Subscription is not { } moduleSubscription
-                            ? s_maybeNothingInstance
-                            : ElmValue.TagInstance(
-                                "Just",
-                                [EncodeNode(EncodeString, moduleSubscription)])),
-                        ])
-                    ]),
+                    ("subscription",
+                    moduleData.ModuleData.Subscription is not { } moduleSubscription
+                    ?
+                    s_maybeNothingInstance
+                    :
+                    ElmValue.TagInstance(
+                        "Just",
+                        [EncodeNode(EncodeString, moduleSubscription)])),
+                    ])
+                ]),
 
             _ =>
             throw new NotImplementedException(
@@ -107,15 +114,17 @@ public class EncodeAsElmValue
         return exposing switch
         {
             Exposing.All range =>
-                ElmValue.TagInstance(
-                    "All",
-                    [EncodeRange(range.Range)]),
+            ElmValue.TagInstance(
+                "All",
+                [EncodeRange(range.Range)]),
 
             Exposing.Explicit explicitExp =>
-                ElmValue.TagInstance(
-                    "Explicit",
-                    [ElmValue.ListInstance(
-                        [.. explicitExp.Nodes.Select(n => EncodeNode(EncodeTopLevelExpose, n))])]),
+            ElmValue.TagInstance(
+                "Explicit",
+                [
+                ElmValue.ListInstance(
+                    [.. explicitExp.Nodes.Select(n => EncodeNode(EncodeTopLevelExpose, n))])
+                ]),
 
             _ =>
             throw new NotImplementedException(
@@ -163,14 +172,15 @@ public class EncodeAsElmValue
 
     private static ElmValue EncodeExposedType(ExposedType exposedType)
     {
-        return new ElmValue.ElmRecord(
-            [
+        return
+            new ElmValue.ElmRecord(
+                [
                 ("name",
                 ElmValue.StringInstance(exposedType.Name)),
 
                 ("open",
                 EncodeMaybe(EncodeRange, exposedType.Open)),
-            ]);
+                ]);
     }
 
     private static ElmValue EncodeImport(Import import)
@@ -180,17 +190,21 @@ public class EncodeAsElmValue
                 [
                 ("exposingList",
                 import.ExposingList is null
-                    ? s_maybeNothingInstance
-                    : ElmValue.TagInstance(
-                        "Just",
-                        [EncodeNode(EncodeExposing, import.ExposingList)])),
+                ?
+                s_maybeNothingInstance
+                :
+                ElmValue.TagInstance(
+                    "Just",
+                    [EncodeNode(EncodeExposing, import.ExposingList)])),
 
                 ("moduleAlias",
                 import.ModuleAlias is null
-                    ? s_maybeNothingInstance
-                    : ElmValue.TagInstance(
-                        "Just",
-                        [EncodeNode(EncodeModuleName, import.ModuleAlias)])),
+                ?
+                s_maybeNothingInstance
+                :
+                ElmValue.TagInstance(
+                    "Just",
+                    [EncodeNode(EncodeModuleName, import.ModuleAlias)])),
 
                 ("moduleName",
                 EncodeNode(EncodeModuleName, import.ModuleName)),
@@ -202,29 +216,29 @@ public class EncodeAsElmValue
         return declaration switch
         {
             Declaration.FunctionDeclaration functionDeclaration =>
-                ElmValue.TagInstance(
-                    "FunctionDeclaration",
-                    [EncodeFunction(functionDeclaration.Function)]),
+            ElmValue.TagInstance(
+                "FunctionDeclaration",
+                [EncodeFunction(functionDeclaration.Function)]),
 
             Declaration.CustomTypeDeclaration typeDeclaration =>
-                ElmValue.TagInstance(
-                    "CustomTypeDeclaration",
-                    [EncodeTypeStruct(typeDeclaration.TypeDeclaration)]),
+            ElmValue.TagInstance(
+                "CustomTypeDeclaration",
+                [EncodeTypeStruct(typeDeclaration.TypeDeclaration)]),
 
             Declaration.InfixDeclaration infixDeclaration =>
-                ElmValue.TagInstance(
-                    "InfixDeclaration",
-                    [EncodeInfix(infixDeclaration.Infix)]),
+            ElmValue.TagInstance(
+                "InfixDeclaration",
+                [EncodeInfix(infixDeclaration.Infix)]),
 
             Declaration.PortDeclaration portDeclaration =>
-                ElmValue.TagInstance(
-                    "PortDeclaration",
-                    [EncodeSignature(portDeclaration.Signature)]),
+            ElmValue.TagInstance(
+                "PortDeclaration",
+                [EncodeSignature(portDeclaration.Signature)]),
 
             Declaration.AliasDeclaration aliasDeclaration =>
-                ElmValue.TagInstance(
-                    "AliasDeclaration",
-                    [EncodeTypeAlias(aliasDeclaration.TypeAlias)]),
+            ElmValue.TagInstance(
+                "AliasDeclaration",
+                [EncodeTypeAlias(aliasDeclaration.TypeAlias)]),
 
             _ =>
             throw new NotImplementedException(
@@ -317,34 +331,36 @@ public class EncodeAsElmValue
         {
             // | GenericType String
             TypeAnnotation.GenericType name =>
-                ElmValue.TagInstance(
-                    "GenericType",
-                    [EncodeString(name.Name)]),
+            ElmValue.TagInstance(
+                "GenericType",
+                [EncodeString(name.Name)]),
 
             TypeAnnotation.Typed typeName =>
             // | Typed (Node ( ModuleName, String )) (List (Node TypeAnnotation))
-                ElmValue.TagInstance(
-                    "Typed",
-                    [
-                        EncodeNode(
-                            aggregateName =>
-                            ElmValue.ListInstance(
-                                [
-                                EncodeModuleName(aggregateName.ModuleName),
-                                EncodeString(aggregateName.Name),
-                                ]),
-                            typeName.TypeName),
+            ElmValue.TagInstance(
+                "Typed",
+                [
+                EncodeNode(
+                    aggregateName =>
+                    ElmValue.ListInstance(
+                        [
+                        EncodeModuleName(aggregateName.ModuleName),
+                        EncodeString(aggregateName.Name),
+                        ]),
+                    typeName.TypeName),
 
-                        ElmValue.ListInstance(
-                            [..typeName.TypeArguments.Select(a => EncodeNode(EncodeTypeAnnotation, a))]),
-                    ]),
+                ElmValue.ListInstance(
+                    [..typeName.TypeArguments.Select(a => EncodeNode(EncodeTypeAnnotation, a))]),
+                ]),
 
             // | Tupled (List (Node TypeAnnotation))
             TypeAnnotation.Tupled tupled =>
             ElmValue.TagInstance(
                 "Tupled",
-                [ElmValue.ListInstance(
-                    [..tupled.TypeAnnotations.Select(a => EncodeNode(EncodeTypeAnnotation, a))])]),
+                [
+                ElmValue.ListInstance(
+                    [..tupled.TypeAnnotations.Select(a => EncodeNode(EncodeTypeAnnotation, a))])
+                ]),
 
             // | Unit
             TypeAnnotation.Unit =>
@@ -357,8 +373,8 @@ public class EncodeAsElmValue
             ElmValue.TagInstance(
                 "FunctionTypeAnnotation",
                 [
-                    EncodeNode(EncodeTypeAnnotation, functionType.ArgumentType),
-                    EncodeNode(EncodeTypeAnnotation, functionType.ReturnType),
+                EncodeNode(EncodeTypeAnnotation, functionType.ArgumentType),
+                EncodeNode(EncodeTypeAnnotation, functionType.ReturnType),
                 ]),
 
             // | Record RecordDefinition
@@ -372,8 +388,8 @@ public class EncodeAsElmValue
             ElmValue.TagInstance(
                 "GenericRecord",
                 [
-                    EncodeNode(EncodeString, genericRecord.GenericName),
-                    EncodeNode(EncodeRecordDefinition, genericRecord.RecordDefinition),
+                EncodeNode(EncodeString, genericRecord.GenericName),
+                EncodeNode(EncodeRecordDefinition, genericRecord.RecordDefinition),
                 ]),
 
             _ =>
@@ -395,8 +411,8 @@ public class EncodeAsElmValue
             // | ( Node String, Node TypeAnnotation )
             ElmValue.ListInstance(
                 [
-                    EncodeNode(EncodeString, field.FieldName),
-                    EncodeNode(EncodeTypeAnnotation, field.FieldType),
+                EncodeNode(EncodeString, field.FieldName),
+                EncodeNode(EncodeTypeAnnotation, field.FieldType),
                 ]);
     }
 
@@ -413,10 +429,12 @@ public class EncodeAsElmValue
 
                 ("signature",
                 function.Signature is null
-                    ? s_maybeNothingInstance
-                    : ElmValue.TagInstance(
-                        "Just",
-                        [EncodeNode(EncodeSignature, function.Signature)])),
+                ?
+                s_maybeNothingInstance
+                :
+                ElmValue.TagInstance(
+                    "Just",
+                    [EncodeNode(EncodeSignature, function.Signature)])),
                 ]);
     }
 
@@ -454,88 +472,94 @@ public class EncodeAsElmValue
         return pattern switch
         {
             Pattern.VarPattern name =>
-                ElmValue.TagInstance(
-                    "VarPattern",
-                    [EncodeString(name.Name)]),
+            ElmValue.TagInstance(
+                "VarPattern",
+                [EncodeString(name.Name)]),
 
             Pattern.AllPattern =>
-                ElmValue.TagInstance(
-                    "AllPattern",
-                    []),
+            ElmValue.TagInstance(
+                "AllPattern",
+                []),
 
             Pattern.UnitPattern =>
-                ElmValue.TagInstance(
-                    "UnitPattern",
-                    []),
+            ElmValue.TagInstance(
+                "UnitPattern",
+                []),
 
             Pattern.CharPattern value =>
-                ElmValue.TagInstance(
-                    "CharPattern",
-                    [ElmValue.CharInstance(value.Value)]),
+            ElmValue.TagInstance(
+                "CharPattern",
+                [ElmValue.CharInstance(value.Value)]),
 
             Pattern.StringPattern value =>
-                ElmValue.TagInstance(
-                    "StringPattern",
-                    [EncodeString(value.Value)]),
+            ElmValue.TagInstance(
+                "StringPattern",
+                [EncodeString(value.Value)]),
 
             Pattern.IntPattern value =>
-                ElmValue.TagInstance(
-                    "IntPattern",
-                    [ElmValue.Integer(value.Value)]),
+            ElmValue.TagInstance(
+                "IntPattern",
+                [ElmValue.Integer(value.Value)]),
 
             Pattern.HexPattern value =>
-                ElmValue.TagInstance(
-                    "HexPattern",
-                    [ElmValue.Integer(value.Value)]),
+            ElmValue.TagInstance(
+                "HexPattern",
+                [ElmValue.Integer(value.Value)]),
 
             Pattern.NamedPattern name =>
-                ElmValue.TagInstance(
-                    "NamedPattern",
-                    [
-                        EncodeQualifiedNameRef(name.Name),
+            ElmValue.TagInstance(
+                "NamedPattern",
+                [
+                EncodeQualifiedNameRef(name.Name),
 
-                        ElmValue.ListInstance(
-                            [..name.Arguments.Select(a => EncodeNode(EncodePattern, a))]),
-                    ]),
+                ElmValue.ListInstance(
+                    [..name.Arguments.Select(a => EncodeNode(EncodePattern, a))]),
+                ]),
 
             Pattern.TuplePattern elements =>
-                ElmValue.TagInstance(
-                    "TuplePattern",
-                    [ElmValue.ListInstance(
-                        [..elements.Elements.Select(e => EncodeNode(EncodePattern, e))])]),
+            ElmValue.TagInstance(
+                "TuplePattern",
+                [
+                ElmValue.ListInstance(
+                    [..elements.Elements.Select(e => EncodeNode(EncodePattern, e))])
+                ]),
 
             Pattern.RecordPattern fields =>
-                ElmValue.TagInstance(
-                    "RecordPattern",
-                    [ElmValue.ListInstance(
-                        [..fields.Fields.Select(f => EncodeNode(EncodeString, f))])]),
+            ElmValue.TagInstance(
+                "RecordPattern",
+                [
+                ElmValue.ListInstance(
+                    [..fields.Fields.Select(f => EncodeNode(EncodeString, f))])
+                ]),
 
             Pattern.UnConsPattern unCons =>
-                ElmValue.TagInstance(
-                    "UnConsPattern",
-                    [
-                        EncodeNode(EncodePattern, unCons.Head),
-                        EncodeNode(EncodePattern, unCons.Tail),
-                    ]),
+            ElmValue.TagInstance(
+                "UnConsPattern",
+                [
+                EncodeNode(EncodePattern, unCons.Head),
+                EncodeNode(EncodePattern, unCons.Tail),
+                ]),
 
             Pattern.ListPattern elements =>
-                ElmValue.TagInstance(
-                    "ListPattern",
-                    [ElmValue.ListInstance(
-                        [..elements.Elements.Select(e => EncodeNode(EncodePattern, e))])]),
+            ElmValue.TagInstance(
+                "ListPattern",
+                [
+                ElmValue.ListInstance(
+                    [..elements.Elements.Select(e => EncodeNode(EncodePattern, e))])
+                ]),
 
             Pattern.AsPattern asPattern =>
-                ElmValue.TagInstance(
-                    "AsPattern",
-                    [
-                        EncodeNode(EncodePattern, asPattern.Pattern),
-                        EncodeNode(EncodeString, asPattern.Name),
-                    ]),
+            ElmValue.TagInstance(
+                "AsPattern",
+                [
+                EncodeNode(EncodePattern, asPattern.Pattern),
+                EncodeNode(EncodeString, asPattern.Name),
+                ]),
 
             Pattern.ParenthesizedPattern parenthesized =>
-                ElmValue.TagInstance(
-                    "ParenthesizedPattern",
-                    [EncodeNode(EncodePattern, parenthesized.Pattern)]),
+            ElmValue.TagInstance(
+                "ParenthesizedPattern",
+                [EncodeNode(EncodePattern, parenthesized.Pattern)]),
 
             _ =>
             throw new NotImplementedException(
@@ -562,164 +586,172 @@ public class EncodeAsElmValue
         {
             // | Literal String
             Expression.Literal value =>
-                ElmValue.TagInstance(
-                    "Literal",
-                    [EncodeString(value.Value)]),
+            ElmValue.TagInstance(
+                "Literal",
+                [EncodeString(value.Value)]),
 
             // | CharLiteral Char
             Expression.CharLiteral value =>
-                ElmValue.TagInstance(
-                    "CharLiteral",
-                    [ElmValue.CharInstance(value.Value)]),
+            ElmValue.TagInstance(
+                "CharLiteral",
+                [ElmValue.CharInstance(value.Value)]),
 
             // | Integer Int
             Expression.Integer value =>
-                ElmValue.TagInstance(
-                    "Integer",
-                    [ElmValue.Integer(value.Value)]),
+            ElmValue.TagInstance(
+                "Integer",
+                [ElmValue.Integer(value.Value)]),
 
             // | Hex Int
             Expression.Hex value =>
-                ElmValue.TagInstance(
-                    "Hex",
-                    [ElmValue.Integer(value.Value)]),
+            ElmValue.TagInstance(
+                "Hex",
+                [ElmValue.Integer(value.Value)]),
 
             // | Floatable Float
             Expression.Floatable value =>
-                ElmValue.TagInstance(
-                    "Floatable",
-                    [FloatLiteralConversion.ToElmFloat(value.LiteralText)]),
+            ElmValue.TagInstance(
+                "Floatable",
+                [FloatLiteralConversion.ToElmFloat(value.LiteralText)]),
 
             // | Negation (Node Expression)
             Expression.Negation negation =>
-                ElmValue.TagInstance(
-                    "Negation",
-                    [EncodeNode(EncodeExpression, negation.Expression)]),
+            ElmValue.TagInstance(
+                "Negation",
+                [EncodeNode(EncodeExpression, negation.Expression)]),
 
             // | ListExpr (List (Node Expression))
             Expression.ListExpr elements =>
-                ElmValue.TagInstance(
-                    "ListExpr",
-                    [ElmValue.ListInstance(
-                        [..elements.Elements.Select(e => EncodeNode(EncodeExpression, e))])]),
+            ElmValue.TagInstance(
+                "ListExpr",
+                [
+                ElmValue.ListInstance(
+                    [..elements.Elements.Select(e => EncodeNode(EncodeExpression, e))])
+                ]),
 
             // | FunctionOrValue ModuleName String
             Expression.FunctionOrValue functionOrValue =>
-                ElmValue.TagInstance(
-                    "FunctionOrValue",
-                    [
-                        EncodeModuleName(functionOrValue.ModuleName),
-                        EncodeString(functionOrValue.Name),
-                    ]),
+            ElmValue.TagInstance(
+                "FunctionOrValue",
+                [
+                EncodeModuleName(functionOrValue.ModuleName),
+                EncodeString(functionOrValue.Name),
+                ]),
 
             // | Application (List (Node Expression))
             Expression.Application arguments =>
-                ElmValue.TagInstance(
-                    "Application",
-                    [ElmValue.ListInstance(
-                        [..arguments.Arguments.Select(a => EncodeNode(EncodeExpression, a))])]),
+            ElmValue.TagInstance(
+                "Application",
+                [
+                ElmValue.ListInstance(
+                    [..arguments.Arguments.Select(a => EncodeNode(EncodeExpression, a))])
+                ]),
 
             // | ParenthesizedExpression (Node Expression)
             Expression.ParenthesizedExpression expressionNode =>
-                ElmValue.TagInstance(
-                    "ParenthesizedExpression",
-                    [EncodeNode(EncodeExpression, expressionNode.Expression)]),
+            ElmValue.TagInstance(
+                "ParenthesizedExpression",
+                [EncodeNode(EncodeExpression, expressionNode.Expression)]),
 
             // | TupledExpression (List (Node Expression))
             Expression.TupledExpression elements =>
-                ElmValue.TagInstance(
-                    "TupledExpression",
-                    [ElmValue.ListInstance(
-                        [..elements.Elements.Select(e => EncodeNode(EncodeExpression, e))])]),
+            ElmValue.TagInstance(
+                "TupledExpression",
+                [
+                ElmValue.ListInstance(
+                    [..elements.Elements.Select(e => EncodeNode(EncodeExpression, e))])
+                ]),
 
             // | LambdaExpression Lambda
             Expression.LambdaExpression lambda =>
-                ElmValue.TagInstance(
-                    "LambdaExpression",
-                    [EncodeLambda(lambda.Lambda)]),
+            ElmValue.TagInstance(
+                "LambdaExpression",
+                [EncodeLambda(lambda.Lambda)]),
 
             // | OperatorApplication String InfixDirection (Node Expression) (Node Expression)
             Expression.OperatorApplication operatorApplication =>
+            ElmValue.TagInstance(
+                "OperatorApplication",
+                [
+                EncodeString(operatorApplication.Operator),
                 ElmValue.TagInstance(
-                    "OperatorApplication",
-                    [
-                        EncodeString(operatorApplication.Operator),
-                        ElmValue.TagInstance(
-                            operatorApplication.Direction.ToString(),
-                            []),
-                        EncodeNode(EncodeExpression, operatorApplication.Left),
-                        EncodeNode(EncodeExpression, operatorApplication.Right),
-                    ]),
+                    operatorApplication.Direction.ToString(),
+                    []),
+                EncodeNode(EncodeExpression, operatorApplication.Left),
+                EncodeNode(EncodeExpression, operatorApplication.Right),
+                ]),
 
             // | IfBlock (Node Expression) (Node Expression) (Node Expression)
             Expression.IfBlock ifBlock =>
-                ElmValue.TagInstance(
-                    "IfBlock",
-                    [
-                        EncodeNode(EncodeExpression, ifBlock.Condition),
-                        EncodeNode(EncodeExpression, ifBlock.ThenBlock),
-                        EncodeNode(EncodeExpression, ifBlock.ElseBlock),
-                    ]),
+            ElmValue.TagInstance(
+                "IfBlock",
+                [
+                EncodeNode(EncodeExpression, ifBlock.Condition),
+                EncodeNode(EncodeExpression, ifBlock.ThenBlock),
+                EncodeNode(EncodeExpression, ifBlock.ElseBlock),
+                ]),
 
             // | UnitExpr
             Expression.UnitExpr =>
-                ElmValue.TagInstance(
-                    "UnitExpr",
-                    []),
+            ElmValue.TagInstance(
+                "UnitExpr",
+                []),
 
             // | CaseExpression CaseBlock
             Expression.CaseExpression caseBlock =>
-                ElmValue.TagInstance(
-                    "CaseExpression",
-                    [EncodeCaseBlock(caseBlock.CaseBlock)]),
+            ElmValue.TagInstance(
+                "CaseExpression",
+                [EncodeCaseBlock(caseBlock.CaseBlock)]),
 
             // | LetExpression LetBlock
             Expression.LetExpression letBlock =>
-                ElmValue.TagInstance(
-                    "LetExpression",
-                    [EncodeLetBlock(letBlock.Value)]),
+            ElmValue.TagInstance(
+                "LetExpression",
+                [EncodeLetBlock(letBlock.Value)]),
 
             // | PrefixOperator String
             Expression.PrefixOperator prefixOperator =>
-                ElmValue.TagInstance(
-                    "PrefixOperator",
-                    [EncodeString(prefixOperator.Operator)]),
+            ElmValue.TagInstance(
+                "PrefixOperator",
+                [EncodeString(prefixOperator.Operator)]),
 
             // | RecordExpr (List (Node RecordSetter))
             Expression.RecordExpr fields =>
-                ElmValue.TagInstance(
-                    "RecordExpr",
-                    [ElmValue.ListInstance(
-                        [..fields.Fields.Select(rs => EncodeNode(EncodeRecordSetter, rs))])]),
+            ElmValue.TagInstance(
+                "RecordExpr",
+                [
+                ElmValue.ListInstance(
+                    [..fields.Fields.Select(rs => EncodeNode(EncodeRecordSetter, rs))])
+                ]),
 
             // | RecordAccess (Node Expression) (Node String)
             Expression.RecordAccess recordAccess =>
-                ElmValue.TagInstance(
-                    "RecordAccess",
-                    [
-                        EncodeNode(EncodeExpression, recordAccess.Record),
-                        EncodeNode(EncodeString, recordAccess.FieldName),
-                    ]),
+            ElmValue.TagInstance(
+                "RecordAccess",
+                [
+                EncodeNode(EncodeExpression, recordAccess.Record),
+                EncodeNode(EncodeString, recordAccess.FieldName),
+                ]),
 
             // | RecordAccessFunction String
             Expression.RecordAccessFunction functionName =>
-                ElmValue.TagInstance(
-                    "RecordAccessFunction",
-                    [EncodeString(functionName.FunctionName)]),
+            ElmValue.TagInstance(
+                "RecordAccessFunction",
+                [EncodeString(functionName.FunctionName)]),
 
             // | RecordUpdateExpression (Node String) (List (Node RecordSetter))
             Expression.RecordUpdateExpression recordUpdate =>
-                ElmValue.TagInstance(
-                    "RecordUpdateExpression",
-                    [
-                        EncodeNode(EncodeString, recordUpdate.RecordName),
-                        ElmValue.ListInstance(
-                            [..recordUpdate.Fields.Select(rs => EncodeNode(EncodeRecordSetter, rs))]),
-                    ]),
+            ElmValue.TagInstance(
+                "RecordUpdateExpression",
+                [
+                EncodeNode(EncodeString, recordUpdate.RecordName),
+                ElmValue.ListInstance(
+                    [..recordUpdate.Fields.Select(rs => EncodeNode(EncodeRecordSetter, rs))]),
+                ]),
 
             _ =>
-                throw new NotImplementedException(
-                    "Unexpected expression type: " + expression.GetType().Name),
+            throw new NotImplementedException(
+                "Unexpected expression type: " + expression.GetType().Name),
         };
     }
 
@@ -741,17 +773,18 @@ public class EncodeAsElmValue
         return declaration switch
         {
             Expression.LetDeclaration.LetFunction function =>
-                ElmValue.TagInstance(
-                    "LetFunction",
-                    [EncodeFunction(function.Function)]),
+            ElmValue.TagInstance(
+                "LetFunction",
+                [EncodeFunction(function.Function)]),
 
             Expression.LetDeclaration.LetDestructuring destructuring =>
-                ElmValue.TagInstance(
-                    "LetDestructuring",
-                    [
-                        EncodeNode(EncodePattern, destructuring.Pattern),
-                        EncodeNode(EncodeExpression, destructuring.Expression),
-                    ]),
+            ElmValue.TagInstance(
+                "LetDestructuring",
+                [
+                EncodeNode(EncodePattern, destructuring.Pattern),
+                EncodeNode(EncodeExpression, destructuring.Expression),
+                ]),
+
             _ =>
             throw new NotImplementedException(
                 "Unexpected let declaration type: " + declaration.GetType().Name),
@@ -841,7 +874,7 @@ public class EncodeAsElmValue
                 [
                 ("column", ElmValue.Integer(location.Column)),
                 ("row", ElmValue.Integer(location.Row)),
-            ]);
+                ]);
     }
 
     private static ElmValue EncodeMaybe<JustT>(

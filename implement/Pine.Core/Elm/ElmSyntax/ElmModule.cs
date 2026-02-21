@@ -21,13 +21,13 @@ public static partial class ElmModule
 {
     static readonly IReadOnlyList<IReadOnlyList<string>> s_elmCoreAutoImportedModulesNames =
         [
-            ["Basics"],
-            ["Tuple"],
-            ["Maybe"],
-            ["List"],
-            ["Char"],
-            ["String"],
-            ["Result"],
+        ["Basics"],
+        ["Tuple"],
+        ["Maybe"],
+        ["List"],
+        ["Char"],
+        ["String"],
+        ["Result"],
         ];
 
     /// <summary>
@@ -146,9 +146,10 @@ public static partial class ElmModule
         var includedModulesNames =
             parsedRootModules
             .OrderByDescending(parsedModule => parsedModule.moduleText.Length)
-            .SelectMany(rootModule =>
-            ListImportsOfModuleTransitive(rootModule.parsedModule.ModuleName)
-            .Prepend(rootModule.parsedModule.ModuleName))
+            .SelectMany(
+                rootModule =>
+                ListImportsOfModuleTransitive(rootModule.parsedModule.ModuleName)
+                .Prepend(rootModule.parsedModule.ModuleName))
             .Concat(s_elmCoreAutoImportedModulesNames)
             .Intersect(
                 parsedModules.Select(pm => pm.parsedModule.ModuleName),
@@ -157,8 +158,8 @@ public static partial class ElmModule
 
         IReadOnlyList<IReadOnlyList<string>> includedModulesNamesWithDeps =
             [
-                .. s_elmCoreAutoImportedModulesNames,
-                .. includedModulesNames
+            .. s_elmCoreAutoImportedModulesNames,
+            .. includedModulesNames
                 .OrderBy(moduleName => string.Join(".", moduleName))
                 .SelectMany(moduleName => ListImportsOfModuleTransitive(moduleName).Prepend(moduleName))
                 .OrderBy(moduleName => ListImportsOfModuleTransitive(moduleName).Count),
@@ -171,9 +172,11 @@ public static partial class ElmModule
             .ToImmutableArray();
 
         return
-            [.. includedModulesNamesOrdered
+            [
+            .. includedModulesNamesOrdered
             .Select(moduleName => parsedModulesByName[moduleName])
-            .Select(parsedModule => parsedModule.moduleText)];
+            .Select(parsedModule => parsedModule.moduleText)
+            ];
     }
 
     /// <summary>
@@ -195,8 +198,9 @@ public static partial class ElmModule
 
             if (match.Success)
             {
-                return Result<string, IReadOnlyList<string>>.ok(
-                    match.Groups[2].Value.Split('.'));
+                return
+                    Result<string, IReadOnlyList<string>>.ok(
+                        match.Groups[2].Value.Split('.'));
             }
         }
 
@@ -209,8 +213,9 @@ public static partial class ElmModule
 
             if (match.Success)
             {
-                return Result<string, IReadOnlyList<string>>.ok(
-                    match.Groups[1].Value.Split('.'));
+                return
+                    Result<string, IReadOnlyList<string>>.ok(
+                        match.Groups[1].Value.Split('.'));
             }
         }
 
@@ -381,7 +386,8 @@ public static partial class ElmModule
                 {
                     try
                     {
-                        var blobContentAsString = System.Text.Encoding.UTF8.GetString(blobPathAndContent.fileContent.Span);
+                        var blobContentAsString =
+                            System.Text.Encoding.UTF8.GetString(blobPathAndContent.fileContent.Span);
 
                         return
                             ParseModuleName(blobContentAsString)
@@ -423,10 +429,13 @@ public static partial class ElmModule
 
         return
             FileTree.FromSetOfFiles(
-                [.. originalBlobs
-                .Where(pathAndContent =>
-                filteredModulesPaths.Contains(pathAndContent.path) ||
-                pathAndContent.path.LastOrDefault() is "elm.json")]);
+                [
+                .. originalBlobs
+                .Where(
+                    pathAndContent =>
+                    filteredModulesPaths.Contains(pathAndContent.path) ||
+                    pathAndContent.path.LastOrDefault() is "elm.json")
+                ]);
     }
 
     [GeneratedRegex(@"^import\s+([\w.]+)(\s|$)")]

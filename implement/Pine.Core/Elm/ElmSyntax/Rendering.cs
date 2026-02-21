@@ -43,6 +43,7 @@ public class Rendering
 
         return LinebreakStyle.LF;
     }
+
     /// <summary>
     /// Represents an item that can be inserted during rendering (comment or incomplete declaration).
     /// </summary>
@@ -143,6 +144,7 @@ public class Rendering
             if (CurrentRow == targetLocation.Row)
             {
                 var spacesToAdd = targetLocation.Column - CurrentColumn;
+
                 if (spacesToAdd > 0)
                 {
                     Output.Append(' ', spacesToAdd);
@@ -162,11 +164,14 @@ public class Rendering
             {
                 var item = Insertables[_nextInsertableIndex];
 
-                var itemIsAfterCurrent = item.StartLocation.Row > CurrentRow ||
+                var itemIsAfterCurrent =
+                    item.StartLocation.Row > CurrentRow ||
                     (item.StartLocation.Row == CurrentRow && item.StartLocation.Column >= CurrentColumn);
 
-                var itemIsBeforeTarget = item.StartLocation.Row < targetLocation.Row ||
-                    (item.StartLocation.Row == targetLocation.Row && item.StartLocation.Column < targetLocation.Column);
+                var itemIsBeforeTarget =
+                    item.StartLocation.Row < targetLocation.Row ||
+                    (item.StartLocation.Row == targetLocation.Row &&
+                    item.StartLocation.Column < targetLocation.Column);
 
                 if (itemIsAfterCurrent && itemIsBeforeTarget)
                 {
@@ -216,7 +221,7 @@ public class Rendering
                     CurrentRow++;
                     CurrentColumn = 1;
                 }
-                else if (ch is not '\r')  // Skip CR when counting position
+                else if (ch is not '\r') // Skip CR when counting position
                 {
                     CurrentColumn++;
                 }
@@ -235,6 +240,7 @@ public class Rendering
             if (CurrentRow == targetLocation.Row)
             {
                 var spacesToAdd = targetLocation.Column - CurrentColumn;
+
                 if (spacesToAdd > 0)
                 {
                     Output.Append(' ', spacesToAdd);
@@ -253,7 +259,8 @@ public class Rendering
             {
                 var item = Insertables[_nextInsertableIndex];
 
-                var itemIsAfterCurrent = item.StartLocation.Row > CurrentRow ||
+                var itemIsAfterCurrent =
+                    item.StartLocation.Row > CurrentRow ||
                     (item.StartLocation.Row == CurrentRow && item.StartLocation.Column >= CurrentColumn);
 
                 if (itemIsAfterCurrent)
@@ -349,6 +356,7 @@ public class Rendering
     {
         // Find the start of this quote sequence
         var sequenceStart = index;
+
         while (sequenceStart > 0 && value[sequenceStart - 1] is '"')
         {
             sequenceStart--;
@@ -356,6 +364,7 @@ public class Rendering
 
         // Count total consecutive quotes in this sequence
         var consecutiveQuotes = 0;
+
         for (var j = sequenceStart; j < value.Length && value[j] is '"'; j++)
         {
             consecutiveQuotes++;
@@ -498,10 +507,11 @@ public class Rendering
         // Sort by position (row, then column)
         insertables.Sort();
 
-        var context = new RenderContext(linebreakStyle)
-        {
-            Insertables = insertables
-        };
+        var context =
+            new RenderContext(linebreakStyle)
+            {
+                Insertables = insertables
+            };
 
         // Render module definition
         RenderModule(file.ModuleDefinition, context);
@@ -607,6 +617,7 @@ public class Rendering
                 break;
 
             case Exposing.Explicit explicitExposing:
+
                 // Render using stored locations for precise whitespace preservation
                 context.AdvanceToLocation(explicitExposing.OpenParenLocation);
                 context.Append("(");
@@ -642,10 +653,12 @@ public class Rendering
 
             case TopLevelExpose.TypeExpose typeExpose:
                 context.Append(typeExpose.ExposedType.Name);
+
                 if (typeExpose.ExposedType.Open is not null)
                 {
                     context.Append("(..)");
                 }
+
                 break;
 
             default:
@@ -785,6 +798,7 @@ public class Rendering
         for (var i = 0; i < customTypeDecl.TypeDeclaration.Constructors.Count; i++)
         {
             var (pipeLocation, constructor) = customTypeDecl.TypeDeclaration.Constructors[i];
+
             if (pipeLocation is { } pipe)
             {
                 context.AdvanceToLocation(pipe);
@@ -817,16 +831,17 @@ public class Rendering
         context.Append("infix");
         context.AdvanceToLocation(infixDecl.Infix.Direction.Range.Start);
 
-        context.Append(infixDecl.Infix.Direction.Value switch
-        {
-            InfixDirection.Left => "left",
-            InfixDirection.Right => "right",
-            InfixDirection.Non => "non",
+        context.Append(
+            infixDecl.Infix.Direction.Value switch
+            {
+                InfixDirection.Left => "left",
+                InfixDirection.Right => "right",
+                InfixDirection.Non => "non",
 
-            _ =>
-            throw new NotImplementedException(
-                $"InfixDirection '{infixDecl.Infix.Direction.Value}' not supported")
-        });
+                _ =>
+                throw new NotImplementedException(
+                    $"InfixDirection '{infixDecl.Infix.Direction.Value}' not supported")
+            });
 
         context.AdvanceToLocation(infixDecl.Infix.Precedence.Range.Start);
         context.Append(infixDecl.Infix.Precedence.Value.ToString());
@@ -880,6 +895,7 @@ public class Rendering
                     context.AdvanceToLocation(arg.Range.Start);
                     RenderTypeAnnotation(arg, context);
                 }
+
                 break;
 
             case TypeAnnotation.Unit:
@@ -887,6 +903,7 @@ public class Rendering
                 break;
 
             case TypeAnnotation.Tupled tupled:
+
                 // Open paren location is at the node's range start
                 context.Append("(");
                 RenderSeparatedList(tupled.TypeAnnotations, RenderTypeAnnotation, context);
@@ -896,6 +913,7 @@ public class Rendering
                 break;
 
             case TypeAnnotation.Record record:
+
                 // Open brace location is at the node's range start
                 context.Append("{");
                 RenderRecordDefinition(record.RecordDefinition, context);
@@ -905,6 +923,7 @@ public class Rendering
                 break;
 
             case TypeAnnotation.GenericRecord genericRecord:
+
                 // Open brace location is at the node's range start
                 context.Append("{");
                 context.AdvanceToLocation(genericRecord.GenericName.Range.Start);
@@ -951,12 +970,14 @@ public class Rendering
 
             case SeparatedSyntaxList<TNode>.NonEmpty nonEmpty:
                 renderItem(nonEmpty.First, context);
+
                 foreach (var (separatorLocation, node) in nonEmpty.Rest)
                 {
                     context.AdvanceToLocation(separatorLocation);
                     context.Append(",");
                     renderItem(node, context);
                 }
+
                 break;
         }
     }
@@ -981,6 +1002,7 @@ public class Rendering
 
         // Check if value is on a different row - if so, don't add trailing space after =
         var valueOnDifferentRow = field.ValueExpr.Range.Start.Row > field.FieldName.Range.Start.Row;
+
         if (valueOnDifferentRow)
         {
             context.Append(" =");
@@ -991,6 +1013,7 @@ public class Rendering
             context.AdvanceToLocation(field.EqualsLocation, minSpaces: 1);
             context.Append("=");
         }
+
         RenderExpression(field.ValueExpr, context);
     }
 
@@ -1056,6 +1079,7 @@ public class Rendering
                 break;
 
             case ExpressionSyntax.ListExpr listExpr:
+
                 // The opening bracket is at the expression's start location (already advanced to)
                 context.Append("[");
                 RenderSeparatedList(listExpr.Elements, RenderExpression, context);
@@ -1073,6 +1097,7 @@ public class Rendering
                 {
                     context.Append(funcOrValue.Name);
                 }
+
                 break;
 
             case ExpressionSyntax.IfBlock ifBlock:
@@ -1092,6 +1117,7 @@ public class Rendering
                 break;
 
             case ExpressionSyntax.ParenthesizedExpression parenExpr:
+
                 // expressionNode.Range.Start is the open paren location (already advanced to)
                 context.Append("(");
                 RenderExpression(parenExpr.Expression, context);
@@ -1106,6 +1132,7 @@ public class Rendering
                 {
                     RenderExpression(application.Arguments[i], context);
                 }
+
                 break;
 
             case ExpressionSyntax.OperatorApplication opApp:
@@ -1116,11 +1143,14 @@ public class Rendering
                 break;
 
             case ExpressionSyntax.TupledExpression tupledExpr:
+
                 // Open paren location is derived from containing node's range start (already positioned by RenderExpression)
                 context.Append("(");
                 RenderSeparatedList(tupledExpr.Elements, RenderExpression, context);
                 // Close paren location is derived from containing node's range end - 1
-                var closeParenLocation = new Location(expressionNode.Range.End.Row, expressionNode.Range.End.Column - 1);
+                var closeParenLocation =
+                    new Location(expressionNode.Range.End.Row, expressionNode.Range.End.Column - 1);
+
                 context.AdvanceToLocation(closeParenLocation);
                 context.Append(")");
                 break;
@@ -1128,10 +1158,12 @@ public class Rendering
             case ExpressionSyntax.LambdaExpression lambdaExpr:
                 context.AdvanceToLocation(lambdaExpr.Lambda.BackslashLocation);
                 context.Append("\\");
+
                 foreach (var arg in lambdaExpr.Lambda.Arguments)
                 {
                     RenderPattern(arg, context);
                 }
+
                 context.AdvanceToLocation(lambdaExpr.Lambda.ArrowLocation);
                 context.Append("->");
                 RenderExpression(lambdaExpr.Lambda.Expression, context);
@@ -1151,6 +1183,7 @@ public class Rendering
                     context.Append("->");
                     RenderExpression(caseItem.Expression, context);
                 }
+
                 break;
 
             case ExpressionSyntax.LetExpression letExpr:
@@ -1168,6 +1201,7 @@ public class Rendering
                 break;
 
             case ExpressionSyntax.RecordExpr recordExpr:
+
                 // The opening brace is at the expression's start location (already advanced to)
                 context.Append("{");
                 RenderSeparatedList(recordExpr.Fields, RenderRecordExprField, context);
@@ -1187,6 +1221,7 @@ public class Rendering
                 break;
 
             case ExpressionSyntax.RecordUpdateExpression recordUpdate:
+
                 // The opening brace is at the expression's start location (already advanced to)
                 context.Append("{");
                 context.AdvanceToLocation(recordUpdate.RecordName.Range.Start);
@@ -1295,6 +1330,7 @@ public class Rendering
                 break;
 
             case Pattern.TuplePattern tuplePattern:
+
                 // patternNode.Range.Start is the open paren location (already advanced to)
                 context.Append("(");
                 RenderSeparatedList(tuplePattern.Elements, RenderPatternNode, context);
@@ -1305,6 +1341,7 @@ public class Rendering
                 break;
 
             case Pattern.RecordPattern recordPattern:
+
                 // patternNode.Range.Start is the open brace location (already advanced to)
                 context.Append("{");
                 RenderSeparatedList(recordPattern.Fields, RenderRecordPatternField, context);
@@ -1322,6 +1359,7 @@ public class Rendering
                 break;
 
             case Pattern.ListPattern listPattern:
+
                 // patternNode.Range.Start is the open bracket location (already advanced to)
                 context.Append("[");
                 RenderSeparatedList(listPattern.Elements, RenderPatternNode, context);
@@ -1346,6 +1384,7 @@ public class Rendering
                     context.AdvanceByMinimum(1); // space before each argument
                     RenderPattern(arg, context);
                 }
+
                 break;
 
             case Pattern.AsPattern asPattern:
@@ -1357,6 +1396,7 @@ public class Rendering
                 break;
 
             case Pattern.ParenthesizedPattern parenPattern:
+
                 // patternNode.Range.Start is the open paren location (already advanced to)
                 context.Append("(");
                 RenderPattern(parenPattern.Pattern, context);
@@ -1409,6 +1449,7 @@ public class Rendering
                     break;
 
                 case '\r':
+
                     // avh4/elm-format uses Unicode escape for carriage return
                     sb.Append("\\u{000D}");
                     break;
@@ -1418,6 +1459,7 @@ public class Rendering
                     break;
 
                 default:
+
                     // Check for surrogate pairs (emoji and other characters above U+FFFF)
                     if (char.IsHighSurrogate(ch) && i + 1 < value.Length && char.IsLowSurrogate(value[i + 1]))
                     {
@@ -1438,6 +1480,7 @@ public class Rendering
                     {
                         sb.Append(ch);
                     }
+
                     break;
             }
         }
@@ -1470,7 +1513,7 @@ public class Rendering
         ch switch
         {
             '\n' =>
-            null,  // Literal newlines are preserved in triple-quoted strings
+            null, // Literal newlines are preserved in triple-quoted strings
 
             '\t' =>
             "\\t", // Tabs are escaped
@@ -1510,7 +1553,7 @@ public class Rendering
             return "'\\n'";
 
         if (c is "\r")
-            return "'\\u{000D}'";  // avh4/elm-format uses Unicode escape for carriage return
+            return "'\\u{000D}'"; // avh4/elm-format uses Unicode escape for carriage return
 
         if (c is "\t")
             return "'\\t'";
@@ -1547,10 +1590,13 @@ public class Rendering
 
         if (hex.Length <= 2)
             targetLength = 2;
+
         else if (hex.Length <= 4)
             targetLength = 4;
+
         else if (hex.Length <= 8)
             targetLength = 8;
+
         else
             // Round up to next multiple of 8
             targetLength = (hex.Length + 7) / 8 * 8;

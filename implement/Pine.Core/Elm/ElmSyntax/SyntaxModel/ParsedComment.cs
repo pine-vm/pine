@@ -27,8 +27,11 @@ public record ParsedComment(string Text, CommentCategory Category)
         if (trimmed.StartsWith("{-"))
         {
             var isMultiLine = commentText.Contains('\n');
-            return new ParsedComment(commentText,
-                isMultiLine ? CommentCategory.BlockComment_MultiLine : CommentCategory.BlockComment_SingleLine);
+
+            return
+                new ParsedComment(
+                    commentText,
+                    isMultiLine ? CommentCategory.BlockComment_MultiLine : CommentCategory.BlockComment_SingleLine);
         }
 
         if (trimmed.StartsWith("--"))

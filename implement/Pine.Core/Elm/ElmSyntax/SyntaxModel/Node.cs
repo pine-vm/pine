@@ -26,8 +26,7 @@ public record Node<T>(
     public Node<T> WithRange(
         Location newStart,
         Location newEnd) =>
-        this
-        with
+        this with
         {
             Range = new Range(newStart, newEnd)
         };
@@ -53,8 +52,9 @@ public record Node<T>(
         if (Value is System.ValueTuple<ModuleName, string> tuple &&
             other.Value is System.ValueTuple<ModuleName, string> otherTuple)
         {
-            return System.Linq.Enumerable.SequenceEqual(tuple.Item1, otherTuple.Item1) &&
-                   tuple.Item2 == otherTuple.Item2;
+            return
+                System.Linq.Enumerable.SequenceEqual(tuple.Item1, otherTuple.Item1) &&
+                tuple.Item2 == otherTuple.Item2;
         }
 
         return EqualityComparer<T>.Default.Equals(Value, other.Value);
@@ -80,6 +80,7 @@ public record Node<T>(
             {
                 hashCode.Add(item);
             }
+
             hashCode.Add(tuple.Item2);
         }
         else

@@ -97,16 +97,16 @@ public class SetTypeAnnotation
     {
         var updatedDeclarations =
             fileBefore.Declarations
-            .Select(declaration =>
-            UpdateDeclarationTypeAnnotations(
-                declaration,
-                declarationPath: [],
-                declarationsTypeAnnotations))
+            .Select(
+                declaration =>
+                UpdateDeclarationTypeAnnotations(
+                    declaration,
+                    declarationPath: [],
+                    declarationsTypeAnnotations))
             .ToArray();
 
         return
-            fileBefore
-            with
+            fileBefore with
             {
                 Declarations = updatedDeclarations
             };
@@ -126,15 +126,17 @@ public class SetTypeAnnotation
         var newTypeAnnotation = declarationsTypeAnnotations(fullPath, existingTypeAnnotation);
 
         // Update the expression for nested let-blocks
-        var updatedExpression = UpdateExpressionTypeAnnotations(
-            functionStruct.Declaration.Value.Expression,
-            fullPath,
-            declarationsTypeAnnotations);
+        var updatedExpression =
+            UpdateExpressionTypeAnnotations(
+                functionStruct.Declaration.Value.Expression,
+                fullPath,
+                declarationsTypeAnnotations);
 
-        var updatedImpl = functionStruct.Declaration.Value with
-        {
-            Expression = updatedExpression
-        };
+        var updatedImpl =
+            functionStruct.Declaration.Value with
+            {
+                Expression = updatedExpression
+            };
 
         var updatedDeclNode = functionStruct.Declaration with { Value = updatedImpl };
 
@@ -144,10 +146,11 @@ public class SetTypeAnnotation
         {
             var newTypeAnnotationNode = MakeNode(newTypeAnnotation);
 
-            var newSignature = new Signature(
-                Name: MakeNode(funcName),
-                ColonLocation: s_locationZero,
-                TypeAnnotation: newTypeAnnotationNode);
+            var newSignature =
+                new Signature(
+                    Name: MakeNode(funcName),
+                    ColonLocation: s_locationZero,
+                    TypeAnnotation: newTypeAnnotationNode);
 
             updatedSignature = MakeNode(newSignature);
         }
@@ -156,11 +159,12 @@ public class SetTypeAnnotation
             updatedSignature = functionStruct.Signature;
         }
 
-        return functionStruct with
-        {
-            Signature = updatedSignature,
-            Declaration = updatedDeclNode
-        };
+        return
+            functionStruct with
+            {
+                Signature = updatedSignature,
+                Declaration = updatedDeclNode
+            };
     }
 
     /// <summary>
@@ -180,10 +184,11 @@ public class SetTypeAnnotation
             var funcName = funcDecl.Function.Declaration.Value.Name.Value;
             var fullPath = declarationPath.Concat([funcName]).ToList();
 
-            var updatedFunc = UpdateFunctionStructTypeAnnotation(
-                funcDecl.Function,
-                fullPath,
-                declarationsTypeAnnotations);
+            var updatedFunc =
+                UpdateFunctionStructTypeAnnotation(
+                    funcDecl.Function,
+                    fullPath,
+                    declarationsTypeAnnotations);
 
             var updatedFuncDecl = new Declaration.FunctionDeclaration(updatedFunc);
             return declaration with { Value = updatedFuncDecl };
@@ -213,78 +218,96 @@ public class SetTypeAnnotation
 
                 foreach (var letDecl in letExpr.Value.Declarations)
                 {
-                    var updatedLetDecl = UpdateLetDeclarationTypeAnnotations(
-                        letDecl,
-                        parentPath,
-                        declarationsTypeAnnotations);
+                    var updatedLetDecl =
+                        UpdateLetDeclarationTypeAnnotations(
+                            letDecl,
+                            parentPath,
+                            declarationsTypeAnnotations);
+
                     updatedDeclarations.Add(updatedLetDecl);
                 }
 
-                var updatedInExpr = UpdateExpressionTypeAnnotations(
-                    letExpr.Value.Expression,
-                    parentPath,
-                    declarationsTypeAnnotations);
+                var updatedInExpr =
+                    UpdateExpressionTypeAnnotations(
+                        letExpr.Value.Expression,
+                        parentPath,
+                        declarationsTypeAnnotations);
 
-                var updatedLetBlock = letExpr.Value with
-                {
-                    Declarations = updatedDeclarations,
-                    Expression = updatedInExpr
-                };
+                var updatedLetBlock =
+                    letExpr.Value with
+                    {
+                        Declarations = updatedDeclarations,
+                        Expression = updatedInExpr
+                    };
 
                 var updatedLetExpression = new ExpressionSyntax.LetExpression(updatedLetBlock);
                 return expression with { Value = updatedLetExpression };
 
             case ExpressionSyntax.IfBlock ifBlock:
-                var updatedCondition = UpdateExpressionTypeAnnotations(
-                    ifBlock.Condition,
-                    parentPath,
-                    declarationsTypeAnnotations);
-                var updatedThenBlock = UpdateExpressionTypeAnnotations(
-                    ifBlock.ThenBlock,
-                    parentPath,
-                    declarationsTypeAnnotations);
-                var updatedElseBlock = UpdateExpressionTypeAnnotations(
-                    ifBlock.ElseBlock,
-                    parentPath,
-                    declarationsTypeAnnotations);
+                var updatedCondition =
+                    UpdateExpressionTypeAnnotations(
+                        ifBlock.Condition,
+                        parentPath,
+                        declarationsTypeAnnotations);
 
-                var updatedIfBlock = new ExpressionSyntax.IfBlock(
-                    ifBlock.IfTokenLocation,
-                    updatedCondition,
-                    ifBlock.ThenTokenLocation,
-                    updatedThenBlock,
-                    ifBlock.ElseTokenLocation,
-                    updatedElseBlock);
+                var updatedThenBlock =
+                    UpdateExpressionTypeAnnotations(
+                        ifBlock.ThenBlock,
+                        parentPath,
+                        declarationsTypeAnnotations);
+
+                var updatedElseBlock =
+                    UpdateExpressionTypeAnnotations(
+                        ifBlock.ElseBlock,
+                        parentPath,
+                        declarationsTypeAnnotations);
+
+                var updatedIfBlock =
+                    new ExpressionSyntax.IfBlock(
+                        ifBlock.IfTokenLocation,
+                        updatedCondition,
+                        ifBlock.ThenTokenLocation,
+                        updatedThenBlock,
+                        ifBlock.ElseTokenLocation,
+                        updatedElseBlock);
+
                 return expression with { Value = updatedIfBlock };
 
             case ExpressionSyntax.CaseExpression caseExpr:
-                var updatedScrutinee = UpdateExpressionTypeAnnotations(
-                    caseExpr.CaseBlock.Expression,
-                    parentPath,
-                    declarationsTypeAnnotations);
-
-                var updatedCases = new List<Case>();
-                foreach (var caseItem in caseExpr.CaseBlock.Cases)
-                {
-                    var updatedCaseExpr = UpdateExpressionTypeAnnotations(
-                        caseItem.Expression,
+                var updatedScrutinee =
+                    UpdateExpressionTypeAnnotations(
+                        caseExpr.CaseBlock.Expression,
                         parentPath,
                         declarationsTypeAnnotations);
+
+                var updatedCases = new List<Case>();
+
+                foreach (var caseItem in caseExpr.CaseBlock.Cases)
+                {
+                    var updatedCaseExpr =
+                        UpdateExpressionTypeAnnotations(
+                            caseItem.Expression,
+                            parentPath,
+                            declarationsTypeAnnotations);
+
                     updatedCases.Add(caseItem with { Expression = updatedCaseExpr });
                 }
 
-                var updatedCaseBlock = caseExpr.CaseBlock with
-                {
-                    Expression = updatedScrutinee,
-                    Cases = updatedCases
-                };
+                var updatedCaseBlock =
+                    caseExpr.CaseBlock with
+                    {
+                        Expression = updatedScrutinee,
+                        Cases = updatedCases
+                    };
+
                 return expression with { Value = new ExpressionSyntax.CaseExpression(updatedCaseBlock) };
 
             case ExpressionSyntax.LambdaExpression lambdaExpr:
-                var updatedLambdaBody = UpdateExpressionTypeAnnotations(
-                    lambdaExpr.Lambda.Expression,
-                    parentPath,
-                    declarationsTypeAnnotations);
+                var updatedLambdaBody =
+                    UpdateExpressionTypeAnnotations(
+                        lambdaExpr.Lambda.Expression,
+                        parentPath,
+                        declarationsTypeAnnotations);
 
                 var updatedLambda =
                     lambdaExpr.Lambda with { Expression = updatedLambdaBody };
@@ -292,72 +315,94 @@ public class SetTypeAnnotation
                 return expression with { Value = new ExpressionSyntax.LambdaExpression(updatedLambda) };
 
             case ExpressionSyntax.Application appExpr:
-                var updatedArgs = appExpr.Arguments
+                var updatedArgs =
+                    appExpr.Arguments
                     .Select(arg => UpdateExpressionTypeAnnotations(arg, parentPath, declarationsTypeAnnotations))
                     .ToList();
+
                 return expression with { Value = new ExpressionSyntax.Application(updatedArgs) };
 
             case ExpressionSyntax.OperatorApplication opApp:
-                var updatedLeft = UpdateExpressionTypeAnnotations(
-                    opApp.Left,
-                    parentPath,
-                    declarationsTypeAnnotations);
-                var updatedRight = UpdateExpressionTypeAnnotations(
-                    opApp.Right,
-                    parentPath,
-                    declarationsTypeAnnotations);
+                var updatedLeft =
+                    UpdateExpressionTypeAnnotations(
+                        opApp.Left,
+                        parentPath,
+                        declarationsTypeAnnotations);
+
+                var updatedRight =
+                    UpdateExpressionTypeAnnotations(
+                        opApp.Right,
+                        parentPath,
+                        declarationsTypeAnnotations);
+
                 var updatedOpApp = opApp with { Left = updatedLeft, Right = updatedRight };
                 return expression with { Value = updatedOpApp };
 
             case ExpressionSyntax.ParenthesizedExpression parenExpr:
-                var updatedInner = UpdateExpressionTypeAnnotations(
-                    parenExpr.Expression,
-                    parentPath,
-                    declarationsTypeAnnotations);
+                var updatedInner =
+                    UpdateExpressionTypeAnnotations(
+                        parenExpr.Expression,
+                        parentPath,
+                        declarationsTypeAnnotations);
+
                 return expression with { Value = new ExpressionSyntax.ParenthesizedExpression(updatedInner) };
 
             case ExpressionSyntax.TupledExpression tupledExpr:
-                var updatedElements = UpdateSeparatedSyntaxList(
-                    tupledExpr.Elements,
-                    elem => UpdateExpressionTypeAnnotations(elem, parentPath, declarationsTypeAnnotations));
+                var updatedElements =
+                    UpdateSeparatedSyntaxList(
+                        tupledExpr.Elements,
+                        elem => UpdateExpressionTypeAnnotations(elem, parentPath, declarationsTypeAnnotations));
+
                 return expression with { Value = new ExpressionSyntax.TupledExpression(updatedElements) };
 
             case ExpressionSyntax.ListExpr listExpr:
-                var updatedListElements = UpdateSeparatedSyntaxList(
-                    listExpr.Elements,
-                    elem => UpdateExpressionTypeAnnotations(elem, parentPath, declarationsTypeAnnotations));
+                var updatedListElements =
+                    UpdateSeparatedSyntaxList(
+                        listExpr.Elements,
+                        elem => UpdateExpressionTypeAnnotations(elem, parentPath, declarationsTypeAnnotations));
+
                 return expression with { Value = new ExpressionSyntax.ListExpr(updatedListElements) };
 
             case ExpressionSyntax.RecordExpr recordExpr:
-                var updatedRecordFields = UpdateSeparatedSyntaxList(
-                    recordExpr.Fields,
-                    field => field with
-                    {
-                        ValueExpr = UpdateExpressionTypeAnnotations(field.ValueExpr, parentPath, declarationsTypeAnnotations)
-                    });
+                var updatedRecordFields =
+                    UpdateSeparatedSyntaxList(
+                        recordExpr.Fields,
+                        field => field with
+                        {
+                            ValueExpr =
+                            UpdateExpressionTypeAnnotations(field.ValueExpr, parentPath, declarationsTypeAnnotations)
+                        });
+
                 return expression with { Value = new ExpressionSyntax.RecordExpr(updatedRecordFields) };
 
             case ExpressionSyntax.RecordUpdateExpression recordUpdate:
-                var updatedUpdateFields = UpdateSeparatedSyntaxList(
-                    recordUpdate.Fields,
-                    field => field with
-                    {
-                        ValueExpr = UpdateExpressionTypeAnnotations(field.ValueExpr, parentPath, declarationsTypeAnnotations)
-                    });
+                var updatedUpdateFields =
+                    UpdateSeparatedSyntaxList(
+                        recordUpdate.Fields,
+                        field => field with
+                        {
+                            ValueExpr =
+                            UpdateExpressionTypeAnnotations(field.ValueExpr, parentPath, declarationsTypeAnnotations)
+                        });
+
                 return expression with { Value = recordUpdate with { Fields = updatedUpdateFields } };
 
             case ExpressionSyntax.RecordAccess recordAccess:
-                var updatedRecord = UpdateExpressionTypeAnnotations(
-                    recordAccess.Record,
-                    parentPath,
-                    declarationsTypeAnnotations);
+                var updatedRecord =
+                    UpdateExpressionTypeAnnotations(
+                        recordAccess.Record,
+                        parentPath,
+                        declarationsTypeAnnotations);
+
                 return expression with { Value = recordAccess with { Record = updatedRecord } };
 
             case ExpressionSyntax.Negation negation:
-                var updatedNegationExpr = UpdateExpressionTypeAnnotations(
-                    negation.Expression,
-                    parentPath,
-                    declarationsTypeAnnotations);
+                var updatedNegationExpr =
+                    UpdateExpressionTypeAnnotations(
+                        negation.Expression,
+                        parentPath,
+                        declarationsTypeAnnotations);
+
                 return expression with { Value = new ExpressionSyntax.Negation(updatedNegationExpr) };
 
             // Leaf expressions that don't contain nested expressions
@@ -397,27 +442,31 @@ public class SetTypeAnnotation
                 var funcName = letFunc.Function.Declaration.Value.Name.Value;
                 var fullPath = parentPath.Concat([funcName]).ToList();
 
-                var updatedFunc = UpdateFunctionStructTypeAnnotation(
-                    letFunc.Function,
-                    fullPath,
-                    declarationsTypeAnnotations);
+                var updatedFunc =
+                    UpdateFunctionStructTypeAnnotation(
+                        letFunc.Function,
+                        fullPath,
+                        declarationsTypeAnnotations);
 
-                return letDecl with
-                {
-                    Value = new ExpressionSyntax.LetDeclaration.LetFunction(updatedFunc)
-                };
+                return
+                    letDecl with
+                    {
+                        Value = new ExpressionSyntax.LetDeclaration.LetFunction(updatedFunc)
+                    };
 
             case ExpressionSyntax.LetDeclaration.LetDestructuring letDestructuring:
 
-                var updatedDestrExpr = UpdateExpressionTypeAnnotations(
-                    letDestructuring.Expression,
-                    parentPath,
-                    declarationsTypeAnnotations);
+                var updatedDestrExpr =
+                    UpdateExpressionTypeAnnotations(
+                        letDestructuring.Expression,
+                        parentPath,
+                        declarationsTypeAnnotations);
 
-                return letDecl with
-                {
-                    Value = letDestructuring with { Expression = updatedDestrExpr }
-                };
+                return
+                    letDecl with
+                    {
+                        Value = letDestructuring with { Expression = updatedDestrExpr }
+                    };
 
             default:
                 return letDecl;
@@ -442,9 +491,12 @@ public class SetTypeAnnotation
 
             case SeparatedSyntaxList<T>.NonEmpty nonEmpty:
                 var updatedFirst = updateFunc(nonEmpty.First);
-                var updatedRest = nonEmpty.Rest
+
+                var updatedRest =
+                    nonEmpty.Rest
                     .Select(item => (item.SeparatorLocation, Node: updateFunc(item.Node)))
                     .ToList();
+
                 return new SeparatedSyntaxList<T>.NonEmpty(updatedFirst, updatedRest);
 
             default:

@@ -33,6 +33,7 @@ public static class CommentNodeExtensions
 public class CommentQueryHelper
 {
     private readonly IReadOnlyList<Node<ParsedComment>> _allComments;
+
     private readonly ImmutableDictionary<int, ImmutableList<Node<ParsedComment>>> _byStartRow;
 
     /// <summary>
@@ -45,12 +46,15 @@ public class CommentQueryHelper
         // Pre-sort all comments by row then column for consistent ordering
         // and parse them once
         _allComments =
-            [.. comments
+            [
+            .. comments
             .Select(c => c.ToCommentNode())
             .OrderBy(c => c.Range.Start.Row)
-            .ThenBy(c => c.Range.Start.Column)];
+            .ThenBy(c => c.Range.Start.Column)
+            ];
 
-        _byStartRow = _allComments
+        _byStartRow =
+            _allComments
             .GroupBy(c => c.Range.Start.Row)
             .ToImmutableDictionary(g => g.Key, g => g.OrderBy(c => c.Range.Start.Column).ToImmutableList());
     }
@@ -89,8 +93,10 @@ public class CommentQueryHelper
     /// </summary>
     public Node<ParsedComment>? GetTrailing(Range elementRange) =>
         _byStartRow.TryGetValue(elementRange.End.Row, out var rowComments)
-            ? rowComments.FirstOrDefault(c => c.Range.Start.Column > elementRange.End.Column)
-            : null;
+        ?
+        rowComments.FirstOrDefault(c => c.Range.Start.Column > elementRange.End.Column)
+        :
+        null;
 
     /// <summary>
     /// Get comments between two row numbers with inclusive end bound.
@@ -105,10 +111,13 @@ public class CommentQueryHelper
     /// Returns comments ordered by row then column.
     /// </summary>
     public IReadOnlyList<Node<ParsedComment>> GetAfterLocationBeforeRow(Location afterLoc, int beforeRow) =>
-        [.. _allComments.Where(c =>
+        [
+        .. _allComments.Where(
+            c =>
             c.Range.Start.Row >= afterLoc.Row &&
             c.Range.Start.Row < beforeRow &&
-            (c.Range.Start.Row > afterLoc.Row || c.Range.Start.Column > afterLoc.Column))];
+            (c.Range.Start.Row > afterLoc.Row || c.Range.Start.Column > afterLoc.Column))
+        ];
 
     /// <summary>
     /// Get comments between two rows with inclusive end, filtering by column on end row.
@@ -116,10 +125,13 @@ public class CommentQueryHelper
     /// </summary>
     public IReadOnlyList<Node<ParsedComment>> GetBetweenRowsInclusiveEndWithColumnFilter(
         int afterRow, int beforeRowInclusive, int beforeColumn) =>
-        [.. _allComments.Where(c =>
+        [
+        .. _allComments.Where(
+            c =>
             c.Range.Start.Row > afterRow &&
             c.Range.Start.Row <= beforeRowInclusive &&
-            (c.Range.Start.Row < beforeRowInclusive || c.Range.Start.Column < beforeColumn))];
+            (c.Range.Start.Row < beforeRowInclusive || c.Range.Start.Column < beforeColumn))
+        ];
 
     /// <summary>
     /// Get comments on a specific row that are before a specific column, but after another row.
@@ -127,8 +139,10 @@ public class CommentQueryHelper
     /// </summary>
     public IReadOnlyList<Node<ParsedComment>> GetOnRowBeforeColumnAfterRow(int row, int beforeColumn, int afterRow) =>
         _byStartRow.TryGetValue(row, out var rowComments)
-            ? [.. rowComments.Where(c => c.Range.Start.Column < beforeColumn && c.Range.Start.Row > afterRow)]
-            : [];
+        ?
+        [.. rowComments.Where(c => c.Range.Start.Column < beforeColumn && c.Range.Start.Row > afterRow)]
+        :
+        [];
 
     /// <summary>
     /// Get comments after one row/column but before another row, with optional column check.
@@ -136,10 +150,13 @@ public class CommentQueryHelper
     /// </summary>
     public IReadOnlyList<Node<ParsedComment>> GetAfterRowBeforeRowWithColumnCheck(
         int afterRow, int afterColumn, int beforeRow, bool requireAfterColumn = false) =>
-        [.. _allComments.Where(c =>
+        [
+        .. _allComments.Where(
+            c =>
             c.Range.Start.Row >= afterRow &&
             c.Range.Start.Row < beforeRow &&
-            (!requireAfterColumn || c.Range.Start.Row > afterRow || c.Range.Start.Column > afterColumn))];
+            (!requireAfterColumn || c.Range.Start.Row > afterRow || c.Range.Start.Column > afterColumn))
+        ];
 
     /// <summary>
     /// Check if there are any comments between two rows (exclusive bounds).
@@ -153,8 +170,10 @@ public class CommentQueryHelper
     /// </summary>
     public IReadOnlyList<Node<ParsedComment>> GetOnRowAfterColumn(int row, int afterColumn) =>
         _byStartRow.TryGetValue(row, out var rowComments)
-            ? [.. rowComments.Where(c => c.Range.Start.Column > afterColumn)]
-            : [];
+        ?
+        [.. rowComments.Where(c => c.Range.Start.Column > afterColumn)]
+        :
+        [];
 
     /// <summary>
     /// Get comments on a specific row that start after one column and end before another column.
@@ -163,9 +182,14 @@ public class CommentQueryHelper
     /// </summary>
     public IReadOnlyList<Node<ParsedComment>> GetOnRowBetweenColumns(int row, int afterColumn, int beforeColumn) =>
         _byStartRow.TryGetValue(row, out var rowComments)
-            ? [.. rowComments.Where(c => c.Range.Start.Column > afterColumn &&
-                                         c.Range.End.Column <= beforeColumn)]
-            : [];
+        ?
+        [
+        .. rowComments.Where(
+            c => c.Range.Start.Column > afterColumn &&
+                c.Range.End.Column <= beforeColumn)
+        ]
+        :
+        [];
 
     /// <summary>
     /// Get the first doc comment that starts after a given row.

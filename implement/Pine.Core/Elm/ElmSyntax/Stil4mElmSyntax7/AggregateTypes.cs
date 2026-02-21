@@ -1,5 +1,5 @@
-using System.Collections.Generic;
 using Pine.Core.Elm.ElmSyntax.SyntaxModel;
+using System.Collections.Generic;
 
 /*
  * Types for modelling parsed concrete syntax, based on
@@ -90,13 +90,13 @@ public abstract record Module
         module switch
         {
             NormalModule normalModule =>
-                normalModule.ModuleData.ModuleName,
+            normalModule.ModuleData.ModuleName,
 
             PortModule portModule =>
-                portModule.ModuleData.ModuleName,
+            portModule.ModuleData.ModuleName,
 
             EffectModule effectModule =>
-                effectModule.ModuleData.ModuleName,
+            effectModule.ModuleData.ModuleName,
 
             _ =>
             throw new System.NotImplementedException(

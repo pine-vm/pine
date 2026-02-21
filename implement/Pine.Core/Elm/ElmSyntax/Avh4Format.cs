@@ -80,41 +80,77 @@ public class Avh4Format
     private static class Keywords
     {
         public const string Module = "module";
+
         public const string Port = "port";
+
         public const string Effect = "effect";
+
         public const string Infix = "infix";
+
         public const string Alias = "alias";
+
         public const string ExposingAll = "exposing (..)";
+
         public const string Exposing = "exposing";
+
         public const string Import = "import";
+
         public const string As = "as";
+
         public const string Case = "case";
+
         public const string Of = "of";
+
         public const string Let = "let";
+
         public const string In = "in";
+
         public const string If = "if";
+
         public const string Then = "then";
+
         public const string Else = "else";
+
         public const string Type = "type";
+
         public const string Unit = "()";
+
         public const string EmptyList = "[]";
+
         public const string EmptyRecord = "{}";
+
         public const string ListOpen = "[";
+
         public const string ListClose = "]";
+
         public const string RecordOpen = "{";
+
         public const string RecordClose = "}";
+
         public const string TupleOpen = "(";
+
         public const string TupleClose = ")";
+
         public const string OpenParen = "(";
+
         public const string CloseParen = ")";
+
         public const string OpenBrace = "{";
+
         public const string CloseBrace = "}";
+
         public const string Comma = ",";
+
         public const string Colon = ":";
+
         public new const string Equals = "=";
+
         public const string Arrow = "->";
+
         public const string Minus = "-";
+
         public const string Pipe = "|";
+
         public const string TripleQuotes = "\"\"\"";
     }
 
@@ -130,8 +166,11 @@ public class Avh4Format
     private sealed class FormattingContext
     {
         public int CurrentRow { get; }
+
         public int CurrentColumn { get; }
+
         public int IndentSpaces { get; }
+
         public ImmutableList<Node<string>> Comments { get; }
 
         private FormattingContext(
@@ -160,11 +199,12 @@ public class Avh4Format
         /// </summary>
         public FormattingContext NextRowToIndent(int addMoreLineBreaks = 0)
         {
-            return new FormattingContext(
-                currentRow: CurrentRow + 1 + addMoreLineBreaks,
-                currentColumn: 1 + IndentSpaces,
-                indentSpaces: IndentSpaces,
-                comments: Comments);
+            return
+                new FormattingContext(
+                    currentRow: CurrentRow + 1 + addMoreLineBreaks,
+                    currentColumn: 1 + IndentSpaces,
+                    indentSpaces: IndentSpaces,
+                    comments: Comments);
         }
 
         public FormattingContext NextRowToIndentIfCurrentColumnGreaterThanIndent()
@@ -206,11 +246,12 @@ public class Avh4Format
         {
             var nextColumn = GetNextMultipleOfFourColumn();
 
-            return new FormattingContext(
-                currentRow: CurrentRow,
-                currentColumn: nextColumn,
-                indentSpaces: IndentSpaces,
-                comments: Comments);
+            return
+                new FormattingContext(
+                    currentRow: CurrentRow,
+                    currentColumn: nextColumn,
+                    indentSpaces: IndentSpaces,
+                    comments: Comments);
         }
 
         /// <summary>
@@ -218,11 +259,12 @@ public class Avh4Format
         /// </summary>
         public FormattingContext SetIndentToCurrentColumn()
         {
-            return new FormattingContext(
-                CurrentRow,
-                CurrentColumn,
-                indentSpaces: CurrentColumn - 1,
-                comments: Comments);
+            return
+                new FormattingContext(
+                    CurrentRow,
+                    CurrentColumn,
+                    indentSpaces: CurrentColumn - 1,
+                    comments: Comments);
         }
 
         /// <summary>
@@ -270,11 +312,12 @@ public class Avh4Format
             var nextIndentColumn = GetNextMultipleOfFourColumn();
             // IndentSpaces is the number of leading spaces (0-based), while column is 1-based.
             // So for a column N, the corresponding IndentSpaces is N - 1.
-            return new FormattingContext(
-                currentRow: CurrentRow,
-                currentColumn: nextIndentColumn,
-                indentSpaces: nextIndentColumn - 1,
-                comments: Comments);
+            return
+                new FormattingContext(
+                    currentRow: CurrentRow,
+                    currentColumn: nextIndentColumn,
+                    indentSpaces: nextIndentColumn - 1,
+                    comments: Comments);
         }
 
         /// <summary>
@@ -502,14 +545,14 @@ public class Avh4Format
     /// </summary>
     private static (SeparatedSyntaxList<TResult>.NonEmpty FormattedList, FormattingContext FinalContext)
         FormatMultilineSeparatedListGeneral<TItem, TResult>(
-            SeparatedSyntaxList<TItem>.NonEmpty separatedList,
-            System.Func<TItem, FormattingContext, FormattingResult<TResult>> formatItem,
-            System.Func<TItem, Range> getItemRange,
-            CommentQueryHelper commentQueries,
-            SeparatedListConfig config,
-            FormattingContext startContext,
-            Range containerRange,
-            SeparatedListCommentStyle commentStyle)
+        SeparatedSyntaxList<TItem>.NonEmpty separatedList,
+        System.Func<TItem, FormattingContext, FormattingResult<TResult>> formatItem,
+        System.Func<TItem, Range> getItemRange,
+        CommentQueryHelper commentQueries,
+        SeparatedListConfig config,
+        FormattingContext startContext,
+        Range containerRange,
+        SeparatedListCommentStyle commentStyle)
     {
         var firstItem = separatedList.First;
         var restItems = separatedList.Rest;
@@ -525,7 +568,8 @@ public class Avh4Format
         {
             foreach (var comment in commentsBeforeFirst)
             {
-                firstElemCtx = firstElemCtx.ReturnToIndent(config.ContentIndentRef).FormatAndAddCommentAndNextRowToIndent(comment);
+                firstElemCtx =
+                    firstElemCtx.ReturnToIndent(config.ContentIndentRef).FormatAndAddCommentAndNextRowToIndent(comment);
             }
         }
 
@@ -535,12 +579,14 @@ public class Avh4Format
 
         // Check for trailing comment on the same row as the first element
         var firstElemTrailingComment = commentQueries.GetTrailing(firstItemRange);
+
         if (firstElemTrailingComment is not null)
         {
             // Only handle the trailing comment if formatItem didn't already process it.
             // We detect this by checking if we're still on the same row AND before the comment's column.
             // If formatItem handled it, the context would have advanced past the comment.
             var currLoc = elemCtx.CurrentLocation();
+
             if (currLoc.Row == firstItemRange.End.Row && currLoc.Column <= firstElemTrailingComment.Range.Start.Column)
             {
                 elemCtx = elemCtx.Advance(1); // space before comment
@@ -596,16 +642,19 @@ public class Avh4Format
             {
                 var firstRow = firstItemRange.Start.Row;
                 var count = 1; // First item
+
                 foreach (var (_, restNode) in restItems)
                 {
                     if (getItemRange(restNode).Start.Row == firstRow)
                         count++;
                 }
+
                 return count > 1;
             }
 
             // Render comments BEFORE the comma (trailing comments for previous element)
             var handledCommentsBeforeComma = false;
+
             if (commentsBeforeComma.Count > 0)
             {
                 var firstComment = commentsBeforeComma[0];
@@ -628,10 +677,13 @@ public class Avh4Format
                     // blank line, comment(s) at alignment ref, then separator
                     elemCtx = elemCtx.ReturnToIndent(config.AlignmentRef).NextRowToIndent();
                     elemCtx = elemCtx.ReturnToIndent(config.AlignmentRef).NextRowToIndent();
+
                     foreach (var comment in commentsBeforeComma)
                     {
-                        elemCtx = elemCtx.ReturnToIndent(config.AlignmentRef).FormatAndAddCommentAndNextRowToIndent(comment);
+                        elemCtx =
+                            elemCtx.ReturnToIndent(config.AlignmentRef).FormatAndAddCommentAndNextRowToIndent(comment);
                     }
+
                     handledCommentsBeforeComma = true;
                 }
                 else
@@ -655,6 +707,7 @@ public class Avh4Format
                 // After FormatAndAddComment, we're already at next row, just set indent
                 elemCtx = elemCtx.ReturnToIndent(config.AlignmentRef).SetIndentColumn();
             }
+
             var separatorLoc = elemCtx.CurrentLocation();
 
             if (commentsAfterComma.Count is not 0)
@@ -678,10 +731,14 @@ public class Avh4Format
                     // Comments on same line as separator: ", -- comment\n  element"
                     // For tuple-style, all comments go inline; for list-style, only single comments without blank line
                     elemCtx = elemCtx.Advance(config.Separator.Length);
+
                     foreach (var comment in commentsAfterComma)
                     {
-                        elemCtx = elemCtx.ReturnToIndent(config.ContentIndentRef).FormatAndAddCommentAndNextRowToIndent(comment);
+                        elemCtx =
+                            elemCtx.ReturnToIndent(config.ContentIndentRef)
+                                .FormatAndAddCommentAndNextRowToIndent(comment);
                     }
+
                     var elemResult = formatItem(currItem, elemCtx);
                     formattedRestItems.Add((separatorLoc, elemResult.FormattedNode));
                     elemCtx = elemResult.Context.ReturnToIndent(startContext);
@@ -691,10 +748,13 @@ public class Avh4Format
                     // Comments between elements with blank line: format as
                     // blank line, comment(s) on own lines, ", element"
                     elemCtx = elemCtx.ReturnToIndent(config.AlignmentRef).NextRowToIndent();
+
                     foreach (var comment in commentsAfterComma)
                     {
-                        elemCtx = elemCtx.ReturnToIndent(config.AlignmentRef).FormatAndAddCommentAndNextRowToIndent(comment);
+                        elemCtx =
+                            elemCtx.ReturnToIndent(config.AlignmentRef).FormatAndAddCommentAndNextRowToIndent(comment);
                     }
+
                     separatorLoc = elemCtx.CurrentLocation();
                     elemCtx = elemCtx.Advance(config.Separator.Length);
                     var elemResult = formatItem(currItem, elemCtx);
@@ -711,11 +771,13 @@ public class Avh4Format
 
                 // Check for trailing comment on the same row as the element
                 var trailingComment = commentQueries.GetTrailing(currItemRange);
+
                 if (trailingComment is not null)
                 {
                     // Only handle the trailing comment if formatItem didn't already process it.
                     // We detect this by checking if we're still on the same row AND before the comment's column.
                     var currLoc = elemCtx.CurrentLocation();
+
                     if (currLoc.Row == currItemRange.End.Row && currLoc.Column <= trailingComment.Range.Start.Column)
                     {
                         elemCtx = elemCtx.Advance(1); // space before comment
@@ -765,9 +827,10 @@ public class Avh4Format
         var closeCtx = elemCtx.ReturnToIndent(closeBracketAlignRef).NextRowToIndent();
         var afterClose = closeCtx.Advance(config.CloseBracket.Length);
 
-        var formattedList = new SeparatedSyntaxList<TResult>.NonEmpty(
-            firstElemResult.FormattedNode,
-            formattedRestItems);
+        var formattedList =
+            new SeparatedSyntaxList<TResult>.NonEmpty(
+                firstElemResult.FormattedNode,
+                formattedRestItems);
 
         return (formattedList, afterClose.ReturnToIndent(startContext));
     }
@@ -801,26 +864,27 @@ public class Avh4Format
     /// <returns>A tuple of the formatted separated list and the final context.</returns>
     private static (SeparatedSyntaxList<TResult> FormattedList, FormattingContext FinalContext)
         FormatSeparatedList<TItem, TResult>(
-            SeparatedSyntaxList<Node<TItem>> separatedList,
-            System.Func<Node<TItem>, FormattingContext, FormattingResult<TResult>> formatItem,
-            CommentQueryHelper commentQueries,
-            SingleLineSeparatedListConfig singleLineConfig,
-            SeparatedListConfig multilineConfig,
-            FormattingContext context,
-            Range containerRange,
-            SeparatedListCommentStyle commentStyle)
+        SeparatedSyntaxList<Node<TItem>> separatedList,
+        System.Func<Node<TItem>, FormattingContext, FormattingResult<TResult>> formatItem,
+        CommentQueryHelper commentQueries,
+        SingleLineSeparatedListConfig singleLineConfig,
+        SeparatedListConfig multilineConfig,
+        FormattingContext context,
+        Range containerRange,
+        SeparatedListCommentStyle commentStyle)
     {
         // Delegate to the general version with Range extraction from Node
-        return FormatSeparatedListGeneral(
-            separatedList: separatedList,
-            formatItem: formatItem,
-            getItemRange: item => item.Range,
-            commentQueries: commentQueries,
-            singleLineConfig: singleLineConfig,
-            multilineConfig: multilineConfig,
-            context: context,
-            containerRange: containerRange,
-            commentStyle: commentStyle);
+        return
+            FormatSeparatedListGeneral(
+                separatedList: separatedList,
+                formatItem: formatItem,
+                getItemRange: item => item.Range,
+                commentQueries: commentQueries,
+                singleLineConfig: singleLineConfig,
+                multilineConfig: multilineConfig,
+                context: context,
+                containerRange: containerRange,
+                commentStyle: commentStyle);
     }
 
     /// <summary>
@@ -830,15 +894,15 @@ public class Avh4Format
     /// </summary>
     private static (SeparatedSyntaxList<TResult> FormattedList, FormattingContext FinalContext)
         FormatSeparatedListGeneral<TItem, TResult>(
-            SeparatedSyntaxList<TItem> separatedList,
-            System.Func<TItem, FormattingContext, FormattingResult<TResult>> formatItem,
-            System.Func<TItem, Range> getItemRange,
-            CommentQueryHelper commentQueries,
-            SingleLineSeparatedListConfig singleLineConfig,
-            SeparatedListConfig multilineConfig,
-            FormattingContext context,
-            Range containerRange,
-            SeparatedListCommentStyle commentStyle)
+        SeparatedSyntaxList<TItem> separatedList,
+        System.Func<TItem, FormattingContext, FormattingResult<TResult>> formatItem,
+        System.Func<TItem, Range> getItemRange,
+        CommentQueryHelper commentQueries,
+        SingleLineSeparatedListConfig singleLineConfig,
+        SeparatedListConfig multilineConfig,
+        FormattingContext context,
+        Range containerRange,
+        SeparatedListCommentStyle commentStyle)
     {
         // Handle empty list case
         if (separatedList is SeparatedSyntaxList<TItem>.Empty)
@@ -896,22 +960,23 @@ public class Avh4Format
     /// </summary>
     private static (SeparatedSyntaxList<TResult>.NonEmpty FormattedList, FormattingContext FinalContext)
         FormatSingleLineSeparatedList<TItem, TResult>(
-            SeparatedSyntaxList<Node<TItem>>.NonEmpty separatedList,
-            System.Func<Node<TItem>, FormattingContext, FormattingResult<TResult>> formatItem,
-            CommentQueryHelper commentQueries,
-            SingleLineSeparatedListConfig config,
-            FormattingContext context,
-            Range containerRange)
+        SeparatedSyntaxList<Node<TItem>>.NonEmpty separatedList,
+        System.Func<Node<TItem>, FormattingContext, FormattingResult<TResult>> formatItem,
+        CommentQueryHelper commentQueries,
+        SingleLineSeparatedListConfig config,
+        FormattingContext context,
+        Range containerRange)
     {
         // Delegate to the general version with Range extraction from Node
-        return FormatSingleLineSeparatedListGeneral(
-            separatedList: separatedList,
-            formatItem: formatItem,
-            getItemRange: item => item.Range,
-            commentQueries: commentQueries,
-            config: config,
-            context: context,
-            containerRange: containerRange);
+        return
+            FormatSingleLineSeparatedListGeneral(
+                separatedList: separatedList,
+                formatItem: formatItem,
+                getItemRange: item => item.Range,
+                commentQueries: commentQueries,
+                config: config,
+                context: context,
+                containerRange: containerRange);
     }
 
     /// <summary>
@@ -920,23 +985,25 @@ public class Avh4Format
     /// </summary>
     private static (SeparatedSyntaxList<TResult>.NonEmpty FormattedList, FormattingContext FinalContext)
         FormatSingleLineSeparatedListGeneral<TItem, TResult>(
-            SeparatedSyntaxList<TItem>.NonEmpty separatedList,
-            System.Func<TItem, FormattingContext, FormattingResult<TResult>> formatItem,
-            System.Func<TItem, Range> getItemRange,
-            CommentQueryHelper commentQueries,
-            SingleLineSeparatedListConfig config,
-            FormattingContext context,
-            Range containerRange)
+        SeparatedSyntaxList<TItem>.NonEmpty separatedList,
+        System.Func<TItem, FormattingContext, FormattingResult<TResult>> formatItem,
+        System.Func<TItem, Range> getItemRange,
+        CommentQueryHelper commentQueries,
+        SingleLineSeparatedListConfig config,
+        FormattingContext context,
+        Range containerRange)
     {
         var afterOpenBracket = context.Advance(config.OpenBracket.Length);
         var currentContext = afterOpenBracket;
 
         // Handle comments after opening bracket before first element
         var firstItemRange = getItemRange(separatedList.First);
-        var commentsAfterOpen = commentQueries.GetOnRowBetweenColumns(
-            containerRange.Start.Row,
-            containerRange.Start.Column,
-            firstItemRange.Start.Column);
+
+        var commentsAfterOpen =
+            commentQueries.GetOnRowBetweenColumns(
+                containerRange.Start.Row,
+                containerRange.Start.Column,
+                firstItemRange.Start.Column);
 
         foreach (var comment in commentsAfterOpen)
         {
@@ -957,10 +1024,11 @@ public class Avh4Format
             var itemRange = getItemRange(item);
 
             // Comments before separator (after previous element but before comma)
-            var commentsBeforeSep = commentQueries.GetOnRowBetweenColumns(
-                containerRange.Start.Row,
-                prevItemRange.End.Column,
-                originalSepLoc.Column);
+            var commentsBeforeSep =
+                commentQueries.GetOnRowBetweenColumns(
+                    containerRange.Start.Row,
+                    prevItemRange.End.Column,
+                    originalSepLoc.Column);
 
             foreach (var comment in commentsBeforeSep)
             {
@@ -973,10 +1041,11 @@ public class Avh4Format
             currentContext = currentContext.Advance(1); // comma character
 
             // Comments after separator (after comma but before element)
-            var commentsAfterSep = commentQueries.GetOnRowBetweenColumns(
-                containerRange.Start.Row,
-                originalSepLoc.Column,
-                itemRange.Start.Column);
+            var commentsAfterSep =
+                commentQueries.GetOnRowBetweenColumns(
+                    containerRange.Start.Row,
+                    originalSepLoc.Column,
+                    itemRange.Start.Column);
 
             foreach (var comment in commentsAfterSep)
             {
@@ -995,10 +1064,11 @@ public class Avh4Format
         }
 
         // Handle comments before closing bracket after last element
-        var commentsBeforeClose = commentQueries.GetOnRowBetweenColumns(
-            containerRange.Start.Row,
-            prevItemRange.End.Column,
-            containerRange.End.Column);
+        var commentsBeforeClose =
+            commentQueries.GetOnRowBetweenColumns(
+                containerRange.Start.Row,
+                prevItemRange.End.Column,
+                containerRange.End.Column);
 
         foreach (var comment in commentsBeforeClose)
         {
@@ -1028,22 +1098,23 @@ public class Avh4Format
     /// <returns>A tuple of the formatted separated list and the final context.</returns>
     private static (SeparatedSyntaxList<TResult> FormattedList, FormattingContext FinalContext)
         FormatSingleLineOnlySeparatedList<TItem, TResult>(
-            SeparatedSyntaxList<Node<TItem>> separatedList,
-            System.Func<Node<TItem>, FormattingContext, FormattingResult<TResult>> formatItem,
-            CommentQueryHelper commentQueries,
-            SingleLineSeparatedListConfig config,
-            FormattingContext context,
-            Range containerRange)
+        SeparatedSyntaxList<Node<TItem>> separatedList,
+        System.Func<Node<TItem>, FormattingContext, FormattingResult<TResult>> formatItem,
+        CommentQueryHelper commentQueries,
+        SingleLineSeparatedListConfig config,
+        FormattingContext context,
+        Range containerRange)
     {
         // Delegate to the general version with Range extraction from Node
-        return FormatSingleLineOnlySeparatedListGeneral(
-            separatedList: separatedList,
-            formatItem: formatItem,
-            getItemRange: item => item.Range,
-            commentQueries: commentQueries,
-            config: config,
-            context: context,
-            containerRange: containerRange);
+        return
+            FormatSingleLineOnlySeparatedListGeneral(
+                separatedList: separatedList,
+                formatItem: formatItem,
+                getItemRange: item => item.Range,
+                commentQueries: commentQueries,
+                config: config,
+                context: context,
+                containerRange: containerRange);
     }
 
     /// <summary>
@@ -1052,13 +1123,13 @@ public class Avh4Format
     /// </summary>
     private static (SeparatedSyntaxList<TResult> FormattedList, FormattingContext FinalContext)
         FormatSingleLineOnlySeparatedListGeneral<TItem, TResult>(
-            SeparatedSyntaxList<TItem> separatedList,
-            System.Func<TItem, FormattingContext, FormattingResult<TResult>> formatItem,
-            System.Func<TItem, Range> getItemRange,
-            CommentQueryHelper commentQueries,
-            SingleLineSeparatedListConfig config,
-            FormattingContext context,
-            Range containerRange)
+        SeparatedSyntaxList<TItem> separatedList,
+        System.Func<TItem, FormattingContext, FormattingResult<TResult>> formatItem,
+        System.Func<TItem, Range> getItemRange,
+        CommentQueryHelper commentQueries,
+        SingleLineSeparatedListConfig config,
+        FormattingContext context,
+        Range containerRange)
     {
         // Handle empty list case
         if (separatedList is SeparatedSyntaxList<TItem>.Empty)
@@ -1071,14 +1142,17 @@ public class Avh4Format
 
         // We have a non-empty list - use the general single-line helper with comment handling
         var nonEmptyList = (SeparatedSyntaxList<TItem>.NonEmpty)separatedList;
-        var (formattedList, finalContext) = FormatSingleLineSeparatedListGeneral(
-            separatedList: nonEmptyList,
-            formatItem: formatItem,
-            getItemRange: getItemRange,
-            commentQueries: commentQueries,
-            config: config,
-            context: context,
-            containerRange: containerRange);
+
+        var (formattedList, finalContext) =
+            FormatSingleLineSeparatedListGeneral(
+                separatedList: nonEmptyList,
+                formatItem: formatItem,
+                getItemRange: getItemRange,
+                commentQueries: commentQueries,
+                config: config,
+                context: context,
+                containerRange: containerRange);
+
         return (formattedList, finalContext);
     }
 
@@ -1132,6 +1206,7 @@ public class Avh4Format
             if (index > 0 && !comment.Value.IsDocComment)
             {
                 var prevComment = comments[index - 1];
+
                 if (prevComment.Value.IsDocComment)
                 {
                     // WithBlankLine() does 2 row advances, plus 1 for going to next row = 3 blank lines total
@@ -1181,6 +1256,7 @@ public class Avh4Format
                         var nextComment = comments[i + 1];
                         // Check if there was a gap (blank line) between this comment and next in the original
                         var gapBetweenComments = nextComment.Range.Start.Row > comment.Range.End.Row + 1;
+
                         if (gapBetweenComments)
                         {
                             currentContext = currentContext.WithBlankLine();
@@ -1242,6 +1318,7 @@ public class Avh4Format
                 if (!comment.Value.IsDocComment)
                 {
                     var isLastComment = ci == comments.Count - 1;
+
                     if (isLastComment)
                     {
                         currentContext = currentContext.WithBlankLine();
@@ -1273,7 +1350,8 @@ public class Avh4Format
             // Check for comments before the module definition (at the beginning of the file)
             var commentsBeforeModule = commentQueries.GetBeforeRow(file.ModuleDefinition.Range.Start.Row);
 
-            FormattingContext contextBeforeModule = context;
+            var contextBeforeModule = context;
+
             if (commentsBeforeModule.Count > 0)
             {
                 // Format comments that appear before the module definition
@@ -1294,8 +1372,10 @@ public class Avh4Format
 
             var commentsAfterModuleBeforeImports =
                 firstImport is not null
-                ? commentQueries.GetBetweenRows(file.ModuleDefinition.Range.End.Row, firstImport.Range.Start.Row)
-                : [];
+                ?
+                commentQueries.GetBetweenRows(file.ModuleDefinition.Range.End.Row, firstImport.Range.Start.Row)
+                :
+                [];
 
             FormattingContext contextBeforeImports;
 
@@ -1305,7 +1385,8 @@ public class Avh4Format
 
                 contextBeforeImports =
                     CommentPlacementHelper.PlaceCommentSequence(
-                        startContext, commentsAfterModuleBeforeImports);
+                        startContext,
+                        commentsAfterModuleBeforeImports);
 
                 contextBeforeImports = contextBeforeImports.NextRowToIndent();
             }
@@ -1332,15 +1413,19 @@ public class Avh4Format
             // Search for comments between imports/module and first declaration using original positions
             var lastOriginalRowBeforeDecls =
                 file.Imports.Any()
-                ? file.Imports.Last().Range.End.Row
-                : file.ModuleDefinition.Range.End.Row;
+                ?
+                file.Imports.Last().Range.End.Row
+                :
+                file.ModuleDefinition.Range.End.Row;
 
             var firstDeclaration = file.Declarations.FirstOrDefault();
 
             var commentsBefore =
                 firstDeclaration is not null
-                ? commentQueries.GetBetweenRows(lastOriginalRowBeforeDecls, firstDeclaration.Range.Start.Row)
-                : [];
+                ?
+                commentQueries.GetBetweenRows(lastOriginalRowBeforeDecls, firstDeclaration.Range.Start.Row)
+                :
+                [];
 
             FormattingContext contextBeforeDecls;
 
@@ -1350,6 +1435,7 @@ public class Avh4Format
                 var isFirstCommentDoc = firstComment.Value.IsDocComment;
 
                 FormattingContext startContext;
+
                 if (formattedImports.Any())
                 {
                     if (isFirstCommentDoc)
@@ -1377,6 +1463,7 @@ public class Avh4Format
                 // For module-level doc comments (between module and first declaration, no imports),
                 // we need to add 2 blank lines after the doc comment
                 var lastComment = commentsBefore[^1];
+
                 if (!formattedImports.Any() && lastComment.Value.IsDocComment)
                 {
                     // Doc comment at module level: 2 blank lines after
@@ -1385,9 +1472,12 @@ public class Avh4Format
             }
             else
             {
-                contextBeforeDecls = formattedImports.Any()
-                    ? contextAfterImports.WithBlankLine()
-                    : contextAfterModule.WithBlankLine().NextRowToIndent();
+                contextBeforeDecls =
+                    formattedImports.Any()
+                    ?
+                    contextAfterImports.WithBlankLine()
+                    :
+                    contextAfterModule.WithBlankLine().NextRowToIndent();
             }
 
             // Format declarations along with incomplete declarations interleaved by position
@@ -1395,20 +1485,27 @@ public class Avh4Format
                 FormatDeclarationsWithIncompletes(file.Declarations, contextBeforeDecls);
 
             // Get trailing comments that appear after all declarations
-            var lastDeclRow = file.Declarations.Any()
-                ? file.Declarations.Max(d => d.Range.End.Row)
-                : (file.Imports.Any()
-                    ? file.Imports.Last().Range.End.Row
-                    : file.ModuleDefinition.Range.End.Row);
+            var lastDeclRow =
+                file.Declarations.Any()
+                ?
+                file.Declarations.Max(d => d.Range.End.Row)
+                :
+                (file.Imports.Any()
+                ?
+                file.Imports.Last().Range.End.Row
+                :
+                file.ModuleDefinition.Range.End.Row);
 
             var trailingComments = commentQueries.GetAfterRow(lastDeclRow);
 
             // Format trailing comments
             var contextAfterTrailingComments = contextAfterDeclarations;
+
             if (trailingComments.Count > 0)
             {
                 var firstTrailingComment = trailingComments[0];
                 FormattingContext trailingContext;
+
                 if (file.Declarations.Any() || formattedIncompleteDeclarations.Any())
                 {
                     // For section comments (non-doc), use 3 blank lines before
@@ -1438,12 +1535,13 @@ public class Avh4Format
                     CommentPlacementHelper.PlaceCommentSequence(trailingContext, trailingComments);
             }
 
-            var formattedFile = new File(
-                ModuleDefinition: formattedModule,
-                Imports: formattedImports,
-                Declarations: formattedDeclarations,
-                Comments: [],
-                IncompleteDeclarations: []);
+            var formattedFile =
+                new File(
+                    ModuleDefinition: formattedModule,
+                    Imports: formattedImports,
+                    Declarations: formattedDeclarations,
+                    Comments: [],
+                    IncompleteDeclarations: []);
 
             return (formattedFile, contextAfterTrailingComments.Comments, formattedIncompleteDeclarations);
         }
@@ -1512,14 +1610,14 @@ public class Avh4Format
             Node<Exposing> formattedExposing,
             FormattingContext contextAfterExposing)
             FormatModuleCore(
-                IReadOnlyList<string> moduleNameValue,
-                Node<Exposing> exposingList,
-                FormattingContext context,
-                CommentQueryHelper commentQueries,
-                string? prefixKeyword = null)
+            IReadOnlyList<string> moduleNameValue,
+            Node<Exposing> exposingList,
+            FormattingContext context,
+            CommentQueryHelper commentQueries,
+            string? prefixKeyword = null)
         {
             Location? prefixTokenLoc = null;
-            FormattingContext afterPrefix = context;
+            var afterPrefix = context;
 
             // Handle prefix keyword (e.g., "port " or "effect ")
             if (prefixKeyword is not null)
@@ -1552,13 +1650,17 @@ public class Avh4Format
             CommentQueryHelper commentQueries)
         {
             var (range, moduleTokenLoc, _, moduleNameNode, exposingTokenLoc, formattedExposing, contextAfterExposing) =
-                FormatModuleCore(module.ModuleData.ModuleName.Value, module.ModuleData.ExposingList, context, commentQueries);
+                FormatModuleCore(
+                    module.ModuleData.ModuleName.Value,
+                    module.ModuleData.ExposingList,
+                    context,
+                    commentQueries);
 
-            var formattedModuleData = new DefaultModuleData(
-                ModuleName: moduleNameNode,
-                ExposingTokenLocation: exposingTokenLoc,
-                ExposingList: formattedExposing
-            );
+            var formattedModuleData =
+                new DefaultModuleData(
+                    ModuleName: moduleNameNode,
+                    ExposingTokenLocation: exposingTokenLoc,
+                    ExposingList: formattedExposing);
 
             return (MakeNode<Module>(range, new Module.NormalModule(moduleTokenLoc, formattedModuleData)), contextAfterExposing);
         }
@@ -1569,13 +1671,18 @@ public class Avh4Format
             CommentQueryHelper commentQueries)
         {
             var (range, moduleTokenLoc, prefixTokenLoc, moduleNameNode, exposingTokenLoc, formattedExposing, contextAfterExposing) =
-                FormatModuleCore(module.ModuleData.ModuleName.Value, module.ModuleData.ExposingList, context, commentQueries, Keywords.Port);
+                FormatModuleCore(
+                    module.ModuleData.ModuleName.Value,
+                    module.ModuleData.ExposingList,
+                    context,
+                    commentQueries,
+                    Keywords.Port);
 
-            var formattedModuleData = new DefaultModuleData(
-                ModuleName: moduleNameNode,
-                ExposingTokenLocation: exposingTokenLoc,
-                ExposingList: formattedExposing
-            );
+            var formattedModuleData =
+                new DefaultModuleData(
+                    ModuleName: moduleNameNode,
+                    ExposingTokenLocation: exposingTokenLoc,
+                    ExposingList: formattedExposing);
 
             return (MakeNode<Module>(range, new Module.PortModule(prefixTokenLoc!.Value, moduleTokenLoc, formattedModuleData)), contextAfterExposing);
         }
@@ -1586,15 +1693,20 @@ public class Avh4Format
             CommentQueryHelper commentQueries)
         {
             var (range, moduleTokenLoc, prefixTokenLoc, moduleNameNode, exposingTokenLoc, formattedExposing, contextAfterExposing) =
-                FormatModuleCore(module.ModuleData.ModuleName.Value, module.ModuleData.ExposingList, context, commentQueries, Keywords.Effect);
+                FormatModuleCore(
+                    module.ModuleData.ModuleName.Value,
+                    module.ModuleData.ExposingList,
+                    context,
+                    commentQueries,
+                    Keywords.Effect);
 
-            var formattedModuleData = new EffectModuleData(
-                ModuleName: moduleNameNode,
-                ExposingTokenLocation: exposingTokenLoc,
-                ExposingList: formattedExposing,
-                Command: module.ModuleData.Command,
-                Subscription: module.ModuleData.Subscription
-            );
+            var formattedModuleData =
+                new EffectModuleData(
+                    ModuleName: moduleNameNode,
+                    ExposingTokenLocation: exposingTokenLoc,
+                    ExposingList: formattedExposing,
+                    Command: module.ModuleData.Command,
+                    Subscription: module.ModuleData.Subscription);
 
             return (MakeNode<Module>(range, new Module.EffectModule(prefixTokenLoc!.Value, moduleTokenLoc, formattedModuleData)), contextAfterExposing);
         }
@@ -1649,11 +1761,13 @@ public class Avh4Format
             if (!isMultiLine)
             {
                 // Single-line format: exposing (A, B, C)
-                var exposingOpen = Keywords.Exposing + " " + Keywords.OpenParen;  // "exposing ("
-                var singleLineConfig = new SingleLineSeparatedListConfig(
-                    OpenBracket: exposingOpen,
-                    Separator: Keywords.Comma + " ",  // ", "
-                    CloseBracket: Keywords.CloseParen);  // ")"
+                var exposingOpen = Keywords.Exposing + " " + Keywords.OpenParen; // "exposing ("
+
+                var singleLineConfig =
+                    new SingleLineSeparatedListConfig(
+                        OpenBracket: exposingOpen,
+                        Separator: Keywords.Comma + " ", // ", "
+                        CloseBracket: Keywords.CloseParen); // ")"
 
                 // Handle empty case
                 if (explicitList.Nodes is SeparatedSyntaxList<Node<TopLevelExpose>>.Empty)
@@ -1661,28 +1775,41 @@ public class Avh4Format
                     var afterOpen = context.Advance(exposingOpen.Length);
                     var closeContext = afterOpen.Advance(Keywords.CloseParen.Length);
                     var emptyRange = MakeRange(context.CurrentLocation(), closeContext.CurrentLocation());
-                    return (MakeNode<Exposing>(emptyRange, new Exposing.Explicit(
-                        OpenParenLocation: context.CurrentLocation(),
-                        Nodes: new SeparatedSyntaxList<Node<TopLevelExpose>>.Empty(),
-                        CloseParenLocation: closeContext.CurrentLocation() with { Column = closeContext.CurrentLocation().Column - 1 })), closeContext);
+
+                    return
+                        (MakeNode<Exposing>(
+                            emptyRange,
+                            new Exposing.Explicit(
+                                OpenParenLocation: context.CurrentLocation(),
+                                Nodes: new SeparatedSyntaxList<Node<TopLevelExpose>>.Empty(),
+                                CloseParenLocation:
+                                closeContext.CurrentLocation() with { Column = closeContext.CurrentLocation().Column - 1 })),
+                        closeContext);
                 }
 
                 var nonEmptyList = (SeparatedSyntaxList<Node<TopLevelExpose>>.NonEmpty)explicitList.Nodes;
 
                 // Use FormatSingleLineSeparatedList for the items
-                var (formattedList, afterClose) = FormatSingleLineSeparatedList(
-                    separatedList: nonEmptyList,
-                    formatItem: FormatTopLevelExposeItem,
-                    commentQueries: commentQueries,
-                    config: singleLineConfig,
-                    context: context,
-                    containerRange: MakeRange(explicitList.OpenParenLocation, explicitList.CloseParenLocation));
+                var (formattedList, afterClose) =
+                    FormatSingleLineSeparatedList(
+                        separatedList: nonEmptyList,
+                        formatItem: FormatTopLevelExposeItem,
+                        commentQueries: commentQueries,
+                        config: singleLineConfig,
+                        context: context,
+                        containerRange: MakeRange(explicitList.OpenParenLocation, explicitList.CloseParenLocation));
 
                 var range = MakeRange(context.CurrentLocation(), afterClose.CurrentLocation());
-                return (MakeNode<Exposing>(range, new Exposing.Explicit(
-                    OpenParenLocation: openParenLocation,
-                    Nodes: formattedList,
-                    CloseParenLocation: afterClose.CurrentLocation() with { Column = afterClose.CurrentLocation().Column - 1 })), afterClose);
+
+                return
+                    (MakeNode<Exposing>(
+                        range,
+                        new Exposing.Explicit(
+                            OpenParenLocation: openParenLocation,
+                            Nodes: formattedList,
+                            CloseParenLocation:
+                            afterClose.CurrentLocation() with { Column = afterClose.CurrentLocation().Column - 1 })),
+                    afterClose);
             }
             else
             {
@@ -1712,10 +1839,15 @@ public class Avh4Format
                     var afterCloseParen = closeLineContext.Advance(Keywords.CloseParen.Length);
                     var finalContext = afterCloseParen.ReturnToIndent(parentContext);
                     var emptyRange = MakeRange(context.CurrentLocation(), finalContext.CurrentLocation());
-                    return (MakeNode<Exposing>(emptyRange, new Exposing.Explicit(
-                        OpenParenLocation: openParenLocation,
-                        Nodes: new SeparatedSyntaxList<Node<TopLevelExpose>>.Empty(),
-                        CloseParenLocation: closeParenLocation)), finalContext);
+
+                    return
+                        (MakeNode<Exposing>(
+                            emptyRange,
+                            new Exposing.Explicit(
+                                OpenParenLocation: openParenLocation,
+                                Nodes: new SeparatedSyntaxList<Node<TopLevelExpose>>.Empty(),
+                                CloseParenLocation: closeParenLocation)),
+                        finalContext);
                 }
 
                 var nonEmptyList = (SeparatedSyntaxList<Node<TopLevelExpose>>.NonEmpty)explicitList.Nodes;
@@ -1726,6 +1858,7 @@ public class Avh4Format
 
                 // Extract @docs groups and group items
                 IReadOnlyList<IReadOnlyList<Node<TopLevelExpose>>> itemGroups;
+
                 if (moduleDocComment is not null)
                 {
                     var docsGroups = ExtractDocsGroupsFromDocComment(moduleDocComment.Value.Text);
@@ -1738,21 +1871,28 @@ public class Avh4Format
                     else
                     {
                         // Doc comment exists but has no @docs directives - one item per line
-                        itemGroups = [.. nonEmptyList.Nodes.Select(item => new[] { item } as IReadOnlyList<Node<TopLevelExpose>>)];
+                        itemGroups =
+                            [
+                            .. nonEmptyList.Nodes.Select(item => new[] { item } as IReadOnlyList<Node<TopLevelExpose>>)
+                            ];
                     }
                 }
                 else
                 {
                     // No module documentation - put each item in its own group (current behavior)
-                    itemGroups = [.. nonEmptyList.Nodes.Select(item => new[] { item } as IReadOnlyList<Node<TopLevelExpose>>)];
+                    itemGroups =
+                        [
+                        .. nonEmptyList.Nodes.Select(item => new[] { item } as IReadOnlyList<Node<TopLevelExpose>>)
+                        ];
                 }
 
                 // Format items grouped by @docs
-                var (formattedList, afterFields) = FormatGroupedExposingList(
-                    itemGroups: itemGroups,
-                    formatItem: FormatTopLevelExposeItem,
-                    alignmentRef: indentedRef,
-                    startContext: afterOpenParen2);
+                var (formattedList, afterFields) =
+                    FormatGroupedExposingList(
+                        itemGroups: itemGroups,
+                        formatItem: FormatTopLevelExposeItem,
+                        alignmentRef: indentedRef,
+                        startContext: afterOpenParen2);
 
                 // Close paren on new line
                 var closeLineCtx = afterFields.ReturnToIndent(indentedRef).NextRowToIndent();
@@ -1762,10 +1902,14 @@ public class Avh4Format
                 var finalContext2 = afterCloseParen2.ReturnToIndent(parentContext);
                 var range = MakeRange(context.CurrentLocation(), finalContext2.CurrentLocation());
 
-                return (MakeNode<Exposing>(range, new Exposing.Explicit(
-                    OpenParenLocation: openParenLocation,
-                    Nodes: formattedList,
-                    CloseParenLocation: closeParenLocation2)), finalContext2);
+                return
+                    (MakeNode<Exposing>(
+                        range,
+                        new Exposing.Explicit(
+                            OpenParenLocation: openParenLocation,
+                            Nodes: formattedList,
+                            CloseParenLocation: closeParenLocation2)),
+                    finalContext2);
             }
         }
 
@@ -1779,10 +1923,10 @@ public class Avh4Format
         /// </summary>
         private static (SeparatedSyntaxList<Node<TopLevelExpose>>.NonEmpty FormattedList, FormattingContext FinalContext)
             FormatGroupedExposingList(
-                IReadOnlyList<IReadOnlyList<Node<TopLevelExpose>>> itemGroups,
-                System.Func<Node<TopLevelExpose>, FormattingContext, FormattingResult<Node<TopLevelExpose>>> formatItem,
-                FormattingContext alignmentRef,
-                FormattingContext startContext)
+            IReadOnlyList<IReadOnlyList<Node<TopLevelExpose>>> itemGroups,
+            System.Func<Node<TopLevelExpose>, FormattingContext, FormattingResult<Node<TopLevelExpose>>> formatItem,
+            FormattingContext alignmentRef,
+            FormattingContext startContext)
         {
             var allFormattedItems = new List<Node<TopLevelExpose>>();
             var restItems = new List<(Location SeparatorLocation, Node<TopLevelExpose> Node)>();
@@ -1792,6 +1936,7 @@ public class Avh4Format
             for (var groupIndex = 0; groupIndex < itemGroups.Count; groupIndex++)
             {
                 var group = itemGroups[groupIndex];
+
                 if (group.Count is 0)
                     continue;
 
@@ -1831,9 +1976,10 @@ public class Avh4Format
                 throw new System.InvalidOperationException("Expected at least one item in the exposing list");
             }
 
-            var formattedList = new SeparatedSyntaxList<Node<TopLevelExpose>>.NonEmpty(
-                allFormattedItems[0],
-                restItems);
+            var formattedList =
+                new SeparatedSyntaxList<Node<TopLevelExpose>>.NonEmpty(
+                    allFormattedItems[0],
+                    restItems);
 
             return (formattedList, currentContext);
         }
@@ -1863,8 +2009,10 @@ public class Avh4Format
 
                 TopLevelExpose.TypeExpose typeExpose =>
                 typeExpose.ExposedType.Open is not null
-                ? $"{typeExpose.ExposedType.Name}(..)"
-                : typeExpose.ExposedType.Name,
+                ?
+                $"{typeExpose.ExposedType.Name}(..)"
+                :
+                typeExpose.ExposedType.Name,
 
                 _ =>
                 throw new System.NotImplementedException(
@@ -1884,26 +2032,32 @@ public class Avh4Format
             // Find all @docs directives
             // Format: @docs name1, name2, name3
             var lines = docCommentText.Split('\n');
+
             foreach (var line in lines)
             {
                 var trimmed = line.Trim();
+
                 if (trimmed.StartsWith("@docs "))
                 {
                     var namesStr = trimmed.Substring("@docs ".Length);
-                    var names = namesStr
+
+                    var names =
+                        namesStr
                         .Split(',')
                         .Select(n => n.Trim())
                         .Where(n => !string.IsNullOrEmpty(n))
-                        .Select(n =>
-                        {
-                            // Strip parentheses from operator names like "(+)" -> "+"
-                            // Must have at least 3 chars to have content between parens: "(x)"
-                            if (n.Length > 2 && n.StartsWith("(") && n.EndsWith(")"))
+                        .Select(
+                            n =>
                             {
-                                return n.Substring(1, n.Length - 2);
-                            }
-                            return n;
-                        })
+                                // Strip parentheses from operator names like "(+)" -> "+"
+                                // Must have at least 3 chars to have content between parens: "(x)"
+                                if (n.Length > 2 && n.StartsWith("(") && n.EndsWith(")"))
+                                {
+                                    return n.Substring(1, n.Length - 2);
+                                }
+
+                                return n;
+                            })
                         .ToList();
 
                     if (names.Count > 0)
@@ -1945,6 +2099,7 @@ public class Avh4Format
             foreach (var docsGroup in docsGroups)
             {
                 var group = new List<Node<TopLevelExpose>>();
+
                 foreach (var name in docsGroup)
                 {
                     if (itemsByName.TryGetValue(name, out var item) && !usedItems.Contains(item))
@@ -1953,6 +2108,7 @@ public class Avh4Format
                         usedItems.Add(item);
                     }
                 }
+
                 if (group.Count > 0)
                 {
                     result.Add(group);
@@ -1961,6 +2117,7 @@ public class Avh4Format
 
             // Collect remaining items (not in any @docs group) into a final group
             var remaining = items.Where(item => !usedItems.Contains(item)).ToList();
+
             if (remaining.Count > 0)
             {
                 result.Add(remaining);
@@ -1981,7 +2138,9 @@ public class Avh4Format
                 TopLevelExpose.FunctionExpose func => func.Name,
                 TopLevelExpose.TypeOrAliasExpose type => type.Name,
                 TopLevelExpose.TypeExpose typeExpose => typeExpose.ExposedType.Name,
-                _ => throw new System.NotImplementedException(
+
+                _ =>
+                throw new System.NotImplementedException(
                     $"Getting base name for expose type '{expose.GetType().Name}' is not implemented in {nameof(GetTopLevelExposeBaseName)}.")
             };
         }
@@ -2034,6 +2193,7 @@ public class Avh4Format
             var currentContext = afterModuleName;
 
             (Location AsTokenLocation, Node<IReadOnlyList<string>> Alias)? moduleAlias = null;
+
             if (import.Value.ModuleAlias is { } alias)
             {
                 // Advance for space before "as"
@@ -2044,10 +2204,13 @@ public class Avh4Format
                 var aliasName = string.Join(".", alias.Alias.Value);
                 var aliasStartLoc = currentContext.CurrentLocation();
                 currentContext = currentContext.Advance(aliasName.Length);
-                moduleAlias = (asTokenLoc, MakeNode(aliasStartLoc, currentContext.CurrentLocation(), alias.Alias.Value));
+
+                moduleAlias =
+                    (asTokenLoc, MakeNode(aliasStartLoc, currentContext.CurrentLocation(), alias.Alias.Value));
             }
 
             (Location ExposingTokenLocation, Node<Exposing> ExposingList)? exposingList = null;
+
             if (import.Value.ExposingList is { } exposing)
             {
                 // Determine if the exposing list content is multiline
@@ -2063,7 +2226,9 @@ public class Avh4Format
                     currentContext = currentContext.ReturnToIndent(indentedRef).NextRowToIndent();
                     var exposingTokenLoc = currentContext.CurrentLocation();
                     // FormatExposing expects to be positioned BEFORE "exposing" keyword
-                    var (formattedExposing, afterExposingList) = FormatExposing(exposing.ExposingList, currentContext, commentQueries);
+                    var (formattedExposing, afterExposingList) =
+                        FormatExposing(exposing.ExposingList, currentContext, commentQueries);
+
                     exposingList = (exposingTokenLoc, formattedExposing);
                     currentContext = afterExposingList;
                 }
@@ -2073,7 +2238,9 @@ public class Avh4Format
                     currentContext = currentContext.AdvanceSpaceSeparator(); // space before "exposing"
                     var exposingTokenLoc = currentContext.CurrentLocation();
                     // FormatExposing expects to be positioned BEFORE "exposing" keyword
-                    var (formattedExposing, afterExposingList) = FormatExposing(exposing.ExposingList, currentContext, commentQueries);
+                    var (formattedExposing, afterExposingList) =
+                        FormatExposing(exposing.ExposingList, currentContext, commentQueries);
+
                     exposingList = (exposingTokenLoc, formattedExposing);
                     currentContext = afterExposingList;
                 }
@@ -2082,12 +2249,12 @@ public class Avh4Format
             var range = MakeRange(context.CurrentLocation(), currentContext.CurrentLocation());
             var moduleNameNode = MakeNode(range, import.Value.ModuleName.Value);
 
-            var formattedImport = new Import(
-                ImportTokenLocation: importTokenLoc,
-                ModuleName: moduleNameNode,
-                ModuleAlias: moduleAlias,
-                ExposingList: exposingList
-            );
+            var formattedImport =
+                new Import(
+                    ImportTokenLocation: importTokenLoc,
+                    ModuleName: moduleNameNode,
+                    ModuleAlias: moduleAlias,
+                    ExposingList: exposingList);
 
             return (MakeNode(range, formattedImport), currentContext);
         }
@@ -2150,16 +2317,21 @@ public class Avh4Format
                         if (nextItem.isComplete)
                         {
                             var nextDecl = declarations[nextItem.originalIndex];
-                            var commentsBetween = commentQueries.GetBetweenRowsInclusiveEnd(
-                                decl.Range.End.Row, nextDecl.Range.Start.Row);
 
-                            if (declResult.FormattedNode.Value is Declaration.InfixDeclaration && nextDecl.Value is Declaration.InfixDeclaration)
+                            var commentsBetween =
+                                commentQueries.GetBetweenRowsInclusiveEnd(
+                                    decl.Range.End.Row,
+                                    nextDecl.Range.Start.Row);
+
+                            if (declResult.FormattedNode.Value is Declaration.InfixDeclaration &&
+                                nextDecl.Value is Declaration.InfixDeclaration)
                             {
                                 currentContext = nextContext.NextRowToIndent();
                             }
                             else
                             {
-                                currentContext = CommentPlacementHelper.PlaceCommentsBetweenDeclarations(nextContext, commentsBetween);
+                                currentContext =
+                                    CommentPlacementHelper.PlaceCommentsBetweenDeclarations(nextContext, commentsBetween);
                             }
                         }
                         else
@@ -2182,12 +2354,13 @@ public class Avh4Format
                     var endLoc = CalculateEndLocation(startLoc, originalText);
 
                     // Preserve the original error location and message
-                    formattedIncompletes.Add(MakeNode(
-                        new Range(startLoc, endLoc),
-                        new IncompleteDeclaration(
-                            originalText,
-                            incompleteDecl.Value.ErrorLocation,
-                            incompleteDecl.Value.ErrorMessage)));
+                    formattedIncompletes.Add(
+                        MakeNode(
+                            new Range(startLoc, endLoc),
+                            new IncompleteDeclaration(
+                                originalText,
+                                incompleteDecl.Value.ErrorLocation,
+                                incompleteDecl.Value.ErrorMessage)));
 
                     // Advance context past this incomplete declaration
                     foreach (var ch in originalText)
@@ -2258,16 +2431,22 @@ public class Avh4Format
 
                 // Check for comments between doc comment and the next content (signature or function name)
                 var docCommentEndRow = docComment.Range.End.Row;
-                var nextContentStartRow = funcDecl.Function.Signature is { } sig
-                    ? sig.Value.Name.Range.Start.Row
-                    : funcDecl.Function.Declaration.Value.Name.Range.Start.Row;
+
+                var nextContentStartRow =
+                    funcDecl.Function.Signature is { } sig
+                    ?
+                    sig.Value.Name.Range.Start.Row
+                    :
+                    funcDecl.Function.Declaration.Value.Name.Range.Start.Row;
 
                 var commentsBetweenDocAndContent = commentQueries.GetBetweenRows(docCommentEndRow, nextContentStartRow);
+
                 if (commentsBetweenDocAndContent.Count > 0)
                 {
                     // Format these comments with section comment spacing (3 blank lines before)
                     // WithBlankLine() = 2 row advances, plus NextRowToIndent() = 1 more, for total of 3 blank lines
                     currentContext = currentContext.WithBlankLine().NextRowToIndent();
+
                     foreach (var comment in commentsBetweenDocAndContent)
                     {
                         currentContext = currentContext.ResetIndent().SetIndentColumn();
@@ -2280,18 +2459,21 @@ public class Avh4Format
 
             // Format signature if present
             Node<Signature>? formattedSignature = null;
+
             if (funcDecl.Function.Signature is { } signature)
             {
                 var sigName = signature.Value.Name.Value;
                 var afterSigName = currentContext.Advance(sigName.Length);
 
                 // Detect if type annotation should be on a new line after the colon
-                var isTypeAnnotOnNewLine = signature.Value.TypeAnnotation.Range.Start.Row > signature.Value.Name.Range.Start.Row;
+                var isTypeAnnotOnNewLine =
+                    signature.Value.TypeAnnotation.Range.Start.Row > signature.Value.Name.Range.Start.Row;
 
                 var colonLoc = afterSigName.Advance(1).CurrentLocation(); // space before colon
                 var afterColon = afterSigName.Advance(2); // " :"
 
                 FormattingResult<Node<TypeAnnotation>> typeAnnotResult;
+
                 if (isTypeAnnotOnNewLine)
                 {
                     // Type annotation on new line with indentation - no space after colon
@@ -2317,14 +2499,17 @@ public class Avh4Format
                 }
 
                 var sigRange = MakeRange(currentContext.CurrentLocation(), typeAnnotResult.Context.CurrentLocation());
-                formattedSignature = MakeNode(sigRange, new Signature(
-                    Name: MakeNode(
-                        currentContext.CurrentLocation(),
-                        afterSigName.CurrentLocation(),
-                        sigName),
-                    ColonLocation: colonLoc,
-                    TypeAnnotation: typeAnnotResult.FormattedNode
-                ));
+
+                formattedSignature =
+                    MakeNode(
+                        sigRange,
+                        new Signature(
+                            Name: MakeNode(
+                                currentContext.CurrentLocation(),
+                                afterSigName.CurrentLocation(),
+                                sigName),
+                            ColonLocation: colonLoc,
+                            TypeAnnotation: typeAnnotResult.FormattedNode));
 
                 // Return to base indent level for the implementation
                 currentContext = typeAnnotResult.Context.ReturnToIndent(context).NextRowToIndent();
@@ -2339,6 +2524,7 @@ public class Avh4Format
             // Arguments - format with updated ranges
             var formattedArguments = new List<Node<Pattern>>();
             var afterArgs = afterName;
+
             foreach (var arg in impl.Arguments)
             {
                 afterArgs = afterArgs.Advance(1); // space before arg
@@ -2369,26 +2555,28 @@ public class Avh4Format
             var exprResult = FormatExpression(impl.Expression, exprContext);
 
             // Build formatted implementation
-            var formattedImpl = new FunctionImplementation(
-                Name: MakeNode(funcNameStartLoc, afterName.CurrentLocation(), impl.Name.Value),
-                Arguments: formattedArguments,
-                EqualsTokenLocation: equalsLoc,
-                Expression: exprResult.FormattedNode
-            );
+            var formattedImpl =
+                new FunctionImplementation(
+                    Name: MakeNode(funcNameStartLoc, afterName.CurrentLocation(), impl.Name.Value),
+                    Arguments: formattedArguments,
+                    EqualsTokenLocation: equalsLoc,
+                    Expression: exprResult.FormattedNode);
 
-            var formattedFunc = new FunctionStruct(
-                Documentation: funcDecl.Function.Documentation,
-                Signature: formattedSignature,
-                Declaration: MakeNode(
-                    currentContext.CurrentLocation(),
-                    exprResult.Context.CurrentLocation(),
-                    formattedImpl)
-            );
+            var formattedFunc =
+                new FunctionStruct(
+                    Documentation: funcDecl.Function.Documentation,
+                    Signature: formattedSignature,
+                    Declaration: MakeNode(
+                        currentContext.CurrentLocation(),
+                        exprResult.Context.CurrentLocation(),
+                        formattedImpl));
 
             var range = MakeRange(context.CurrentLocation(), exprResult.Context.CurrentLocation());
-            return FormattingResult<Node<Declaration>>.Create(
-                MakeNode<Declaration>(range, new Declaration.FunctionDeclaration(formattedFunc)),
-                exprResult.Context.ReturnToIndent(context));
+
+            return
+                FormattingResult<Node<Declaration>>.Create(
+                    MakeNode<Declaration>(range, new Declaration.FunctionDeclaration(formattedFunc)),
+                    exprResult.Context.ReturnToIndent(context));
         }
 
         private FormattingResult<Node<Declaration>> FormatAliasDeclaration(
@@ -2418,6 +2606,7 @@ public class Avh4Format
 
             var currentContext = afterName;
             var formattedGenerics = new List<Node<string>>();
+
             foreach (var generic in aliasDecl.TypeAlias.Generics)
             {
                 currentContext = currentContext.AdvanceSpaceSeparator();
@@ -2436,9 +2625,10 @@ public class Avh4Format
             var typeContext = afterEquals.ReturnToIndent(indentedRef).NextRowToIndent();
 
             // Check for comments between the equals sign and the type annotation
-            var commentsBeforeType = commentQueries.GetBetweenRows(
-                aliasDecl.TypeAlias.EqualsTokenLocation.Row,
-                aliasDecl.TypeAlias.TypeAnnotation.Range.Start.Row);
+            var commentsBeforeType =
+                commentQueries.GetBetweenRows(
+                    aliasDecl.TypeAlias.EqualsTokenLocation.Row,
+                    aliasDecl.TypeAlias.TypeAnnotation.Range.Start.Row);
 
             foreach (var comment in commentsBeforeType)
             {
@@ -2448,21 +2638,23 @@ public class Avh4Format
             // Format the type annotation with proper locations
             var typeAnnotResult = FormatTypeAnnotation(aliasDecl.TypeAlias.TypeAnnotation, typeContext);
 
-            var formattedTypeAlias = new TypeAlias(
-                Documentation: aliasDecl.TypeAlias.Documentation,
-                TypeTokenLocation: typeTokenLoc,
-                AliasTokenLocation: aliasTokenLoc,
-                Name: formattedName,
-                Generics: formattedGenerics,
-                EqualsTokenLocation: equalsLoc,
-                TypeAnnotation: typeAnnotResult.FormattedNode
-            );
+            var formattedTypeAlias =
+                new TypeAlias(
+                    Documentation: aliasDecl.TypeAlias.Documentation,
+                    TypeTokenLocation: typeTokenLoc,
+                    AliasTokenLocation: aliasTokenLoc,
+                    Name: formattedName,
+                    Generics: formattedGenerics,
+                    EqualsTokenLocation: equalsLoc,
+                    TypeAnnotation: typeAnnotResult.FormattedNode);
 
             var finalContext = typeAnnotResult.Context.ReturnToIndent(parentContext);
             var range = MakeRange(startContext.CurrentLocation(), finalContext.CurrentLocation());
-            return FormattingResult<Node<Declaration>>.Create(
-                MakeNode<Declaration>(range, new Declaration.AliasDeclaration(formattedTypeAlias)),
-                finalContext);
+
+            return
+                FormattingResult<Node<Declaration>>.Create(
+                    MakeNode<Declaration>(range, new Declaration.AliasDeclaration(formattedTypeAlias)),
+                    finalContext);
         }
 
         private FormattingResult<Node<Declaration>> FormatCustomTypeDeclaration(
@@ -2488,6 +2680,7 @@ public class Avh4Format
 
             var currentContext = afterName;
             var formattedGenerics = new List<Node<string>>();
+
             foreach (var generic in customTypeDecl.TypeDeclaration.Generics)
             {
                 currentContext = currentContext.AdvanceSpaceSeparator();
@@ -2511,6 +2704,7 @@ public class Avh4Format
                 var (pipeLocation, constructor) = customTypeDecl.TypeDeclaration.Constructors[i];
 
                 Location? formattedPipeLoc = null;
+
                 if (i is 0)
                 {
                     // Check for comments between equals sign and first constructor
@@ -2520,25 +2714,36 @@ public class Avh4Format
                     var constructorOnSameRowAsEquals = constructor.Range.Start.Row == equalsRow;
 
                     // Get comments between = and constructor on the same row (not trailing comments on args)
-                    var commentsAfterEqualsOnSameLine = constructorOnSameRowAsEquals
-                        ? commentQueries.GetOnRowBetweenColumns(equalsRow, equalsColumn, constructor.Range.Start.Column).ToList()
-                        : [.. commentQueries.GetOnRowAfterColumn(equalsRow, equalsColumn)];
-                    var commentsBetweenRows = constructor.Range.Start.Row > equalsRow
-                        ? commentQueries.GetBetweenRows(equalsRow, constructor.Range.Start.Row).ToList()
-                        : [];
+                    var commentsAfterEqualsOnSameLine =
+                        constructorOnSameRowAsEquals
+                        ?
+                        commentQueries.GetOnRowBetweenColumns(equalsRow, equalsColumn, constructor.Range.Start.Column)
+                        .ToList()
+                        :
+                        [.. commentQueries.GetOnRowAfterColumn(equalsRow, equalsColumn)];
+
+                    var commentsBetweenRows =
+                        constructor.Range.Start.Row > equalsRow
+                        ?
+                        commentQueries.GetBetweenRows(equalsRow, constructor.Range.Start.Row).ToList()
+                        :
+                        [];
 
                     // Combine comments: same line first, then between rows
-                    var allCommentsBeforeFirstConstructor = commentsAfterEqualsOnSameLine
+                    var allCommentsBeforeFirstConstructor =
+                        commentsAfterEqualsOnSameLine
                         .Concat(commentsBetweenRows)
                         .ToList();
 
                     if (allCommentsBeforeFirstConstructor.Count is not 0)
                     {
                         // Comment gets extra 2 space indent (6 spaces total = 4 base indent + 2 extra)
-                        var commentIndentRef = constructorIndentContext.SetIndentColumn().Advance(2).SetIndentToCurrentColumn();
+                        var commentIndentRef =
+                            constructorIndentContext.SetIndentColumn().Advance(2).SetIndentToCurrentColumn();
 
                         // Handle inline comments (constructor on same line as equals)
-                        if (constructorOnSameRowAsEquals && commentsAfterEqualsOnSameLine.Count > 0 && commentsBetweenRows.Count is 0)
+                        if (constructorOnSameRowAsEquals && commentsAfterEqualsOnSameLine.Count > 0 &&
+                            commentsBetweenRows.Count is 0)
                         {
                             // All comments and constructor on same line - format inline
                             foreach (var comment in commentsAfterEqualsOnSameLine)
@@ -2563,13 +2768,17 @@ public class Avh4Format
                                 {
                                     // FormatAndAddComment already positioned us on a new row, just set indent
                                     constructorCtx = constructorCtx.SetIndentColumn();
-                                    constructorCtx = constructorCtx.FormatAndAddCommentAndNextRowToIndent(commentsAfterEqualsOnSameLine[ci]);
+
+                                    constructorCtx =
+                                        constructorCtx.FormatAndAddCommentAndNextRowToIndent(commentsAfterEqualsOnSameLine[ci]);
+
                                     constructorCtx = constructorCtx.ReturnToIndent(commentIndentRef);
                                 }
                             }
 
                             // Format comments from between rows
                             var isFirstBetweenComment = true;
+
                             foreach (var comment in commentsBetweenRows)
                             {
                                 // First between comment: if we just wrote a same-line comment, we're already on a new row
@@ -2584,6 +2793,7 @@ public class Avh4Format
                                     // FormatAndAddComment already positioned us on a new row, just set indent
                                     constructorCtx = constructorCtx.SetIndentColumn();
                                 }
+
                                 isFirstBetweenComment = false;
                                 constructorCtx = constructorCtx.FormatAndAddCommentAndNextRowToIndent(comment);
                                 constructorCtx = constructorCtx.ReturnToIndent(commentIndentRef);
@@ -2598,21 +2808,31 @@ public class Avh4Format
                 {
                     // Check for comments between this and previous constructor
                     var prevConstructor = customTypeDecl.TypeDeclaration.Constructors[i - 1].Constructor;
-                    var commentsBetweenConstructors = commentQueries.GetBetweenRanges(prevConstructor.Range, constructor.Range).ToList();
+
+                    var commentsBetweenConstructors =
+                        commentQueries.GetBetweenRanges(prevConstructor.Range, constructor.Range).ToList();
 
                     // Also check for inline comments on the same row as the constructor (before the constructor name)
                     // The pipe location is at pipeLocation, and comments would be between the pipe and the constructor name
                     var pipeRow = pipeLocation?.Row ?? constructor.Range.Start.Row;
-                    var inlineComments = pipeLocation.HasValue
-                        ? commentQueries.GetOnRowBetweenColumns(pipeRow, pipeLocation.Value.Column, constructor.Value.Name.Range.Start.Column).ToList()
-                        : [];
+
+                    var inlineComments =
+                        pipeLocation.HasValue
+                        ?
+                        commentQueries.GetOnRowBetweenColumns(pipeRow, pipeLocation.Value.Column, constructor.Value.Name.Range.Start.Column)
+                        .ToList()
+                        :
+                        [];
 
                     if (commentsBetweenConstructors.Count is not 0)
                     {
                         // Format comments between constructors
                         // Comment gets extra 2 space indent (6 spaces total = 4 base indent + 2 extra)
-                        var commentIndentRef = constructorIndentContext.SetIndentColumn().Advance(2).SetIndentToCurrentColumn();
+                        var commentIndentRef =
+                            constructorIndentContext.SetIndentColumn().Advance(2).SetIndentToCurrentColumn();
+
                         var isFirstComment = true;
+
                         foreach (var comment in commentsBetweenConstructors)
                         {
                             if (isFirstComment)
@@ -2626,6 +2846,7 @@ public class Avh4Format
                                 // FormatAndAddComment already positioned us on a new row
                                 constructorCtx = constructorCtx.ReturnToIndent(commentIndentRef).SetIndentColumn();
                             }
+
                             constructorCtx = constructorCtx.FormatAndAddCommentAndNextRowToIndent(comment);
                         }
                         // After comments, position for the pipe and constructor
@@ -2636,6 +2857,7 @@ public class Avh4Format
                         // Move to next line for subsequent constructors (only when no comments between constructors)
                         constructorCtx = constructorCtx.NextRowToIndent();
                     }
+
                     formattedPipeLoc = constructorCtx.CurrentLocation();
                     constructorCtx = constructorCtx.Advance(2); // "| "
 
@@ -2657,6 +2879,7 @@ public class Avh4Format
                 // Constructor arguments
                 var formattedArgs = new List<Node<TypeAnnotation>>();
                 var argCtx = afterConstructorName;
+
                 for (var argIndex = 0; argIndex < constructor.Value.Arguments.Count; argIndex++)
                 {
                     var arg = constructor.Value.Arguments[argIndex];
@@ -2664,6 +2887,7 @@ public class Avh4Format
                     // Determine where to look for comments based on whether this is the first argument
                     int searchStartRow;
                     int searchStartCol;
+
                     if (argIndex is 0)
                     {
                         // For first argument, search from constructor name row/col
@@ -2682,14 +2906,19 @@ public class Avh4Format
                     var commentsBetween = commentQueries.GetBetweenRows(searchStartRow, arg.Range.Start.Row).ToList();
 
                     // Also check for inline comments on the same row (between prev arg end and current arg start)
-                    var inlineComments = (searchStartRow == arg.Range.Start.Row)
-                        ? commentQueries.GetOnRowBetweenColumns(searchStartRow, searchStartCol, arg.Range.Start.Column).ToList()
-                        : [];
+                    var inlineComments =
+                        (searchStartRow == arg.Range.Start.Row)
+                        ?
+                        commentQueries.GetOnRowBetweenColumns(searchStartRow, searchStartCol, arg.Range.Start.Column)
+                        .ToList()
+                        :
+                        [];
 
                     if (commentsBetween.Count > 0)
                     {
                         // Arguments with comments between them should be on separate lines
                         var isFirstComment = true;
+
                         foreach (var comment in commentsBetween)
                         {
                             if (isFirstComment)
@@ -2702,6 +2931,7 @@ public class Avh4Format
                                 // FormatAndAddComment already positioned us on a new row
                                 argCtx = argCtx.ReturnToIndent(argIndentRef).SetIndentColumn();
                             }
+
                             argCtx = argCtx.FormatAndAddCommentAndNextRowToIndent(comment);
                         }
 
@@ -2726,8 +2956,10 @@ public class Avh4Format
                     // Check if argument is on a new line in the original
                     var isArgOnNewLine =
                         argIndex is 0
-                        ? arg.Range.Start.Row > constructor.Value.Name.Range.End.Row
-                        : arg.Range.Start.Row > constructor.Value.Arguments[argIndex - 1].Range.End.Row;
+                        ?
+                        arg.Range.Start.Row > constructor.Value.Name.Range.End.Row
+                        :
+                        arg.Range.Start.Row > constructor.Value.Arguments[argIndex - 1].Range.End.Row;
 
                     if (isArgOnNewLine)
                     {
@@ -2749,6 +2981,7 @@ public class Avh4Format
                 {
                     var lastArg = constructor.Value.Arguments[constructor.Value.Arguments.Count - 1];
                     var trailingComment = commentQueries.GetTrailing(lastArg.Range);
+
                     if (trailingComment is not null)
                     {
                         argCtx = argCtx.Advance(1); // space before comment
@@ -2759,6 +2992,7 @@ public class Avh4Format
                 {
                     // No arguments - check for trailing comment on constructor name
                     var trailingComment = commentQueries.GetTrailing(constructor.Value.Name.Range);
+
                     if (trailingComment is not null)
                     {
                         argCtx = argCtx.Advance(1); // space before comment
@@ -2766,12 +3000,13 @@ public class Avh4Format
                     }
                 }
 
-                var formattedConstructor = new ValueConstructor(
-                    MakeNode(
-                        constructorStartLoc,
-                        afterConstructorName.CurrentLocation(),
-                        constructor.Value.Name.Value),
-                    formattedArgs);
+                var formattedConstructor =
+                    new ValueConstructor(
+                        MakeNode(
+                            constructorStartLoc,
+                            afterConstructorName.CurrentLocation(),
+                            constructor.Value.Name.Value),
+                        formattedArgs);
 
                 formattedConstructors.Add(
                     (formattedPipeLoc, MakeNode(constructorStartLoc, argCtx.CurrentLocation(), formattedConstructor)));
@@ -2780,20 +3015,22 @@ public class Avh4Format
                 constructorCtx = argCtx.ReturnToIndent(constructorIndentContext);
             }
 
-            var formattedTypeStruct = new TypeStruct(
-                Documentation: customTypeDecl.TypeDeclaration.Documentation,
-                TypeTokenLocation: typeTokenLoc,
-                Name: MakeNode(afterType.CurrentLocation(), afterName.CurrentLocation(), typeName),
-                Generics: formattedGenerics,
-                EqualsTokenLocation: equalsLoc,
-                Constructors: formattedConstructors
-            );
+            var formattedTypeStruct =
+                new TypeStruct(
+                    Documentation: customTypeDecl.TypeDeclaration.Documentation,
+                    TypeTokenLocation: typeTokenLoc,
+                    Name: MakeNode(afterType.CurrentLocation(), afterName.CurrentLocation(), typeName),
+                    Generics: formattedGenerics,
+                    EqualsTokenLocation: equalsLoc,
+                    Constructors: formattedConstructors);
 
             var finalContext = constructorCtx.ReturnToIndent(startContext);
             var range = MakeRange(startContext.CurrentLocation(), constructorCtx.CurrentLocation());
-            return FormattingResult<Node<Declaration>>.Create(
-                MakeNode<Declaration>(range, new Declaration.CustomTypeDeclaration(formattedTypeStruct)),
-                finalContext);
+
+            return
+                FormattingResult<Node<Declaration>>.Create(
+                    MakeNode<Declaration>(range, new Declaration.CustomTypeDeclaration(formattedTypeStruct)),
+                    finalContext);
         }
 
         private static FormattingResult<Node<Declaration>> FormatInfixDeclaration(
@@ -2854,38 +3091,43 @@ public class Avh4Format
 
             var range = MakeRange(context.CurrentLocation(), afterFunctionName.CurrentLocation());
 
-            var formattedDirection = MakeNode(
-                directionLoc,
-                afterInfixKeyword.Advance(directionText.Length).CurrentLocation(),
-                infixDecl.Infix.Direction.Value);
+            var formattedDirection =
+                MakeNode(
+                    directionLoc,
+                    afterInfixKeyword.Advance(directionText.Length).CurrentLocation(),
+                    infixDecl.Infix.Direction.Value);
 
-            var formattedPrecedence = MakeNode(
-                precedenceLoc,
-                afterDirectionPadding.Advance(precedenceText.Length).CurrentLocation(),
-                infixDecl.Infix.Precedence.Value);
+            var formattedPrecedence =
+                MakeNode(
+                    precedenceLoc,
+                    afterDirectionPadding.Advance(precedenceText.Length).CurrentLocation(),
+                    infixDecl.Infix.Precedence.Value);
 
-            var formattedOperator = MakeNode(
-                operatorLoc,
-                afterPrecedence.Advance(operatorText.Length).CurrentLocation(),
-                infixDecl.Infix.Operator.Value);
+            var formattedOperator =
+                MakeNode(
+                    operatorLoc,
+                    afterPrecedence.Advance(operatorText.Length).CurrentLocation(),
+                    infixDecl.Infix.Operator.Value);
 
-            var formattedFunctionName = MakeNode(
-                functionNameLoc,
-                afterFunctionName.CurrentLocation(),
-                infixDecl.Infix.FunctionName.Value);
+            var formattedFunctionName =
+                MakeNode(
+                    functionNameLoc,
+                    afterFunctionName.CurrentLocation(),
+                    infixDecl.Infix.FunctionName.Value);
 
-            var formattedInfix = new Infix(
-                InfixTokenLocation: infixTokenLoc,
-                Direction: formattedDirection,
-                Precedence: formattedPrecedence,
-                Operator: formattedOperator,
-                EqualsTokenLocation: equalsLoc,
-                FunctionName: formattedFunctionName
-            );
+            var formattedInfix =
+                new Infix(
+                    InfixTokenLocation: infixTokenLoc,
+                    Direction: formattedDirection,
+                    Precedence: formattedPrecedence,
+                    Operator: formattedOperator,
+                    EqualsTokenLocation: equalsLoc,
+                    FunctionName: formattedFunctionName);
 
-            return FormattingResult<Node<Declaration>>.Create(
-                MakeNode<Declaration>(range, new Declaration.InfixDeclaration(formattedInfix)),
-                afterFunctionName);
+            return
+                FormattingResult<Node<Declaration>>.Create(
+                    MakeNode<Declaration>(range, new Declaration.InfixDeclaration(formattedInfix)),
+                    afterFunctionName);
         }
 
         private static FormattingResult<Node<Declaration>> FormatPortDeclaration(
@@ -2903,7 +3145,8 @@ public class Avh4Format
 
             // Simplified type annotation
             var typeAnnotLength =
-                portDecl.Signature.TypeAnnotation.Range.End.Column - portDecl.Signature.TypeAnnotation.Range.Start.Column;
+                portDecl.Signature.TypeAnnotation.Range.End.Column -
+                portDecl.Signature.TypeAnnotation.Range.Start.Column;
 
             var afterType = afterColon.AdvanceSpaceSeparator().Advance(typeAnnotLength);
 
@@ -2913,16 +3156,16 @@ public class Avh4Format
                         afterPort.CurrentLocation(),
                         afterSigName.CurrentLocation(),
                         sigName),
-                ColonLocation: colonLoc,
-                TypeAnnotation: portDecl.Signature.TypeAnnotation
-            );
+                    ColonLocation: colonLoc,
+                    TypeAnnotation: portDecl.Signature.TypeAnnotation);
 
             var range =
                 MakeRange(context.CurrentLocation(), afterType.CurrentLocation());
 
-            return FormattingResult<Node<Declaration>>.Create(
-                MakeNode<Declaration>(range, new Declaration.PortDeclaration(portTokenLoc, formattedSig)),
-                afterType);
+            return
+                FormattingResult<Node<Declaration>>.Create(
+                    MakeNode<Declaration>(range, new Declaration.PortDeclaration(portTokenLoc, formattedSig)),
+                    afterType);
         }
 
         #endregion
@@ -2936,10 +3179,14 @@ public class Avh4Format
             bool forceMultilineArrows = false)
         {
             var startLoc = context.CurrentLocation();
-            var typeResult = FormatTypeAnnotationValue(typeAnnot.Value, typeAnnot.Range, context, arrowBaseRef, forceMultilineArrows);
-            return FormattingResult<Node<TypeAnnotation>>.Create(
-                MakeNode(startLoc, typeResult.Context.CurrentLocation(), typeResult.FormattedNode),
-                typeResult.Context);
+
+            var typeResult =
+                FormatTypeAnnotationValue(typeAnnot.Value, typeAnnot.Range, context, arrowBaseRef, forceMultilineArrows);
+
+            return
+                FormattingResult<Node<TypeAnnotation>>.Create(
+                    MakeNode(startLoc, typeResult.Context.CurrentLocation(), typeResult.FormattedNode),
+                    typeResult.Context);
         }
 
         private FormattingResult<TypeAnnotation> FormatTypeAnnotationValue(
@@ -2963,8 +3210,10 @@ public class Avh4Format
 
                         var typeNameText =
                             typeName.ModuleName.Count > 0
-                            ? string.Join(".", typeName.ModuleName) + "." + typeName.Name
-                            : typeName.Name;
+                            ?
+                            string.Join(".", typeName.ModuleName) + "." + typeName.Name
+                            :
+                            typeName.Name;
 
                         var afterTypeName = context.Advance(typeNameText.Length);
 
@@ -2979,9 +3228,13 @@ public class Avh4Format
                             var arg = typed.TypeArguments[argIndex];
 
                             // Check if this argument should be on a new line by comparing to original positions
-                            var prevOriginalRow = argIndex is 0
-                                ? typeNameOriginalRow
-                                : typed.TypeArguments[argIndex - 1].Range.End.Row;
+                            var prevOriginalRow =
+                                argIndex is 0
+                                ?
+                                typeNameOriginalRow
+                                :
+                                typed.TypeArguments[argIndex - 1].Range.End.Row;
+
                             var isArgMultiline = arg.Range.Start.Row > prevOriginalRow;
 
                             if (isArgMultiline)
@@ -3001,10 +3254,11 @@ public class Avh4Format
                             }
                         }
 
-                        var formattedTyped = new TypeAnnotation.Typed(
-                            typed.TypeName,
-                            formattedArgs
-                        );
+                        var formattedTyped =
+                            new TypeAnnotation.Typed(
+                                typed.TypeName,
+                                formattedArgs);
+
                         return FormattingResult<TypeAnnotation>.Create(formattedTyped, currentCtx);
                     }
 
@@ -3020,8 +3274,12 @@ public class Avh4Format
                         // This is special and cannot use the generic formatter
                         if (isSingleElement)
                         {
-                            return FormatTupledTypeAnnotationSingleElement(
-                                tupled, tupledElements[0], originalRange, context);
+                            return
+                                FormatTupledTypeAnnotationSingleElement(
+                                    tupled,
+                                    tupledElements[0],
+                                    originalRange,
+                                    context);
                         }
 
                         // Multi-element case (2+ elements): Use spaces "( Element1, Element2 )"
@@ -3034,30 +3292,34 @@ public class Avh4Format
                         // Create reference for content indented past paren
                         var elemContentRef = context.Advance(2).SetIndentToCurrentColumn();
 
-                        var singleLineConfig = new SingleLineSeparatedListConfig(
-                            OpenBracket: "( ",
-                            Separator: ", ",
-                            CloseBracket: " )");
+                        var singleLineConfig =
+                            new SingleLineSeparatedListConfig(
+                                OpenBracket: "( ",
+                                Separator: ", ",
+                                CloseBracket: " )");
 
-                        var multilineConfig = new SeparatedListConfig(
-                            AlignmentRef: parenAlignRef,
-                            ContentIndentRef: elemContentRef,
-                            Separator: Keywords.Comma + " ",  // ", "
-                            CloseBracket: ")");
+                        var multilineConfig =
+                            new SeparatedListConfig(
+                                AlignmentRef: parenAlignRef,
+                                ContentIndentRef: elemContentRef,
+                                Separator: Keywords.Comma + " ", // ", "
+                                CloseBracket: ")");
 
-                        var (formattedList, finalContext) = FormatSeparatedList(
-                            separatedList: tupled.TypeAnnotations,
-                            formatItem: (item, ctx) => FormatTypeAnnotation(item, ctx),
-                            commentQueries: commentQueries,
-                            singleLineConfig: singleLineConfig,
-                            multilineConfig: multilineConfig,
-                            context: context,
-                            containerRange: containerRange,
-                            commentStyle: SeparatedListCommentStyle.TupleStyle);
+                        var (formattedList, finalContext) =
+                            FormatSeparatedList(
+                                separatedList: tupled.TypeAnnotations,
+                                formatItem: (item, ctx) => FormatTypeAnnotation(item, ctx),
+                                commentQueries: commentQueries,
+                                singleLineConfig: singleLineConfig,
+                                multilineConfig: multilineConfig,
+                                context: context,
+                                containerRange: containerRange,
+                                commentStyle: SeparatedListCommentStyle.TupleStyle);
 
-                        var formattedTupledAnnot = new TypeAnnotation.Tupled(
-                            formattedList
-                        );
+                        var formattedTupledAnnot =
+                            new TypeAnnotation.Tupled(
+                                formattedList);
+
                         return FormattingResult<TypeAnnotation>.Create(formattedTupledAnnot, finalContext);
                     }
 
@@ -3067,8 +3329,10 @@ public class Avh4Format
                         // We need to check if ANY part of the function type annotation spans multiple lines
                         // If so, ALL arrows should be formatted on new lines
                         var overallMultiline = originalRange.End.Row > originalRange.Start.Row || forceMultilineArrows;
-                        var returnTypeOnNewLine = funcType.ReturnType.Range.Start.Row > funcType.ArgumentType.Range.Start.Row ||
-                                                  overallMultiline;
+
+                        var returnTypeOnNewLine =
+                            funcType.ReturnType.Range.Start.Row > funcType.ArgumentType.Range.Start.Row ||
+                            overallMultiline;
 
                         // Propagate multiline flag to nested function types
                         var propagateMultiline = returnTypeOnNewLine;
@@ -3080,7 +3344,8 @@ public class Avh4Format
                         // Use passed reference or create one at current column if first encounter
                         var effectiveArrowBaseRef = arrowBaseRef ?? context.SetIndentToCurrentColumn();
 
-                        var argTypeResult = FormatTypeAnnotation(funcType.ArgumentType, context, effectiveArrowBaseRef, propagateMultiline);
+                        var argTypeResult =
+                            FormatTypeAnnotation(funcType.ArgumentType, context, effectiveArrowBaseRef, propagateMultiline);
 
                         Location arrowLocation;
                         FormattingResult<Node<TypeAnnotation>> returnTypeResult;
@@ -3088,24 +3353,30 @@ public class Avh4Format
                         if (returnTypeOnNewLine)
                         {
                             // Multiline: arrow on new line, at the base column
-                            var newLineCtx = argTypeResult.Context.ReturnToIndent(effectiveArrowBaseRef).NextRowToIndent();
+                            var newLineCtx =
+                                argTypeResult.Context.ReturnToIndent(effectiveArrowBaseRef).NextRowToIndent();
+
                             arrowLocation = newLineCtx.CurrentLocation();
 
                             if (resultTypeOnOwnLine)
                             {
                                 // Arrow is on its own line, result type goes on next line with additional indentation
-                                var afterArrow = newLineCtx.Advance(2); // "->" (no space after since we're going to new line)
+                                var afterArrow =
+                                    newLineCtx.Advance(2); // "->" (no space after since we're going to new line)
                                 // Create reference for result type at arrow base + 4
                                 var resultTypeRef = effectiveArrowBaseRef.CreateIndentedRef();
                                 var resultTypeCtx = afterArrow.ReturnToIndent(resultTypeRef).NextRowToIndent();
                                 // Pass effectiveArrowBaseRef so nested function type arrows align properly
-                                returnTypeResult = FormatTypeAnnotation(funcType.ReturnType, resultTypeCtx, effectiveArrowBaseRef, propagateMultiline);
+                                returnTypeResult =
+                                    FormatTypeAnnotation(funcType.ReturnType, resultTypeCtx, effectiveArrowBaseRef, propagateMultiline);
                             }
                             else
                             {
                                 // Arrow on new line, but result type on same line as arrow
                                 var arrowCtx = newLineCtx.Advance(3); // "-> "
-                                returnTypeResult = FormatTypeAnnotation(funcType.ReturnType, arrowCtx, effectiveArrowBaseRef, propagateMultiline);
+
+                                returnTypeResult =
+                                    FormatTypeAnnotation(funcType.ReturnType, arrowCtx, effectiveArrowBaseRef, propagateMultiline);
                             }
                         }
                         else
@@ -3114,14 +3385,16 @@ public class Avh4Format
                             var arrowCtx = argTypeResult.Context.Advance(1); // space before arrow
                             arrowLocation = arrowCtx.CurrentLocation();
                             var afterArrow = arrowCtx.Advance(3); // "-> "
-                            returnTypeResult = FormatTypeAnnotation(funcType.ReturnType, afterArrow, effectiveArrowBaseRef, propagateMultiline);
+
+                            returnTypeResult =
+                                FormatTypeAnnotation(funcType.ReturnType, afterArrow, effectiveArrowBaseRef, propagateMultiline);
                         }
 
-                        var formattedFuncType = new TypeAnnotation.FunctionTypeAnnotation(
-                            argTypeResult.FormattedNode,
-                            arrowLocation,
-                            returnTypeResult.FormattedNode
-                        );
+                        var formattedFuncType =
+                            new TypeAnnotation.FunctionTypeAnnotation(
+                                argTypeResult.FormattedNode,
+                                arrowLocation,
+                                returnTypeResult.FormattedNode);
                         // Return with IndentSpaces reset to the original context
                         return FormattingResult<TypeAnnotation>.Create(formattedFuncType, returnTypeResult.Context.ReturnToIndent(context));
                     }
@@ -3137,10 +3410,13 @@ public class Avh4Format
                         {
                             var afterEmptyRecord = context.Advance(2); // After both "{" and "}"
 
-                            var emptyRecordDef = new RecordDefinition(new SeparatedSyntaxList<Node<RecordField>>.Empty());
-                            var emptyRecordResult = new TypeAnnotation.Record(
-                                emptyRecordDef
-                            );
+                            var emptyRecordDef =
+                                new RecordDefinition(new SeparatedSyntaxList<Node<RecordField>>.Empty());
+
+                            var emptyRecordResult =
+                                new TypeAnnotation.Record(
+                                    emptyRecordDef);
+
                             return FormattingResult<TypeAnnotation>.Create(emptyRecordResult, afterEmptyRecord);
                         }
 
@@ -3149,34 +3425,39 @@ public class Avh4Format
                         // Create reference context at brace + 2 for field indent
                         var fieldContentRef = context.Advance(2).SetIndentToCurrentColumn();
 
-                        var singleLineConfig = new SingleLineSeparatedListConfig(
-                            OpenBracket: "{ ",
-                            Separator: ", ",
-                            CloseBracket: " }");
+                        var singleLineConfig =
+                            new SingleLineSeparatedListConfig(
+                                OpenBracket: "{ ",
+                                Separator: ", ",
+                                CloseBracket: " }");
 
-                        var multilineConfig = new SeparatedListConfig(
-                            AlignmentRef: braceAlignRef,
-                            ContentIndentRef: fieldContentRef,
-                            Separator: Keywords.Comma + " ",  // ", "
-                            CloseBracket: "}");
+                        var multilineConfig =
+                            new SeparatedListConfig(
+                                AlignmentRef: braceAlignRef,
+                                ContentIndentRef: fieldContentRef,
+                                Separator: Keywords.Comma + " ", // ", "
+                                CloseBracket: "}");
 
                         // Capture context refs for the field formatter closure
                         var fieldIndentRef = fieldContentRef;
 
-                        var (formattedList, finalContext) = FormatSeparatedList(
-                            separatedList: record.RecordDefinition.Fields,
-                            formatItem: (field, fieldCtx) => FormatRecordField(field, fieldCtx, fieldIndentRef),
-                            commentQueries: commentQueries,
-                            singleLineConfig: singleLineConfig,
-                            multilineConfig: multilineConfig,
-                            context: context,
-                            containerRange: containerRange,
-                            commentStyle: SeparatedListCommentStyle.ListStyle);
+                        var (formattedList, finalContext) =
+                            FormatSeparatedList(
+                                separatedList: record.RecordDefinition.Fields,
+                                formatItem: (field, fieldCtx) => FormatRecordField(field, fieldCtx, fieldIndentRef),
+                                commentQueries: commentQueries,
+                                singleLineConfig: singleLineConfig,
+                                multilineConfig: multilineConfig,
+                                context: context,
+                                containerRange: containerRange,
+                                commentStyle: SeparatedListCommentStyle.ListStyle);
 
                         var formattedRecordDef = new RecordDefinition(formattedList);
-                        var formattedRecord = new TypeAnnotation.Record(
-                            formattedRecordDef
-                        );
+
+                        var formattedRecord =
+                            new TypeAnnotation.Record(
+                                formattedRecordDef);
+
                         return FormattingResult<TypeAnnotation>.Create(formattedRecord, finalContext);
                     }
 
@@ -3195,14 +3476,16 @@ public class Avh4Format
                         var afterGenericName = afterOpenBrace.Advance(genericRecord.GenericName.Value.Length);
 
                         // Handle comments between the opening brace and generic name
-                        var commentsBeforeGenericName = commentQueries.GetBetweenRows(
-                            containerRange.Start.Row,
-                            genericRecord.GenericName.Range.Start.Row);
+                        var commentsBeforeGenericName =
+                            commentQueries.GetBetweenRows(
+                                containerRange.Start.Row,
+                                genericRecord.GenericName.Range.Start.Row);
 
                         // Check for comments between generic name and pipe
-                        var commentsBeforePipe = commentQueries.GetBetweenRows(
-                            genericRecord.GenericName.Range.End.Row,
-                            genericRecord.PipeLocation.Row);
+                        var commentsBeforePipe =
+                            commentQueries.GetBetweenRows(
+                                genericRecord.GenericName.Range.End.Row,
+                                genericRecord.PipeLocation.Row);
 
                         // Handle multiline generic name section
                         var isMultiline = SpansMultipleRows(containerRange);
@@ -3229,6 +3512,7 @@ public class Avh4Format
                             {
                                 ctx = ctx.ReturnToIndent(pipeAndFieldAlignRef).NextRowToIndent();
                             }
+
                             genericNameStartLoc = ctx.CurrentLocation();
                             ctx = ctx.Advance(genericRecord.GenericName.Value.Length);
                             afterGenericName = ctx;
@@ -3241,7 +3525,10 @@ public class Avh4Format
                             }
 
                             // Place pipe on new line if multiline or has comments
-                            var pipeOnNewLine = genericRecord.PipeLocation.Row > genericRecord.GenericName.Range.End.Row || commentsBeforePipe.Count > 0;
+                            var pipeOnNewLine =
+                                genericRecord.PipeLocation.Row > genericRecord.GenericName.Range.End.Row ||
+                                commentsBeforePipe.Count > 0;
+
                             if (pipeOnNewLine)
                             {
                                 ctx = ctx.ReturnToIndent(pipeAndFieldAlignRef).NextRowToIndent();
@@ -3267,30 +3554,34 @@ public class Avh4Format
                         var fieldContentRef = afterPipe.Advance(1).SetIndentToCurrentColumn();
 
                         // Build the container range for the fields portion (from after pipe to end)
-                        var fieldsContainerRange = new Range(
-                            genericRecord.RecordDefinition.Range.Start,
-                            containerRange.End);
+                        var fieldsContainerRange =
+                            new Range(
+                                genericRecord.RecordDefinition.Range.Start,
+                                containerRange.End);
 
-                        var singleLineConfig = new SingleLineSeparatedListConfig(
-                            OpenBracket: " ",  // Just a space after pipe
-                            Separator: ", ",
-                            CloseBracket: " }");
+                        var singleLineConfig =
+                            new SingleLineSeparatedListConfig(
+                                OpenBracket: " ", // Just a space after pipe
+                                Separator: ", ",
+                                CloseBracket: " }");
 
                         // For multiline, use pipeAndFieldAlignRef for separator alignment,
                         // but braceAlignRef for close bracket alignment
-                        var multilineConfig = new SeparatedListConfig(
-                            AlignmentRef: pipeAndFieldAlignRef,
-                            ContentIndentRef: fieldContentRef,
-                            Separator: Keywords.Comma + " ",  // ", "
-                            CloseBracket: "}",
-                            CloseBracketAlignRef: braceAlignRef);
+                        var multilineConfig =
+                            new SeparatedListConfig(
+                                AlignmentRef: pipeAndFieldAlignRef,
+                                ContentIndentRef: fieldContentRef,
+                                Separator: Keywords.Comma + " ", // ", "
+                                CloseBracket: "}",
+                                CloseBracketAlignRef: braceAlignRef);
 
                         var fieldIndentRefForFields = fieldContentRef;
 
                         var (formattedList, finalContext) =
                             FormatSeparatedList(
                                 separatedList: genericRecord.RecordDefinition.Value.Fields,
-                                formatItem: (field, fieldCtx) => FormatRecordField(field, fieldCtx, fieldIndentRefForFields),
+                                formatItem:
+                                (field, fieldCtx) => FormatRecordField(field, fieldCtx, fieldIndentRefForFields),
                                 commentQueries: commentQueries,
                                 singleLineConfig: singleLineConfig,
                                 multilineConfig: multilineConfig,
@@ -3299,21 +3590,25 @@ public class Avh4Format
                                 commentStyle: SeparatedListCommentStyle.ListStyle);
 
                         // Create formatted generic name node
-                        var formattedGenericName = MakeNode(
-                            genericNameStartLoc,
-                            genericNameStartLoc with { Column = genericNameStartLoc.Column + genericRecord.GenericName.Value.Length },
-                            genericRecord.GenericName.Value);
+                        var formattedGenericName =
+                            MakeNode(
+                                genericNameStartLoc,
+                                genericNameStartLoc with { Column = genericNameStartLoc.Column + genericRecord.GenericName.Value.Length },
+                                genericRecord.GenericName.Value);
 
                         var formattedRecordDef = new RecordDefinition(formattedList);
-                        var formattedRecordDefNode = new Node<RecordDefinition>(
-                            genericRecord.RecordDefinition.Range,
-                            formattedRecordDef);
 
-                        var formattedGenericRecord = new TypeAnnotation.GenericRecord(
-                            formattedGenericName,
-                            pipeLoc,
-                            formattedRecordDefNode
-                        );
+                        var formattedRecordDefNode =
+                            new Node<RecordDefinition>(
+                                genericRecord.RecordDefinition.Range,
+                                formattedRecordDef);
+
+                        var formattedGenericRecord =
+                            new TypeAnnotation.GenericRecord(
+                                formattedGenericName,
+                                pipeLoc,
+                                formattedRecordDefNode);
+
                         return FormattingResult<TypeAnnotation>.Create(formattedGenericRecord, finalContext);
                     }
 
@@ -3340,7 +3635,7 @@ public class Avh4Format
             if (isMultiline)
             {
                 // Multiline format for single element (grouping parens): (Element\n)
-                var afterOpenParen = context.Advance(1);  // "("
+                var afterOpenParen = context.Advance(1); // "("
 
                 // Create reference context at opening paren column for alignment
                 var parenAlignRef = context.SetIndentToCurrentColumn();
@@ -3352,28 +3647,31 @@ public class Avh4Format
                 var closeCtx = elemCtx.ReturnToIndent(parenAlignRef).NextRowToIndent();
                 var afterCloseParen = closeCtx.Advance(1); // ")"
 
-                var separatedElems = new SeparatedSyntaxList<Node<TypeAnnotation>>.NonEmpty(
-                    elemResult.FormattedNode,
-                    []);
+                var separatedElems =
+                    new SeparatedSyntaxList<Node<TypeAnnotation>>.NonEmpty(
+                        elemResult.FormattedNode,
+                        []);
 
-                var formattedTupledAnnot = new TypeAnnotation.Tupled(
-                    separatedElems
-                );
+                var formattedTupledAnnot =
+                    new TypeAnnotation.Tupled(
+                        separatedElems);
+
                 return FormattingResult<TypeAnnotation>.Create(formattedTupledAnnot, afterCloseParen.ReturnToIndent(context));
             }
             else
             {
                 // Single line format for single element (grouping parens): (Element)
-                var afterOpenParen = context.Advance(1);  // "("
+                var afterOpenParen = context.Advance(1); // "("
 
                 var elemResult = FormatTypeAnnotation(singleElement, afterOpenParen);
                 var currentCtx = elemResult.Context;
 
                 // Check for trailing comment between the element and closing paren
-                var trailingComment = commentQueries.GetOnRowBetweenColumns(
-                    originalRange.End.Row,
-                    singleElement.Range.End.Column,
-                    originalRange.End.Column);
+                var trailingComment =
+                    commentQueries.GetOnRowBetweenColumns(
+                        originalRange.End.Row,
+                        singleElement.Range.End.Column,
+                        originalRange.End.Column);
 
                 foreach (var comment in trailingComment)
                 {
@@ -3383,13 +3681,15 @@ public class Avh4Format
 
                 var afterCloseParen = currentCtx.Advance(1); // ")"
 
-                var separatedElems = new SeparatedSyntaxList<Node<TypeAnnotation>>.NonEmpty(
-                    elemResult.FormattedNode,
-                    []);
+                var separatedElems =
+                    new SeparatedSyntaxList<Node<TypeAnnotation>>.NonEmpty(
+                        elemResult.FormattedNode,
+                        []);
 
-                var formattedTupledAnnot = new TypeAnnotation.Tupled(
-                    separatedElems
-                );
+                var formattedTupledAnnot =
+                    new TypeAnnotation.Tupled(
+                        separatedElems);
+
                 return FormattingResult<TypeAnnotation>.Create(formattedTupledAnnot, afterCloseParen);
             }
         }
@@ -3412,18 +3712,20 @@ public class Avh4Format
             var isColonOnNewLine = field.Value.ColonLocation.Row > field.Value.FieldName.Range.End.Row;
 
             // Check for comments between field name and colon
-            var commentsBeforeColon = commentQueries.GetBetweenRowsInclusiveEndWithColumnFilter(
-                field.Value.FieldName.Range.End.Row,
-                field.Value.ColonLocation.Row,
-                field.Value.ColonLocation.Column);
+            var commentsBeforeColon =
+                commentQueries.GetBetweenRowsInclusiveEndWithColumnFilter(
+                    field.Value.FieldName.Range.End.Row,
+                    field.Value.ColonLocation.Row,
+                    field.Value.ColonLocation.Column);
 
             // Check if field type is on a new line
             var isFieldTypeOnNewLine = field.Value.FieldType.Range.Start.Row > field.Value.ColonLocation.Row;
 
             // Check for comments between colon and type
-            var commentsAfterColon = commentQueries.GetBetweenRows(
-                field.Value.ColonLocation.Row,
-                field.Value.FieldType.Range.Start.Row);
+            var commentsAfterColon =
+                commentQueries.GetBetweenRows(
+                    field.Value.ColonLocation.Row,
+                    field.Value.FieldType.Range.Start.Row);
 
             // Check for trailing comment on the field type
             var fieldTypeTrailingComment = commentQueries.GetTrailing(field.Value.FieldType.Range);
@@ -3446,17 +3748,19 @@ public class Avh4Format
 
                 var simpleFieldTypeResult = FormatTypeAnnotation(field.Value.FieldType, simpleAfterColon);
 
-                var simpleFormattedFieldNameNode = MakeNode(fieldStartLoc, afterFieldName.CurrentLocation(), field.Value.FieldName.Value);
+                var simpleFormattedFieldNameNode =
+                    MakeNode(fieldStartLoc, afterFieldName.CurrentLocation(), field.Value.FieldName.Value);
 
-                var simpleFormattedField = new RecordField(
-                    simpleFormattedFieldNameNode,
-                    simpleColonLoc,
-                    simpleFieldTypeResult.FormattedNode
-                );
+                var simpleFormattedField =
+                    new RecordField(
+                        simpleFormattedFieldNameNode,
+                        simpleColonLoc,
+                        simpleFieldTypeResult.FormattedNode);
 
-                return FormattingResult<Node<RecordField>>.Create(
-                    MakeNode(fieldStartLoc, simpleFieldTypeResult.Context.CurrentLocation(), simpleFormattedField),
-                    simpleFieldTypeResult.Context);
+                return
+                    FormattingResult<Node<RecordField>>.Create(
+                        MakeNode(fieldStartLoc, simpleFieldTypeResult.Context.CurrentLocation(), simpleFormattedField),
+                        simpleFieldTypeResult.Context);
             }
 
             // Multiline handling with comments
@@ -3473,6 +3777,7 @@ public class Avh4Format
             {
                 // Handle comments between field name and colon
                 var ctx = afterFieldName;
+
                 foreach (var comment in commentsBeforeColon)
                 {
                     ctx = ctx.ReturnToIndent(fieldIndentRef).NextRowToIndent();
@@ -3492,10 +3797,11 @@ public class Avh4Format
             }
 
             // Check for comments on the same line as the type, BEFORE the type
-            var commentsOnSameLineAsType = commentQueries.GetOnRowBeforeColumnAfterRow(
-                field.Value.FieldType.Range.Start.Row,
-                field.Value.FieldType.Range.Start.Column,
-                field.Value.ColonLocation.Row);
+            var commentsOnSameLineAsType =
+                commentQueries.GetOnRowBeforeColumnAfterRow(
+                    field.Value.FieldType.Range.Start.Row,
+                    field.Value.FieldType.Range.Start.Column,
+                    field.Value.ColonLocation.Row);
 
             FormattingResult<Node<TypeAnnotation>> fieldTypeResult;
 
@@ -3528,22 +3834,25 @@ public class Avh4Format
             // Handle trailing comment on the field type
             if (fieldTypeTrailingComment is not null)
             {
-                fieldTypeResult = FormattingResult<Node<TypeAnnotation>>.Create(
-                    fieldTypeResult.FormattedNode,
-                    fieldTypeResult.Context.Advance(1).FormatAndAddComment(fieldTypeTrailingComment));
+                fieldTypeResult =
+                    FormattingResult<Node<TypeAnnotation>>.Create(
+                        fieldTypeResult.FormattedNode,
+                        fieldTypeResult.Context.Advance(1).FormatAndAddComment(fieldTypeTrailingComment));
             }
 
-            var formattedFieldNameNode = MakeNode(fieldStartLoc, afterFieldName.CurrentLocation(), field.Value.FieldName.Value);
+            var formattedFieldNameNode =
+                MakeNode(fieldStartLoc, afterFieldName.CurrentLocation(), field.Value.FieldName.Value);
 
-            var formattedFieldMultiline = new RecordField(
-                formattedFieldNameNode,
-                colonLoc,
-                fieldTypeResult.FormattedNode
-            );
+            var formattedFieldMultiline =
+                new RecordField(
+                    formattedFieldNameNode,
+                    colonLoc,
+                    fieldTypeResult.FormattedNode);
 
-            return FormattingResult<Node<RecordField>>.Create(
-                MakeNode(fieldStartLoc, fieldTypeResult.Context.CurrentLocation(), formattedFieldMultiline),
-                fieldTypeResult.Context);
+            return
+                FormattingResult<Node<RecordField>>.Create(
+                    MakeNode(fieldStartLoc, fieldTypeResult.Context.CurrentLocation(), formattedFieldMultiline),
+                    fieldTypeResult.Context);
         }
 
         #endregion
@@ -3556,9 +3865,11 @@ public class Avh4Format
         {
             var startLoc = context.CurrentLocation();
             var result = FormatExpressionValue(expr.Value, expr.Range, context);
-            return FormattingResult<Node<ExpressionSyntax>>.Create(
-                MakeNode(startLoc, result.Context.CurrentLocation(), result.FormattedNode),
-                result.Context);
+
+            return
+                FormattingResult<Node<ExpressionSyntax>>.Create(
+                    MakeNode(startLoc, result.Context.CurrentLocation(), result.FormattedNode),
+                    result.Context);
         }
 
         private FormattingResult<ExpressionSyntax> FormatExpressionValue(
@@ -3607,6 +3918,7 @@ public class Avh4Format
                     }
 
                 case ExpressionSyntax.CharLiteral charLit:
+
                     // Use the actual rendered length which varies for escaped characters
                     return FormattingResult<ExpressionSyntax>.Create(charLit, context.Advance(Rendering.RenderCharLiteral(charLit.Value).Length));
 
@@ -3617,18 +3929,24 @@ public class Avh4Format
                     return FormattingResult<ExpressionSyntax>.Create(floatLit, context.Advance(floatLit.LiteralText.Length));
 
                 case ExpressionSyntax.FunctionOrValue funcOrVal:
-                    var funcName = funcOrVal.ModuleName.Count > 0
-                        ? string.Join(".", funcOrVal.ModuleName) + "." + funcOrVal.Name
-                        : funcOrVal.Name;
+                    var funcName =
+                        funcOrVal.ModuleName.Count > 0
+                        ?
+                        string.Join(".", funcOrVal.ModuleName) + "." + funcOrVal.Name
+                        :
+                        funcOrVal.Name;
+
                     return FormattingResult<ExpressionSyntax>.Create(funcOrVal, context.Advance(funcName.Length));
 
                 case ExpressionSyntax.Negation negation:
                     {
                         var afterNegSign = context.Advance(1); // "-"
                         var negResult = FormatExpression(negation.Expression, afterNegSign);
-                        return FormattingResult<ExpressionSyntax>.Create(
-                            new ExpressionSyntax.Negation(negResult.FormattedNode),
-                            negResult.Context);
+
+                        return
+                            FormattingResult<ExpressionSyntax>.Create(
+                                new ExpressionSyntax.Negation(negResult.FormattedNode),
+                                negResult.Context);
                     }
 
                 case ExpressionSyntax.Application app:
@@ -3656,6 +3974,7 @@ public class Avh4Format
                                 // Rule: The first applied argument (index 1) can stay on the same line as
                                 // the function if it was originally there. All other args go on new lines.
                                 bool putOnNewLine;
+
                                 if (i is 0)
                                 {
                                     // Function itself: never put on new line - it's always at the start of the Application
@@ -3680,12 +3999,15 @@ public class Avh4Format
                                 {
                                     // Check for comments between previous argument and this one
                                     var hadComments = false;
+
                                     if (i > 0)
                                     {
                                         var prevArg = app.Arguments[i - 1];
-                                        var commentsBetween = commentQueries.GetBetweenRows(
-                                            prevArg.Range.End.Row,
-                                            arg.Range.Start.Row);
+
+                                        var commentsBetween =
+                                            commentQueries.GetBetweenRows(
+                                                prevArg.Range.End.Row,
+                                                arg.Range.Start.Row);
 
                                         for (var ci = 0; ci < commentsBetween.Count; ci++)
                                         {
@@ -3737,7 +4059,9 @@ public class Avh4Format
                             // Single line: arguments separated by spaces
                             for (var i = 0; i < app.Arguments.Count; i++)
                             {
-                                if (i > 0) appCtx = appCtx.Advance(1); // space
+                                if (i > 0)
+                                    appCtx = appCtx.Advance(1); // space
+
                                 var argResult = FormatExpression(app.Arguments[i], appCtx);
                                 formattedArgs.Add(argResult.FormattedNode);
                                 appCtx = argResult.Context;
@@ -3770,6 +4094,7 @@ public class Avh4Format
 
                             FormattingResult<Node<ExpressionSyntax>> valueResult;
                             Location equalsLoc;
+
                             if (fieldValueOnNewLine)
                             {
                                 // Value on new line with indentation to next multiple of 4 from field start
@@ -3783,6 +4108,7 @@ public class Avh4Format
                                 var eqRow = field.FieldName.Range.End.Row;
                                 var valStartRow = field.ValueExpr.Range.Start.Row;
                                 var commentsBeforeVal = commentQueries.GetBetweenRows(eqRow, valStartRow);
+
                                 foreach (var comment in commentsBeforeVal)
                                 {
                                     valueContext = valueContext.FormatAndAddCommentAndNextRowToIndent(comment);
@@ -3800,37 +4126,45 @@ public class Avh4Format
                                 valueResult = FormatExpression(field.ValueExpr, afterEq);
                             }
 
-                            var fieldNameNode = MakeNode(fieldStartLoc, afterFieldName.CurrentLocation(), field.FieldName.Value);
-                            var formattedField = new RecordExprField(fieldNameNode, equalsLoc, valueResult.FormattedNode);
+                            var fieldNameNode =
+                                MakeNode(fieldStartLoc, afterFieldName.CurrentLocation(), field.FieldName.Value);
+
+                            var formattedField =
+                                new RecordExprField(fieldNameNode, equalsLoc, valueResult.FormattedNode);
 
                             return FormattingResult<RecordExprField>.Create(formattedField, valueResult.Context);
                         }
 
-                        var singleLineConfig = new SingleLineSeparatedListConfig(
-                            OpenBracket: "{ ",
-                            Separator: ", ",
-                            CloseBracket: " }");
+                        var singleLineConfig =
+                            new SingleLineSeparatedListConfig(
+                                OpenBracket: "{ ",
+                                Separator: ", ",
+                                CloseBracket: " }");
 
-                        var multilineConfig = new SeparatedListConfig(
-                            AlignmentRef: recordAlignRef,
-                            ContentIndentRef: recordContentRef,
-                            Separator: Keywords.Comma + " ",  // ", "
-                            CloseBracket: "}");
+                        var multilineConfig =
+                            new SeparatedListConfig(
+                                AlignmentRef: recordAlignRef,
+                                ContentIndentRef: recordContentRef,
+                                Separator: Keywords.Comma + " ", // ", "
+                                CloseBracket: "}");
 
-                        var (formattedList, finalContext) = FormatSeparatedListGeneral(
-                            separatedList: recordExpr.Fields,
-                            formatItem: FormatRecordField,
-                            getItemRange: GetRecordFieldRange,
-                            commentQueries: commentQueries,
-                            singleLineConfig: singleLineConfig,
-                            multilineConfig: multilineConfig,
-                            context: context,
-                            containerRange: originalRange,
-                            commentStyle: SeparatedListCommentStyle.ListStyle);  // Records use list-style for blank line preservation
+                        var (formattedList, finalContext) =
+                            FormatSeparatedListGeneral(
+                                separatedList: recordExpr.Fields,
+                                formatItem: FormatRecordField,
+                                getItemRange: GetRecordFieldRange,
+                                commentQueries: commentQueries,
+                                singleLineConfig: singleLineConfig,
+                                multilineConfig: multilineConfig,
+                                context: context,
+                                containerRange: originalRange,
+                                commentStyle: SeparatedListCommentStyle.ListStyle); // Records use list-style for blank line preservation
 
-                        return FormattingResult<ExpressionSyntax>.Create(new ExpressionSyntax.RecordExpr(
-                            formattedList
-                        ), finalContext);
+                        return
+                            FormattingResult<ExpressionSyntax>.Create(
+                                new ExpressionSyntax.RecordExpr(
+                                    formattedList),
+                                finalContext);
                     }
 
                 case ExpressionSyntax.ListExpr listExpr:
@@ -3841,30 +4175,35 @@ public class Avh4Format
                         var listContentRef = context.Advance(2).SetIndentToCurrentColumn();
 
                         // Use the unified generic separated list formatter
-                        var singleLineConfig = new SingleLineSeparatedListConfig(
-                            OpenBracket: "[ ",
-                            Separator: ", ",
-                            CloseBracket: " ]");
+                        var singleLineConfig =
+                            new SingleLineSeparatedListConfig(
+                                OpenBracket: "[ ",
+                                Separator: ", ",
+                                CloseBracket: " ]");
 
-                        var multilineConfig = new SeparatedListConfig(
-                            AlignmentRef: listAlignRef,
-                            ContentIndentRef: listContentRef,
-                            Separator: Keywords.Comma + " ",  // ", "
-                            CloseBracket: "]");
+                        var multilineConfig =
+                            new SeparatedListConfig(
+                                AlignmentRef: listAlignRef,
+                                ContentIndentRef: listContentRef,
+                                Separator: Keywords.Comma + " ", // ", "
+                                CloseBracket: "]");
 
-                        var (formattedList, finalContext) = FormatSeparatedList(
-                            separatedList: listExpr.Elements,
-                            formatItem: FormatExpression,
-                            commentQueries: commentQueries,
-                            singleLineConfig: singleLineConfig,
-                            multilineConfig: multilineConfig,
-                            context: context,
-                            containerRange: originalRange,
-                            commentStyle: SeparatedListCommentStyle.ListStyle);
+                        var (formattedList, finalContext) =
+                            FormatSeparatedList(
+                                separatedList: listExpr.Elements,
+                                formatItem: FormatExpression,
+                                commentQueries: commentQueries,
+                                singleLineConfig: singleLineConfig,
+                                multilineConfig: multilineConfig,
+                                context: context,
+                                containerRange: originalRange,
+                                commentStyle: SeparatedListCommentStyle.ListStyle);
 
-                        return FormattingResult<ExpressionSyntax>.Create(new ExpressionSyntax.ListExpr(
-                            formattedList
-                        ), finalContext);
+                        return
+                            FormattingResult<ExpressionSyntax>.Create(
+                                new ExpressionSyntax.ListExpr(
+                                    formattedList),
+                                finalContext);
                     }
 
                 case ExpressionSyntax.ParenthesizedExpression parenExpr:
@@ -3875,6 +4214,7 @@ public class Avh4Format
                         // This is safe because the AST is an immutable tree parsed from source code,
                         // so circular references are not possible and depth is bounded by source nesting.
                         var innerExpr = parenExpr.Expression;
+
                         while (innerExpr.Value is ExpressionSyntax.ParenthesizedExpression nestedParen)
                         {
                             innerExpr = nestedParen.Expression;
@@ -3904,19 +4244,24 @@ public class Avh4Format
                         {
                             // Inner expression is on a different line - check for line comments on the open paren line
                             // Use afterColumn = openParenEndCol since we want comments AFTER the '(' (column > openParenEndCol)
-                            var commentsAfterOpenParen = commentQueries.GetOnRowAfterColumn(openParenRow, openParenEndCol);
+                            var commentsAfterOpenParen =
+                                commentQueries.GetOnRowAfterColumn(openParenRow, openParenEndCol);
 
                             if (commentsAfterOpenParen.Count > 0)
                             {
                                 // Format the comment on the same line as the opening paren
                                 contextBeforeInner = afterOpenParen;
+
                                 foreach (var comment in commentsAfterOpenParen)
                                 {
                                     contextBeforeInner = contextBeforeInner.FormatAndAddComment(comment);
                                 }
                                 // Move to next row at inner expression indent
-                                var innerIndentRef = openParenRef.Advance(1).SetIndentToCurrentColumn(); // align with content after "("
-                                contextBeforeInner = contextBeforeInner.ReturnToIndent(innerIndentRef).NextRowToIndent();
+                                var innerIndentRef =
+                                    openParenRef.Advance(1).SetIndentToCurrentColumn(); // align with content after "("
+
+                                contextBeforeInner =
+                                    contextBeforeInner.ReturnToIndent(innerIndentRef).NextRowToIndent();
                             }
                             else
                             {
@@ -3943,10 +4288,13 @@ public class Avh4Format
 
                         var trailingCommentsBeforeCloseParen =
                             (innerEndRow == originalRange.End.Row)
-                            ? commentQueries.GetOnRowBetweenColumns(innerEndRow, innerEndCol, closeParenCol)
-                            : [];
+                            ?
+                            commentQueries.GetOnRowBetweenColumns(innerEndRow, innerEndCol, closeParenCol)
+                            :
+                            [];
 
                         var contextAfterInner = innerResult.Context;
+
                         foreach (var trailingComment in trailingCommentsBeforeCloseParen)
                         {
                             contextAfterInner = contextAfterInner.Advance(1); // space before comment
@@ -3967,9 +4315,10 @@ public class Avh4Format
                             afterCloseParen = contextAfterInner.Advance(1); // ")"
                         }
 
-                        return FormattingResult<ExpressionSyntax>.Create(
-                            new ExpressionSyntax.ParenthesizedExpression(innerResult.FormattedNode),
-                            afterCloseParen);
+                        return
+                            FormattingResult<ExpressionSyntax>.Create(
+                                new ExpressionSyntax.ParenthesizedExpression(innerResult.FormattedNode),
+                                afterCloseParen);
                     }
 
                 case ExpressionSyntax.OperatorApplication opApp:
@@ -3984,7 +4333,8 @@ public class Avh4Format
 
                         // For <| operator, also treat as multiline if right operand spans multiple rows
                         // (even if it starts on the same line as <|)
-                        var treatAsMultiline = rightOnNewLine ||
+                        var treatAsMultiline =
+                            rightOnNewLine ||
                             (opApp.Operator.Value is "<|" && rightIsMultiline);
 
                         if (treatAsMultiline)
@@ -4009,8 +4359,10 @@ public class Avh4Format
                                 var pipeRightContext = pipeAfterOp.ReturnToIndent(rightIndentRef).NextRowToIndent();
 
                                 // Look for comments between operator and right operand
-                                var pipeCommentsBeforeRight = commentQueries.GetBetweenRows(
-                                    opApp.Operator.Range.End.Row, opApp.Right.Range.Start.Row);
+                                var pipeCommentsBeforeRight =
+                                    commentQueries.GetBetweenRows(
+                                        opApp.Operator.Range.End.Row,
+                                        opApp.Right.Range.Start.Row);
 
                                 // Format comments between operator and right operand
                                 foreach (var comment in pipeCommentsBeforeRight)
@@ -4020,12 +4372,14 @@ public class Avh4Format
 
                                 var pipeRightResult = FormatExpression(opApp.Right, pipeRightContext);
 
-                                return FormattingResult<ExpressionSyntax>.Create(new ExpressionSyntax.OperatorApplication(
-                                    formattedOperator,
-                                    opApp.Direction,
-                                    leftResult.FormattedNode,
-                                    pipeRightResult.FormattedNode
-                                ), pipeRightResult.Context.ReturnToIndent(context));
+                                return
+                                    FormattingResult<ExpressionSyntax>.Create(
+                                        new ExpressionSyntax.OperatorApplication(
+                                            formattedOperator,
+                                            opApp.Direction,
+                                            leftResult.FormattedNode,
+                                            pipeRightResult.FormattedNode),
+                                        pipeRightResult.Context.ReturnToIndent(context));
                             }
 
                             // Multiline: operator and right operand on new line
@@ -4060,8 +4414,10 @@ public class Avh4Format
                             }
 
                             // Look for comments between the left operand and the operator
-                            var commentsBeforeOperator = commentQueries.GetBetweenRows(
-                                opApp.Left.Range.End.Row, opApp.Operator.Range.Start.Row);
+                            var commentsBeforeOperator =
+                                commentQueries.GetBetweenRows(
+                                    opApp.Left.Range.End.Row,
+                                    opApp.Operator.Range.Start.Row);
 
                             var newLineCtx = leftResult.Context.ReturnToIndent(targetRef).NextRowToIndent();
 
@@ -4084,12 +4440,16 @@ public class Avh4Format
                             // (trailing comment after operator but before the right operand)
                             var opEndRow = opApp.Operator.Range.End.Row;
                             var rightStartRow = opApp.Right.Range.Start.Row;
-                            var trailingOpComments = opEndRow == rightStartRow
-                                ? commentQueries.GetOnRowBetweenColumns(
+
+                            var trailingOpComments =
+                                opEndRow == rightStartRow
+                                ?
+                                commentQueries.GetOnRowBetweenColumns(
                                     opEndRow,
                                     opApp.Operator.Range.End.Column,
                                     opApp.Right.Range.Start.Column)
-                                : commentQueries.GetOnRowAfterColumn(opEndRow, opApp.Operator.Range.End.Column);
+                                :
+                                commentQueries.GetOnRowAfterColumn(opEndRow, opApp.Operator.Range.End.Column);
 
                             FormattingContext rightContext;
 
@@ -4098,7 +4458,8 @@ public class Avh4Format
                                 // Comment immediately after operator: "&&" followed by " -- comment" then newline
                                 var afterOpSpace = afterOp.Advance(1); // " "
                                 // Format comment - this positions at indent column on new row
-                                var afterComment = afterOpSpace.FormatAndAddCommentAndNextRowToIndent(trailingOpComments[0]);
+                                var afterComment =
+                                    afterOpSpace.FormatAndAddCommentAndNextRowToIndent(trailingOpComments[0]);
                                 // Right operand position: from indent, advance by operator width + 1 space
                                 rightContext = afterComment.Advance(opApp.Operator.Value.Length + 1);
                             }
@@ -4110,8 +4471,10 @@ public class Avh4Format
                             }
 
                             // Look for comments between operator and right operand (on separate lines)
-                            var commentsBeforeRight = commentQueries.GetBetweenRows(
-                                opApp.Operator.Range.End.Row, opApp.Right.Range.Start.Row);
+                            var commentsBeforeRight =
+                                commentQueries.GetBetweenRows(
+                                    opApp.Operator.Range.End.Row,
+                                    opApp.Right.Range.Start.Row);
 
                             // Format comments between operator and right operand
                             foreach (var comment in commentsBeforeRight)
@@ -4121,12 +4484,14 @@ public class Avh4Format
 
                             var rightResult = FormatExpression(opApp.Right, rightContext);
 
-                            return FormattingResult<ExpressionSyntax>.Create(new ExpressionSyntax.OperatorApplication(
-                                formattedOp,
-                                opApp.Direction,
-                                leftResult.FormattedNode,
-                                rightResult.FormattedNode
-                            ), rightResult.Context.ReturnToIndent(context));
+                            return
+                                FormattingResult<ExpressionSyntax>.Create(
+                                    new ExpressionSyntax.OperatorApplication(
+                                        formattedOp,
+                                        opApp.Direction,
+                                        leftResult.FormattedNode,
+                                        rightResult.FormattedNode),
+                                    rightResult.Context.ReturnToIndent(context));
                         }
                         else
                         {
@@ -4135,7 +4500,10 @@ public class Avh4Format
                             var leftEndRow = opApp.Left.Range.End.Row;
                             var leftEndCol = opApp.Left.Range.End.Column;
                             var opStartCol = opApp.Operator.Range.Start.Column;
-                            var leftTrailingComments = commentQueries.GetOnRowBetweenColumns(leftEndRow, leftEndCol, opStartCol);
+
+                            var leftTrailingComments =
+                                commentQueries.GetOnRowBetweenColumns(leftEndRow, leftEndCol, opStartCol);
+
                             var afterLeftContext = leftResult.Context;
 
                             foreach (var leftTrailingComment in leftTrailingComments)
@@ -4155,9 +4523,12 @@ public class Avh4Format
                             var opEndCol = opApp.Operator.Range.End.Column;
                             var rightStartCol = opApp.Right.Range.Start.Column;
                             var opRow = opApp.Operator.Range.End.Row;
-                            var opToRightComments = commentQueries.GetOnRowBetweenColumns(opRow, opEndCol, rightStartCol);
+
+                            var opToRightComments =
+                                commentQueries.GetOnRowBetweenColumns(opRow, opEndCol, rightStartCol);
 
                             var contextBeforeRight = afterOpSpace;
+
                             foreach (var opToRightComment in opToRightComments)
                             {
                                 // Format inline comment after operator: ">= {- 0 -} 0x30"
@@ -4173,10 +4544,16 @@ public class Avh4Format
                             var rightEndRow = opApp.Right.Range.End.Row;
                             var rightEndCol = opApp.Right.Range.End.Column;
                             var exprEndCol = originalRange.End.Column;
-                            var rightTrailingComments = (rightEndRow == originalRange.End.Row)
-                                ? commentQueries.GetOnRowBetweenColumns(rightEndRow, rightEndCol, exprEndCol)
-                                : [];
+
+                            var rightTrailingComments =
+                                (rightEndRow == originalRange.End.Row)
+                                ?
+                                commentQueries.GetOnRowBetweenColumns(rightEndRow, rightEndCol, exprEndCol)
+                                :
+                                [];
+
                             var finalContext = rightResult.Context;
+
                             foreach (var rightTrailingComment in rightTrailingComments)
                             {
                                 finalContext = finalContext.Advance(1); // space before comment
@@ -4186,12 +4563,14 @@ public class Avh4Format
                             // Create operator node with its new position
                             var formattedOp = MakeNode(opStart, opEnd, opApp.Operator.Value);
 
-                            return FormattingResult<ExpressionSyntax>.Create(new ExpressionSyntax.OperatorApplication(
-                                formattedOp,
-                                opApp.Direction,
-                                leftResult.FormattedNode,
-                                rightResult.FormattedNode
-                            ), finalContext);
+                            return
+                                FormattingResult<ExpressionSyntax>.Create(
+                                    new ExpressionSyntax.OperatorApplication(
+                                        formattedOp,
+                                        opApp.Direction,
+                                        leftResult.FormattedNode,
+                                        rightResult.FormattedNode),
+                                    finalContext);
                         }
                     }
 
@@ -4204,11 +4583,14 @@ public class Avh4Format
                         var afterDot = recordResult.Context.Advance(1); // "."
                         var fieldNameLoc = afterDot.CurrentLocation();
                         var afterFieldAccess = afterDot.Advance(recordAccess.FieldName.Value.Length);
-                        var fieldNameWithLoc = MakeNode(fieldNameLoc, afterFieldAccess.CurrentLocation(), recordAccess.FieldName.Value);
 
-                        return FormattingResult<ExpressionSyntax>.Create(
-                            new ExpressionSyntax.RecordAccess(recordResult.FormattedNode, fieldNameWithLoc),
-                            afterFieldAccess);
+                        var fieldNameWithLoc =
+                            MakeNode(fieldNameLoc, afterFieldAccess.CurrentLocation(), recordAccess.FieldName.Value);
+
+                        return
+                            FormattingResult<ExpressionSyntax>.Create(
+                                new ExpressionSyntax.RecordAccess(recordResult.FormattedNode, fieldNameWithLoc),
+                                afterFieldAccess);
                     }
 
                 case ExpressionSyntax.RecordAccessFunction accessFunc:
@@ -4254,8 +4636,10 @@ public class Avh4Format
             if (ifBlock.ElseBlock.Value is ExpressionSyntax.IfBlock innerIf)
             {
                 // Check if there are any comments between else token and inner if token
-                var commentsBetweenElseAndIf = commentQueries.HasBetweenRows(
-                    ifBlock.ElseTokenLocation.Row, innerIf.IfTokenLocation.Row);
+                var commentsBetweenElseAndIf =
+                    commentQueries.HasBetweenRows(
+                        ifBlock.ElseTokenLocation.Row,
+                        innerIf.IfTokenLocation.Row);
 
                 // Also check for comments on the same row BETWEEN else and if
                 // (not just any comments after else - we need to check only up to where "if" starts)
@@ -4264,7 +4648,8 @@ public class Avh4Format
 
                 var commentsAfterElseBeforeIf =
                     (ifBlock.ElseTokenLocation.Row == innerIf.IfTokenLocation.Row) &&
-                    commentQueries.GetOnRowBetweenColumns(ifBlock.ElseTokenLocation.Row, elseEndCol, ifStartCol).Count > 0;
+                    commentQueries.GetOnRowBetweenColumns(ifBlock.ElseTokenLocation.Row, elseEndCol, ifStartCol).Count >
+                    0;
 
                 // Only treat as else-if if no comments between else and if
                 isElseIf = !commentsBetweenElseAndIf && !commentsAfterElseBeforeIf;
@@ -4303,17 +4688,21 @@ public class Avh4Format
                 var conditionContext = afterIf.ReturnToIndent(indentedRef).NextRowToIndent();
 
                 // Check for comments between "if" and the condition
-                var commentsBeforeCondition = commentQueries.GetBetweenRows(
-                    ifBlock.IfTokenLocation.Row,
-                    ifBlock.Condition.Range.Start.Row);
+                var commentsBeforeCondition =
+                    commentQueries.GetBetweenRows(
+                        ifBlock.IfTokenLocation.Row,
+                        ifBlock.Condition.Range.Start.Row);
 
                 if (commentsBeforeCondition.Count > 0)
                 {
                     var conditionIndentRef = conditionContext.SetIndentToCurrentColumn();
+
                     foreach (var comment in commentsBeforeCondition)
                     {
                         // Format the comment, add it to the context, and position at condition indent
-                        conditionContext = conditionContext.ReturnToIndent(conditionIndentRef).FormatAndAddCommentAndNextRowToIndent(comment);
+                        conditionContext =
+                            conditionContext.ReturnToIndent(conditionIndentRef)
+                                .FormatAndAddCommentAndNextRowToIndent(comment);
                     }
                 }
 
@@ -4326,6 +4715,7 @@ public class Avh4Format
                         ifBlock.ThenTokenLocation.Row);
 
                 var afterConditionCtx = conditionResult.Context;
+
                 if (commentsAfterCondition.Count > 0)
                 {
                     // Comments between condition and "then" - indent them like condition
@@ -4352,11 +4742,16 @@ public class Avh4Format
                 var condEndRow = ifBlock.Condition.Range.End.Row;
                 var condEndCol = ifBlock.Condition.Range.End.Column;
                 var thenCol = ifBlock.ThenTokenLocation.Column;
-                var inlineCommentsBeforeThen = (condEndRow == ifBlock.ThenTokenLocation.Row)
-                    ? commentQueries.GetOnRowBetweenColumns(condEndRow, condEndCol, thenCol)
-                    : [];
+
+                var inlineCommentsBeforeThen =
+                    (condEndRow == ifBlock.ThenTokenLocation.Row)
+                    ?
+                    commentQueries.GetOnRowBetweenColumns(condEndRow, condEndCol, thenCol)
+                    :
+                    [];
 
                 var afterCondCtx = conditionResult.Context;
+
                 foreach (var comment in inlineCommentsBeforeThen)
                 {
                     afterCondCtx = afterCondCtx.AdvanceSpaceSeparator();
@@ -4385,10 +4780,12 @@ public class Avh4Format
             if (commentsBeforeThenBlock.Count > 0)
             {
                 var thenBodyIndentRef = thenContext.SetIndentToCurrentColumn();
+
                 foreach (var comment in commentsBeforeThenBlock)
                 {
                     // Format the comment, add it to the context, and position at then body indent
-                    thenContext = thenContext.ReturnToIndent(thenBodyIndentRef).FormatAndAddCommentAndNextRowToIndent(comment);
+                    thenContext =
+                        thenContext.ReturnToIndent(thenBodyIndentRef).FormatAndAddCommentAndNextRowToIndent(comment);
                 }
             }
 
@@ -4417,7 +4814,8 @@ public class Avh4Format
 
                 // After comments, we're already at the start of a new line
                 // Just add one more blank line (one newline) before else
-                elseContext = afterThenBlockContext.NextRowToIndent().ReturnToIndent(effectiveBaseRef).SetIndentColumn();
+                elseContext =
+                    afterThenBlockContext.NextRowToIndent().ReturnToIndent(effectiveBaseRef).SetIndentColumn();
             }
             else
             {
@@ -4456,26 +4854,34 @@ public class Avh4Format
                     var innerConditionContext = afterInnerIf.ReturnToIndent(bodyRef).NextRowToIndent();
 
                     // Check for comments before the inner condition
-                    var commentsBeforeInnerCondition = commentQueries.GetBetweenRows(
-                        innerIfBlock.IfTokenLocation.Row, innerIfBlock.Condition.Range.Start.Row);
+                    var commentsBeforeInnerCondition =
+                        commentQueries.GetBetweenRows(
+                            innerIfBlock.IfTokenLocation.Row,
+                            innerIfBlock.Condition.Range.Start.Row);
 
                     if (commentsBeforeInnerCondition.Count > 0)
                     {
                         var innerCondIndentRef = innerConditionContext.SetIndentToCurrentColumn();
+
                         foreach (var comment in commentsBeforeInnerCondition)
                         {
                             // Format the comment, add it to the context, and position at inner condition indent
-                            innerConditionContext = innerConditionContext.ReturnToIndent(innerCondIndentRef).FormatAndAddCommentAndNextRowToIndent(comment);
+                            innerConditionContext =
+                                innerConditionContext.ReturnToIndent(innerCondIndentRef)
+                                    .FormatAndAddCommentAndNextRowToIndent(comment);
                         }
                     }
 
                     innerConditionResult = FormatExpression(innerIfBlock.Condition, innerConditionContext);
 
                     // Check for comments between inner condition and inner "then"
-                    var commentsAfterInnerCondition = commentQueries.GetBetweenRows(
-                        innerIfBlock.Condition.Range.End.Row, innerIfBlock.ThenTokenLocation.Row);
+                    var commentsAfterInnerCondition =
+                        commentQueries.GetBetweenRows(
+                            innerIfBlock.Condition.Range.End.Row,
+                            innerIfBlock.ThenTokenLocation.Row);
 
                     var afterInnerConditionCtx = innerConditionResult.Context;
+
                     if (commentsAfterInnerCondition.Count > 0)
                     {
                         foreach (var comment in commentsAfterInnerCondition)
@@ -4487,7 +4893,9 @@ public class Avh4Format
                     }
 
                     // "then" on its own line at base indent
-                    var innerThenLineContext = afterInnerConditionCtx.ReturnToIndent(effectiveBaseRef).NextRowToIndent();
+                    var innerThenLineContext =
+                        afterInnerConditionCtx.ReturnToIndent(effectiveBaseRef).NextRowToIndent();
+
                     innerThenLoc = innerThenLineContext.CurrentLocation();
                     afterInnerThen = innerThenLineContext.Advance(Keywords.Then.Length);
                 }
@@ -4504,10 +4912,13 @@ public class Avh4Format
 
                     var inlineCommentsBeforeInnerThen =
                         (innerCondEndRow == innerIfBlock.ThenTokenLocation.Row)
-                        ? commentQueries.GetOnRowBetweenColumns(innerCondEndRow, innerCondEndCol, innerThenCol)
-                        : [];
+                        ?
+                        commentQueries.GetOnRowBetweenColumns(innerCondEndRow, innerCondEndCol, innerThenCol)
+                        :
+                        [];
 
                     var afterInnerCondCtx = innerConditionResult.Context;
+
                     foreach (var comment in inlineCommentsBeforeInnerThen)
                     {
                         afterInnerCondCtx = afterInnerCondCtx.AdvanceSpaceSeparator();
@@ -4527,8 +4938,10 @@ public class Avh4Format
 
                 var commentsBeforeInnerThenBlock =
                     commentQueries.GetAfterRowBeforeRowWithColumnCheck(
-                    innerIfBlock.ThenTokenLocation.Row, innerIfBlock.ThenTokenLocation.Column + Keywords.Then.Length,
-                    innerIfBlock.ThenBlock.Range.Start.Row, requireAfterColumn: true);
+                        innerIfBlock.ThenTokenLocation.Row,
+                        innerIfBlock.ThenTokenLocation.Column + Keywords.Then.Length,
+                        innerIfBlock.ThenBlock.Range.Start.Row,
+                        requireAfterColumn: true);
 
                 if (commentsBeforeInnerThenBlock.Count > 0)
                 {
@@ -4564,17 +4977,20 @@ public class Avh4Format
                     foreach (var comment in commentsAfterInnerThenBlock)
                     {
                         // Format the comment, add it to the context, and position at indent on the next row
-                        afterInnerThenBlockContext = afterInnerThenBlockContext.FormatAndAddCommentThenNextRowToIndent(comment);
+                        afterInnerThenBlockContext =
+                            afterInnerThenBlockContext.FormatAndAddCommentThenNextRowToIndent(comment);
                     }
 
                     // After comments, we're already at the start of a new line
                     // Just add one more blank line (one newline) before else
-                    innerElseContext = afterInnerThenBlockContext.NextRowToIndent().ReturnToIndent(effectiveBaseRef).SetIndentColumn();
+                    innerElseContext =
+                        afterInnerThenBlockContext.NextRowToIndent().ReturnToIndent(effectiveBaseRef).SetIndentColumn();
                 }
                 else
                 {
                     // No comments - add blank line (2 rows) before else
-                    innerElseContext = afterInnerThenBlockContext.WithBlankLine().ReturnToIndent(effectiveBaseRef).SetIndentColumn();
+                    innerElseContext =
+                        afterInnerThenBlockContext.WithBlankLine().ReturnToIndent(effectiveBaseRef).SetIndentColumn();
                 }
 
                 var innerElseTokenLoc = innerElseContext.CurrentLocation();
@@ -4587,7 +5003,13 @@ public class Avh4Format
                     // Continue the chain - pass the base column
                     var afterInnerElse = innerElseContext.Advance(Keywords.Else.Length).AdvanceSpaceSeparator();
                     var nestedIfResult = FormatIfBlock(nestedIf, afterInnerElse, effectiveBaseColumn);
-                    formattedInnerElseBlock = MakeNode(afterInnerElse.CurrentLocation(), nestedIfResult.Context.CurrentLocation(), nestedIfResult.FormattedNode);
+
+                    formattedInnerElseBlock =
+                        MakeNode(
+                            afterInnerElse.CurrentLocation(),
+                            nestedIfResult.Context.CurrentLocation(),
+                            nestedIfResult.FormattedNode);
+
                     afterInnerElseBlock = nestedIfResult.Context;
                 }
                 else
@@ -4599,17 +5021,24 @@ public class Avh4Format
                     var innerElseBodyContext = innerElseBodyContextReference;
 
                     // Check for comments between inner "else" and inner else-block
-                    var commentsBeforeInnerElseBlock = commentQueries.GetAfterRowBeforeRowWithColumnCheck(
-                        innerIfBlock.ElseTokenLocation.Row, innerIfBlock.ElseTokenLocation.Column + Keywords.Else.Length,
-                        innerIfBlock.ElseBlock.Range.Start.Row, requireAfterColumn: true);
+                    var commentsBeforeInnerElseBlock =
+                        commentQueries.GetAfterRowBeforeRowWithColumnCheck(
+                            innerIfBlock.ElseTokenLocation.Row,
+                            innerIfBlock.ElseTokenLocation.Column +
+                            Keywords.Else.Length,
+                            innerIfBlock.ElseBlock.Range.Start.Row,
+                            requireAfterColumn: true);
 
                     if (commentsBeforeInnerElseBlock.Count > 0)
                     {
                         var innerElseBodyIndentRef = innerElseBodyContext.SetIndentToCurrentColumn();
+
                         foreach (var comment in commentsBeforeInnerElseBlock)
                         {
                             // Format the comment, add it to the context, and position at inner else body indent
-                            innerElseBodyContext = innerElseBodyContext.ReturnToIndent(innerElseBodyIndentRef).FormatAndAddCommentAndNextRowToIndent(comment);
+                            innerElseBodyContext =
+                                innerElseBodyContext.ReturnToIndent(innerElseBodyIndentRef)
+                                    .FormatAndAddCommentAndNextRowToIndent(comment);
                         }
                     }
 
@@ -4618,27 +5047,29 @@ public class Avh4Format
                     afterInnerElseBlock = innerElseResult.Context;
                 }
 
-                var formattedInnerIf = new ExpressionSyntax.IfBlock(
-                    innerIfTokenLoc,
-                    innerConditionResult.FormattedNode,
-                    innerThenLoc,
-                    innerThenResult.FormattedNode,
-                    innerElseTokenLoc,
-                    formattedInnerElseBlock
-                );
+                var formattedInnerIf =
+                    new ExpressionSyntax.IfBlock(
+                        innerIfTokenLoc,
+                        innerConditionResult.FormattedNode,
+                        innerThenLoc,
+                        innerThenResult.FormattedNode,
+                        innerElseTokenLoc,
+                        formattedInnerElseBlock);
 
                 // The else block wraps the inner if block
                 var elseBlockRange = MakeRange(afterElse.CurrentLocation(), afterInnerElseBlock.CurrentLocation());
                 var formattedElseBlock = MakeNode<ExpressionSyntax>(elseBlockRange, formattedInnerIf);
 
-                return FormattingResult<ExpressionSyntax>.Create(new ExpressionSyntax.IfBlock(
-                    ifTokenLoc,
-                    conditionResult.FormattedNode,
-                    thenTokenLoc,
-                    thenResult.FormattedNode,
-                    elseTokenLoc,
-                    formattedElseBlock
-                ), afterInnerElseBlock);
+                return
+                    FormattingResult<ExpressionSyntax>.Create(
+                        new ExpressionSyntax.IfBlock(
+                            ifTokenLoc,
+                            conditionResult.FormattedNode,
+                            thenTokenLoc,
+                            thenResult.FormattedNode,
+                            elseTokenLoc,
+                            formattedElseBlock),
+                        afterInnerElseBlock);
             }
             else
             {
@@ -4657,30 +5088,38 @@ public class Avh4Format
                 var elseBlockContext = elseBlockContextReference;
 
                 // Check for comments between "else" and the else-block
-                var commentsBeforeElseBlock = commentQueries.GetAfterRowBeforeRowWithColumnCheck(
-                    ifBlock.ElseTokenLocation.Row, ifBlock.ElseTokenLocation.Column + 4,
-                    ifBlock.ElseBlock.Range.Start.Row, requireAfterColumn: true);
+                var commentsBeforeElseBlock =
+                    commentQueries.GetAfterRowBeforeRowWithColumnCheck(
+                        ifBlock.ElseTokenLocation.Row,
+                        ifBlock.ElseTokenLocation.Column + 4,
+                        ifBlock.ElseBlock.Range.Start.Row,
+                        requireAfterColumn: true);
 
                 if (commentsBeforeElseBlock.Count > 0)
                 {
                     var elseBodyIndentRef = elseBlockContext.SetIndentToCurrentColumn();
+
                     foreach (var comment in commentsBeforeElseBlock)
                     {
                         // Format the comment, add it to the context, and position at else body indent
-                        elseBlockContext = elseBlockContext.ReturnToIndent(elseBodyIndentRef).FormatAndAddCommentAndNextRowToIndent(comment);
+                        elseBlockContext =
+                            elseBlockContext.ReturnToIndent(elseBodyIndentRef)
+                                .FormatAndAddCommentAndNextRowToIndent(comment);
                     }
                 }
 
                 var elseResult = FormatExpression(ifBlock.ElseBlock, elseBlockContext);
 
-                return FormattingResult<ExpressionSyntax>.Create(new ExpressionSyntax.IfBlock(
-                    ifTokenLoc,
-                    conditionResult.FormattedNode,
-                    thenTokenLoc,
-                    thenResult.FormattedNode,
-                    elseTokenLoc,
-                    elseResult.FormattedNode
-                ), elseResult.Context.ReturnToIndent(context));
+                return
+                    FormattingResult<ExpressionSyntax>.Create(
+                        new ExpressionSyntax.IfBlock(
+                            ifTokenLoc,
+                            conditionResult.FormattedNode,
+                            thenTokenLoc,
+                            thenResult.FormattedNode,
+                            elseTokenLoc,
+                            elseResult.FormattedNode),
+                        elseResult.Context.ReturnToIndent(context));
             }
         }
 
@@ -4692,8 +5131,12 @@ public class Avh4Format
             // This can happen if:
             // 1. The scrutinee expression starts on a new line from the case keyword
             // 2. The "of" keyword is on a different line from the scrutinee
-            var scrutineeOnNewLine = caseExpr.CaseBlock.Expression.Range.Start.Row > caseExpr.CaseBlock.CaseTokenLocation.Row;
-            var ofOnDifferentLine = caseExpr.CaseBlock.OfTokenLocation.Row > caseExpr.CaseBlock.Expression.Range.End.Row;
+            var scrutineeOnNewLine =
+                caseExpr.CaseBlock.Expression.Range.Start.Row > caseExpr.CaseBlock.CaseTokenLocation.Row;
+
+            var ofOnDifferentLine =
+                caseExpr.CaseBlock.OfTokenLocation.Row > caseExpr.CaseBlock.Expression.Range.End.Row;
+
             var isMultilineCaseHeader = scrutineeOnNewLine || ofOnDifferentLine;
 
             // "case" or "case "
@@ -4727,6 +5170,7 @@ public class Avh4Format
             // " of" (space before of) or just "of" if scrutinee was on new line
             Location ofTokenLoc;
             FormattingContext afterOf;
+
             if (isMultilineCaseHeader)
             {
                 // "of" on new line, aligned with "case" keyword
@@ -4759,11 +5203,17 @@ public class Avh4Format
                 }
 
                 // Check for comments before this case pattern
-                var prevEnd = i is 0
-                    ? caseExpr.CaseBlock.Expression.Range.End
-                    : caseExpr.CaseBlock.Cases[i - 1].Expression.Range.End;
-                var commentsBeforePattern = commentQueries.GetBetweenRows(
-                    prevEnd.Row, caseItem.Pattern.Range.Start.Row);
+                var prevEnd =
+                    i is 0
+                    ?
+                    caseExpr.CaseBlock.Expression.Range.End
+                    :
+                    caseExpr.CaseBlock.Cases[i - 1].Expression.Range.End;
+
+                var commentsBeforePattern =
+                    commentQueries.GetBetweenRows(
+                        prevEnd.Row,
+                        caseItem.Pattern.Range.Start.Row);
 
                 foreach (var comment in commentsBeforePattern)
                 {
@@ -4790,7 +5240,8 @@ public class Avh4Format
                 var caseExprContext = afterArrow.ReturnToIndent(caseExprRef).NextRowToIndent();
 
                 // Check for comments before the case expression
-                var commentsBeforeExpr = commentQueries.GetBetweenRanges(caseItem.Pattern.Range, caseItem.Expression.Range).ToList();
+                var commentsBeforeExpr =
+                    commentQueries.GetBetweenRanges(caseItem.Pattern.Range, caseItem.Expression.Range).ToList();
 
                 foreach (var comment in commentsBeforeExpr)
                 {
@@ -4800,11 +5251,11 @@ public class Avh4Format
 
                 var caseExprResult = FormatExpression(caseItem.Expression, caseExprContext);
 
-                formattedCases.Add(new Case(
-                    transformedPatternNode,
-                    arrowLoc,
-                    caseExprResult.FormattedNode
-                ));
+                formattedCases.Add(
+                    new Case(
+                        transformedPatternNode,
+                        arrowLoc,
+                        caseExprResult.FormattedNode));
 
                 // Only add newline for blank line before next case (not after last case)
                 if (i < caseExpr.CaseBlock.Cases.Count - 1)
@@ -4814,21 +5265,23 @@ public class Avh4Format
                 }
                 else
                 {
-                    caseContext = caseExprResult.Context
+                    caseContext =
+                        caseExprResult.Context
                         .ReturnToIndent(caseBranchIndentContext);
                 }
             }
 
-            var formattedCaseBlock = new CaseBlock(
-                caseTokenLoc,
-                exprResult.FormattedNode,
-                ofTokenLoc,
-                formattedCases
-            );
+            var formattedCaseBlock =
+                new CaseBlock(
+                    caseTokenLoc,
+                    exprResult.FormattedNode,
+                    ofTokenLoc,
+                    formattedCases);
 
-            return FormattingResult<ExpressionSyntax>.Create(
-                new ExpressionSyntax.CaseExpression(formattedCaseBlock),
-                caseContext.ReturnToIndent(context));
+            return
+                FormattingResult<ExpressionSyntax>.Create(
+                    new ExpressionSyntax.CaseExpression(formattedCaseBlock),
+                    caseContext.ReturnToIndent(context));
         }
 
         private FormattingResult<ExpressionSyntax> FormatLetExpression(
@@ -4856,6 +5309,7 @@ public class Avh4Format
 
                 // Check for comments before this declaration
                 int prevEndRow;
+
                 if (i is 0)
                 {
                     // For first decl, look for comments between "let" and first declaration
@@ -4894,11 +5348,17 @@ public class Avh4Format
             }
 
             // Check for comments between last declaration and "in"
-            var lastDeclEndRow = letExpr.Value.Declarations.Count > 0
-                ? letExpr.Value.Declarations[letExpr.Value.Declarations.Count - 1].Range.End.Row
-                : letExpr.Value.LetTokenLocation.Row;
-            var commentsBeforeIn = commentQueries.GetBetweenRows(
-                lastDeclEndRow, letExpr.Value.InTokenLocation.Row);
+            var lastDeclEndRow =
+                letExpr.Value.Declarations.Count > 0
+                ?
+                letExpr.Value.Declarations[letExpr.Value.Declarations.Count - 1].Range.End.Row
+                :
+                letExpr.Value.LetTokenLocation.Row;
+
+            var commentsBeforeIn =
+                commentQueries.GetBetweenRows(
+                    lastDeclEndRow,
+                    letExpr.Value.InTokenLocation.Row);
 
             // Format comments between last declaration and "in"
             if (commentsBeforeIn.Count > 0)
@@ -4919,8 +5379,10 @@ public class Avh4Format
             var afterIn = inContext.Advance(Keywords.In.Length);
 
             // Check for comments between "in" and the expression
-            var commentsBeforeExpr = commentQueries.GetBetweenRows(
-                letExpr.Value.InTokenLocation.Row, letExpr.Value.Expression.Range.Start.Row);
+            var commentsBeforeExpr =
+                commentQueries.GetBetweenRows(
+                    letExpr.Value.InTokenLocation.Row,
+                    letExpr.Value.Expression.Range.Start.Row);
 
             // Expression after "in" - reset IndentSpaces to match let's position
             var exprContext = afterIn.ReturnToIndent(letTokenRef).NextRowToIndent();
@@ -4934,16 +5396,17 @@ public class Avh4Format
 
             var exprResult = FormatExpression(letExpr.Value.Expression, exprContext);
 
-            var formattedLet = new ExpressionSyntax.LetBlock(
-                letTokenLoc,
-                formattedDecls,
-                inTokenLoc,
-                exprResult.FormattedNode
-            );
+            var formattedLet =
+                new ExpressionSyntax.LetBlock(
+                    letTokenLoc,
+                    formattedDecls,
+                    inTokenLoc,
+                    exprResult.FormattedNode);
 
-            return FormattingResult<ExpressionSyntax>.Create(
-                new ExpressionSyntax.LetExpression(formattedLet),
-                exprResult.Context);
+            return
+                FormattingResult<ExpressionSyntax>.Create(
+                    new ExpressionSyntax.LetExpression(formattedLet),
+                    exprResult.Context);
         }
 
         private FormattingResult<Node<ExpressionSyntax.LetDeclaration>> FormatLetDeclaration(
@@ -4975,7 +5438,9 @@ public class Avh4Format
 
                             // Check if type annotation is on a new line AND spans multiple lines
                             // (only preserve multiline format for complex types like records that span multiple lines)
-                            var typeAnnotOnNewLine = signature.Value.TypeAnnotation.Range.Start.Row > signature.Value.ColonLocation.Row;
+                            var typeAnnotOnNewLine =
+                                signature.Value.TypeAnnotation.Range.Start.Row > signature.Value.ColonLocation.Row;
+
                             var typeAnnotSpansMultipleLines = SpansMultipleRows(signature.Value.TypeAnnotation.Range);
                             var preserveMultilineFormat = typeAnnotOnNewLine && typeAnnotSpansMultipleLines;
 
@@ -4995,13 +5460,14 @@ public class Avh4Format
                                 typeAnnotResult = FormatTypeAnnotation(signature.Value.TypeAnnotation, afterColon);
                             }
 
-                            var formattedSigValue = new Signature(
-                                MakeNode(sigNameLoc, afterSigName.CurrentLocation(), funcName),
-                                colonLoc,
-                                typeAnnotResult.FormattedNode
-                            );
+                            var formattedSigValue =
+                                new Signature(
+                                    MakeNode(sigNameLoc, afterSigName.CurrentLocation(), funcName),
+                                    colonLoc,
+                                    typeAnnotResult.FormattedNode);
 
-                            formattedSignature = MakeNode(sigNameLoc, typeAnnotResult.Context.CurrentLocation(), formattedSigValue);
+                            formattedSignature =
+                                MakeNode(sigNameLoc, typeAnnotResult.Context.CurrentLocation(), formattedSigValue);
 
                             // Move to next line for function implementation
                             currentCtx = typeAnnotResult.Context.ReturnToIndent(context).NextRowToIndent();
@@ -5045,25 +5511,26 @@ public class Avh4Format
 
                         var exprResult = FormatExpression(letFunc.Function.Declaration.Value.Expression, exprContext);
 
-                        var formattedImpl = new FunctionImplementation(
-                            MakeNode(implStartLoc, afterName.CurrentLocation(), funcName),
-                            formattedLetArgs,
-                            equalsLoc,
-                            exprResult.FormattedNode
-                        );
+                        var formattedImpl =
+                            new FunctionImplementation(
+                                MakeNode(implStartLoc, afterName.CurrentLocation(), funcName),
+                                formattedLetArgs,
+                                equalsLoc,
+                                exprResult.FormattedNode);
 
-                        var formattedLetFunc = new ExpressionSyntax.LetDeclaration.LetFunction(
-                            new FunctionStruct(
-                                letFunc.Function.Documentation,
-                                formattedSignature,
-                                MakeNode(implStartLoc, exprResult.Context.CurrentLocation(), formattedImpl)
-                            )
-                        );
+                        var formattedLetFunc =
+                            new ExpressionSyntax.LetDeclaration.LetFunction(
+                                new FunctionStruct(
+                                    letFunc.Function.Documentation,
+                                    formattedSignature,
+                                    MakeNode(implStartLoc, exprResult.Context.CurrentLocation(), formattedImpl)));
 
                         var range = MakeRange(startLoc, exprResult.Context.CurrentLocation());
-                        return FormattingResult<Node<ExpressionSyntax.LetDeclaration>>.Create(
-                            MakeNode<ExpressionSyntax.LetDeclaration>(range, formattedLetFunc),
-                            exprResult.Context.ReturnToIndent(context));
+
+                        return
+                            FormattingResult<Node<ExpressionSyntax.LetDeclaration>>.Create(
+                                MakeNode<ExpressionSyntax.LetDeclaration>(range, formattedLetFunc),
+                                exprResult.Context.ReturnToIndent(context));
                     }
 
                 case ExpressionSyntax.LetDeclaration.LetDestructuring letDestructuring:
@@ -5093,16 +5560,18 @@ public class Avh4Format
 
                         var exprResult = FormatExpression(letDestructuring.Expression, destructExprContext);
 
-                        var formattedDestructuring = new ExpressionSyntax.LetDeclaration.LetDestructuring(
-                            transformedPatternNode,
-                            destructEqualsLoc,
-                            exprResult.FormattedNode
-                        );
+                        var formattedDestructuring =
+                            new ExpressionSyntax.LetDeclaration.LetDestructuring(
+                                transformedPatternNode,
+                                destructEqualsLoc,
+                                exprResult.FormattedNode);
 
                         var destructRange = MakeRange(context.CurrentLocation(), exprResult.Context.CurrentLocation());
-                        return FormattingResult<Node<ExpressionSyntax.LetDeclaration>>.Create(
-                            MakeNode<ExpressionSyntax.LetDeclaration>(destructRange, formattedDestructuring),
-                            exprResult.Context.ReturnToIndent(context));
+
+                        return
+                            FormattingResult<Node<ExpressionSyntax.LetDeclaration>>.Create(
+                                MakeNode<ExpressionSyntax.LetDeclaration>(destructRange, formattedDestructuring),
+                                exprResult.Context.ReturnToIndent(context));
                     }
 
                 default:
@@ -5177,16 +5646,17 @@ public class Avh4Format
                 exprResult = FormatExpression(lambdaExpr.Lambda.Expression, afterSpace);
             }
 
-            var formattedLambda = new LambdaStruct(
-                backslashLoc,
-                formattedArgs,
-                arrowLoc,
-                exprResult.FormattedNode
-            );
+            var formattedLambda =
+                new LambdaStruct(
+                    backslashLoc,
+                    formattedArgs,
+                    arrowLoc,
+                    exprResult.FormattedNode);
 
-            return FormattingResult<ExpressionSyntax>.Create(
-                new ExpressionSyntax.LambdaExpression(formattedLambda),
-                exprResult.Context);
+            return
+                FormattingResult<ExpressionSyntax>.Create(
+                    new ExpressionSyntax.LambdaExpression(formattedLambda),
+                    exprResult.Context);
         }
 
         private FormattingResult<ExpressionSyntax> FormatTupledExpression(
@@ -5207,33 +5677,38 @@ public class Avh4Format
             var elemContentRef = context.Advance(2).SetIndentToCurrentColumn();
 
             // Use the unified generic separated list formatter
-            var singleLineConfig = new SingleLineSeparatedListConfig(
-                OpenBracket: "( ",
-                Separator: ", ",
-                CloseBracket: " )");
+            var singleLineConfig =
+                new SingleLineSeparatedListConfig(
+                    OpenBracket: "( ",
+                    Separator: ", ",
+                    CloseBracket: " )");
 
-            var multilineConfig = new SeparatedListConfig(
-                AlignmentRef: elemAlignRef,
-                ContentIndentRef: elemContentRef,
-                Separator: Keywords.Comma + " ",  // ", "
-                CloseBracket: ")");
+            var multilineConfig =
+                new SeparatedListConfig(
+                    AlignmentRef: elemAlignRef,
+                    ContentIndentRef: elemContentRef,
+                    Separator: Keywords.Comma + " ", // ", "
+                    CloseBracket: ")");
 
-            var (formattedList, finalContext) = FormatSeparatedList(
-                separatedList: tupledExpr.Elements,
-                formatItem: FormatExpression,
-                commentQueries: commentQueries,
-                singleLineConfig: singleLineConfig,
-                multilineConfig: multilineConfig,
-                context: context,
-                containerRange: originalRange,
-                commentStyle: SeparatedListCommentStyle.TupleStyle);
+            var (formattedList, finalContext) =
+                FormatSeparatedList(
+                    separatedList: tupledExpr.Elements,
+                    formatItem: FormatExpression,
+                    commentQueries: commentQueries,
+                    singleLineConfig: singleLineConfig,
+                    multilineConfig: multilineConfig,
+                    context: context,
+                    containerRange: originalRange,
+                    commentStyle: SeparatedListCommentStyle.TupleStyle);
 
             // Since tuples always have at least 2 elements, the result should be NonEmpty
             if (formattedList is SeparatedSyntaxList<Node<ExpressionSyntax>>.NonEmpty nonEmptyResult)
             {
-                return FormattingResult<ExpressionSyntax>.Create(new ExpressionSyntax.TupledExpression(
-                    nonEmptyResult
-                ), finalContext);
+                return
+                    FormattingResult<ExpressionSyntax>.Create(
+                        new ExpressionSyntax.TupledExpression(
+                            nonEmptyResult),
+                        finalContext);
             }
 
             // Fallback - shouldn't happen for valid tuples
@@ -5315,7 +5790,8 @@ public class Avh4Format
 
                     var fieldResult = FormatExpression(field.ValueExpr, valueContext);
 
-                    var fieldNameNode = MakeNode(fieldStartLoc, afterFieldName.CurrentLocation(), field.FieldName.Value);
+                    var fieldNameNode =
+                        MakeNode(fieldStartLoc, afterFieldName.CurrentLocation(), field.FieldName.Value);
 
                     var formattedField = new RecordExprField(fieldNameNode, equalsLoc, fieldResult.FormattedNode);
 
@@ -5336,6 +5812,7 @@ public class Avh4Format
                 var afterCloseBrace = closeCtx.Advance(1); // "}"
 
                 SeparatedSyntaxList<RecordExprField> separatedFields;
+
                 if (firstField is not null)
                 {
                     separatedFields = new SeparatedSyntaxList<RecordExprField>.NonEmpty(firstField, restFields);
@@ -5345,11 +5822,13 @@ public class Avh4Format
                     separatedFields = new SeparatedSyntaxList<RecordExprField>.Empty();
                 }
 
-                return FormattingResult<ExpressionSyntax>.Create(new ExpressionSyntax.RecordUpdateExpression(
-                    MakeNode(recordNameLoc, afterRecordName.CurrentLocation(), recordUpdate.RecordName.Value),
-                    pipeLoc,
-                    separatedFields
-                ), afterCloseBrace.ReturnToIndent(context));
+                return
+                    FormattingResult<ExpressionSyntax>.Create(
+                        new ExpressionSyntax.RecordUpdateExpression(
+                            MakeNode(recordNameLoc, afterRecordName.CurrentLocation(), recordUpdate.RecordName.Value),
+                            pipeLoc,
+                            separatedFields),
+                        afterCloseBrace.ReturnToIndent(context));
             }
             else
             {
@@ -5364,7 +5843,9 @@ public class Avh4Format
                     var afterEq = afterFieldName.Advance(3); // " = "
                     var valueResult = FormatExpression(field.ValueExpr, afterEq);
 
-                    var fieldNameNode = MakeNode(fieldStartLoc, afterFieldName.CurrentLocation(), field.FieldName.Value);
+                    var fieldNameNode =
+                        MakeNode(fieldStartLoc, afterFieldName.CurrentLocation(), field.FieldName.Value);
+
                     var formattedField = new RecordExprField(fieldNameNode, equalsLoc, valueResult.FormattedNode);
 
                     return FormattingResult<RecordExprField>.Create(formattedField, valueResult.Context);
@@ -5383,34 +5864,45 @@ public class Avh4Format
                 {
                     // " }"
                     var afterCloseBrace = afterPipe.Advance(2);
-                    return FormattingResult<ExpressionSyntax>.Create(new ExpressionSyntax.RecordUpdateExpression(
-                        MakeNode(recordNameLoc, afterRecordName.CurrentLocation(), recordUpdate.RecordName.Value),
-                        pipeLoc,
-                        recordUpdate.Fields
-                    ), afterCloseBrace);
+
+                    return
+                        FormattingResult<ExpressionSyntax>.Create(
+                            new ExpressionSyntax.RecordUpdateExpression(
+                                MakeNode(
+                                    recordNameLoc,
+                                    afterRecordName.CurrentLocation(),
+                                    recordUpdate.RecordName.Value),
+                                pipeLoc,
+                                recordUpdate.Fields),
+                            afterCloseBrace);
                 }
 
                 // Use the general single-line formatter
-                var singleLineConfig = new SingleLineSeparatedListConfig(
-                    OpenBracket: "",  // No open bracket - we start after "|"
-                    Separator: ", ",
-                    CloseBracket: " }");
+                var singleLineConfig =
+                    new SingleLineSeparatedListConfig(
+                        OpenBracket: "", // No open bracket - we start after "|"
+                        Separator: ", ",
+                        CloseBracket: " }");
 
                 var nonEmptyFields = (SeparatedSyntaxList<RecordExprField>.NonEmpty)recordUpdate.Fields;
-                var (formattedFields, afterClose) = FormatSingleLineSeparatedListGeneral(
-                    separatedList: nonEmptyFields,
-                    formatItem: FormatRecordUpdateField,
-                    getItemRange: GetRecordFieldRange,
-                    commentQueries: commentQueries,
-                    config: singleLineConfig,
-                    context: afterPipe,
-                    containerRange: originalRange);
 
-                return FormattingResult<ExpressionSyntax>.Create(new ExpressionSyntax.RecordUpdateExpression(
-                    MakeNode(recordNameLoc, afterRecordName.CurrentLocation(), recordUpdate.RecordName.Value),
-                    pipeLoc,
-                    formattedFields
-                ), afterClose);
+                var (formattedFields, afterClose) =
+                    FormatSingleLineSeparatedListGeneral(
+                        separatedList: nonEmptyFields,
+                        formatItem: FormatRecordUpdateField,
+                        getItemRange: GetRecordFieldRange,
+                        commentQueries: commentQueries,
+                        config: singleLineConfig,
+                        context: afterPipe,
+                        containerRange: originalRange);
+
+                return
+                    FormattingResult<ExpressionSyntax>.Create(
+                        new ExpressionSyntax.RecordUpdateExpression(
+                            MakeNode(recordNameLoc, afterRecordName.CurrentLocation(), recordUpdate.RecordName.Value),
+                            pipeLoc,
+                            formattedFields),
+                        afterClose);
             }
         }
 
@@ -5475,38 +5967,65 @@ public class Avh4Format
                     return FormatSimplePattern(pattern, 2, startLoc, context);
 
                 case Pattern.CharPattern charPattern:
-                    return FormatSimplePattern(pattern, Rendering.RenderCharLiteral(charPattern.Value).Length, startLoc, context);
+                    return
+                        FormatSimplePattern(
+                            pattern,
+                            Rendering.RenderCharLiteral(charPattern.Value).Length,
+                            startLoc,
+                            context);
 
                 case Pattern.StringPattern stringPattern:
-                    return FormatSimplePattern(pattern, Rendering.RenderStringLiteral(stringPattern.Value).Length, startLoc, context);
+                    return
+                        FormatSimplePattern(
+                            pattern,
+                            Rendering.RenderStringLiteral(stringPattern.Value).Length,
+                            startLoc,
+                            context);
 
                 case Pattern.IntPattern intPattern:
                     return FormatSimplePattern(pattern, intPattern.Value.ToString().Length, startLoc, context);
 
                 case Pattern.HexPattern hexPattern:
-                    return FormatSimplePattern(pattern, Rendering.RenderHexPattern(hexPattern.Value).Length, startLoc, context);
+                    return
+                        FormatSimplePattern(
+                            pattern,
+                            Rendering.RenderHexPattern(hexPattern.Value).Length,
+                            startLoc,
+                            context);
 
                 case Pattern.FloatPattern floatPattern:
-                    return FormatSimplePattern(pattern, Rendering.FormatFloatForElm(floatPattern.Value).Length, startLoc, context);
+                    return
+                        FormatSimplePattern(
+                            pattern,
+                            Rendering.FormatFloatForElm(floatPattern.Value).Length,
+                            startLoc,
+                            context);
 
                 case Pattern.RecordPattern recordPattern:
                     {
                         // Format: { field1, field2, ... }
                         // Record patterns are always single-line
-                        var singleLineConfig = new SingleLineSeparatedListConfig(
-                            OpenBracket: "{ ",
-                            Separator: ", ",
-                            CloseBracket: " }");
+                        var singleLineConfig =
+                            new SingleLineSeparatedListConfig(
+                                OpenBracket: "{ ",
+                                Separator: ", ",
+                                CloseBracket: " }");
 
                         // Helper to format a string field node
                         static FormattingResult<Node<string>> FormatStringField(
                             Node<string> field, FormattingContext ctx)
                         {
                             var fieldStartLoc = ctx.CurrentLocation();
-                            var fieldEndLoc = new Location(fieldStartLoc.Row, fieldStartLoc.Column + field.Value.Length);
+
+                            var fieldEndLoc =
+                                new Location(fieldStartLoc.Row, fieldStartLoc.Column + field.Value.Length);
+
                             var formattedField = MakeNode(fieldStartLoc, fieldEndLoc, field.Value);
-                            return FormattingResult<Node<string>>.Create(
-                                formattedField, ctx.Advance(field.Value.Length));
+
+                            return
+                                FormattingResult<Node<string>>.Create(
+                                    formattedField,
+                                    ctx.Advance(field.Value.Length));
                         }
 
                         var (formattedList, afterClose) =
@@ -5531,8 +6050,11 @@ public class Avh4Format
                         var len = qualifiedName.Length;
                         var endLoc = new Location(startLoc.Row, startLoc.Column + len);
                         var node = MakeNode(startLoc, endLoc, pattern);
-                        return FormattingResult<Node<Pattern>>.Create(
-                            node, context.Advance(len));
+
+                        return
+                            FormattingResult<Node<Pattern>>.Create(
+                                node,
+                                context.Advance(len));
                     }
 
                 case Pattern.NamedPattern namedPattern:
@@ -5565,10 +6087,11 @@ public class Avh4Format
                         var currentContext = context.Advance(1); // "("
 
                         // Handle comments between opening paren and inner pattern
-                        var commentsAfterParen = commentQueries.GetOnRowBetweenColumns(
-                            originalRange.Start.Row,
-                            originalRange.Start.Column,
-                            parenPattern.Pattern.Range.Start.Column);
+                        var commentsAfterParen =
+                            commentQueries.GetOnRowBetweenColumns(
+                                originalRange.Start.Row,
+                                originalRange.Start.Column,
+                                parenPattern.Pattern.Range.Start.Column);
 
                         foreach (var comment in commentsAfterParen)
                         {
@@ -5580,10 +6103,11 @@ public class Avh4Format
                         currentContext = innerResult.Context;
 
                         // Handle comments between inner pattern and closing paren
-                        var commentsBeforeCloseParen = commentQueries.GetOnRowBetweenColumns(
-                            originalRange.Start.Row,
-                            parenPattern.Pattern.Range.End.Column,
-                            originalRange.End.Column);
+                        var commentsBeforeCloseParen =
+                            commentQueries.GetOnRowBetweenColumns(
+                                originalRange.Start.Row,
+                                parenPattern.Pattern.Range.End.Column,
+                                originalRange.End.Column);
 
                         foreach (var comment in commentsBeforeCloseParen)
                         {
@@ -5602,18 +6126,20 @@ public class Avh4Format
                 case Pattern.TuplePattern tuplePattern:
                     {
                         // Tuple patterns are always single-line with inline comment handling
-                        var singleLineConfig = new SingleLineSeparatedListConfig(
-                            OpenBracket: "( ",
-                            Separator: ", ",
-                            CloseBracket: " )");
+                        var singleLineConfig =
+                            new SingleLineSeparatedListConfig(
+                                OpenBracket: "( ",
+                                Separator: ", ",
+                                CloseBracket: " )");
 
-                        var (formattedList, afterClose) = FormatSingleLineOnlySeparatedList(
-                            separatedList: tuplePattern.Elements,
-                            formatItem: FormatPattern,
-                            commentQueries: commentQueries,
-                            config: singleLineConfig,
-                            context: context,
-                            containerRange: originalRange);
+                        var (formattedList, afterClose) =
+                            FormatSingleLineOnlySeparatedList(
+                                separatedList: tuplePattern.Elements,
+                                formatItem: FormatPattern,
+                                commentQueries: commentQueries,
+                                config: singleLineConfig,
+                                context: context,
+                                containerRange: originalRange);
 
                         var endLoc = afterClose.CurrentLocation();
                         // TuplePattern requires NonEmpty, but we handle gracefully
@@ -5627,29 +6153,37 @@ public class Avh4Format
                         {
                             // Empty tuple pattern - shouldn't happen but handle gracefully
                             var emptyEndLoc = new Location(startLoc.Row, startLoc.Column + 2);
-                            Pattern emptyPattern = new Pattern.TuplePattern(
-                                new SeparatedSyntaxList<Node<Pattern>>.Empty());
+
+                            Pattern emptyPattern =
+                                new Pattern.TuplePattern(
+                                    new SeparatedSyntaxList<Node<Pattern>>.Empty());
+
                             var emptyNode = MakeNode(startLoc, emptyEndLoc, emptyPattern);
-                            return FormattingResult<Node<Pattern>>.Create(
-                                emptyNode, context.Advance(2));
+
+                            return
+                                FormattingResult<Node<Pattern>>.Create(
+                                    emptyNode,
+                                    context.Advance(2));
                         }
                     }
 
                 case Pattern.ListPattern listPattern:
                     {
                         // List patterns are always single-line with inline comment handling
-                        var singleLineConfig = new SingleLineSeparatedListConfig(
-                            OpenBracket: "[ ",
-                            Separator: ", ",
-                            CloseBracket: " ]");
+                        var singleLineConfig =
+                            new SingleLineSeparatedListConfig(
+                                OpenBracket: "[ ",
+                                Separator: ", ",
+                                CloseBracket: " ]");
 
-                        var (formattedList, afterClose) = FormatSingleLineOnlySeparatedList(
-                            separatedList: listPattern.Elements,
-                            formatItem: FormatPattern,
-                            commentQueries: commentQueries,
-                            config: singleLineConfig,
-                            context: context,
-                            containerRange: originalRange);
+                        var (formattedList, afterClose) =
+                            FormatSingleLineOnlySeparatedList(
+                                separatedList: listPattern.Elements,
+                                formatItem: FormatPattern,
+                                commentQueries: commentQueries,
+                                config: singleLineConfig,
+                                context: context,
+                                containerRange: originalRange);
 
                         var endLoc = afterClose.CurrentLocation();
                         Pattern newPattern = new Pattern.ListPattern(formattedList);
@@ -5664,10 +6198,11 @@ public class Avh4Format
                         var currentContext = headResult.Context;
 
                         // Handle comments between head and :: operator
-                        var commentsBeforeOp = commentQueries.GetOnRowBetweenColumns(
-                            originalRange.Start.Row,
-                            unConsPattern.Head.Range.End.Column,
-                            unConsPattern.ConsOperatorLocation.Column);
+                        var commentsBeforeOp =
+                            commentQueries.GetOnRowBetweenColumns(
+                                originalRange.Start.Row,
+                                unConsPattern.Head.Range.End.Column,
+                                unConsPattern.ConsOperatorLocation.Column);
 
                         foreach (var comment in commentsBeforeOp)
                         {
@@ -5680,10 +6215,11 @@ public class Avh4Format
                         currentContext = currentContext.Advance(2); // "::" (2 chars)
 
                         // Handle comments between :: and tail pattern
-                        var commentsAfterOp = commentQueries.GetOnRowBetweenColumns(
-                            originalRange.Start.Row,
-                            unConsPattern.ConsOperatorLocation.Column + 2, // After ::
-                            unConsPattern.Tail.Range.Start.Column);
+                        var commentsAfterOp =
+                            commentQueries.GetOnRowBetweenColumns(
+                                originalRange.Start.Row,
+                                unConsPattern.ConsOperatorLocation.Column + 2, // After ::
+                                unConsPattern.Tail.Range.Start.Column);
 
                         if (commentsAfterOp.Count > 0)
                         {
@@ -5692,6 +6228,7 @@ public class Avh4Format
                                 currentContext = currentContext.Advance(1); // space before comment
                                 currentContext = currentContext.FormatAndAddComment(comment);
                             }
+
                             currentContext = currentContext.Advance(1); // space after last comment
                         }
                         else
@@ -5703,10 +6240,11 @@ public class Avh4Format
                         currentContext = tailResult.Context;
 
                         // Handle comments after tail (but within the overall pattern range)
-                        var commentsAfterTail = commentQueries.GetOnRowBetweenColumns(
-                            originalRange.Start.Row,
-                            unConsPattern.Tail.Range.End.Column,
-                            originalRange.End.Column);
+                        var commentsAfterTail =
+                            commentQueries.GetOnRowBetweenColumns(
+                                originalRange.Start.Row,
+                                unConsPattern.Tail.Range.End.Column,
+                                originalRange.End.Column);
 
                         foreach (var comment in commentsAfterTail)
                         {
@@ -5715,8 +6253,13 @@ public class Avh4Format
                         }
 
                         var endLoc = currentContext.CurrentLocation();
-                        Pattern newPattern = new Pattern.UnConsPattern(
-                            headResult.FormattedNode, consOpLoc, tailResult.FormattedNode);
+
+                        Pattern newPattern =
+                            new Pattern.UnConsPattern(
+                                headResult.FormattedNode,
+                                consOpLoc,
+                                tailResult.FormattedNode);
+
                         var node = MakeNode(startLoc, endLoc, newPattern);
                         return FormattingResult<Node<Pattern>>.Create(node, currentContext);
                     }
@@ -5740,8 +6283,13 @@ public class Avh4Format
                         var newNameNode = MakeNode(nameLoc, nameEndLoc, asPattern.Name.Value);
 
                         var endLoc = currentContext.CurrentLocation();
-                        Pattern newPattern = new Pattern.AsPattern(
-                            innerResult.FormattedNode, asTokenLoc, newNameNode);
+
+                        Pattern newPattern =
+                            new Pattern.AsPattern(
+                                innerResult.FormattedNode,
+                                asTokenLoc,
+                                newNameNode);
+
                         var node = MakeNode(startLoc, endLoc, newPattern);
                         return FormattingResult<Node<Pattern>>.Create(node, currentContext);
                     }
@@ -5765,15 +6313,18 @@ public class Avh4Format
         {
             var endLoc = new Location(startLoc.Row, startLoc.Column + length);
             var node = MakeNode(startLoc, endLoc, pattern);
-            return FormattingResult<Node<Pattern>>.Create(
-                node, context.Advance(length));
+
+            return
+                FormattingResult<Node<Pattern>>.Create(
+                    node,
+                    context.Advance(length));
         }
 
         private static string EscapeCharForPattern(char ch) =>
             ch switch
             {
                 '\n' => "\\n",
-                '\r' => "\\u{000D}",  // Elm uses Unicode escape for carriage return
+                '\r' => "\\u{000D}", // Elm uses Unicode escape for carriage return
                 '\t' => "\\t",
                 '\\' => "\\\\",
                 '\'' => "\\'",

@@ -57,18 +57,19 @@ public abstract record SeparatedSyntaxList<TNode>
     /// <summary>
     /// Gets the count of elements in the list.
     /// </summary>
-    public int Count => this switch
-    {
-        Empty =>
-        0,
+    public int Count =>
+        this switch
+        {
+            Empty =>
+            0,
 
-        NonEmpty nonEmpty =>
-        1 + nonEmpty.Rest.Count,
+            NonEmpty nonEmpty =>
+            1 + nonEmpty.Rest.Count,
 
-        _ =>
-        throw new System.NotImplementedException(
-            "Unexpected type: " + GetType().FullName)
-    };
+            _ =>
+            throw new System.NotImplementedException(
+                "Unexpected type: " + GetType().FullName)
+        };
 
     /// <summary>
     /// Gets all nodes in the list as an enumerable.
@@ -157,13 +158,13 @@ public abstract record Module
         module switch
         {
             NormalModule normalModule =>
-                normalModule.ModuleData.ModuleName,
+            normalModule.ModuleData.ModuleName,
 
             PortModule portModule =>
-                portModule.ModuleData.ModuleName,
+            portModule.ModuleData.ModuleName,
 
             EffectModule effectModule =>
-                effectModule.ModuleData.ModuleName,
+            effectModule.ModuleData.ModuleName,
 
             _ =>
             throw new System.NotImplementedException(

@@ -54,18 +54,20 @@ public static class FloatLiteralConversion
             // Positive exponent: multiply numerator by 10^exponent
             var multiplier = BigInteger.Pow(10, exponent);
 
-            return ElmValue.ElmFloat.Normalized(
-                mantissaParsed.Numerator * multiplier,
-                mantissaParsed.Denominator);
+            return
+                ElmValue.ElmFloat.Normalized(
+                    mantissaParsed.Numerator * multiplier,
+                    mantissaParsed.Denominator);
         }
         else
         {
             // Negative exponent: multiply denominator by 10^(-exponent)
             var multiplier = BigInteger.Pow(10, -exponent);
 
-            return ElmValue.ElmFloat.Normalized(
-                mantissaParsed.Numerator,
-                mantissaParsed.Denominator * multiplier);
+            return
+                ElmValue.ElmFloat.Normalized(
+                    mantissaParsed.Numerator,
+                    mantissaParsed.Denominator * multiplier);
         }
     }
 
@@ -82,9 +84,10 @@ public static class FloatLiteralConversion
             var intValue =
                 BigInteger.Parse(absLiteral, System.Globalization.CultureInfo.InvariantCulture);
 
-            return ElmValue.ElmFloat.Normalized(
-                isNegative ? -intValue : intValue,
-                BigInteger.One);
+            return
+                ElmValue.ElmFloat.Normalized(
+                    isNegative ? -intValue : intValue,
+                    BigInteger.One);
         }
 
         // Has decimal point
@@ -111,9 +114,10 @@ public static class FloatLiteralConversion
 
         var numerator = integerValue * denominator + fractionalValue;
 
-        return ElmValue.ElmFloat.Normalized(
-            isNegative ? -numerator : numerator,
-            denominator);
+        return
+            ElmValue.ElmFloat.Normalized(
+                isNegative ? -numerator : numerator,
+                denominator);
     }
 
     /// <summary>
