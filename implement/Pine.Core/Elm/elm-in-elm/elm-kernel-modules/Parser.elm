@@ -45,7 +45,6 @@ module Parser exposing
     , withIndent
     )
 
-import Char
 import Parser.Advanced as A exposing ((|.), (|=))
 import Set
 

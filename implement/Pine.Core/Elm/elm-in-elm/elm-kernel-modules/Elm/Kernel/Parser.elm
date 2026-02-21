@@ -1,8 +1,5 @@
 module Elm.Kernel.Parser exposing (..)
 
-import Char
-import String
-
 
 consumeBase : Int -> Int -> Int -> ( Int, Int )
 consumeBase base offset charsBytes =

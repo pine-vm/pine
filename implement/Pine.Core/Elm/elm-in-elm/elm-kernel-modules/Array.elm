@@ -1,11 +1,5 @@
 module Array exposing (..)
 
-import Basics
-import Bitwise
-import List
-import Maybe exposing (Maybe(..))
-import Tuple
-
 
 type alias Array a =
     List a

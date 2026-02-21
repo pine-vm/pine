@@ -12,7 +12,8 @@ public record ImplicitImportConfig(
     ImmutableHashSet<ModuleName> ModuleImports,
     IImmutableDictionary<string, ModuleName> TypeImports,
     IImmutableDictionary<string, ModuleName> ValueImports,
-    IImmutableDictionary<string, (ModuleName ModuleName, string FunctionName)> OperatorToFunction)
+    IImmutableDictionary<string, (ModuleName ModuleName, string FunctionName)> OperatorToFunction,
+    IImmutableDictionary<string, ModuleName> ModuleAliases)
 {
     /// <summary>
     /// Elm 0.19 defaults.
@@ -30,10 +31,14 @@ public record ImplicitImportConfig(
             .Add(["Basics"])
             .Add(["List"])
             .Add(["Maybe"])
+            .Add(["Result"])
             .Add(["Tuple"])
             .Add(["Char"])
             .Add(["String"])
-            .Add(["Debug"]);
+            .Add(["Debug"])
+            .Add(["Platform"])
+            .Add(["Platform", "Cmd"])
+            .Add(["Platform", "Sub"]);
 
         var typeImports =
             ImmutableDictionary<string, ModuleName>.Empty
@@ -126,6 +131,13 @@ public record ImplicitImportConfig(
             // List operators
             .Add("::", (["List"], "cons"));
 
-        return new ImplicitImportConfig(modules, typeImports, valueImports, operatorToFunction);
+        // Module name aliases for implicit imports
+        // Based on Elm 0.19 spec: Platform.Cmd is aliased as Cmd, Platform.Sub is aliased as Sub
+        var moduleAliases =
+            ImmutableDictionary<string, ModuleName>.Empty
+            .Add("Cmd", ["Platform", "Cmd"])
+            .Add("Sub", ["Platform", "Sub"]);
+
+        return new ImplicitImportConfig(modules, typeImports, valueImports, operatorToFunction, moduleAliases);
     }
 }

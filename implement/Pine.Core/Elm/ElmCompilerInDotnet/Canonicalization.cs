@@ -102,12 +102,25 @@ public class Canonicalization
                     kvp => kvp.Key,
                     kvp => ((IReadOnlyList<string>)[.. kvp.Value.ModuleName], kvp.Value.FunctionName));
 
+            // Merge implicit module aliases into the alias map
+            // This enables e.g. using "Cmd" as an alias for "Platform.Cmd"
+            var mergedAliasMap = AliasMap;
+
+            foreach (var (alias, moduleName) in implicitImportConfig.ModuleAliases)
+            {
+                if (!mergedAliasMap.ContainsKey(alias))
+                {
+                    mergedAliasMap = mergedAliasMap.Add(alias, moduleName);
+                }
+            }
+
             return
                 this with
                 {
                     TypeImportMap = mergedTypeImportMap,
                     ValueImportMap = mergedValueImportMap,
-                    OperatorToFunction = operatorToFunction
+                    OperatorToFunction = operatorToFunction,
+                    AliasMap = mergedAliasMap
                 };
         }
     }

@@ -1,7 +1,6 @@
 module Json.Encode exposing (..)
 
 import Array
-import Char
 
 
 type String

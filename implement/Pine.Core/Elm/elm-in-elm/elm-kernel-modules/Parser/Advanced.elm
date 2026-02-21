@@ -60,7 +60,6 @@ module Parser.Advanced exposing
 
 -}
 
-import Char
 import Elm.Kernel.Parser
 import Set
 

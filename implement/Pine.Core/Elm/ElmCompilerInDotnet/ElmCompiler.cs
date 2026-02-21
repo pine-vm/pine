@@ -145,10 +145,17 @@ public class ElmCompiler
                     if (!successfullyParsedModules.TryGetValue(moduleName, out var parsedModule))
                         continue;
 
-                    foreach (var import in parsedModule.Imports)
-                    {
-                        var importedName = string.Join(".", import.Value.ModuleName.Value);
+                    // Collect both explicit imports and implicit imports as dependencies.
+                    var importedNames =
+                        parsedModule.Imports
+                        .Select(import => string.Join(".", import.Value.ModuleName.Value));
 
+                    var implicitModuleNames =
+                        ImplicitImportConfig.Default.ModuleImports
+                        .Select(m => string.Join(".", m));
+
+                    foreach (var importedName in importedNames.Concat(implicitModuleNames).Distinct())
+                    {
                         if (s_nativelyImplementedModuleNames.Contains(importedName))
                             continue; // Natively implemented in .NET; not a compilation dep.
 

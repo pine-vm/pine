@@ -1,7 +1,5 @@
 module Char exposing (..)
 
-import Basics exposing ((&&), (<=), (>=), (||), Bool, Int)
-
 
 type alias Char =
     Int

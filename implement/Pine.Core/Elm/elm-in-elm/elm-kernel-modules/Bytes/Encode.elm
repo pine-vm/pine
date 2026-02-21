@@ -1,8 +1,6 @@
 module Bytes.Encode exposing (..)
 
 import Bytes exposing (Bytes, Endianness)
-import Char
-import List
 
 
 type Encoder

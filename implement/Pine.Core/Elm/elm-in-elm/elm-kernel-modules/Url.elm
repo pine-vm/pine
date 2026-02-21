@@ -29,12 +29,6 @@ addresses like `tom@example.com`.
 
 -}
 
-import Basics exposing (Bool(..))
-import Char
-import List exposing ((::))
-import Maybe exposing (Maybe(..))
-import String
-
 
 type alias Url =
     { protocol : Protocol

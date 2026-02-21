@@ -1,10 +1,6 @@
 module Bytes.Decode exposing (..)
 
 import Bytes exposing (Bytes, Endianness)
-import Char
-import List exposing ((::))
-import Maybe exposing (Maybe(..))
-import String
 
 
 

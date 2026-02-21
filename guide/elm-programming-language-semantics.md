@@ -127,7 +127,7 @@ myNode =
 
 ### Implicit Imports
 
-Elm automatically imports certain core modules with specific names exposed. The `Basics` module is implicitly imported with all its contents exposed, providing common functions and types like `Int`, `Float`, `Bool`, `True`, `False`, `+`, `-`, etc.
+Elm automatically imports certain core modules with specific names exposed. The `Basics` module is implicitly imported, exposing all its contents, including common types, functions, and infix operators such as `Int`, `Float`, `Bool`, `True`, `False`, `+`, `-`, etc.
 
 This is why you can write:
 
@@ -138,6 +138,25 @@ myValue =
 ```
 
 Without explicitly importing `Basics` or qualifying these names.
+
+The following other modules in the core library are also implicitly imported:
+
++ `List`, `Char`, `String`, `Maybe`, and `Result` each with their canonical name and specific declarations exposed (listed below).
++ `Debug` and `Tuple` each with their canonical name but with no declarations exposed. This means they only support qualified access (e.g., `Debug.log`, `Tuple.first`) without an explicit import statement.
++ `Platform` with its canonical name, exposing the `Program` type.
++ `Platform.Cmd` with an module name alias `Cmd`, exposing the `Cmd` type.
++ `Platform.Sub` with an module name alias `Sub`, exposing the `Sub` type.
+
+The following declarations from the core library are also implicitly exposed:
+
++ The type `List` and the infix operator `::` from `List`
++ The type `Char` from `Char`
++ The type `String` from `String`
++ The type `Maybe` and its choices `Nothing` and `Just` from `Maybe`
++ The type `Result` and its choices `Err` and `Ok` from `Result`
++ The type `Program` from `Platform`
++ The type `Cmd` from `Platform.Cmd`
++ The type `Sub` from `Platform.Sub`
 
 ### Shadowing Imported Names
 

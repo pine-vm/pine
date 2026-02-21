@@ -30,9 +30,6 @@ way to manage errors in Elm.
 
 -}
 
-import Basics exposing (Bool(..))
-import Maybe exposing (Maybe(..))
-
 
 {-| A `Result` is either `Ok` meaning the computation succeeded, or it is an
 `Err` meaning that there was some failure.

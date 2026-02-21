@@ -38,9 +38,6 @@ module List exposing
     , unzip
     )
 
-import Basics
-import Maybe exposing (Maybe(..))
-
 
 infix right 5 (::) = cons
 

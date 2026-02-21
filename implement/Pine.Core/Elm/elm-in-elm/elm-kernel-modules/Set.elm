@@ -45,10 +45,7 @@ Insert, remove, and query operations all take _O(log n)_ time.
 
 -}
 
-import Basics exposing (Bool, Int)
 import Dict
-import List exposing ((::))
-import Maybe exposing (Maybe(..))
 
 
 {-| Represents a set of unique values. So `(Set Int)` is a set of integers and

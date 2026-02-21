@@ -46,12 +46,6 @@ module String exposing
     , words
     )
 
-import Basics
-import Char
-import List exposing ((::))
-import Maybe exposing (Maybe)
-import Tuple
-
 
 type String
     = String Int
