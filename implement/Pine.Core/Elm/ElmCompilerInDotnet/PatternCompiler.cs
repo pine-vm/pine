@@ -667,6 +667,17 @@ public class PatternCompiler
 
     private static PineValue? AsConstantNamedPattern(SyntaxTypes.Pattern.NamedPattern namedPattern)
     {
+        // Special handling for Bool constructors: True and False use the kernel
+        // representation (Blob([4]) and Blob([2])) rather than the generic tag representation.
+        if (namedPattern.Arguments.Count is 0)
+        {
+            if (namedPattern.Name.Name is "True")
+                return ExpressionCompiler.EmitBooleanLiteral(true);
+
+            if (namedPattern.Name.Name is "False")
+                return ExpressionCompiler.EmitBooleanLiteral(false);
+        }
+
         var arguments = new PineValue[namedPattern.Arguments.Count];
 
         for (var i = 0; i < namedPattern.Arguments.Count; i++)

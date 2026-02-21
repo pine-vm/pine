@@ -302,4 +302,272 @@ public class SimpleNamedPatternTests
             """"
             .Trim());
     }
+
+    [Fact]
+    public void Case_of_bool_True_and_False_patterns()
+    {
+        var elmModuleText =
+            """
+            module Test exposing (..)
+
+
+            decl arg =
+                case arg of
+                    True ->
+                        10
+
+                    False ->
+                        20
+
+            """;
+
+        var parseCache = new PineVMParseCache();
+
+        var parsedEnv =
+            ElmCompilerTestHelper.CompileElmModules(
+                [elmModuleText],
+                disableInlining: false);
+
+        var testModule =
+            parsedEnv.Modules.FirstOrDefault(c => c.moduleName is "Test");
+
+        var declValue =
+            testModule.moduleContent.FunctionDeclarations
+            .FirstOrDefault(decl => decl.Key is "decl");
+
+        var declParsed =
+            FunctionRecord.ParseFunctionRecordTagged(declValue.Value, parseCache)
+            .Extract(err => throw new Exception("Failed parsing " + nameof(declValue) + ": " + err));
+
+        var invokeFunction = ElmCompilerTestHelper.CreateFunctionInvocationDelegate(declParsed);
+
+        string ApplyForArgumentAsExpressionString(PineValue argument)
+        {
+            var (applyRunResult, _) = invokeFunction([argument]);
+
+            var result = applyRunResult.ReturnValue.Evaluate();
+
+            var resultAsElmValue =
+                ElmValueEncoding.PineValueAsElmValue(result, null, null);
+
+            return
+                ElmValue.RenderAsElmExpression(
+                    resultAsElmValue
+                    .Extract(err => throw new Exception("Failed decoding result as Elm value: " + err)))
+                .expressionString;
+        }
+
+        // True -> 10
+        {
+            var result =
+                ApplyForArgumentAsExpressionString(
+                    KernelFunction.ValueFromBool(true));
+
+            result.Should().Be("10");
+        }
+
+        // False -> 20
+        {
+            var result =
+                ApplyForArgumentAsExpressionString(
+                    KernelFunction.ValueFromBool(false));
+
+            result.Should().Be("20");
+        }
+    }
+
+    [Fact]
+    public void Case_of_nested_bool_in_constructor_pattern()
+    {
+        var elmModuleText =
+            """
+            module Test exposing (..)
+
+
+            type Wrapper
+                = WrapBool Bool
+                | WrapInt Int
+
+
+            decl arg =
+                case arg of
+                    WrapBool True ->
+                        10
+
+                    WrapBool False ->
+                        20
+
+                    WrapInt n ->
+                        Pine_builtin.int_add
+                            [ 100
+                            , n
+                            ]
+
+                    _ ->
+                        0
+
+            """;
+
+        var parseCache = new PineVMParseCache();
+
+        var parsedEnv =
+            ElmCompilerTestHelper.CompileElmModules(
+                [elmModuleText],
+                disableInlining: false);
+
+        var testModule =
+            parsedEnv.Modules.FirstOrDefault(c => c.moduleName is "Test");
+
+        var declValue =
+            testModule.moduleContent.FunctionDeclarations
+            .FirstOrDefault(decl => decl.Key is "decl");
+
+        var declParsed =
+            FunctionRecord.ParseFunctionRecordTagged(declValue.Value, parseCache)
+            .Extract(err => throw new Exception("Failed parsing " + nameof(declValue) + ": " + err));
+
+        var invokeFunction = ElmCompilerTestHelper.CreateFunctionInvocationDelegate(declParsed);
+
+        string ApplyForArgumentAsExpressionString(PineValue argument)
+        {
+            var (applyRunResult, _) = invokeFunction([argument]);
+
+            var result = applyRunResult.ReturnValue.Evaluate();
+
+            var resultAsElmValue =
+                ElmValueEncoding.PineValueAsElmValue(result, null, null);
+
+            return
+                ElmValue.RenderAsElmExpression(
+                    resultAsElmValue
+                    .Extract(err => throw new Exception("Failed decoding result as Elm value: " + err)))
+                .expressionString;
+        }
+
+        // WrapBool True -> 10
+        {
+            var result =
+                ApplyForArgumentAsExpressionString(
+                    ElmValueEncoding.TagAsPineValue("WrapBool", [KernelFunction.ValueFromBool(true)]));
+
+            result.Should().Be("10");
+        }
+
+        // WrapBool False -> 20
+        {
+            var result =
+                ApplyForArgumentAsExpressionString(
+                    ElmValueEncoding.TagAsPineValue("WrapBool", [KernelFunction.ValueFromBool(false)]));
+
+            result.Should().Be("20");
+        }
+
+        // WrapInt 7 -> 107
+        {
+            var result =
+                ApplyForArgumentAsExpressionString(
+                    ElmValueEncoding.TagAsPineValue("WrapInt", [IntegerEncoding.EncodeSignedInteger(7)]));
+
+            result.Should().Be("107");
+        }
+    }
+
+    [Fact]
+    public void Case_of_bool_in_tuple_pattern()
+    {
+        var elmModuleText =
+            """
+            module Test exposing (..)
+
+
+            decl arg =
+                case arg of
+                    ( True, True ) ->
+                        1
+
+                    ( True, False ) ->
+                        2
+
+                    ( False, True ) ->
+                        3
+
+                    ( False, False ) ->
+                        4
+
+            """;
+
+        var parseCache = new PineVMParseCache();
+
+        var parsedEnv =
+            ElmCompilerTestHelper.CompileElmModules(
+                [elmModuleText],
+                disableInlining: false);
+
+        var testModule =
+            parsedEnv.Modules.FirstOrDefault(c => c.moduleName is "Test");
+
+        var declValue =
+            testModule.moduleContent.FunctionDeclarations
+            .FirstOrDefault(decl => decl.Key is "decl");
+
+        var declParsed =
+            FunctionRecord.ParseFunctionRecordTagged(declValue.Value, parseCache)
+            .Extract(err => throw new Exception("Failed parsing " + nameof(declValue) + ": " + err));
+
+        var invokeFunction = ElmCompilerTestHelper.CreateFunctionInvocationDelegate(declParsed);
+
+        string ApplyForArgumentAsExpressionString(PineValue argument)
+        {
+            var (applyRunResult, _) = invokeFunction([argument]);
+
+            var result = applyRunResult.ReturnValue.Evaluate();
+
+            var resultAsElmValue =
+                ElmValueEncoding.PineValueAsElmValue(result, null, null);
+
+            return
+                ElmValue.RenderAsElmExpression(
+                    resultAsElmValue
+                    .Extract(err => throw new Exception("Failed decoding result as Elm value: " + err)))
+                .expressionString;
+        }
+
+        PineValue BoolVal(bool b) => KernelFunction.ValueFromBool(b);
+
+        // ( True, True ) -> 1
+        {
+            var result =
+                ApplyForArgumentAsExpressionString(
+                    PineValue.List([BoolVal(true), BoolVal(true)]));
+
+            result.Should().Be("1");
+        }
+
+        // ( True, False ) -> 2
+        {
+            var result =
+                ApplyForArgumentAsExpressionString(
+                    PineValue.List([BoolVal(true), BoolVal(false)]));
+
+            result.Should().Be("2");
+        }
+
+        // ( False, True ) -> 3
+        {
+            var result =
+                ApplyForArgumentAsExpressionString(
+                    PineValue.List([BoolVal(false), BoolVal(true)]));
+
+            result.Should().Be("3");
+        }
+
+        // ( False, False ) -> 4
+        {
+            var result =
+                ApplyForArgumentAsExpressionString(
+                    PineValue.List([BoolVal(false), BoolVal(false)]));
+
+            result.Should().Be("4");
+        }
+    }
 }
