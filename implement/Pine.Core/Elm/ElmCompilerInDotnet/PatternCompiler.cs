@@ -215,6 +215,9 @@ public class PatternCompiler
             SyntaxTypes.Pattern.RecordPattern recordPattern =>
             AnalyzeRecordPattern(recordPattern, scrutinee),
 
+            SyntaxTypes.Pattern.UnitPattern =>
+            PatternAnalysis.WithCondition(new PatternCondition.LengthEquals(0)),
+
             _ =>
             throw new NotImplementedException($"Pattern type not yet supported: {pattern.GetType().Name}")
         };
@@ -624,6 +627,9 @@ public class PatternCompiler
 
             SyntaxTypes.Pattern.AsPattern =>
             null, // As pattern always binds a variable
+
+            SyntaxTypes.Pattern.UnitPattern =>
+            PineValue.EmptyList, // Unit is the empty list
 
             _ =>
             throw new NotImplementedException(

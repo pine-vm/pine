@@ -87,6 +87,9 @@ public class ExpressionCompiler
             SyntaxTypes.Expression.RecordAccess expr =>
             CompileRecordAccess(expr, context),
 
+            SyntaxTypes.Expression.RecordAccessFunction expr =>
+            CompileRecordAccessFunction(expr),
+
             _ =>
             CompilationError.UnsupportedExpression(expression.GetType().Name)
         };
@@ -213,6 +216,14 @@ public class ExpressionCompiler
             {
                 return Expression.LiteralInstance(basicsFunctionValue);
             }
+        }
+
+        // Handle List.cons used as a value reference (the :: operator after canonicalization)
+        // This handles cases like passing (::) as a function value: `applyFunc (::) 1 [2, 3]`
+        if (expr.ModuleName.Count is 1 && expr.ModuleName[0] is "List" &&
+            expr.Name is "cons")
+        {
+            return Expression.LiteralInstance(s_consFunction.Value);
         }
 
         return new CompilationError.UnresolvedReference(expr.Name, context.CurrentModuleName);
@@ -454,6 +465,37 @@ public class ExpressionCompiler
                     return
                         CompileGenericFunctionApplication(
                             Expression.LiteralInstance(basicsFuncValue),
+                            compiledArguments);
+                }
+
+                // Handle List.cons (the :: operator after canonicalization)
+                if (funcRef.ModuleName.Count is 1 && funcRef.ModuleName[0] is "List" &&
+                    funcRef.Name is "cons")
+                {
+                    if (compiledArguments.Length >= 2)
+                    {
+                        // Full application: cons head tail  ==>  concat([[head], tail])
+                        var singletonList = Expression.ListInstance([compiledArguments[0]]);
+
+                        var consResult =
+                            BuiltinHelpers.ApplyBuiltinConcat(
+                                [singletonList, compiledArguments[1]]);
+
+                        // Handle over-application (unlikely but consistent)
+                        if (compiledArguments.Length > 2)
+                        {
+                            return CompileGenericFunctionApplication(
+                                consResult,
+                                compiledArguments[2..]);
+                        }
+
+                        return consResult;
+                    }
+
+                    // Partial or no application: return the cons function value
+                    return
+                        CompileGenericFunctionApplication(
+                            Expression.LiteralInstance(s_consFunction.Value),
                             compiledArguments);
                 }
 
@@ -922,6 +964,43 @@ public class ExpressionCompiler
     }
 
     /// <summary>
+    /// Compiles a record access function expression like <c>.fieldName</c> to a one-argument
+    /// function value that extracts a field from a record.
+    /// </summary>
+    private static Result<CompilationError, Expression> CompileRecordAccessFunction(
+        SyntaxTypes.Expression.RecordAccessFunction expr)
+    {
+        var fieldName = expr.FunctionName;
+
+        // Build a 1-argument function: \record -> record.fieldName
+        // The parameter is at env[0]
+        var recordParam =
+            ExpressionBuilder.BuildExpressionForPathInExpression(
+                [0],
+                Expression.EnvironmentInstance);
+
+        // Build the record field lookup body using the runtime function
+        var callEnv =
+            Expression.ListInstance(
+                [
+                recordParam,
+                Expression.LiteralInstance(StringEncoding.ValueFromString(fieldName))
+                ]);
+
+        var body =
+            new Expression.ParseAndEval(
+                encoded: Expression.LiteralInstance(RecordRuntime.PineFunctionForRecordAccessAsValue),
+                environment: callEnv);
+
+        var functionValue =
+            FunctionValueBuilder.EmitFunctionValueWithoutEnvFunctions(
+                body,
+                parameterCount: 1);
+
+        return Expression.LiteralInstance(functionValue);
+    }
+
+    /// <summary>
     /// Compiles a record field access when the field index is known at compile time.
     /// This avoids runtime iteration through fields.
     /// </summary>
@@ -1011,6 +1090,12 @@ public class ExpressionCompiler
     private static Result<CompilationError, Expression> CompilePrefixOperator(
         SyntaxTypes.Expression.PrefixOperator expr)
     {
+        // Handle :: (cons) operator specially - it's from List, not Basics
+        if (expr.Operator is "::")
+        {
+            return Expression.LiteralInstance(s_consFunction.Value);
+        }
+
         // Delegate to BasicArithmetic for centralized operator handling
         var prefixExpr = CoreLibraryModule.CoreBasics.GetPrefixOperatorExpression(expr.Operator);
 
@@ -1020,6 +1105,36 @@ public class ExpressionCompiler
         }
 
         return prefixExpr;
+    }
+
+    private static readonly Lazy<PineValue> s_consFunction = new(BuildConsFunction);
+
+    /// <summary>
+    /// Builds a cons (::) function value: a 2-argument function that prepends head to tail list.
+    /// </summary>
+    private static PineValue BuildConsFunction()
+    {
+        var headExpr =
+            ExpressionBuilder.BuildExpressionForPathInExpression(
+                [0],
+                Expression.EnvironmentInstance);
+
+        var tailExpr =
+            ExpressionBuilder.BuildExpressionForPathInExpression(
+                [1],
+                Expression.EnvironmentInstance);
+
+        // head :: tail  ==>  concat([[head], tail])
+        var singletonList = Expression.ListInstance([headExpr]);
+
+        var body =
+            BuiltinHelpers.ApplyBuiltinConcat(
+                [singletonList, tailExpr]);
+
+        return
+            FunctionValueBuilder.EmitFunctionValueWithoutEnvFunctions(
+                body,
+                parameterCount: 2);
     }
 
     private static Result<CompilationError, Expression> CompileNegation(
@@ -1336,6 +1451,79 @@ public class ExpressionCompiler
                     if (!localNames.Contains(innerRef))
                     {
                         refs.Add(innerRef);
+                    }
+                }
+
+                break;
+
+            case SyntaxTypes.Expression.RecordExpr recordExpr:
+                foreach (var field in recordExpr.Fields)
+                {
+                    CollectExpressionReferences(field.Value.valueExpr.Value, refs);
+                }
+
+                break;
+
+            case SyntaxTypes.Expression.RecordUpdateExpression recordUpdate:
+                refs.Add(recordUpdate.RecordName.Value);
+
+                foreach (var field in recordUpdate.Fields)
+                {
+                    CollectExpressionReferences(field.Value.valueExpr.Value, refs);
+                }
+
+                break;
+
+            case SyntaxTypes.Expression.RecordAccess recordAccess:
+                CollectExpressionReferences(recordAccess.Record.Value, refs);
+                break;
+
+            case SyntaxTypes.Expression.CaseExpression caseExpr:
+                CollectExpressionReferences(caseExpr.CaseBlock.Expression.Value, refs);
+
+                foreach (var caseItem in caseExpr.CaseBlock.Cases)
+                {
+                    var caseLocalNames = new HashSet<string>();
+                    PatternCompiler.CollectPatternNames(caseItem.Pattern.Value, caseLocalNames);
+
+                    var caseRefs = new HashSet<string>();
+                    CollectExpressionReferences(caseItem.Expression.Value, caseRefs);
+
+                    foreach (var caseRef in caseRefs)
+                    {
+                        if (!caseLocalNames.Contains(caseRef))
+                        {
+                            refs.Add(caseRef);
+                        }
+                    }
+                }
+
+                break;
+
+            case SyntaxTypes.Expression.TupledExpression tupled:
+                foreach (var elem in tupled.Elements)
+                {
+                    CollectExpressionReferences(elem.Value, refs);
+                }
+
+                break;
+
+            case SyntaxTypes.Expression.LambdaExpression lambdaExpr:
+                var lambdaParamNames = new HashSet<string>();
+
+                foreach (var param in lambdaExpr.Lambda.Arguments)
+                {
+                    PatternCompiler.CollectPatternNames(param.Value, lambdaParamNames);
+                }
+
+                var lambdaRefs = new HashSet<string>();
+                CollectExpressionReferences(lambdaExpr.Lambda.Expression.Value, lambdaRefs);
+
+                foreach (var lambdaRef in lambdaRefs)
+                {
+                    if (!lambdaParamNames.Contains(lambdaRef))
+                    {
+                        refs.Add(lambdaRef);
                     }
                 }
 

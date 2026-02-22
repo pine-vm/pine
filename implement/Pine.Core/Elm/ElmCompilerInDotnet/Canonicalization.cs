@@ -103,9 +103,10 @@ public class Canonicalization
             {
                 if (!mergedOperatorToFunction.ContainsKey(kvp.Key))
                 {
-                    mergedOperatorToFunction = mergedOperatorToFunction.Add(
-                        kvp.Key,
-                        ((IReadOnlyList<string>)[.. kvp.Value.ModuleName], kvp.Value.FunctionName));
+                    mergedOperatorToFunction =
+                        mergedOperatorToFunction.Add(
+                            kvp.Key,
+                            ((IReadOnlyList<string>)[.. kvp.Value.ModuleName], kvp.Value.FunctionName));
                 }
             }
 
@@ -520,6 +521,14 @@ public class Canonicalization
 
                         case SyntaxTypes.Declaration.AliasDeclaration aliasDecl:
                             typeExportsBuilder.Add(aliasDecl.TypeAlias.Name.Value);
+
+                            // Record type aliases also create an implicit constructor function
+                            if (aliasDecl.TypeAlias.TypeAnnotation.Value
+                                is SyntaxTypes.TypeAnnotation.Record)
+                            {
+                                valueExportsBuilder.Add(aliasDecl.TypeAlias.Name.Value);
+                            }
+
                             break;
 
                         case SyntaxTypes.Declaration.InfixDeclaration infixDecl:
@@ -555,6 +564,16 @@ public class Canonicalization
 
                         case SyntaxTypes.TopLevelExpose.TypeOrAliasExpose typeOrAlias:
                             typeExportsBuilder.Add(typeOrAlias.Name);
+
+                            // Record type aliases also create an implicit constructor function
+                            if (allDeclarations.TryGetValue(typeOrAlias.Name, out var aliasLookup) &&
+                                aliasLookup is SyntaxTypes.Declaration.AliasDeclaration aliasDeclLookup &&
+                                aliasDeclLookup.TypeAlias.TypeAnnotation.Value
+                                is SyntaxTypes.TypeAnnotation.Record)
+                            {
+                                valueExportsBuilder.Add(typeOrAlias.Name);
+                            }
+
                             break;
 
                         case SyntaxTypes.TopLevelExpose.TypeExpose typeExpose:
@@ -728,7 +747,13 @@ public class Canonicalization
             ([], [functionExpose.Name]),
 
             // Type or alias without constructors - type name only
+            // However, record type aliases also export a value (constructor function)
             SyntaxTypes.TopLevelExpose.TypeOrAliasExpose typeOrAliasExpose =>
+            (moduleExportsMap.TryGetValue(moduleName, out var aliasModuleExports) &&
+            aliasModuleExports.ValueExports.Contains(typeOrAliasExpose.Name))
+            ?
+            ([typeOrAliasExpose.Name], [typeOrAliasExpose.Name])
+            :
             ([typeOrAliasExpose.Name], []),
 
             // Type with constructors - type name as type, constructors as values
@@ -854,9 +879,12 @@ public class Canonicalization
     {
         var signatureResult =
             func.Signature is null
-            ? NoErrors<Node<SyntaxTypes.Signature>?>(null)
-            : CanonicalizeSignature(func.Signature.Value, context)
-                .MapValue(sig => (Node<SyntaxTypes.Signature>?)new Node<SyntaxTypes.Signature>(
+            ?
+            NoErrors<Node<SyntaxTypes.Signature>?>(null)
+            :
+            CanonicalizeSignature(func.Signature.Value, context)
+                .MapValue(
+                sig => (Node<SyntaxTypes.Signature>?)new Node<SyntaxTypes.Signature>(
                     func.Signature.Range,
                     sig));
 

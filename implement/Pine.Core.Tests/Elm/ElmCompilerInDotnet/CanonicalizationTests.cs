@@ -1625,4 +1625,205 @@ public class CanonicalizationTests
         var errorMessages = testModuleResult.Errors.Select(e => e.ReferencedName).ToList();
         errorMessages.Should().OnlyContain(e => e.Contains("helper"));
     }
+
+    [Fact]
+    public void Resolves_record_type_alias_constructor_from_other_module_exposing_all()
+    {
+        var typesModuleText =
+            """"
+            module Types exposing (..)
+
+
+            type alias Point =
+                { x : Int
+                , y : Int
+                }
+            """";
+
+        var mainModuleText =
+            """"
+            module Main exposing (..)
+
+            import Types exposing (..)
+
+
+            origin : Point
+            origin =
+                Point 0 0
+            """";
+
+        var expectedMainModuleText =
+            """"
+            module Main exposing (..)
+
+
+            origin : Types.Point
+            origin =
+                Types.Point 0 0
+            """";
+
+        var mainModuleCanonicalized =
+            ElmCompilerTestHelper.CanonicalizeAndGetSingleModule(
+                elmModulesTexts:
+                [typesModuleText, mainModuleText],
+                moduleName: ["Main"]);
+
+        var renderedMainModule =
+            Avh4Format.FormatToString(
+                ToFullSyntaxModel.Convert(mainModuleCanonicalized));
+
+        renderedMainModule.Trim().Should().Be(
+            expectedMainModuleText.Trim());
+    }
+
+    [Fact]
+    public void Resolves_record_type_alias_constructor_from_other_module_exposing_named()
+    {
+        var typesModuleText =
+            """"
+            module Types exposing (..)
+
+
+            type alias Config =
+                { width : Int
+                , height : Int
+                , title : String
+                }
+            """";
+
+        var mainModuleText =
+            """"
+            module Main exposing (..)
+
+            import Types exposing (Config)
+
+
+            defaultConfig : Config
+            defaultConfig =
+                Config 800 600 "Untitled"
+            """";
+
+        var expectedMainModuleText =
+            """"
+            module Main exposing (..)
+
+
+            defaultConfig : Types.Config
+            defaultConfig =
+                Types.Config 800 600 "Untitled"
+            """";
+
+        var mainModuleCanonicalized =
+            ElmCompilerTestHelper.CanonicalizeAndGetSingleModule(
+                elmModulesTexts:
+                [typesModuleText, mainModuleText],
+                moduleName: ["Main"]);
+
+        var renderedMainModule =
+            Avh4Format.FormatToString(
+                ToFullSyntaxModel.Convert(mainModuleCanonicalized));
+
+        renderedMainModule.Trim().Should().Be(
+            expectedMainModuleText.Trim());
+    }
+
+    [Fact]
+    public void Resolves_record_type_alias_constructor_qualified_reference()
+    {
+        var typesModuleText =
+            """"
+            module Types exposing (..)
+
+
+            type alias Pair =
+                { first : Int
+                , second : Int
+                }
+            """";
+
+        var mainModuleText =
+            """"
+            module Main exposing (..)
+
+            import Types
+
+
+            makePair : Types.Pair
+            makePair =
+                Types.Pair 1 2
+            """";
+
+        var expectedMainModuleText =
+            """"
+            module Main exposing (..)
+
+
+            makePair : Types.Pair
+            makePair =
+                Types.Pair 1 2
+            """";
+
+        var mainModuleCanonicalized =
+            ElmCompilerTestHelper.CanonicalizeAndGetSingleModule(
+                elmModulesTexts:
+                [typesModuleText, mainModuleText],
+                moduleName: ["Main"]);
+
+        var renderedMainModule =
+            Avh4Format.FormatToString(
+                ToFullSyntaxModel.Convert(mainModuleCanonicalized));
+
+        renderedMainModule.Trim().Should().Be(
+            expectedMainModuleText.Trim());
+    }
+
+    [Fact]
+    public void Resolves_record_type_alias_constructor_FunctionOrValue_from_other_module()
+    {
+        var typesModuleText =
+            """"
+            module Types exposing (..)
+
+
+            type alias Point =
+                { x : Int
+                , y : Int
+                }
+            """";
+
+        var mainModuleText =
+            """"
+            module Main exposing (..)
+
+            import Types exposing (Point)
+
+
+            origin =
+                Point 0 0
+            """";
+
+        var parsedModule1 = ParseModuleText(typesModuleText);
+        var parsedModule2 = ParseModuleText(mainModuleText);
+
+        var canonicalizeResult =
+            Canonicalization.Canonicalize([parsedModule1, parsedModule2]);
+
+        var mainModule =
+            ElmCompilerTestHelper.GetCanonicalizedModule(canonicalizeResult, ["Main"]);
+
+        var originFunc =
+            mainModule.Declarations
+            .Select(d => d.Value)
+            .OfType<Declaration.FunctionDeclaration>()
+            .Single(f => f.Function.Declaration.Value.Name.Value is "origin");
+
+        // The expression should be Application [Point, 0, 0]
+        var application = (SyntaxTypes.Expression.Application)originFunc.Function.Declaration.Value.Expression.Value;
+        var pointRef = (SyntaxTypes.Expression.FunctionOrValue)application.Arguments[0].Value;
+
+        // Point should resolve to Types module
+        pointRef.Should().Be(new SyntaxTypes.Expression.FunctionOrValue(
+            ModuleName: ["Types"],
+            Name: "Point"));
+    }
 }

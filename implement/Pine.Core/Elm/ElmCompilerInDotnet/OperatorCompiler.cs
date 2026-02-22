@@ -155,6 +155,17 @@ public class OperatorCompiler
             return CoreBasics.Generic_ApR(leftCompiled, rightCompiled);
         }
 
+        if (operatorApp.Operator is "::")
+        {
+            // Cons operator: prepend element to list
+            // head :: tail  ==>  concat([[head], tail])
+            var singletonList = Expression.ListInstance([leftCompiled]);
+
+            return
+                BuiltinHelpers.ApplyBuiltinConcat(
+                    [singletonList, rightCompiled]);
+        }
+
         if (operatorApp.Operator is "/")
         {
             return CompilationError.UnsupportedOperator(operatorApp.Operator);
