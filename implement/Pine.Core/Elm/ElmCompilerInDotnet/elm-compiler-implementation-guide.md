@@ -4,7 +4,18 @@ For semantics of the Elm programming language, consult the file 'elm-programming
 
 ## Encoding of Elm Values as Pine Values
 
-For the encoding of Elm values as Pine values, the compiler follows the model established in the `ElmValueEncoding.cs` file. The definitions in `ElmValueEncoding.cs` cover the encoding of all Elm values except functions.
+At the interface chosen as the entry point for the compilation, the encoding of Elm values follows the model established in the `ElmValueEncoding.cs` file. The definitions in `ElmValueEncoding.cs` cover the encoding of all Elm values except functions.
+
+For functions not called directly from outside, the compiler can deviate from that encoding to optimize for runtime efficiency.
+
+The following are some examples of such optimized internal representations:
+
++ For a parameter that has a choice type, we might omit the tag if the source type declaration only contains a single tag anyway.
++ For a parameter that has a record type, we might omit field name labels if the record type is closed, or we can otherwise prove that each field name used by the function always has the same offset.
+
+We use these optimizations for both function parameters and return values.
+
+The compiler tracks the concrete representations of function parameters and return values internally to ensure correct argument packaging and return value consumption.
 
 ## Function Applications
 
