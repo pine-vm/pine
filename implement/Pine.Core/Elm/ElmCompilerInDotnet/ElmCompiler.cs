@@ -388,7 +388,21 @@ public class ElmCompiler
             if (!allLayoutDepsCompiled)
                 continue;
 
-            compilationContext = CompileSCC(scc, compilationContext);
+            var compileSccResult = CompileSCC(scc, compilationContext);
+
+            if (compileSccResult.IsErrOrNull() is { } compileSccErr)
+            {
+                return
+                    "Failed to compile SCC [" + string.Join(", ", scc.Members) + "]: " + compileSccErr;
+            }
+
+            if (compileSccResult.IsOkOrNull() is not { } compileSccOk)
+            {
+                throw new NotImplementedException(
+                    "Unexpected result type: " + compileSccResult.GetType());
+            }
+
+            compilationContext = compileSccOk;
         }
 
         // Third pass: Build module values from compiled functions
@@ -718,7 +732,7 @@ public class ElmCompiler
     /// Since SCCs are compiled in dependency order, all dependencies of the current SCC
     /// are already compiled and can be retrieved from the context.
     /// </summary>
-    private static ModuleCompilationContext CompileSCC(
+    private static Result<CompilationError, ModuleCompilationContext> CompileSCC(
         FunctionScc scc,
         ModuleCompilationContext context)
     {
@@ -796,7 +810,18 @@ public class ElmCompiler
                     FunctionReturnTypes: context.FunctionReturnTypes);
 
             // Compile the body
-            var compiledBody = CompileExpression(functionBody, expressionContext);
+            var compileBodyResult = ExpressionCompiler.Compile(functionBody, expressionContext);
+
+            if (compileBodyResult.IsErrOrNull() is { } compileErr)
+            {
+                return CompilationError.Scoped("Failed compiling declaration '" + memberName + "'", compileErr);
+            }
+
+            if (compileBodyResult.IsOkOrNull() is not { } compiledBody)
+            {
+                throw new NotImplementedException(
+                    "Unexpected result type: " + compileBodyResult.GetType());
+            }
 
             compiledBody = ReducePineExpression.ReduceExpressionBottomUp(compiledBody, parseCache);
 
