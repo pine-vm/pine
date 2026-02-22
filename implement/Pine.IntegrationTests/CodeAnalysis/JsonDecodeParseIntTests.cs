@@ -834,7 +834,7 @@ public class JsonDecodeParseIntTests
                         PineValue local_005 = Test.parseUnsignedInt(param_1_0, local_002);
                         PineValue local_006 = PineValueExtension.ValueFromPathOrEmptyList(local_005, [0]);
                         PineValue local_007 = PineValueExtension.ValueFromPathOrEmptyList(local_006, [0]);
-            
+
                         if (CommonReusedValues.Blob_Str_Ok == local_007)
                         {
                             return
@@ -845,13 +845,15 @@ public class JsonDecodeParseIntTests
                                         CommonReusedValues.Blob_Str_Ok,
                                         PineValue.List(
                                             [
-                                            KernelFunctionSpecialized.int_mul(-1, PineValueExtension.ValueFromPathOrEmptyList(local_006, [1, 0]))
+                                            KernelFunctionSpecialized.int_mul(
+                                                -1,
+                                                PineValueExtension.ValueFromPathOrEmptyList(local_006, [1, 0]))
                                             ])
                                         ]),
                                     PineValueExtension.ValueFromPathOrEmptyList(local_005, [1])
                                     ]);
                         }
-            
+
                         if (CommonReusedValues.Blob_Str_Err == local_007)
                         {
                             return
@@ -865,23 +867,23 @@ public class JsonDecodeParseIntTests
                                     PineValueExtension.ValueFromPathOrEmptyList(local_005, [1])
                                     ]);
                         }
-            
+
                         throw new ParseExpressionException("TODO: Include details from encoded and env subexpressions");
                     }
-            
+
                     return Test.parseUnsignedInt(param_1_0, param_1_1);
                 }
-            
+
                 public static PineValue parseUnsignedInt(PineValue param_1_0, PineValue param_1_1)
                 {
                     PineValue local_000 =
                         KernelFunctionFused.SkipAndTake(takeCount: 4, skipCountValue: param_1_1, argument: param_1_0);
-            
+
                     if (local_000 == CommonReusedValues.Blob_Char_digit_0)
                     {
                         return PineValue.List([CommonReusedValues.List_c3304aab, KernelFunctionSpecialized.int_add(4, param_1_1)]);
                     }
-            
+
                     if (local_000 == CommonReusedValues.Blob_Char_digit_1)
                     {
                         return
@@ -890,7 +892,7 @@ public class JsonDecodeParseIntTests
                                 param_1_0,
                                 KernelFunctionSpecialized.int_add(4, param_1_1));
                     }
-            
+
                     if (local_000 == CommonReusedValues.Blob_Char_digit_2)
                     {
                         return
@@ -899,7 +901,7 @@ public class JsonDecodeParseIntTests
                                 param_1_0,
                                 KernelFunctionSpecialized.int_add(4, param_1_1));
                     }
-            
+
                     if (local_000 == CommonReusedValues.Blob_Char_digit_3)
                     {
                         return
@@ -908,7 +910,7 @@ public class JsonDecodeParseIntTests
                                 param_1_0,
                                 KernelFunctionSpecialized.int_add(4, param_1_1));
                     }
-            
+
                     if (local_000 == CommonReusedValues.Blob_Char_digit_4)
                     {
                         return
@@ -917,7 +919,7 @@ public class JsonDecodeParseIntTests
                                 param_1_0,
                                 KernelFunctionSpecialized.int_add(4, param_1_1));
                     }
-            
+
                     if (local_000 == CommonReusedValues.Blob_Char_digit_5)
                     {
                         return
@@ -926,7 +928,7 @@ public class JsonDecodeParseIntTests
                                 param_1_0,
                                 KernelFunctionSpecialized.int_add(4, param_1_1));
                     }
-            
+
                     if (local_000 == CommonReusedValues.Blob_Char_digit_6)
                     {
                         return
@@ -935,7 +937,7 @@ public class JsonDecodeParseIntTests
                                 param_1_0,
                                 KernelFunctionSpecialized.int_add(4, param_1_1));
                     }
-            
+
                     if (local_000 == CommonReusedValues.Blob_Char_digit_7)
                     {
                         return
@@ -944,7 +946,7 @@ public class JsonDecodeParseIntTests
                                 param_1_0,
                                 KernelFunctionSpecialized.int_add(4, param_1_1));
                     }
-            
+
                     if (local_000 == CommonReusedValues.Blob_Char_digit_8)
                     {
                         return
@@ -953,7 +955,7 @@ public class JsonDecodeParseIntTests
                                 param_1_0,
                                 KernelFunctionSpecialized.int_add(4, param_1_1));
                     }
-            
+
                     if (local_000 == CommonReusedValues.Blob_Char_digit_9)
                     {
                         return
@@ -962,21 +964,24 @@ public class JsonDecodeParseIntTests
                                 param_1_0,
                                 KernelFunctionSpecialized.int_add(4, param_1_1));
                     }
-            
+
                     return PineValue.List([CommonReusedValues.List_ae45bd54, param_1_1]);
                 }
-            
+
                 public static PineValue parseUnsignedIntRec(PineValue param_1_0, PineValue param_1_1, PineValue param_1_2)
                 {
                     PineValue local_param_1_0 = param_1_0;
                     PineValue local_param_1_1 = param_1_1;
                     PineValue local_param_1_2 = param_1_2;
-            
+
                     while (true)
                     {
                         PineValue local_000 =
-                            KernelFunctionFused.SkipAndTake(takeCount: 4, skipCountValue: local_param_1_2, argument: local_param_1_1);
-            
+                            KernelFunctionFused.SkipAndTake(
+                                takeCount: 4,
+                                skipCountValue: local_param_1_2,
+                                argument: local_param_1_1);
+
                         if (local_000 == CommonReusedValues.Blob_Char_digit_0)
                         {
                             {
@@ -985,136 +990,136 @@ public class JsonDecodeParseIntTests
                                 local_param_1_0 = local_param_1_0_temp;
                                 local_param_1_2 = local_param_1_2_temp;
                             }
-            
+
                             continue;
                         }
-            
+
                         if (local_000 == CommonReusedValues.Blob_Char_digit_1)
                         {
                             {
                                 PineValue local_param_1_0_temp =
                                     KernelFunctionSpecialized.int_add(1, KernelFunctionSpecialized.int_mul(10, local_param_1_0));
-            
+
                                 PineValue local_param_1_2_temp = KernelFunctionSpecialized.int_add(4, local_param_1_2);
                                 local_param_1_0 = local_param_1_0_temp;
                                 local_param_1_2 = local_param_1_2_temp;
                             }
-            
+
                             continue;
                         }
-            
+
                         if (local_000 == CommonReusedValues.Blob_Char_digit_2)
                         {
                             {
                                 PineValue local_param_1_0_temp =
                                     KernelFunctionSpecialized.int_add(2, KernelFunctionSpecialized.int_mul(10, local_param_1_0));
-            
+
                                 PineValue local_param_1_2_temp = KernelFunctionSpecialized.int_add(4, local_param_1_2);
                                 local_param_1_0 = local_param_1_0_temp;
                                 local_param_1_2 = local_param_1_2_temp;
                             }
-            
+
                             continue;
                         }
-            
+
                         if (local_000 == CommonReusedValues.Blob_Char_digit_3)
                         {
                             {
                                 PineValue local_param_1_0_temp =
                                     KernelFunctionSpecialized.int_add(3, KernelFunctionSpecialized.int_mul(10, local_param_1_0));
-            
+
                                 PineValue local_param_1_2_temp = KernelFunctionSpecialized.int_add(4, local_param_1_2);
                                 local_param_1_0 = local_param_1_0_temp;
                                 local_param_1_2 = local_param_1_2_temp;
                             }
-            
+
                             continue;
                         }
-            
+
                         if (local_000 == CommonReusedValues.Blob_Char_digit_4)
                         {
                             {
                                 PineValue local_param_1_0_temp =
                                     KernelFunctionSpecialized.int_add(4, KernelFunctionSpecialized.int_mul(10, local_param_1_0));
-            
+
                                 PineValue local_param_1_2_temp = KernelFunctionSpecialized.int_add(4, local_param_1_2);
                                 local_param_1_0 = local_param_1_0_temp;
                                 local_param_1_2 = local_param_1_2_temp;
                             }
-            
+
                             continue;
                         }
-            
+
                         if (local_000 == CommonReusedValues.Blob_Char_digit_5)
                         {
                             {
                                 PineValue local_param_1_0_temp =
                                     KernelFunctionSpecialized.int_add(5, KernelFunctionSpecialized.int_mul(10, local_param_1_0));
-            
+
                                 PineValue local_param_1_2_temp = KernelFunctionSpecialized.int_add(4, local_param_1_2);
                                 local_param_1_0 = local_param_1_0_temp;
                                 local_param_1_2 = local_param_1_2_temp;
                             }
-            
+
                             continue;
                         }
-            
+
                         if (local_000 == CommonReusedValues.Blob_Char_digit_6)
                         {
                             {
                                 PineValue local_param_1_0_temp =
                                     KernelFunctionSpecialized.int_add(6, KernelFunctionSpecialized.int_mul(10, local_param_1_0));
-            
+
                                 PineValue local_param_1_2_temp = KernelFunctionSpecialized.int_add(4, local_param_1_2);
                                 local_param_1_0 = local_param_1_0_temp;
                                 local_param_1_2 = local_param_1_2_temp;
                             }
-            
+
                             continue;
                         }
-            
+
                         if (local_000 == CommonReusedValues.Blob_Char_digit_7)
                         {
                             {
                                 PineValue local_param_1_0_temp =
                                     KernelFunctionSpecialized.int_add(7, KernelFunctionSpecialized.int_mul(10, local_param_1_0));
-            
+
                                 PineValue local_param_1_2_temp = KernelFunctionSpecialized.int_add(4, local_param_1_2);
                                 local_param_1_0 = local_param_1_0_temp;
                                 local_param_1_2 = local_param_1_2_temp;
                             }
-            
+
                             continue;
                         }
-            
+
                         if (local_000 == CommonReusedValues.Blob_Char_digit_8)
                         {
                             {
                                 PineValue local_param_1_0_temp =
                                     KernelFunctionSpecialized.int_add(8, KernelFunctionSpecialized.int_mul(10, local_param_1_0));
-            
+
                                 PineValue local_param_1_2_temp = KernelFunctionSpecialized.int_add(4, local_param_1_2);
                                 local_param_1_0 = local_param_1_0_temp;
                                 local_param_1_2 = local_param_1_2_temp;
                             }
-            
+
                             continue;
                         }
-            
+
                         if (local_000 == CommonReusedValues.Blob_Char_digit_9)
                         {
                             {
                                 PineValue local_param_1_0_temp =
                                     KernelFunctionSpecialized.int_add(9, KernelFunctionSpecialized.int_mul(10, local_param_1_0));
-            
+
                                 PineValue local_param_1_2_temp = KernelFunctionSpecialized.int_add(4, local_param_1_2);
                                 local_param_1_0 = local_param_1_0_temp;
                                 local_param_1_2 = local_param_1_2_temp;
                             }
-            
+
                             continue;
                         }
-            
+
                         return
                             PineValue.List(
                                 [

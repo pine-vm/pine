@@ -4697,4 +4697,302 @@ public class CSharpFormatTests
 
         AssertFormattedSyntax(input, expected, scriptMode: true);
     }
+
+    [Fact]
+    public void Preserves_comments_after_if_token_and_else_token()
+    {
+        var input =
+            """"
+            if (entry.Mode is "40000") // Directory
+            {
+                CollectBlobShasFromTree(entry.HashBase16, getObjectBySHA1, blobShas);
+            }
+            else // File (blob)
+            {
+                blobShas.Add(entry.HashBase16);
+            }
+            """";
+
+        AssertFormattedSyntax(input, input, scriptMode: true);
+    }
+
+    [Fact]
+    public void Preserves_invocation_on_return_value_method_name_on_same_line()
+    {
+        var input =
+            """"
+            subtreeObject.Type.Should().Be(
+                PackFile.ObjectType.Tree,
+                "Navigated path should point to a tree");
+            """";
+
+        AssertFormattedSyntax(input, input, scriptMode: true);
+    }
+
+    [Fact]
+    public void Formats_invocation_on_return_value_exceeding_line_length_preserving_method_name_on_same_line()
+    {
+        var input =
+            """"
+            currentSha.Should().Be("377a8477cff1f2c40108634b524dcf80a3e41db1", "First commit should be the start commit. Found unexpected hash.");
+
+            directObj.Data.Span.SequenceEqual(indexBasedObj.Data.Span).Should().BeTrue($"Object {sha1} should have the same data in both parsing methods");
+            """";
+
+        var expected =
+            """"
+            currentSha.Should().Be(
+                "377a8477cff1f2c40108634b524dcf80a3e41db1",
+                "First commit should be the start commit. Found unexpected hash.");
+
+            directObj.Data.Span.SequenceEqual(indexBasedObj.Data.Span).Should().BeTrue(
+                $"Object {sha1} should have the same data in both parsing methods");
+            """";
+
+        AssertFormattedSyntax(input, expected, scriptMode: true);
+    }
+
+    [Fact]
+    public void Formats_return_statement_anonymous_object_creation_expression_multiline()
+    {
+        var input =
+            """"
+            return new
+            {
+                @int = value,
+                int_low32 = asInt32,
+            };
+            """";
+
+        var expected =
+            """"
+            return
+                new
+                {
+                    @int = value,
+                    int_low32 = asInt32,
+                };
+            """";
+
+        AssertFormattedSyntax(input, expected, scriptMode: true);
+    }
+
+    [Fact]
+    public void Formats_return_statement_object_creation_expression_argument_list_multiline()
+    {
+        var input =
+            """"
+            return new UITreeNode.Bunch
+            (
+                entriesOfInterest: entriesOfInterestJObject
+            );
+            """";
+
+        var expected =
+            """"
+            return
+                new UITreeNode.Bunch(
+                    entriesOfInterest: entriesOfInterestJObject);
+            """";
+
+        AssertFormattedSyntax(input, expected, scriptMode: true);
+    }
+
+    [Fact]
+    public void Formats_declaration_statement_object_creation_expression_argument_list_multiline()
+    {
+        var input =
+            """"
+            var genericRepresentation = new UITreeNode.DictEntryValueGenericRepresentation
+            (
+                address: valueOjectAddress,
+                pythonObjectTypeName: value_pythonTypeName
+            );
+            """";
+
+        var expected =
+            """"
+            var genericRepresentation =
+                new UITreeNode.DictEntryValueGenericRepresentation(
+                    address: valueOjectAddress,
+                    pythonObjectTypeName: value_pythonTypeName);
+            """";
+
+        AssertFormattedSyntax(input, expected, scriptMode: true);
+    }
+
+    [Fact]
+    public void Normalizes_indent_in_declaration_equals_value_multiline()
+    {
+        var input =
+            """"
+            readonly IImmutableList<SampleMemoryRegion> memoryRegionsOrderedByAddress =
+                    memoryRegions
+                    .OrderBy(memoryRegion => memoryRegion.baseAddress)
+                    .ToImmutableList();
+            """";
+
+        var expected =
+            """"
+            readonly IImmutableList<SampleMemoryRegion> memoryRegionsOrderedByAddress =
+                memoryRegions
+                .OrderBy(memoryRegion => memoryRegion.baseAddress)
+                .ToImmutableList();
+            """";
+
+        AssertFormattedSyntax(input, expected, scriptMode: true);
+    }
+
+    [Fact]
+    public void Formats_chain_including_invocation_exceeding_line_length()
+    {
+        var input =
+            """"
+            var processIdParam =
+            saveProcessSampleCmd.Option("--pid", "[Required] Id of the Windows process to read from.", CommandOptionType.SingleValue).IsRequired(errorMessage: "From which process should I read?");
+            """";
+
+        var expected =
+            """"
+            var processIdParam =
+                saveProcessSampleCmd.Option(
+                    "--pid",
+                    "[Required] Id of the Windows process to read from.",
+                    CommandOptionType.SingleValue)
+                .IsRequired(errorMessage: "From which process should I read?");
+            """";
+
+        AssertFormattedSyntax(input, expected, scriptMode: true);
+    }
+
+    [Fact]
+    public void Preserves_method_return_statement_switch_expression()
+    {
+        var input =
+            """"
+            private static SyntaxNode FormatNode(SyntaxNode node, int indent)
+            {
+                return
+                    node switch
+                    {
+                        CompilationUnitSyntax n => FormatCompilationUnit(n, indent),
+
+                        // Declarations
+                        FileScopedNamespaceDeclarationSyntax n => FormatFileScopedNamespace(n, indent)
+                    };
+            }
+            """";
+
+        AssertFormattedSyntax(input, input, scriptMode: true);
+    }
+
+    [Fact]
+    public void Formats_nested_invocation_array_creation_initializer_multi_line()
+    {
+        var input =
+            """"
+            return
+                SyntaxFactory.InvocationExpression(
+                    SyntaxFactory.MemberAccessExpression(
+                        SyntaxKind.SimpleMemberAccessExpression,
+                        CompileTypeSyntax.TypeSyntaxFromType(
+                            typeof(PineValueExtension),
+                            declarationSyntaxContext),
+                        SyntaxFactory.IdentifierName(nameof(PineValueExtension.ValueFromPathOrEmptyList))))
+                .WithArgumentList(
+                    SyntaxFactory.ArgumentList(
+                        SyntaxFactory.SeparatedList<ArgumentSyntax>(new SyntaxNodeOrToken[]
+                        {
+                            SyntaxFactory.Argument(compositionExpr),
+                            SyntaxFactory.Token(SyntaxKind.CommaToken),
+                            SyntaxFactory.Argument(pathCollectionExpr)
+                        })));
+            """";
+
+        var expected =
+            """"
+            return
+                SyntaxFactory.InvocationExpression(
+                    SyntaxFactory.MemberAccessExpression(
+                        SyntaxKind.SimpleMemberAccessExpression,
+                        CompileTypeSyntax.TypeSyntaxFromType(
+                            typeof(PineValueExtension),
+                            declarationSyntaxContext),
+                        SyntaxFactory.IdentifierName(nameof(PineValueExtension.ValueFromPathOrEmptyList))))
+                .WithArgumentList(
+                    SyntaxFactory.ArgumentList(
+                        SyntaxFactory.SeparatedList<ArgumentSyntax>(
+                            new SyntaxNodeOrToken[]
+                            {
+                                SyntaxFactory.Argument(compositionExpr),
+                                SyntaxFactory.Token(SyntaxKind.CommaToken),
+                                SyntaxFactory.Argument(pathCollectionExpr)
+                            })));
+            """";
+
+        AssertFormattedSyntax(input, expected, scriptMode: true);
+    }
+
+    [Fact]
+    public void Preserves_extra_empty_line_after_comment_in_switch()
+    {
+        var input =
+            """"
+            private static int SpecificityRank(KernelFunctionParameterType t) =>
+                t switch
+                {
+                    // More specific gets a higher rank
+
+                    KernelFunctionParameterType.Integer =>
+                    3,
+
+                    KernelFunctionParameterType.SpanGeneric =>
+                    2
+                };
+            """";
+
+        AssertFormattedSyntax(input, input, scriptMode: true);
+    }
+
+    [Fact]
+    public void Normalizes_indent_in_cast_invocation_argument_lambda_invocation()
+    {
+        var input =
+            """"
+            return
+                classDeclarations
+                .ToFrozenDictionary(
+                    cd => FilePathFromClassDeclaration(cd.declSyntax, [.. namespacePrefix, .. cd.namespaces]),
+                    cd =>
+                    (ReadOnlyMemory<byte>)
+                        Encoding.UTF8.GetBytes(
+                            BuildCompilationUnitSyntax(
+                                cd.declSyntax,
+                                staticProgram.DeclarationSyntaxContext,
+                                [.. namespacePrefix, .. cd.namespaces]).ToFullString())
+                        .AsMemory(),
+                    comparer:
+                    EnumerableExtensions.EqualityComparer<IReadOnlyList<string>>());
+            """";
+
+        var expected =
+            """"
+            return
+                classDeclarations
+                .ToFrozenDictionary(
+                    cd => FilePathFromClassDeclaration(cd.declSyntax, [.. namespacePrefix, .. cd.namespaces]),
+                    cd =>
+                    (ReadOnlyMemory<byte>)
+                    Encoding.UTF8.GetBytes(
+                        BuildCompilationUnitSyntax(
+                            cd.declSyntax,
+                            staticProgram.DeclarationSyntaxContext,
+                            [.. namespacePrefix, .. cd.namespaces]).ToFullString())
+                    .AsMemory(),
+                    comparer:
+                    EnumerableExtensions.EqualityComparer<IReadOnlyList<string>>());
+            """";
+
+        AssertFormattedSyntax(input, expected, scriptMode: true);
+    }
 }

@@ -87,7 +87,10 @@ public class OptimizeAndEmitStringToListTests
                     while (true)
                     {
                         PineValue local_000 =
-                            KernelFunctionFused.SkipAndTake(takeCount: 4, skipCountValue: local_param_1_0, argument: local_param_1_2);
+                            KernelFunctionFused.SkipAndTake(
+                                takeCount: 4,
+                                skipCountValue: local_param_1_0,
+                                argument: local_param_1_2);
 
                         if (KernelFunctionSpecialized.length_as_int(local_000) == 0)
                         {

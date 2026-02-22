@@ -99,12 +99,12 @@ public class OptimizeAndEmitValueFromStringTests
                 {
                     PineValue local_000 =
                         KernelFunctionFused.CanonicalIntegerFromUnsigned(signIsPositive: true, unsignedValue: param_1_0);
-            
+
                     PineValue local_001 = IntegerEncoding.EncodeSignedInteger(KernelFunctionSpecialized.length_as_int(local_000));
-            
+
                     PineValue local_002 =
                         KernelFunction.ValueFromBool(KernelFunctionSpecialized.int_is_sorted_asc_as_boolean(2, local_001));
-            
+
                     return
                         PineValue.List(
                             [
@@ -138,35 +138,38 @@ public class OptimizeAndEmitValueFromStringTests
                             Basics.modBy(CommonReusedValues.Blob_Int_256, local_000)
                             ]);
                 }
-            
+
                 public static PineValue blobBytesFromChars(PineValue param_1_0, PineValue param_1_1)
                 {
                     ImmutableConcatBuilder local_param_1_0 = ImmutableConcatBuilder.Create([param_1_0]);
                     ImmutableSliceBuilder local_param_1_1 = ImmutableSliceBuilder.Create(param_1_1);
-            
+
                     while (true)
                     {
                         if (local_param_1_1.IsEmptyList())
                         {
                             return local_param_1_0.EvaluateReverse();
                         }
-            
+
                         if (!(local_param_1_1.GetLength() == 0))
                         {
                             {
                                 local_param_1_0 =
-                                    local_param_1_0.PrependItems([PineValue.List([Test.blobBytesFromChar(local_param_1_1.GetHead())])]);
+                                    local_param_1_0.PrependItems(
+                                        [
+                                        PineValue.List([Test.blobBytesFromChar(local_param_1_1.GetHead())])
+                                        ]);
 
                                 local_param_1_1 = local_param_1_1.Skip(1);
                             }
-            
+
                             continue;
                         }
-            
+
                         throw new ParseExpressionException("TODO: Include details from encoded and env subexpressions");
                     }
                 }
-            
+
                 public static PineValue computeValueFromString(PineValue param_1_0)
                 {
                     return
@@ -201,7 +204,10 @@ public class OptimizeAndEmitValueFromStringTests
                     while (true)
                     {
                         PineValue local_000 =
-                            KernelFunctionFused.SkipAndTake(takeCount: 4, skipCountValue: local_param_1_0, argument: local_param_1_2);
+                            KernelFunctionFused.SkipAndTake(
+                                takeCount: 4,
+                                skipCountValue: local_param_1_0,
+                                argument: local_param_1_2);
 
                         if (KernelFunctionSpecialized.length_as_int(local_000) == 0)
                         {
@@ -231,7 +237,10 @@ public class OptimizeAndEmitValueFromStringTests
                         if (KernelFunctionSpecialized.int_is_sorted_asc_as_boolean(local_000, local_param_1_0))
                         {
                             PineValue local_001 =
-                                Global_Anonymous.zzz_anon_6dc95117_ab4922f9(local_param_1_0, local_000, CommonReusedValues.Blob_Int_0);
+                                Global_Anonymous.zzz_anon_6dc95117_ab4922f9(
+                                    local_param_1_0,
+                                    local_000,
+                                    CommonReusedValues.Blob_Int_0);
 
                             return
                                 KernelFunctionSpecialized.int_add(
@@ -248,7 +257,9 @@ public class OptimizeAndEmitValueFromStringTests
                         {
                             {
                                 PineValue local_param_1_0_temp =
-                                    KernelFunctionSpecialized.int_add(local_param_1_0, KernelFunctionSpecialized.int_mul(-1, local_param_1_1));
+                                    KernelFunctionSpecialized.int_add(
+                                        local_param_1_0,
+                                        KernelFunctionSpecialized.int_mul(-1, local_param_1_1));
 
                                 PineValue local_param_1_2_temp = KernelFunctionSpecialized.int_add(1, local_param_1_2);
                                 local_param_1_0 = local_param_1_0_temp;

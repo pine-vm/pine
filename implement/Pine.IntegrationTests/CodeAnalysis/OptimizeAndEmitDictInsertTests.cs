@@ -85,9 +85,9 @@ public class OptimizeAndEmitDictInsertTests
                     {
                         return CommonReusedValues.List_ac855cb8;
                     }
-            
+
                     PineValue local_001 = PineValueExtension.ValueFromPathOrEmptyList(param_1_1, [0]);
-            
+
                     if ((CommonReusedValues.Blob_Str_String == local_001) &&
                         (CommonReusedValues.Blob_Str_String == PineValueExtension.ValueFromPathOrEmptyList(param_1_0, [0])))
                     {
@@ -97,15 +97,15 @@ public class OptimizeAndEmitDictInsertTests
                                 PineValueExtension.ValueFromPathOrEmptyList(param_1_0, [1, 0]),
                                 PineValueExtension.ValueFromPathOrEmptyList(param_1_1, [1, 0]));
                     }
-            
+
                     PineValue local_002 = KernelFunction.ValueFromBool(CommonReusedValues.Blob_Str_Elm_Float == local_001);
-            
+
                     if ((local_002 == PineKernelValues.TrueValue) &&
                         (CommonReusedValues.Blob_Str_Elm_Float == PineValueExtension.ValueFromPathOrEmptyList(param_1_0, [0])))
                     {
                         PineValue local_003 = PineValueExtension.ValueFromPathOrEmptyList(param_1_0, [1]);
                         PineValue local_004 = PineValueExtension.ValueFromPathOrEmptyList(param_1_1, [1]);
-            
+
                         if (KernelFunctionSpecialized.int_mul(
                             PineValueExtension.ValueFromPathOrEmptyList(local_003, [0]),
                             PineValueExtension.ValueFromPathOrEmptyList(local_004, [1])) ==
@@ -115,7 +115,7 @@ public class OptimizeAndEmitDictInsertTests
                         {
                             return CommonReusedValues.List_ac855cb8;
                         }
-            
+
                         if (KernelFunctionSpecialized.int_is_sorted_asc_as_boolean(
                             KernelFunctionSpecialized.int_mul(
                                 PineValueExtension.ValueFromPathOrEmptyList(local_003, [0]),
@@ -126,68 +126,74 @@ public class OptimizeAndEmitDictInsertTests
                         {
                             return CommonReusedValues.List_af0e3cad;
                         }
-            
+
                         return CommonReusedValues.List_50724673;
                     }
-            
+
                     if (CommonReusedValues.Blob_Str_Elm_Float == PineValueExtension.ValueFromPathOrEmptyList(param_1_0, [0]))
                     {
                         PineValue local_005 = PineValueExtension.ValueFromPathOrEmptyList(param_1_0, [1]);
-            
+
                         if (PineValueExtension.ValueFromPathOrEmptyList(local_005, [0]) ==
-                            KernelFunctionSpecialized.int_mul(PineValueExtension.ValueFromPathOrEmptyList(local_005, [1]), param_1_1))
+                            KernelFunctionSpecialized.int_mul(
+                                PineValueExtension.ValueFromPathOrEmptyList(local_005, [1]),
+                                param_1_1))
                         {
                             return CommonReusedValues.List_ac855cb8;
                         }
-            
+
                         if (KernelFunctionSpecialized.int_is_sorted_asc_as_boolean(
                             PineValueExtension.ValueFromPathOrEmptyList(local_005, [0]),
-                            KernelFunctionSpecialized.int_mul(PineValueExtension.ValueFromPathOrEmptyList(local_005, [1]), param_1_1)))
+                            KernelFunctionSpecialized.int_mul(
+                                PineValueExtension.ValueFromPathOrEmptyList(local_005, [1]),
+                                param_1_1)))
                         {
                             return CommonReusedValues.List_af0e3cad;
                         }
-            
+
                         return CommonReusedValues.List_50724673;
                     }
-            
+
                     if (local_002 == PineKernelValues.TrueValue)
                     {
                         PineValue local_006 = PineValueExtension.ValueFromPathOrEmptyList(param_1_1, [1]);
-            
+
                         if (KernelFunctionSpecialized.int_mul(param_1_0, PineValueExtension.ValueFromPathOrEmptyList(local_006, [1])) ==
                             PineValueExtension.ValueFromPathOrEmptyList(local_006, [0]))
                         {
                             return CommonReusedValues.List_ac855cb8;
                         }
-            
+
                         if (KernelFunctionSpecialized.int_is_sorted_asc_as_boolean(
-                            KernelFunctionSpecialized.int_mul(param_1_0, PineValueExtension.ValueFromPathOrEmptyList(local_006, [1])),
+                            KernelFunctionSpecialized.int_mul(
+                                param_1_0,
+                                PineValueExtension.ValueFromPathOrEmptyList(local_006, [1])),
                             PineValueExtension.ValueFromPathOrEmptyList(local_006, [0])))
                         {
                             return CommonReusedValues.List_af0e3cad;
                         }
-            
+
                         return CommonReusedValues.List_50724673;
                     }
-            
+
                     if (Global_Anonymous.zzz_anon_c78b4c00_dda26649(param_1_0) == PineKernelValues.TrueValue)
                     {
                         return Basics.compareList(param_1_0, param_1_1);
                     }
-            
+
                     if (KernelFunctionSpecialized.int_is_sorted_asc_as_boolean(param_1_0, param_1_1))
                     {
                         return CommonReusedValues.List_af0e3cad;
                     }
-            
+
                     return CommonReusedValues.List_50724673;
                 }
-            
+
                 public static PineValue compareList(PineValue param_1_0, PineValue param_1_1)
                 {
                     ImmutableSliceBuilder local_param_1_0 = ImmutableSliceBuilder.Create(param_1_0);
                     ImmutableSliceBuilder local_param_1_1 = ImmutableSliceBuilder.Create(param_1_1);
-            
+
                     while (true)
                     {
                         if (local_param_1_0.IsEmptyList())
@@ -196,92 +202,98 @@ public class OptimizeAndEmitDictInsertTests
                             {
                                 return CommonReusedValues.List_ac855cb8;
                             }
-            
+
                             return CommonReusedValues.List_af0e3cad;
                         }
-            
+
                         if (!(local_param_1_0.GetLength() == 0))
                         {
                             if (local_param_1_1.IsEmptyList())
                             {
                                 return CommonReusedValues.List_50724673;
                             }
-            
+
                             if (!(local_param_1_1.GetLength() == 0))
                             {
                                 PineValue local_004 = Basics.compare(local_param_1_0.GetHead(), local_param_1_1.GetHead());
-            
+
                                 if (local_004 == CommonReusedValues.List_ac855cb8)
                                 {
                                     {
                                         local_param_1_0 = local_param_1_0.Skip(1);
                                         local_param_1_1 = local_param_1_1.Skip(1);
                                     }
-            
+
                                     continue;
                                 }
-            
+
                                 return local_004;
                             }
-            
+
                             throw new ParseExpressionException("TODO: Include details from encoded and env subexpressions");
                         }
-            
+
                         throw new ParseExpressionException("TODO: Include details from encoded and env subexpressions");
                     }
                 }
-            
+
                 public static PineValue compareStrings(PineValue param_1_0, PineValue param_1_1, PineValue param_1_2)
                 {
                     PineValue local_param_1_0 = param_1_0;
                     PineValue local_param_1_1 = param_1_1;
                     PineValue local_param_1_2 = param_1_2;
-            
+
                     while (true)
                     {
                         PineValue local_000 =
-                            KernelFunctionFused.SkipAndTake(takeCount: 4, skipCountValue: local_param_1_0, argument: local_param_1_1);
-            
+                            KernelFunctionFused.SkipAndTake(
+                                takeCount: 4,
+                                skipCountValue: local_param_1_0,
+                                argument: local_param_1_1);
+
                         PineValue local_001 =
-                            KernelFunctionFused.SkipAndTake(takeCount: 4, skipCountValue: local_param_1_0, argument: local_param_1_2);
-            
+                            KernelFunctionFused.SkipAndTake(
+                                takeCount: 4,
+                                skipCountValue: local_param_1_0,
+                                argument: local_param_1_2);
+
                         PineValue local_002 =
                             IntegerEncoding.EncodeSignedInteger(KernelFunctionSpecialized.length_as_int(local_001));
-            
+
                         PineValue local_004 = KernelFunction.ValueFromBool(local_002 == CommonReusedValues.Blob_Int_0);
-            
+
                         if (KernelFunctionSpecialized.length_as_int(local_000) == 0)
                         {
                             if (local_004 == PineKernelValues.TrueValue)
                             {
                                 return CommonReusedValues.List_ac855cb8;
                             }
-            
+
                             return CommonReusedValues.List_af0e3cad;
                         }
-            
+
                         if (local_004 == PineKernelValues.TrueValue)
                         {
                             return CommonReusedValues.List_50724673;
                         }
-            
+
                         if (local_000 == local_001)
                         {
                             {
                                 PineValue local_param_1_0_temp = KernelFunctionSpecialized.int_add(4, local_param_1_0);
                                 local_param_1_0 = local_param_1_0_temp;
                             }
-            
+
                             continue;
                         }
-            
+
                         if (KernelFunctionSpecialized.int_is_sorted_asc_as_boolean(
                             KernelFunctionSpecialized.concat(IntegerEncoding.EncodeSignedInteger(0), local_000),
                             KernelFunctionSpecialized.concat(IntegerEncoding.EncodeSignedInteger(0), local_001)))
                         {
                             return CommonReusedValues.List_af0e3cad;
                         }
-            
+
                         return CommonReusedValues.List_50724673;
                     }
                 }
@@ -339,7 +351,14 @@ public class OptimizeAndEmitDictInsertTests
                                         PineValue.List(
                                             [
                                             CommonReusedValues.Blob_Str_RBNode_elm_builtin,
-                                            PineValue.List([CommonReusedValues.List_7222f8d4, local_010, local_011, local_012, local_013])
+                                            PineValue.List(
+                                                [
+                                                CommonReusedValues.List_7222f8d4,
+                                                local_010,
+                                                local_011,
+                                                local_012,
+                                                local_013
+                                                ])
                                             ])
                                         ])
                                     ]);
@@ -357,7 +376,14 @@ public class OptimizeAndEmitDictInsertTests
                                     PineValue.List(
                                         [
                                         CommonReusedValues.Blob_Str_RBNode_elm_builtin,
-                                        PineValue.List([CommonReusedValues.List_dafb9d35, param_1_1, param_1_2, param_1_3, local_012])
+                                        PineValue.List(
+                                            [
+                                            CommonReusedValues.List_dafb9d35,
+                                            param_1_1,
+                                            param_1_2,
+                                            param_1_3,
+                                            local_012
+                                            ])
                                         ]),
                                     local_013
                                     ])
