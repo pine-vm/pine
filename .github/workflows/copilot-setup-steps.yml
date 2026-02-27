@@ -46,6 +46,12 @@ jobs:
       - name: Check installed dotnet
         run: dotnet --info
 
+      - name: Install dotnet-script tool
+        run: dotnet tool install -g dotnet-script
+
+      - name: Check dotnet-script installation
+        run: dotnet script --version
+
       - name: Install Pine to $RUNNER_TEMP and expose it
         run: |
           set -euo pipefail
