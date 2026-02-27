@@ -803,19 +803,14 @@ public static class FunctionValueBuilder
             input: Expression.ListInstance([left, right]));
 
     /// <summary>
-    /// Creates a wrapper for a zero-parameter function without env functions - immediate invocation.
-    /// The inner expression receives empty list as environment.
+    /// Creates a wrapper for a zero-parameter function without env functions.
+    /// Since the inner expression has no parameters, it is encoded directly without
+    /// wrapping in a ParseAndEval expression.
     /// </summary>
     private static PineValue EmitZeroParameterWrapperWithoutEnvFunctions(
         Expression innerExpression)
     {
-        // ParseAndEval(innerExpr, [])
-        var invocationExpr =
-            new Expression.ParseAndEval(
-                encoded: Expression.LiteralInstance(ExpressionEncoding.EncodeExpressionAsValue(innerExpression)),
-                environment: Expression.EmptyList);
-
-        return ExpressionEncoding.EncodeExpressionAsValue(invocationExpr);
+        return ExpressionEncoding.EncodeExpressionAsValue(innerExpression);
     }
 
     /// <summary>

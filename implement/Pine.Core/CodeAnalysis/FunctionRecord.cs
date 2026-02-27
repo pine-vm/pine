@@ -211,12 +211,16 @@ public record FunctionRecord(
             return ParseFunctionValueFromListExpression(pineValue, parseCache);
         }
 
-        return "Expected ParseAndEval or List expression at top level, got: " + expr.GetType().Name;
+        // For zero-parameter WithoutEnvFunctions: the expression is the inner function directly,
+        // without a ParseAndEval wrapper.
+        return new ParsedFunctionValue.WithoutEnvFunctions(
+            InnerFunction: expr,
+            ParameterCount: 0);
     }
 
     /// <summary>
     /// Parses a function value from a ParseAndEval expression.
-    /// This handles 0 and 1 parameter functions for both WithEnvFunctions and WithoutEnvFunctions formats.
+    /// This handles 0 and 1 parameter functions for WithEnvFunctions and 1 parameter for WithoutEnvFunctions formats.
     /// </summary>
     private static Result<string, ParsedFunctionValue> ParseFunctionValueFromParseAndEval(
         Expression.ParseAndEval parseAndEval,
@@ -242,7 +246,7 @@ public record FunctionRecord(
 
         // Distinguish between WithEnvFunctions and WithoutEnvFunctions formats
         // WithEnvFunctions: Environment structure is [envFuncs, args] - a list with 2 elements
-        // WithoutEnvFunctions: Environment structure is either [] (0 params) or [env] (1 param)
+        // WithoutEnvFunctions: Environment structure is [env] (1 param)
 
         if (parseAndEval.Environment is Expression.List envList)
         {
@@ -287,14 +291,6 @@ public record FunctionRecord(
                 return new ParsedFunctionValue.WithoutEnvFunctions(
                     InnerFunction: innerExpression,
                     ParameterCount: 1);
-            }
-
-            // Check for empty list (0 params)
-            if (envList.Items.Count is 0)
-            {
-                return new ParsedFunctionValue.WithoutEnvFunctions(
-                    InnerFunction: innerExpression,
-                    ParameterCount: 0);
             }
         }
 
