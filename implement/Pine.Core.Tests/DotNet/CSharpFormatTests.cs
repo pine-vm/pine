@@ -4724,6 +4724,9 @@ public class CSharpFormatTests
             subtreeObject.Type.Should().Be(
                 PackFile.ObjectType.Tree,
                 "Navigated path should point to a tree");
+
+            rendered.Trim().Should().Be(
+                expectedTokensModuleText.Trim());
             """";
 
         AssertFormattedSyntax(input, input, scriptMode: true);
@@ -4991,6 +4994,239 @@ public class CSharpFormatTests
                     .AsMemory(),
                     comparer:
                     EnumerableExtensions.EqualityComparer<IReadOnlyList<string>>());
+            """";
+
+        AssertFormattedSyntax(input, expected, scriptMode: true);
+    }
+
+    [Fact]
+    public void Formats_invocation_argument_containing_multiline_string_literal()
+    {
+        var input =
+            """""
+            var scenario = TestCase.DefaultAppWithoutPackages(
+            [
+                """"
+                module Test exposing (..)
+
+
+                alfa =
+                    41
+
+                """",
+            ]);
+            """"";
+
+        var expected =
+            """"""
+            var scenario =
+                TestCase.DefaultAppWithoutPackages(
+                    [
+                    """"
+                    module Test exposing (..)
+
+
+                    alfa =
+                        41
+
+                    """",
+                    ]);
+            """""";
+
+        AssertFormattedSyntax(input, expected, scriptMode: true);
+    }
+
+    [Fact]
+    public void Formats_invocation_on_return_value()
+    {
+        var input =
+            """"
+            var (finalResult, _) =
+                ElmCompilerTestHelper.CreateFunctionValueInvocationDelegate(firstApplied.returnValue, parseCache)
+                ([
+                    StringEncoding.ValueFromString("middle"),
+                    IntegerEncoding.EncodeSignedInteger(30)
+                ]);
+            """";
+
+        var expected =
+            """"
+            var (finalResult, _) =
+                ElmCompilerTestHelper.CreateFunctionValueInvocationDelegate(firstApplied.returnValue, parseCache)(
+                    [
+                    StringEncoding.ValueFromString("middle"),
+                    IntegerEncoding.EncodeSignedInteger(30)
+                    ]);
+            """";
+
+        AssertFormattedSyntax(input, expected, scriptMode: true);
+    }
+
+    [Fact]
+    public void Formats_if_block_condition_invocation_lambda_exceeding_line_length()
+    {
+        var input =
+            """"
+            {
+                if (observedSetInitial.Any(entry => entry.origExpr == current.expr && entry.constraint.Equals(current.envValueClass)))
+                    continue;
+            }
+            """";
+
+        var expected =
+            """"
+            {
+                if (observedSetInitial.Any(
+                    entry => entry.origExpr == current.expr && entry.constraint.Equals(current.envValueClass)))
+                    continue;
+            }
+            """";
+
+        AssertFormattedSyntax(input, expected, scriptMode: true);
+    }
+
+    [Fact]
+    public void Formats_if_block_condition_invocation_lambda_exceeding_line_length_twice()
+    {
+        var input =
+            """"
+            {
+                if (observedSetInitial.Any(entry => entry.origExpr == current.expr && entry.constraint.Equals(current.envValueClass && and_another_condition)))
+                    continue;
+            }
+            """";
+
+        var expected =
+            """"
+            {
+                if (observedSetInitial.Any(
+                    entry =>
+                    entry.origExpr == current.expr && entry.constraint.Equals(current.envValueClass && and_another_condition)))
+                    continue;
+            }
+            """";
+
+        AssertFormattedSyntax(input, expected, scriptMode: true);
+    }
+
+    [Fact]
+    public void Formats_if_block_condition_invocation_lambda_exceeding_line_length_trice()
+    {
+        var input =
+            """"
+            {
+                if (observedSetInitial.Any(entry => entry.origExpr == current.expr && entry.constraint.Equals(current.envValueClass && and_another_condition && and_yet_another)))
+                    continue;
+            }
+            """";
+
+        var expected =
+            """"
+            {
+                if (observedSetInitial.Any(
+                    entry =>
+                    entry.origExpr == current.expr &&
+                    entry.constraint.Equals(current.envValueClass && and_another_condition && and_yet_another)))
+                    continue;
+            }
+            """";
+
+        AssertFormattedSyntax(input, expected, scriptMode: true);
+    }
+
+    [Fact]
+    public void Preserves_method_chain_with_trailing_comment()
+    {
+        var input =
+            """"
+            var shortenedParams =
+                allImplicitParam
+                .Select(p => (IReadOnlyList<int>)[.. p.Take(2)]) // Take at most 2 elements from each implicit param path
+                .Distinct(IntPathEqualityComparer.Instance);
+            """";
+
+        AssertFormattedSyntax(input, input, scriptMode: true);
+    }
+
+    [Fact]
+    public void Normalizes_indent_in_invocation_argument_list_containing_lambda()
+    {
+        var input =
+            """"
+            var reducedExpression =
+                ReducePineExpression.TransformPineExpressionWithOptionalReplacement(
+                findReplacement:
+                expr =>
+                {
+                    return recursionResult.expr;
+                },
+                expression).expr;
+            """";
+
+        var expected =
+            """"
+            var reducedExpression =
+                ReducePineExpression.TransformPineExpressionWithOptionalReplacement(
+                    findReplacement:
+                    expr =>
+                    {
+                        return recursionResult.expr;
+                    },
+                    expression).expr;
+            """";
+
+        AssertFormattedSyntax(input, expected, scriptMode: true);
+    }
+
+    [Fact]
+    public void Normalizes_indent_in_objection_creation_argument_list()
+    {
+        var input =
+            """"
+            public static StaticProgramParserConfig<IdentifierT> OptionalNullRequiredThrow(
+                Func<IEnumerable<IdentifierT>, string> describeContext)
+                =>
+                new(
+                    IdentifyInstanceRequired:
+                        (context, value) =>
+                        {
+                            throw new InvalidOperationException(
+                                $"No identifier provided for required instance in context {describeContext(context)} and value {value}.");
+                        },
+
+                    IdentifyInstanceOptional:
+                        (context, value) => null,
+
+                    IdentifyCrash:
+                        (context, origin) =>
+                        {
+                            throw new InvalidOperationException(
+                                $"No identifier provided for crash in context {describeContext(context)}");
+                        });
+            """";
+
+        var expected =
+            """"
+            public static StaticProgramParserConfig<IdentifierT> OptionalNullRequiredThrow(
+                Func<IEnumerable<IdentifierT>, string> describeContext)
+                =>
+                new(
+                    IdentifyInstanceRequired:
+                    (context, value) =>
+                    {
+                        throw new InvalidOperationException(
+                            $"No identifier provided for required instance in context {describeContext(context)} and value {value}.");
+                    },
+
+                    IdentifyInstanceOptional:
+                    (context, value) => null,
+
+                    IdentifyCrash:
+                    (context, origin) =>
+                    {
+                        throw new InvalidOperationException(
+                            $"No identifier provided for crash in context {describeContext(context)}");
+                    });
             """";
 
         AssertFormattedSyntax(input, expected, scriptMode: true);

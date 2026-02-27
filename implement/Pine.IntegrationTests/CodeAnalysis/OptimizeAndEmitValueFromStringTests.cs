@@ -113,8 +113,7 @@ public class OptimizeAndEmitValueFromStringTests
                                 Basics.idiv(local_000, CommonReusedValues.Blob_Int_16777216)),
                             Basics.modBy(
                                 CommonReusedValues.Blob_Int_256,
-                                local_002 ==
-                                PineKernelValues.TrueValue
+                                local_002 == PineKernelValues.TrueValue
                                 ?
                                 (KernelFunctionSpecialized.int_is_sorted_asc_as_boolean(4, local_001)
                                 ?
@@ -125,8 +124,7 @@ public class OptimizeAndEmitValueFromStringTests
                                 PineValue.EmptyList),
                             Basics.modBy(
                                 CommonReusedValues.Blob_Int_256,
-                                local_002 ==
-                                PineKernelValues.TrueValue
+                                local_002 == PineKernelValues.TrueValue
                                 ?
                                 (KernelFunctionSpecialized.int_is_sorted_asc_as_boolean(3, local_001)
                                 ?

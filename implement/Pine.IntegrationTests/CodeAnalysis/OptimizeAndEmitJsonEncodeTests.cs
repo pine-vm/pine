@@ -679,8 +679,7 @@ public class OptimizeAndEmitJsonEncodeTests
                                         ])
                                     :
                                     PineValue.EmptyList,
-                                    KernelFunctionSpecialized.int_is_sorted_asc(0, local_012, 65_535) ==
-                                    PineKernelValues.TrueValue
+                                    KernelFunctionSpecialized.int_is_sorted_asc(0, local_012, 65_535) == PineKernelValues.TrueValue
                                     ?
                                     KernelFunctionSpecialized.concat(CommonReusedValues.List_599c92a7, Test.hex4(local_012))
                                     :
