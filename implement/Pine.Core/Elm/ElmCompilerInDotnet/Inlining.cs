@@ -404,6 +404,100 @@ public class Inlining
 
         var funcExpr = app.Arguments[0].Value;
 
+        // Desugar pipe operators: Basics.apR x f → f x, Basics.apL f x → f x
+        // These operators take exactly 2 arguments (3 including the function reference in the AST).
+        // We use >= 3 to also handle any extra arguments that would be applied to the result,
+        // while skipping partial applications (count < 3) that cannot be fully desugared.
+        if (app.Arguments.Count >= 3 &&
+            funcExpr is SyntaxTypes.Expression.FunctionOrValue pipeFunc &&
+            pipeFunc.ModuleName.Count is 1 && pipeFunc.ModuleName[0] is "Basics")
+        {
+            if (pipeFunc.Name is "apR")
+            {
+                // Basics.apR x f  →  f x
+                var desugaredArgs = new List<Node<SyntaxTypes.Expression>> { app.Arguments[2], app.Arguments[1] };
+                desugaredArgs.AddRange(app.Arguments.Skip(3));
+
+                return
+                    ParenthesizeApplicationArguments(
+                        InlineApplication(new SyntaxTypes.Expression.Application([.. desugaredArgs]), context));
+            }
+
+            if (pipeFunc.Name is "apL")
+            {
+                // Basics.apL f x  →  f x
+                var desugaredArgs = new List<Node<SyntaxTypes.Expression>>(app.Arguments.Skip(1));
+
+                return
+                    ParenthesizeApplicationArguments(
+                        InlineApplication(new SyntaxTypes.Expression.Application([.. desugaredArgs]), context));
+            }
+
+            if (pipeFunc.Name is "composeR" or "composeL")
+            {
+                // composeR f g  →  \composeArg -> g (f composeArg)
+                // composeL g f  →  \composeArg -> g (f composeArg)
+                // For composeR: arg[1] = inner (applied first), arg[2] = outer (applied second)
+                // For composeL: arg[1] = outer (applied second), arg[2] = inner (applied first)
+                var inner = pipeFunc.Name is "composeR" ? app.Arguments[1] : app.Arguments[2];
+                var outer = pipeFunc.Name is "composeR" ? app.Arguments[2] : app.Arguments[1];
+
+                // Count == 3 means the operator + 2 function arguments (no application argument yet).
+                // Count > 3 means extra arguments are being applied to the composed result.
+                if (app.Arguments.Count == 3)
+                {
+                    // No application argument: produce a lambda \composeArg -> outer (inner composeArg)
+                    var param =
+                        new Node<SyntaxTypes.Pattern>(
+                            s_zeroRange,
+                            new SyntaxTypes.Pattern.VarPattern("composeArg"));
+
+                    var paramRef =
+                        new Node<SyntaxTypes.Expression>(
+                            s_zeroRange,
+                            new SyntaxTypes.Expression.FunctionOrValue([], "composeArg"));
+
+                    var innerApp =
+                        new Node<SyntaxTypes.Expression>(
+                            s_zeroRange,
+                            new SyntaxTypes.Expression.Application([inner, paramRef]));
+
+                    var parenInnerApp =
+                        new Node<SyntaxTypes.Expression>(
+                            s_zeroRange,
+                            new SyntaxTypes.Expression.ParenthesizedExpression(innerApp));
+
+                    var bodyExpr = new SyntaxTypes.Expression.Application([outer, parenInnerApp]);
+                    var bodyNode = new Node<SyntaxTypes.Expression>(s_zeroRange, bodyExpr);
+                    var inlinedBody = InlineExpression(bodyNode, context);
+
+                    return
+                        new SyntaxTypes.Expression.LambdaExpression(
+                            new SyntaxTypes.LambdaStruct([param], inlinedBody));
+                }
+                else
+                {
+                    // Has application argument: composeR f g x [extra...]  →  g (f x) [extra...]
+                    var innerApp =
+                        new Node<SyntaxTypes.Expression>(
+                            s_zeroRange,
+                            new SyntaxTypes.Expression.Application([inner, app.Arguments[3]]));
+
+                    var parenInnerApp =
+                        new Node<SyntaxTypes.Expression>(
+                            s_zeroRange,
+                            new SyntaxTypes.Expression.ParenthesizedExpression(innerApp));
+
+                    var desugaredArgs = new List<Node<SyntaxTypes.Expression>> { outer, parenInnerApp };
+                    desugaredArgs.AddRange(app.Arguments.Skip(4));
+
+                    return
+                        ParenthesizeApplicationArguments(
+                            InlineApplication(new SyntaxTypes.Expression.Application([.. desugaredArgs]), context));
+                }
+            }
+        }
+
         // Check if this is a call to a known function
         if (funcExpr is SyntaxTypes.Expression.FunctionOrValue funcOrValue)
         {
@@ -449,6 +543,40 @@ public class Inlining
         return
             new SyntaxTypes.Expression.Application(
                 [.. app.Arguments.Select(a => InlineExpression(a, context))]);
+    }
+
+    /// <summary>
+    /// Wraps Application arguments (except the function position) in ParenthesizedExpression
+    /// when they are themselves Application expressions with multiple arguments.
+    /// This ensures correct rendering after pipe operator desugaring.
+    /// </summary>
+    private static SyntaxTypes.Expression ParenthesizeApplicationArguments(SyntaxTypes.Expression expr)
+    {
+        if (expr is not SyntaxTypes.Expression.Application app || app.Arguments.Count < 2)
+        {
+            return expr;
+        }
+
+        var newArgs = new List<Node<SyntaxTypes.Expression>>(app.Arguments.Count) { app.Arguments[0] };
+
+        for (var i = 1; i < app.Arguments.Count; i++)
+        {
+            var arg = app.Arguments[i];
+
+            if (arg.Value is SyntaxTypes.Expression.Application innerApp && innerApp.Arguments.Count > 1)
+            {
+                newArgs.Add(
+                    new Node<SyntaxTypes.Expression>(
+                        arg.Range,
+                        new SyntaxTypes.Expression.ParenthesizedExpression(arg)));
+            }
+            else
+            {
+                newArgs.Add(arg);
+            }
+        }
+
+        return new SyntaxTypes.Expression.Application([.. newArgs]);
     }
 
     private static bool ShouldInline(
