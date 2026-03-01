@@ -1555,6 +1555,185 @@ public class CoreBasicsFunctionTests
         resultValue.Should().Be(ElmValue.Integer(42));
     }
 
+    // ========== Tests for abs ==========
+
+    [Fact]
+    public void Abs_positive_int()
+    {
+        var resultValue =
+            ApplyUnary(
+                CoreBasics.Abs_FunctionValue(),
+                ElmValue.Integer(17));
+
+        resultValue.Should().Be(ElmValue.Integer(17));
+    }
+
+    [Fact]
+    public void Abs_negative_int()
+    {
+        var resultValue =
+            ApplyUnary(
+                CoreBasics.Abs_FunctionValue(),
+                ElmValue.Integer(-17));
+
+        resultValue.Should().Be(ElmValue.Integer(17));
+    }
+
+    [Fact]
+    public void Abs_zero_int()
+    {
+        var resultValue =
+            ApplyUnary(
+                CoreBasics.Abs_FunctionValue(),
+                ElmValue.Integer(0));
+
+        resultValue.Should().Be(ElmValue.Integer(0));
+    }
+
+    [Fact]
+    public void Abs_positive_float()
+    {
+        var resultValue =
+            ApplyUnary(
+                CoreBasics.Abs_FunctionValue(),
+                ElmValue.ElmFloat.Convert(3.7));
+
+        resultValue.Should().Be(ElmValue.ElmFloat.Convert(3.7));
+    }
+
+    [Fact]
+    public void Abs_negative_float()
+    {
+        var resultValue =
+            ApplyUnary(
+                CoreBasics.Abs_FunctionValue(),
+                ElmValue.ElmFloat.Convert(-3.7));
+
+        resultValue.Should().Be(ElmValue.ElmFloat.Convert(3.7));
+    }
+
+    // ========== Tests for clamp ==========
+
+    [Fact]
+    public void Clamp_int_below_range()
+    {
+        var resultValue =
+            ApplyGeneric(
+                CoreBasics.Clamp_FunctionValue(),
+                [
+                ElmValue.Integer(10),
+                ElmValue.Integer(20),
+                ElmValue.Integer(5)
+                ]);
+
+        resultValue.Should().Be(ElmValue.Integer(10));
+    }
+
+    [Fact]
+    public void Clamp_int_above_range()
+    {
+        var resultValue =
+            ApplyGeneric(
+                CoreBasics.Clamp_FunctionValue(),
+                [
+                ElmValue.Integer(10),
+                ElmValue.Integer(20),
+                ElmValue.Integer(25)
+                ]);
+
+        resultValue.Should().Be(ElmValue.Integer(20));
+    }
+
+    [Fact]
+    public void Clamp_int_within_range()
+    {
+        var resultValue =
+            ApplyGeneric(
+                CoreBasics.Clamp_FunctionValue(),
+                [
+                ElmValue.Integer(10),
+                ElmValue.Integer(20),
+                ElmValue.Integer(15)
+                ]);
+
+        resultValue.Should().Be(ElmValue.Integer(15));
+    }
+
+    [Fact]
+    public void Clamp_int_equal_to_low()
+    {
+        var resultValue =
+            ApplyGeneric(
+                CoreBasics.Clamp_FunctionValue(),
+                [
+                ElmValue.Integer(10),
+                ElmValue.Integer(20),
+                ElmValue.Integer(10)
+                ]);
+
+        resultValue.Should().Be(ElmValue.Integer(10));
+    }
+
+    [Fact]
+    public void Clamp_int_equal_to_high()
+    {
+        var resultValue =
+            ApplyGeneric(
+                CoreBasics.Clamp_FunctionValue(),
+                [
+                ElmValue.Integer(10),
+                ElmValue.Integer(20),
+                ElmValue.Integer(20)
+                ]);
+
+        resultValue.Should().Be(ElmValue.Integer(20));
+    }
+
+    [Fact]
+    public void Clamp_float_below_range()
+    {
+        var resultValue =
+            ApplyGeneric(
+                CoreBasics.Clamp_FunctionValue(),
+                [
+                ElmValue.ElmFloat.Convert(1.5),
+                ElmValue.ElmFloat.Convert(3.5),
+                ElmValue.ElmFloat.Convert(0.5)
+                ]);
+
+        resultValue.Should().Be(ElmValue.ElmFloat.Convert(1.5));
+    }
+
+    [Fact]
+    public void Clamp_float_above_range()
+    {
+        var resultValue =
+            ApplyGeneric(
+                CoreBasics.Clamp_FunctionValue(),
+                [
+                ElmValue.ElmFloat.Convert(1.5),
+                ElmValue.ElmFloat.Convert(3.5),
+                ElmValue.ElmFloat.Convert(5.0)
+                ]);
+
+        resultValue.Should().Be(ElmValue.ElmFloat.Convert(3.5));
+    }
+
+    [Fact]
+    public void Clamp_float_within_range()
+    {
+        var resultValue =
+            ApplyGeneric(
+                CoreBasics.Clamp_FunctionValue(),
+                [
+                ElmValue.ElmFloat.Convert(1.5),
+                ElmValue.ElmFloat.Convert(3.5),
+                ElmValue.ElmFloat.Convert(2.5)
+                ]);
+
+        resultValue.Should().Be(ElmValue.ElmFloat.Convert(2.5));
+    }
+
     private static readonly PineVMParseCache s_pineVMParseCache = new();
 
     #region TryInterpret Tests

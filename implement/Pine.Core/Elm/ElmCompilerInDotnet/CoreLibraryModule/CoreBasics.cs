@@ -356,6 +356,23 @@ public class CoreBasics
                 [TypeInference.InferredType.Number(), TypeInference.InferredType.Number()],
                 args => Generic_Negate(args[0])),
 
+            // abs : number -> number
+            "abs" =>
+            new CoreFunctionInfo(
+                [TypeInference.InferredType.Number(), TypeInference.InferredType.Number()],
+                args => Generic_Abs(args[0])),
+
+            // clamp : number -> number -> number -> number
+            "clamp" =>
+            new CoreFunctionInfo(
+                [
+                TypeInference.InferredType.Number(),
+                TypeInference.InferredType.Number(),
+                TypeInference.InferredType.Number(),
+                TypeInference.InferredType.Number()
+                ],
+                args => Generic_Clamp(args[0], args[1], args[2])),
+
             // min : comparable -> comparable -> comparable
             "min" =>
             new CoreFunctionInfo(
@@ -539,6 +556,12 @@ public class CoreBasics
 
             "negate" =>
             Negate_FunctionValue(),
+
+            "abs" =>
+            Abs_FunctionValue(),
+
+            "clamp" =>
+            Clamp_FunctionValue(),
 
             "min" =>
             Min_FunctionValue(),
@@ -1775,6 +1798,148 @@ public class CoreBasics
 
         return
             ExpressionEncoding.EncodeExpressionAsValue(asExpr);
+    }
+
+    /// <summary>
+    /// abs : number -> number
+    /// <para>
+    /// <see href="https://package.elm-lang.org/packages/elm/core/latest/Basics#abs"/>
+    /// </para>
+    /// </summary>
+    public static Expression Generic_Abs(
+        Expression arg)
+    {
+        return
+            UnaryApplication(
+                functionValue: Abs_FunctionValue(),
+                arg: arg);
+    }
+
+    /// <summary>
+    /// abs : number -> number
+    /// <para>
+    /// <see href="https://package.elm-lang.org/packages/elm/core/latest/Basics#abs"/>
+    /// </para>
+    /// </summary>
+    public static PineValue Abs_FunctionValue()
+    {
+        /*
+        abs : number -> number
+        abs n =
+            if Pine_kernel.int_is_sorted_asc [ 0, n ] then
+                n
+            else
+                Pine_kernel.int_mul [ -1, n ]
+         * */
+
+        var n = Expression.EnvironmentInstance;
+
+        // Check if the value is a float by checking if head(n) equals "Elm_Float"
+        var isFloatCondition =
+            BuiltinHelpers.ApplyBuiltinEqualBinary(
+                BuiltinHelpers.ApplyBuiltinHead(n),
+                s_elmFloatTypeTagNameLiteral);
+
+        // For float: access numerator and denominator from [Elm_Float, [numerator, denominator]]
+        var tagArgs = BuiltinHelpers.ApplyBuiltinHead(BuiltinHelpers.ApplyBuiltinSkip(1, n));
+
+        var numerator = BuiltinHelpers.ApplyBuiltinHead(tagArgs);
+        var denominator = BuiltinHelpers.ApplyBuiltinHead(BuiltinHelpers.ApplyBuiltinSkip(1, tagArgs));
+
+        // For float: abs means absolute value of numerator
+        var isNumeratorNonNegative =
+            BuiltinIntIsSortedAsc(LiteralInt(0), numerator);
+
+        var absNumerator =
+            Expression.ConditionalInstance(
+                condition: isNumeratorNonNegative,
+                trueBranch: numerator,
+                falseBranch: BuiltinMul(LiteralInt(-1), numerator));
+
+        var absFloat =
+            Expression.ListInstance(
+                [
+                s_elmFloatTypeTagNameLiteral,
+                Expression.ListInstance([absNumerator, denominator])
+                ]);
+
+        // For non-float: check if n >= 0
+        var isNonNegative =
+            BuiltinIntIsSortedAsc(LiteralInt(0), n);
+
+        var absInt =
+            Expression.ConditionalInstance(
+                condition: isNonNegative,
+                trueBranch: n,
+                falseBranch: BuiltinMul(LiteralInt(-1), n));
+
+        var asExpr =
+            Expression.ConditionalInstance(
+                condition: isFloatCondition,
+                trueBranch: absFloat,
+                falseBranch: absInt);
+
+        return
+            ExpressionEncoding.EncodeExpressionAsValue(asExpr);
+    }
+
+    /// <summary>
+    /// clamp : number -> number -> number -> number
+    /// <para>
+    /// <see href="https://package.elm-lang.org/packages/elm/core/latest/Basics#clamp"/>
+    /// </para>
+    /// clamp low high n = if compare n low == LT then low else if compare n high == GT then high else n
+    /// </summary>
+    public static Expression Generic_Clamp(
+        Expression low,
+        Expression high,
+        Expression n)
+    {
+        // clamp low high n = if compare n low == LT then low else if compare n high == GT then high else n
+        // Using a function value that captures low and high
+        var compareNLow = Generic_Compare(n, low);
+        var isLT = Generic_Eq(compareNLow, s_orderLT);
+        var compareNHigh = Generic_Compare(n, high);
+        var isGT = Generic_Eq(compareNHigh, s_orderGT);
+
+        return
+            Expression.ConditionalInstance(
+                condition: isLT,
+                trueBranch: low,
+                falseBranch:
+                Expression.ConditionalInstance(
+                    condition: isGT,
+                    trueBranch: high,
+                    falseBranch: n));
+    }
+
+    /// <summary>
+    /// clamp : number -> number -> number -> number
+    /// </summary>
+    public static PineValue Clamp_FunctionValue()
+    {
+        // For WithoutEnvFunctions variant with 3 arguments: [low, high, n]
+        var low =
+            ExpressionBuilder.BuildExpressionForPathInExpression(
+                [0],
+                Expression.EnvironmentInstance);
+
+        var high =
+            ExpressionBuilder.BuildExpressionForPathInExpression(
+                [1],
+                Expression.EnvironmentInstance);
+
+        var n =
+            ExpressionBuilder.BuildExpressionForPathInExpression(
+                [2],
+                Expression.EnvironmentInstance);
+
+        var asExpr = Generic_Clamp(low, high, n);
+
+        return
+            FunctionValueBuilder.EmitFunctionValueWithoutEnvFunctions(
+                asExpr,
+                parameterCount: 3);
     }
 
     private static Expression Internal_Generic_Add(
