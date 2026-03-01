@@ -206,7 +206,7 @@ public class StaticProgramParser
 
         var parametersExprs =
             Enumerable.Range(0, parsedFunction.ParameterCount)
-            .Select(paramIndex => StaticExpressionExtension.BuildPathToExpression([1, paramIndex], StaticExpression<IdentifierT>.EnvironmentInstance))
+            .Select(paramIndex => StaticExpressionExtension.BuildPathToExpression([1 + paramIndex], StaticExpression<IdentifierT>.EnvironmentInstance))
             .ToArray();
 
         return (new ParsedFunction<IdentifierT>(parametersExprs, parseBodyOk.current), parseBodyOk.dependencies);
@@ -245,25 +245,21 @@ public class StaticProgramParser
 
         if (CodeAnalysis.TryParseExprAsPathInEnv(expression) is { } pathInEnv)
         {
-            if (pathInEnv.Count > 1 && pathInEnv[0] is 1)
+            if (pathInEnv.Count is 1 && pathInEnv[0] >= 1)
             {
-                var parameterIndex = pathInEnv[1];
+                // Flat parameter reference: env[1+paramIndex]
+                var parameterIndex = pathInEnv[0] - 1;
 
-                if (pathInEnv.Count is 2)
-                {
-                    // Simple parameter reference like env[1][0]
-                    var parameterExpr =
-                        StaticExpression<IdentifierT>.ParameterReference(parameterIndex);
+                var parameterExpr =
+                    StaticExpression<IdentifierT>.ParameterReference(parameterIndex);
 
-                    return (parameterExpr, ImmutableDictionary<IdentifierT, PineValue>.Empty);
-                }
+                return (parameterExpr, ImmutableDictionary<IdentifierT, PineValue>.Empty);
+            }
 
+            if (pathInEnv.Count > 1 && pathInEnv[0] >= 1)
+            {
                 // For tuple patterns, nested tuple patterns, or choice type deconstruction patterns
-                // like env[1][0][0] or env[1][0][1][0], build a full path expression
-                // that will be rendered as param_1_0[0] or param_1_0[1][0].
-                // Examples:
-                // - Tuple: `(x, y)` generates env[1][0][0] and env[1][0][1]
-                // - Choice: `(TagAlfa a)` generates env[1][0][1][0]
+                // like env[1][0] or env[2][1][0], build a full path expression from environment
                 var pathExpr =
                     StaticExpressionExtension.BuildPathToExpression(
                         pathInEnv,
@@ -495,8 +491,8 @@ public class StaticProgramParser
         // For full function applications, parse arguments from the environment structure
         if (resolvedFunction.isFullApplication)
         {
-            // Full application: environment is [[functions], [arguments]]
-            // Parse the arguments from environment[1]
+            // Full application: environment is [envFunctions, arg0, arg1, ...]
+            // Parse the arguments from environment[1..N]
             var parseArgsResult =
                 ParseFullApplicationArguments(
                     path,
@@ -698,30 +694,24 @@ public class StaticProgramParser
         PineVMParseCache parseCache)
         where IdentifierT : notnull
     {
-        // Environment is [[functions], [arguments]]
-        // We need to parse environment[1] which contains the arguments list
+        // Environment is flat: [envFunctions, arg0, arg1, ...]
+        // Arguments start at index 1
 
-        if (environment is not Expression.List envList || envList.Items.Count < 2)
+        if (environment is not Expression.List envList || envList.Items.Count < 1)
         {
-            return "Full application environment is not a list with at least 2 items";
+            return "Full application environment is not a list with at least 1 item";
         }
 
-        var argsListExpr = envList.Items[1];
-
-        if (argsListExpr is not Expression.List argsList)
-        {
-            return "Arguments portion of environment is not a list";
-        }
-
-        var parsedArgs = new StaticExpression<IdentifierT>[argsList.Items.Count];
+        var argCount = envList.Items.Count - 1;
+        var parsedArgs = new StaticExpression<IdentifierT>[argCount];
         var allDependencies = ImmutableDictionary<IdentifierT, PineValue>.Empty;
 
-        for (var i = 0; i < argsList.Items.Count; i++)
+        for (var i = 0; i < argCount; i++)
         {
             var parseArgResult =
                 ParseExpression(
                     path,
-                    argsList.Items[i],
+                    envList.Items[1 + i],
                     envClass,
                     parseConfig,
                     parseCache);

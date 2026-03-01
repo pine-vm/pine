@@ -28,7 +28,7 @@ Function applications are grouped into full applications and partial application
 ### Full Function Applications
 
 For function applications where the number of arguments equals the number of parameters of the function (non-partial application), we use the following pattern to compile Elm function applications, as a convention:
-The environment is a list with two items. The first item in this list contains all the encoded function bodies needed for further applications. This set contains all the transitively referenced functions that have not been inlined. The second item in the list contains the arguments from the source Elm code.
+The environment is a flat list. The first item in this list contains all the encoded function bodies needed for further applications. This set contains all the transitively referenced functions that have not been inlined. The remaining items in the list are the arguments from the source Elm code, each at its own position in the root list.
 
 For example, a recursive function, when calling itself via 'ParseAndEval', composes the new environment so that it also contains a representation of the function itself in encoded form, to enable continuing recursion in the non-terminating branch.
 
@@ -52,15 +52,15 @@ Following the pattern established earlier, our expression to create the new envi
 
 ```txt
 [ [ value_encoding_factorial ]
-, [ Pine_builtin.int_add [ n, -1 ] ]
+, Pine_builtin.int_add [ n, -1 ]
 ]
 ```
 
-Because of the direct recursion, the calling function happens to be the called function, so placement of the components in the environment is symmetrical. The parameter named "n" is the first in the parameter list, and therefore is placed at index 0:
+Because of the direct recursion, the calling function happens to be the called function, so placement of the components in the environment is symmetrical. The parameter named "n" is at index 1 in the flat environment (right after the env functions list):
 
 ```txt
 [ [ current_env[0][0] ]
-, [ Pine_builtin.int_add [ current_env[1][0], -1 ] ]
+, Pine_builtin.int_add [ current_env[1], -1 ]
 ]
 ```
 

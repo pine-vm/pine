@@ -130,12 +130,28 @@ public static class ElmInteractiveEnvironment
                 functionRecord.ParameterCount;
         }
 
-        var combinedEnvironment =
-            PineValue.List(
-                [
-                PineValue.List(functionRecord.EnvFunctions),
-                PineValue.List([..combinedArguments])
-                ]);
+        PineValue combinedEnvironment;
+
+        if (functionRecord.UsesNestedArgFormat)
+        {
+            // Old nested format: [envFuncs, [arg0, arg1, ...]]
+            combinedEnvironment =
+                PineValue.List(
+                    [
+                    PineValue.List(functionRecord.EnvFunctions),
+                    PineValue.List(combinedArguments.ToArray())
+                    ]);
+        }
+        else
+        {
+            // New flat format: [envFuncs, arg0, arg1, ...]
+            combinedEnvironment =
+                PineValue.List(
+                    [
+                    PineValue.List(functionRecord.EnvFunctions),
+                    ..combinedArguments
+                    ]);
+        }
 
         return (functionRecord.InnerFunction, combinedEnvironment);
     }

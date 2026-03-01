@@ -101,7 +101,9 @@ public class ExpressionCompiler
     private static Result<CompilationError, Expression> CompileFloatable(
         SyntaxTypes.Expression.Floatable expr)
     {
-        var floatValue = ElmValue.ElmFloat.Convert(double.Parse(expr.LiteralText, System.Globalization.CultureInfo.InvariantCulture));
+        var floatValue =
+            ElmValue.ElmFloat.Convert(
+                double.Parse(expr.LiteralText, System.Globalization.CultureInfo.InvariantCulture));
 
         var pineValue =
             ElmValueEncoding.ElmValueAsPineValue(floatValue);
@@ -484,9 +486,10 @@ public class ExpressionCompiler
                         // Handle over-application (unlikely but consistent)
                         if (compiledArguments.Length > 2)
                         {
-                            return CompileGenericFunctionApplication(
-                                consResult,
-                                compiledArguments[2..]);
+                            return
+                                CompileGenericFunctionApplication(
+                                    consResult,
+                                    compiledArguments[2..]);
                         }
 
                         return consResult;
@@ -515,7 +518,7 @@ public class ExpressionCompiler
 
             if (argCount >= paramCount && paramCount > 0)
             {
-                // Full or over-application: use optimized [[envFuncs], [arg0, arg1, ...]] structure
+                // Full or over-application: use optimized [envFuncs, arg0, arg1, ...] flat structure
                 // for the first paramCount arguments
                 var functionRef =
                     ExpressionBuilder.BuildExpressionForPathInExpression(
@@ -563,10 +566,7 @@ public class ExpressionCompiler
 
                 var callEnvironment =
                     Expression.ListInstance(
-                        [
-                        callEnvFunctions,
-                        Expression.ListInstance(fullApplicationArgs)
-                        ]);
+                        [callEnvFunctions, .. fullApplicationArgs]);
 
                 Expression fullApplicationResult =
                     new Expression.ParseAndEval(
@@ -1741,9 +1741,9 @@ public class ExpressionCompiler
         }
 
         // Build the inner expression that constructs the choice type value.
-        // The inner expression expects:
-        // - For functions WITH captured args: environment = [[capturedArgs...], [remainingArgs...]]
-        // - Captured args at env[0], remaining args at env[1]
+        // The inner expression expects flat env layout:
+        // - env[0] = captured args list (stored in "env functions" slot)
+        // - env[1..N] = remaining args
         //
         // We use FunctionValueBuilder with the captured args stored in the "env functions" slot.
 
@@ -1762,12 +1762,12 @@ public class ExpressionCompiler
                     Expression.EnvironmentInstance));
         }
 
-        // Build expressions to get remaining args from env[1]
+        // Build expressions to get remaining args from env (flat layout)
         for (var i = 0; i < remainingArgCount; i++)
         {
             allArgExpressions.Add(
                 ExpressionBuilder.BuildExpressionForPathInExpression(
-                    [1, i],
+                    [1 + i],
                     Expression.EnvironmentInstance));
         }
 
@@ -1919,7 +1919,7 @@ public class ExpressionCompiler
         var remainingArgCount = totalArgCount - capturedArgExpressions.Count;
 
         // Build the inner expression that constructs the record.
-        // At invocation time, environment is [[capturedArgs], [remainingArgs]]
+        // At invocation time, flat env layout: env[0] = capturedArgs list, env[1..N] = remainingArgs
         var allArgExpressions = new List<Expression>();
 
         // Build expressions to get captured args from env[0]
@@ -1931,12 +1931,12 @@ public class ExpressionCompiler
                     Expression.EnvironmentInstance));
         }
 
-        // Build expressions to get remaining args from env[1]
+        // Build expressions to get remaining args from env (flat layout)
         for (var i = 0; i < remainingArgCount; i++)
         {
             allArgExpressions.Add(
                 ExpressionBuilder.BuildExpressionForPathInExpression(
-                    [1, i],
+                    [1 + i],
                     Expression.EnvironmentInstance));
         }
 

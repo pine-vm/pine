@@ -131,7 +131,7 @@ public record NamesFromCompiledEnv
 
                  ..arguments.Select((argValue, argIndex) =>
                      new KeyValuePair<IReadOnlyList<int>, PineValue>(
-                         [1, argIndex],
+                         [1 + argIndex],
                          argValue)),
                  ]);
 

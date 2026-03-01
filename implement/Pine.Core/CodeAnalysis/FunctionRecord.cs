@@ -26,7 +26,7 @@ public abstract record ParsedFunctionValue
 
     /// <summary>
     /// Represents a function value emitted by <see cref="FunctionValueBuilder.EmitFunctionValueWithEnvFunctions"/>.
-    /// The inner expression receives environment as [envFunctions, [arg0, arg1, ...]].
+    /// The inner expression receives environment as [envFunctions, arg0, arg1, ...].
     /// </summary>
     /// <param name="InnerFunction">The inner function expression body.</param>
     /// <param name="ParameterCount">Total number of parameters expected by the function.</param>
@@ -114,7 +114,8 @@ public record FunctionRecord(
     Expression InnerFunction,
     int ParameterCount,
     ReadOnlyMemory<PineValue> EnvFunctions,
-    ReadOnlyMemory<PineValue> ArgumentsAlreadyCollected)
+    ReadOnlyMemory<PineValue> ArgumentsAlreadyCollected,
+    bool UsesNestedArgFormat = false)
 {
     /*
      * TODO: Rename to 'FunctionValueParser' for symmetry with 'FunctionValueBuilder'?
@@ -213,9 +214,10 @@ public record FunctionRecord(
 
         // For zero-parameter WithoutEnvFunctions: the expression is the inner function directly,
         // without a ParseAndEval wrapper.
-        return new ParsedFunctionValue.WithoutEnvFunctions(
-            InnerFunction: expr,
-            ParameterCount: 0);
+        return
+            new ParsedFunctionValue.WithoutEnvFunctions(
+                InnerFunction: expr,
+                ParameterCount: 0);
     }
 
     /// <summary>
@@ -245,52 +247,51 @@ public record FunctionRecord(
         }
 
         // Distinguish between WithEnvFunctions and WithoutEnvFunctions formats
-        // WithEnvFunctions: Environment structure is [envFuncs, args] - a list with 2 elements
+        // WithEnvFunctions: Environment structure is [envFuncs, arg0, arg1, ...] - a flat list
+        //   - 0 params: [envFuncs] (1 element)
+        //   - 1 param:  [envFuncs, Environment] (2 elements)
         // WithoutEnvFunctions: Environment structure is [env] (1 param)
 
         if (parseAndEval.Environment is Expression.List envList)
         {
-            // Check if this is WithEnvFunctions format: [envFuncs, args]
-            if (envList.Items.Count is 2)
+            // Check if this is WithEnvFunctions format
+            // For 0 params: [envFuncs] - 1 item where first can be parsed as env functions
+            if (envList.Items.Count is 1)
             {
-                // Try to parse as WithEnvFunctions format
                 var envFunctionsResult = ParseEnvFunctionsFromExpression(envList.Items[0]);
 
                 if (envFunctionsResult.IsOkOrNull() is { } envFunctions)
                 {
-                    var argsExpr = envList.Items[1];
-
-                    if (argsExpr is Expression.List argsList)
-                    {
-                        int parameterCount;
-
-                        if (argsList.Items.Count is 0)
-                        {
-                            parameterCount = 0;
-                        }
-                        else if (argsList.Items.Count is 1 && argsList.Items[0] is Expression.Environment)
-                        {
-                            parameterCount = 1;
-                        }
-                        else
-                        {
-                            return "Unexpected args list structure in WithEnvFunctions format - expected [] or [Environment]";
-                        }
-
-                        return new ParsedFunctionValue.WithEnvFunctions(
+                    return
+                        new ParsedFunctionValue.WithEnvFunctions(
                             InnerFunction: innerExpression,
-                            ParameterCount: parameterCount,
+                            ParameterCount: 0,
                             EnvFunctions: envFunctions);
-                    }
+                }
+
+                // Check if this is WithoutEnvFunctions format: [env] for 1 param
+                if (envList.Items[0] is Expression.Environment)
+                {
+                    return
+                        new ParsedFunctionValue.WithoutEnvFunctions(
+                            InnerFunction: innerExpression,
+                            ParameterCount: 1);
                 }
             }
 
-            // Check if this is WithoutEnvFunctions format: [env] for 1 param
-            if (envList.Items.Count is 1 && envList.Items[0] is Expression.Environment)
+            // For 1 param: [envFuncs, Environment] - 2 items
+            if (envList.Items.Count is 2 && envList.Items[1] is Expression.Environment)
             {
-                return new ParsedFunctionValue.WithoutEnvFunctions(
-                    InnerFunction: innerExpression,
-                    ParameterCount: 1);
+                var envFunctionsResult = ParseEnvFunctionsFromExpression(envList.Items[0]);
+
+                if (envFunctionsResult.IsOkOrNull() is { } envFunctions)
+                {
+                    return
+                        new ParsedFunctionValue.WithEnvFunctions(
+                            InnerFunction: innerExpression,
+                            ParameterCount: 1,
+                            EnvFunctions: envFunctions);
+                }
             }
         }
 
@@ -376,6 +377,7 @@ public record FunctionRecord(
                 }
 
                 var innerParseResult = parseCache.ParseExpression(innerLit.Value);
+
                 if (innerParseResult.IsErrOrNull() is { } innerErr)
                 {
                     return "Failed to parse inner expression: " + innerErr;
@@ -387,32 +389,44 @@ public record FunctionRecord(
                 }
 
                 // Determine format from environment structure
-                // WithEnvFunctions: environment is [envFuncs, argsExpr] where envFuncs is a list
+                // WithEnvFunctions: environment is concat([envFuncs], argsExpr)
+                //   where the first item of the concat input is a list containing env functions
                 // WithoutEnvFunctions: environment is just the argsExpr (concat of captured and last arg)
 
-                if (parseAndEval.Environment is Expression.List envList && envList.Items.Count is 2)
-                {
-                    // Check if first element can be parsed as env functions
-                    var envFuncsResult = ParseEnvFunctionsFromExpression(envList.Items[0]);
-
-                    if (envFuncsResult.IsOkOrNull() is { } envFunctions)
-                    {
-                        // This is WithEnvFunctions format
-                        return new ParsedFunctionValue.WithEnvFunctions(
-                            InnerFunction: innerExpression,
-                            ParameterCount: levels,
-                            EnvFunctions: envFunctions);
-                    }
-                }
-
-                // Check for WithoutEnvFunctions format
-                // The environment should be a KernelApplication (concat) expression
                 if (parseAndEval.Environment is Expression.KernelApplication kernelApp &&
                     kernelApp.Function is nameof(KernelFunction.concat))
                 {
-                    return new ParsedFunctionValue.WithoutEnvFunctions(
-                        InnerFunction: innerExpression,
-                        ParameterCount: levels);
+                    // Both WithEnvFunctions and WithoutEnvFunctions use concat at the innermost level
+                    // WithEnvFunctions: concat([[envFuncs], fullArgs]) where fullArgs = concat(captured, [lastArg])
+                    //   -> input is List with 2 items: first is List([envFuncsExpr]), second is fullArgs
+                    // WithoutEnvFunctions: concat(captured, [lastArg])
+                    //   -> input is List with 2 items: first is captured, second is [lastArg]
+
+                    if (kernelApp.Input is Expression.List concatInput && concatInput.Items.Count is 2)
+                    {
+                        // Check if first item is a list containing a single env functions expression
+                        if (concatInput.Items[0] is Expression.List outerList &&
+                            outerList.Items.Count is 1)
+                        {
+                            var envFuncsResult = ParseEnvFunctionsFromExpression(outerList.Items[0]);
+
+                            if (envFuncsResult.IsOkOrNull() is { } envFunctions)
+                            {
+                                // This is WithEnvFunctions format
+                                return
+                                    new ParsedFunctionValue.WithEnvFunctions(
+                                        InnerFunction: innerExpression,
+                                        ParameterCount: levels,
+                                        EnvFunctions: envFunctions);
+                            }
+                        }
+
+                        // Otherwise it's WithoutEnvFunctions format
+                        return
+                            new ParsedFunctionValue.WithoutEnvFunctions(
+                                InnerFunction: innerExpression,
+                                ParameterCount: levels);
+                    }
                 }
 
                 return "Unable to determine function value format from innermost environment structure";
@@ -438,8 +452,8 @@ public record FunctionRecord(
         PineValue encodedWrapper,
         PineVMParseCache parseCache)
     {
-        // For 0 params: ParseAndEval(innerExpr, [envFuncs, []])
-        // For 1 param: ParseAndEval(innerExpr, [envFuncsLiteral, [Environment]])
+        // For 0 params: ParseAndEval(innerExpr, [envFuncs])
+        // For 1 param: ParseAndEval(innerExpr, [envFuncs, Environment])
 
         var parseExprResult = parseCache.ParseExpression(encodedWrapper);
 
@@ -471,11 +485,22 @@ public record FunctionRecord(
             return "Failed to extract inner expression";
         }
 
-        // Extract env functions from the environment structure
-        // Environment structure: [envFuncsExpr, argsExpr]
-        if (outerParseAndEval.Environment is not Expression.List envList || envList.Items.Count != 2)
+        // Check if the inner expression is another wrapper level (intermediate partially-applied wrapper).
+        // Wrapper levels are List expressions that construct expression encodings, starting with a tag literal
+        // like "ParseAndEval" or "List". Real function bodies don't start with such tag literals.
+        if (innerExpression is Expression.List innerList &&
+            innerList.Items.Count is 2 &&
+            innerList.Items[0] is Expression.Literal tagLit &&
+            StringEncoding.StringFromValue(tagLit.Value).IsOkOrNull() is "ParseAndEval" or "List")
         {
-            return "Expected environment to be a list of 2 elements";
+            return "Inner expression appears to be another wrapper level, not a function body";
+        }
+
+        // Extract env functions from the environment structure
+        // Environment structure: [envFuncs] for 0 params, [envFuncs, Environment] for 1 param
+        if (outerParseAndEval.Environment is not Expression.List envList || envList.Items.Count is 0)
+        {
+            return "Expected environment to be a non-empty list";
         }
 
         // Parse env functions - must be one of:
@@ -493,27 +518,32 @@ public record FunctionRecord(
             return "Failed to extract env functions";
         }
 
-        // Determine parameter count - must match exact expected forms
-        var argsExpr = envList.Items[1];
-
-        if (argsExpr is not Expression.List argsList)
-        {
-            return "Expected args expression to be a List";
-        }
-
+        // Determine parameter count from remaining items
         int parameterCount;
+        bool usesNestedArgFormat = false;
 
-        if (argsList.Items.Count is 0)
+        if (envList.Items.Count is 1)
         {
+            // [envFuncs] - zero parameters
             parameterCount = 0;
         }
-        else if (argsList.Items.Count is 1 && argsList.Items[0] is Expression.Environment)
+        else if (envList.Items.Count is 2 && envList.Items[1] is Expression.Environment)
         {
+            // New flat format: [envFuncs, Environment] - one parameter
             parameterCount = 1;
+        }
+        else if (envList.Items.Count is 2 &&
+            envList.Items[1] is Expression.List innerArgList &&
+            innerArgList.Items.Count is 1 &&
+            innerArgList.Items[0] is Expression.Environment)
+        {
+            // Old nested format: [envFuncs, [Environment]] - one parameter
+            parameterCount = 1;
+            usesNestedArgFormat = true;
         }
         else
         {
-            return "Unexpected args list structure - expected [] or [Environment]";
+            return "Unexpected environment structure - expected [envFuncs] or [envFuncs, Environment]";
         }
 
         return
@@ -521,7 +551,8 @@ public record FunctionRecord(
                 InnerFunction: innerExpression,
                 ParameterCount: parameterCount,
                 EnvFunctions: envFunctions,
-                ArgumentsAlreadyCollected: ReadOnlyMemory<PineValue>.Empty);
+                ArgumentsAlreadyCollected: ReadOnlyMemory<PineValue>.Empty,
+                UsesNestedArgFormat: usesNestedArgFormat);
     }
 
     /// <summary>
@@ -608,14 +639,15 @@ public record FunctionRecord(
                 InnerFunction: result.innerExpr,
                 ParameterCount: result.paramCount,
                 EnvFunctions: result.envFuncs,
-                ArgumentsAlreadyCollected: ReadOnlyMemory<PineValue>.Empty);
+                ArgumentsAlreadyCollected: ReadOnlyMemory<PineValue>.Empty,
+                UsesNestedArgFormat: result.usesNestedArgFormat);
     }
 
     /// <summary>
     /// Strictly traverses multi-parameter wrapper structure following the exact expected pattern.
     /// Returns error if the structure doesn't match what FunctionValueBuilder produces.
     /// </summary>
-    private static Result<string, (int paramCount, Expression innerExpr, PineValue[] envFuncs)> TraverseMultiParamWrapperStrict(
+    private static Result<string, (int paramCount, Expression innerExpr, PineValue[] envFuncs, bool usesNestedArgFormat)> TraverseMultiParamWrapperStrict(
         PineValue encodedWrapper,
         PineVMParseCache parseCache)
     {
@@ -672,6 +704,7 @@ public record FunctionRecord(
                 }
 
                 var innerParseResult = parseCache.ParseExpression(innerLit.Value);
+
                 if (innerParseResult.IsErrOrNull() is { } innerErr)
                 {
                     return "Failed to parse inner expression: " + innerErr;
@@ -683,24 +716,42 @@ public record FunctionRecord(
                 }
 
                 // Extract env functions from environment structure
-                if (parseAndEval.Environment is not Expression.List envList || envList.Items.Count < 1)
+                // With flat layout: environment is concat([envFuncs], fullArgs) - a KernelApplication
+                if (parseAndEval.Environment is Expression.KernelApplication concatApp &&
+                    concatApp.Function is nameof(KernelFunction.concat) &&
+                    concatApp.Input is Expression.List concatInputList &&
+                    concatInputList.Items.Count is 2 &&
+                    concatInputList.Items[0] is Expression.List envFuncsList &&
+                    envFuncsList.Items.Count is 1)
                 {
-                    return "Expected environment to be a list with at least 1 element";
+                    var envFuncsResult = ParseEnvFunctionsFromExpression(envFuncsList.Items[0]);
+
+                    if (envFuncsResult.IsErrOrNull() is { } envFuncsErr)
+                    {
+                        return "Failed to parse env functions in innermost level: " + envFuncsErr;
+                    }
+
+                    if (envFuncsResult.IsOkOrNull() is not { } envFunctions)
+                    {
+                        return "Failed to extract env functions";
+                    }
+
+                    return (levels, innerExpression, envFunctions, usesNestedArgFormat: false);
                 }
 
-                var envFuncsResult = ParseEnvFunctionsFromExpression(envList.Items[0]);
-
-                if (envFuncsResult.IsErrOrNull() is { } envFuncsErr)
+                // Old nested format: environment is List([envFuncs, concat(captured, [lastArg])])
+                if (parseAndEval.Environment is Expression.List envListOld &&
+                    envListOld.Items.Count is 2)
                 {
-                    return "Failed to parse env functions in innermost level: " + envFuncsErr;
+                    var envFuncsResultOld = ParseEnvFunctionsFromExpression(envListOld.Items[0]);
+
+                    if (envFuncsResultOld.IsOkOrNull() is { } envFunctionsOld)
+                    {
+                        return (levels, innerExpression, envFunctionsOld, usesNestedArgFormat: true);
+                    }
                 }
 
-                if (envFuncsResult.IsOkOrNull() is not { } envFunctions)
-                {
-                    return "Failed to extract env functions";
-                }
-
-                return (levels, innerExpression, envFunctions);
+                return "Expected environment to be concat([envFuncs], fullArgs) or List([envFuncs, args]) at innermost level";
             }
             else if (nextParseResult.IsOkOrNull() is Expression.List)
             {
@@ -757,10 +808,12 @@ public record FunctionRecord(
                 {
                     // Check if this literal contains a valid expression (List or ParseAndEval)
                     var parseResult = parseCache.ParseExpression(lit.Value);
+
                     if (parseResult.IsOkOrNull() is Expression.List or Expression.ParseAndEval)
                     {
                         return lit.Value;
                     }
+
                     return "Literal does not contain a valid next level expression";
                 }
 
@@ -770,11 +823,13 @@ public record FunctionRecord(
                     foreach (var item in list.Items)
                     {
                         var result = FindFirstValidNextLevelLiteral(item, parseCache);
+
                         if (result.IsOkOrNull() is { } value)
                         {
                             return value;
                         }
                     }
+
                     return "No valid next level Literal found in List";
                 }
 
@@ -884,6 +939,7 @@ public record FunctionRecord(
 
         var parseFunctionParameterCountResult =
             IntegerEncoding.ParseSignedIntegerStrict(paramCountValue);
+
         {
             if (parseFunctionParameterCountResult.IsErrOrNull() is { } err)
             {
@@ -922,7 +978,8 @@ public record FunctionRecord(
                 InnerFunction: innerFunction,
                 ParameterCount: (int)functionParameterCount,
                 EnvFunctions: envFunctionsList.Items.ToArray(),
-                ArgumentsAlreadyCollected: argumentsAlreadyCollectedList.Items.ToArray());
+                ArgumentsAlreadyCollected: argumentsAlreadyCollectedList.Items.ToArray(),
+                UsesNestedArgFormat: true);
     }
 
     /// <summary>
@@ -1001,7 +1058,8 @@ public record FunctionRecord(
                 InnerFunction: innerFunction,
                 ParameterCount: (int)functionParameterCount,
                 EnvFunctions: envFunctionsList.Items.ToArray(),
-                ArgumentsAlreadyCollected: argumentsAlreadyCollectedList.Items.ToArray());
+                ArgumentsAlreadyCollected: argumentsAlreadyCollectedList.Items.ToArray(),
+                UsesNestedArgFormat: true);
     }
 
     /// <summary>

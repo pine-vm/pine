@@ -11,11 +11,12 @@ public static class BuiltinHelpers
 {
     /// <summary>
     /// Builds an expression that accesses a parameter at the given index.
-    /// Parameters are placed in the environment at path [1, parameterIndex].
+    /// Parameters are placed in the environment at path [1 + parameterIndex],
+    /// since the environment is a flat list: [envFunctions, arg0, arg1, ...].
     /// </summary>
     public static Expression BuildPathToParameter(int parameterIndex) =>
         ExpressionBuilder.BuildExpressionForPathInExpression(
-            [1, parameterIndex],
+            [1 + parameterIndex],
             Expression.EnvironmentInstance);
 
     /// <summary>

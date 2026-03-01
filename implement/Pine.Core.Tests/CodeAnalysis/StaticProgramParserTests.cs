@@ -37,7 +37,7 @@ public class StaticProgramParserTests
     private static Expression BuildParamReference(int paramIndex) =>
         ExpressionBuilder.BuildExpressionForPathInExpression(
             expression: Expression.EnvironmentInstance,
-            path: [1, paramIndex]);
+            path: [1 + paramIndex]);
 
     [Fact]
     public void Zero_roots()

@@ -226,9 +226,9 @@ public class TypeInferenceCanonicalizedOperatorsTests
 
             Test.alfa param_1_0 =
                 Pine_builtin.int_mul
-                    [ param_1_0[0]
+                    [ param_1_0
                     , Pine_builtin.int_add
-                        [ param_1_0[1]
+                        [ param_1_1
                         , 17
                         ]
                     ]

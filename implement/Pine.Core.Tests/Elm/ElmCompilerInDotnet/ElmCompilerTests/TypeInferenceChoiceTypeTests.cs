@@ -51,7 +51,7 @@ public class TypeInferenceChoiceTypeTests
                 Pine_builtin.int_mul
                     [ param_1_1
                     , Pine_builtin.int_add
-                        [ param_1_0[1][0]
+                        [ param_1_1[0]
                         , 17
                         ]
                     ]
@@ -156,12 +156,12 @@ public class TypeInferenceChoiceTypeTests
                     if
                         Pine_builtin.equal
                             [ Pine_builtin.length
-                                param_1_0[1]
+                                param_1_1
                             , 1
                             ]
                     then
                         Pine_builtin.equal
-                            [ param_1_0[0]
+                            [ param_1_0
                             , TagAlfa
                             ]
 
@@ -171,7 +171,7 @@ public class TypeInferenceChoiceTypeTests
                     Pine_builtin.int_mul
                         [ param_1_1
                         , Pine_builtin.int_add
-                            [ param_1_0[1][0]
+                            [ param_1_1[0]
                             , 17
                             ]
                         ]
@@ -226,19 +226,19 @@ public class TypeInferenceChoiceTypeTests
                     if
                         Pine_builtin.equal
                             [ Pine_builtin.length
-                                param_1_0[1][0]
+                                param_1_1[0]
                             , 2
                             ]
                     then
                         if
                             Pine_builtin.equal
                                 [ Pine_builtin.length
-                                    param_1_0[1]
+                                    param_1_1
                                 , 1
                                 ]
                         then
                             Pine_builtin.equal
-                                [ param_1_0[0]
+                                [ param_1_0
                                 , TagAlfa
                                 ]
 
@@ -251,7 +251,7 @@ public class TypeInferenceChoiceTypeTests
                     Pine_builtin.int_mul
                         [ param_1_1
                         , Pine_builtin.int_add
-                            [ param_1_0[1][0][1]
+                            [ param_1_1[0][1]
                             , 17
                             ]
                         ]

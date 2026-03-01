@@ -1288,8 +1288,8 @@ public class CoreBasics
         Expression g)
     {
         // Build a function value that captures f and g, and takes 1 argument x.
-        // Inner body environment: [[f, g], [x]]
-        // f = env[0][0], g = env[0][1], x = env[1][0]
+        // Inner body environment (flat layout): [envFuncs, x]
+        // f = env[0][0], g = env[0][1], x = env[1]
         var fCaptured =
             ExpressionBuilder.BuildExpressionForPathInExpression(
                 [0, 0],
@@ -1302,7 +1302,7 @@ public class CoreBasics
 
         var xArg =
             ExpressionBuilder.BuildExpressionForPathInExpression(
-                [1, 0],
+                [1],
                 Expression.EnvironmentInstance);
 
         // f(x)
@@ -1330,8 +1330,8 @@ public class CoreBasics
         Expression f)
     {
         // Build a function value that captures g and f, and takes 1 argument x.
-        // Inner body environment: [[g, f], [x]]
-        // g = env[0][0], f = env[0][1], x = env[1][0]
+        // Inner body environment (flat layout): [envFuncs, x]
+        // g = env[0][0], f = env[0][1], x = env[1]
         var gCaptured =
             ExpressionBuilder.BuildExpressionForPathInExpression(
                 [0, 0],
@@ -1344,7 +1344,7 @@ public class CoreBasics
 
         var xArg =
             ExpressionBuilder.BuildExpressionForPathInExpression(
-                [1, 0],
+                [1],
                 Expression.EnvironmentInstance);
 
         // f(x)
