@@ -210,6 +210,14 @@ Where necessary to avoid name clashes between transitively imported packages, ca
 
 Besides canonicalizing references in module contents, the canonicalization stage also produces errors like ‘Name Error’ and ‘Name Clash’, including the source ranges to render error messages in the right places.
 
+## Let Blocks
+
+The most generic way to compile a let block is to treat it analogously to a module: local declarations can be compiled like module-level declarations. However, apply extensive inlining of let blocks (declarations are substituted at their usage sites) to simplify the emitted code.
+
+A local declaration is not suitable for inlining if it contains a function application and is referenced more than once.
+
+There is no need to check for recursive references in the block declarations separately, because a self-referencing declaration has at least one reference from within its own body (the recursive call), plus any references from the let block's body expression or other declarations. Since a recursive function must also be used somewhere (otherwise it is dead code), the total reference count is at least 2, and the declaration is automatically preserved in the block.
+
 ## Future Exploration
 
 ### Future Exploration - Monomorphizing Extensible Records

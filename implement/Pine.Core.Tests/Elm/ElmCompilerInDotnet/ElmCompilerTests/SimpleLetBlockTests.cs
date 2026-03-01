@@ -388,4 +388,183 @@ public class SimpleLetBlockTests
             resultExprString.Should().Be("[ 15, 102, 23 ]");
         }
     }
+
+    [Fact]
+    public void Let_block_recursive_function()
+    {
+        var elmModuleText =
+            """"
+            module Test exposing (..)
+
+
+            decl arg =
+                let
+                    factorial n =
+                        if Pine_builtin.int_is_sorted_asc [ n, 1 ] then
+                            1
+
+                        else
+                            Pine_builtin.int_mul
+                                [ factorial (Pine_builtin.int_add [ n, -1 ])
+                                , n
+                                ]
+                in
+                factorial arg
+
+            """";
+
+        var parseCache = new PineVMParseCache();
+
+        var parsedEnv =
+            ElmCompilerTestHelper.CompileElmModules(
+                [elmModuleText],
+                disableInlining: false);
+
+        var testModule =
+            parsedEnv.Modules.FirstOrDefault(c => c.moduleName is "Test");
+
+        var declValue =
+            testModule.moduleContent.FunctionDeclarations
+            .FirstOrDefault(decl => decl.Key is "decl");
+
+        var declParsed =
+            FunctionRecord.ParseFunctionRecordTagged(declValue.Value, parseCache)
+            .Extract(err => throw new Exception("Failed parsing " + nameof(declValue) + ": " + err));
+
+        var invokeFunction = ElmCompilerTestHelper.CreateFunctionInvocationDelegate(declParsed);
+
+        PineValue ApplyForArgument(PineValue argument)
+        {
+            var (applyRunResult, _) = invokeFunction([argument]);
+
+            return applyRunResult.ReturnValue.Evaluate();
+        }
+
+        string ResultAsExpressionString(PineValue argument)
+        {
+            var applyResult = ApplyForArgument(argument);
+
+            var resultAsElmValue =
+                ElmValueEncoding.PineValueAsElmValue(applyResult, null, null);
+
+            var resultAsElmExpr =
+                ElmValue.RenderAsElmExpression(
+                    resultAsElmValue
+                    .Extract(err => throw new Exception("Failed decoding result as Elm value: " + err)));
+
+            return resultAsElmExpr.expressionString;
+        }
+
+        {
+            var resultExprString =
+                ResultAsExpressionString(IntegerEncoding.EncodeSignedInteger(1));
+
+            resultExprString.Should().Be("1");
+        }
+
+        {
+            var resultExprString =
+                ResultAsExpressionString(IntegerEncoding.EncodeSignedInteger(5));
+
+            resultExprString.Should().Be("120");
+        }
+
+        {
+            var resultExprString =
+                ResultAsExpressionString(IntegerEncoding.EncodeSignedInteger(7));
+
+            resultExprString.Should().Be("5040");
+        }
+    }
+
+    [Fact]
+    public void Let_block_recursive_function_with_outer_transformation()
+    {
+        var elmModuleText =
+            """"
+            module Test exposing (..)
+
+
+            decl arg =
+                let
+                    factorial n =
+                        if Pine_builtin.int_is_sorted_asc [ n, 1 ] then
+                            1
+
+                        else
+                            Pine_builtin.int_mul
+                                [ factorial (Pine_builtin.int_add [ n, -1 ])
+                                , n
+                                ]
+                in
+                Pine_builtin.int_add
+                    [ factorial arg
+                    , 1000
+                    ]
+
+            """";
+
+        var parseCache = new PineVMParseCache();
+
+        var parsedEnv =
+            ElmCompilerTestHelper.CompileElmModules(
+                [elmModuleText],
+                disableInlining: false);
+
+        var testModule =
+            parsedEnv.Modules.FirstOrDefault(c => c.moduleName is "Test");
+
+        var declValue =
+            testModule.moduleContent.FunctionDeclarations
+            .FirstOrDefault(decl => decl.Key is "decl");
+
+        var declParsed =
+            FunctionRecord.ParseFunctionRecordTagged(declValue.Value, parseCache)
+            .Extract(err => throw new Exception("Failed parsing " + nameof(declValue) + ": " + err));
+
+        var invokeFunction = ElmCompilerTestHelper.CreateFunctionInvocationDelegate(declParsed);
+
+        PineValue ApplyForArgument(PineValue argument)
+        {
+            var (applyRunResult, _) = invokeFunction([argument]);
+
+            return applyRunResult.ReturnValue.Evaluate();
+        }
+
+        string ResultAsExpressionString(PineValue argument)
+        {
+            var applyResult = ApplyForArgument(argument);
+
+            var resultAsElmValue =
+                ElmValueEncoding.PineValueAsElmValue(applyResult, null, null);
+
+            var resultAsElmExpr =
+                ElmValue.RenderAsElmExpression(
+                    resultAsElmValue
+                    .Extract(err => throw new Exception("Failed decoding result as Elm value: " + err)));
+
+            return resultAsElmExpr.expressionString;
+        }
+
+        {
+            var resultExprString =
+                ResultAsExpressionString(IntegerEncoding.EncodeSignedInteger(1));
+
+            resultExprString.Should().Be("1001");
+        }
+
+        {
+            var resultExprString =
+                ResultAsExpressionString(IntegerEncoding.EncodeSignedInteger(5));
+
+            resultExprString.Should().Be("1120");
+        }
+
+        {
+            var resultExprString =
+                ResultAsExpressionString(IntegerEncoding.EncodeSignedInteger(7));
+
+            resultExprString.Should().Be("6040");
+        }
+    }
 }
