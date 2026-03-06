@@ -1,0 +1,38 @@
+{
+  "KernelApplication": [
+    "equal",
+    {
+      "List": [
+        [
+          {
+            "KernelApplication": [
+              "take",
+              {
+                "List": [
+                  [
+                    {
+                      "Literal": [
+                        0
+                      ]
+                    },
+                    {
+                      "Environment": [
+                      ]
+                    }
+                  ]
+                ]
+              }
+            ]
+          },
+          {
+            "Literal": [
+              {
+                "AsBase64": ""
+              }
+            ]
+          }
+        ]
+      ]
+    }
+  ]
+}

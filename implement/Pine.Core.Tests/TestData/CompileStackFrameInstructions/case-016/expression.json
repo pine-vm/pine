@@ -1,0 +1,98 @@
+{
+  "Conditional": [
+    {
+      "List": [
+        [
+          {
+            "KernelApplication": [
+              "int_mul",
+              {
+                "List": [
+                  [
+                    {
+                      "Environment": [
+                      ]
+                    },
+                    {
+                      "Environment": [
+                      ]
+                    },
+                    {
+                      "Environment": [
+                      ]
+                    }
+                  ]
+                ]
+              }
+            ]
+          },
+          {
+            "KernelApplication": [
+              "int_mul",
+              {
+                "List": [
+                  [
+                    {
+                      "Environment": [
+                      ]
+                    },
+                    {
+                      "Environment": [
+                      ]
+                    },
+                    {
+                      "Environment": [
+                      ]
+                    }
+                  ]
+                ]
+              }
+            ]
+          }
+        ]
+      ]
+    },
+    {
+      "Conditional": [
+        {
+          "KernelApplication": [
+            "int_mul",
+            {
+              "List": [
+                [
+                  {
+                    "Environment": [
+                    ]
+                  },
+                  {
+                    "Environment": [
+                    ]
+                  },
+                  {
+                    "Environment": [
+                    ]
+                  }
+                ]
+              ]
+            }
+          ]
+        },
+        {
+          "Literal": [
+            27
+          ]
+        },
+        {
+          "Literal": [
+            23
+          ]
+        }
+      ]
+    },
+    {
+      "Literal": [
+        13
+      ]
+    }
+  ]
+}

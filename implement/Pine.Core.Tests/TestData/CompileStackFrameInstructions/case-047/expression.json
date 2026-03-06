@@ -1,0 +1,30 @@
+{
+  "KernelApplication": [
+    "reverse",
+    {
+      "KernelApplication": [
+        "take",
+        {
+          "List": [
+            [
+              {
+                "Literal": [
+                  3
+                ]
+              },
+              {
+                "KernelApplication": [
+                  "reverse",
+                  {
+                    "Environment": [
+                    ]
+                  }
+                ]
+              }
+            ]
+          ]
+        }
+      ]
+    }
+  ]
+}

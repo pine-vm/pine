@@ -1,0 +1,3 @@
+Local_Get (0)
+Bit_Shift_Left_Const (13)
+Return

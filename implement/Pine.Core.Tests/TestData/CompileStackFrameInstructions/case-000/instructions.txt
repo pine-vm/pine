@@ -1,0 +1,2 @@
+Push_Literal (Blob [0] (0x))
+Return

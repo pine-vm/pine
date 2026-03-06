@@ -1,0 +1,3 @@
+Local_Get (0)
+Take_Const (71)
+Return

@@ -1,0 +1,25 @@
+{
+  "KernelApplication": [
+    "int_is_sorted_asc",
+    {
+      "List": [
+        [
+          {
+            "Literal": [
+              23
+            ]
+          },
+          {
+            "Environment": [
+            ]
+          },
+          {
+            "Literal": [
+              27
+            ]
+          }
+        ]
+      ]
+    }
+  ]
+}

@@ -1,0 +1,6 @@
+Push_Literal (Blob [2] (int 11))
+Jump_If_True_Const (2)
+Push_Literal (Blob [2] (int 17))
+Return
+Push_Literal (Blob [2] (int 13))
+Return

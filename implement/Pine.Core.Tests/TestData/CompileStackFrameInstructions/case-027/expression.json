@@ -1,0 +1,25 @@
+{
+  "KernelApplication": [
+    "equal",
+    {
+      "List": [
+        [
+          {
+            "Literal": [
+              73
+            ]
+          },
+          {
+            "KernelApplication": [
+              "head",
+              {
+                "Environment": [
+                ]
+              }
+            ]
+          }
+        ]
+      ]
+    }
+  ]
+}

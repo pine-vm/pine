@@ -1,0 +1,7 @@
+Push_Literal (Blob [2] (int 21))
+Local_Get (0)
+Negate
+Skip_Head_Const (23)
+Build_List (2)
+Skip_Head_Const (17)
+Return

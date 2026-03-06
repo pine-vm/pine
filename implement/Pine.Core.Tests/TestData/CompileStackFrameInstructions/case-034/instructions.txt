@@ -1,0 +1,3 @@
+Local_Get (0)
+Bit_And_Const (Blob [2] (int 23))
+Return

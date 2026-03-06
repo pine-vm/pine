@@ -1,0 +1,4 @@
+Push_Literal (Blob [2] (int 42))
+Local_Get (0)
+Prepend_List_Items (1)
+Return

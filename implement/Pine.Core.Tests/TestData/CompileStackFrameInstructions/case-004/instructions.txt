@@ -1,0 +1,4 @@
+Local_Get (0)
+Local_Get (0)
+Parse_And_Eval_Binary
+Return

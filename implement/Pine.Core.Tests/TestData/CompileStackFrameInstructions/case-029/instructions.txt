@@ -1,0 +1,3 @@
+Local_Get (0)
+Length_Equal_Const (13)
+Return

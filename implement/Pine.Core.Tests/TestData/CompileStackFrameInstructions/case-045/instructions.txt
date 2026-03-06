@@ -1,0 +1,6 @@
+Local_Get (0)
+Int_Unsigned_Greater_Than_Or_Equal_Const (83)
+Local_Get (0)
+Int_Unsigned_Less_Than_Or_Equal_Const (107)
+Logical_And_Binary
+Return

@@ -1,0 +1,4 @@
+Push_Literal (List [0] (0))
+Push_Literal (Blob [0] (0x))
+Build_List (2)
+Return

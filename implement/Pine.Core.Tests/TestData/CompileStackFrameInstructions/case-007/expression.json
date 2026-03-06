@@ -1,0 +1,34 @@
+{
+  "List": [
+    [
+      {
+        "Literal": [
+          17
+        ]
+      },
+      {
+        "Conditional": [
+          {
+            "Environment": [
+            ]
+          },
+          {
+            "Literal": [
+              23
+            ]
+          },
+          {
+            "Literal": [
+              21
+            ]
+          }
+        ]
+      },
+      {
+        "Literal": [
+          27
+        ]
+      }
+    ]
+  ]
+}

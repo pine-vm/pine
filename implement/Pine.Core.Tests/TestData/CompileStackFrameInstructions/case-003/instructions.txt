@@ -1,0 +1,9 @@
+Push_Literal (List [0] (0))
+Local_Get (0)
+Skip_Const (13)
+Concat_Generic
+Local_Set (1)
+Push_Literal (Blob [0] (0x))
+Local_Get (1)
+Build_List (4)
+Return

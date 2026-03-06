@@ -1,0 +1,57 @@
+{
+  "KernelApplication": [
+    "int_is_sorted_asc",
+    {
+      "List": [
+        [
+          {
+            "Literal": [
+              83
+            ]
+          },
+          {
+            "KernelApplication": [
+              "concat",
+              {
+                "List": [
+                  [
+                    {
+                      "KernelApplication": [
+                        "take",
+                        {
+                          "List": [
+                            [
+                              {
+                                "Literal": [
+                                  1
+                                ]
+                              },
+                              {
+                                "Literal": [
+                                  0
+                                ]
+                              }
+                            ]
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "KernelApplication": [
+                        "head",
+                        {
+                          "Environment": [
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                ]
+              }
+            ]
+          }
+        ]
+      ]
+    }
+  ]
+}
