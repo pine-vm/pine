@@ -385,7 +385,9 @@ public class KernelJsonFunctionTests
         ElmValue.TagInstance("Ok", [inner]);
 
     private static readonly ElmValue s_true = ElmValue.TagInstance("True", []);
+
     private static readonly ElmValue s_false = ElmValue.TagInstance("False", []);
+
     private static readonly ElmValue s_nothing = ElmValue.TagInstance("Nothing", []);
 
     private static ElmValue JustOf(ElmValue inner) =>
@@ -717,9 +719,10 @@ public class KernelJsonFunctionTests
     public void ParseJson_array_nested()
     {
         ParseJson("[[1,2],[3]]").Should().Be(
-            OkOf(JsonArray(
-                JsonArray(JsonInt(1), JsonInt(2)),
-                JsonArray(JsonInt(3)))));
+            OkOf(
+                JsonArray(
+                    JsonArray(JsonInt(1), JsonInt(2)),
+                    JsonArray(JsonInt(3)))));
     }
 
     [Fact]
@@ -739,17 +742,19 @@ public class KernelJsonFunctionTests
     public void ParseJson_object_multiple()
     {
         ParseJson("{\"name\":\"Tom\",\"age\":42}").Should().Be(
-            OkOf(JsonObject(
-                JsonEntry("name", JsonString("Tom")),
-                JsonEntry("age", JsonInt(42)))));
+            OkOf(
+                JsonObject(
+                    JsonEntry("name", JsonString("Tom")),
+                    JsonEntry("age", JsonInt(42)))));
     }
 
     [Fact]
     public void ParseJson_object_nested()
     {
         ParseJson("{\"a\":{\"b\":2}}").Should().Be(
-            OkOf(JsonObject(
-                JsonEntry("a", JsonObject(JsonEntry("b", JsonInt(2)))))));
+            OkOf(
+                JsonObject(
+                    JsonEntry("a", JsonObject(JsonEntry("b", JsonInt(2)))))));
     }
 
     [Fact]
@@ -841,9 +846,10 @@ public class KernelJsonFunctionTests
     [Fact]
     public void Encode_object()
     {
-        EncodeValue(JsonObject(
-            JsonEntry("name", JsonString("Tom")),
-            JsonEntry("age", JsonInt(42))))
+        EncodeValue(
+            JsonObject(
+                JsonEntry("name", JsonString("Tom")),
+                JsonEntry("age", JsonInt(42))))
             .Should().Be(String("{\"name\":\"Tom\",\"age\":42}"));
     }
 
@@ -856,9 +862,12 @@ public class KernelJsonFunctionTests
     [Fact]
     public void Encode_nested_object()
     {
-        EncodeValue(JsonObject(
-            JsonEntry("x", JsonObject(
-                JsonEntry("y", JsonInt(1))))))
+        EncodeValue(
+            JsonObject(
+                JsonEntry(
+                    "x",
+                    JsonObject(
+                        JsonEntry("y", JsonInt(1))))))
             .Should().Be(String("{\"x\":{\"y\":1}}"));
     }
 
@@ -1139,8 +1148,22 @@ public class KernelJsonFunctionTests
     [Fact]
     public void Decode_map3()
     {
-        DecodeMap3Person("{ \"name\": \"tom\", \"age\": 42, \"height\": 180 }")
-            .Should().Be(OkOf(new ElmValue.ElmRecord([("age", Integer(42)), ("height", Integer(180)), ("name", String("tom"))])));
+        var (value, report) =
+            CoreLibraryTestHelper.ApplyAndProfileUnary(
+                GetTestFunction("decodeMap3Person"),
+                String("{ \"name\": \"tom\", \"age\": 42, \"height\": 180 }"),
+                s_vm);
+
+        value.Should().Be(
+            OkOf(
+                new ElmValue.ElmRecord([("age", Integer(42)), ("height", Integer(180)), ("name", String("tom"))])));
+
+        CoreLibraryTestHelper.FormatCounts(report).Should().Be(
+            """
+            InstructionCount: 12015
+            InvocationCount: 411
+            LoopIterationCount: 0
+            """);
     }
 
     // ===== Json.Decode: andThen =====
@@ -1148,7 +1171,20 @@ public class KernelJsonFunctionTests
     [Fact]
     public void Decode_andThen_version()
     {
-        DecodeAndThenVersion("{ \"version\": 3, \"data\": \"v3-data\" }").Should().Be(OkOf(String("v3-data")));
+        var (value, report) =
+            CoreLibraryTestHelper.ApplyAndProfileUnary(
+                GetTestFunction("decodeAndThenVersion"),
+                String("{ \"version\": 3, \"data\": \"v3-data\" }"),
+                s_vm);
+
+        value.Should().Be(OkOf(String("v3-data")));
+
+        CoreLibraryTestHelper.FormatCounts(report).Should().Be(
+            """
+            InstructionCount: 8609
+            InvocationCount: 289
+            LoopIterationCount: 0
+            """);
     }
 
     [Fact]
@@ -1188,13 +1224,39 @@ public class KernelJsonFunctionTests
     [Fact]
     public void Decode_lazy_recursive()
     {
-        DecodeLazyCommentMessage("{ \"message\": \"hello\", \"responses\": [] }").Should().Be(OkOf(String("hello")));
+        var (value, report) =
+            CoreLibraryTestHelper.ApplyAndProfileUnary(
+                GetTestFunction("decodeLazyCommentMessage"),
+                String("{ \"message\": \"hello\", \"responses\": [] }"),
+                s_vm);
+
+        value.Should().Be(OkOf(String("hello")));
+
+        CoreLibraryTestHelper.FormatCounts(report).Should().Be(
+            """
+            InstructionCount: 12882
+            InvocationCount: 438
+            LoopIterationCount: 0
+            """);
     }
 
     [Fact]
     public void Decode_lazy_nested()
     {
-        DecodeLazyCommentResponseCount("{ \"message\": \"a\", \"responses\": [{ \"message\": \"b\", \"responses\": [] }] }").Should().Be(OkOf(Integer(1)));
+        var (value, report) =
+            CoreLibraryTestHelper.ApplyAndProfileUnary(
+                GetTestFunction("decodeLazyCommentResponseCount"),
+                String("{ \"message\": \"a\", \"responses\": [{ \"message\": \"b\", \"responses\": [] }] }"),
+                s_vm);
+
+        value.Should().Be(OkOf(Integer(1)));
+
+        CoreLibraryTestHelper.FormatCounts(report).Should().Be(
+            """
+            InstructionCount: 21596
+            InvocationCount: 731
+            LoopIterationCount: 0
+            """);
     }
 
     // ===== Json.Decode: at =====
@@ -1202,19 +1264,41 @@ public class KernelJsonFunctionTests
     [Fact]
     public void Decode_at_person_name()
     {
-        DecodeAtString(
-            ElmList(String("person"), String("name")),
-            "{ \"person\": { \"name\": \"tom\", \"age\": 42 } }")
-            .Should().Be(OkOf(String("tom")));
+        var (value, report) =
+            CoreLibraryTestHelper.ApplyAndProfileBinary(
+                GetTestFunction("decodeAtString"),
+                ElmList(String("person"), String("name")),
+                String("{ \"person\": { \"name\": \"tom\", \"age\": 42 } }"),
+                s_vm);
+
+        value.Should().Be(OkOf(String("tom")));
+
+        CoreLibraryTestHelper.FormatCounts(report).Should().Be(
+            """
+            InstructionCount: 8793
+            InvocationCount: 281
+            LoopIterationCount: 0
+            """);
     }
 
     [Fact]
     public void Decode_at_person_age()
     {
-        DecodeAtInt(
-            ElmList(String("person"), String("age")),
-            "{ \"person\": { \"name\": \"tom\", \"age\": 42 } }")
-            .Should().Be(OkOf(Integer(42)));
+        var (value, report) =
+            CoreLibraryTestHelper.ApplyAndProfileBinary(
+                GetTestFunction("decodeAtInt"),
+                ElmList(String("person"), String("age")),
+                String("{ \"person\": { \"name\": \"tom\", \"age\": 42 } }"),
+                s_vm);
+
+        value.Should().Be(OkOf(Integer(42)));
+
+        CoreLibraryTestHelper.FormatCounts(report).Should().Be(
+            """
+            InstructionCount: 8793
+            InvocationCount: 281
+            LoopIterationCount: 0
+            """);
     }
 
     // ===== Json.Decode: maybe =====
@@ -1263,13 +1347,40 @@ public class KernelJsonFunctionTests
     [Fact]
     public void Decode_dict_get()
     {
-        DecodeDictGetInt("alice", "{ \"alice\": 42, \"bob\": 99 }").Should().Be(JustOf(Integer(42)));
+        var (value, report) =
+            CoreLibraryTestHelper.ApplyAndProfileBinary(
+                GetTestFunction("decodeDictGetInt"),
+                String("alice"),
+                String("{ \"alice\": 42, \"bob\": 99 }"),
+                s_vm);
+
+        value.Should().Be(JustOf(Integer(42)));
+
+        CoreLibraryTestHelper.FormatCounts(report).Should().Be(
+            """
+            InstructionCount: 12852
+            InvocationCount: 405
+            LoopIterationCount: 0
+            """);
     }
 
     [Fact]
     public void Decode_dict_size()
     {
-        DecodeDictSizeInt("{ \"alice\": 42, \"bob\": 99 }").Should().Be(Integer(2));
+        var (value, report) =
+            CoreLibraryTestHelper.ApplyAndProfileUnary(
+                GetTestFunction("decodeDictSizeInt"),
+                String("{ \"alice\": 42, \"bob\": 99 }"),
+                s_vm);
+
+        value.Should().Be(Integer(2));
+
+        CoreLibraryTestHelper.FormatCounts(report).Should().Be(
+            """
+            InstructionCount: 11966
+            InvocationCount: 372
+            LoopIterationCount: 0
+            """);
     }
 
     // ===== Json.Decode: oneOrMore =====
@@ -1299,10 +1410,24 @@ public class KernelJsonFunctionTests
     [Fact]
     public void Decode_nested_array()
     {
-        DecodeNestedListInt("[[1,2],[3,4]]").Should().Be(
-            OkOf(ElmList(
-                ElmList(Integer(1), Integer(2)),
-                ElmList(Integer(3), Integer(4)))));
+        var (value, report) =
+            CoreLibraryTestHelper.ApplyAndProfileUnary(
+                GetTestFunction("decodeNestedListInt"),
+                String("[[1,2],[3,4]]"),
+                s_vm);
+
+        value.Should().Be(
+            OkOf(
+                ElmList(
+                    ElmList(Integer(1), Integer(2)),
+                    ElmList(Integer(3), Integer(4)))));
+
+        CoreLibraryTestHelper.FormatCounts(report).Should().Be(
+            """
+            InstructionCount: 10094
+            InvocationCount: 272
+            LoopIterationCount: 0
+            """);
     }
 
     // ===== Roundtrip: encode then decode via encodeDecodeRoundtrip =====
@@ -1328,11 +1453,25 @@ public class KernelJsonFunctionTests
     [Fact]
     public void Roundtrip_encode_decode_object()
     {
-        var obj = JsonObject(
-            JsonEntry("name", JsonString("Tom")),
-            JsonEntry("age", JsonInt(42)));
+        var obj =
+            JsonObject(
+                JsonEntry("name", JsonString("Tom")),
+                JsonEntry("age", JsonInt(42)));
 
-        EncodeDecodeRoundtrip(obj).Should().Be(OkOf(obj));
+        var (value, report) =
+            CoreLibraryTestHelper.ApplyAndProfileUnary(
+                GetTestFunction("encodeDecodeRoundtrip"),
+                obj,
+                s_vm);
+
+        value.Should().Be(OkOf(obj));
+
+        CoreLibraryTestHelper.FormatCounts(report).Should().Be(
+            """
+            InstructionCount: 18024
+            InvocationCount: 610
+            LoopIterationCount: 0
+            """);
     }
 
     // ===== Json.Decode: negative int =====
@@ -1391,4 +1530,5 @@ public class KernelJsonFunctionTests
             "{ \"outer\": { \"inner\": 99 } }")
             .Should().Be(OkOf(Integer(99)));
     }
+
 }

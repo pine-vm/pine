@@ -280,8 +280,12 @@ public class ElmCompiler
             }
         }
 
-        // Build choice type tag argument types dictionary for type inference from NamedPatterns
+        // Build choice type tag argument types dictionary for type inference from NamedPatterns.
+        // When multiple modules define constructors with the same unqualified name but different
+        // argument counts, we remove the entry to avoid incorrect code generation.
+        // For example, ParserFast.Good (2 args) vs Parser.Advanced.Good (3 args).
         var choiceTagArgumentTypes = new Dictionary<string, IReadOnlyList<TypeInference.InferredType>>();
+        var ambiguousConstructorNames = new HashSet<string>();
 
         foreach (var elmModuleSyntax in lambdaLiftedModules)
         {
@@ -305,9 +309,22 @@ public class ElmCompiler
                         argTypes.Add(argType);
                     }
 
+                    if (choiceTagArgumentTypes.TryGetValue(ctorName, out var existingArgTypes))
+                    {
+                        if (existingArgTypes.Count != argTypes.Count)
+                        {
+                            ambiguousConstructorNames.Add(ctorName);
+                        }
+                    }
+
                     choiceTagArgumentTypes[ctorName] = argTypes;
                 }
             }
+        }
+
+        foreach (var ambiguousName in ambiguousConstructorNames)
+        {
+            choiceTagArgumentTypes.Remove(ambiguousName);
         }
 
         // Build record type alias constructors dictionary

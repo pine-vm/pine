@@ -177,4 +177,95 @@ public static class CoreLibraryTestHelper
             ElmValueEncoding.PineValueAsElmValue(resultPineValue, null, null)
             .Extract(err => throw new System.Exception("Failed decode as Elm value: " + err));
     }
+
+    public static string FormatCounts(EvaluationReport report) =>
+        string.Join(
+            "\n",
+            "InstructionCount: " + report.InstructionCount,
+            "InvocationCount: " + report.InvocationCount,
+            "LoopIterationCount: " + report.LoopIterationCount);
+
+    public static (ElmValue value, EvaluationReport report) ApplyAndProfileUnary(
+        PineValue functionValue,
+        ElmValue argument,
+        Core.Interpreter.IntermediateVM.PineVM vm) =>
+        ApplyGenericWithProfiling(functionValue, [argument], vm);
+
+    public static (ElmValue value, EvaluationReport report) ApplyAndProfileBinary(
+        PineValue functionValue,
+        ElmValue arg1,
+        ElmValue arg2,
+        Core.Interpreter.IntermediateVM.PineVM vm) =>
+        ApplyGenericWithProfiling(functionValue, [arg1, arg2], vm);
+
+    public static (ElmValue value, EvaluationReport report) ApplyGenericWithProfiling(
+        PineValue functionValue,
+        ElmValue[] arguments,
+        Core.Interpreter.IntermediateVM.PineVM vm)
+    {
+        var pineArguments =
+            new PineValue[arguments.Length];
+
+        for (var i = 0; i < arguments.Length; i++)
+        {
+            pineArguments[i] =
+                ElmValueEncoding.ElmValueAsPineValue(arguments[i]);
+        }
+
+        var (resultPineValue, report) =
+            ApplyGenericPineWithProfiling(functionValue, pineArguments, vm);
+
+        var elmValue =
+            ElmValueEncoding.PineValueAsElmValue(resultPineValue, null, null)
+            .Extract(err => throw new System.Exception("Failed decode as Elm value: " + err));
+
+        return (elmValue, report);
+    }
+
+    public static (PineValue result, EvaluationReport report) ApplyGenericPineWithProfiling(
+        PineValue functionValue,
+        IReadOnlyList<PineValue> arguments,
+        Core.Interpreter.IntermediateVM.PineVM vm)
+    {
+        if (arguments.Count is 0)
+            throw new System.ArgumentException("Expected at least one argument", nameof(arguments));
+
+        var currentValue = functionValue;
+
+        long totalInstructions = 0;
+        long totalInvocations = 0;
+        long totalLoopIterations = 0;
+
+        EvaluationReport lastReport = null!;
+
+        for (var i = 0; i < arguments.Count; i++)
+        {
+            var asIndependent =
+                new Expression.ParseAndEval(
+                    encoded: Expression.LiteralInstance(currentValue),
+                    environment: Expression.LiteralInstance(arguments[i]));
+
+            var report =
+                vm.EvaluateExpressionOnCustomStack(
+                    asIndependent,
+                    PineValue.EmptyBlob,
+                    config: new Core.Interpreter.IntermediateVM.PineVM.EvaluationConfig(ParseAndEvalCountLimit: null))
+                .Extract(err => throw new System.Exception("Failed eval: " + err));
+
+            currentValue = report.ReturnValue.Evaluate();
+            totalInstructions += report.InstructionCount;
+            totalInvocations += report.InvocationCount;
+            totalLoopIterations += report.LoopIterationCount;
+            lastReport = report;
+        }
+
+        var aggregated = lastReport with
+        {
+            InstructionCount = totalInstructions,
+            InvocationCount = totalInvocations,
+            LoopIterationCount = totalLoopIterations
+        };
+
+        return (currentValue, aggregated);
+    }
 }
