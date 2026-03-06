@@ -1,0 +1,6 @@
+Local_Get (0)
+Push_Literal (Blob [2] (int 1))
+Push_Literal (Blob [2] (int 2))
+Push_Literal (Blob [2] (int 3))
+Append_List_Items (3)
+Return

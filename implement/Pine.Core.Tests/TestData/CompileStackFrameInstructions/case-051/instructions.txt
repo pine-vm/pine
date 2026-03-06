@@ -1,0 +1,3 @@
+Local_Get (0)
+Is_Blob_Value
+Return

@@ -1,0 +1,25 @@
+{
+  "KernelApplication": [
+    "int_add",
+    {
+      "List": [
+        [
+          {
+            "KernelApplication": [
+              "head",
+              {
+                "Environment": [
+                ]
+              }
+            ]
+          },
+          {
+            "Literal": [
+              13
+            ]
+          }
+        ]
+      ]
+    }
+  ]
+}

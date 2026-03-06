@@ -1,0 +1,3 @@
+Local_Get (0)
+Blob_Trim_Leading_Zeros
+Return

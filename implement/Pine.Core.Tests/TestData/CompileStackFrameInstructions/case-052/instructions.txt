@@ -1,0 +1,4 @@
+Local_Get (0)
+Push_Literal (Blob [2] (int 0))
+Starts_With_Const_At_Offset_Var (Blob [1] (0x7b))
+Return

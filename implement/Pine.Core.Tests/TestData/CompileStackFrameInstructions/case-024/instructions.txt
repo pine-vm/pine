@@ -1,0 +1,3 @@
+Local_Get (0)
+Int_Add_Const (13)
+Return

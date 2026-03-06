@@ -1,0 +1,66 @@
+{
+  "KernelApplication": [
+    "negate",
+    {
+      "KernelApplication": [
+        "equal",
+        {
+          "List": [
+            [
+              {
+                "KernelApplication": [
+                  "head",
+                  {
+                    "KernelApplication": [
+                      "skip",
+                      {
+                        "List": [
+                          [
+                            {
+                              "Literal": [
+                                11
+                              ]
+                            },
+                            {
+                              "Environment": [
+                              ]
+                            }
+                          ]
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "KernelApplication": [
+                  "head",
+                  {
+                    "KernelApplication": [
+                      "skip",
+                      {
+                        "List": [
+                          [
+                            {
+                              "Literal": [
+                                13
+                              ]
+                            },
+                            {
+                              "Environment": [
+                              ]
+                            }
+                          ]
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          ]
+        }
+      ]
+    }
+  ]
+}

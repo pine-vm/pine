@@ -1,0 +1,66 @@
+{
+  "KernelApplication": [
+    "int_add",
+    {
+      "List": [
+        [
+          {
+            "KernelApplication": [
+              "head",
+              {
+                "KernelApplication": [
+                  "skip",
+                  {
+                    "List": [
+                      [
+                        {
+                          "Literal": [
+                            1
+                          ]
+                        },
+                        {
+                          "Environment": [
+                          ]
+                        }
+                      ]
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "KernelApplication": [
+              "negate",
+              {
+                "KernelApplication": [
+                  "head",
+                  {
+                    "KernelApplication": [
+                      "skip",
+                      {
+                        "List": [
+                          [
+                            {
+                              "Literal": [
+                                2
+                              ]
+                            },
+                            {
+                              "Environment": [
+                              ]
+                            }
+                          ]
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      ]
+    }
+  ]
+}

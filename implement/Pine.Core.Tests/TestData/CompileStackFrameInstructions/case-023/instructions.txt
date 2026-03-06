@@ -1,0 +1,4 @@
+Local_Get (1)
+Local_Get (0)
+Int_Less_Than_Binary
+Return

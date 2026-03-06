@@ -1,0 +1,11 @@
+Push_Literal (Blob [2] (int 47))
+Push_Literal (Blob [2] (int 11))
+Jump_If_True_Const (2)
+Push_Literal (Blob [2] (int 17))
+Jump_Const (5)
+Local_Get (0)
+Local_Get (0)
+Skip_Const (13)
+Parse_And_Eval_Binary
+Build_List (2)
+Return

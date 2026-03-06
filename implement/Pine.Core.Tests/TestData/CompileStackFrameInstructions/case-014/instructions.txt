@@ -1,0 +1,4 @@
+Local_Get (0)
+Reverse
+Skip_Head_Const (17)
+Return

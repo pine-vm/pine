@@ -1,0 +1,17 @@
+Local_Get (0)
+Local_Get (0)
+Int_Mul_Binary
+Local_Get (0)
+Int_Mul_Binary
+Local_Set (1)
+Local_Get (1)
+Build_List (2)
+Jump_If_True_Const (6)
+Local_Get (1)
+Jump_If_True_Const (2)
+Push_Literal (Blob [2] (int 27))
+Return
+Push_Literal (Blob [2] (int 23))
+Return
+Push_Literal (Blob [2] (int 13))
+Return

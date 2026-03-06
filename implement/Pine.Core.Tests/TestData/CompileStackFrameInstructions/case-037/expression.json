@@ -1,0 +1,20 @@
+{
+  "KernelApplication": [
+    "bit_or",
+    {
+      "List": [
+        [
+          {
+            "Environment": [
+            ]
+          },
+          {
+            "Literal": [
+              37
+            ]
+          }
+        ]
+      ]
+    }
+  ]
+}

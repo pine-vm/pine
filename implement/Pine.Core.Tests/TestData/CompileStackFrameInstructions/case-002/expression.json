@@ -1,0 +1,59 @@
+{
+  "List": [
+    [
+      {
+        "Literal": [
+          [
+          ]
+        ]
+      },
+      {
+        "KernelApplication": [
+          "skip",
+          {
+            "List": [
+              [
+                {
+                  "Literal": [
+                    1
+                  ]
+                },
+                {
+                  "Environment": [
+                  ]
+                }
+              ]
+            ]
+          }
+        ]
+      },
+      {
+        "Literal": [
+          {
+            "AsBase64": ""
+          }
+        ]
+      },
+      {
+        "KernelApplication": [
+          "skip",
+          {
+            "List": [
+              [
+                {
+                  "Literal": [
+                    1
+                  ]
+                },
+                {
+                  "Environment": [
+                  ]
+                }
+              ]
+            ]
+          }
+        ]
+      }
+    ]
+  ]
+}

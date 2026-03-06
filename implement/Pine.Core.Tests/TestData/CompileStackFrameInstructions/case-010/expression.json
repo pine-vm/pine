@@ -1,0 +1,53 @@
+{
+  "List": [
+    [
+      {
+        "Literal": [
+          47
+        ]
+      },
+      {
+        "Conditional": [
+          {
+            "Literal": [
+              11
+            ]
+          },
+          {
+            "Literal": [
+              17
+            ]
+          },
+          {
+            "ParseAndEval": [
+              {
+                "KernelApplication": [
+                  "skip",
+                  {
+                    "List": [
+                      [
+                        {
+                          "Literal": [
+                            13
+                          ]
+                        },
+                        {
+                          "Environment": [
+                          ]
+                        }
+                      ]
+                    ]
+                  }
+                ]
+              },
+              {
+                "Environment": [
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  ]
+}

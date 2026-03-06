@@ -1,0 +1,25 @@
+{
+  "KernelApplication": [
+    "int_mul",
+    {
+      "List": [
+        [
+          {
+            "KernelApplication": [
+              "head",
+              {
+                "Environment": [
+                ]
+              }
+            ]
+          },
+          {
+            "Literal": [
+              17
+            ]
+          }
+        ]
+      ]
+    }
+  ]
+}

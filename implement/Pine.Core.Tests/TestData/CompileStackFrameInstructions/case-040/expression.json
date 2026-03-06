@@ -1,0 +1,13 @@
+{
+  "KernelApplication": [
+    "take",
+    {
+      "List": [
+        [
+          { "Literal": [ 71 ] },
+          { "Environment": [] }
+        ]
+      ]
+    }
+  ]
+}

@@ -1,0 +1,3 @@
+Local_Get (0)
+Skip_Const (73)
+Return

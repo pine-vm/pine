@@ -1,0 +1,13 @@
+{
+  "KernelApplication": [
+    "skip",
+    {
+      "List": [
+        [
+          { "Literal": [ 73 ] },
+          { "Environment": [] }
+        ]
+      ]
+    }
+  ]
+}
