@@ -1,4 +1,5 @@
 using AwesomeAssertions;
+using System.Linq;
 using Xunit;
 
 namespace Pine.Core.Tests.Elm.ElmCompilerInDotnet.ElmCompilerTests;
@@ -240,5 +241,73 @@ public class DependencyLayoutTests
 
         // funcD depends on funcA, funcB, funcC, sorted alphabetically: [self, funcA, funcB, funcC]
         layouts["Test.funcD"].Should().Equal(["Test.funcD", "Test.funcA", "Test.funcB", "Test.funcC"]);
+    }
+
+    /// <summary>
+    /// Tests that a function dependency inside a record access expression is correctly detected.
+    /// For example, <c>(getRecord x).name</c> should register <c>getRecord</c> as a dependency
+    /// even though it appears inside a <c>RecordAccess</c> node.
+    /// </summary>
+    [Fact]
+    public void Function_dependency_inside_record_access_is_detected()
+    {
+        var elmModuleText =
+            """
+            module Test exposing (..)
+
+            getRecord x =
+                { name = x, age = 0 }
+
+            caller x =
+                (getRecord x).name
+            """;
+
+        var layouts = ElmCompilerTestHelper.ComputeDependencyLayoutsFromModule(elmModuleText);
+
+        layouts.Should().ContainKey("Test.caller");
+
+        // caller depends on getRecord because it calls getRecord inside the record access
+        layouts["Test.caller"].Should().Equal(["Test.caller", "Test.getRecord"]);
+    }
+
+    /// <summary>
+    /// Tests that a function dependency inside a lambda expression body is correctly detected.
+    /// Even though lambda lifting transforms lambdas before dependency analysis, this test
+    /// verifies that the overall pipeline correctly handles function references in lambda bodies.
+    /// </summary>
+    [Fact]
+    public void Function_dependency_inside_lambda_body_is_detected()
+    {
+        var elmModuleText =
+            """
+            module Test exposing (..)
+
+            helper x =
+                Pine_kernel.int_add [ x, 1 ]
+
+            caller f =
+                f (\x -> helper x)
+            """;
+
+        var layouts = ElmCompilerTestHelper.ComputeDependencyLayoutsFromModule(elmModuleText);
+
+        layouts.Should().ContainKey("Test.caller");
+
+        // After lambda lifting, the lambda becomes a top-level function that references helper.
+        // The lifted function should depend on helper, and caller should depend on the lifted function.
+        // Verify that helper appears somewhere in the transitive dependency chain.
+        // The caller's layout should include the lifted function (which depends on helper).
+        var callerLayout = layouts["Test.caller"];
+        callerLayout.Should().Contain("Test.caller");
+
+        // Find the lifted lambda function (it should contain "__lifted__" in its name)
+        var liftedFuncName = callerLayout.FirstOrDefault(n => n.Contains("__lifted__"));
+        liftedFuncName.Should().NotBeNull("caller should depend on a lifted lambda function");
+
+        // The lifted function should have helper in its layout
+        if (liftedFuncName is not null)
+        {
+            layouts[liftedFuncName].Should().Contain("Test.helper");
+        }
     }
 }

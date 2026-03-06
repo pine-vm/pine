@@ -44,10 +44,13 @@ public class RecordAccessTests
         var invokeFunction = ElmCompilerTestHelper.CreateFunctionInvocationDelegate(declParsed);
 
         {
-            var recordArg = ElmValueEncoding.ElmValueAsPineValue(
-                new ElmValue.ElmRecord(
-                    [("age", new ElmValue.ElmInteger(25)),
-                     ("name", ElmValue.StringInstance("Alice"))]));
+            var recordArg =
+                ElmValueEncoding.ElmValueAsPineValue(
+                    new ElmValue.ElmRecord(
+                        [
+                        ("age", new ElmValue.ElmInteger(25)),
+                        ("name", ElmValue.StringInstance("Alice"))
+                        ]));
 
             var (applyRunResult, _) = invokeFunction([recordArg]);
 
@@ -61,10 +64,13 @@ public class RecordAccessTests
         }
 
         {
-            var recordArg = ElmValueEncoding.ElmValueAsPineValue(
-                new ElmValue.ElmRecord(
-                    [("age", new ElmValue.ElmInteger(30)),
-                     ("name", ElmValue.StringInstance("Bob"))]));
+            var recordArg =
+                ElmValueEncoding.ElmValueAsPineValue(
+                    new ElmValue.ElmRecord(
+                        [
+                        ("age", new ElmValue.ElmInteger(30)),
+                        ("name", ElmValue.StringInstance("Bob"))
+                        ]));
 
             var (applyRunResult, _) = invokeFunction([recordArg]);
 
@@ -118,10 +124,13 @@ public class RecordAccessTests
         var invokeFunction = ElmCompilerTestHelper.CreateFunctionInvocationDelegate(declParsed);
 
         {
-            var recordArg = ElmValueEncoding.ElmValueAsPineValue(
-                new ElmValue.ElmRecord(
-                    [("age", new ElmValue.ElmInteger(25)),
-                     ("name", ElmValue.StringInstance("Alice"))]));
+            var recordArg =
+                ElmValueEncoding.ElmValueAsPineValue(
+                    new ElmValue.ElmRecord(
+                        [
+                        ("age", new ElmValue.ElmInteger(25)),
+                        ("name", ElmValue.StringInstance("Alice"))
+                        ]));
 
             var (applyRunResult, _) = invokeFunction([recordArg]);
 
@@ -180,11 +189,14 @@ public class RecordAccessTests
         var invokeFunction = ElmCompilerTestHelper.CreateFunctionInvocationDelegate(declParsed);
 
         {
-            var listArg = ElmValueEncoding.ElmValueAsPineValue(
-                new ElmValue.ElmList(
-                    [new ElmValue.ElmRecord([("name", ElmValue.StringInstance("Alice"))]),
-                     new ElmValue.ElmRecord([("name", ElmValue.StringInstance("Bob"))]),
-                     new ElmValue.ElmRecord([("name", ElmValue.StringInstance("Carol"))])]));
+            var listArg =
+                ElmValueEncoding.ElmValueAsPineValue(
+                    new ElmValue.ElmList(
+                        [
+                        new ElmValue.ElmRecord([("name", ElmValue.StringInstance("Alice"))]),
+                        new ElmValue.ElmRecord([("name", ElmValue.StringInstance("Bob"))]),
+                        new ElmValue.ElmRecord([("name", ElmValue.StringInstance("Carol"))])
+                        ]));
 
             var (applyRunResult, _) = invokeFunction([listArg]);
 
@@ -196,9 +208,11 @@ public class RecordAccessTests
 
             resultElm.Should().Be(
                 new ElmValue.ElmList(
-                    [ElmValue.StringInstance("Alice"),
-                     ElmValue.StringInstance("Bob"),
-                     ElmValue.StringInstance("Carol")]));
+                    [
+                    ElmValue.StringInstance("Alice"),
+                    ElmValue.StringInstance("Bob"),
+                    ElmValue.StringInstance("Carol")
+                    ]));
         }
     }
 
@@ -241,10 +255,13 @@ public class RecordAccessTests
         var invokeFunction = ElmCompilerTestHelper.CreateFunctionInvocationDelegate(declParsed);
 
         {
-            var recordArg = ElmValueEncoding.ElmValueAsPineValue(
-                new ElmValue.ElmRecord(
-                    [("age", new ElmValue.ElmInteger(30)),
-                     ("name", ElmValue.StringInstance("Alice"))]));
+            var recordArg =
+                ElmValueEncoding.ElmValueAsPineValue(
+                    new ElmValue.ElmRecord(
+                        [
+                        ("age", new ElmValue.ElmInteger(30)),
+                        ("name", ElmValue.StringInstance("Alice"))
+                        ]));
 
             var (applyRunResult, _) = invokeFunction([recordArg]);
 
@@ -298,9 +315,10 @@ public class RecordAccessTests
         var invokeFunction = ElmCompilerTestHelper.CreateFunctionInvocationDelegate(declParsed);
 
         {
-            var recordArg = ElmValueEncoding.ElmValueAsPineValue(
-                new ElmValue.ElmRecord(
-                    [("name", ElmValue.StringInstance("Hello"))]));
+            var recordArg =
+                ElmValueEncoding.ElmValueAsPineValue(
+                    new ElmValue.ElmRecord(
+                        [("name", ElmValue.StringInstance("Hello"))]));
 
             var (applyRunResult, _) = invokeFunction([recordArg]);
 
@@ -349,10 +367,13 @@ public class RecordAccessTests
         var invokeFunction = ElmCompilerTestHelper.CreateFunctionInvocationDelegate(declParsed);
 
         {
-            var recordArg = ElmValueEncoding.ElmValueAsPineValue(
-                new ElmValue.ElmRecord(
-                    [("x", new ElmValue.ElmInteger(42)),
-                     ("y", new ElmValue.ElmInteger(7))]));
+            var recordArg =
+                ElmValueEncoding.ElmValueAsPineValue(
+                    new ElmValue.ElmRecord(
+                        [
+                        ("x", new ElmValue.ElmInteger(42)),
+                        ("y", new ElmValue.ElmInteger(7))
+                        ]));
 
             var (applyRunResult, _) = invokeFunction([recordArg]);
 
@@ -363,6 +384,67 @@ public class RecordAccessTests
                 .Extract(err => throw new Exception("Failed decoding result: " + err));
 
             resultElm.Should().Be(new ElmValue.ElmInteger(42));
+        }
+    }
+
+    /// <summary>
+    /// Tests that a function call result can be immediately record-accessed.
+    /// This exercises the dependency analysis of <c>RecordAccess</c> nodes:
+    /// the compiler must detect that the function called inside the record
+    /// access expression is a dependency.
+    /// Pattern: <c>(someFunction arg).fieldName</c>
+    /// </summary>
+    [Fact]
+    public void Record_access_on_function_call_result()
+    {
+        var elmModuleText =
+            """"
+            module Test exposing (..)
+
+
+            makeRecord : Int -> { start : Int, end : Int }
+            makeRecord n =
+                { start = n, end = Pine_kernel.int_add [ n, 10 ] }
+
+
+            alfa : Int -> Int
+            alfa n =
+                (makeRecord n).start
+
+            """";
+
+        var parseCache = new PineVMParseCache();
+
+        var parsedEnv =
+            ElmCompilerTestHelper.CompileElmModules(
+                [elmModuleText],
+                disableInlining: false);
+
+        var testModule =
+            parsedEnv.Modules.FirstOrDefault(c => c.moduleName is "Test");
+
+        var declValue =
+            testModule.moduleContent.FunctionDeclarations
+            .FirstOrDefault(decl => decl.Key is "alfa");
+
+        var declParsed =
+            FunctionRecord.ParseFunctionRecordTagged(declValue.Value, parseCache)
+            .Extract(err => throw new Exception("Failed parsing " + nameof(declValue) + ": " + err));
+
+        var invokeFunction = ElmCompilerTestHelper.CreateFunctionInvocationDelegate(declParsed);
+
+        {
+            var arg = ElmValueEncoding.ElmValueAsPineValue(new ElmValue.ElmInteger(5));
+
+            var (applyRunResult, _) = invokeFunction([arg]);
+
+            var resultValue = applyRunResult.ReturnValue.Evaluate();
+
+            var resultElm =
+                ElmValueEncoding.PineValueAsElmValue(resultValue, null, null)
+                .Extract(err => throw new Exception("Failed decoding result: " + err));
+
+            resultElm.Should().Be(new ElmValue.ElmInteger(5));
         }
     }
 }
