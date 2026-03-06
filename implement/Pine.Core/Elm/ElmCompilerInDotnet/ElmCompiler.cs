@@ -1019,6 +1019,14 @@ public class ElmCompiler
 
                     break;
 
+                case SyntaxTypes.Expression.RecordAccess recordAccess:
+                    AnalyzeExpression(recordAccess.Record.Value);
+                    break;
+
+                case SyntaxTypes.Expression.LambdaExpression lambdaExpr:
+                    AnalyzeExpression(lambdaExpr.Lambda.Expression.Value);
+                    break;
+
                 case SyntaxTypes.Expression.FunctionOrValue funcOrValue:
 
                     if (funcOrValue.Name.Length < 0)
