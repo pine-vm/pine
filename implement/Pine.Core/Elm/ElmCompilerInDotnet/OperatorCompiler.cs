@@ -27,7 +27,7 @@ public class OperatorCompiler
                 context.ParameterTypes,
                 context.LocalBindingTypes,
                 context.CurrentModuleName,
-                context.FunctionReturnTypes);
+                context.FunctionTypes);
 
         var leftResult = ExpressionCompiler.Compile(operatorApp.Left.Value, context);
 

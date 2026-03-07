@@ -49,7 +49,8 @@ public sealed class ImportedModule : IEquatable<ImportedModule>
         if (ReferenceEquals(this, other))
             return true;
 
-        return ModuleName.AsSpan().SequenceEqual(other.ModuleName.AsSpan())
+        return
+            ModuleName.AsSpan().SequenceEqual(other.ModuleName.AsSpan())
             && string.Equals(Alias, other.Alias, StringComparison.Ordinal);
     }
 

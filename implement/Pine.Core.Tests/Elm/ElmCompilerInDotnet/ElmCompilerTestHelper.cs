@@ -275,7 +275,7 @@ public class ElmCompilerTestHelper
 
         // Collect all functions
         var allFunctions =
-            new Dictionary<string, (string moduleName, string functionName, AbstractSyntaxTypes.Declaration.FunctionDeclaration declaration)>();
+            new Dictionary<ConcreteSyntaxTypes.QualifiedNameRef, (string moduleName, string functionName, AbstractSyntaxTypes.Declaration.FunctionDeclaration declaration)>();
 
         foreach (var elmModuleSyntax in lambdaLiftedModules)
         {
@@ -292,7 +292,7 @@ public class ElmCompilerTestHelper
             foreach (var declaration in declarations)
             {
                 var functionName = declaration.Function.Declaration.Value.Name.Value;
-                var qualifiedName = moduleNameFlattened + "." + functionName;
+                var qualifiedName = new ConcreteSyntaxTypes.QualifiedNameRef(moduleName, functionName);
                 allFunctions[qualifiedName] = (moduleNameFlattened, functionName, declaration);
             }
         }

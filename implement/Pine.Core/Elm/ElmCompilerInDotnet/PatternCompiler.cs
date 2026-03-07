@@ -84,7 +84,7 @@ public class PatternCompiler
                 context.ParameterTypes,
                 context.LocalBindingTypes,
                 context.CurrentModuleName,
-                context.FunctionReturnTypes);
+                context.FunctionTypes);
 
         for (var i = caseBlock.Cases.Count - 1; i >= 0; i--)
         {
