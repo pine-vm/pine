@@ -280,15 +280,16 @@ public class ElmCompiler
             }
         }
 
-        // Build choice type tag argument types dictionary for type inference from NamedPatterns.
-        // When multiple modules define constructors with the same unqualified name but different
-        // argument counts, we remove the entry to avoid incorrect code generation.
-        // For example, ParserFast.Good (2 args) vs Parser.Advanced.Good (3 args).
+        // Build choice type tag argument types dictionary keyed by qualified constructor name.
+        // We use qualified names to avoid cross-module collisions such as
+        // ParserFast.Good vs Parser.Advanced.Good.
         var choiceTagArgumentTypes = new Dictionary<string, IReadOnlyList<TypeInference.InferredType>>();
-        var ambiguousConstructorNames = new HashSet<string>();
 
         foreach (var elmModuleSyntax in lambdaLiftedModules)
         {
+            var moduleName =
+                SyntaxTypes.Module.GetModuleName(elmModuleSyntax.ModuleDefinition.Value).Value;
+
             var typeDeclarations =
                 elmModuleSyntax.Declarations
                 .Select(declNode => declNode.Value)
@@ -301,6 +302,9 @@ public class ElmCompiler
                     var ctor = ctorNode.Value;
                     var ctorName = ctor.Name.Value;
 
+                    var qualifiedCtorName =
+                        QualifiedNameHelper.ToQualifiedNameString(moduleName, ctorName);
+
                     var argTypes = new List<TypeInference.InferredType>();
 
                     foreach (var argNode in ctor.Arguments)
@@ -309,22 +313,9 @@ public class ElmCompiler
                         argTypes.Add(argType);
                     }
 
-                    if (choiceTagArgumentTypes.TryGetValue(ctorName, out var existingArgTypes))
-                    {
-                        if (existingArgTypes.Count != argTypes.Count)
-                        {
-                            ambiguousConstructorNames.Add(ctorName);
-                        }
-                    }
-
-                    choiceTagArgumentTypes[ctorName] = argTypes;
+                    choiceTagArgumentTypes[qualifiedCtorName] = argTypes;
                 }
             }
-        }
-
-        foreach (var ambiguousName in ambiguousConstructorNames)
-        {
-            choiceTagArgumentTypes.Remove(ambiguousName);
         }
 
         // Build record type alias constructors dictionary

@@ -177,7 +177,15 @@ public class ExpressionCompiler
         // by having an uppercase first letter
         if (ElmValueEncoding.StringIsValidTagName(expr.Name))
         {
-            var expectedArgCount = context.ModuleCompilationContext.TryGetChoiceTypeConstructorArgumentCount(expr.Name);
+            var qualifiedConstructorName =
+                expr.ModuleName.Count > 0
+                ?
+                QualifiedNameHelper.ToQualifiedNameString(expr.ModuleName, expr.Name)
+                :
+                QualifiedNameHelper.ToQualifiedNameString([context.CurrentModuleName], expr.Name);
+
+            var expectedArgCount =
+                context.ModuleCompilationContext.TryGetChoiceTypeConstructorArgumentCount(qualifiedConstructorName);
 
             if (expectedArgCount is null || expectedArgCount.Value is 0)
             {
@@ -368,8 +376,15 @@ public class ExpressionCompiler
             {
                 var tagNameValue = Expression.LiteralInstance(StringEncoding.ValueFromString(funcRef.Name));
 
+                var qualifiedTagName =
+                    funcRef.ModuleName.Count > 0
+                    ?
+                    QualifiedNameHelper.ToQualifiedNameString(funcRef.ModuleName, funcRef.Name)
+                    :
+                    QualifiedNameHelper.ToQualifiedNameString([context.CurrentModuleName], funcRef.Name);
+
                 var expectedArgCount =
-                    context.ModuleCompilationContext.TryGetChoiceTypeConstructorArgumentCount(funcRef.Name);
+                    context.ModuleCompilationContext.TryGetChoiceTypeConstructorArgumentCount(qualifiedTagName);
 
                 // If we know the expected argument count and have all arguments, build the value directly
                 if (expectedArgCount is null || compiledArguments.Length >= expectedArgCount.Value)

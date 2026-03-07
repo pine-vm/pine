@@ -14,6 +14,12 @@ namespace Pine.Core.Elm.ElmCompilerInDotnet;
 /// </summary>
 public static class TypeInference
 {
+    private static string QualifiedNameToString(SyntaxTypes.QualifiedNameRef qualifiedNameRef) =>
+        QualifiedNameHelper.ToQualifiedNameString(qualifiedNameRef.ModuleName, qualifiedNameRef.Name);
+
+    private static string QualifiedNameToString(SyntaxTypes.Expression.FunctionOrValue functionOrValue) =>
+        QualifiedNameHelper.ToQualifiedNameString(functionOrValue.ModuleName, functionOrValue.Name);
+
     /// <summary>
     /// Represents an inferred type for an Elm expression.
     /// </summary>
@@ -1313,7 +1319,7 @@ public static class TypeInference
                     ElmValueEncoding.StringIsValidTagName(tagFuncRef.Name))
                 {
                     // This is a tag constructor application
-                    if (constructorArgumentTypes.TryGetValue(tagFuncRef.Name, out var argTypes))
+                    if (constructorArgumentTypes.TryGetValue(QualifiedNameToString(tagFuncRef), out var argTypes))
                     {
                         // Match arguments to constructor argument types
                         // Arguments start at index 1 (index 0 is the constructor itself)
@@ -1898,7 +1904,7 @@ public static class TypeInference
             case SyntaxTypes.Pattern.NamedPattern namedPattern:
 
                 // NamedPattern - look up constructor argument types
-                if (constructorArgumentTypes.TryGetValue(namedPattern.Name.Name, out var argTypes) &&
+                if (constructorArgumentTypes.TryGetValue(QualifiedNameToString(namedPattern.Name), out var argTypes) &&
                     argTypes.Count == namedPattern.Arguments.Count)
                 {
                     for (var i = 0; i < namedPattern.Arguments.Count; i++)
@@ -2018,7 +2024,7 @@ public static class TypeInference
 
                 // NamedPattern - look up constructor argument types
                 if (constructorArgumentTypes is not null &&
-                    constructorArgumentTypes.TryGetValue(namedPattern.Name.Name, out var argTypes) &&
+                    constructorArgumentTypes.TryGetValue(QualifiedNameToString(namedPattern.Name), out var argTypes) &&
                     argTypes.Count == namedPattern.Arguments.Count)
                 {
                     for (var i = 0; i < namedPattern.Arguments.Count; i++)

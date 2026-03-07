@@ -6,6 +6,16 @@ using SyntaxTypes = Pine.Core.Elm.ElmSyntax.Stil4mElmSyntax7;
 
 namespace Pine.Core.Elm.ElmCompilerInDotnet;
 
+internal static class QualifiedNameHelper
+{
+    public static string ToQualifiedNameString(IReadOnlyList<string> moduleName, string name) =>
+        moduleName.Count is 0
+        ?
+        name
+        :
+        string.Join(".", moduleName) + "." + name;
+}
+
 /// <summary>
 /// Information about a compiled function including its dependency layout.
 /// </summary>
@@ -67,7 +77,7 @@ public record FunctionScc(
 /// <param name="FunctionDependencyLayouts">Pre-computed dependency layouts for all functions (populated before compilation).</param>
 /// <param name="FunctionReturnTypes">Map of qualified function names to their return types.</param>
 /// <param name="FunctionParameterTypes">Map of qualified function names to their parameter types (for type inference from function applications).</param>
-/// <param name="ChoiceTagArgumentTypes">Map of choice type tag names to their argument types (for type inference from NamedPatterns).</param>
+/// <param name="ChoiceTagArgumentTypes">Map of qualified choice type tag names to their argument types (for type inference from NamedPatterns).</param>
 /// <param name="RecordTypeAliasConstructors">Map of qualified record type alias names to their field names in declaration order (for record constructors).</param>
 public record ModuleCompilationContext(
     IReadOnlyDictionary<string, (string moduleName, string functionName, SyntaxTypes.Declaration.FunctionDeclaration declaration)> AllFunctions,
@@ -189,11 +199,11 @@ public record ModuleCompilationContext(
     /// Gets the number of arguments expected by a choice type constructor.
     /// Returns null if the constructor is not found.
     /// </summary>
-    /// <param name="constructorName">The unqualified name of the choice type constructor.</param>
+    /// <param name="qualifiedConstructorName">The qualified name of the choice type constructor.</param>
     /// <returns>The number of arguments, or null if not found.</returns>
-    public int? TryGetChoiceTypeConstructorArgumentCount(string constructorName)
+    public int? TryGetChoiceTypeConstructorArgumentCount(string qualifiedConstructorName)
     {
-        if (ChoiceTagArgumentTypes?.TryGetValue(constructorName, out var argTypes) ?? false)
+        if (ChoiceTagArgumentTypes?.TryGetValue(qualifiedConstructorName, out var argTypes) ?? false)
         {
             return argTypes.Count;
         }
