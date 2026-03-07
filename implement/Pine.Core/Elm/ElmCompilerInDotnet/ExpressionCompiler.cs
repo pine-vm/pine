@@ -445,7 +445,7 @@ public class ExpressionCompiler
                             context.ParameterTypes,
                             context.LocalBindingTypes,
                             context.CurrentModuleName,
-                            context.FunctionReturnTypes);
+                            context.FunctionTypes);
 
                     if (expressionType is TypeInference.InferredType.IntType)
                     {
@@ -1303,7 +1303,7 @@ public class ExpressionCompiler
                                 context.ParameterTypes,
                                 newBindingTypes.Count > 0 ? newBindingTypes : null,
                                 context.CurrentModuleName,
-                                context.FunctionReturnTypes);
+                                context.FunctionTypes);
 
                         newBindingTypes = newBindingTypes.SetItem(funcName, bindingType);
 
@@ -1336,7 +1336,7 @@ public class ExpressionCompiler
                             context.ParameterTypes,
                             newBindingTypes.Count > 0 ? newBindingTypes : null,
                             context.CurrentModuleName,
-                            context.FunctionReturnTypes);
+                            context.FunctionTypes);
 
                     // Extract binding types from the pattern using the inferred type
                     newBindingTypes =

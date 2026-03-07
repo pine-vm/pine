@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
 
+using SyntaxModelTypes = Pine.Core.Elm.ElmSyntax.SyntaxModel;
 using SyntaxTypes = Pine.Core.Elm.ElmSyntax.Stil4mElmSyntax7;
 
 namespace Pine.Core.Elm.ElmCompilerInDotnet;
@@ -19,6 +20,27 @@ public static class TypeInference
 
     private static string QualifiedNameToString(SyntaxTypes.Expression.FunctionOrValue functionOrValue) =>
         QualifiedNameHelper.ToQualifiedNameString(functionOrValue.ModuleName, functionOrValue.Name);
+
+    private static SyntaxModelTypes.QualifiedNameRef QualifiedNameToRef(SyntaxTypes.QualifiedNameRef qualifiedNameRef) =>
+        new(qualifiedNameRef.ModuleName, qualifiedNameRef.Name);
+
+    private static SyntaxModelTypes.QualifiedNameRef ResolveQualifiedNameRef(
+        IReadOnlyList<string> moduleName,
+        string name,
+        string? currentModuleName)
+    {
+        if (moduleName.Count > 0)
+        {
+            return QualifiedNameHelper.ToQualifiedNameRef(moduleName, name);
+        }
+
+        if (currentModuleName is not null)
+        {
+            return QualifiedNameHelper.FromQualifiedNameString(currentModuleName + "." + name);
+        }
+
+        return QualifiedNameHelper.ToQualifiedNameRef([], name);
+    }
 
     /// <summary>
     /// Represents an inferred type for an Elm expression.
@@ -716,7 +738,7 @@ public static class TypeInference
     /// <param name="parameterTypes">Map of parameter names to their types from type annotations.</param>
     /// <param name="localBindingTypes">Map of local binding names to their types.</param>
     /// <param name="currentModuleName">The current module name for resolving unqualified function references.</param>
-    /// <param name="functionReturnTypes">Map of qualified function names to their return types.</param>
+    /// <param name="functionTypes">Map of qualified function names to their return and parameter types.</param>
     /// <returns>The inferred type of the expression.</returns>
     public static InferredType InferExpressionType(
         SyntaxTypes.Expression expression,
@@ -724,7 +746,7 @@ public static class TypeInference
         IReadOnlyDictionary<string, InferredType> parameterTypes,
         IReadOnlyDictionary<string, InferredType>? localBindingTypes,
         string? currentModuleName,
-        IReadOnlyDictionary<string, InferredType>? functionReturnTypes)
+        IReadOnlyDictionary<SyntaxModelTypes.QualifiedNameRef, FunctionTypeInfo>? functionTypes)
     {
         // Integer literal - in Elm, this has type "number" (polymorphic), not forced to Int
         if (expression is SyntaxTypes.Expression.Integer)
@@ -779,27 +801,14 @@ public static class TypeInference
         // Function or constructor reference - look up type from function signatures
         // This handles cases like `ChoiceD` which should return `Bool -> Beta`
         if (expression is SyntaxTypes.Expression.FunctionOrValue funcOrValueRef &&
-            functionReturnTypes is not null)
+            functionTypes is not null)
         {
-            // Build the qualified name
-            string qualifiedFuncName;
+            var qualifiedFuncName =
+                ResolveQualifiedNameRef(funcOrValueRef.ModuleName, funcOrValueRef.Name, currentModuleName);
 
-            if (funcOrValueRef.ModuleName.Count > 0)
+            if (functionTypes.TryGetValue(qualifiedFuncName, out var functionTypeInfo))
             {
-                qualifiedFuncName = string.Join(".", funcOrValueRef.ModuleName) + "." + funcOrValueRef.Name;
-            }
-            else if (currentModuleName is not null)
-            {
-                qualifiedFuncName = currentModuleName + "." + funcOrValueRef.Name;
-            }
-            else
-            {
-                qualifiedFuncName = funcOrValueRef.Name;
-            }
-
-            if (functionReturnTypes.TryGetValue(qualifiedFuncName, out var funcOrValueType))
-            {
-                return funcOrValueType;
+                return functionTypeInfo.ReturnType;
             }
         }
 
@@ -813,7 +822,7 @@ public static class TypeInference
                     parameterTypes,
                     localBindingTypes,
                     currentModuleName,
-                    functionReturnTypes);
+                    functionTypes);
         }
 
         // Tuple expression - infer type from element types
@@ -830,7 +839,7 @@ public static class TypeInference
                         parameterTypes,
                         localBindingTypes,
                         currentModuleName,
-                        functionReturnTypes));
+                        functionTypes));
             }
 
             return new InferredType.TupleType(elementTypes);
@@ -846,7 +855,7 @@ public static class TypeInference
                     parameterTypes,
                     localBindingTypes,
                     currentModuleName,
-                    functionReturnTypes);
+                    functionTypes);
         }
 
         // Function application - infer from the function's return type
@@ -869,8 +878,8 @@ public static class TypeInference
                         // We need to compute the result type after applying the given arguments
                         var appliedArgCount = application.Arguments.Count - 1; // Exclude the function itself
 
-                        var functionTypes = basicsFuncInfo.FunctionType;
-                        var totalArgCount = functionTypes.Count - 1; // Last element is return type
+                        var functionTypeSignature = basicsFuncInfo.FunctionType;
+                        var totalArgCount = functionTypeSignature.Count - 1; // Last element is return type
 
                         // Infer actual argument types to specialize polymorphic (NumberType) results
                         var actualArgTypes = new List<InferredType>();
@@ -886,38 +895,27 @@ public static class TypeInference
                                     parameterTypes,
                                     localBindingTypes,
                                     currentModuleName,
-                                    functionReturnTypes));
+                                    functionTypes));
                         }
 
                         return
                             SpecializeNumericFunctionResultType(
-                                functionTypes,
+                                functionTypeSignature,
                                 actualArgTypes,
                                 appliedArgCount,
                                 totalArgCount);
                     }
                 }
 
-                // Build the qualified function name
-                string qualifiedName;
-
-                if (funcRef.ModuleName.Count > 0)
-                {
-                    qualifiedName = string.Join(".", funcRef.ModuleName) + "." + funcRef.Name;
-                }
-                else if (currentModuleName is not null)
-                {
-                    qualifiedName = currentModuleName + "." + funcRef.Name;
-                }
-                else
-                {
-                    qualifiedName = funcRef.Name;
-                }
+                var qualifiedName =
+                    ResolveQualifiedNameRef(funcRef.ModuleName, funcRef.Name, currentModuleName);
 
                 // Look up the function type
                 // After canonicalization, all references should be fully qualified
-                if (functionReturnTypes is not null && functionReturnTypes.TryGetValue(qualifiedName, out var funcType))
+                if (functionTypes is not null && functionTypes.TryGetValue(qualifiedName, out var functionTypeInfo))
                 {
+                    var funcType = functionTypeInfo.ReturnType;
+
                     // Build a substitution map from type variables to concrete types
                     var substitution = new Dictionary<string, InferredType>();
 
@@ -940,7 +938,7 @@ public static class TypeInference
                                 parameterTypes,
                                 localBindingTypes,
                                 currentModuleName,
-                                functionReturnTypes);
+                                functionTypes);
 
                         // Collect type variable substitutions from matching expected vs actual arg types
                         CollectTypeVariableSubstitutions(ft.ArgumentType, actualArgType, substitution);
@@ -964,8 +962,8 @@ public static class TypeInference
                         // FunctionType contains [arg1Type, arg2Type, ..., returnType]
                         var appliedArgCount = application.Arguments.Count - 1; // Exclude the operator itself
 
-                        var functionTypes = basicsFuncInfo.FunctionType;
-                        var totalArgCount = functionTypes.Count - 1;
+                        var functionTypeSignature = basicsFuncInfo.FunctionType;
+                        var totalArgCount = functionTypeSignature.Count - 1;
 
                         // Infer actual argument types to specialize polymorphic (NumberType) results
                         var actualArgTypes = new List<InferredType>();
@@ -981,12 +979,12 @@ public static class TypeInference
                                     parameterTypes,
                                     localBindingTypes,
                                     currentModuleName,
-                                    functionReturnTypes));
+                                    functionTypes));
                         }
 
                         return
                             SpecializeNumericFunctionResultType(
-                                functionTypes,
+                                functionTypeSignature,
                                 actualArgTypes,
                                 appliedArgCount,
                                 totalArgCount);
@@ -1011,7 +1009,7 @@ public static class TypeInference
                         parameterTypes,
                         localBindingTypes,
                         currentModuleName,
-                        functionReturnTypes);
+                        functionTypes);
 
                 fields.Add((fieldName, fieldType));
             }
@@ -1041,7 +1039,7 @@ public static class TypeInference
                             parameterTypes,
                             extendedLocalBindings,
                             currentModuleName,
-                            functionReturnTypes);
+                            functionTypes);
 
                     extendedLocalBindings = extendedLocalBindings.SetItem(funcName, funcType);
                 }
@@ -1056,7 +1054,7 @@ public static class TypeInference
                             parameterTypes,
                             extendedLocalBindings,
                             currentModuleName,
-                            functionReturnTypes);
+                            functionTypes);
 
                     // Try to extract binding names from the pattern
                     foreach (var binding in ExtractBindingsFromPattern(letDestr.Pattern.Value))
@@ -1074,7 +1072,7 @@ public static class TypeInference
                     parameterTypes,
                     extendedLocalBindings,
                     currentModuleName,
-                    functionReturnTypes);
+                    functionTypes);
         }
 
         // List expression - infer type from element types
@@ -1094,7 +1092,7 @@ public static class TypeInference
                     parameterTypes,
                     localBindingTypes,
                     currentModuleName,
-                    functionReturnTypes);
+                    functionTypes);
 
             return new InferredType.ListType(firstElementType);
         }
@@ -1109,7 +1107,7 @@ public static class TypeInference
                     parameterTypes,
                     localBindingTypes,
                     currentModuleName,
-                    functionReturnTypes);
+                    functionTypes);
 
             var elseType =
                 InferExpressionType(
@@ -1118,7 +1116,7 @@ public static class TypeInference
                     parameterTypes,
                     localBindingTypes,
                     currentModuleName,
-                    functionReturnTypes);
+                    functionTypes);
 
             // Unify types: If one branch is more specific (e.g., Int vs number), use the more specific type
             return UnifyTypes(thenType, elseType);
@@ -1140,7 +1138,7 @@ public static class TypeInference
                     parameterTypes,
                     localBindingTypes,
                     currentModuleName,
-                    functionReturnTypes);
+                    functionTypes);
 
             // Unify with remaining case arm types
             for (var i = 1; i < caseExpr.CaseBlock.Cases.Count; i++)
@@ -1152,7 +1150,7 @@ public static class TypeInference
                         parameterTypes,
                         localBindingTypes,
                         currentModuleName,
-                        functionReturnTypes);
+                        functionTypes);
 
                 unifiedType = UnifyTypes(unifiedType, armType);
             }
@@ -1224,7 +1222,7 @@ public static class TypeInference
         IReadOnlyDictionary<string, InferredType> parameterTypes,
         IReadOnlyDictionary<string, InferredType>? localBindingTypes,
         string? currentModuleName,
-        IReadOnlyDictionary<string, InferredType>? functionReturnTypes)
+        IReadOnlyDictionary<SyntaxModelTypes.QualifiedNameRef, FunctionTypeInfo>? functionTypes)
     {
         // Check if operator has explicit type constraints
         if (s_operatorConstraints.TryGetValue(operatorApp.Operator, out var constraints))
@@ -1244,7 +1242,7 @@ public static class TypeInference
                 parameterTypes,
                 localBindingTypes,
                 currentModuleName,
-                functionReturnTypes);
+                functionTypes);
 
         var rightType =
             InferExpressionType(
@@ -1253,7 +1251,7 @@ public static class TypeInference
                 parameterTypes,
                 localBindingTypes,
                 currentModuleName,
-                functionReturnTypes);
+                functionTypes);
 
         // For arithmetic operators without explicit constraints (+, -, *, etc.), 
         // resolve the type based on concrete operand types
@@ -1289,7 +1287,7 @@ public static class TypeInference
     /// <returns>A new dictionary containing all constraints (existing plus newly discovered).</returns>
     public static ImmutableDictionary<string, InferredType> ExtractTypeConstraintsFromTagApplications(
         SyntaxTypes.Expression expression,
-        IReadOnlyDictionary<string, IReadOnlyList<InferredType>>? constructorArgumentTypes,
+        IReadOnlyDictionary<SyntaxModelTypes.QualifiedNameRef, IReadOnlyList<InferredType>>? constructorArgumentTypes,
         ImmutableDictionary<string, InferredType> existingConstraints)
     {
         if (constructorArgumentTypes is null)
@@ -1304,7 +1302,7 @@ public static class TypeInference
 
     private static ImmutableDictionary<string, InferredType> ExtractTypeConstraintsFromTagApplicationsInternal(
         SyntaxTypes.Expression expression,
-        IReadOnlyDictionary<string, IReadOnlyList<InferredType>> constructorArgumentTypes,
+        IReadOnlyDictionary<SyntaxModelTypes.QualifiedNameRef, IReadOnlyList<InferredType>> constructorArgumentTypes,
         ImmutableDictionary<string, InferredType> constraints)
     {
         switch (expression)
@@ -1319,7 +1317,9 @@ public static class TypeInference
                     ElmValueEncoding.StringIsValidTagName(tagFuncRef.Name))
                 {
                     // This is a tag constructor application
-                    if (constructorArgumentTypes.TryGetValue(QualifiedNameToString(tagFuncRef), out var argTypes))
+                    if (constructorArgumentTypes.TryGetValue(
+                        QualifiedNameHelper.ToQualifiedNameRef(tagFuncRef.ModuleName, tagFuncRef.Name),
+                        out var argTypes))
                     {
                         // Match arguments to constructor argument types
                         // Arguments start at index 1 (index 0 is the constructor itself)
@@ -1453,30 +1453,30 @@ public static class TypeInference
     /// For example, in `alfa a` where `alfa : Int -> String`, we infer that `a` is `Int`.
     /// </summary>
     /// <param name="expression">The expression to analyze.</param>
-    /// <param name="functionParameterTypes">Map of qualified function names to their parameter types.</param>
+    /// <param name="functionTypes">Map of qualified function names to their return and parameter types.</param>
     /// <param name="currentModuleName">The current module name for resolving unqualified function references.</param>
     /// <param name="existingConstraints">Existing type constraints to merge with.</param>
     /// <returns>A new dictionary containing all constraints (existing plus newly discovered).</returns>
     public static ImmutableDictionary<string, InferredType> ExtractTypeConstraintsFromFunctionApplications(
         SyntaxTypes.Expression expression,
-        IReadOnlyDictionary<string, IReadOnlyList<InferredType>>? functionParameterTypes,
+        IReadOnlyDictionary<SyntaxModelTypes.QualifiedNameRef, FunctionTypeInfo>? functionTypes,
         string currentModuleName,
         ImmutableDictionary<string, InferredType> existingConstraints)
     {
-        if (functionParameterTypes is null)
+        if (functionTypes is null)
             return existingConstraints;
 
         return
             ExtractTypeConstraintsFromFunctionApplicationsInternal(
                 expression,
-                functionParameterTypes,
+                functionTypes,
                 currentModuleName,
                 existingConstraints);
     }
 
     private static ImmutableDictionary<string, InferredType> ExtractTypeConstraintsFromFunctionApplicationsInternal(
         SyntaxTypes.Expression expression,
-        IReadOnlyDictionary<string, IReadOnlyList<InferredType>> functionParameterTypes,
+        IReadOnlyDictionary<SyntaxModelTypes.QualifiedNameRef, FunctionTypeInfo> functionTypes,
         string currentModuleName,
         ImmutableDictionary<string, InferredType> constraints)
     {
@@ -1489,13 +1489,8 @@ public static class TypeInference
                     application.Arguments[0].Value is SyntaxTypes.Expression.FunctionOrValue funcRef &&
                     !ElmValueEncoding.StringIsValidTagName(funcRef.Name))
                 {
-                    // Build qualified function name
                     var qualifiedFuncName =
-                        funcRef.ModuleName.Count > 0
-                        ?
-                        string.Join(".", funcRef.ModuleName) + "." + funcRef.Name
-                        :
-                        currentModuleName + "." + funcRef.Name;
+                        ResolveQualifiedNameRef(funcRef.ModuleName, funcRef.Name, currentModuleName);
 
                     // First, check if this is a Basics module function with known types
                     IReadOnlyList<InferredType>? paramTypes = null;
@@ -1514,7 +1509,11 @@ public static class TypeInference
                     // If not a known Basics function, check the user-defined function parameter types
                     if (paramTypes is null)
                     {
-                        functionParameterTypes.TryGetValue(qualifiedFuncName, out paramTypes);
+                        if (functionTypes.TryGetValue(qualifiedFuncName, out var functionTypeInfo) &&
+                            functionTypeInfo.ParameterTypes.Count > 0)
+                        {
+                            paramTypes = functionTypeInfo.ParameterTypes;
+                        }
                     }
 
                     if (paramTypes is not null)
@@ -1574,17 +1573,17 @@ public static class TypeInference
                 foreach (var arg in application.Arguments)
                 {
                     constraints =
-                        ExtractTypeConstraintsFromFunctionApplicationsInternal(arg.Value, functionParameterTypes, currentModuleName, constraints);
+                        ExtractTypeConstraintsFromFunctionApplicationsInternal(arg.Value, functionTypes, currentModuleName, constraints);
                 }
 
                 return constraints;
 
             case SyntaxTypes.Expression.OperatorApplication opApp:
                 constraints =
-                    ExtractTypeConstraintsFromFunctionApplicationsInternal(opApp.Left.Value, functionParameterTypes, currentModuleName, constraints);
+                    ExtractTypeConstraintsFromFunctionApplicationsInternal(opApp.Left.Value, functionTypes, currentModuleName, constraints);
 
                 constraints =
-                    ExtractTypeConstraintsFromFunctionApplicationsInternal(opApp.Right.Value, functionParameterTypes, currentModuleName, constraints);
+                    ExtractTypeConstraintsFromFunctionApplicationsInternal(opApp.Right.Value, functionTypes, currentModuleName, constraints);
 
                 return constraints;
 
@@ -1592,21 +1591,21 @@ public static class TypeInference
                 constraints =
                     ExtractTypeConstraintsFromFunctionApplicationsInternal(
                         ifBlock.Condition.Value,
-                        functionParameterTypes,
+                        functionTypes,
                         currentModuleName,
                         constraints);
 
                 constraints =
                     ExtractTypeConstraintsFromFunctionApplicationsInternal(
                         ifBlock.ThenBlock.Value,
-                        functionParameterTypes,
+                        functionTypes,
                         currentModuleName,
                         constraints);
 
                 constraints =
                     ExtractTypeConstraintsFromFunctionApplicationsInternal(
                         ifBlock.ElseBlock.Value,
-                        functionParameterTypes,
+                        functionTypes,
                         currentModuleName,
                         constraints);
 
@@ -1621,7 +1620,7 @@ public static class TypeInference
                             constraints =
                                 ExtractTypeConstraintsFromFunctionApplicationsInternal(
                                     letFunc.Function.Declaration.Value.Expression.Value,
-                                    functionParameterTypes,
+                                    functionTypes,
                                     currentModuleName,
                                     constraints);
 
@@ -1631,7 +1630,7 @@ public static class TypeInference
                             constraints =
                                 ExtractTypeConstraintsFromFunctionApplicationsInternal(
                                     letDestr.Expression.Value,
-                                    functionParameterTypes,
+                                    functionTypes,
                                     currentModuleName,
                                     constraints);
 
@@ -1642,7 +1641,7 @@ public static class TypeInference
                 constraints =
                     ExtractTypeConstraintsFromFunctionApplicationsInternal(
                         letExpr.Value.Expression.Value,
-                        functionParameterTypes,
+                        functionTypes,
                         currentModuleName,
                         constraints);
 
@@ -1652,7 +1651,7 @@ public static class TypeInference
                 constraints =
                     ExtractTypeConstraintsFromFunctionApplicationsInternal(
                         caseExpr.CaseBlock.Expression.Value,
-                        functionParameterTypes,
+                        functionTypes,
                         currentModuleName,
                         constraints);
 
@@ -1661,7 +1660,7 @@ public static class TypeInference
                     constraints =
                         ExtractTypeConstraintsFromFunctionApplicationsInternal(
                             caseItem.Expression.Value,
-                            functionParameterTypes,
+                            functionTypes,
                             currentModuleName,
                             constraints);
                 }
@@ -1672,7 +1671,7 @@ public static class TypeInference
                 return
                     ExtractTypeConstraintsFromFunctionApplicationsInternal(
                         parenExpr.Expression.Value,
-                        functionParameterTypes,
+                        functionTypes,
                         currentModuleName,
                         constraints);
 
@@ -1680,7 +1679,7 @@ public static class TypeInference
                 foreach (var elem in listExpr.Elements)
                 {
                     constraints =
-                        ExtractTypeConstraintsFromFunctionApplicationsInternal(elem.Value, functionParameterTypes, currentModuleName, constraints);
+                        ExtractTypeConstraintsFromFunctionApplicationsInternal(elem.Value, functionTypes, currentModuleName, constraints);
                 }
 
                 return constraints;
@@ -1689,7 +1688,7 @@ public static class TypeInference
                 foreach (var elem in tupleExpr.Elements)
                 {
                     constraints =
-                        ExtractTypeConstraintsFromFunctionApplicationsInternal(elem.Value, functionParameterTypes, currentModuleName, constraints);
+                        ExtractTypeConstraintsFromFunctionApplicationsInternal(elem.Value, functionTypes, currentModuleName, constraints);
                 }
 
                 return constraints;
@@ -1698,7 +1697,7 @@ public static class TypeInference
                 return
                     ExtractTypeConstraintsFromFunctionApplicationsInternal(
                         negation.Expression.Value,
-                        functionParameterTypes,
+                        functionTypes,
                         currentModuleName,
                         constraints);
 
@@ -1885,7 +1884,7 @@ public static class TypeInference
     /// <returns>A new dictionary containing all bindings (existing plus newly discovered).</returns>
     public static ImmutableDictionary<string, InferredType> ExtractPatternBindingTypesWithConstructors(
         SyntaxTypes.Pattern pattern,
-        IReadOnlyDictionary<string, IReadOnlyList<InferredType>>? constructorArgumentTypes,
+        IReadOnlyDictionary<SyntaxModelTypes.QualifiedNameRef, IReadOnlyList<InferredType>>? constructorArgumentTypes,
         ImmutableDictionary<string, InferredType> existingBindings)
     {
         if (constructorArgumentTypes is null)
@@ -1896,7 +1895,7 @@ public static class TypeInference
 
     private static ImmutableDictionary<string, InferredType> ExtractPatternBindingTypesWithConstructorsInternal(
         SyntaxTypes.Pattern pattern,
-        IReadOnlyDictionary<string, IReadOnlyList<InferredType>> constructorArgumentTypes,
+        IReadOnlyDictionary<SyntaxModelTypes.QualifiedNameRef, IReadOnlyList<InferredType>> constructorArgumentTypes,
         ImmutableDictionary<string, InferredType> bindings)
     {
         switch (pattern)
@@ -1904,7 +1903,7 @@ public static class TypeInference
             case SyntaxTypes.Pattern.NamedPattern namedPattern:
 
                 // NamedPattern - look up constructor argument types
-                if (constructorArgumentTypes.TryGetValue(QualifiedNameToString(namedPattern.Name), out var argTypes) &&
+                if (constructorArgumentTypes.TryGetValue(QualifiedNameToRef(namedPattern.Name), out var argTypes) &&
                     argTypes.Count == namedPattern.Arguments.Count)
                 {
                     for (var i = 0; i < namedPattern.Arguments.Count; i++)
@@ -1973,7 +1972,7 @@ public static class TypeInference
         SyntaxTypes.Pattern pattern,
         InferredType inferredType,
         ImmutableDictionary<string, InferredType> existingBindings,
-        IReadOnlyDictionary<string, IReadOnlyList<InferredType>>? constructorArgumentTypes)
+        IReadOnlyDictionary<SyntaxModelTypes.QualifiedNameRef, IReadOnlyList<InferredType>>? constructorArgumentTypes)
     {
         return ExtractPatternBindingTypesFromInferredInternal(pattern, inferredType, existingBindings, constructorArgumentTypes);
     }
@@ -1982,7 +1981,7 @@ public static class TypeInference
         SyntaxTypes.Pattern pattern,
         InferredType inferredType,
         ImmutableDictionary<string, InferredType> bindings,
-        IReadOnlyDictionary<string, IReadOnlyList<InferredType>>? constructorArgumentTypes)
+        IReadOnlyDictionary<SyntaxModelTypes.QualifiedNameRef, IReadOnlyList<InferredType>>? constructorArgumentTypes)
     {
         switch (pattern)
         {
@@ -2024,7 +2023,7 @@ public static class TypeInference
 
                 // NamedPattern - look up constructor argument types
                 if (constructorArgumentTypes is not null &&
-                    constructorArgumentTypes.TryGetValue(QualifiedNameToString(namedPattern.Name), out var argTypes) &&
+                    constructorArgumentTypes.TryGetValue(QualifiedNameToRef(namedPattern.Name), out var argTypes) &&
                     argTypes.Count == namedPattern.Arguments.Count)
                 {
                     for (var i = 0; i < namedPattern.Arguments.Count; i++)
@@ -2194,6 +2193,11 @@ public static class TypeInference
 
         var localBindingTypes = ImmutableDictionary<string, InferredType>.Empty;
 
+        var knownFunctionTypes =
+            functionSignatures.ToDictionary(
+                kvp => QualifiedNameHelper.FromQualifiedNameString(kvp.Key),
+                kvp => new FunctionTypeInfo(kvp.Value, Array.Empty<InferredType>()));
+
         var returnType =
             InferExpressionType(
                 expression,
@@ -2201,7 +2205,7 @@ public static class TypeInference
                 parameterTypes,
                 localBindingTypes,
                 moduleName,
-                functionSignatures);
+                knownFunctionTypes);
 
         return (returnType, parameterTypes);
     }
