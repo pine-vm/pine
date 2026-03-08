@@ -762,8 +762,11 @@ public class KernelParserFunctionTests
         ElmValue.TagInstance("Err", [inner]);
 
     private static readonly ElmValue s_true = ElmValue.TagInstance("True", []);
+
     private static readonly ElmValue s_false = ElmValue.TagInstance("False", []);
+
     private static readonly ElmValue s_nothing = ElmValue.TagInstance("Nothing", []);
+
     private static readonly ElmValue s_unit = ElmValue.ListInstance([]);
 
     private static ElmValue JustOf(ElmValue inner) =>
@@ -974,8 +977,10 @@ public class KernelParserFunctionTests
     public void Lazy_double_nested()
     {
         CallThunk("lazyDoubleNested").Should().Be(
-            OkOf(ElmValue.TagInstance("Negate",
-                [ElmValue.TagInstance("Negate", [ElmValue.TagInstance("Literal", [Integer(42)])])])));
+            OkOf(
+                ElmValue.TagInstance(
+                    "Negate",
+                    [ElmValue.TagInstance("Negate", [ElmValue.TagInstance("Literal", [Integer(42)])])])));
     }
 
     // ===== Pipeline: |= and |. =====
@@ -984,8 +989,12 @@ public class KernelParserFunctionTests
     public void Pipeline_point()
     {
         var result = CallThunk("pipelinePoint");
-        var expected = OkOf(new ElmValue.ElmRecord(
-            [("x", Integer(3)), ("y", Integer(4))]));
+
+        var expected =
+            OkOf(
+                new ElmValue.ElmRecord(
+                    [("x", Integer(3)), ("y", Integer(4))]));
+
         result.Should().Be(expected);
     }
 
@@ -993,8 +1002,12 @@ public class KernelParserFunctionTests
     public void Pipeline_point_no_spaces()
     {
         var result = CallThunk("pipelinePointNoSpaces");
-        var expected = OkOf(new ElmValue.ElmRecord(
-            [("x", Integer(10)), ("y", Integer(20))]));
+
+        var expected =
+            OkOf(
+                new ElmValue.ElmRecord(
+                    [("x", Integer(10)), ("y", Integer(20))]));
+
         result.Should().Be(expected);
     }
 

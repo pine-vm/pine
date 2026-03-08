@@ -610,27 +610,21 @@ public class CoreStringFunctionTests
     public void ToFloat_123()
     {
         var result = ApplyUnary(GetStringFunction("toFloat"), String("123"));
-        var justTag = result as ElmValue.ElmTag;
-        justTag.Should().NotBeNull();
-        justTag!.TagName.Should().Be("Just");
+        result.Should().Be(JustOf(ElmValue.ElmFloat.Convert(123)));
     }
 
     [Fact]
     public void ToFloat_neg42()
     {
         var result = ApplyUnary(GetStringFunction("toFloat"), String("-42"));
-        var justTag = result as ElmValue.ElmTag;
-        justTag.Should().NotBeNull();
-        justTag!.TagName.Should().Be("Just");
+        result.Should().Be(JustOf(ElmValue.ElmFloat.Convert(-42)));
     }
 
     [Fact]
     public void ToFloat_3_1()
     {
         var result = ApplyUnary(GetStringFunction("toFloat"), String("3.1"));
-        var justTag = result as ElmValue.ElmTag;
-        justTag.Should().NotBeNull();
-        justTag!.TagName.Should().Be("Just");
+        result.Should().Be(JustOf(ElmValue.ElmFloat.Convert(3.1)));
     }
 
     [Fact]

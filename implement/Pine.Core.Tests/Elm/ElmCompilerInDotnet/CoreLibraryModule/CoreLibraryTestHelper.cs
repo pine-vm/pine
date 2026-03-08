@@ -259,12 +259,13 @@ public static class CoreLibraryTestHelper
             lastReport = report;
         }
 
-        var aggregated = lastReport with
-        {
-            InstructionCount = totalInstructions,
-            InvocationCount = totalInvocations,
-            LoopIterationCount = totalLoopIterations
-        };
+        var aggregated =
+            lastReport with
+            {
+                InstructionCount = totalInstructions,
+                InvocationCount = totalInvocations,
+                LoopIterationCount = totalLoopIterations
+            };
 
         return (currentValue, aggregated);
     }

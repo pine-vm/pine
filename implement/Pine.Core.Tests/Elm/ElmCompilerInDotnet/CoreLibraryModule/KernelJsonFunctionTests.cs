@@ -957,19 +957,14 @@ public class KernelJsonFunctionTests
         // In the Elm runtime, toFloat on an integer value may return ElmInteger
         // since the rational representation 42/1 normalizes to an integer.
         var result = DecodeStringFloat("42");
-        result.Should().BeOfType<ElmValue.ElmTag>();
-        var tag = (ElmValue.ElmTag)result;
-        tag.TagName.Should().Be("Ok");
+        result.Should().Be(OkOf(Integer(42)));
     }
 
     [Fact]
     public void Decode_float_314()
     {
         var result = DecodeStringFloat("3.14");
-        result.Should().BeOfType<ElmValue.ElmTag>();
-        var tag = (ElmValue.ElmTag)result;
-        tag.TagName.Should().Be("Ok");
-        tag.Arguments[0].Should().BeOfType<ElmValue.ElmFloat>();
+        result.Should().Be(OkOf(ElmValue.ElmFloat.Convert(3.14)));
     }
 
     [Fact]
@@ -1327,13 +1322,12 @@ public class KernelJsonFunctionTests
     public void Decode_keyValuePairs()
     {
         var result = DecodeKeyValuePairsInt("{ \"alice\": 42, \"bob\": 99 }");
-        result.Should().BeOfType<ElmValue.ElmTag>();
-        ((ElmValue.ElmTag)result).TagName.Should().Be("Ok");
-        var okArgs = ((ElmValue.ElmTag)result).Arguments;
-        okArgs.Should().HaveCount(1);
-        var list = okArgs[0];
-        list.Should().BeOfType<ElmValue.ElmList>();
-        ((ElmValue.ElmList)list).Items.Should().HaveCount(2);
+
+        result.Should().Be(
+            OkOf(
+                ElmList(
+                    ElmList(String("alice"), Integer(42)),
+                    ElmList(String("bob"), Integer(99)))));
     }
 
     [Fact]
