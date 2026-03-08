@@ -181,9 +181,14 @@ public static class CoreLibraryTestHelper
     public static string FormatCounts(EvaluationReport report) =>
         string.Join(
             "\n",
-            "InstructionCount: " + report.InstructionCount,
-            "InvocationCount: " + report.InvocationCount,
-            "LoopIterationCount: " + report.LoopIterationCount);
+            EnumerateCountLines(report));
+
+    private static IEnumerable<string> EnumerateCountLines(EvaluationReport report)
+    {
+        yield return "InstructionCount: " + report.InstructionCount;
+        yield return "InvocationCount: " + report.InvocationCount;
+        yield return "LoopIterationCount: " + report.LoopIterationCount;
+    }
 
     public static (ElmValue value, EvaluationReport report) ApplyAndProfileUnary(
         PineValue functionValue,
@@ -256,6 +261,7 @@ public static class CoreLibraryTestHelper
             totalInstructions += report.InstructionCount;
             totalInvocations += report.InvocationCount;
             totalLoopIterations += report.LoopIterationCount;
+
             lastReport = report;
         }
 

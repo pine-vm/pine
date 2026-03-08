@@ -25,7 +25,8 @@ public class PineVM : IPineVM
 
     private readonly bool _disableReductionInCompilation;
 
-    private readonly Func<Expression, PineValueInProcess, PineVMParseCache, Func<PrecompiledResult>?>? _selectPrecompiled = null;
+    private readonly Func<Expression, PineValueInProcess, PineVMParseCache, Func<PrecompiledResult>?>? _selectPrecompiled =
+        null;
 
     private readonly Func<Expression, bool> _skipInlineForExpression;
 
@@ -154,6 +155,8 @@ public class PineVM : IPineVM
 
     readonly Dictionary<Expression, ExpressionEntry> _expressionCompilationDict = [];
 
+    readonly Dictionary<Expression, Expression> _reducedExpressionDict = [];
+
     private record struct ExpressionEntry(
         ExpressionCompilation Compilation,
         string ExpressionHashBase16,
@@ -177,16 +180,17 @@ public class PineVM : IPineVM
             localsValues[i] = stackFrameInput.Arguments[i];
         }
 
-        return new StackFrame(
-            expressionValue,
-            expression,
-            instructions,
-            InputValues: stackFrameInput,
-            StackValues: new PineValueInProcess[instructions.MaxStackUsage],
-            LocalsValues: localsValues,
-            ProfilingBaseline: profilingBaseline,
-            Specialization: null,
-            CacheFileName: cacheFileName);
+        return
+            new StackFrame(
+                expressionValue,
+                expression,
+                instructions,
+                InputValues: stackFrameInput,
+                StackValues: new PineValueInProcess[instructions.MaxStackUsage],
+                LocalsValues: localsValues,
+                ProfilingBaseline: profilingBaseline,
+                Specialization: null,
+                CacheFileName: cacheFileName);
     }
 
     private ExpressionEntry GetExpressionEntry(
@@ -232,7 +236,8 @@ public class PineVM : IPineVM
                 parseCache: ParseCache,
                 disableReduction: _disableReductionInCompilation,
                 skipInlining: SkipInlining,
-                enableTailRecursionOptimization: _enableTailRecursionOptimization);
+                enableTailRecursionOptimization: _enableTailRecursionOptimization,
+                reducedExpressionCache: _reducedExpressionDict);
 
         OptimizationParametersSerial.ExpressionConfig? optimizationConfig = null;
 
@@ -310,7 +315,8 @@ public class PineVM : IPineVM
                                     "Failed to parse expression from value: " + contParseErr +
                                     " - expressionValue is " +
                                     (expressionValue is null ? "null" : DescribeValueForErrorMessage(expressionValue)) +
-                                    " - environmentValue is " + DescribeValueForErrorMessage(environmentValue.Evaluate());
+                                    " - environmentValue is " +
+                                    DescribeValueForErrorMessage(environmentValue.Evaluate());
                             }
 
                             if (contParseResult.IsOkOrNull() is not { } contParseOk)
@@ -444,7 +450,8 @@ public class PineVM : IPineVM
                             catch (Exception ex)
                             {
                                 throw new Exception(
-                                    "Failed to decode cached value for cache file '" + cacheFileName + "'.", ex);
+                                    "Failed to decode cached value for cache file '" + cacheFileName + "'.",
+                                    ex);
                             }
                         }
                     }
@@ -457,8 +464,7 @@ public class PineVM : IPineVM
                     instructions: instructions,
                     stackFrameInput: stackFrameInput,
                     cacheFileName: cacheFileName,
-                    replaceCurrentFrame: replaceCurrentFrame
-                );
+                    replaceCurrentFrame: replaceCurrentFrame);
 
                 return null;
             }
@@ -571,15 +577,16 @@ public class PineVM : IPineVM
             {
                 var rootExprValue = EncodeExpressionAsValue(rootExpression);
 
-                return new EvaluationReport(
-                    ExpressionValue: rootExprValue,
-                    Expression: rootExpression,
-                    Input: StackFrameInput.GenericFromEnvironmentValue(rootEnvironment),
-                    InstructionCount: instructionCount,
-                    LoopIterationCount: loopIterationCount,
-                    InvocationCount: parseAndEvalCount,
-                    ReturnValue: frameReturnValue,
-                    StackTrace: []);
+                return
+                    new EvaluationReport(
+                        ExpressionValue: rootExprValue,
+                        Expression: rootExpression,
+                        Input: StackFrameInput.GenericFromEnvironmentValue(rootEnvironment),
+                        InstructionCount: instructionCount,
+                        LoopIterationCount: loopIterationCount,
+                        InvocationCount: parseAndEvalCount,
+                        ReturnValue: frameReturnValue,
+                        StackTrace: []);
             }
 
             var previousFrame = stack.Peek();
@@ -1019,6 +1026,7 @@ public class PineVM : IPineVM
 
                             // Pop items in reverse order (last pushed is first popped)
                             var items = new PineValueInProcess[itemsCount];
+
                             for (var i = 0; i < itemsCount; ++i)
                             {
                                 items[itemsCount - i - 1] = currentFrame.PopTopmostFromStack();
@@ -1030,7 +1038,8 @@ public class PineVM : IPineVM
                             {
                                 resultValue =
                                     PineValueInProcess.ConcatBinary(
-                                        PineValueInProcess.CreateList(items), targetList);
+                                        PineValueInProcess.CreateList(items),
+                                        targetList);
                             }
 
                             currentFrame.PushInstructionResult(resultValue);
@@ -1047,6 +1056,7 @@ public class PineVM : IPineVM
 
                             // Pop items in reverse order (last pushed is first popped)
                             var items = new PineValueInProcess[itemsCount];
+
                             for (var i = 0; i < itemsCount; ++i)
                             {
                                 items[itemsCount - i - 1] = currentFrame.PopTopmostFromStack();
@@ -1061,7 +1071,8 @@ public class PineVM : IPineVM
                             {
                                 resultValue =
                                     PineValueInProcess.ConcatBinary(
-                                        targetList, PineValueInProcess.CreateList(items));
+                                        targetList,
+                                        PineValueInProcess.CreateList(items));
                             }
 
                             currentFrame.PushInstructionResult(resultValue);
@@ -1280,7 +1291,8 @@ public class PineVM : IPineVM
 
                     case StackInstructionKind.Int_Mul_Const:
                         {
-                            var right = currentInstruction.IntegerLiteral
+                            var right =
+                                currentInstruction.IntegerLiteral
                                 ??
                                 throw new Exception("Invalid operation form: Missing literal value");
 
@@ -1527,7 +1539,9 @@ public class PineVM : IPineVM
                                         "Parse and eval count limit exceeded: " +
                                         CommandLineInterface.FormatIntegerForDisplay(limit) +
                                         "\nLast stack frames expressions:\n" +
-                                        string.Join("\n", stackTraceHashes.Select(hash => Convert.ToHexStringLower(hash.Span)[..8]));
+                                        string.Join(
+                                            "\n",
+                                            stackTraceHashes.Select(hash => Convert.ToHexStringLower(hash.Span)[..8]));
                                 }
                             }
 
@@ -1548,7 +1562,8 @@ public class PineVM : IPineVM
                                 return
                                     "Failed to parse expression from value: " + parseErr +
                                     " - expressionValue is " + DescribeValueForErrorMessage(expressionValue) +
-                                    " - environmentValue is " + DescribeValueForErrorMessage(environmentValue.Evaluate());
+                                    " - environmentValue is " +
+                                    DescribeValueForErrorMessage(environmentValue.Evaluate());
                             }
 
                             if (parseResult.IsOkOrNull() is not { } parseOk)
@@ -1631,7 +1646,8 @@ public class PineVM : IPineVM
 
                     case StackInstructionKind.Bit_And_Const:
                         {
-                            var right = currentInstruction.Literal
+                            var right =
+                                currentInstruction.Literal
                                 ??
                                 throw new Exception("Invalid operation form: Missing literal value");
 

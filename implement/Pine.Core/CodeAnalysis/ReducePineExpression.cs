@@ -350,11 +350,12 @@ public class ReducePineExpression
                                 {
                                     var reducedArgumentsList =
                                         inputList.Items
-                                        .Select(origArg => SearchForExpressionReductionRecursive(
-                                            maxDepth: 5,
-                                            expression: origArg,
-                                            parseCache: parseCache,
-                                            envConstraintId: envConstraintId))
+                                        .Select(
+                                            origArg => SearchForExpressionReductionRecursive(
+                                                maxDepth: 5,
+                                                expression: origArg,
+                                                parseCache: parseCache,
+                                                envConstraintId: envConstraintId))
                                         .ToImmutableArray();
 
                                     var listLengthLowerBounds = new List<int>();
@@ -389,7 +390,8 @@ public class ReducePineExpression
                                     }
 
                                     var listLengthLowerBound =
-                                        listLengthLowerBounds.Count is 0 ?
+                                        listLengthLowerBounds.Count is 0
+                                        ?
                                         (int?)null
                                         :
                                         listLengthLowerBounds.Max();
@@ -416,7 +418,8 @@ public class ReducePineExpression
                                         if (itemFixedLength.HasValue)
                                         {
                                             if (itemFixedLength < listLengthLowerBound ||
-                                                (prevItemFixedLength.HasValue && itemFixedLength.Value != prevItemFixedLength.Value))
+                                                (prevItemFixedLength.HasValue &&
+                                                itemFixedLength.Value != prevItemFixedLength.Value))
                                             {
                                                 return Expression.LiteralInstance(PineKernelValues.FalseValue);
                                             }
@@ -524,7 +527,8 @@ public class ReducePineExpression
 
                                         if (argItem is Expression.Literal argLiteral)
                                         {
-                                            if (argLiteral.Value is PineValue.ListValue listValue && listValue.Items.Length is 0)
+                                            if (argLiteral.Value is PineValue.ListValue listValue &&
+                                                listValue.Items.Length is 0)
                                                 continue;
                                         }
 
@@ -876,11 +880,9 @@ public class ReducePineExpression
                         }
 
                         return
-                            (new Expression.ParseAndEval
-                            (
+                            (new Expression.ParseAndEval(
                                 encoded: encodedTransform.expr,
-                                environment: envTransform.expr
-                            ),
+                                environment: envTransform.expr),
                             referencesOriginalEnv);
                     }
 
@@ -898,8 +900,7 @@ public class ReducePineExpression
                         }
 
                         return
-                            (
-                            Expression.KernelApplicationInstance(
+                            (Expression.KernelApplicationInstance(
                                 function: kernelApp.Function,
                                 input: argumentTransform.expr),
                             argumentTransform.referencesOriginalEnv);
@@ -942,8 +943,7 @@ public class ReducePineExpression
                             (
                                 condition: conditionTransform.expr,
                                 falseBranch: falseBranchTransform.expr,
-                                trueBranch: trueBranchTransform.expr
-                                ),
+                                trueBranch: trueBranchTransform.expr),
                             referencesOriginalEnv);
                     }
 
@@ -965,11 +965,9 @@ public class ReducePineExpression
                         }
 
                         return
-                            (new Expression.StringTag
-                            (
+                            (new Expression.StringTag(
                                 stringTagExpr.Tag,
-                                taggedTransform.expr
-                            ),
+                                taggedTransform.expr),
                             taggedTransform.referencesOriginalEnv);
                     }
             }
@@ -993,27 +991,20 @@ public class ReducePineExpression
     /// <param name="expression">The expression to reduce.</param>
     /// <param name="parseCache">Cache used when parsing encoded expressions.</param>
     /// <param name="envConstraintId">Optional environment constraints to enable reductions.</param>
-    /// <param name="dontReduceExpression">Predicate to exclude certain expressions from reduction.</param>
     /// <returns>The possibly reduced expression.</returns>
     public static Expression SearchForExpressionReductionRecursive(
         int maxDepth,
         Expression expression,
         PineVMParseCache parseCache,
-        PineValueClass? envConstraintId = null,
-        Func<Expression, bool>? dontReduceExpression = null)
+        PineValueClass? envConstraintId = null)
     {
         if (maxDepth < 1)
             return expression;
 
         var transformed =
             TransformPineExpressionWithOptionalReplacement(
-                expr =>
-                {
-                    if (dontReduceExpression?.Invoke(expr) ?? false)
-                        return null;
-
-                    return SearchForExpressionReduction(expr, envConstraintId, parseCache);
-                }, expression).expr;
+                expr => SearchForExpressionReduction(expr, envConstraintId, parseCache),
+                expression).expr;
 
         if (transformed == expression)
             return transformed;
@@ -1023,8 +1014,7 @@ public class ReducePineExpression
                 maxDepth - 1,
                 transformed,
                 parseCache,
-                envConstraintId: envConstraintId,
-                dontReduceExpression);
+                envConstraintId: envConstraintId);
     }
 
     /// <summary>
@@ -1034,13 +1024,18 @@ public class ReducePineExpression
     /// </summary>
     /// <param name="expression">The expression to reduce.</param>
     /// <param name="parseCache">Cache used when parsing encoded expressions.</param>
-    /// <param name="dontReduceExpression">Predicate to exclude certain expressions from reduction.</param>
     /// <returns>The reduced expression if any reduction was possible; otherwise the original expression.</returns>
     public static Expression ReduceExpressionBottomUp(
         Expression expression,
         PineVMParseCache parseCache,
-        Func<Expression, bool>? dontReduceExpression = null)
+        IDictionary<Expression, Expression>? reducedExpressionCache = null)
     {
+        if (reducedExpressionCache is not null &&
+            reducedExpressionCache.TryGetValue(expression, out var cachedReducedExpression))
+        {
+            return cachedReducedExpression;
+        }
+
         // First, reduce the sub-expressions.
         var expressionWithReducedChildren =
             expression switch
@@ -1048,34 +1043,34 @@ public class ReducePineExpression
                 Expression.Literal => expression,
 
                 Expression.List listExpr =>
-                    ReduceListExpressionBottomUp(
-                        listExpr,
-                        parseCache,
-                        dontReduceExpression),
+                ReduceListExpressionBottomUp(
+                    listExpr,
+                    parseCache,
+                    reducedExpressionCache),
 
                 Expression.KernelApplication kernelApp =>
-                    ReduceKernelApplicationBottomUp(
-                        kernelApp,
-                        parseCache,
-                        dontReduceExpression),
+                ReduceKernelApplicationBottomUp(
+                    kernelApp,
+                    parseCache,
+                    reducedExpressionCache),
 
                 Expression.ParseAndEval parseAndEval =>
-                    ReduceParseAndEvalBottomUp(
-                        parseAndEval,
-                        parseCache,
-                        dontReduceExpression),
+                ReduceParseAndEvalBottomUp(
+                    parseAndEval,
+                    parseCache,
+                    reducedExpressionCache),
 
                 Expression.Conditional conditional =>
-                    ReduceConditionalBottomUp(
-                        conditional,
-                        parseCache,
-                        dontReduceExpression),
+                ReduceConditionalBottomUp(
+                    conditional,
+                    parseCache,
+                    reducedExpressionCache),
 
                 Expression.StringTag stringTag =>
-                    ReduceStringTagBottomUp(
-                        stringTag,
-                        parseCache,
-                        dontReduceExpression),
+                ReduceStringTagBottomUp(
+                    stringTag,
+                    parseCache,
+                    reducedExpressionCache),
 
                 // These are direct references to the environment or stack.
                 // No further children to reduce.
@@ -1087,16 +1082,22 @@ public class ReducePineExpression
             };
 
         // Next, try to reduce this node itself unless the caller forbids it.
-        if (!(dontReduceExpression?.Invoke(expressionWithReducedChildren) ?? false))
         {
             // If we can reduce further, return the reduced expression:
-            var reduced = SearchForExpressionReduction(expressionWithReducedChildren, envConstraintId: null, parseCache);
+            var reduced =
+                SearchForExpressionReduction(expressionWithReducedChildren, envConstraintId: null, parseCache);
 
             if (reduced is not null)
+            {
+                reducedExpressionCache?[expression] = reduced;
+
                 return reduced;
+            }
         }
 
         // If no further reduction, just return our (possibly child-reduced) node.
+        reducedExpressionCache?[expression] = expressionWithReducedChildren;
+
         return expressionWithReducedChildren;
     }
 
@@ -1105,12 +1106,11 @@ public class ReducePineExpression
     /// </summary>
     /// <param name="listExpr">The list expression to reduce.</param>
     /// <param name="parseCache">Cache used when parsing encoded expressions.</param>
-    /// <param name="dontReduceExpression">Predicate to exclude certain expressions from reduction.</param>
     /// <returns>The reduced list expression or the original if no change occurs.</returns>
     public static Expression ReduceListExpressionBottomUp(
         Expression.List listExpr,
         PineVMParseCache parseCache,
-        Func<Expression, bool>? dontReduceExpression)
+        IDictionary<Expression, Expression>? reducedExpressionCache)
     {
         var items = listExpr.Items;
         var changed = false;
@@ -1118,7 +1118,11 @@ public class ReducePineExpression
 
         for (var i = 0; i < items.Count; i++)
         {
-            var reducedChild = ReduceExpressionBottomUp(items[i], parseCache, dontReduceExpression);
+            var reducedChild =
+                ReduceExpressionBottomUp(
+                    items[i],
+                    parseCache,
+                    reducedExpressionCache);
 
             newItems[i] = reducedChild;
 
@@ -1138,15 +1142,17 @@ public class ReducePineExpression
     /// </summary>
     /// <param name="kernelApp">The kernel application to reduce.</param>
     /// <param name="parseCache">Cache used when parsing encoded expressions.</param>
-    /// <param name="dontReduceExpression">Predicate to exclude certain expressions from reduction.</param>
     /// <returns>The reduced expression or the original if no change occurs.</returns>
     public static Expression ReduceKernelApplicationBottomUp(
         Expression.KernelApplication kernelApp,
         PineVMParseCache parseCache,
-        Func<Expression, bool>? dontReduceExpression)
+        IDictionary<Expression, Expression>? reducedExpressionCache)
     {
         var reducedArg =
-            ReduceExpressionBottomUp(kernelApp.Input, parseCache, dontReduceExpression);
+            ReduceExpressionBottomUp(
+                kernelApp.Input,
+                parseCache,
+                reducedExpressionCache);
 
         if (kernelApp.Function is nameof(KernelFunction.int_mul) &&
             reducedArg is Expression.List operandList)
@@ -1177,6 +1183,7 @@ public class ReducePineExpression
             reducedArg is Expression.List addendList)
         {
             var constants = CollectConstantIntegers(addendList.Items);
+
             if (1 < constants.constants.Count)
             {
                 var sum = BigInteger.Zero;
@@ -1230,18 +1237,23 @@ public class ReducePineExpression
     /// </summary>
     /// <param name="parseAndEval">The Parse-and-Eval expression to reduce.</param>
     /// <param name="parseCache">Cache used when parsing encoded expressions.</param>
-    /// <param name="dontReduceExpression">Predicate to exclude certain expressions from reduction.</param>
     /// <returns>The reduced expression or the original if no change occurs.</returns>
     public static Expression ReduceParseAndEvalBottomUp(
         Expression.ParseAndEval parseAndEval,
         PineVMParseCache parseCache,
-        Func<Expression, bool>? dontReduceExpression)
+        IDictionary<Expression, Expression>? reducedExpressionCache)
     {
         var reducedEncoded =
-            ReduceExpressionBottomUp(parseAndEval.Encoded, parseCache, dontReduceExpression);
+            ReduceExpressionBottomUp(
+                parseAndEval.Encoded,
+                parseCache,
+                reducedExpressionCache);
 
         var reducedEnv =
-            ReduceExpressionBottomUp(parseAndEval.Environment, parseCache, dontReduceExpression);
+            ReduceExpressionBottomUp(
+                parseAndEval.Environment,
+                parseCache,
+                reducedExpressionCache);
 
         if (reducedEncoded == parseAndEval.Encoded &&
             reducedEnv == parseAndEval.Environment)
@@ -1257,30 +1269,29 @@ public class ReducePineExpression
     /// </summary>
     /// <param name="conditional">The conditional expression to reduce.</param>
     /// <param name="parseCache">Cache used when parsing encoded expressions.</param>
-    /// <param name="dontReduceExpression">Predicate to exclude certain expressions from reduction.</param>
     /// <returns>The reduced expression or the original if no change occurs.</returns>
     public static Expression ReduceConditionalBottomUp(
         Expression.Conditional conditional,
         PineVMParseCache parseCache,
-        Func<Expression, bool>? dontReduceExpression)
+        IDictionary<Expression, Expression>? reducedExpressionCache)
     {
         var reducedCondition =
             ReduceExpressionBottomUp(
                 conditional.Condition,
                 parseCache,
-                dontReduceExpression);
+                reducedExpressionCache);
 
         var reducedTrue =
             ReduceExpressionBottomUp(
                 conditional.TrueBranch,
                 parseCache,
-                dontReduceExpression);
+                reducedExpressionCache);
 
         var reducedFalse =
             ReduceExpressionBottomUp(
                 conditional.FalseBranch,
                 parseCache,
-                dontReduceExpression);
+                reducedExpressionCache);
 
         if (reducedCondition == conditional.Condition &&
             reducedTrue == conditional.TrueBranch &&
@@ -1300,18 +1311,17 @@ public class ReducePineExpression
     /// </summary>
     /// <param name="stringTag">The string tag expression to reduce.</param>
     /// <param name="parseCache">Cache used when parsing encoded expressions.</param>
-    /// <param name="dontReduceExpression">Predicate to exclude certain expressions from reduction.</param>
     /// <returns>The reduced expression or the original if no change occurs.</returns>
     public static Expression ReduceStringTagBottomUp(
         Expression.StringTag stringTag,
         PineVMParseCache parseCache,
-        Func<Expression, bool>? dontReduceExpression)
+        IDictionary<Expression, Expression>? reducedExpressionCache)
     {
         var reducedTagged =
             ReduceExpressionBottomUp(
                 stringTag.Tagged,
                 parseCache,
-                dontReduceExpression);
+                reducedExpressionCache);
 
         if (reducedTagged == stringTag.Tagged)
             return stringTag;
@@ -1360,7 +1370,7 @@ public class ReducePineExpression
             case Expression.Conditional cond:
                 {
                     if (ApplyKernelFunctionReverseToAllBranches(cond.FalseBranch) is { } falseOk &&
-                       ApplyKernelFunctionReverseToAllBranches(cond.TrueBranch) is { } trueOk)
+                        ApplyKernelFunctionReverseToAllBranches(cond.TrueBranch) is { } trueOk)
                     {
                         return
                             Expression.ConditionalInstance(
@@ -1427,7 +1437,8 @@ public class ReducePineExpression
                 {
                     if (innerSkip.Function is nameof(KernelFunction.skip) &&
                         innerSkip.Input is Expression.List args && args.Items.Count is 2 &&
-                        args.Items[0] is Expression.Literal litCount && KernelFunction.SignedIntegerFromValueRelaxed(litCount.Value) is { } innerCount)
+                        args.Items[0] is Expression.Literal litCount &&
+                        KernelFunction.SignedIntegerFromValueRelaxed(litCount.Value) is { } innerCount)
                     {
                         var innerCountClamped =
                             innerCount < 0 ? 0 : (int)innerCount;
@@ -1606,7 +1617,8 @@ public class ReducePineExpression
     /// </summary>
     public static Expression? TryReduceSelectListItem(Expression inputExpression, int index)
     {
-        if (index < 0) index = 0;
+        if (index < 0)
+            index = 0;
 
         switch (inputExpression)
         {
@@ -1661,4 +1673,3 @@ public class ReducePineExpression
         return null;
     }
 }
-

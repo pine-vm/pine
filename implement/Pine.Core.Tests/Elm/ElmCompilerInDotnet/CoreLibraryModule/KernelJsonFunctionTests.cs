@@ -1227,7 +1227,10 @@ public class KernelJsonFunctionTests
 
         value.Should().Be(OkOf(String("hello")));
 
-        CoreLibraryTestHelper.FormatCounts(report).Should().Be(
+        var formattedCounts =
+            CoreLibraryTestHelper.FormatCounts(report);
+
+        formattedCounts.Should().Be(
             """
             InstructionCount: 14530
             InvocationCount: 496
@@ -1246,7 +1249,10 @@ public class KernelJsonFunctionTests
 
         value.Should().Be(OkOf(Integer(1)));
 
-        CoreLibraryTestHelper.FormatCounts(report).Should().Be(
+        var formattedCounts =
+            CoreLibraryTestHelper.FormatCounts(report);
+
+        formattedCounts.Should().Be(
             """
             InstructionCount: 18453
             InvocationCount: 642

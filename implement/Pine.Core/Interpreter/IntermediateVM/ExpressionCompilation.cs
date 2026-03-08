@@ -57,7 +57,8 @@ public record ExpressionCompilation(
         PineVMParseCache parseCache,
         bool disableReduction,
         bool enableTailRecursionOptimization,
-        Func<Expression, PineValueClass?, bool> skipInlining)
+        Func<Expression, PineValueClass?, bool> skipInlining,
+        IDictionary<Expression, Expression>? reducedExpressionCache = null)
     {
         var genericParameters =
             StaticFunctionInterface.FromExpression(rootExpression);
@@ -72,7 +73,8 @@ public record ExpressionCompilation(
                     parseCache: parseCache,
                     disableReduction: disableReduction,
                     skipInlining: skipInlining,
-                    enableTailRecursionOptimization: enableTailRecursionOptimization),
+                    enableTailRecursionOptimization: enableTailRecursionOptimization,
+                    reducedExpressionCache: reducedExpressionCache),
                 TrackEnvConstraint: null);
 
         var specialized =
@@ -92,8 +94,9 @@ public record ExpressionCompilation(
                                     parametersAsLocals: genericParameters,
                                     parseCache: parseCache,
                                     disableReduction: disableReduction,
-                        enableTailRecursionOptimization: enableTailRecursionOptimization,
-                                    skipInlining: skipInlining),
+                                    enableTailRecursionOptimization: enableTailRecursionOptimization,
+                                    skipInlining: skipInlining,
+                                    reducedExpressionCache: reducedExpressionCache),
                     TrackEnvConstraint: specialization)))
             .ToImmutableArray();
 
@@ -126,7 +129,8 @@ public record ExpressionCompilation(
         PineVMParseCache parseCache,
         bool disableReduction,
         bool enableTailRecursionOptimization,
-        Func<Expression, PineValueClass?, bool> skipInlining)
+        Func<Expression, PineValueClass?, bool> skipInlining,
+        IDictionary<Expression, Expression>? reducedExpressionCache = null)
     {
         var inlinedStaticInvocations =
             disableReduction || enableTailRecursionOptimization
@@ -140,7 +144,8 @@ public record ExpressionCompilation(
                 maxSubexpressionCount: 4_000,
                 parseCache,
                 disableRecurseAfterInline: false,
-                skipInlining: e => skipInlining(e, null));
+                skipInlining: e => skipInlining(e, null),
+                reducedExpressionCache: reducedExpressionCache);
 
         var expressionWithEnvConstraint =
             envConstraintId is null || enableTailRecursionOptimization
@@ -169,7 +174,8 @@ public record ExpressionCompilation(
                 envConstraintId: envConstraintId,
                 rootExprForms: [rootExpression],
                 disableRecurseAfterInline: false,
-                skipInlining: skipInlining);
+                skipInlining: skipInlining,
+                reducedExpressionCache: reducedExpressionCache);
 
         var allInstructionsBeforeReturn =
             InstructionsFromExpression(
@@ -231,12 +237,14 @@ public record ExpressionCompilation(
         int maxSubexpressionCount,
         PineVMParseCache parseCache,
         bool disableRecurseAfterInline,
-        Func<Expression, bool> skipInlining)
+        Func<Expression, bool> skipInlining,
+        IDictionary<Expression, Expression>? reducedExpressionCache = null)
     {
         var expressionReduced =
             ReducePineExpression.ReduceExpressionBottomUp(
                 currentExpression,
-                parseCache);
+                parseCache,
+                reducedExpressionCache: reducedExpressionCache);
 
         if (maxDepth <= 0)
         {
@@ -303,7 +311,8 @@ public record ExpressionCompilation(
             var inlinedExprReduced =
                 ReducePineExpression.ReduceExpressionBottomUp(
                     inlinedExpr,
-                    parseCache);
+                    parseCache,
+                    reducedExpressionCache: reducedExpressionCache);
 
             var inlinedFinal =
                 InlineStaticInvocationsAndReduceRecursive(
@@ -313,7 +322,8 @@ public record ExpressionCompilation(
                     maxSubexpressionCount: maxSubexpressionCount,
                     parseCache: parseCache,
                     skipInlining: skipInlining,
-                    disableRecurseAfterInline: disableRecurseAfterInline);
+                    disableRecurseAfterInline: disableRecurseAfterInline,
+                    reducedExpressionCache: reducedExpressionCache);
 
             return inlinedFinal;
         }
@@ -384,7 +394,10 @@ public record ExpressionCompilation(
                 underConditional: false);
 
         var expressionInlinedReduced =
-            ReducePineExpression.ReduceExpressionBottomUp(expressionInlined, parseCache);
+            ReducePineExpression.ReduceExpressionBottomUp(
+                expressionInlined,
+                parseCache,
+                reducedExpressionCache: reducedExpressionCache);
 
         return expressionInlinedReduced;
     }
@@ -397,7 +410,8 @@ public record ExpressionCompilation(
         int maxSubexpressionCount,
         PineVMParseCache parseCache,
         bool disableRecurseAfterInline,
-        Func<Expression, PineValueClass?, bool> skipInlining) =>
+        Func<Expression, PineValueClass?, bool> skipInlining,
+        IDictionary<Expression, Expression>? reducedExpressionCache = null) =>
         ReduceExpressionAndInlineRecursive(
             currentExpression: rootExpression,
             inlinedParents: [],
@@ -407,7 +421,8 @@ public record ExpressionCompilation(
             maxSubexpressionCount: maxSubexpressionCount,
             parseCache: parseCache,
             disableRecurseAfterInline: disableRecurseAfterInline,
-            skipInlining: skipInlining);
+            skipInlining: skipInlining,
+            reducedExpressionCache: reducedExpressionCache);
 
     public static Expression ReduceExpressionAndInlineRecursive(
         Expression currentExpression,
@@ -418,7 +433,8 @@ public record ExpressionCompilation(
         int maxSubexpressionCount,
         PineVMParseCache parseCache,
         bool disableRecurseAfterInline,
-        Func<Expression, PineValueClass?, bool> skipInlining)
+        Func<Expression, PineValueClass?, bool> skipInlining,
+        IDictionary<Expression, Expression>? reducedExpressionCache = null)
     {
         var expressionSubstituted =
             envConstraintId is null
@@ -430,7 +446,10 @@ public record ExpressionCompilation(
                 envConstraintId);
 
         var expressionReduced =
-            ReducePineExpression.ReduceExpressionBottomUp(expressionSubstituted, parseCache);
+            ReducePineExpression.ReduceExpressionBottomUp(
+                expressionSubstituted,
+                parseCache,
+                reducedExpressionCache: reducedExpressionCache);
 
         if (maxDepth <= 0)
         {
@@ -517,7 +536,10 @@ public record ExpressionCompilation(
                     SubstituteSubexpressionsForEnvironmentConstraint(inlinedExpr, envConstraintId);
 
                 var inlinedExprReduced =
-                    ReducePineExpression.ReduceExpressionBottomUp(inlinedExprSubstituted, parseCache);
+                    ReducePineExpression.ReduceExpressionBottomUp(
+                        inlinedExprSubstituted,
+                        parseCache,
+                        reducedExpressionCache: reducedExpressionCache);
 
                 {
                     if (500 < inlinedExprReduced.SubexpressionCount)
@@ -567,7 +589,8 @@ public record ExpressionCompilation(
                         maxSubexpressionCount: maxSubexpressionCount,
                         parseCache: parseCache,
                         skipInlining: skipInlining,
-                        disableRecurseAfterInline: disableRecurseAfterInline);
+                        disableRecurseAfterInline: disableRecurseAfterInline,
+                        reducedExpressionCache: reducedExpressionCache);
 
                 {
                     if (500 < inlinedFinal.SubexpressionCount)
@@ -688,7 +711,10 @@ public record ExpressionCompilation(
                 underConditional: false);
 
         var expressionInlinedReduced =
-            ReducePineExpression.ReduceExpressionBottomUp(expressionInlined, parseCache);
+            ReducePineExpression.ReduceExpressionBottomUp(
+                expressionInlined,
+                parseCache,
+                reducedExpressionCache: reducedExpressionCache);
 
         return expressionInlinedReduced;
     }
@@ -801,4 +827,3 @@ public record ExpressionCompilation(
         }
     }
 }
-
