@@ -52,6 +52,12 @@ jobs:
       - name: Check dotnet-script installation
         run: dotnet script --version
 
+      - name: Install dotnet-trace tool
+        run: dotnet  tool  install --global dotnet-trace
+
+      - name: Check dotnet-trace installation
+        run: dotnet trace --version
+
       - name: Install Pine to $RUNNER_TEMP and expose it
         run: |
           set -euo pipefail
