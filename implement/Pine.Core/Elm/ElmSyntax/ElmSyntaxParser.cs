@@ -2923,7 +2923,7 @@ public class ElmSyntaxParser
                         argumentsNodes.Last().Range.End);
 
                 var applicationExpr =
-                    new SyntaxTypes.Expression.Application([functionExpr, .. argumentsNodes]);
+                    new SyntaxTypes.Expression.Application(functionExpr, argumentsNodes);
 
                 return
                     new Node<SyntaxTypes.Expression>(

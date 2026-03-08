@@ -486,8 +486,17 @@ public static class ToFullSyntaxModel
                 Expression: ConvertNode(parenthesizedExpression.Expression, Convert)),
 
             Expression.Application application =>
-            new FullTypes.Expression.Application(
-                ConvertNodes(application.Arguments, Convert)),
+            application.Arguments.Count switch
+            {
+                0 =>
+                throw new System.InvalidOperationException(
+                    "Cannot convert Elm syntax v7 application without a function expression."),
+
+                _ =>
+                new FullTypes.Expression.Application(
+                    ConvertNode(application.Arguments[0], Convert),
+                    ConvertNodes(application.Arguments.Skip(1).ToList(), Convert))
+            },
 
             Expression.OperatorApplication operatorApplication =>
             new FullTypes.Expression.OperatorApplication(

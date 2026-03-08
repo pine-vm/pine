@@ -888,9 +888,17 @@ public abstract record Expression
 
     /// <summary>Function application expression.</summary>
     public sealed record Application(
+        Node<Expression> Function,
         IReadOnlyList<Node<Expression>> Arguments)
         : Expression
     {
+        /*
+         * Aligned with stil4m/elm-syntax v8: Use dedicated property for the 'Function' part:
+         * + https://github.com/stil4m/elm-syntax/issues/43
+         * + https://github.com/stil4m/elm-syntax/pull/48
+         * + https://github.com/stil4m/elm-syntax/blob/4268c7d850577f35ae0975862e376c7365b3064c/src/Elm/Syntax/Expression.elm#L112
+         * */
+
         /// <inheritdoc/>
         public bool Equals(Application? other)
         {
@@ -900,13 +908,17 @@ public abstract record Expression
             if (other is null)
                 return false;
 
-            return Enumerable.SequenceEqual(Arguments, other.Arguments);
+            return
+                EqualityComparer<Node<Expression>>.Default.Equals(Function, other.Function) &&
+                Enumerable.SequenceEqual(Arguments, other.Arguments);
         }
 
         /// <inheritdoc/>
         public override int GetHashCode()
         {
             var hashCode = new System.HashCode();
+
+            hashCode.Add(Function);
 
             foreach (var item in Arguments)
                 hashCode.Add(item);

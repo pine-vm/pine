@@ -315,12 +315,15 @@ public class SetTypeAnnotation
                 return expression with { Value = new ExpressionSyntax.LambdaExpression(updatedLambda) };
 
             case ExpressionSyntax.Application appExpr:
+                var updatedFunction =
+                    UpdateExpressionTypeAnnotations(appExpr.Function, parentPath, declarationsTypeAnnotations);
+
                 var updatedArgs =
                     appExpr.Arguments
                     .Select(arg => UpdateExpressionTypeAnnotations(arg, parentPath, declarationsTypeAnnotations))
                     .ToList();
 
-                return expression with { Value = new ExpressionSyntax.Application(updatedArgs) };
+                return expression with { Value = new ExpressionSyntax.Application(updatedFunction, updatedArgs) };
 
             case ExpressionSyntax.OperatorApplication opApp:
                 var updatedLeft =

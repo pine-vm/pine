@@ -1,7 +1,7 @@
 using AwesomeAssertions;
+using Pine.Core.Elm.ElmSyntax.SyntaxModel;
 using System.Collections.Generic;
 using Xunit;
-using Pine.Core.Elm.ElmSyntax.SyntaxModel;
 
 using ModuleName = System.Collections.Generic.IReadOnlyList<string>;
 
@@ -20,14 +20,16 @@ public class TypesTests
         params TNode[] rest)
     {
         var restList = new List<(Location SeparatorLocation, TNode Node)>();
+
         foreach (var item in rest)
         {
             restList.Add((separatorLocation, item));
         }
 
-        return new SeparatedSyntaxList<TNode>.NonEmpty(
-            First: first,
-            Rest: restList);
+        return
+            new SeparatedSyntaxList<TNode>.NonEmpty(
+                First: first,
+                Rest: restList);
     }
 
     [Fact]
@@ -94,14 +96,15 @@ public class TypesTests
     {
         var location = new Location(1, 5);
 
-        var list1 = new SeparatedSyntaxList<string>.NonEmpty(
-            "first",
-            [(location, "second")]
-        );
-        var list2 = new SeparatedSyntaxList<string>.NonEmpty(
-            "first",
-            [(location, "second")]
-        );
+        var list1 =
+            new SeparatedSyntaxList<string>.NonEmpty(
+                "first",
+                [(location, "second")]);
+
+        var list2 =
+            new SeparatedSyntaxList<string>.NonEmpty(
+                "first",
+                [(location, "second")]);
 
         list1.Should().Be(list2);
         list1.GetHashCode().Should().Be(list2.GetHashCode());
@@ -114,18 +117,19 @@ public class TypesTests
         var importLoc = new Location(1, 1);
         ModuleName moduleName = ["List"];
 
-        var import1 = new Import(
-            importLoc,
-            new Node<ModuleName>(range, moduleName),
-            null,
-            null
-        );
-        var import2 = new Import(
-            importLoc,
-            new Node<ModuleName>(range, moduleName),
-            null,
-            null
-        );
+        var import1 =
+            new Import(
+                importLoc,
+                new Node<ModuleName>(range, moduleName),
+                null,
+                null);
+
+        var import2 =
+            new Import(
+                importLoc,
+                new Node<ModuleName>(range, moduleName),
+                null,
+                null);
 
         import1.Should().Be(import2);
         import1.GetHashCode().Should().Be(import2.GetHashCode());
@@ -139,16 +143,17 @@ public class TypesTests
         var exposingTokenLoc = new Location(1, 15);
         ModuleName moduleName = ["Test"];
 
-        var moduleData1 = new DefaultModuleData(
-            new Node<ModuleName>(range, moduleName),
-            exposingTokenLoc,
-            new Node<Exposing>(range, new Exposing.All(range))
-        );
-        var moduleData2 = new DefaultModuleData(
-            new Node<ModuleName>(range, moduleName),
-            exposingTokenLoc,
-            new Node<Exposing>(range, new Exposing.All(range))
-        );
+        var moduleData1 =
+            new DefaultModuleData(
+                new Node<ModuleName>(range, moduleName),
+                exposingTokenLoc,
+                new Node<Exposing>(range, new Exposing.All(range)));
+
+        var moduleData2 =
+            new DefaultModuleData(
+                new Node<ModuleName>(range, moduleName),
+                exposingTokenLoc,
+                new Node<Exposing>(range, new Exposing.All(range)));
 
         var module1 = new Module.NormalModule(moduleTokenLoc, moduleData1);
         var module2 = new Module.NormalModule(moduleTokenLoc, moduleData2);
@@ -166,16 +171,17 @@ public class TypesTests
         var exposingTokenLoc = new Location(1, 15);
         ModuleName moduleName = ["Test"];
 
-        var moduleData1 = new DefaultModuleData(
-            new Node<ModuleName>(range, moduleName),
-            exposingTokenLoc,
-            new Node<Exposing>(range, new Exposing.All(range))
-        );
-        var moduleData2 = new DefaultModuleData(
-            new Node<ModuleName>(range, moduleName),
-            exposingTokenLoc,
-            new Node<Exposing>(range, new Exposing.All(range))
-        );
+        var moduleData1 =
+            new DefaultModuleData(
+                new Node<ModuleName>(range, moduleName),
+                exposingTokenLoc,
+                new Node<Exposing>(range, new Exposing.All(range)));
+
+        var moduleData2 =
+            new DefaultModuleData(
+                new Node<ModuleName>(range, moduleName),
+                exposingTokenLoc,
+                new Node<Exposing>(range, new Exposing.All(range)));
 
         var module1 = new Module.PortModule(portTokenLoc, moduleTokenLoc, moduleData1);
         var module2 = new Module.PortModule(portTokenLoc, moduleTokenLoc, moduleData2);
@@ -205,20 +211,20 @@ public class TypesTests
         var node1 = new Node<TopLevelExpose>(nodeRange, new TopLevelExpose.FunctionExpose("test"));
         var nodesList1 = new SeparatedSyntaxList<Node<TopLevelExpose>>.NonEmpty(node1, []);
 
-        var exposing1 = new Exposing.Explicit(
-            OpenParenLocation: new Location(1, 1),
-            Nodes: nodesList1,
-            CloseParenLocation: new Location(1, 7)
-        );
+        var exposing1 =
+            new Exposing.Explicit(
+                OpenParenLocation: new Location(1, 1),
+                Nodes: nodesList1,
+                CloseParenLocation: new Location(1, 7));
 
         var node2 = new Node<TopLevelExpose>(nodeRange, new TopLevelExpose.FunctionExpose("test"));
         var nodesList2 = new SeparatedSyntaxList<Node<TopLevelExpose>>.NonEmpty(node2, []);
 
-        var exposing2 = new Exposing.Explicit(
-            OpenParenLocation: new Location(1, 1),
-            Nodes: nodesList2,
-            CloseParenLocation: new Location(1, 7)
-        );
+        var exposing2 =
+            new Exposing.Explicit(
+                OpenParenLocation: new Location(1, 1),
+                Nodes: nodesList2,
+                CloseParenLocation: new Location(1, 7));
 
         exposing1.Should().Be(exposing2);
         exposing1.GetHashCode().Should().Be(exposing2.GetHashCode());
@@ -324,20 +330,19 @@ public class TypesTests
         var range = new Range(new Location(1, 1), new Location(1, 10));
         var commaLoc = new Location(1, 5);
 
-        var expr1 = new SyntaxTypes.Expression.ListExpr(
-            CreateSeparatedList(
-                new Node<SyntaxTypes.Expression>(range, new SyntaxTypes.Expression.Integer("1")),
-                commaLoc,
-                new Node<SyntaxTypes.Expression>(range, new SyntaxTypes.Expression.Integer("2"))
-            )
-        );
-        var expr2 = new SyntaxTypes.Expression.ListExpr(
-            CreateSeparatedList(
-                new Node<SyntaxTypes.Expression>(range, new SyntaxTypes.Expression.Integer("1")),
-                commaLoc,
-                new Node<SyntaxTypes.Expression>(range, new SyntaxTypes.Expression.Integer("2"))
-            )
-        );
+        var expr1 =
+            new SyntaxTypes.Expression.ListExpr(
+                CreateSeparatedList(
+                    new Node<SyntaxTypes.Expression>(range, new SyntaxTypes.Expression.Integer("1")),
+                    commaLoc,
+                    new Node<SyntaxTypes.Expression>(range, new SyntaxTypes.Expression.Integer("2"))));
+
+        var expr2 =
+            new SyntaxTypes.Expression.ListExpr(
+                CreateSeparatedList(
+                    new Node<SyntaxTypes.Expression>(range, new SyntaxTypes.Expression.Integer("1")),
+                    commaLoc,
+                    new Node<SyntaxTypes.Expression>(range, new SyntaxTypes.Expression.Integer("2"))));
 
         expr1.Should().Be(expr2);
         expr1.GetHashCode().Should().Be(expr2.GetHashCode());
@@ -349,20 +354,19 @@ public class TypesTests
         var range = new Range(new Location(1, 1), new Location(1, 10));
         var commaLoc = new Location(1, 5);
 
-        var expr1 = new SyntaxTypes.Expression.TupledExpression(
-            CreateSeparatedList(
-                new Node<SyntaxTypes.Expression>(range, new SyntaxTypes.Expression.Integer("1")),
-                commaLoc,
-                new Node<SyntaxTypes.Expression>(range, new SyntaxTypes.Expression.Integer("2"))
-            )
-        );
-        var expr2 = new SyntaxTypes.Expression.TupledExpression(
-            CreateSeparatedList(
-                new Node<SyntaxTypes.Expression>(range, new SyntaxTypes.Expression.Integer("1")),
-                commaLoc,
-                new Node<SyntaxTypes.Expression>(range, new SyntaxTypes.Expression.Integer("2"))
-            )
-        );
+        var expr1 =
+            new SyntaxTypes.Expression.TupledExpression(
+                CreateSeparatedList(
+                    new Node<SyntaxTypes.Expression>(range, new SyntaxTypes.Expression.Integer("1")),
+                    commaLoc,
+                    new Node<SyntaxTypes.Expression>(range, new SyntaxTypes.Expression.Integer("2"))));
+
+        var expr2 =
+            new SyntaxTypes.Expression.TupledExpression(
+                CreateSeparatedList(
+                    new Node<SyntaxTypes.Expression>(range, new SyntaxTypes.Expression.Integer("1")),
+                    commaLoc,
+                    new Node<SyntaxTypes.Expression>(range, new SyntaxTypes.Expression.Integer("2"))));
 
         expr1.Should().Be(expr2);
         expr1.GetHashCode().Should().Be(expr2.GetHashCode());
@@ -393,16 +397,18 @@ public class TypesTests
     {
         var range = new Range(new Location(1, 1), new Location(1, 10));
 
-        var typeAnnotations = new SeparatedSyntaxList<Node<TypeAnnotation>>.NonEmpty(
-            new Node<TypeAnnotation>(range, new TypeAnnotation.GenericType("a")),
-            []);
+        var typeAnnotations =
+            new SeparatedSyntaxList<Node<TypeAnnotation>>.NonEmpty(
+                new Node<TypeAnnotation>(range, new TypeAnnotation.GenericType("a")),
+                []);
 
-        var type1 = new TypeAnnotation.Tupled(
-            typeAnnotations
-        );
-        var type2 = new TypeAnnotation.Tupled(
-            typeAnnotations
-        );
+        var type1 =
+            new TypeAnnotation.Tupled(
+                typeAnnotations);
+
+        var type2 =
+            new TypeAnnotation.Tupled(
+                typeAnnotations);
 
         type1.Should().Be(type2);
         type1.GetHashCode().Should().Be(type2.GetHashCode());
@@ -480,18 +486,19 @@ public class TypesTests
         var backslashLoc = new Location(1, 1);
         var arrowLoc = new Location(1, 5);
 
-        var lambda1 = new LambdaStruct(
-            backslashLoc,
-            [new Node<Pattern>(range, new Pattern.VarPattern("x"))],
-            arrowLoc,
-            new Node<SyntaxTypes.Expression>(range, new SyntaxTypes.Expression.Integer("42"))
-        );
-        var lambda2 = new LambdaStruct(
-            backslashLoc,
-            [new Node<Pattern>(range, new Pattern.VarPattern("x"))],
-            arrowLoc,
-            new Node<SyntaxTypes.Expression>(range, new SyntaxTypes.Expression.Integer("42"))
-        );
+        var lambda1 =
+            new LambdaStruct(
+                backslashLoc,
+                [new Node<Pattern>(range, new Pattern.VarPattern("x"))],
+                arrowLoc,
+                new Node<SyntaxTypes.Expression>(range, new SyntaxTypes.Expression.Integer("42")));
+
+        var lambda2 =
+            new LambdaStruct(
+                backslashLoc,
+                [new Node<Pattern>(range, new Pattern.VarPattern("x"))],
+                arrowLoc,
+                new Node<SyntaxTypes.Expression>(range, new SyntaxTypes.Expression.Integer("42")));
 
         lambda1.Should().Be(lambda2);
         lambda1.GetHashCode().Should().Be(lambda2.GetHashCode());
@@ -505,24 +512,25 @@ public class TypesTests
         var ofLoc = new Location(1, 5);
         var arrowLoc = new Location(1, 10);
 
-        var caseItem = new Case(
-            new Node<Pattern>(range, new Pattern.VarPattern("x")),
-            arrowLoc,
-            new Node<SyntaxTypes.Expression>(range, new SyntaxTypes.Expression.Integer("42"))
-        );
+        var caseItem =
+            new Case(
+                new Node<Pattern>(range, new Pattern.VarPattern("x")),
+                arrowLoc,
+                new Node<SyntaxTypes.Expression>(range, new SyntaxTypes.Expression.Integer("42")));
 
-        var block1 = new CaseBlock(
-            caseLoc,
-            new Node<SyntaxTypes.Expression>(range, new SyntaxTypes.Expression.Integer("1")),
-            ofLoc,
-            [caseItem]
-        );
-        var block2 = new CaseBlock(
-            caseLoc,
-            new Node<SyntaxTypes.Expression>(range, new SyntaxTypes.Expression.Integer("1")),
-            ofLoc,
-            [caseItem]
-        );
+        var block1 =
+            new CaseBlock(
+                caseLoc,
+                new Node<SyntaxTypes.Expression>(range, new SyntaxTypes.Expression.Integer("1")),
+                ofLoc,
+                [caseItem]);
+
+        var block2 =
+            new CaseBlock(
+                caseLoc,
+                new Node<SyntaxTypes.Expression>(range, new SyntaxTypes.Expression.Integer("1")),
+                ofLoc,
+                [caseItem]);
 
         block1.Should().Be(block2);
         block1.GetHashCode().Should().Be(block2.GetHashCode());
@@ -534,20 +542,23 @@ public class TypesTests
         var range = new Range(new Location(1, 1), new Location(1, 10));
         var colonLoc = new Location(1, 5);
 
-        var field = new RecordField(
-            new Node<string>(range, "name"),
-            colonLoc,
-            new Node<TypeAnnotation>(range, new TypeAnnotation.GenericType("String"))
-        );
+        var field =
+            new RecordField(
+                new Node<string>(range, "name"),
+                colonLoc,
+                new Node<TypeAnnotation>(range, new TypeAnnotation.GenericType("String")));
 
-        var def1 = new RecordDefinition(
-            new SeparatedSyntaxList<Node<RecordField>>.NonEmpty(
-                new Node<RecordField>(range, field),
-                []));
-        var def2 = new RecordDefinition(
-            new SeparatedSyntaxList<Node<RecordField>>.NonEmpty(
-                new Node<RecordField>(range, field),
-                []));
+        var def1 =
+            new RecordDefinition(
+                new SeparatedSyntaxList<Node<RecordField>>.NonEmpty(
+                    new Node<RecordField>(range, field),
+                    []));
+
+        var def2 =
+            new RecordDefinition(
+                new SeparatedSyntaxList<Node<RecordField>>.NonEmpty(
+                    new Node<RecordField>(range, field),
+                    []));
 
         def1.Should().Be(def2);
         def1.GetHashCode().Should().Be(def2.GetHashCode());
@@ -558,14 +569,15 @@ public class TypesTests
     {
         var range = new Range(new Location(1, 1), new Location(1, 10));
 
-        var ctor1 = new ValueConstructor(
-            new Node<string>(range, "Just"),
-            [new Node<TypeAnnotation>(range, new TypeAnnotation.GenericType("a"))]
-        );
-        var ctor2 = new ValueConstructor(
-            new Node<string>(range, "Just"),
-            [new Node<TypeAnnotation>(range, new TypeAnnotation.GenericType("a"))]
-        );
+        var ctor1 =
+            new ValueConstructor(
+                new Node<string>(range, "Just"),
+                [new Node<TypeAnnotation>(range, new TypeAnnotation.GenericType("a"))]);
+
+        var ctor2 =
+            new ValueConstructor(
+                new Node<string>(range, "Just"),
+                [new Node<TypeAnnotation>(range, new TypeAnnotation.GenericType("a"))]);
 
         ctor1.Should().Be(ctor2);
         ctor1.GetHashCode().Should().Be(ctor2.GetHashCode());
@@ -579,24 +591,25 @@ public class TypesTests
         var aliasLoc = new Location(1, 6);
         var equalsLoc = new Location(1, 15);
 
-        var alias1 = new TypeAlias(
-            null,
-            typeLoc,
-            aliasLoc,
-            new Node<string>(range, "MyAlias"),
-            [],
-            equalsLoc,
-            new Node<TypeAnnotation>(range, new TypeAnnotation.Unit())
-        );
-        var alias2 = new TypeAlias(
-            null,
-            typeLoc,
-            aliasLoc,
-            new Node<string>(range, "MyAlias"),
-            [],
-            equalsLoc,
-            new Node<TypeAnnotation>(range, new TypeAnnotation.Unit())
-        );
+        var alias1 =
+            new TypeAlias(
+                null,
+                typeLoc,
+                aliasLoc,
+                new Node<string>(range, "MyAlias"),
+                [],
+                equalsLoc,
+                new Node<TypeAnnotation>(range, new TypeAnnotation.Unit()));
+
+        var alias2 =
+            new TypeAlias(
+                null,
+                typeLoc,
+                aliasLoc,
+                new Node<string>(range, "MyAlias"),
+                [],
+                equalsLoc,
+                new Node<TypeAnnotation>(range, new TypeAnnotation.Unit()));
 
         alias1.Should().Be(alias2);
         alias1.GetHashCode().Should().Be(alias2.GetHashCode());
@@ -609,22 +622,23 @@ public class TypesTests
         var typeLoc = new Location(1, 1);
         var equalsLoc = new Location(1, 15);
 
-        var type1 = new TypeStruct(
-            null,
-            typeLoc,
-            new Node<string>(range, "MyType"),
-            [],
-            equalsLoc,
-            []
-        );
-        var type2 = new TypeStruct(
-            null,
-            typeLoc,
-            new Node<string>(range, "MyType"),
-            [],
-            equalsLoc,
-            []
-        );
+        var type1 =
+            new TypeStruct(
+                null,
+                typeLoc,
+                new Node<string>(range, "MyType"),
+                [],
+                equalsLoc,
+                []);
+
+        var type2 =
+            new TypeStruct(
+                null,
+                typeLoc,
+                new Node<string>(range, "MyType"),
+                [],
+                equalsLoc,
+                []);
 
         type1.Should().Be(type2);
         type1.GetHashCode().Should().Be(type2.GetHashCode());
@@ -636,18 +650,19 @@ public class TypesTests
         var range = new Range(new Location(1, 1), new Location(1, 10));
         var equalsLoc = new Location(1, 10);
 
-        var impl1 = new FunctionImplementation(
-            new Node<string>(range, "test"),
-            [],
-            equalsLoc,
-            new Node<SyntaxTypes.Expression>(range, new SyntaxTypes.Expression.UnitExpr())
-        );
-        var impl2 = new FunctionImplementation(
-            new Node<string>(range, "test"),
-            [],
-            equalsLoc,
-            new Node<SyntaxTypes.Expression>(range, new SyntaxTypes.Expression.UnitExpr())
-        );
+        var impl1 =
+            new FunctionImplementation(
+                new Node<string>(range, "test"),
+                [],
+                equalsLoc,
+                new Node<SyntaxTypes.Expression>(range, new SyntaxTypes.Expression.UnitExpr()));
+
+        var impl2 =
+            new FunctionImplementation(
+                new Node<string>(range, "test"),
+                [],
+                equalsLoc,
+                new Node<SyntaxTypes.Expression>(range, new SyntaxTypes.Expression.UnitExpr()));
 
         impl1.Should().Be(impl2);
         impl1.GetHashCode().Should().Be(impl2.GetHashCode());
@@ -660,22 +675,23 @@ public class TypesTests
         var infixLoc = new Location(1, 1);
         var equalsLoc = new Location(1, 15);
 
-        var infix1 = new Infix(
-            infixLoc,
-            new Node<InfixDirection>(range, InfixDirection.Left),
-            new Node<int>(range, 4),
-            new Node<string>(range, "+"),
-            equalsLoc,
-            new Node<string>(range, "add")
-        );
-        var infix2 = new Infix(
-            infixLoc,
-            new Node<InfixDirection>(range, InfixDirection.Left),
-            new Node<int>(range, 4),
-            new Node<string>(range, "+"),
-            equalsLoc,
-            new Node<string>(range, "add")
-        );
+        var infix1 =
+            new Infix(
+                infixLoc,
+                new Node<InfixDirection>(range, InfixDirection.Left),
+                new Node<int>(range, 4),
+                new Node<string>(range, "+"),
+                equalsLoc,
+                new Node<string>(range, "add"));
+
+        var infix2 =
+            new Infix(
+                infixLoc,
+                new Node<InfixDirection>(range, InfixDirection.Left),
+                new Node<int>(range, 4),
+                new Node<string>(range, "+"),
+                equalsLoc,
+                new Node<string>(range, "add"));
 
         infix1.Should().Be(infix2);
         infix1.GetHashCode().Should().Be(infix2.GetHashCode());
@@ -687,16 +703,17 @@ public class TypesTests
         var range = new Range(new Location(1, 1), new Location(1, 10));
         var colonLoc = new Location(1, 5);
 
-        var sig1 = new Signature(
-            new Node<string>(range, "myFunc"),
-            colonLoc,
-            new Node<TypeAnnotation>(range, new TypeAnnotation.Unit())
-        );
-        var sig2 = new Signature(
-            new Node<string>(range, "myFunc"),
-            colonLoc,
-            new Node<TypeAnnotation>(range, new TypeAnnotation.Unit())
-        );
+        var sig1 =
+            new Signature(
+                new Node<string>(range, "myFunc"),
+                colonLoc,
+                new Node<TypeAnnotation>(range, new TypeAnnotation.Unit()));
+
+        var sig2 =
+            new Signature(
+                new Node<string>(range, "myFunc"),
+                colonLoc,
+                new Node<TypeAnnotation>(range, new TypeAnnotation.Unit()));
 
         sig1.Should().Be(sig2);
         sig1.GetHashCode().Should().Be(sig2.GetHashCode());
@@ -725,8 +742,10 @@ public class TypesTests
         var valueExpr = new Node<SyntaxTypes.Expression>(range, new SyntaxTypes.Expression.Literal("test"));
         var field = new RecordExprField(fieldName, equalsLoc, valueExpr);
 
-        var fieldsList = new SeparatedSyntaxList<RecordExprField>.NonEmpty(
-            field, []);
+        var fieldsList =
+            new SeparatedSyntaxList<RecordExprField>.NonEmpty(
+                field,
+                []);
 
         var expr1 = new SyntaxTypes.Expression.RecordExpr(fieldsList);
         var expr2 = new SyntaxTypes.Expression.RecordExpr(fieldsList);
@@ -746,17 +765,22 @@ public class TypesTests
         var valueExpr = new Node<SyntaxTypes.Expression>(range, new SyntaxTypes.Expression.Literal("test"));
         var field = new RecordExprField(fieldName, equalsLoc, valueExpr);
 
-        var fieldsList = new SeparatedSyntaxList<RecordExprField>.NonEmpty(
-            field, []);
+        var fieldsList =
+            new SeparatedSyntaxList<RecordExprField>.NonEmpty(
+                field,
+                []);
 
-        var expr1 = new SyntaxTypes.Expression.RecordUpdateExpression(
-            new Node<string>(range, "record"),
-            pipeLoc,
-            fieldsList);
-        var expr2 = new SyntaxTypes.Expression.RecordUpdateExpression(
-            new Node<string>(range, "record"),
-            pipeLoc,
-            fieldsList);
+        var expr1 =
+            new SyntaxTypes.Expression.RecordUpdateExpression(
+                new Node<string>(range, "record"),
+                pipeLoc,
+                fieldsList);
+
+        var expr2 =
+            new SyntaxTypes.Expression.RecordUpdateExpression(
+                new Node<string>(range, "record"),
+                pipeLoc,
+                fieldsList);
 
         expr1.Should().Be(expr2);
         expr1.GetHashCode().Should().Be(expr2.GetHashCode());

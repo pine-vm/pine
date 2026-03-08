@@ -482,7 +482,7 @@ public static class FromFullSyntaxModel
 
             FullTypes.Expression.Application application =>
             new Expression.Application(
-                ConvertExpressionNodes(application.Arguments)),
+                [ConvertExpressionNode(application.Function), .. ConvertExpressionNodes(application.Arguments)]),
 
             FullTypes.Expression.OperatorApplication operatorApplication =>
             new Expression.OperatorApplication(

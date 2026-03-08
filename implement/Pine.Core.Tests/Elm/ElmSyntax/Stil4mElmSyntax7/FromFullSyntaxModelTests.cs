@@ -3,6 +3,7 @@ using Pine.Core.Elm.ElmSyntax;
 using Pine.Core.Elm.ElmSyntax.SyntaxModel;
 using System.Collections.Generic;
 using Xunit;
+
 using FullTypes = Pine.Core.Elm.ElmSyntax.SyntaxModel;
 using ModuleName = System.Collections.Generic.IReadOnlyList<string>;
 
@@ -19,14 +20,16 @@ public class FromFullSyntaxModelTests
         params TNode[] rest)
     {
         var restList = new List<(Location SeparatorLocation, TNode Node)>();
+
         foreach (var item in rest)
         {
             restList.Add((separatorLocation, item));
         }
 
-        return new SeparatedSyntaxList<TNode>.NonEmpty(
-            First: first,
-            Rest: restList);
+        return
+            new SeparatedSyntaxList<TNode>.NonEmpty(
+                First: first,
+                Rest: restList);
     }
 
     [Fact]
@@ -37,14 +40,13 @@ public class FromFullSyntaxModelTests
         var exposingTokenLoc = new Location(1, 15);
         ModuleName moduleName = ["Test"];
 
-        var fullModule = new Module.NormalModule(
-            moduleTokenLoc,
-            new DefaultModuleData(
-                new Node<ModuleName>(range, moduleName),
-                exposingTokenLoc,
-                new Node<Exposing>(range, new Exposing.All(range))
-            )
-        );
+        var fullModule =
+            new Module.NormalModule(
+                moduleTokenLoc,
+                new DefaultModuleData(
+                    new Node<ModuleName>(range, moduleName),
+                    exposingTokenLoc,
+                    new Node<Exposing>(range, new Exposing.All(range))));
 
         var result = Core.Elm.ElmSyntax.Stil4mElmSyntax7.FromFullSyntaxModel.Convert(fullModule);
 
@@ -62,15 +64,14 @@ public class FromFullSyntaxModelTests
         var exposingTokenLoc = new Location(1, 15);
         ModuleName moduleName = ["Test"];
 
-        var fullModule = new Module.PortModule(
-            portTokenLoc,
-            moduleTokenLoc,
-            new DefaultModuleData(
-                new Node<ModuleName>(range, moduleName),
-                exposingTokenLoc,
-                new Node<Exposing>(range, new Exposing.All(range))
-            )
-        );
+        var fullModule =
+            new Module.PortModule(
+                portTokenLoc,
+                moduleTokenLoc,
+                new DefaultModuleData(
+                    new Node<ModuleName>(range, moduleName),
+                    exposingTokenLoc,
+                    new Node<Exposing>(range, new Exposing.All(range))));
 
         var result = Core.Elm.ElmSyntax.Stil4mElmSyntax7.FromFullSyntaxModel.Convert(fullModule);
 
@@ -84,12 +85,12 @@ public class FromFullSyntaxModelTests
         var importLoc = new Location(1, 1);
         ModuleName moduleName = ["List"];
 
-        var fullImport = new Import(
-            importLoc,
-            new Node<ModuleName>(range, moduleName),
-            null,
-            null
-        );
+        var fullImport =
+            new Import(
+                importLoc,
+                new Node<ModuleName>(range, moduleName),
+                null,
+                null);
 
         var result = Core.Elm.ElmSyntax.Stil4mElmSyntax7.FromFullSyntaxModel.Convert(fullImport);
 
@@ -107,12 +108,12 @@ public class FromFullSyntaxModelTests
         ModuleName moduleName = ["Platform", "Cmd"];
         ModuleName aliasName = ["Cmd"];
 
-        var fullImport = new Import(
-            importLoc,
-            new Node<ModuleName>(range, moduleName),
-            (asLoc, new Node<ModuleName>(range, aliasName)),
-            null
-        );
+        var fullImport =
+            new Import(
+                importLoc,
+                new Node<ModuleName>(range, moduleName),
+                (asLoc, new Node<ModuleName>(range, aliasName)),
+                null);
 
         var result = Core.Elm.ElmSyntax.Stil4mElmSyntax7.FromFullSyntaxModel.Convert(fullImport);
 
@@ -140,15 +141,17 @@ public class FromFullSyntaxModelTests
         var nodeRange = new Range(new Location(1, 2), new Location(1, 6));
 
         var node = new Node<TopLevelExpose>(nodeRange, new TopLevelExpose.FunctionExpose("test"));
-        var nodesList = new SeparatedSyntaxList<Node<TopLevelExpose>>.NonEmpty(
-            node,
-            []);
 
-        var fullExposing = new Exposing.Explicit(
-            OpenParenLocation: new Location(1, 1),
-            Nodes: nodesList,
-            CloseParenLocation: new Location(1, 7)
-        );
+        var nodesList =
+            new SeparatedSyntaxList<Node<TopLevelExpose>>.NonEmpty(
+                node,
+                []);
+
+        var fullExposing =
+            new Exposing.Explicit(
+                OpenParenLocation: new Location(1, 1),
+                Nodes: nodesList,
+                CloseParenLocation: new Location(1, 7));
 
         var result = Core.Elm.ElmSyntax.Stil4mElmSyntax7.FromFullSyntaxModel.Convert(fullExposing);
 
@@ -218,14 +221,14 @@ public class FromFullSyntaxModelTests
         var thenLoc = new Location(1, 10);
         var elseLoc = new Location(1, 20);
 
-        var fullExpr = new FullTypes.Expression.IfBlock(
-            ifLoc,
-            new Node<FullTypes.Expression>(range, new FullTypes.Expression.Integer("1")),
-            thenLoc,
-            new Node<FullTypes.Expression>(range, new FullTypes.Expression.Integer("2")),
-            elseLoc,
-            new Node<FullTypes.Expression>(range, new FullTypes.Expression.Integer("3"))
-        );
+        var fullExpr =
+            new FullTypes.Expression.IfBlock(
+                ifLoc,
+                new Node<FullTypes.Expression>(range, new FullTypes.Expression.Integer("1")),
+                thenLoc,
+                new Node<FullTypes.Expression>(range, new FullTypes.Expression.Integer("2")),
+                elseLoc,
+                new Node<FullTypes.Expression>(range, new FullTypes.Expression.Integer("3")));
 
         var result = Core.Elm.ElmSyntax.Stil4mElmSyntax7.FromFullSyntaxModel.Convert(fullExpr);
 
@@ -240,13 +243,12 @@ public class FromFullSyntaxModelTests
         var range = new Range(new Location(1, 1), new Location(1, 10));
         var commaLoc = new Location(1, 5);
 
-        var fullExpr = new FullTypes.Expression.ListExpr(
-            CreateSeparatedList(
-                new Node<FullTypes.Expression>(range, new FullTypes.Expression.Integer("1")),
-                commaLoc,
-                new Node<FullTypes.Expression>(range, new FullTypes.Expression.Integer("2"))
-            )
-        );
+        var fullExpr =
+            new FullTypes.Expression.ListExpr(
+                CreateSeparatedList(
+                    new Node<FullTypes.Expression>(range, new FullTypes.Expression.Integer("1")),
+                    commaLoc,
+                    new Node<FullTypes.Expression>(range, new FullTypes.Expression.Integer("2"))));
 
         var result = Core.Elm.ElmSyntax.Stil4mElmSyntax7.FromFullSyntaxModel.Convert(fullExpr);
 
@@ -290,8 +292,11 @@ public class FromFullSyntaxModelTests
 
         var firstElem = new Node<Pattern>(range, new Pattern.VarPattern("x"));
         var secondElem = new Node<Pattern>(range, new Pattern.VarPattern("y"));
-        var elements = new SeparatedSyntaxList<Node<Pattern>>.NonEmpty(
-            firstElem, [(new Location(1, 5), secondElem)]);
+
+        var elements =
+            new SeparatedSyntaxList<Node<Pattern>>.NonEmpty(
+                firstElem,
+                [(new Location(1, 5), secondElem)]);
 
         var fullPattern = new Pattern.TuplePattern(elements);
 
@@ -318,11 +323,11 @@ public class FromFullSyntaxModelTests
         var range = new Range(new Location(1, 1), new Location(1, 10));
         var commaLoc = new Location(1, 5);
 
-        var fullType = new TypeAnnotation.Tupled(
-            new SeparatedSyntaxList<Node<TypeAnnotation>>.NonEmpty(
-                new Node<TypeAnnotation>(range, new TypeAnnotation.GenericType("a")),
-                [(commaLoc, new Node<TypeAnnotation>(range, new TypeAnnotation.GenericType("b")))])
-        );
+        var fullType =
+            new TypeAnnotation.Tupled(
+                new SeparatedSyntaxList<Node<TypeAnnotation>>.NonEmpty(
+                    new Node<TypeAnnotation>(range, new TypeAnnotation.GenericType("a")),
+                    [(commaLoc, new Node<TypeAnnotation>(range, new TypeAnnotation.GenericType("b")))]));
 
         var result = Core.Elm.ElmSyntax.Stil4mElmSyntax7.FromFullSyntaxModel.Convert(fullType);
 
@@ -337,12 +342,12 @@ public class FromFullSyntaxModelTests
         var backslashLoc = new Location(1, 1);
         var arrowLoc = new Location(1, 5);
 
-        var fullLambda = new LambdaStruct(
-            backslashLoc,
-            [new Node<Pattern>(range, new Pattern.VarPattern("x"))],
-            arrowLoc,
-            new Node<FullTypes.Expression>(range, new FullTypes.Expression.Integer("42"))
-        );
+        var fullLambda =
+            new LambdaStruct(
+                backslashLoc,
+                [new Node<Pattern>(range, new Pattern.VarPattern("x"))],
+                arrowLoc,
+                new Node<FullTypes.Expression>(range, new FullTypes.Expression.Integer("42")));
 
         var result = Core.Elm.ElmSyntax.Stil4mElmSyntax7.FromFullSyntaxModel.Convert(fullLambda);
 
@@ -358,18 +363,17 @@ public class FromFullSyntaxModelTests
         var ofLoc = new Location(1, 5);
         var arrowLoc = new Location(1, 10);
 
-        var fullCaseBlock = new CaseBlock(
-            caseLoc,
-            new Node<FullTypes.Expression>(range, new FullTypes.Expression.Integer("1")),
-            ofLoc,
-            [
+        var fullCaseBlock =
+            new CaseBlock(
+                caseLoc,
+                new Node<FullTypes.Expression>(range, new FullTypes.Expression.Integer("1")),
+                ofLoc,
+                [
                 new Case(
                     new Node<Pattern>(range, new Pattern.VarPattern("x")),
                     arrowLoc,
-                    new Node<FullTypes.Expression>(range, new FullTypes.Expression.Integer("42"))
-                )
-            ]
-        );
+                    new Node<FullTypes.Expression>(range, new FullTypes.Expression.Integer("42")))
+                ]);
 
         var result = Core.Elm.ElmSyntax.Stil4mElmSyntax7.FromFullSyntaxModel.Convert(fullCaseBlock);
 
@@ -383,21 +387,18 @@ public class FromFullSyntaxModelTests
         var range = new Range(new Location(1, 1), new Location(1, 10));
         var equalsLoc = new Location(1, 10);
 
-        var fullDeclaration = new Declaration.FunctionDeclaration(
-            new FunctionStruct(
-                Documentation: null,
-                Signature: null,
-                Declaration: new Node<FunctionImplementation>(
-                    range,
-                    new FunctionImplementation(
-                        new Node<string>(range, "test"),
-                        [],
-                        equalsLoc,
-                        new Node<FullTypes.Expression>(range, new FullTypes.Expression.UnitExpr())
-                    )
-                )
-            )
-        );
+        var fullDeclaration =
+            new Declaration.FunctionDeclaration(
+                new FunctionStruct(
+                    Documentation: null,
+                    Signature: null,
+                    Declaration: new Node<FunctionImplementation>(
+                        range,
+                        new FunctionImplementation(
+                            new Node<string>(range, "test"),
+                            [],
+                            equalsLoc,
+                            new Node<FullTypes.Expression>(range, new FullTypes.Expression.UnitExpr())))));
 
         var result = Core.Elm.ElmSyntax.Stil4mElmSyntax7.FromFullSyntaxModel.Convert(fullDeclaration);
 

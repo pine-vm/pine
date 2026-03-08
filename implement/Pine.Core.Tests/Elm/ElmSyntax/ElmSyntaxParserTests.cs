@@ -76,14 +76,46 @@ public class ElmSyntaxParserTests
         // First field: a : Int
         var firstField = fields!.First;
         // The field should end where "Int" ends
-        firstField.Value.FieldType.Range.End.Should().Be(firstField.Range.End,
+        firstField.Value.FieldType.Range.End.Should().Be(
+            firstField.Range.End,
             "first field range should end at the field type end");
 
         // Second field: b : String
         var secondField = fields.Rest[0].Node;
         // The field should end where "String" ends
-        secondField.Value.FieldType.Range.End.Should().Be(secondField.Range.End,
+        secondField.Value.FieldType.Range.End.Should().Be(
+            secondField.Range.End,
             "second field range should end at the field type end");
+    }
+
+    [Fact]
+    public void Application_expression_uses_separate_function_property()
+    {
+        var input =
+            """"
+            module Test exposing (..)
+
+
+            value =
+                foo bar baz
+            """";
+
+        var parsedFile =
+            ElmSyntaxParser.ParseModuleText(input)
+            .Extract(err => throw new System.Exception(err));
+
+        var funcDecl =
+            parsedFile.Declarations[0].Value as Declaration.FunctionDeclaration;
+
+        funcDecl.Should().NotBeNull();
+
+        var expr = funcDecl!.Function.Declaration.Value.Expression.Value as ExpressionSyntax.Application;
+
+        expr.Should().NotBeNull();
+        expr!.Arguments.Should().HaveCount(2);
+        expr.Function.Value.Should().Be(new ExpressionSyntax.FunctionOrValue([], "foo"));
+        expr.Arguments[0].Value.Should().Be(new ExpressionSyntax.FunctionOrValue([], "bar"));
+        expr.Arguments[1].Value.Should().Be(new ExpressionSyntax.FunctionOrValue([], "baz"));
     }
 
     [Fact]
@@ -119,13 +151,15 @@ public class ElmSyntaxParserTests
         // First field: a : Int -- trailing comment
         var firstField = fields!.First;
         // The field range should end where "Int" ends, NOT at the end of the comment
-        firstField.Value.FieldType.Range.End.Should().Be(firstField.Range.End,
+        firstField.Value.FieldType.Range.End.Should().Be(
+            firstField.Range.End,
             "first field range should end at the field type end, not including trailing comment");
 
         // Verify the type annotation ends at "Int", not at the comment
         // Row 5: "    { a : Int -- trailing comment"
         // "Int" ends at column 14 (1-indexed)
-        firstField.Value.FieldType.Range.End.Column.Should().Be(14,
+        firstField.Value.FieldType.Range.End.Column.Should().Be(
+            14,
             "Int should end at column 14");
     }
 
@@ -158,12 +192,16 @@ public class ElmSyntaxParserTests
 
         // First field: a : Int
         var firstField = fields!.First;
-        firstField.Value.FieldType.Range.End.Should().Be(firstField.Range.End,
+
+        firstField.Value.FieldType.Range.End.Should().Be(
+            firstField.Range.End,
             "first field range should end at the field type end");
 
         // Second field: b : String -- trailing
         var secondField = fields.Rest[0].Node;
-        secondField.Value.FieldType.Range.End.Should().Be(secondField.Range.End,
+
+        secondField.Value.FieldType.Range.End.Should().Be(
+            secondField.Range.End,
             "second field range should end at the field type end, not including trailing comment");
     }
 }

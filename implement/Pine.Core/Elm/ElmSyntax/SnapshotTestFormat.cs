@@ -276,7 +276,7 @@ public class SnapshotTestFormat
         }
 
         // For applications, create a new node with a multiline range
-        if (formattedValue is ExpressionSyntax.Application application && application.Arguments.Count > 1)
+        if (formattedValue is ExpressionSyntax.Application application && application.Arguments.Count > 0)
         {
             // Application should span multiple rows (from start to end of last argument)
             var lastArg = application.Arguments[application.Arguments.Count - 1];
@@ -380,14 +380,16 @@ public class SnapshotTestFormat
         // Application should be multiline if any argument is a complex (multiline) list or record
         // or if any argument is itself an application that should be multiline
         return
-            app.Arguments.Skip(1).Any(
+            app.Arguments.Any(
                 arg =>
                 arg.Value is ExpressionSyntax.RecordExpr ||
                 arg.Value is ExpressionSyntax.ListExpr listExpr && ShouldFormatListAsMultiline(listExpr) ||
                 arg.Value is ExpressionSyntax.Application innerApp && ShouldFormatApplicationAsMultiline(innerApp));
     }
 
-    private static ExpressionSyntax FormatOperatorApplication(Range originalRange, ExpressionSyntax.OperatorApplication opApp)
+    private static ExpressionSyntax FormatOperatorApplication(
+        Range originalRange,
+        ExpressionSyntax.OperatorApplication opApp)
     {
         // Transform operator application to multiline by marking operands with separate row locations
 
@@ -568,7 +570,9 @@ public class SnapshotTestFormat
                 Fields: ToSeparatedListFromRecordExprFields(fieldsWithLocation, record.Fields));
     }
 
-    private static ExpressionSyntax FormatLambdaExpression(Range originalRange, ExpressionSyntax.LambdaExpression lambda)
+    private static ExpressionSyntax FormatLambdaExpression(
+        Range originalRange,
+        ExpressionSyntax.LambdaExpression lambda)
     {
         // Always format lambda expressions as multiline by placing the body on a new row
 
@@ -614,12 +618,13 @@ public class SnapshotTestFormat
         return new ExpressionSyntax.LambdaExpression(Lambda: formattedLambda);
     }
 
-    private static ExpressionSyntax FormatApplicationForLambdaBody(Range originalRange, ExpressionSyntax.Application app)
+    private static ExpressionSyntax FormatApplicationForLambdaBody(
+        Range originalRange,
+        ExpressionSyntax.Application app)
     {
         // Format application for lambda body context - ensure list arguments are multiline
 
-        if (app.Arguments.Count is 0)
-            return app;
+        var formattedFunction = FormatExpression(app.Function);
 
         // Format each argument, forcing lists to be multiline
         var formattedArgs =
@@ -651,11 +656,20 @@ public class SnapshotTestFormat
         // Mark as multiline by giving different rows to each argument
         var fakeRow = originalRange.Start.Row;
 
+        var functionWithLocation =
+            formattedFunction with
+            {
+                Range =
+                new Range(
+                    Start: new Location(Row: fakeRow, Column: 1),
+                    End: new Location(Row: fakeRow, Column: 15))
+            };
+
         var argsWithLocation =
             formattedArgs.Select(
                 (arg, i) =>
                 {
-                    var argRow = fakeRow + i;
+                    var argRow = fakeRow + i + 1;
 
                     // Preserve multiline ranges for arguments that are already multiline
                     var argEndRow =
@@ -670,13 +684,14 @@ public class SnapshotTestFormat
                         {
                             Range =
                             new Range(
-                                Start: new Location(Row: argRow, Column: i is 0 ? 1 : 5),
+                                Start: new Location(Row: argRow, Column: 5),
                                 End: new Location(Row: argEndRow, Column: 15))
                         };
                 }).ToList();
 
         return
             new ExpressionSyntax.Application(
+                Function: functionWithLocation,
                 Arguments: argsWithLocation);
     }
 
@@ -730,7 +745,7 @@ public class SnapshotTestFormat
             list.Elements.Count > 1 ||
             (list.Elements.Count is 1 && IsExpressionMultiline(list.Elements[0])),
 
-            ExpressionSyntax.Application app => app.Arguments.Count > 1,
+            ExpressionSyntax.Application app => app.Arguments.Count > 0,
 
             _ =>
             false
@@ -741,20 +756,26 @@ public class SnapshotTestFormat
     {
         // Transform application to multiline by marking it with separate row locations
 
-        if (app.Arguments.Count is 0)
-            return app;
-
-        // First argument is the function, rest are arguments
+        var formattedFunction = FormatExpression(app.Function);
         var formattedArgs = app.Arguments.Select(FormatExpression).ToList();
 
         // Mark as multiline by giving different rows to each argument
         var fakeRow = originalRange.Start.Row;
 
+        var functionWithLocation =
+            formattedFunction with
+            {
+                Range =
+                new Range(
+                    Start: new Location(Row: fakeRow, Column: 1),
+                    End: new Location(Row: fakeRow, Column: 15))
+            };
+
         var argsWithLocation =
             formattedArgs.Select(
                 (arg, i) =>
                 {
-                    var argRow = fakeRow + (i * 10); // Use larger spacing to ensure distinct rows
+                    var argRow = fakeRow + ((i + 1) * 10); // Use larger spacing to ensure distinct rows
 
                     // Preserve multiline ranges for arguments that are already multiline
                     // (e.g., lists that should be formatted as multiline)
@@ -770,13 +791,14 @@ public class SnapshotTestFormat
                         {
                             Range =
                             new Range(
-                                Start: new Location(Row: argRow, Column: i is 0 ? 1 : 5),
+                                Start: new Location(Row: argRow, Column: 5),
                                 End: new Location(Row: argEndRow, Column: 15))
                         };
                 }).ToList();
 
         return
             new ExpressionSyntax.Application(
+                Function: functionWithLocation,
                 Arguments: argsWithLocation);
     }
 

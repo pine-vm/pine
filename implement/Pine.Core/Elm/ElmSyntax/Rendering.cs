@@ -445,7 +445,8 @@ public class Rendering
     /// - NewlineCount: The number of newline characters in the content
     /// - LastLineLength: The length of the content after the last newline (or total if no newlines)
     /// </returns>
-    public static (int TotalLength, int NewlineCount, int LastLineLength) GetTripleQuotedStringContentLength(string value)
+    public static (int TotalLength, int NewlineCount, int LastLineLength) GetTripleQuotedStringContentLength(
+        string value)
     {
         var totalLength = 0;
         var newlineCount = 0;
@@ -908,7 +909,9 @@ public class Rendering
                 context.Append("(");
                 RenderSeparatedList(tupled.TypeAnnotations, RenderTypeAnnotation, context);
                 // Close paren location is at the node's range end - 1 (since range end is after the paren)
-                context.AdvanceToLocation(typeAnnotationNode.Range.End with { Column = typeAnnotationNode.Range.End.Column - 1 });
+                context.AdvanceToLocation(
+                    typeAnnotationNode.Range.End with { Column = typeAnnotationNode.Range.End.Column - 1 });
+
                 context.Append(")");
                 break;
 
@@ -918,7 +921,9 @@ public class Rendering
                 context.Append("{");
                 RenderRecordDefinition(record.RecordDefinition, context);
                 // Close brace location is at the node's range end - 1 (since range end is after the brace)
-                context.AdvanceToLocation(typeAnnotationNode.Range.End with { Column = typeAnnotationNode.Range.End.Column - 1 });
+                context.AdvanceToLocation(
+                    typeAnnotationNode.Range.End with { Column = typeAnnotationNode.Range.End.Column - 1 });
+
                 context.Append("}");
                 break;
 
@@ -932,7 +937,9 @@ public class Rendering
                 context.Append("|");
                 RenderRecordDefinition(genericRecord.RecordDefinition.Value, context);
                 // Close brace location is at the node's range end - 1 (since range end is after the brace)
-                context.AdvanceToLocation(typeAnnotationNode.Range.End with { Column = typeAnnotationNode.Range.End.Column - 1 });
+                context.AdvanceToLocation(
+                    typeAnnotationNode.Range.End with { Column = typeAnnotationNode.Range.End.Column - 1 });
+
                 context.Append("}");
                 break;
 
@@ -1084,7 +1091,9 @@ public class Rendering
                 context.Append("[");
                 RenderSeparatedList(listExpr.Elements, RenderExpression, context);
                 // The closing bracket is at the end of the expression range (column - 1 since Range.End is after the bracket)
-                context.AdvanceToLocation(expressionNode.Range.End with { Column = expressionNode.Range.End.Column - 1 });
+                context.AdvanceToLocation(
+                    expressionNode.Range.End with { Column = expressionNode.Range.End.Column - 1 });
+
                 context.Append("]");
                 break;
 
@@ -1123,11 +1132,15 @@ public class Rendering
                 RenderExpression(parenExpr.Expression, context);
                 // Derive close paren location from the containing node's Range.End
                 // (Range.End is after the ')', so adjust column by -1)
-                context.AdvanceToLocation(expressionNode.Range.End with { Column = expressionNode.Range.End.Column - 1 });
+                context.AdvanceToLocation(
+                    expressionNode.Range.End with { Column = expressionNode.Range.End.Column - 1 });
+
                 context.Append(")");
                 break;
 
             case ExpressionSyntax.Application application:
+                RenderExpression(application.Function, context);
+
                 for (var i = 0; i < application.Arguments.Count; i++)
                 {
                     RenderExpression(application.Arguments[i], context);
@@ -1206,7 +1219,9 @@ public class Rendering
                 context.Append("{");
                 RenderSeparatedList(recordExpr.Fields, RenderRecordExprField, context);
                 // The closing brace is at the end of the expression range (column - 1 since Range.End is after the brace)
-                context.AdvanceToLocation(expressionNode.Range.End with { Column = expressionNode.Range.End.Column - 1 });
+                context.AdvanceToLocation(
+                    expressionNode.Range.End with { Column = expressionNode.Range.End.Column - 1 });
+
                 context.Append("}");
                 break;
 
@@ -1230,7 +1245,9 @@ public class Rendering
                 context.Append("|");
                 RenderSeparatedList(recordUpdate.Fields, RenderRecordExprField, context);
                 // The closing brace is at the end of the expression range (column - 1 since Range.End is after the brace)
-                context.AdvanceToLocation(expressionNode.Range.End with { Column = expressionNode.Range.End.Column - 1 });
+                context.AdvanceToLocation(
+                    expressionNode.Range.End with { Column = expressionNode.Range.End.Column - 1 });
+
                 context.Append("}");
                 break;
 

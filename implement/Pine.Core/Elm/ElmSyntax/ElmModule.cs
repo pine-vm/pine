@@ -80,25 +80,27 @@ public static partial class ElmModule
             .Select(
                 moduleText =>
                 (moduleText,
-                parsedModule: new ParsedModule
-                (ModuleName: ParseModuleName(moduleText)
-                .Extract(err =>
-                throw new Exception(
-                    string.Concat(
-                        "Failed parsing module name: ", err,
-                        "\nmodule text (" + moduleText.Length.ToString() + "):\n:",
-                        moduleText.AsSpan(0, Math.Min(1000, moduleText.Length))))),
-                ImportedModulesNames:
+                parsedModule: new ParsedModule(
+                    ModuleName: ParseModuleName(moduleText)
+                    .Extract(
+                        err =>
+                        throw new Exception(
+                            string.Concat(
+                                "Failed parsing module name: ",
+                                err,
+                                "\nmodule text (" + moduleText.Length.ToString() + "):\n:",
+                                moduleText.AsSpan(0, Math.Min(1000, moduleText.Length))))),
+                    ImportedModulesNames:
                     ParseModuleImportedModulesNames(moduleText)
-                    .ToImmutableHashSet(EnumerableExtensions.EqualityComparer<IReadOnlyList<string>>())
-                )))
+                    .ToImmutableHashSet(EnumerableExtensions.EqualityComparer<IReadOnlyList<string>>()))))
             .ToImmutableList();
 
         foreach (var module in parsedModules)
         {
             var modulesWithSameName =
                 parsedModules
-                .Where(parsedModule => parsedModule.parsedModule.ModuleName.SequenceEqual(module.parsedModule.ModuleName))
+                .Where(
+                    parsedModule => parsedModule.parsedModule.ModuleName.SequenceEqual(module.parsedModule.ModuleName))
                 .ToImmutableList();
 
             if (1 < modulesWithSameName.Count)
@@ -407,7 +409,8 @@ public static partial class ElmModule
 
         var rootModulesTexts =
             allElmModules
-            .Where(moduleNameAndText => moduleNameIsRootModule(ParseModuleName(moduleNameAndText.content).WithDefault([])))
+            .Where(
+                moduleNameAndText => moduleNameIsRootModule(ParseModuleName(moduleNameAndText.content).WithDefault([])))
             .Select(moduleNameAndText => moduleNameAndText.content)
             .ToImmutableArray();
 
@@ -424,7 +427,8 @@ public static partial class ElmModule
 
         var filteredModulesPaths =
             filteredModules
-            .Select(moduleText => allElmModules.First(moduleNameAndText => moduleNameAndText.content == moduleText).path)
+            .Select(
+                moduleText => allElmModules.First(moduleNameAndText => moduleNameAndText.content == moduleText).path)
             .ToImmutableHashSet(EnumerableExtensions.EqualityComparer<IReadOnlyList<string>>());
 
         return

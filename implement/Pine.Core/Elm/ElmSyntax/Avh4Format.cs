@@ -2331,7 +2331,9 @@ public class Avh4Format
                             else
                             {
                                 currentContext =
-                                    CommentPlacementHelper.PlaceCommentsBetweenDeclarations(nextContext, commentsBetween);
+                                    CommentPlacementHelper.PlaceCommentsBetweenDeclarations(
+                                        nextContext,
+                                        commentsBetween);
                             }
                         }
                         else
@@ -2770,7 +2772,8 @@ public class Avh4Format
                                     constructorCtx = constructorCtx.SetIndentColumn();
 
                                     constructorCtx =
-                                        constructorCtx.FormatAndAddCommentAndNextRowToIndent(commentsAfterEqualsOnSameLine[ci]);
+                                        constructorCtx.FormatAndAddCommentAndNextRowToIndent(
+                                            commentsAfterEqualsOnSameLine[ci]);
 
                                     constructorCtx = constructorCtx.ReturnToIndent(commentIndentRef);
                                 }
@@ -2819,7 +2822,10 @@ public class Avh4Format
                     var inlineComments =
                         pipeLocation.HasValue
                         ?
-                        commentQueries.GetOnRowBetweenColumns(pipeRow, pipeLocation.Value.Column, constructor.Value.Name.Range.Start.Column)
+                        commentQueries.GetOnRowBetweenColumns(
+                            pipeRow,
+                            pipeLocation.Value.Column,
+                            constructor.Value.Name.Range.Start.Column)
                         .ToList()
                         :
                         [];
@@ -3396,7 +3402,10 @@ public class Avh4Format
                                 arrowLocation,
                                 returnTypeResult.FormattedNode);
                         // Return with IndentSpaces reset to the original context
-                        return FormattingResult<TypeAnnotation>.Create(formattedFuncType, returnTypeResult.Context.ReturnToIndent(context));
+                        return
+                            FormattingResult<TypeAnnotation>.Create(
+                                formattedFuncType,
+                                returnTypeResult.Context.ReturnToIndent(context));
                     }
 
                 case TypeAnnotation.Record record:
@@ -3656,7 +3665,10 @@ public class Avh4Format
                     new TypeAnnotation.Tupled(
                         separatedElems);
 
-                return FormattingResult<TypeAnnotation>.Create(formattedTupledAnnot, afterCloseParen.ReturnToIndent(context));
+                return
+                    FormattingResult<TypeAnnotation>.Create(
+                        formattedTupledAnnot,
+                        afterCloseParen.ReturnToIndent(context));
             }
             else
             {
@@ -3920,13 +3932,19 @@ public class Avh4Format
                 case ExpressionSyntax.CharLiteral charLit:
 
                     // Use the actual rendered length which varies for escaped characters
-                    return FormattingResult<ExpressionSyntax>.Create(charLit, context.Advance(Rendering.RenderCharLiteral(charLit.Value).Length));
+                    return
+                        FormattingResult<ExpressionSyntax>.Create(
+                            charLit,
+                            context.Advance(Rendering.RenderCharLiteral(charLit.Value).Length));
 
                 case ExpressionSyntax.Integer intLit:
                     return FormattingResult<ExpressionSyntax>.Create(intLit, context.Advance(intLit.LiteralText.Length));
 
                 case ExpressionSyntax.Floatable floatLit:
-                    return FormattingResult<ExpressionSyntax>.Create(floatLit, context.Advance(floatLit.LiteralText.Length));
+                    return
+                        FormattingResult<ExpressionSyntax>.Create(
+                            floatLit,
+                            context.Advance(floatLit.LiteralText.Length));
 
                 case ExpressionSyntax.FunctionOrValue funcOrVal:
                     var funcName =
@@ -3954,8 +3972,9 @@ public class Avh4Format
                         // Check if application spans multiple lines based on the containing node's range only
                         var isMultiline = SpansMultipleRows(originalRange);
 
+                        var functionResult = FormatExpression(app.Function, context);
                         var formattedArgs = new List<Node<ExpressionSyntax>>();
-                        var appCtx = context;
+                        var appCtx = functionResult.Context.ReturnToIndent(context);
 
                         if (isMultiline)
                         {
@@ -3963,24 +3982,19 @@ public class Avh4Format
                             // Create reference context at the target column for arguments
                             var multilineTargetRef = context.AdvanceToNextIndentLevel().SetIndentToCurrentColumn();
 
-                            // Get the row of the function (first element) to check if first arg is on same line
-                            var functionRow = app.Arguments.Count > 0 ? app.Arguments[0].Range.Start.Row : -1;
+                            // Get the row of the function to check if first arg is on same line
+                            var functionRow = app.Function.Range.Start.Row;
 
                             for (var i = 0; i < app.Arguments.Count; i++)
                             {
                                 var arg = app.Arguments[i];
 
                                 // Determine if this argument should go on a new line
-                                // Rule: The first applied argument (index 1) can stay on the same line as
+                                // Rule: The first applied argument can stay on the same line as
                                 // the function if it was originally there. All other args go on new lines.
                                 bool putOnNewLine;
 
                                 if (i is 0)
-                                {
-                                    // Function itself: never put on new line - it's always at the start of the Application
-                                    putOnNewLine = false;
-                                }
-                                else if (i is 1)
                                 {
                                     // First applied argument: keep on same line only if:
                                     // 1. It was originally on the same line as the function, AND
@@ -3999,36 +4013,32 @@ public class Avh4Format
                                 {
                                     // Check for comments between previous argument and this one
                                     var hadComments = false;
+                                    var prevArg = i is 0 ? app.Function : app.Arguments[i - 1];
 
-                                    if (i > 0)
+                                    var commentsBetween =
+                                        commentQueries.GetBetweenRows(
+                                            prevArg.Range.End.Row,
+                                            arg.Range.Start.Row);
+
+                                    for (var ci = 0; ci < commentsBetween.Count; ci++)
                                     {
-                                        var prevArg = app.Arguments[i - 1];
+                                        var comment = commentsBetween[ci];
+                                        hadComments = true;
 
-                                        var commentsBetween =
-                                            commentQueries.GetBetweenRows(
-                                                prevArg.Range.End.Row,
-                                                arg.Range.Start.Row);
-
-                                        for (var ci = 0; ci < commentsBetween.Count; ci++)
+                                        // Only move to new line before the FIRST comment
+                                        // For subsequent comments, FormatAndAddComment already positioned us
+                                        if (ci is 0)
                                         {
-                                            var comment = commentsBetween[ci];
-                                            hadComments = true;
-
-                                            // Only move to new line before the FIRST comment
-                                            // For subsequent comments, FormatAndAddComment already positioned us
-                                            if (ci is 0)
-                                            {
-                                                appCtx = appCtx.ReturnToIndent(multilineTargetRef).NextRowToIndent();
-                                            }
-                                            else
-                                            {
-                                                // Just ensure we're at the right column
-                                                appCtx = appCtx.ReturnToIndent(multilineTargetRef).SetIndentColumn();
-                                            }
-
-                                            // Format the comment
-                                            appCtx = appCtx.FormatAndAddCommentAndNextRowToIndent(comment);
+                                            appCtx = appCtx.ReturnToIndent(multilineTargetRef).NextRowToIndent();
                                         }
+                                        else
+                                        {
+                                            // Just ensure we're at the right column
+                                            appCtx = appCtx.ReturnToIndent(multilineTargetRef).SetIndentColumn();
+                                        }
+
+                                        // Format the comment
+                                        appCtx = appCtx.FormatAndAddCommentAndNextRowToIndent(comment);
                                     }
 
                                     // Move to next line at the consistent target column, but only if we didn't
@@ -4043,7 +4053,7 @@ public class Avh4Format
                                         appCtx = appCtx.ReturnToIndent(multilineTargetRef).SetIndentColumn();
                                     }
                                 }
-                                else if (i > 0)
+                                else
                                 {
                                     // Same line: just add a space (for first applied arg staying on function line)
                                     appCtx = appCtx.Advance(1);
@@ -4059,8 +4069,7 @@ public class Avh4Format
                             // Single line: arguments separated by spaces
                             for (var i = 0; i < app.Arguments.Count; i++)
                             {
-                                if (i > 0)
-                                    appCtx = appCtx.Advance(1); // space
+                                appCtx = appCtx.Advance(1); // space
 
                                 var argResult = FormatExpression(app.Arguments[i], appCtx);
                                 formattedArgs.Add(argResult.FormattedNode);
@@ -4068,7 +4077,10 @@ public class Avh4Format
                             }
                         }
 
-                        return FormattingResult<ExpressionSyntax>.Create(new ExpressionSyntax.Application(formattedArgs), appCtx);
+                        return
+                            FormattingResult<ExpressionSyntax>.Create(
+                                new ExpressionSyntax.Application(functionResult.FormattedNode, formattedArgs),
+                                appCtx);
                     }
 
                 case ExpressionSyntax.RecordExpr recordExpr:
@@ -4575,7 +4587,10 @@ public class Avh4Format
                     }
 
                 case ExpressionSyntax.PrefixOperator prefixOp:
-                    return FormattingResult<ExpressionSyntax>.Create(prefixOp, context.Advance(prefixOp.Operator.Length + 2)); // "(op)"
+                    return
+                        FormattingResult<ExpressionSyntax>.Create(
+                            prefixOp,
+                            context.Advance(prefixOp.Operator.Length + 2)); // "(op)"
 
                 case ExpressionSyntax.RecordAccess recordAccess:
                     {
@@ -4594,7 +4609,10 @@ public class Avh4Format
                     }
 
                 case ExpressionSyntax.RecordAccessFunction accessFunc:
-                    return FormattingResult<ExpressionSyntax>.Create(accessFunc, context.Advance(accessFunc.FunctionName.Length));
+                    return
+                        FormattingResult<ExpressionSyntax>.Create(
+                            accessFunc,
+                            context.Advance(accessFunc.FunctionName.Length));
 
                 case ExpressionSyntax.IfBlock ifBlock:
                     return FormatIfBlock(ifBlock, context);
@@ -4963,7 +4981,9 @@ public class Avh4Format
 
                 // Check for comments between inner then-block and inner else
                 var commentsAfterInnerThenBlock =
-                    commentQueries.GetBetweenRows(innerIfBlock.ThenBlock.Range.End.Row, innerIfBlock.ElseTokenLocation.Row);
+                    commentQueries.GetBetweenRows(
+                        innerIfBlock.ThenBlock.Range.End.Row,
+                        innerIfBlock.ElseTokenLocation.Row);
 
                 // Format comments after inner then-block
                 var afterInnerThenBlockContext = innerThenResult.Context;

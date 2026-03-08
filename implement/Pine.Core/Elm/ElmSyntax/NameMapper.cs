@@ -293,6 +293,7 @@ public class NameMapper
 
                 ExpressionSyntax.Application app =>
                 new ExpressionSyntax.Application(
+                    MapExpression(app.Function, mapQualifiedName),
                     [.. app.Arguments.Select(a => MapExpression(a, mapQualifiedName))]),
 
                 ExpressionSyntax.ListExpr listExpr =>
