@@ -31,6 +31,7 @@ The runtime performance items are not related to the Pine language, but are impl
 - [ ] Introduce specialized representation for concatenated list value to make list composition cheaper.
 - [ ] Introduce specialized representation for `Int64` for cheaper integer arithmetic.
 - [ ] Introduce specialized representation for `Int32` for cheaper integer arithmetic.
+- [ ] Sound and garbage free memory management in WASM-based representations including opportunistic mutation (perhaps Perceus reference counting (<https://www.microsoft.com/en-us/research/wp-content/uploads/2020/11/perceus-tr-v1.pdf>))
 
 ## Language Elm
 
