@@ -894,7 +894,9 @@ public static class FormatCSharpFile
     // ──────────────────────────────────────────────────────────
 
     /// <summary>Formats a file-scoped namespace declaration and its members.</summary>
-    private static FileScopedNamespaceDeclarationSyntax FormatFileScopedNamespace(FileScopedNamespaceDeclarationSyntax node, FormatContext ctx)
+    private static FileScopedNamespaceDeclarationSyntax FormatFileScopedNamespace(
+        FileScopedNamespaceDeclarationSyntax node,
+        FormatContext ctx)
     {
         var members = FormatMemberList(node.Members, ctx);
         var usings = FormatUsingDirectives(node.Usings);
@@ -932,7 +934,9 @@ public static class FormatCSharpFile
     }
 
     /// <summary>Formats a braced namespace declaration and its members.</summary>
-    private static NamespaceDeclarationSyntax FormatNamespaceDeclaration(NamespaceDeclarationSyntax node, FormatContext ctx)
+    private static NamespaceDeclarationSyntax FormatNamespaceDeclaration(
+        NamespaceDeclarationSyntax node,
+        FormatContext ctx)
     {
         var members = FormatMemberList(node.Members, ctx.Indented());
         var usings = FormatUsingDirectives(node.Usings);
@@ -1052,7 +1056,9 @@ public static class FormatCSharpFile
     }
 
     /// <summary>Formats a constructor declaration, including body and parameters.</summary>
-    private static ConstructorDeclarationSyntax FormatConstructorDeclaration(ConstructorDeclarationSyntax node, FormatContext ctx)
+    private static ConstructorDeclarationSyntax FormatConstructorDeclaration(
+        ConstructorDeclarationSyntax node,
+        FormatContext ctx)
     {
         var r = node;
 
@@ -1064,7 +1070,9 @@ public static class FormatCSharpFile
     }
 
     /// <summary>Formats a property declaration, including expression body and initializer.</summary>
-    private static PropertyDeclarationSyntax FormatPropertyDeclaration(PropertyDeclarationSyntax node, FormatContext ctx)
+    private static PropertyDeclarationSyntax FormatPropertyDeclaration(
+        PropertyDeclarationSyntax node,
+        FormatContext ctx)
     {
         var r = node;
 
@@ -1100,7 +1108,9 @@ public static class FormatCSharpFile
     }
 
     /// <summary>Formats a local function statement, including body and parameters.</summary>
-    private static LocalFunctionStatementSyntax FormatLocalFunctionStatement(LocalFunctionStatementSyntax node, FormatContext ctx)
+    private static LocalFunctionStatementSyntax FormatLocalFunctionStatement(
+        LocalFunctionStatementSyntax node,
+        FormatContext ctx)
     {
         var r = node;
 
@@ -1144,7 +1154,9 @@ public static class FormatCSharpFile
     }
 
     /// <summary>Formats a list of statements with correct indentation and blank-line separation.</summary>
-    private static SyntaxList<StatementSyntax> FormatStatementList(SyntaxList<StatementSyntax> stmts, FormatContext ctx)
+    private static SyntaxList<StatementSyntax> FormatStatementList(
+        SyntaxList<StatementSyntax> stmts,
+        FormatContext ctx)
     {
         if (stmts.Count is 0)
             return stmts;
@@ -1391,7 +1403,9 @@ public static class FormatCSharpFile
     }
 
     /// <summary>Formats a foreach variable statement (deconstruction pattern).</summary>
-    private static ForEachVariableStatementSyntax FormatForEachVariableStatement(ForEachVariableStatementSyntax node, FormatContext ctx)
+    private static ForEachVariableStatementSyntax FormatForEachVariableStatement(
+        ForEachVariableStatementSyntax node,
+        FormatContext ctx)
     {
         var body =
             node.Statement is BlockSyntax block
@@ -1491,7 +1505,9 @@ public static class FormatCSharpFile
         var open =
             node.OpenBraceToken.WithLeadingTrivia(s_lineFeed, Indent(ctx.IndentLevel)).WithTrailingTrivia(s_lineFeed);
         // Preserve comments in close brace leading trivia
-        var closeLeading = RebuildLeading(node.CloseBraceToken.LeadingTrivia, secIndent);
+        // Comments before the closing brace belong visually with section statements,
+        // not with the case labels, so indent them one level deeper than secIndent.
+        var closeLeading = RebuildLeading(node.CloseBraceToken.LeadingTrivia, secIndent + 1);
 
         var closeList = closeLeading.ToList();
 
@@ -1711,7 +1727,9 @@ public static class FormatCSharpFile
     // ──────────────────────────────────────────────────────────
 
     /// <summary>Formats a local variable declaration statement with its initializer.</summary>
-    private static LocalDeclarationStatementSyntax FormatLocalDeclarationStatement(LocalDeclarationStatementSyntax node, FormatContext ctx)
+    private static LocalDeclarationStatementSyntax FormatLocalDeclarationStatement(
+        LocalDeclarationStatementSyntax node,
+        FormatContext ctx)
     {
         if (node.Declaration.Variables.Count > 0 && node.Declaration.Variables[0].Initializer is { } init)
         {
@@ -1728,7 +1746,9 @@ public static class FormatCSharpFile
     }
 
     /// <summary>Formats an expression statement by formatting its inner expression.</summary>
-    private static ExpressionStatementSyntax FormatExpressionStatement(ExpressionStatementSyntax node, FormatContext ctx)
+    private static ExpressionStatementSyntax FormatExpressionStatement(
+        ExpressionStatementSyntax node,
+        FormatContext ctx)
     {
         return node.WithExpression((ExpressionSyntax)FormatNode(node.Expression, ctx));
     }
@@ -2173,6 +2193,23 @@ public static class FormatCSharpFile
                     return true;
         }
 
+        var openLoc = node.OpenParenToken.GetLocation();
+
+        if (openLoc != Location.None)
+        {
+            var openLineSpan = openLoc.GetLineSpan();
+
+            if (openLineSpan.StartLinePosition.Line == closeLine)
+            {
+                var singleLineWidth =
+                    openLineSpan.StartLinePosition.Character +
+                    FormatParamListSingleLine(node).ToFullString().Length;
+
+                if (singleLineWidth > MaximumLineLength)
+                    return true;
+            }
+        }
+
         return false;
     }
 
@@ -2238,7 +2275,9 @@ public static class FormatCSharpFile
     // ──────────────────────────────────────────────────────────
 
     /// <summary>Formats a collection expression, choosing single-line or multi-line layout.</summary>
-    private static CollectionExpressionSyntax FormatCollectionExpression(CollectionExpressionSyntax node, FormatContext ctx)
+    private static CollectionExpressionSyntax FormatCollectionExpression(
+        CollectionExpressionSyntax node,
+        FormatContext ctx)
     {
         if (node.Elements.Count is 0)
             return node;
@@ -2298,7 +2337,9 @@ public static class FormatCSharpFile
     }
 
     /// <summary>Formats a collection expression across multiple lines, one element per line.</summary>
-    private static CollectionExpressionSyntax FormatCollectionMultiLine(CollectionExpressionSyntax node, FormatContext ctx)
+    private static CollectionExpressionSyntax FormatCollectionMultiLine(
+        CollectionExpressionSyntax node,
+        FormatContext ctx)
     {
         var elems = new List<SyntaxNode>();
         var origSeps = node.Elements.GetSeparators().ToList();
@@ -2374,7 +2415,9 @@ public static class FormatCSharpFile
     // ──────────────────────────────────────────────────────────
 
     /// <summary>Formats an initializer expression with multi-line layout when needed.</summary>
-    private static InitializerExpressionSyntax FormatInitializerExpression(InitializerExpressionSyntax node, FormatContext ctx)
+    private static InitializerExpressionSyntax FormatInitializerExpression(
+        InitializerExpressionSyntax node,
+        FormatContext ctx)
     {
         if (!SpansMultipleLines(node))
             return node;
@@ -2403,7 +2446,11 @@ public static class FormatCSharpFile
 
             var e = (ExpressionSyntax)FormatNode(node.Expressions[i], ci);
             e = e.WithLeadingTrivia(EnsureLeadingBreaks(origLeading, minBreaks, ci));
-            e = e.WithTrailingTrivia();
+
+            e =
+                e.WithTrailingTrivia(
+                    EnsureSpaceBeforeComments(StripWhitespace(node.Expressions[i].GetTrailingTrivia())));
+
             exprs.Add(e);
         }
 
@@ -2430,7 +2477,9 @@ public static class FormatCSharpFile
     // ──────────────────────────────────────────────────────────
 
     /// <summary>Formats an arrow (=&gt;) expression clause, breaking to a new line when needed.</summary>
-    private static ArrowExpressionClauseSyntax FormatArrowExpressionClause(ArrowExpressionClauseSyntax node, FormatContext ctx)
+    private static ArrowExpressionClauseSyntax FormatArrowExpressionClause(
+        ArrowExpressionClauseSyntax node,
+        FormatContext ctx)
     {
         var fmtExpr = (ExpressionSyntax)FormatNode(node.Expression, ctx.Indented());
         var arrowLine = LineOf(node.ArrowToken);
@@ -2561,7 +2610,9 @@ public static class FormatCSharpFile
     }
 
     /// <summary>Formats a ternary conditional expression with multi-line layout when needed.</summary>
-    private static ConditionalExpressionSyntax FormatConditionalExpression(ConditionalExpressionSyntax node, FormatContext ctx)
+    private static ConditionalExpressionSyntax FormatConditionalExpression(
+        ConditionalExpressionSyntax node,
+        FormatContext ctx)
     {
         var isMultiLine = SpansMultipleLines(node);
 
@@ -2723,9 +2774,12 @@ public static class FormatCSharpFile
     }
 
     /// <summary>Formats a single switch expression arm with correct spacing and line breaks.</summary>
-    private static SwitchExpressionArmSyntax FormatSwitchExpressionArm(SwitchExpressionArmSyntax node, FormatContext ctx)
+    private static SwitchExpressionArmSyntax FormatSwitchExpressionArm(
+        SwitchExpressionArmSyntax node,
+        FormatContext ctx)
     {
-        var fmtExpr = (ExpressionSyntax)FormatNode(node.Expression, ctx);
+        var exprForFormat = NormalizeExpressionIndent(node.Expression, ctx.IndentLevel, uniformIndent: true);
+        var fmtExpr = (ExpressionSyntax)FormatNode(exprForFormat, ctx);
 
         var putOnNewLine =
             node.Expression is ThrowExpressionSyntax || SpansMultipleLines(node) ||
@@ -2790,7 +2844,9 @@ public static class FormatCSharpFile
     }
 
     /// <summary>Formats a member access expression, breaking at dots when lines are too long.</summary>
-    private static MemberAccessExpressionSyntax FormatMemberAccessExpression(MemberAccessExpressionSyntax node, FormatContext ctx)
+    private static MemberAccessExpressionSyntax FormatMemberAccessExpression(
+        MemberAccessExpressionSyntax node,
+        FormatContext ctx)
     {
         var fmtExpr = (ExpressionSyntax)FormatNode(node.Expression, ctx);
         var exprEnd = EndLineOf(node.Expression);
@@ -2976,7 +3032,9 @@ public static class FormatCSharpFile
     }
 
     /// <summary>Formats an invocation expression, including its argument list.</summary>
-    private static InvocationExpressionSyntax FormatInvocationExpression(InvocationExpressionSyntax node, FormatContext ctx)
+    private static InvocationExpressionSyntax FormatInvocationExpression(
+        InvocationExpressionSyntax node,
+        FormatContext ctx)
     {
         var fmtExpr = (ExpressionSyntax)FormatNode(node.Expression, ctx);
         var fmtArgs = FormatArgumentList(node.ArgumentList, ctx);
@@ -3098,7 +3156,9 @@ public static class FormatCSharpFile
     }
 
     /// <summary>Formats an object creation expression, including arguments and initializer.</summary>
-    private static ObjectCreationExpressionSyntax FormatObjectCreationExpression(ObjectCreationExpressionSyntax node, FormatContext ctx)
+    private static ObjectCreationExpressionSyntax FormatObjectCreationExpression(
+        ObjectCreationExpressionSyntax node,
+        FormatContext ctx)
     {
         var r = node;
 
@@ -3124,13 +3184,35 @@ public static class FormatCSharpFile
         }
 
         if (r.Initializer is not null)
-            r = r.WithInitializer(FormatInitializerExpression(r.Initializer, ctx));
+        {
+            var fmtInitializer = FormatInitializerExpression(r.Initializer, ctx);
+
+            if (SpansMultipleLines(fmtInitializer))
+            {
+                if (r.ArgumentList is not null)
+                {
+                    r =
+                        r.WithArgumentList(
+                            r.ArgumentList.WithCloseParenToken(
+                                r.ArgumentList.CloseParenToken.WithTrailingTrivia(
+                                    StripWhitespace(r.ArgumentList.CloseParenToken.TrailingTrivia))));
+                }
+                else
+                {
+                    r = r.WithType(r.Type.WithTrailingTrivia(StripWhitespace(r.Type.GetTrailingTrivia())));
+                }
+            }
+
+            r = r.WithInitializer(fmtInitializer);
+        }
 
         return r;
     }
 
     /// <summary>Formats an implicit object creation (<c>new()</c>) expression.</summary>
-    private static ImplicitObjectCreationExpressionSyntax FormatImplicitObjectCreationExpression(ImplicitObjectCreationExpressionSyntax node, FormatContext ctx)
+    private static ImplicitObjectCreationExpressionSyntax FormatImplicitObjectCreationExpression(
+        ImplicitObjectCreationExpressionSyntax node,
+        FormatContext ctx)
     {
         var r = node.WithArgumentList(FormatArgumentList(node.ArgumentList, ctx));
 
@@ -3141,13 +3223,17 @@ public static class FormatCSharpFile
     }
 
     /// <summary>Formats an implicit array creation (<c>new[]</c>) expression, including its initializer.</summary>
-    private static ImplicitArrayCreationExpressionSyntax FormatImplicitArrayCreationExpression(ImplicitArrayCreationExpressionSyntax node, FormatContext ctx)
+    private static ImplicitArrayCreationExpressionSyntax FormatImplicitArrayCreationExpression(
+        ImplicitArrayCreationExpressionSyntax node,
+        FormatContext ctx)
     {
         return node.WithInitializer(FormatInitializerExpression(node.Initializer, ctx));
     }
 
     /// <summary>Formats an array creation expression, including its initializer.</summary>
-    private static ArrayCreationExpressionSyntax FormatArrayCreationExpression(ArrayCreationExpressionSyntax node, FormatContext ctx)
+    private static ArrayCreationExpressionSyntax FormatArrayCreationExpression(
+        ArrayCreationExpressionSyntax node,
+        FormatContext ctx)
     {
         if (node.Initializer is not null)
             return node.WithInitializer(FormatInitializerExpression(node.Initializer, ctx));
@@ -3167,10 +3253,23 @@ public static class FormatCSharpFile
 
         for (var i = 0; i < node.Initializers.Count; i++)
         {
-            var m = node.Initializers[i];
+            var m = FormatAnonymousObjectMemberDeclarator(node.Initializers[i], memberIndent);
             var origLeading = m.GetLeadingTrivia();
+            var minBreaks = 1;
 
-            m = m.WithLeadingTrivia(EnsureLeadingBreaks(origLeading, 1, memberIndent));
+            if (i > 0)
+            {
+                var origBreaks = CountLineBreaks(origLeading);
+                var separators = node.Initializers.GetSeparators().ToList();
+
+                if (i - 1 < separators.Count)
+                    origBreaks += CountLineBreaks(separators[i - 1].TrailingTrivia);
+
+                if (origBreaks >= 2)
+                    minBreaks = 2;
+            }
+
+            m = m.WithLeadingTrivia(EnsureLeadingBreaks(origLeading, minBreaks, memberIndent));
             m = m.WithTrailingTrivia();
             members.Add(m);
         }
@@ -3193,8 +3292,95 @@ public static class FormatCSharpFile
             .WithInitializers(SyntaxFactory.SeparatedList(members, seps));
     }
 
+    private static AnonymousObjectMemberDeclaratorSyntax FormatAnonymousObjectMemberDeclarator(
+        AnonymousObjectMemberDeclaratorSyntax node, int indent)
+    {
+        if (node.NameEquals is null)
+            return node.WithExpression((ExpressionSyntax)FormatNode(node.Expression, indent));
+
+        var fmtExpr = (ExpressionSyntax)FormatNode(node.Expression, indent);
+        var originalHasBreak = LineOf(node.Expression) > LineOf(node.NameEquals.EqualsToken);
+
+        if (originalHasBreak ||
+            LineEndColumn(node) > MaximumLineLength ||
+            (SpansMultipleLines(fmtExpr.ToFullString().Trim()) && node.Expression is not CastExpressionSyntax))
+        {
+            fmtExpr =
+                fmtExpr.WithLeadingTrivia(
+                    EnsureLeadingBreaks(node.Expression.GetLeadingTrivia(), 1, indent));
+
+            return
+                node.WithNameEquals(
+                    node.NameEquals.WithEqualsToken(
+                        node.NameEquals.EqualsToken.WithLeadingTrivia().WithTrailingTrivia()))
+                .WithExpression(fmtExpr);
+        }
+
+        return
+            node.WithNameEquals(
+                node.NameEquals.WithEqualsToken(
+                    node.NameEquals.EqualsToken.WithLeadingTrivia().WithTrailingTrivia(s_space)))
+            .WithExpression(fmtExpr.WithLeadingTrivia());
+    }
+
+    private static ExpressionSyntax NormalizeExpressionIndent(
+        ExpressionSyntax expression,
+        int expectedIndentLevel,
+        bool uniformIndent = false)
+    {
+        var exprLoc = expression.GetLocation();
+
+        // Location.None indicates a synthesized or malformed node with no stable
+        // column information available for indentation repair.
+        if (exprLoc == Location.None)
+            return expression;
+
+        var exprCol = exprLoc.GetLineSpan().StartLinePosition.Character;
+        var expectedCol = expectedIndentLevel * IndentSize;
+
+        if (exprCol <= expectedCol)
+            return expression;
+
+        // Normalize line endings before trimming indentation so the reparse step
+        // behaves consistently across CRLF/LF/CR inputs.
+        var expressionFullText =
+            expression.ToFullString()
+            .Replace("\r\n", "\n")
+            .Replace("\r", "\n");
+
+        var lines = expressionFullText.Split('\n');
+
+        for (var li = 0; li < lines.Length; li++)
+        {
+            if (!uniformIndent && li > 0)
+                continue;
+
+            var stripped = 0;
+
+            var lineExcess =
+                uniformIndent
+                ?
+                Math.Max(0, lines[li].TakeWhile(c => c is ' ').Count() - expectedCol)
+                :
+                exprCol - expectedCol;
+
+            while (stripped < lineExcess && stripped < lines[li].Length && lines[li][stripped] is ' ')
+                stripped++;
+
+            if (stripped > 0)
+                lines[li] = lines[li][stripped..];
+        }
+
+        var reparsed = SyntaxFactory.ParseExpression(string.Join("\n", lines));
+
+        // Return the original expression if normalization introduced parse errors.
+        return reparsed.ContainsDiagnostics ? expression : reparsed;
+    }
+
     /// <summary>Formats an assignment expression with line-break handling for the right side.</summary>
-    private static AssignmentExpressionSyntax FormatAssignmentExpression(AssignmentExpressionSyntax node, FormatContext ctx)
+    private static AssignmentExpressionSyntax FormatAssignmentExpression(
+        AssignmentExpressionSyntax node,
+        FormatContext ctx)
     {
         var fmtLeft = (ExpressionSyntax)FormatNode(node.Left, ctx);
         // Strip trailing trivia from left expression to avoid double spaces before =
@@ -3478,7 +3664,9 @@ public static class FormatCSharpFile
     // ──────────────────────────────────────────────────────────
 
     /// <summary>Formats a parenthesized lambda expression, including its body.</summary>
-    private static ParenthesizedLambdaExpressionSyntax FormatParenthesizedLambdaExpression(ParenthesizedLambdaExpressionSyntax node, FormatContext ctx)
+    private static ParenthesizedLambdaExpressionSyntax FormatParenthesizedLambdaExpression(
+        ParenthesizedLambdaExpressionSyntax node,
+        FormatContext ctx)
     {
         if (node.Block is not null)
         {
@@ -3506,7 +3694,9 @@ public static class FormatCSharpFile
     }
 
     /// <summary>Formats a simple lambda expression, including its body.</summary>
-    private static SimpleLambdaExpressionSyntax FormatSimpleLambdaExpression(SimpleLambdaExpressionSyntax node, FormatContext ctx)
+    private static SimpleLambdaExpressionSyntax FormatSimpleLambdaExpression(
+        SimpleLambdaExpressionSyntax node,
+        FormatContext ctx)
     {
         if (node.Block is not null)
         {

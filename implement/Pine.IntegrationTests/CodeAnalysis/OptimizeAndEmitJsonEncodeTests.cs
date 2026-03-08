@@ -427,7 +427,10 @@ public class OptimizeAndEmitJsonEncodeTests
                     }
                 }
 
-                public static PineValue encodeStringUtf32ChunksFromBytes(PineValue param_1_0, PineValue param_1_1, PineValue param_1_2)
+                public static PineValue encodeStringUtf32ChunksFromBytes(
+                    PineValue param_1_0,
+                    PineValue param_1_1,
+                    PineValue param_1_2)
                 {
                     PineValue local_param_1_0 = param_1_0;
                     ImmutableConcatBuilder local_param_1_1 = ImmutableConcatBuilder.Create([param_1_1]);

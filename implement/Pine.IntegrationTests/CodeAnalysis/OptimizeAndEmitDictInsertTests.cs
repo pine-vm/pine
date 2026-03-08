@@ -309,7 +309,12 @@ public class OptimizeAndEmitDictInsertTests
                     return KernelFunctionSpecialized.equal(KernelFunctionSpecialized.take(0, param_1_0), PineValue.EmptyList);
                 }
 
-                public static PineValue zzz_anon_e6d15ff4_dda26649(PineValue param_1_0, PineValue param_1_1, PineValue param_1_2, PineValue param_1_3, PineValue param_1_4)
+                public static PineValue zzz_anon_e6d15ff4_dda26649(
+                    PineValue param_1_0,
+                    PineValue param_1_1,
+                    PineValue param_1_2,
+                    PineValue param_1_3,
+                    PineValue param_1_4)
                 {
                     PineValue local_000 = PineValueExtension.ValueFromPathOrEmptyList(param_1_4, [1]);
 

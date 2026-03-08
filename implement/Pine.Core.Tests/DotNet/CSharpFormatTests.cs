@@ -2887,33 +2887,33 @@ public class CSharpFormatTests
             .WithMembers(
                 SyntaxFactory.List<MemberDeclarationSyntax>(
                     [
-                        SyntaxFactory.FieldDeclaration(
-                            SyntaxFactory.VariableDeclaration(
-                                SyntaxFactory.PredefinedType(
-                                    SyntaxFactory.Token(SyntaxKind.IntKeyword)))
+                    SyntaxFactory.FieldDeclaration(
+                        SyntaxFactory.VariableDeclaration(
+                            SyntaxFactory.PredefinedType(
+                                SyntaxFactory.Token(SyntaxKind.IntKeyword)))
                             .WithVariables(
-                                SyntaxFactory.SingletonSeparatedList(
-                                    SyntaxFactory.VariableDeclarator(
-                                        SyntaxFactory.Identifier("a"))
+                            SyntaxFactory.SingletonSeparatedList(
+                                SyntaxFactory.VariableDeclarator(
+                                    SyntaxFactory.Identifier("a"))
                                     .WithInitializer(
-                                        SyntaxFactory.EqualsValueClause(
-                                            SyntaxFactory.LiteralExpression(
-                                                SyntaxKind.NumericLiteralExpression,
-                                                SyntaxFactory.Literal(41))))))),
-                        SyntaxFactory.FieldDeclaration(
-                            SyntaxFactory.VariableDeclaration(
-                                SyntaxFactory.PredefinedType(
-                                    SyntaxFactory.Token(SyntaxKind.IntKeyword)))
+                                    SyntaxFactory.EqualsValueClause(
+                                        SyntaxFactory.LiteralExpression(
+                                            SyntaxKind.NumericLiteralExpression,
+                                            SyntaxFactory.Literal(41))))))),
+                    SyntaxFactory.FieldDeclaration(
+                        SyntaxFactory.VariableDeclaration(
+                            SyntaxFactory.PredefinedType(
+                                SyntaxFactory.Token(SyntaxKind.IntKeyword)))
                             .WithVariables(
-                                SyntaxFactory.SingletonSeparatedList(
-                                    SyntaxFactory.VariableDeclarator(
-                                        SyntaxFactory.Identifier("b"))
+                            SyntaxFactory.SingletonSeparatedList(
+                                SyntaxFactory.VariableDeclarator(
+                                    SyntaxFactory.Identifier("b"))
                                     .WithInitializer(
-                                        SyntaxFactory.EqualsValueClause(
-                                            SyntaxFactory.LiteralExpression(
-                                                SyntaxKind.NumericLiteralExpression,
-                                                SyntaxFactory.Literal(43)))))))
-                        ]));
+                                    SyntaxFactory.EqualsValueClause(
+                                        SyntaxFactory.LiteralExpression(
+                                            SyntaxKind.NumericLiteralExpression,
+                                            SyntaxFactory.Literal(43)))))))
+                    ]));
 
         var expectedSyntaxText =
             """"
@@ -3057,7 +3057,7 @@ public class CSharpFormatTests
             (skippedFiles.Count > 0
             ?
             $"\n\nSkipped {skippedFiles.Count} file(s):\n" +
-                  string.Join("\n", skippedFiles.Select(s => $"  {s.path}: {s.reason}"))
+            string.Join("\n", skippedFiles.Select(s => $"  {s.path}: {s.reason}"))
             :
             ""));
     }
@@ -3158,14 +3158,16 @@ public class CSharpFormatTests
         var formattedTwice = formatOnce(formattedOnce);
 
         // Assert stability
-        formattedTwice.Trim().Should().Be(formattedOnce.Trim(),
+        formattedTwice.Trim().Should().Be(
+            formattedOnce.Trim(),
             "Formatting must be stable (second pass must match first)");
 
         // Assert only whitespace changed
         var origNonWs = StripWhitespace(inputSyntaxText);
         var fmtNonWs = StripWhitespace(formattedOnce);
 
-        fmtNonWs.Should().Be(origNonWs,
+        fmtNonWs.Should().Be(
+            origNonWs,
             "Formatting must only change whitespace characters");
     }
 
@@ -5227,6 +5229,175 @@ public class CSharpFormatTests
                         throw new InvalidOperationException(
                             $"No identifier provided for crash in context {describeContext(context)}");
                     });
+            """";
+
+        AssertFormattedSyntax(input, expected, scriptMode: true);
+    }
+
+    [Fact]
+    public void Preserves_comment_after_switch_statement_section()
+    {
+        var input =
+            """"
+            private static void CollectPatternNamesRecursive(SyntaxTypes.Pattern pattern, HashSet<string> names)
+            {
+                switch (pattern)
+                {
+                    case SyntaxTypes.Pattern.ParenthesizedPattern parenPattern:
+                        CollectPatternNamesRecursive(parenPattern.Pattern.Value, names);
+                        break;
+
+
+                        // Other pattern types don't introduce names
+                }
+            }
+            """";
+
+        AssertFormattedSyntax(input, input, scriptMode: true);
+    }
+
+    [Fact]
+    public void Formats_object_creation_with_collection_initializer_on_new_line()
+    {
+        var input =
+            """"
+            var items = new List<PineValueInProcess> {
+                PineValueInProcess.Create(PineValue.Blob([1])),
+                PineValueInProcess.Create(PineValue.Blob([3]))
+            };
+            """";
+
+        var expected =
+            """"
+            var items =
+                new List<PineValueInProcess>
+                {
+                    PineValueInProcess.Create(PineValue.Blob([1])),
+                    PineValueInProcess.Create(PineValue.Blob([3]))
+                };
+            """";
+
+        AssertFormattedSyntax(input, expected, scriptMode: true);
+    }
+
+    [Fact]
+    public void Formats_collection_initializer_with_anonymous_object_creation()
+    {
+        var input =
+            """"
+            var testCases = new[]
+            {
+                new
+                {
+                    expression = (Expression)
+                    Expression.LiteralInstance(PineValue.Blob([1, 4, 7])),
+                    environment = PineValue.EmptyList,
+
+                    expected = Result<string, PineValue>.ok(
+                        PineValue.Blob([1, 4, 7]))
+                }
+            };
+            """";
+
+        var expected =
+            """"
+            var testCases =
+                new[]
+                {
+                    new
+                    {
+                        expression = (Expression)
+                        Expression.LiteralInstance(PineValue.Blob([1, 4, 7])),
+                        environment = PineValue.EmptyList,
+
+                        expected =
+                        Result<string, PineValue>.ok(
+                            PineValue.Blob([1, 4, 7]))
+                    }
+                };
+            """";
+
+        AssertFormattedSyntax(input, expected, scriptMode: true);
+    }
+
+    [Fact]
+    public void Formats_object_creation_with_initializer_with_trailing_comment()
+    {
+        var input =
+            """"
+            var files = new Dictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>>
+            {
+                { new[] { "test.txt" }, new byte[] { 72, 101, 108, 108, 111 } }   // "Hello"
+            };
+            """";
+
+        var expected =
+            """"
+            var files =
+                new Dictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>>
+                {
+                    { new[] { "test.txt" }, new byte[] { 72, 101, 108, 108, 111 } } // "Hello"
+                };
+            """";
+
+        AssertFormattedSyntax(input, expected, scriptMode: true);
+    }
+
+    [Fact]
+    public void Normalizes_indent_in_switch_statement_section_in_member_invocation_chain()
+    {
+        var input =
+            """"
+            private static CanonicalizationResult<SyntaxTypes.TypeAnnotation> CanonicalizeTypeAnnotation(
+                SyntaxTypes.TypeAnnotation type,
+                CanonicalizationContext context) =>
+                type switch
+                {
+                    SyntaxTypes.TypeAnnotation.GenericType genericType =>
+                        NoErrors<SyntaxTypes.TypeAnnotation>(genericType), // Generic types don't need canonicalization
+
+                    SyntaxTypes.TypeAnnotation.Typed typed =>
+                        CanonicalizeTypedAnnotation(typed, context)
+                        .MapValue(t => (SyntaxTypes.TypeAnnotation)t)
+                };
+            """";
+
+        var expected =
+            """"
+            private static CanonicalizationResult<SyntaxTypes.TypeAnnotation> CanonicalizeTypeAnnotation(
+                SyntaxTypes.TypeAnnotation type,
+                CanonicalizationContext context) =>
+                type switch
+                {
+                    SyntaxTypes.TypeAnnotation.GenericType genericType =>
+                    NoErrors<SyntaxTypes.TypeAnnotation>(genericType), // Generic types don't need canonicalization
+
+                    SyntaxTypes.TypeAnnotation.Typed typed =>
+                    CanonicalizeTypedAnnotation(typed, context)
+                    .MapValue(t => (SyntaxTypes.TypeAnnotation)t)
+                };
+            """";
+
+        AssertFormattedSyntax(input, expected, scriptMode: true);
+    }
+
+    [Fact]
+    public void Pretty_print_breaks_parameter_list_exceeding_line_length()
+    {
+        var input =
+            """"
+            private static FileScopedNamespaceDeclarationSyntax FormatFileScopedNamespace(FileScopedNamespaceDeclarationSyntax node, FormatContext ctx)
+            {
+            }
+            """";
+
+        var expected =
+            """"
+            private static FileScopedNamespaceDeclarationSyntax FormatFileScopedNamespace(
+                FileScopedNamespaceDeclarationSyntax node,
+                FormatContext ctx)
+            {
+            }
             """";
 
         AssertFormattedSyntax(input, expected, scriptMode: true);
