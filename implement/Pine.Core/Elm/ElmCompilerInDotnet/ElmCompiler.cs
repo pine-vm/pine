@@ -231,10 +231,25 @@ public class ElmCompiler
             .Select(LambdaLifting.LiftLambdas)
             .ToList();
 
+        var modulesForCompilation =
+            disableInlining
+            ?
+            lambdaLiftedModules
+            :
+            Inlining.Inline(lambdaLiftedModules, Inlining.Config.OnlyFunctions)
+            .Map(
+                dict =>
+                lambdaLiftedModules.Select(
+                    moduleSyntax =>
+                    dict[SyntaxTypes.Module.GetModuleName(moduleSyntax.ModuleDefinition.Value).Value])
+                    .Select(LambdaLifting.LiftLambdas)
+                    .ToList())
+                .Extract(err => throw new Exception("Inlining failed: " + err));
+
         var allFunctions =
             new Dictionary<SyntaxModelTypes.QualifiedNameRef, (string moduleName, string functionName, SyntaxTypes.Declaration.FunctionDeclaration declaration)>();
 
-        foreach (var elmModuleSyntax in lambdaLiftedModules)
+        foreach (var elmModuleSyntax in modulesForCompilation)
         {
             var moduleName =
                 SyntaxTypes.Module.GetModuleName(elmModuleSyntax.ModuleDefinition.Value).Value;
@@ -276,7 +291,7 @@ public class ElmCompiler
         var choiceTagArgumentTypes =
             new Dictionary<SyntaxModelTypes.QualifiedNameRef, IReadOnlyList<TypeInference.InferredType>>();
 
-        foreach (var elmModuleSyntax in lambdaLiftedModules)
+        foreach (var elmModuleSyntax in modulesForCompilation)
         {
             var moduleName =
                 SyntaxTypes.Module.GetModuleName(elmModuleSyntax.ModuleDefinition.Value).Value;
@@ -314,7 +329,7 @@ public class ElmCompiler
         // where argument order matches the field order in the type alias declaration
         var recordTypeAliasConstructors = new Dictionary<SyntaxModelTypes.QualifiedNameRef, IReadOnlyList<string>>();
 
-        foreach (var elmModuleSyntax in lambdaLiftedModules)
+        foreach (var elmModuleSyntax in modulesForCompilation)
         {
             var moduleName =
                 SyntaxTypes.Module.GetModuleName(elmModuleSyntax.ModuleDefinition.Value).Value;
@@ -404,7 +419,7 @@ public class ElmCompiler
         // Third pass: Build module values from compiled functions
         var compiledModuleEntries = new List<PineValue>();
 
-        foreach (var parsedModule in lambdaLiftedModules)
+        foreach (var parsedModule in modulesForCompilation)
         {
             var moduleNameFlattened =
                 string.Join('.', SyntaxTypes.Module.GetModuleName(parsedModule.ModuleDefinition.Value).Value);

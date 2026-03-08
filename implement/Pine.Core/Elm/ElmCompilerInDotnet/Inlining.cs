@@ -532,7 +532,7 @@ public class Inlining
                     var newContext = context with { InliningStack = context.InliningStack.Add(qualifiedName) };
 
                     // Inline the function: substitute parameters with arguments
-                    var inlinedResult = InlineFunctionCall(funcImpl, appArgs, newContext);
+                    var inlinedResult = InlineFunctionCall(funcInfo.ModuleName, funcImpl, appArgs, newContext);
 
                     return inlinedResult;
                 }
@@ -584,6 +584,11 @@ public class Inlining
         IReadOnlyList<Node<SyntaxTypes.Expression>> appArgs,
         InliningContext context)
     {
+        if (appArgs.Count < funcParams.Count)
+        {
+            return false;
+        }
+
         if (context.Config is not Config.InlineOnlyFunctions)
         {
             return false;
@@ -604,9 +609,11 @@ public class Inlining
                 return true;
             }
 
-            // If the parameter uses a constructor pattern (like `(Parser f)`), it's likely
-            // extracting a function from a wrapped type - inline to allow direct use
-            if (IsConstructorPattern(param))
+            // If the parameter uses a constructor pattern (like `(Parser f)`), only inline
+            // when the supplied argument itself looks like a function-bearing computation.
+            // This keeps Config.OnlyFunctions focused on higher-order use cases and avoids
+            // inlining data-oriented constructor-pattern calls such as String.split before.
+            if (IsConstructorPattern(param) && IsFunctionBearingExpression(arg, context))
             {
                 return true;
             }
@@ -633,9 +640,12 @@ public class Inlining
         {
             SyntaxTypes.Expression.LambdaExpression => true,
 
-            // Only consider FunctionOrValue as a function if it's a known function in our function dictionary
-            // This excludes data constructors and local variables
+            // Only consider qualified FunctionOrValue references as functions.
+            // This keeps Config.OnlyFunctions focused on stable top-level / cross-module references
+            // and avoids inlining based on local let-bound helpers, which can introduce lifted
+            // dependencies the current compiler pipeline does not yet propagate robustly.
             SyntaxTypes.Expression.FunctionOrValue funcOrValue =>
+            funcOrValue.ModuleName.Count > 0 &&
             context.FunctionsByQualifiedName.ContainsKey((funcOrValue.ModuleName, funcOrValue.Name)),
 
             SyntaxTypes.Expression.ParenthesizedExpression paren =>
@@ -646,7 +656,22 @@ public class Inlining
         };
     }
 
+    private static bool IsFunctionBearingExpression(SyntaxTypes.Expression expr, InliningContext context)
+    {
+        return expr switch
+        {
+            SyntaxTypes.Expression.Application => true,
+
+            SyntaxTypes.Expression.ParenthesizedExpression paren =>
+            IsFunctionBearingExpression(paren.Expression.Value, context),
+
+            _ =>
+            IsFunctionExpression(expr, context)
+        };
+    }
+
     private static SyntaxTypes.Expression InlineFunctionCall(
+        ModuleName calleeModuleName,
         SyntaxTypes.FunctionImplementation funcImpl,
         IReadOnlyList<Node<SyntaxTypes.Expression>> args,
         InliningContext context)
@@ -674,9 +699,10 @@ public class Inlining
                 // Simple variable pattern - direct substitution
                 substitutions[varPattern.Name] = arg;
             }
-            else if (IsConstructorPattern(param.Value))
+            else
             {
-                // Constructor pattern - create a let destructuring binding
+                // Any non-variable pattern needs a let destructuring binding so nested names
+                // introduced by the pattern remain available in the inlined body.
                 var letDestr =
                     new SyntaxTypes.Expression.LetDeclaration.LetDestructuring(
                         Pattern: param,
@@ -684,15 +710,19 @@ public class Inlining
 
                 letDeclarations.Add(new Node<SyntaxTypes.Expression.LetDeclaration>(s_zeroRange, letDestr));
             }
-            // Note: Other complex patterns (like tuples, records) would need additional handling
-            // For now, we only support VarPattern and NamedPattern (constructor patterns)
         }
 
         // Substitute in the function body
         var substitutedBody = SubstituteInExpression(funcBody, substitutions);
 
+        var qualifiedLiftedHelperReferences =
+            QualifyLiftedHelperReferencesFromCalleeModule(
+                substitutedBody,
+                calleeModuleName,
+                context);
+
         // Recursively inline in the substituted body
-        var inlinedBody = InlineExpression(substitutedBody, context);
+        var inlinedBody = InlineExpression(qualifiedLiftedHelperReferences, context);
 
         // If we have let declarations, wrap the body in a let expression
         SyntaxTypes.Expression resultExpr;
@@ -742,6 +772,181 @@ public class Inlining
         }
 
         return resultExpr;
+    }
+
+    private static Node<SyntaxTypes.Expression> QualifyLiftedHelperReferencesFromCalleeModule(
+        Node<SyntaxTypes.Expression> exprNode,
+        ModuleName calleeModuleName,
+        InliningContext context)
+    {
+        var expr = exprNode.Value;
+
+        SyntaxTypes.Expression qualifiedExpr =
+            expr switch
+            {
+                SyntaxTypes.Expression.FunctionOrValue funcOrValue when funcOrValue.ModuleName.Count is 0 &&
+                    funcOrValue.Name.Contains("__lifted__", StringComparison.Ordinal) &&
+                    context.FunctionsByQualifiedName.ContainsKey((calleeModuleName, funcOrValue.Name)) =>
+                new SyntaxTypes.Expression.FunctionOrValue(calleeModuleName, funcOrValue.Name),
+
+                SyntaxTypes.Expression.Application app =>
+                new SyntaxTypes.Expression.Application(
+                    [
+                    .. app.Arguments.Select(
+                        arg =>
+                        QualifyLiftedHelperReferencesFromCalleeModule(arg, calleeModuleName, context))
+                    ]),
+
+                SyntaxTypes.Expression.ParenthesizedExpression paren =>
+                new SyntaxTypes.Expression.ParenthesizedExpression(
+                    QualifyLiftedHelperReferencesFromCalleeModule(paren.Expression, calleeModuleName, context)),
+
+                SyntaxTypes.Expression.IfBlock ifBlock =>
+                new SyntaxTypes.Expression.IfBlock(
+                    QualifyLiftedHelperReferencesFromCalleeModule(ifBlock.Condition, calleeModuleName, context),
+                    QualifyLiftedHelperReferencesFromCalleeModule(ifBlock.ThenBlock, calleeModuleName, context),
+                    QualifyLiftedHelperReferencesFromCalleeModule(ifBlock.ElseBlock, calleeModuleName, context)),
+
+                SyntaxTypes.Expression.CaseExpression caseExpr =>
+                new SyntaxTypes.Expression.CaseExpression(
+                    new SyntaxTypes.CaseBlock(
+                        QualifyLiftedHelperReferencesFromCalleeModule(
+                            caseExpr.CaseBlock.Expression,
+                            calleeModuleName,
+                            context),
+                        [
+                        .. caseExpr.CaseBlock.Cases.Select(
+                            caseItem =>
+                            new SyntaxTypes.Case(
+                                caseItem.Pattern,
+                                QualifyLiftedHelperReferencesFromCalleeModule(
+                                    caseItem.Expression,
+                                    calleeModuleName,
+                                    context)))
+                        ])),
+
+                SyntaxTypes.Expression.LetExpression letExpr =>
+                new SyntaxTypes.Expression.LetExpression(
+                    new SyntaxTypes.Expression.LetBlock(
+                        [
+                        .. letExpr.Value.Declarations.Select(
+                            decl =>
+                            {
+                                var qualifiedDeclaration =
+                                    decl.Value switch
+                                    {
+                                        SyntaxTypes.Expression.LetDeclaration.LetFunction letFunc =>
+                                        new SyntaxTypes.Expression.LetDeclaration.LetFunction(
+                                            letFunc.Function with
+                                            {
+                                                Declaration =
+                                                new Node<SyntaxTypes.FunctionImplementation>(
+                                                    letFunc.Function.Declaration.Range,
+                                                    letFunc.Function.Declaration.Value with
+                                                    {
+                                                        Expression =
+                                                        QualifyLiftedHelperReferencesFromCalleeModule(
+                                                            letFunc.Function.Declaration.Value.Expression,
+                                                            calleeModuleName,
+                                                            context)
+                                                    })
+                                            }),
+
+                                        SyntaxTypes.Expression.LetDeclaration.LetDestructuring letDestructuring =>
+                                        new SyntaxTypes.Expression.LetDeclaration.LetDestructuring(
+                                            letDestructuring.Pattern,
+                                            QualifyLiftedHelperReferencesFromCalleeModule(
+                                                letDestructuring.Expression,
+                                                calleeModuleName,
+                                                context)),
+
+                                        _ =>
+                                        decl.Value
+                                    };
+
+                                return new Node<SyntaxTypes.Expression.LetDeclaration>(decl.Range, qualifiedDeclaration);
+                            })
+                        ],
+                        QualifyLiftedHelperReferencesFromCalleeModule(
+                            letExpr.Value.Expression,
+                            calleeModuleName,
+                            context))),
+
+                SyntaxTypes.Expression.LambdaExpression lambda =>
+                new SyntaxTypes.Expression.LambdaExpression(
+                    new SyntaxTypes.LambdaStruct(
+                        lambda.Lambda.Arguments,
+                        QualifyLiftedHelperReferencesFromCalleeModule(
+                            lambda.Lambda.Expression,
+                            calleeModuleName,
+                            context))),
+
+                SyntaxTypes.Expression.ListExpr listExpr =>
+                new SyntaxTypes.Expression.ListExpr(
+                    [
+                    .. listExpr.Elements.Select(
+                        elem =>
+                        QualifyLiftedHelperReferencesFromCalleeModule(elem, calleeModuleName, context))
+                    ]),
+
+                SyntaxTypes.Expression.TupledExpression tupled =>
+                new SyntaxTypes.Expression.TupledExpression(
+                    [
+                    .. tupled.Elements.Select(
+                        elem =>
+                        QualifyLiftedHelperReferencesFromCalleeModule(elem, calleeModuleName, context))
+                    ]),
+
+                SyntaxTypes.Expression.RecordExpr recordExpr =>
+                new SyntaxTypes.Expression.RecordExpr(
+                    [
+                    .. recordExpr.Fields.Select(
+                        field =>
+                        new Node<(Node<string> fieldName, Node<SyntaxTypes.Expression> valueExpr)>(
+                            field.Range,
+                            (field.Value.fieldName,
+                            QualifyLiftedHelperReferencesFromCalleeModule(
+                                field.Value.valueExpr,
+                                calleeModuleName,
+                                context))))
+                    ]),
+
+                SyntaxTypes.Expression.RecordUpdateExpression recordUpdate =>
+                new SyntaxTypes.Expression.RecordUpdateExpression(
+                    recordUpdate.RecordName,
+                    [
+                    .. recordUpdate.Fields.Select(
+                        field =>
+                        new Node<(Node<string> fieldName, Node<SyntaxTypes.Expression> valueExpr)>(
+                            field.Range,
+                            (field.Value.fieldName,
+                            QualifyLiftedHelperReferencesFromCalleeModule(
+                                field.Value.valueExpr,
+                                calleeModuleName,
+                                context))))
+                    ]),
+
+                SyntaxTypes.Expression.RecordAccess recordAccess =>
+                new SyntaxTypes.Expression.RecordAccess(
+                    QualifyLiftedHelperReferencesFromCalleeModule(recordAccess.Record, calleeModuleName, context),
+                    recordAccess.FieldName),
+
+                SyntaxTypes.Expression.Negation negation =>
+                new SyntaxTypes.Expression.Negation(
+                    QualifyLiftedHelperReferencesFromCalleeModule(negation.Expression, calleeModuleName, context)),
+
+                SyntaxTypes.Expression.OperatorApplication opApp =>
+                new SyntaxTypes.Expression.OperatorApplication(
+                    opApp.Operator,
+                    opApp.Direction,
+                    QualifyLiftedHelperReferencesFromCalleeModule(opApp.Left, calleeModuleName, context),
+                    QualifyLiftedHelperReferencesFromCalleeModule(opApp.Right, calleeModuleName, context)),
+
+                _ =>
+                expr
+            };
+
+        return new Node<SyntaxTypes.Expression>(exprNode.Range, qualifiedExpr);
     }
 
     private static Node<SyntaxTypes.Expression> SubstituteInExpression(
@@ -1136,7 +1341,9 @@ public class Inlining
     /// </summary>
     private sealed class ModuleNameTupleComparer : IEqualityComparer<(ModuleName ModuleName, string FunctionName)>
     {
-        public bool Equals((ModuleName ModuleName, string FunctionName) x, (ModuleName ModuleName, string FunctionName) y)
+        public bool Equals(
+            (ModuleName ModuleName, string FunctionName) x,
+            (ModuleName ModuleName, string FunctionName) y)
         {
             return
                 x.FunctionName == y.FunctionName &&

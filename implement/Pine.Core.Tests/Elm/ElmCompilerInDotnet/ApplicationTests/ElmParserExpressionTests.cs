@@ -206,8 +206,8 @@ public class ElmParserExpressionTests
 
         CoreLibraryModule.CoreLibraryTestHelper.FormatCounts(report).Should().Be(
             """
-            InstructionCount: 91880
-            InvocationCount: 2708
+            InstructionCount: 76018
+            InvocationCount: 2165
             LoopIterationCount: 0
             """);
     }
@@ -227,8 +227,8 @@ public class ElmParserExpressionTests
 
         CoreLibraryModule.CoreLibraryTestHelper.FormatCounts(report).Should().Be(
             """
-            InstructionCount: 164930
-            InvocationCount: 6788
+            InstructionCount: 189898
+            InvocationCount: 8075
             LoopIterationCount: 0
             """);
     }
@@ -248,8 +248,8 @@ public class ElmParserExpressionTests
 
         CoreLibraryModule.CoreLibraryTestHelper.FormatCounts(report).Should().Be(
             """
-            InstructionCount: 193375
-            InvocationCount: 3044
+            InstructionCount: 89244
+            InvocationCount: 1591
             LoopIterationCount: 0
             """);
     }
@@ -272,8 +272,8 @@ public class ElmParserExpressionTests
 
         CoreLibraryModule.CoreLibraryTestHelper.FormatCounts(report).Should().Be(
             """
-            InstructionCount: 492655
-            InvocationCount: 12284
+            InstructionCount: 571644
+            InvocationCount: 15671
             LoopIterationCount: 0
             """);
     }
@@ -305,8 +305,8 @@ public class ElmParserExpressionTests
 
         CoreLibraryModule.CoreLibraryTestHelper.FormatCounts(report).Should().Be(
             """
-            InstructionCount: 5147855
-            InvocationCount: 160924
+            InstructionCount: 5738744
+            InvocationCount: 159291
             LoopIterationCount: 0
             """);
     }
@@ -368,8 +368,8 @@ public class ElmParserExpressionTests
 
         CoreLibraryModule.CoreLibraryTestHelper.FormatCounts(report).Should().Be(
             """
-            InstructionCount: 21623055
-            InvocationCount: 690324
+            InstructionCount: 23461544
+            InvocationCount: 653091
             LoopIterationCount: 0
             """);
     }
@@ -455,8 +455,8 @@ public class ElmParserExpressionTests
 
         CoreLibraryModule.CoreLibraryTestHelper.FormatCounts(report).Should().Be(
             """
-            InstructionCount: 155929215
-            InvocationCount: 4890444
+            InstructionCount: 254639944
+            InvocationCount: 7106611
             LoopIterationCount: 0
             """);
     }
