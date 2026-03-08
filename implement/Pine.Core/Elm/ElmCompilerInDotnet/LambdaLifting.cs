@@ -34,12 +34,25 @@ public static class LambdaLifting
     {
         var newDeclarations = new List<Node<SyntaxTypes.Declaration>>();
 
+        var nextLiftedIdentifierByFunctionName =
+            BuildNextLiftedIdentifierByFunctionName(module);
+
         foreach (var declaration in module.Declarations)
         {
             if (declaration.Value is SyntaxTypes.Declaration.FunctionDeclaration funcDecl)
             {
                 var functionName = funcDecl.Function.Declaration.Value.Name.Value;
-                var context = new LiftingContext(functionName);
+
+                var context =
+                    new LiftingContext(
+                        functionName,
+                        BoundVariables: ImmutableHashSet<string>.Empty,
+                        LambdaCounter:
+                        nextLiftedIdentifierByFunctionName.TryGetValue(functionName, out var nextIdentifier)
+                        ?
+                        nextIdentifier - 1
+                        :
+                        0);
 
                 // Collect parameter names as bound variables
                 var paramNames = CollectPatternNames(funcDecl.Function.Declaration.Value.Arguments);
@@ -82,6 +95,79 @@ public static class LambdaLifting
         }
 
         return module with { Declarations = newDeclarations };
+    }
+
+    private static IReadOnlyDictionary<string, int> BuildNextLiftedIdentifierByFunctionName(
+        SyntaxTypes.File module)
+    {
+        var nextLiftedIdentifierByFunctionName = new Dictionary<string, int>(StringComparer.Ordinal);
+
+        foreach (var declaration in module.Declarations)
+        {
+            if (declaration.Value is not SyntaxTypes.Declaration.FunctionDeclaration funcDecl)
+            {
+                continue;
+            }
+
+            var functionName = funcDecl.Function.Declaration.Value.Name.Value;
+
+            if (TryParseExistingLiftedIdentifier(functionName) is not { } liftedIdentifier)
+            {
+                continue;
+            }
+
+            var nextIdentifier = liftedIdentifier.identifier + 1;
+
+            if (nextLiftedIdentifierByFunctionName.TryGetValue(
+                liftedIdentifier.containingFunctionName,
+                out var existingNextIdentifier))
+            {
+                nextLiftedIdentifierByFunctionName[liftedIdentifier.containingFunctionName] =
+                    Math.Max(existingNextIdentifier, nextIdentifier);
+            }
+            else
+            {
+                nextLiftedIdentifierByFunctionName[liftedIdentifier.containingFunctionName] =
+                    nextIdentifier;
+            }
+        }
+
+        return nextLiftedIdentifierByFunctionName;
+    }
+
+    private static (string containingFunctionName, int identifier)? TryParseExistingLiftedIdentifier(
+        string functionName)
+    {
+        var liftedMarkerIndex =
+            functionName.IndexOf("__lifted__", StringComparison.Ordinal);
+
+        if (liftedMarkerIndex < 0)
+        {
+            return null;
+        }
+
+        var containingFunctionName = functionName[..liftedMarkerIndex];
+        var suffix = functionName[(liftedMarkerIndex + "__lifted__".Length)..];
+
+        if (suffix.StartsWith("lambda", StringComparison.Ordinal) &&
+            int.TryParse(suffix["lambda".Length..], out var lambdaIdentifier))
+        {
+            return (containingFunctionName, lambdaIdentifier);
+        }
+
+        var lastUnderscoreIndex = suffix.LastIndexOf('_');
+
+        if (lastUnderscoreIndex < 0)
+        {
+            return null;
+        }
+
+        return
+            int.TryParse(suffix[(lastUnderscoreIndex + 1)..], out var helperIdentifier)
+            ?
+            (containingFunctionName, helperIdentifier)
+            :
+            null;
     }
 
     /// <summary>
@@ -419,7 +505,8 @@ public static class LambdaLifting
         // Find free variables in the lambda body, excluding other local functions that will be lifted
         var freeVariables =
             FindFreeVariables(lambda.Expression, [.. lambdaParamNames])
-            .Where(v => context.BoundVariables.Contains(v) && v != bindingName && !localFunctionLiftedNames.ContainsKey(v))
+            .Where(
+                v => context.BoundVariables.Contains(v) && v != bindingName && !localFunctionLiftedNames.ContainsKey(v))
             .OrderBy(v => v)
             .ToList();
 
@@ -488,7 +575,8 @@ public static class LambdaLifting
         // Find free variables in the function body, excluding other local functions that will be lifted
         var freeVariables =
             FindFreeVariables(letFunc.Function.Declaration.Value.Expression, [.. funcParamNames])
-            .Where(v => context.BoundVariables.Contains(v) && v != bindingName && !localFunctionLiftedNames.ContainsKey(v))
+            .Where(
+                v => context.BoundVariables.Contains(v) && v != bindingName && !localFunctionLiftedNames.ContainsKey(v))
             .OrderBy(v => v)
             .ToList();
 
@@ -596,7 +684,8 @@ public static class LambdaLifting
 
                 var newCases =
                     caseExpr.CaseBlock.Cases
-                    .Select(c => new SyntaxTypes.Case(c.Pattern, SubstituteVariableReferences(c.Expression, substitutions)))
+                    .Select(
+                        c => new SyntaxTypes.Case(c.Pattern, SubstituteVariableReferences(c.Expression, substitutions)))
                     .ToList();
 
                 return
@@ -652,7 +741,9 @@ public static class LambdaLifting
             case SyntaxTypes.Expression.RecordExpr recordExpr:
                 var newFields =
                     recordExpr.Fields
-                    .Select(f => f with { Value = (f.Value.fieldName, SubstituteVariableReferences(f.Value.valueExpr, substitutions)) })
+                    .Select(
+                        f =>
+                        f with { Value = (f.Value.fieldName, SubstituteVariableReferences(f.Value.valueExpr, substitutions)) })
                     .ToList();
 
                 return exprNode with { Value = new SyntaxTypes.Expression.RecordExpr(newFields) };
@@ -671,7 +762,9 @@ public static class LambdaLifting
 
                 var newUpdateFields =
                     recordUpdate.Fields
-                    .Select(f => f with { Value = (f.Value.fieldName, SubstituteVariableReferences(f.Value.valueExpr, substitutions)) })
+                    .Select(
+                        f =>
+                        f with { Value = (f.Value.fieldName, SubstituteVariableReferences(f.Value.valueExpr, substitutions)) })
                     .ToList();
 
                 // Check if record name needs substitution
@@ -927,7 +1020,8 @@ public static class LambdaLifting
                     var casePatternNames = CollectPatternNames([caseItem.Pattern]);
 
                     caseFreeVars =
-                        caseFreeVars.Union(FindFreeVariables(caseItem.Expression, boundVariables.Union(casePatternNames)));
+                        caseFreeVars.Union(
+                            FindFreeVariables(caseItem.Expression, boundVariables.Union(casePatternNames)));
                 }
 
                 return caseFreeVars;

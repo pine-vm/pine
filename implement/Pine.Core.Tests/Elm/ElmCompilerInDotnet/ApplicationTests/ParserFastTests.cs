@@ -501,8 +501,8 @@ public class ParserFastTests
 
         CoreLibraryModule.CoreLibraryTestHelper.FormatCounts(report).Should().Be(
             """
-            InstructionCount: 500
-            InvocationCount: 20
+            InstructionCount: 288
+            InvocationCount: 10
             LoopIterationCount: 0
             """);
     }
@@ -520,8 +520,8 @@ public class ParserFastTests
 
         CoreLibraryModule.CoreLibraryTestHelper.FormatCounts(report).Should().Be(
             """
-            InstructionCount: 401
-            InvocationCount: 17
+            InstructionCount: 256
+            InvocationCount: 10
             LoopIterationCount: 0
             """);
     }
@@ -539,8 +539,8 @@ public class ParserFastTests
 
         CoreLibraryModule.CoreLibraryTestHelper.FormatCounts(report).Should().Be(
             """
-            InstructionCount: 451
-            InvocationCount: 17
+            InstructionCount: 269
+            InvocationCount: 9
             LoopIterationCount: 0
             """);
     }
@@ -558,8 +558,8 @@ public class ParserFastTests
 
         CoreLibraryModule.CoreLibraryTestHelper.FormatCounts(report).Should().Be(
             """
-            InstructionCount: 2138
-            InvocationCount: 104
+            InstructionCount: 1107
+            InvocationCount: 52
             LoopIterationCount: 0
             """);
     }
