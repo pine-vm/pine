@@ -275,6 +275,7 @@ public class PineVM : IPineVM
         long instructionCount = 0;
         long loopIterationCount = 0;
         long parseAndEvalCount = 0;
+        long buildListCount = 0;
         long stackFrameCount = 0;
         long stackFrameReplaceCount = 0;
         long lastCacheEntryInstructionCount = 0;
@@ -347,7 +348,8 @@ public class PineVM : IPineVM
                                     new StackFrameProfilingBaseline(
                                         BeginInstructionCount: instructionCount,
                                         BeginParseAndEvalCount: parseAndEvalCount,
-                                        BeginStackFrameCount: stackFrameCount),
+                                        BeginStackFrameCount: stackFrameCount,
+                                        BeginBuildListCount: buildListCount),
                                     Specialization: specialization.Stepwise,
                                     CacheFileName: null);
 
@@ -486,7 +488,8 @@ public class PineVM : IPineVM
                 new StackFrameProfilingBaseline(
                     BeginInstructionCount: instructionCount,
                     BeginParseAndEvalCount: parseAndEvalCount,
-                    BeginStackFrameCount: stackFrameCount);
+                    BeginStackFrameCount: stackFrameCount,
+                    BeginBuildListCount: buildListCount);
 
             var newFrame =
                 BuildStackFrame(
@@ -527,6 +530,7 @@ public class PineVM : IPineVM
 
                 var frameParseAndEvalCount = parseAndEvalCount - currentFrame.ProfilingBaseline.BeginParseAndEvalCount;
                 var frameStackFrameCount = stackFrameCount - currentFrame.ProfilingBaseline.BeginStackFrameCount;
+                var frameBuildListCount = buildListCount - currentFrame.ProfilingBaseline.BeginBuildListCount;
 
                 if (currentFrame.CacheFileName is { } cacheFileName && _cacheFileStore is { } cacheFileStore)
                 {
@@ -565,8 +569,9 @@ public class PineVM : IPineVM
                         currentFrame.Expression,
                         currentFrame.InputValues,
                         InstructionCount: frameTotalInstructionCount,
-                        LoopIterationCount: currentFrame.LoopIterationCount,
                         InvocationCount: frameParseAndEvalCount,
+                        BuildListCount: frameBuildListCount,
+                        LoopIterationCount: currentFrame.LoopIterationCount,
                         ReturnValue: frameReturnValue,
                         StackTrace: CompileStackTrace(10)));
             }
@@ -583,8 +588,9 @@ public class PineVM : IPineVM
                         Expression: rootExpression,
                         Input: StackFrameInput.GenericFromEnvironmentValue(rootEnvironment),
                         InstructionCount: instructionCount,
-                        LoopIterationCount: loopIterationCount,
                         InvocationCount: parseAndEvalCount,
+                        BuildListCount: buildListCount,
+                        LoopIterationCount: loopIterationCount,
                         ReturnValue: frameReturnValue,
                         StackTrace: []);
             }
@@ -970,6 +976,8 @@ public class PineVM : IPineVM
                             currentFrame.PushInstructionResult(
                                 PineValueInProcess.CreateList(items));
 
+                            ++buildListCount;
+
                             continue;
                         }
 
@@ -998,6 +1006,7 @@ public class PineVM : IPineVM
                                     items);
 
                             currentFrame.PushInstructionResult(taggedListValue);
+                            ++buildListCount;
                             continue;
                         }
 

@@ -208,6 +208,7 @@ public class ElmParserExpressionTests
             """
             InstructionCount: 76018
             InvocationCount: 2165
+            BuildListCount: 26749
             LoopIterationCount: 0
             """);
     }
@@ -229,6 +230,7 @@ public class ElmParserExpressionTests
             """
             InstructionCount: 189898
             InvocationCount: 8075
+            BuildListCount: 52639
             LoopIterationCount: 0
             """);
     }
@@ -250,6 +252,7 @@ public class ElmParserExpressionTests
             """
             InstructionCount: 89244
             InvocationCount: 1591
+            BuildListCount: 38752
             LoopIterationCount: 0
             """);
     }
@@ -274,6 +277,7 @@ public class ElmParserExpressionTests
             """
             InstructionCount: 571644
             InvocationCount: 15671
+            BuildListCount: 207912
             LoopIterationCount: 0
             """);
     }
@@ -307,6 +311,7 @@ public class ElmParserExpressionTests
             """
             InstructionCount: 5738744
             InvocationCount: 159291
+            BuildListCount: 1991532
             LoopIterationCount: 0
             """);
     }
@@ -370,6 +375,7 @@ public class ElmParserExpressionTests
             """
             InstructionCount: 23461544
             InvocationCount: 653091
+            BuildListCount: 8061732
             LoopIterationCount: 0
             """);
     }
@@ -457,6 +463,7 @@ public class ElmParserExpressionTests
             """
             InstructionCount: 254639944
             InvocationCount: 7106611
+            BuildListCount: 87790852
             LoopIterationCount: 0
             """);
     }

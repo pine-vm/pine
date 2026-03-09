@@ -444,6 +444,7 @@ public class ParserFastTests
             """
             InstructionCount: 2
             InvocationCount: 0
+            BuildListCount: 0
             LoopIterationCount: 0
             """);
     }
@@ -463,6 +464,7 @@ public class ParserFastTests
             """
             InstructionCount: 2
             InvocationCount: 0
+            BuildListCount: 0
             LoopIterationCount: 0
             """);
     }
@@ -482,6 +484,7 @@ public class ParserFastTests
             """
             InstructionCount: 2
             InvocationCount: 0
+            BuildListCount: 0
             LoopIterationCount: 0
             """);
     }
@@ -503,6 +506,7 @@ public class ParserFastTests
             """
             InstructionCount: 288
             InvocationCount: 10
+            BuildListCount: 12
             LoopIterationCount: 0
             """);
     }
@@ -522,6 +526,7 @@ public class ParserFastTests
             """
             InstructionCount: 256
             InvocationCount: 10
+            BuildListCount: 12
             LoopIterationCount: 0
             """);
     }
@@ -541,6 +546,7 @@ public class ParserFastTests
             """
             InstructionCount: 269
             InvocationCount: 9
+            BuildListCount: 15
             LoopIterationCount: 0
             """);
     }
@@ -560,6 +566,7 @@ public class ParserFastTests
             """
             InstructionCount: 1107
             InvocationCount: 52
+            BuildListCount: 54
             LoopIterationCount: 0
             """);
     }

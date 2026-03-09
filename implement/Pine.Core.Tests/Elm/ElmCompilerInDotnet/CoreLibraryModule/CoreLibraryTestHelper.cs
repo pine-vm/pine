@@ -187,6 +187,7 @@ public static class CoreLibraryTestHelper
     {
         yield return "InstructionCount: " + report.InstructionCount;
         yield return "InvocationCount: " + report.InvocationCount;
+        yield return "BuildListCount: " + report.BuildListCount;
         yield return "LoopIterationCount: " + report.LoopIterationCount;
     }
 
@@ -239,6 +240,7 @@ public static class CoreLibraryTestHelper
 
         long totalInstructions = 0;
         long totalInvocations = 0;
+        long totalBuildLists = 0;
         long totalLoopIterations = 0;
 
         EvaluationReport lastReport = null!;
@@ -260,6 +262,7 @@ public static class CoreLibraryTestHelper
             currentValue = report.ReturnValue.Evaluate();
             totalInstructions += report.InstructionCount;
             totalInvocations += report.InvocationCount;
+            totalBuildLists += report.BuildListCount;
             totalLoopIterations += report.LoopIterationCount;
 
             lastReport = report;
@@ -270,6 +273,7 @@ public static class CoreLibraryTestHelper
             {
                 InstructionCount = totalInstructions,
                 InvocationCount = totalInvocations,
+                BuildListCount = totalBuildLists,
                 LoopIterationCount = totalLoopIterations
             };
 
