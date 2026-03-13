@@ -8,6 +8,8 @@ public class FormatIncompleteTests
 {
     /*
      * Scenarios to test formatting of Elm modules containing some incomplete declarations.
+     * 
+     * For discussion of these scenarios, also see https://github.com/avh4/elm-format/issues/109
      * */
 
     [Fact]
