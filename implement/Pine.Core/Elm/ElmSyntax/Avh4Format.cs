@@ -1341,12 +1341,34 @@ public class Avh4Format
         CommentQueryHelper commentQueries,
         IReadOnlyList<Node<IncompleteDeclaration>> originalIncompleteDeclarations)
     {
+        private const string TypeExposeOpenSuffix = "(..)";
+
         #region File Formatting
 
         public (File, IReadOnlyList<Node<string>>, IReadOnlyList<Node<IncompleteDeclaration>>) FormatFile(
             File file,
             FormattingContext context)
         {
+            var firstDeclaration = file.Declarations.FirstOrDefault();
+
+            var (normalizedImports, normalizedIncompleteDeclarations) =
+                NormalizeDisplacedImports(
+                    file.Imports,
+                    originalIncompleteDeclarations,
+                    firstDeclaration?.Range.Start.Row);
+
+            var originalLeadingImports =
+                firstDeclaration is null
+                ?
+                normalizedImports
+                :
+                [
+                ..
+                    normalizedImports.Where(
+                    import =>
+                    import.Range.Start.Row < firstDeclaration.Range.Start.Row)
+                ];
+
             // Check for comments before the module definition (at the beginning of the file)
             var commentsBeforeModule = commentQueries.GetBeforeRow(file.ModuleDefinition.Range.Start.Row);
 
@@ -1368,7 +1390,7 @@ public class Avh4Format
                 FormatModuleDefinition(file.ModuleDefinition, contextBeforeModule, commentQueries);
 
             // Check for comments associated with first import (leading comments)
-            var firstImport = file.Imports.FirstOrDefault();
+            var firstImport = originalLeadingImports.FirstOrDefault();
 
             var commentsAfterModuleBeforeImports =
                 firstImport is not null
@@ -1399,10 +1421,10 @@ public class Avh4Format
             FormattingContext contextAfterImports;
             IReadOnlyList<Node<Import>> formattedImports;
 
-            if (firstImport is not null)
+            if (normalizedImports.Any())
             {
                 (formattedImports, contextAfterImports) =
-                    FormatImports(file.Imports, contextBeforeImports, commentQueries);
+                    FormatImports(normalizedImports, contextBeforeImports, commentQueries);
             }
             else
             {
@@ -1412,13 +1434,11 @@ public class Avh4Format
 
             // Search for comments between imports/module and first declaration using original positions
             var lastOriginalRowBeforeDecls =
-                file.Imports.Any()
+                originalLeadingImports.Any()
                 ?
-                file.Imports.Last().Range.End.Row
+                originalLeadingImports.Last().Range.End.Row
                 :
                 file.ModuleDefinition.Range.End.Row;
-
-            var firstDeclaration = file.Declarations.FirstOrDefault();
 
             var commentsBefore =
                 firstDeclaration is not null
@@ -1482,7 +1502,10 @@ public class Avh4Format
 
             // Format declarations along with incomplete declarations interleaved by position
             var (formattedDeclarations, contextAfterDeclarations, formattedIncompleteDeclarations) =
-                FormatDeclarationsWithIncompletes(file.Declarations, contextBeforeDecls);
+                FormatDeclarationsWithIncompletes(
+                    file.Declarations,
+                    normalizedIncompleteDeclarations,
+                    contextBeforeDecls);
 
             // Get trailing comments that appear after all declarations
             var lastDeclRow =
@@ -1490,9 +1513,9 @@ public class Avh4Format
                 ?
                 file.Declarations.Max(d => d.Range.End.Row)
                 :
-                (file.Imports.Any()
+                (normalizedImports.Any()
                 ?
-                file.Imports.Last().Range.End.Row
+                normalizedImports.Last().Range.End.Row
                 :
                 file.ModuleDefinition.Range.End.Row);
 
@@ -1569,6 +1592,288 @@ public class Avh4Format
 
             return new Location(row, column);
         }
+
+        private static (IReadOnlyList<Node<Import>> Imports, IReadOnlyList<Node<IncompleteDeclaration>> IncompleteDeclarations)
+            NormalizeDisplacedImports(
+            IReadOnlyList<Node<Import>> imports,
+            IReadOnlyList<Node<IncompleteDeclaration>> incompleteDeclarations,
+            int? firstDeclarationRow)
+        {
+            var normalizedImports =
+                imports
+                .Select(
+                    import =>
+                    (Import: import,
+                    IsDisplaced: firstDeclarationRow is { } declarationRow &&
+                        import.Range.Start.Row > declarationRow))
+                .ToList();
+
+            var remainingIncompleteDeclarations = new List<Node<IncompleteDeclaration>>();
+
+            foreach (var incompleteDeclaration in incompleteDeclarations)
+            {
+                var displacedImport = ParseDisplacedImport(incompleteDeclaration);
+
+                if (displacedImport is null)
+                {
+                    remainingIncompleteDeclarations.Add(incompleteDeclaration);
+                    continue;
+                }
+
+                normalizedImports.Add((displacedImport, IsDisplaced: true));
+            }
+
+            return
+                (MergeNormalizedImports(normalizedImports), remainingIncompleteDeclarations);
+        }
+
+        private static Node<Import>? ParseDisplacedImport(
+            Node<IncompleteDeclaration> incompleteDeclaration)
+        {
+            var originalText = incompleteDeclaration.Value.OriginalText.Trim();
+
+            if (!LooksLikeImportDeclaration(originalText))
+                return null;
+
+            return ParseSingleImportAtRow(originalText, incompleteDeclaration.Range.Start.Row);
+        }
+
+        private static bool LooksLikeImportDeclaration(string text) =>
+            text.StartsWith(Keywords.Import + " ", System.StringComparison.Ordinal) ||
+            text == Keywords.Import;
+
+        private static Node<Import>? ParseSingleImportAtRow(
+            string importText,
+            int targetRow)
+        {
+            // The synthetic module header occupies rows 1-2 and places the import on row 3.
+            var syntheticModuleText =
+                "module Temporary exposing (..)\n\n" +
+                new string('\n', System.Math.Max(0, targetRow - 3)) +
+                importText;
+
+            return
+                ElmSyntaxParser.ParseModuleText(syntheticModuleText)
+                .Unpack(
+                    fromErr: _ => null,
+                    fromOk:
+                    parsedFile =>
+                    parsedFile.Declarations.Count is 0 &&
+                    parsedFile.IncompleteDeclarations.Count is 0 &&
+                    parsedFile.Imports.Count is 1
+                    ?
+                    parsedFile.Imports[0]
+                    :
+                    null);
+        }
+
+        private static IReadOnlyList<Node<Import>> MergeNormalizedImports(
+            IReadOnlyList<(Node<Import> Import, bool IsDisplaced)> imports)
+        {
+            var mergedImports = new List<Node<Import>>();
+
+            foreach (var importsWithSameModule in imports.GroupBy(import => string.Join(".", import.Import.Value.ModuleName.Value)))
+            {
+                if (!importsWithSameModule.Any(import => import.IsDisplaced))
+                {
+                    mergedImports.AddRange(importsWithSameModule.Select(import => import.Import));
+                    continue;
+                }
+
+                var mergedImportsWithSameModule = new List<Node<Import>>();
+
+                foreach (var import in importsWithSameModule.Select(import => import.Import))
+                {
+                    var compatibleImportIndex =
+                        mergedImportsWithSameModule.FindIndex(
+                            existingImport => AreImportsCompatible(existingImport, import));
+
+                    if (compatibleImportIndex < 0)
+                    {
+                        mergedImportsWithSameModule.Add(import);
+                        continue;
+                    }
+
+                    mergedImportsWithSameModule[compatibleImportIndex] =
+                        MergeCompatibleImports(mergedImportsWithSameModule[compatibleImportIndex], import);
+                }
+
+                mergedImports.AddRange(mergedImportsWithSameModule);
+            }
+
+            return mergedImports;
+        }
+
+        private static bool AreImportsCompatible(
+            Node<Import> left,
+            Node<Import> right)
+        {
+            if (!Enumerable.SequenceEqual(left.Value.ModuleName.Value, right.Value.ModuleName.Value))
+                return false;
+
+            var leftAlias = ImportAliasText(left.Value);
+            var rightAlias = ImportAliasText(right.Value);
+
+            return leftAlias is null || rightAlias is null || leftAlias == rightAlias;
+        }
+
+        private static string? ImportAliasText(Import import) =>
+            import.ModuleAlias is null
+            ?
+            null
+            :
+            string.Join(".", import.ModuleAlias.Value.Alias.Value);
+
+        private static Node<Import> MergeCompatibleImports(
+            Node<Import> left,
+            Node<Import> right)
+        {
+            var mergedImportText = BuildMergedImportText(left.Value, right.Value);
+
+            return
+                ParseSingleImportAtRow(
+                    mergedImportText,
+                    System.Math.Min(left.Range.Start.Row, right.Range.Start.Row))
+                ??
+                left;
+        }
+
+        private static string BuildMergedImportText(
+            Import left,
+            Import right)
+        {
+            var moduleName = string.Join(".", left.ModuleName.Value);
+            var alias = ImportAliasText(left) ?? ImportAliasText(right);
+            var exposingText = MergeImportExposingText(left, right);
+
+            return
+                "import " + moduleName +
+                (alias is null ? string.Empty : " as " + alias) +
+                (exposingText is null ? string.Empty : " " + exposingText);
+        }
+
+        private static string? MergeImportExposingText(
+            Import left,
+            Import right)
+        {
+            var leftExposing = left.ExposingList?.ExposingList.Value;
+            var rightExposing = right.ExposingList?.ExposingList.Value;
+
+            if (leftExposing is null)
+                return RenderExposingText(rightExposing);
+
+            if (rightExposing is null)
+                return RenderExposingText(leftExposing);
+
+            if (leftExposing is Exposing.All || rightExposing is Exposing.All)
+                return Keywords.ExposingAll;
+
+            if (leftExposing is Exposing.Explicit leftExplicit &&
+                rightExposing is Exposing.Explicit rightExplicit)
+            {
+                var mergedExplicitEntries = new Dictionary<string, string>();
+
+                AddExplicitExposeEntries(mergedExplicitEntries, leftExplicit);
+                AddExplicitExposeEntries(mergedExplicitEntries, rightExplicit);
+
+                var orderedEntries =
+                    mergedExplicitEntries.Values.OrderBy(text => text, System.StringComparer.Ordinal);
+
+                return
+                    Keywords.Exposing +
+                    " (" +
+                    string.Join(", ", orderedEntries) +
+                    ")";
+            }
+
+            return RenderExposingText(leftExposing);
+        }
+
+        private static void AddExplicitExposeEntries(
+            IDictionary<string, string> mergedEntries,
+            Exposing.Explicit exposing)
+        {
+            foreach (var exposedNode in exposing.Nodes.Nodes)
+            {
+                var key = ExposedEntryKey(exposedNode.Value);
+                var renderedEntry = RenderExposedEntry(exposedNode.Value);
+
+                if (!mergedEntries.TryGetValue(key, out var existingEntry) ||
+                    (renderedEntry.EndsWith(TypeExposeOpenSuffix, System.StringComparison.Ordinal) &&
+                    !existingEntry.EndsWith(TypeExposeOpenSuffix, System.StringComparison.Ordinal)))
+                {
+                    mergedEntries[key] = renderedEntry;
+                }
+            }
+        }
+
+        private static string? RenderExposingText(
+            Exposing? exposing) =>
+            exposing switch
+            {
+                null =>
+                null,
+
+                Exposing.All =>
+                Keywords.ExposingAll,
+
+                Exposing.Explicit explicitExposing =>
+                Keywords.Exposing +
+                " (" +
+                string.Join(
+                    ", ",
+                    explicitExposing.Nodes.Nodes
+                    .Select(exposedNode => RenderExposedEntry(exposedNode.Value))
+                    .OrderBy(text => text, System.StringComparer.Ordinal)) +
+                ")",
+
+                _ =>
+                throw new System.NotImplementedException(
+                    "Unexpected exposing type: " + exposing.GetType().Name)
+            };
+
+        private static string ExposedEntryKey(
+            TopLevelExpose exposedEntry) =>
+            exposedEntry switch
+            {
+                TopLevelExpose.InfixExpose infixExpose =>
+                "infix:" + infixExpose.Name,
+
+                TopLevelExpose.FunctionExpose functionExpose =>
+                "function:" + functionExpose.Name,
+
+                TopLevelExpose.TypeOrAliasExpose typeOrAliasExpose =>
+                "type-or-alias:" + typeOrAliasExpose.Name,
+
+                TopLevelExpose.TypeExpose typeExpose =>
+                "type:" + typeExpose.ExposedType.Name,
+
+                _ =>
+                throw new System.NotImplementedException(
+                    "Unexpected top-level expose type: " + exposedEntry.GetType().Name)
+            };
+
+        private static string RenderExposedEntry(
+            TopLevelExpose exposedEntry) =>
+            exposedEntry switch
+            {
+                TopLevelExpose.InfixExpose infixExpose =>
+                "(" + infixExpose.Name + ")",
+
+                TopLevelExpose.FunctionExpose functionExpose =>
+                functionExpose.Name,
+
+                TopLevelExpose.TypeOrAliasExpose typeOrAliasExpose =>
+                typeOrAliasExpose.Name,
+
+                TopLevelExpose.TypeExpose typeExpose =>
+                typeExpose.ExposedType.Name +
+                (typeExpose.ExposedType.Open is null ? string.Empty : TypeExposeOpenSuffix),
+
+                _ =>
+                throw new System.NotImplementedException(
+                    "Unexpected top-level expose type: " + exposedEntry.GetType().Name)
+            };
 
         #endregion
 
@@ -2266,8 +2571,12 @@ public class Avh4Format
         /// <summary>
         /// Formats both complete and incomplete declarations, interleaving them by their original positions.
         /// </summary>  
+        /// <param name="declarations">The complete declarations to format.</param>
+        /// <param name="incompleteDeclarations">The incomplete declarations to interleave with the complete ones.</param>
+        /// <param name="context">The formatting context to start from.</param>
         private (IReadOnlyList<Node<Declaration>>, FormattingContext, IReadOnlyList<Node<IncompleteDeclaration>>) FormatDeclarationsWithIncompletes(
             IReadOnlyList<Node<Declaration>> declarations,
+            IReadOnlyList<Node<IncompleteDeclaration>> incompleteDeclarations,
             FormattingContext context)
         {
             // Create a union of complete and incomplete declarations sorted by position
@@ -2279,9 +2588,9 @@ public class Avh4Format
                 allItems.Add((declarations[i].Range.Start.Row, isComplete: true, originalIndex: i));
             }
 
-            for (var i = 0; i < originalIncompleteDeclarations.Count; i++)
+            for (var i = 0; i < incompleteDeclarations.Count; i++)
             {
-                allItems.Add((originalIncompleteDeclarations[i].Range.Start.Row, isComplete: false, originalIndex: i));
+                allItems.Add((incompleteDeclarations[i].Range.Start.Row, isComplete: false, originalIndex: i));
             }
 
             // Sort by row to interleave correctly
@@ -2350,7 +2659,7 @@ public class Avh4Format
                 else
                 {
                     // Handle incomplete declaration
-                    var incompleteDecl = originalIncompleteDeclarations[originalIndex];
+                    var incompleteDecl = incompleteDeclarations[originalIndex];
                     var originalText = incompleteDecl.Value.OriginalText;
                     var startLoc = currentContext.CurrentLocation();
                     var endLoc = CalculateEndLocation(startLoc, originalText);
@@ -4688,9 +4997,13 @@ public class Avh4Format
             var effectiveBaseColumn = chainBaseColumn ?? ifTokenLoc.Column;
 
             // Create reference context at effective base column for else alignment
-            var effectiveBaseRef = chainBaseColumn.HasValue
-                ? context  // If chain base provided, context is already at that position
-                : context.SetIndentToCurrentColumn();
+            var effectiveBaseRef =
+                chainBaseColumn.HasValue
+                ?
+                context // If chain base provided, context is already at that position
+
+                :
+                context.SetIndentToCurrentColumn();
 
             // Create reference context for body indentation (next multiple of 4 from base)
             var bodyRef = effectiveBaseRef.CreateIndentedRef();

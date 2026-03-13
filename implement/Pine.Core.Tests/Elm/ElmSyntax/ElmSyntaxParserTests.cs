@@ -1,6 +1,7 @@
 using AwesomeAssertions;
 using Pine.Core.Elm.ElmSyntax;
 using Pine.Core.Elm.ElmSyntax.SyntaxModel;
+using System.Linq;
 using Xunit;
 
 using ExpressionSyntax = Pine.Core.Elm.ElmSyntax.SyntaxModel.Expression;
@@ -203,5 +204,44 @@ public class ElmSyntaxParserTests
         secondField.Value.FieldType.Range.End.Should().Be(
             secondField.Range.End,
             "second field range should end at the field type end, not including trailing comment");
+    }
+
+    [Fact]
+    public void Parses_imports_after_top_level_declarations()
+    {
+        var input =
+            """"
+            module Test exposing (..)
+
+            import String
+
+
+            x =
+                1
+
+            import Dict exposing (empty)
+
+            y =
+                2
+            """";
+
+        var parsedFile =
+            ElmSyntaxParser.ParseModuleText(input)
+            .Extract(err => throw new System.Exception(err));
+
+        parsedFile.Imports.Select(import => string.Join(".", import.Value.ModuleName.Value))
+            .Should()
+            .Equal("String", "Dict");
+
+        parsedFile.IncompleteDeclarations.Should().BeEmpty();
+
+        parsedFile.Declarations.Should().HaveCount(2);
+
+        parsedFile.Declarations
+            .Select(
+                declaration =>
+                    ((Declaration.FunctionDeclaration)declaration.Value).Function.Declaration.Value.Name.Value)
+            .Should()
+            .Equal("x", "y");
     }
 }

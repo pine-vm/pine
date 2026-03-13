@@ -585,6 +585,97 @@ public class FormatCompleteTests
     }
 
     [Fact]
+    public void Moves_displaced_imports_to_import_block()
+    {
+        /*
+         * For discussion of the feature to merge displaced import statements, see:
+         * https://github.com/avh4/elm-format/issues/512
+         * https://github.com/avh4/elm-format/pull/836
+         * */
+
+        var input =
+            """"
+            module Test exposing (..)
+
+            import String
+
+
+            x =
+                1
+
+            import Dict
+
+            y =
+                2
+
+            """";
+
+        var expected =
+            """"
+            module Test exposing (..)
+
+            import Dict
+            import String
+
+
+            x =
+                1
+
+
+            y =
+                2
+
+            """";
+
+        AssertModuleTextFormatsToExpected(input, expected);
+    }
+
+    [Fact]
+    public void Merges_displaced_imports_with_existing_imports()
+    {
+        /*
+         * For discussion of the feature to merge displaced import statements, see:
+         * https://github.com/avh4/elm-format/issues/512
+         * https://github.com/avh4/elm-format/pull/836
+         * */
+
+        var input =
+            """"
+            module Test exposing (..)
+
+            import List exposing (map)
+
+
+            x =
+                1
+
+            import List exposing (filter)
+
+            y =
+                2
+
+            """";
+
+        var expected =
+            """"
+            module Test exposing (..)
+
+            import List exposing (filter, map)
+
+
+            x =
+                1
+
+
+            y =
+                2
+
+            """";
+
+        AssertModuleTextFormatsToExpected(input, expected);
+    }
+
+    [Fact]
     public void Breaks_exposing_list_if_multiline()
     {
         var input =

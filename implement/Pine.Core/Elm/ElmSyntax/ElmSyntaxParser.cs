@@ -260,7 +260,7 @@ public class ElmSyntaxParser
         {
             return token.Lexeme switch
             {
-                "type" or "port" or "infix" =>
+                "type" or "port" or "infix" or "import" =>
                 true,
 
                 _ =>
@@ -1229,7 +1229,14 @@ public class ElmSyntaxParser
 
                     try
                     {
-                        declarations.Add(ParseDeclaration(docComment));
+                        if (NextTokenMatches(token => token.Type is TokenType.Identifier && token.Lexeme is "import"))
+                        {
+                            imports.Add(ParseImport());
+                        }
+                        else
+                        {
+                            declarations.Add(ParseDeclaration(docComment));
+                        }
                     }
                     catch (Exception ex)
                     {
