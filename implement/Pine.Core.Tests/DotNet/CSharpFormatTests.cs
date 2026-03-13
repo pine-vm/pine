@@ -2929,6 +2929,20 @@ public class CSharpFormatTests
     }
 
     [Fact]
+    public void Formats_multiline_empty_array_initializer_without_throwing_and_stays_stable()
+    {
+        var input =
+            """"
+            var value =
+                new[]
+                {
+                };
+            """";
+
+        AssertFormattingIsStable(input, scriptMode: true);
+    }
+
+    [Fact]
     public void Formatting_only_changes_whitespace_in_Pine_Core_files()
     {
         var pineCoreDir = FindPineCoreDirectory();

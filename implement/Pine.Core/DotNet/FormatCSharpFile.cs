@@ -2419,6 +2419,9 @@ public static class FormatCSharpFile
         InitializerExpressionSyntax node,
         FormatContext ctx)
     {
+        if (node.Expressions.Count is 0)
+            return node;
+
         if (!SpansMultipleLines(node))
             return node;
 
