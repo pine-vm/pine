@@ -5416,4 +5416,204 @@ public class CSharpFormatTests
 
         AssertFormattedSyntax(input, expected, scriptMode: true);
     }
+
+    [Fact]
+    public void Inserts_empty_lines_around_pragma()
+    {
+        var input =
+            """"
+            namespace Pine.Core.Internal;
+
+            using static Core.KernelFunction;
+            #pragma warning disable IDE1006
+            public class Typename
+            {
+            }
+            """";
+
+        var expected =
+            """"
+            namespace Pine.Core.Internal;
+            
+            using static Core.KernelFunction;
+            
+            #pragma warning disable IDE1006
+            
+            public class Typename
+            {
+            }
+            """";
+
+        AssertFormattedSyntax(input, expected, scriptMode: false);
+    }
+
+    [Fact]
+    public void Preserves_space_between_catch_keyword_and_block()
+    {
+        var input =
+            """"
+            try
+            {
+                fromZipArchive =
+                    FileTree.FromSetOfFilesWithCommonFilePath(
+                        ZipArchive.EntriesFromZipArchive(blobContent));
+            }
+            catch { }
+            """";
+
+        AssertFormattedSyntax(input, input, scriptMode: true);
+    }
+
+    [Fact]
+    public void Formats_conditional_containing_trailing_comment()
+    {
+        var input =
+            """"
+            var effectiveBaseRef = chainBaseColumn.HasValue
+                ? context  // If chain base provided, context is already at that position
+                : context.SetIndentToCurrentColumn();
+            """";
+
+        var expected =
+            """"
+            var effectiveBaseRef =
+                chainBaseColumn.HasValue
+                ? context // If chain base provided, context is already at that position
+                : context.SetIndentToCurrentColumn();
+            """";
+
+        AssertFormattedSyntax(input, expected, scriptMode: true);
+    }
+
+    [Fact]
+    public void Preserves_array_creation_initializer_multiline_comment_indent()
+    {
+        var input =
+            """"            
+            private static readonly FrozenSet<DeclQualifiedName> s_includedDeclarationsDefault =
+                new[]
+                {
+                    new DeclQualifiedName(["Pine"], "stringFromValue"),
+                    new DeclQualifiedName(["Pine"], "valueFromString"),
+
+                    /*
+                     * Would benefit more from memoization, not clear which variant is more efficient at the moment.
+                     * 
+                    new DeclQualifiedName(["Pine"], "evaluateExpression"),
+                    new DeclQualifiedName(["Pine"], "encodeExpressionAsValue"),
+                    */
+                }
+                .ToFrozenSet();
+            """";
+
+        AssertFormattedSyntax(input, input, scriptMode: true);
+    }
+
+    [Fact]
+    public void Normalizes_indent_in_collection_spread_elements_chains()
+    {
+        var input =
+            """"            
+            var outerEnvClass =
+                PineValueClass.Create(
+                    [
+                     ..functionRecord.EnvFunctions.ToArray()
+                         .Select((envFuncValue, index) =>
+                         new KeyValuePair<IReadOnlyList<int>, PineValue>(
+                             [0, index],
+                             envFuncValue)),
+
+                     ..arguments.Select((argValue, argIndex) =>
+                         new KeyValuePair<IReadOnlyList<int>, PineValue>(
+                             [1 + argIndex],
+                             argValue)),
+                     ]);
+            """";
+
+        var expected =
+            """"
+            var outerEnvClass =
+                PineValueClass.Create(
+                    [
+                    ..functionRecord.EnvFunctions.ToArray()
+                    .Select(
+                        (envFuncValue, index) =>
+                        new KeyValuePair<IReadOnlyList<int>, PineValue>(
+                            [0, index],
+                            envFuncValue)),
+
+                    ..arguments.Select(
+                        (argValue, argIndex) =>
+                        new KeyValuePair<IReadOnlyList<int>, PineValue>(
+                            [1 + argIndex],
+                            argValue)),
+                    ]);
+            """";
+
+        AssertFormattedSyntax(input, expected, scriptMode: true);
+    }
+
+    [Fact]
+    public void Formats_member_access_chain_invocation_lambda_containing_multiline_comment()
+    {
+        var input =
+            """"            
+            var observedSet =
+                observedSetInitial
+                .Select(entry =>
+                {
+                    /*
+                    * 2025-09-14:
+                    * */
+
+                    var constraint =
+                        FilterClassRemovingAllNonExpressions(entry.constraint, parseCache);
+
+                    return (entry.origExpr, entry.inlinedExpr, constraint);
+                })
+                .DistinctBy(entry => (entry.origExpr, entry.constraint))
+                .ToArray();
+            """";
+
+        var expected =
+            """"
+            var observedSet =
+                observedSetInitial
+                .Select(
+                    entry =>
+                    {
+                        /*
+                        * 2025-09-14:
+                        * */
+
+                        var constraint =
+                            FilterClassRemovingAllNonExpressions(entry.constraint, parseCache);
+
+                        return (entry.origExpr, entry.inlinedExpr, constraint);
+                    })
+                .DistinctBy(entry => (entry.origExpr, entry.constraint))
+                .ToArray();
+            """";
+
+        AssertFormattedSyntax(input, expected, scriptMode: true);
+    }
+
+    [Fact]
+    public void Formats_member_access_chain_exceeding_line_length()
+    {
+        var input =
+            """"
+            var baseAddressBase16 =
+                System.Text.RegularExpressions.Regex.Match(fileSubpathAndContent.filePath.Single(), @"0x(.+)testing").Groups[1].Value;
+            """";
+
+        var expected =
+            """"
+            var baseAddressBase16 =
+                System.Text.RegularExpressions.Regex.Match(fileSubpathAndContent.filePath.Single(), @"0x(.+)testing").Groups[1]
+                .Value;
+            """";
+
+        AssertFormattedSyntax(input, expected, scriptMode: true);
+    }
 }
