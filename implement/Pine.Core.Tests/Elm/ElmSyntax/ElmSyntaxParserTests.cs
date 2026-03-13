@@ -244,4 +244,54 @@ public class ElmSyntaxParserTests
             .Should()
             .Equal("x", "y");
     }
+
+    [Fact]
+    public void Nested_case_expression_does_not_absorb_dedented_outer_branch()
+    {
+        var input =
+            """"
+            module Test exposing (value)
+
+
+            value parse step s0 =
+                case parse s0 of
+                    Good p1 step1 s1 ->
+                        case step of
+                            Loop newState ->
+                                p1
+
+                            Done result ->
+                                result
+
+                    Bad p1 x ->
+                        x
+            """";
+
+        var parsedFile =
+            ElmSyntaxParser.ParseModuleText(input)
+            .Extract(err => throw new System.Exception(err));
+
+        var functionDeclaration =
+            parsedFile.Declarations
+            .Select(declaration => declaration.Value)
+            .OfType<Declaration.FunctionDeclaration>()
+            .Single();
+
+        var outerCase =
+            functionDeclaration.Function.Declaration.Value.Expression.Value
+            .Should()
+            .BeOfType<ExpressionSyntax.CaseExpression>()
+            .Subject;
+
+        outerCase.CaseBlock.Cases.Should().HaveCount(2);
+
+        var nestedCase =
+            outerCase.CaseBlock.Cases[0].Expression.Value
+            .Should()
+            .BeOfType<ExpressionSyntax.CaseExpression>()
+            .Subject;
+
+        nestedCase.CaseBlock.Cases.Should().HaveCount(2);
+        outerCase.CaseBlock.Cases[1].Expression.Value.Should().BeOfType<ExpressionSyntax.FunctionOrValue>();
+    }
 }

@@ -3198,28 +3198,49 @@ public class ElmSyntaxParser
                     ConsumeAllTrivia();
 
                     var casesIndentMin = Peek.Start.Column;
-                    // For robustness with inconsistently indented case arms, we also accept
-                    // arms that are strictly indented more than the 'case' keyword itself.
-                    // This handles malformed input like:
-                    //     case x of
-                    //          Just y -> ...   (column 10)
-                    //         Nothing -> ...   (column 9, still > case keyword column)
-                    var caseKeywordColumn = firstIdentifierToken.Range.Start.Column;
+
+                    var caseBranchesIndentLowerBound =
+                        casesIndentMin <= indentMin
+                        ?
+                        casesIndentMin
+                        :
+                        indentMin + 1;
 
                     var caseBranches = new List<SyntaxTypes.Case>();
 
                     while (!IsAtEnd() &&
-                        (casesIndentMin <= Peek.Start.Column || caseKeywordColumn < Peek.Start.Column) &&
+                        caseBranchesIndentLowerBound <= Peek.Start.Column &&
                         Peek.Type is not TokenType.Comma &&
                         Peek.Type is not TokenType.CloseParen &&
                         Peek.Type is not TokenType.CloseBracket &&
                         Peek.Type is not TokenType.CloseBrace)
                     {
-                        var caseBranch = ParseCaseBranch(casesIndentMin);
+                        var branchStartIndex = _current;
+                        Node<SyntaxTypes.Case>? caseBranch;
+
+                        try
+                        {
+                            caseBranch = ParseCaseBranch(casesIndentMin);
+                        }
+                        catch (ParserException)
+                        {
+                            _current = branchStartIndex;
+                            break;
+                        }
+                        catch (InvalidOperationException)
+                        {
+                            _current = branchStartIndex;
+                            break;
+                        }
 
                         caseBranches.Add(caseBranch.Value);
 
                         ConsumeAllTrivia();
+                    }
+
+                    if (caseBranches.Count is 0)
+                    {
+                        throw ExceptionForCurrentLocation("Expected at least one case branch after 'of'");
                     }
 
                     var caseBlockRange =
@@ -3635,7 +3656,9 @@ public class ElmSyntaxParser
 
             ConsumeAllTrivia();
 
-            var expression = ParseExpression(indentMin);
+            var expressionIndentMin = Peek.Start.Column;
+
+            var expression = ParseExpression(expressionIndentMin);
 
             var caseRange =
                 MakeRange(pattern.Range.Start, expression.Range.End);

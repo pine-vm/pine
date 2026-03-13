@@ -291,6 +291,8 @@ public class FormatCompleteTests
          *           ^^^^^^^
          * It is confusing me a lot! Normally I can give fairly specific hints, but
          * something is really tripping me up this time.
+         *
+         * As discussed at https://github.com/avh4/elm-format/issues/720 we make formatting more lenient.
          * */
 
         var input =
@@ -306,6 +308,73 @@ public class FormatCompleteTests
                  Nothing ->
                         c
             """";
+
+        var expected =
+            """"
+            module Test exposing (..)
+
+
+            decl a =
+                case a of
+                    Just x ->
+                        b
+
+                    Nothing ->
+                        c
+            """";
+
+        AssertModuleTextFormatsToExpected(input, expected);
+    }
+
+    [Fact]
+    public void Supports_case_arm_indented_less_than_case_line_itself()
+    {
+        /*
+         * Corresponds to https://github.com/avh4/elm-format/issues/720:
+         * accept a case branch indented less than the case line itself.
+         * */
+
+        var input =
+            """"
+            module Test exposing (..)
+
+
+            decl a =
+                case a of
+               Just x ->
+                        b
+
+                Nothing ->
+                        c
+            """";
+
+        var expected =
+            """"
+            module Test exposing (..)
+
+
+            decl a =
+                case a of
+                    Just x ->
+                        b
+
+                    Nothing ->
+                        c
+            """";
+
+        AssertModuleTextFormatsToExpected(input, expected);
+    }
+
+    [Fact]
+    public void Supports_case_arm_starting_after_fresh_line_with_no_indentation()
+    {
+        /*
+         * Corresponds to https://github.com/avh4/elm-format/issues/720:
+         * accept a case branch that starts after a fresh line with no indentation.
+         * */
+
+        var input =
+            "module Test exposing (..)\n\n\ndecl a =\n    case a of\nJust x ->\n        b\n\nNothing ->\n        c";
 
         var expected =
             """"
@@ -582,6 +651,22 @@ public class FormatCompleteTests
             """";
 
         AssertModuleTextFormatsToExpected(input, expected);
+    }
+
+    [Fact]
+    public void Formats_import_at_end_of_file_without_trailing_newline()
+    {
+        /*
+         * Regression test for https://github.com/avh4/elm-format/issues/551:
+         * an import at end of file should not require a trailing newline.
+         * */
+
+        var input = "module Test exposing (..)\n\nimport Something exposing (something)";
+
+        var formatted = FormatString(input);
+
+        formatted.Should().Be(
+            "module Test exposing (..)\n\nimport Something exposing (something)\n");
     }
 
     [Fact]
