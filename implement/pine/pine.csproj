@@ -41,7 +41,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="GitCore" Version="0.2.2" />
+    <PackageReference Include="GitCore" Version="0.2.3" />
     <PackageReference Include="Microsoft.Extensions.FileProviders.Embedded" Version="10.0.3" />
     <PackageReference Include="ReadLine" Version="2.0.1" />
     <PackageReference Include="SharpCompress" Version="0.46.0" />

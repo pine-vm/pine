@@ -8,6 +8,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Runtime.CompilerServices;
+using System.Text;
 using Xunit;
 
 namespace Pine.Core.Tests.DotNet;
@@ -2891,11 +2892,11 @@ public class CSharpFormatTests
                         SyntaxFactory.VariableDeclaration(
                             SyntaxFactory.PredefinedType(
                                 SyntaxFactory.Token(SyntaxKind.IntKeyword)))
-                            .WithVariables(
+                        .WithVariables(
                             SyntaxFactory.SingletonSeparatedList(
                                 SyntaxFactory.VariableDeclarator(
                                     SyntaxFactory.Identifier("a"))
-                                    .WithInitializer(
+                                .WithInitializer(
                                     SyntaxFactory.EqualsValueClause(
                                         SyntaxFactory.LiteralExpression(
                                             SyntaxKind.NumericLiteralExpression,
@@ -2904,11 +2905,11 @@ public class CSharpFormatTests
                         SyntaxFactory.VariableDeclaration(
                             SyntaxFactory.PredefinedType(
                                 SyntaxFactory.Token(SyntaxKind.IntKeyword)))
-                            .WithVariables(
+                        .WithVariables(
                             SyntaxFactory.SingletonSeparatedList(
                                 SyntaxFactory.VariableDeclarator(
                                     SyntaxFactory.Identifier("b"))
-                                    .WithInitializer(
+                                .WithInitializer(
                                     SyntaxFactory.EqualsValueClause(
                                         SyntaxFactory.LiteralExpression(
                                             SyntaxKind.NumericLiteralExpression,
@@ -2945,28 +2946,30 @@ public class CSharpFormatTests
     [Fact]
     public void Formatting_only_changes_whitespace_in_Pine_Core_files()
     {
-        var pineCoreDir = FindPineCoreDirectory();
+        var gitDir = FindGitDirectory();
 
-        var csFiles = Directory.EnumerateFiles(pineCoreDir, "*.cs", SearchOption.AllDirectories).ToList();
+        var allFiles = GitCore.LoadFromLocalFiles.LoadTreeContentsFromHead(gitDir);
+
+        var csFiles =
+            allFiles
+            .Where(
+                kvp =>
+                kvp.Key.Count >= 3 &&
+                kvp.Key[0] == "implement" &&
+                kvp.Key[1] == "Pine.Core" &&
+                kvp.Key[kvp.Key.Count - 1].EndsWith(".cs", StringComparison.OrdinalIgnoreCase))
+            .ToList();
 
         csFiles.Should().NotBeEmpty();
 
         var failures = new List<string>();
         var skippedFiles = new List<(string path, string reason)>();
 
-        foreach (var filePath in csFiles)
+        foreach (var file in csFiles)
         {
-            var relativePath = Path.GetRelativePath(pineCoreDir, filePath);
-            var originalText = File.ReadAllText(filePath);
-
-            // Skip files in bin/obj directories (build artifacts)
-            var sep = Path.DirectorySeparatorChar;
-
-            if (relativePath.Contains(sep + "bin" + sep) ||
-                relativePath.Contains(sep + "obj" + sep))
-            {
-                continue;
-            }
+            // Skip the "implement" and "Pine.Core" path segments to get the relative path within Pine.Core
+            var relativePath = string.Join("/", file.Key.Skip(2));
+            var originalText = Encoding.UTF8.GetString(file.Value.Span);
 
             string formattedText;
             string formattedTwice;
@@ -3084,18 +3087,62 @@ public class CSharpFormatTests
         new([.. text.Where(c => !char.IsWhiteSpace(c))]);
 
 
-    private static string FindPineCoreDirectory([CallerFilePath] string? callerFilePath = null)
+    /// <summary>
+    /// Searches upward from the directory of the calling source file to find the nearest
+    /// valid Git directory (a directory named <c>.git</c> that contains at least one file).
+    /// <para>
+    /// Starting from the directory containing the source file identified by <paramref name="callerFilePath"/>,
+    /// each ancestor directory is checked for a subdirectory named <c>.git</c>. A candidate
+    /// <c>.git</c> directory is considered valid only if it contains at least one file (at any depth),
+    /// which distinguishes a real Git repository from an empty directory that happens to be named <c>.git</c>.
+    /// </para>
+    /// <para>
+    /// This method is designed to be general-purpose and suitable for inclusion in a public API
+    /// (e.g., GitCore). It makes no assumptions about how many directory levels separate the caller
+    /// from the repository root.
+    /// </para>
+    /// </summary>
+    /// <param name="callerFilePath">
+    /// The path of the calling source file, automatically provided by the compiler via
+    /// <see cref="CallerFilePathAttribute"/>. The search starts from the directory containing this file.
+    /// </param>
+    /// <returns>The absolute path to the nearest valid <c>.git</c> directory.</returns>
+    /// <exception cref="Exception">
+    /// Thrown when no valid <c>.git</c> directory is found in any ancestor of the starting directory.
+    /// </exception>
+    private static string FindGitDirectory([CallerFilePath] string? callerFilePath = null)
     {
-        // This test file is at implement/Pine.Core.Tests/DotNet/CSharpFormatTests.cs
-        // Pine.Core is at implement/Pine.Core/
-        var testFileDir = Path.GetDirectoryName(callerFilePath)!;
-        var pineCoreDir = Path.GetFullPath(Path.Combine(testFileDir, "..", "..", "Pine.Core"));
+        var startDirectory = Path.GetDirectoryName(callerFilePath)!;
 
-        Directory.Exists(pineCoreDir).Should().BeTrue(
-            $"Expected Pine.Core directory at {pineCoreDir}");
+        var currentDirectory = Path.GetFullPath(startDirectory);
 
-        return pineCoreDir;
+        while (true)
+        {
+            var candidate = Path.Combine(currentDirectory, ".git");
+
+            if (Directory.Exists(candidate) && DirectoryContainsAnyFile(candidate))
+            {
+                return candidate;
+            }
+
+            var parent = Path.GetDirectoryName(currentDirectory);
+
+            if (parent is null || parent == currentDirectory)
+            {
+                throw new Exception(
+                    "Could not find a valid .git directory in any ancestor of '" + startDirectory + "'");
+            }
+
+            currentDirectory = parent;
+        }
     }
+
+    /// <summary>
+    /// Returns <c>true</c> if the directory at <paramref name="directoryPath"/> contains at least one file,
+    /// searching recursively through all subdirectories.
+    /// </summary>
+    private static bool DirectoryContainsAnyFile(string directoryPath) =>
+        Directory.EnumerateFiles(directoryPath, "*", SearchOption.AllDirectories).Any();
 
     private static void AssertFormattedSyntax(
         string inputSyntaxText,
