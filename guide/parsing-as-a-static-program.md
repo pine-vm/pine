@@ -1,13 +1,17 @@
 # Parsing as a Static Program
 
-Since Pine is an inherently dynamic language, not every Pine program can be mapped to a static program.
+Pine is a **homoiconic** language: code and data share the same representation (`PineValue`). The `ParseAndEval` expression type embodies this — it takes a data value, parses it as an expression at runtime, and evaluates it. This is Pine's equivalent of `eval` in other languages.
+
+A Pine expression is said to be ‘static’ with regard to homoiconicity if it contains no `ParseAndEval` that depends on the environment. In other words, such a ‘static’ expression does not accept a program as input.
+
+Parsing into a static program transforms a standard Pine expression into a form that separates code and data.
 
 Compilers that translate from static source languages, such as Elm, will often produce purely static Pine programs. (A typical case of an exception to this rule is when the application developer selects a higher-order function as the entry point for compilation)
 
 But why do we even care about translating Pine code into a static program representation?
 
 + Supporting inspection and snapshot tests to verify the behavior of compilers and code transformations in general.
-+ Supporting compilation to lower-level representations, especially static programming languages.
++ Supporting the search for representations of the given program that are more efficient and require fewer computing resources at runtime. (These specialized representations are also used to support compilation to bytecode and static programming languages)
 
 While the first use case allows some leniency, the latter is more demanding, requiring fidelity that includes all information needed to construct a program that behaves the same way.
 
