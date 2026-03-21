@@ -2,11 +2,23 @@
 
 For semantics of the Elm programming language, consult the file 'elm-programming-language-semantics.md'
 
-## Encoding of Elm Values as Pine Values
+## Entry Point
 
-At the interface chosen as the entry point for the compilation, the encoding of Elm values follows the model established in the `ElmValueEncoding.cs` file. The definitions in `ElmValueEncoding.cs` cover the encoding of all Elm values except functions.
+The entry point for compilation is the declaration in one of the Elm modules in the source code that supports integration with and connection to the outside world. Compiler applications often expose an API that offers selecting a module as an entry point. In these cases, the compiler application applies a default selection to pick a declaration from that module. Traditionally, that was simply the one declaration named main.
 
-For functions not called directly from outside, the compiler can deviate from that encoding to optimize for runtime efficiency.
+### Encoding of Elm Values at Entry Points
+
+To serve its role in connecting to other systems, an entry point must support incoming values and encode outgoing values using predictable, stable, legible encodings.
+
+For parameters and return values of entry points, the encoding of Elm values follows the model established in the `ElmValueEncoding.cs` file. The definitions in `ElmValueEncoding.cs` cover the encoding of all Elm values except functions. Functions are encoded according to the model in FunctionValueBuilder.cs.
+
+### Relation to Platforms
+
+When looking at the compilation of Elm programs to Pine, a platform is just a constraint on the type of the entry point. Since the platform is the system that translates between values and effects, it is outside the scope of the Elm app and this specification.
+
+### Simplified Internal Function Interfaces
+
+For functions not called directly from outside, the compiler may emit a simplified interface to optimize for smaller program size or runtime efficiency.
 
 The following are some examples of such optimized internal representations:
 
