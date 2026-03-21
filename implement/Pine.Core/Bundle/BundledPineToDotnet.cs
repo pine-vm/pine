@@ -108,7 +108,7 @@ public record BundledPineToDotnet(
     {
         var parseCache = new PineVMParseCache();
 
-        var (staticProgram, declsFailed) =
+        var (staticProgram, functionMetadata, declsFailed) =
             CodeAnalysis.CodeAnalysis.ParseAsStaticMonomorphicProgram(
                 parsedEnvironment,
                 includeDeclaration: IncludeDeclarationDefault,
@@ -124,6 +124,7 @@ public record BundledPineToDotnet(
 
         BuildAndWriteBundleFile(
             staticProgram,
+            functionMetadata,
             destinationDirectory: destinationDirectory,
             logger: logger,
             writeCSharpFilesArchive);
@@ -183,13 +184,14 @@ public record BundledPineToDotnet(
         .ToFrozenSet();
 
     private static void BuildAndWriteBundleFile(
-        StaticProgram staticProgram,
+        StaticProgram<DeclQualifiedName> staticProgram,
+        IReadOnlyDictionary<DeclQualifiedName, StaticProgramFunctionMetadata> functionMetadata,
         string destinationDirectory,
         Action<string> logger,
         bool writeCSharpFilesArchive)
     {
         var csharpFiles =
-            BuildBundleCSharpFiles(staticProgram);
+            BuildBundleCSharpFiles(staticProgram, functionMetadata);
 
         var csharpFilesAggregateSize =
             csharpFiles.Values
@@ -293,10 +295,11 @@ public record BundledPineToDotnet(
     }
 
     public static FileTree BuildBundleCSharpFiles(
-        StaticProgram staticProgram)
+        StaticProgram<DeclQualifiedName> staticProgram,
+        IReadOnlyDictionary<DeclQualifiedName, StaticProgramFunctionMetadata> functionMetadata)
     {
         var asCSharp =
-            StaticProgramCSharp.FromStaticProgram(staticProgram);
+            StaticProgramCSharp.FromStaticProgram(staticProgram, functionMetadata);
 
         var csharpFiles =
             asCSharp.BuildCSharpProjectFiles(

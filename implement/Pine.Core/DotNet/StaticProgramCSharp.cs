@@ -78,15 +78,17 @@ public record StaticProgramCSharp(
     }
 
     public static StaticProgramCSharp FromStaticProgram(
-        StaticProgram staticProgram) =>
-        FromStaticProgram(staticProgram, DeclarationSyntaxContextDefault());
+        StaticProgram<DeclQualifiedName> staticProgram,
+        IReadOnlyDictionary<DeclQualifiedName, StaticProgramFunctionMetadata> functionMetadata) =>
+        FromStaticProgram(staticProgram, functionMetadata, DeclarationSyntaxContextDefault());
 
     public static StaticProgramCSharp FromStaticProgram(
-        StaticProgram staticProgram,
+        StaticProgram<DeclQualifiedName> staticProgram,
+        IReadOnlyDictionary<DeclQualifiedName, StaticProgramFunctionMetadata> functionMetadata,
         DeclarationSyntaxContext declarationSyntaxContext)
     {
         var valuesToReuseRoots =
-            CollectValuesToReuse(staticProgram)
+            CollectValuesToReuse(staticProgram, functionMetadata)
             .ToFrozenSet();
 
         var valuesToReuse =
@@ -127,7 +129,7 @@ public record StaticProgramCSharp(
             staticProgram.NamedFunctions
             .ToFrozenDictionary(
                 kvp => MapFunctionNameToGlobalAnon(kvp.Key),
-                kvp => kvp.Value.interf);
+                kvp => functionMetadata[kvp.Key].Interface);
 
         var moduleNames = new HashSet<DeclQualifiedName>();
 
@@ -153,7 +155,7 @@ public record StaticProgramCSharp(
                 elementSelector:
                 kvp =>
                 {
-                    return (kvp.Value.interf, kvp.Value.body);
+                    return (functionMetadata[kvp.Key].Interface, kvp.Value);
                 });
 
         StaticProgramCSharpClass ClassFromDeclarations(
@@ -203,7 +205,7 @@ public record StaticProgramCSharp(
                             kvp => kvp.Key.DeclName,
                             kvp =>
                             {
-                                return (kvp.Value.interf, kvp.Value.body);
+                                return (functionMetadata[kvp.Key].Interface, kvp.Value);
                             });
 
                     return ClassFromDeclarations(className: cn, functionsInClass);
@@ -214,7 +216,7 @@ public record StaticProgramCSharp(
                 staticProgram.NamedFunctions
                 .ToFrozenDictionary(
                     kvp => MapFunctionNameToGlobalAnon(kvp.Key),
-                    kvp => (kvp.Value.origExpr, kvp.Value.interf, kvp.Value.constraint)),
+                    kvp => (functionMetadata[kvp.Key].OrigExpr, functionMetadata[kvp.Key].Interface, functionMetadata[kvp.Key].Constraint)),
                 valueHashCache: valueHashCache,
                 existingAvailableDecls: commonValueClass.availableDecls,
                 declarationSyntaxContext: declarationSyntaxContext);
@@ -724,17 +726,18 @@ public record StaticProgramCSharp(
     }
 
     public static IEnumerable<PineValue> CollectValuesToReuse(
-        StaticProgram staticProgram)
+        StaticProgram<DeclQualifiedName> staticProgram,
+        IReadOnlyDictionary<DeclQualifiedName, StaticProgramFunctionMetadata> functionMetadata)
     {
         foreach (var kvp in staticProgram.NamedFunctions)
         {
-            foreach (var lit in CollectLiteralsValues(kvp.Value.body))
+            foreach (var lit in CollectLiteralsValues(kvp.Value))
                 yield return lit;
 
-            foreach (var v in CollectValuesRootsFromValueClass(kvp.Value.constraint))
+            foreach (var v in CollectValuesRootsFromValueClass(functionMetadata[kvp.Key].Constraint))
                 yield return v;
 
-            yield return ExpressionEncoding.EncodeExpressionAsValue(kvp.Value.origExpr);
+            yield return ExpressionEncoding.EncodeExpressionAsValue(functionMetadata[kvp.Key].OrigExpr);
         }
     }
 

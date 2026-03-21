@@ -34,7 +34,7 @@ public class CodeAnalysisTests
 
         var parseCache = new PineVMParseCache();
 
-        var (parsedEnv, staticProgram) =
+        var (parsedEnv, staticProgram, functionMetadata) =
             CodeAnalysisTestHelper.StaticProgramFromElmModules(
                 [elmModuleText],
                 includeDeclaration:
@@ -44,7 +44,7 @@ public class CodeAnalysisTests
                 },
                 parseCache);
 
-        var wholeProgramText = StaticExpressionDisplay.RenderStaticProgram(staticProgram);
+        var wholeProgramText = StaticExpressionDisplay.RenderStaticProgram(staticProgram, functionMetadata);
 
         wholeProgramText.Trim().Should().Be(
             """"
@@ -98,7 +98,7 @@ public class CodeAnalysisTests
 
         var parseCache = new PineVMParseCache();
 
-        var (parsedEnv, staticProgram) =
+        var (parsedEnv, staticProgram, functionMetadata) =
             CodeAnalysisTestHelper.StaticProgramFromElmModules(
                 [elmModuleText],
                 includeDeclaration:
@@ -108,7 +108,7 @@ public class CodeAnalysisTests
                 },
                 parseCache);
 
-        var wholeProgramText = StaticExpressionDisplay.RenderStaticProgram(staticProgram);
+        var wholeProgramText = StaticExpressionDisplay.RenderStaticProgram(staticProgram, functionMetadata);
 
         wholeProgramText.Trim().Should().Be(
             """"
@@ -158,7 +158,7 @@ public class CodeAnalysisTests
 
         var parseCache = new PineVMParseCache();
 
-        var (parsedEnv, staticProgram) =
+        var (parsedEnv, staticProgram, functionMetadata) =
             CodeAnalysisTestHelper.StaticProgramFromElmModules(
                 [elmModuleText],
                 includeDeclaration:
@@ -168,7 +168,7 @@ public class CodeAnalysisTests
                 },
                 parseCache);
 
-        var wholeProgramText = StaticExpressionDisplay.RenderStaticProgram(staticProgram);
+        var wholeProgramText = StaticExpressionDisplay.RenderStaticProgram(staticProgram, functionMetadata);
 
         wholeProgramText.Trim().Should().Be(
             """"
@@ -245,7 +245,7 @@ public class CodeAnalysisTests
 
         var parseCache = new PineVMParseCache();
 
-        var (parsedEnv, staticProgram) =
+        var (parsedEnv, staticProgram, functionMetadata) =
             CodeAnalysisTestHelper.StaticProgramFromElmModules(
                 [elmModuleText],
                 includeDeclaration:
@@ -255,7 +255,7 @@ public class CodeAnalysisTests
                 },
                 parseCache);
 
-        var wholeProgramText = StaticExpressionDisplay.RenderStaticProgram(staticProgram);
+        var wholeProgramText = StaticExpressionDisplay.RenderStaticProgram(staticProgram, functionMetadata);
 
         wholeProgramText.Trim().Should().Be(
             """"
@@ -379,7 +379,7 @@ public class CodeAnalysisTests
             ElmInteractiveEnvironment.ParseInteractiveEnvironment(compiledEnv)
             .Extract(err => throw new System.Exception("Failed parsing interactive environment: " + err));
 
-        var staticProgram =
+        var (staticProgram, functionMetadata) =
             CodeAnalysisTestHelper.ParseAsStaticMonomorphicProgramAndCrashOnAnyFailure(
                 parsedEnv,
                 includeDeclaration:
@@ -389,7 +389,7 @@ public class CodeAnalysisTests
                 },
                 parseCache);
 
-        var wholeProgramText = StaticExpressionDisplay.RenderStaticProgram(staticProgram);
+        var wholeProgramText = StaticExpressionDisplay.RenderStaticProgram(staticProgram, functionMetadata);
 
         wholeProgramText.Trim().Should().Be(
             """"
@@ -841,7 +841,7 @@ public class CodeAnalysisTests
 
         var parseCache = new PineVMParseCache();
 
-        var (parsedEnv, staticProgram) =
+        var (parsedEnv, staticProgram, functionMetadata) =
             CodeAnalysisTestHelper.StaticProgramFromElmModules(
                 [elmModuleText],
                 includeDeclaration:
@@ -851,7 +851,7 @@ public class CodeAnalysisTests
                 },
                 parseCache);
 
-        var wholeProgramText = StaticExpressionDisplay.RenderStaticProgram(staticProgram);
+        var wholeProgramText = StaticExpressionDisplay.RenderStaticProgram(staticProgram, functionMetadata);
 
         wholeProgramText.Trim().Should().Be(
             """"
@@ -1037,7 +1037,7 @@ public class CodeAnalysisTests
             ElmInteractiveEnvironment.ParseInteractiveEnvironment(compiledEnv)
             .Extract(err => throw new System.Exception("Failed parsing interactive environment: " + err));
 
-        var staticProgram =
+        var (staticProgram, functionMetadata) =
             CodeAnalysisTestHelper.ParseAsStaticMonomorphicProgramAndCrashOnAnyFailure(
                 parsedEnv,
                 includeDeclaration:
@@ -1047,7 +1047,7 @@ public class CodeAnalysisTests
                 },
                 parseCache);
 
-        var wholeProgramText = StaticExpressionDisplay.RenderStaticProgram(staticProgram);
+        var wholeProgramText = StaticExpressionDisplay.RenderStaticProgram(staticProgram, functionMetadata);
 
         wholeProgramText.Trim().Should().Be(
             """"
@@ -1838,7 +1838,7 @@ public class CodeAnalysisTests
 
         var parseCache = new PineVMParseCache();
 
-        var (parsedEnv, staticProgram) =
+        var (parsedEnv, staticProgram, functionMetadata) =
             CodeAnalysisTestHelper.StaticProgramFromElmModules(
                 [elmModuleText],
                 includeDeclaration:
@@ -1848,7 +1848,7 @@ public class CodeAnalysisTests
                 },
                 parseCache);
 
-        var wholeProgramText = StaticExpressionDisplay.RenderStaticProgram(staticProgram);
+        var wholeProgramText = StaticExpressionDisplay.RenderStaticProgram(staticProgram, functionMetadata);
 
         wholeProgramText.Trim().Should().Be(
             """"
@@ -2111,7 +2111,7 @@ public class CodeAnalysisTests
 
         var parseCache = new PineVMParseCache();
 
-        var (parsedEnv, staticProgram) =
+        var (parsedEnv, staticProgram, functionMetadata) =
             CodeAnalysisTestHelper.StaticProgramFromElmModules(
                 [elmModuleTestListText, elmModuleTestText],
                 includeDeclaration:
@@ -2121,7 +2121,7 @@ public class CodeAnalysisTests
                 },
                 parseCache);
 
-        var wholeProgramText = StaticExpressionDisplay.RenderStaticProgram(staticProgram);
+        var wholeProgramText = StaticExpressionDisplay.RenderStaticProgram(staticProgram, functionMetadata);
 
         wholeProgramText.Trim().Should().Be(
             """"
@@ -2265,7 +2265,7 @@ public class CodeAnalysisTests
             ElmInteractiveEnvironment.ParseInteractiveEnvironment(compiledEnv)
             .Extract(err => throw new System.Exception("Failed parsing interactive environment: " + err));
 
-        var (staticProgram, declsFailed) =
+        var (staticProgram, _, declsFailed) =
             Core.CodeAnalysis.CodeAnalysis.ParseAsStaticMonomorphicProgram(
                 parsedEnv,
                 includeDeclaration:

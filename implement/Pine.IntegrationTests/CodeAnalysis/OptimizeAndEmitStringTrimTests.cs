@@ -12,7 +12,7 @@ public class OptimizeAndEmitStringTrimTests
     {
         var parseCache = new PineVMParseCache();
 
-        var (parsedEnv, staticProgram) =
+        var (parsedEnv, staticProgram, functionMetadata) =
             CodeAnalysisTestHelper.StaticProgramFromElmModules(
                 [],
                 includeDeclaration:
@@ -22,11 +22,12 @@ public class OptimizeAndEmitStringTrimTests
                 },
                 parseCache);
 
-        var wholeProgramText = StaticExpressionDisplay.RenderStaticProgram(staticProgram);
+        var wholeProgramText = StaticExpressionDisplay.RenderStaticProgram(staticProgram, functionMetadata);
 
         var asCSharp =
             StaticProgramCSharp.FromStaticProgram(
                 staticProgram,
+                functionMetadata,
                 CodeAnalysisTestHelper.DeclarationSyntaxContext);
 
         var moduleString = asCSharp.ModulesClasses[new DeclQualifiedName([], "String")];

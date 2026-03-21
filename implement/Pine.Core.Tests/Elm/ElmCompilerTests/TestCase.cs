@@ -77,12 +77,12 @@ public record TestCase(
         return appCodeTree;
     }
 
-    public static StaticProgram ParseAsStaticMonomorphicProgramAndCrashOnAnyFailure(
+    public static (StaticProgram<DeclQualifiedName> staticProgram, IReadOnlyDictionary<DeclQualifiedName, StaticProgramFunctionMetadata> functionMetadata) ParseAsStaticMonomorphicProgramAndCrashOnAnyFailure(
         ElmInteractiveEnvironment.ParsedInteractiveEnvironment parsedEnvironment,
         System.Func<DeclQualifiedName, bool> includeDeclaration,
         PineVMParseCache parseCache)
     {
-        var (staticProgram, declsFailed) =
+        var (staticProgram, functionMetadata, declsFailed) =
             Core.CodeAnalysis.CodeAnalysis.ParseAsStaticMonomorphicProgram(
                 parsedEnvironment,
                 includeDeclaration: includeDeclaration,
@@ -96,6 +96,6 @@ public record TestCase(
 
         staticProgram.Should().NotBeNull();
 
-        return staticProgram;
+        return (staticProgram, functionMetadata);
     }
 }

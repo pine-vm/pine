@@ -363,7 +363,7 @@ public class ParserFastTests
 
         var parseCache = new PineVMParseCache();
 
-        var (parsedEnv, staticProgram) =
+        var (parsedEnv, staticProgram, functionMetadata) =
             CodeAnalysisTestHelper.StaticProgramFromElmModules(
                 [
                 rangeElmModuleText,
@@ -380,7 +380,7 @@ public class ParserFastTests
                 },
                 parseCache);
 
-        var wholeProgramText = StaticExpressionDisplay.RenderStaticProgram(staticProgram);
+        var wholeProgramText = StaticExpressionDisplay.RenderStaticProgram(staticProgram, functionMetadata);
 
         wholeProgramText.Trim().Should().Be(
             """"

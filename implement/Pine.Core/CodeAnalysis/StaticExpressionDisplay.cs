@@ -21,8 +21,7 @@ public static class StaticExpressionDisplay
 {
     /// <summary>
     /// Describes how to render an application of a user-defined function.
-    /// Produced by the host program (e.g. via <see cref="StaticProgram.GetFunctionApplicationRendering"/>)
-    /// so the display layer can obtain canonical ordering and mapping of arguments.
+    /// Produced by the host program so the display layer can obtain canonical ordering and mapping of arguments.
     /// </summary>
     /// <param name="FunctionName">The canonical name to show for the function in the rendered output.</param>
     /// <param name="FunctionInterface">The static interface containing the ordered parameter reference paths used to reconstruct argument expressions.</param>
@@ -451,6 +450,10 @@ public static class StaticExpressionDisplay
                 yield return (indentLevel, "<always_crash>");
                 yield break;
 
+            case StaticExpression<TFunctionName>.Environment:
+                yield return (indentLevel, "<environment>");
+                yield break;
+
             default:
                 throw new NotImplementedException(
                     $"Rendering of static expression type {expression.GetType()} is not implemented yet.");
@@ -564,17 +567,19 @@ public static class StaticExpressionDisplay
     }
 
     /// <summary>
-    /// Render a whole <see cref="StaticProgram"/> by rendering each named function in lexicographical order
+    /// Render a whole <see cref="StaticProgram{TFuncId}"/> by rendering each named function in lexicographical order
     /// and joining them with a blank line between definitions.
     /// </summary>
     /// <param name="staticProgram">The static program to render.</param>
+    /// <param name="functionMetadata">Metadata dictionary providing function interfaces for each declaration.</param>
     /// <param name="kernelApplicationPrefix">
     /// Prefix to use when rendering kernel applications (e.g., <c>"Pine_kernel"</c> or <c>"Pine_builtin"</c>).
     /// Defaults to <c>"Pine_kernel"</c>.
     /// </param>
     /// <returns>A textual representation of the program using LF line endings.</returns>
     public static string RenderStaticProgram(
-        StaticProgram staticProgram,
+        StaticProgram<DeclQualifiedName> staticProgram,
+        IReadOnlyDictionary<DeclQualifiedName, StaticProgramFunctionMetadata> functionMetadata,
         string kernelApplicationPrefix = "Pine_kernel")
     {
         static string? SubstituteEnvironmentPath(IReadOnlyList<int> path, string leafExpr)
@@ -589,13 +594,14 @@ public static class StaticExpressionDisplay
             }
         }
 
-        return RenderStaticProgram(staticProgram, SubstituteEnvironmentPath, kernelApplicationPrefix);
+        return RenderStaticProgram(staticProgram, functionMetadata, SubstituteEnvironmentPath, kernelApplicationPrefix);
     }
 
     /// <summary>
-    /// Render a whole <see cref="StaticProgram"/>, allowing a custom substitution for environment path references.
+    /// Render a whole <see cref="StaticProgram{TFuncId}"/>, allowing a custom substitution for environment path references.
     /// </summary>
     /// <param name="staticProgram">The static program to render.</param>
+    /// <param name="functionMetadata">Metadata dictionary providing function interfaces for each declaration.</param>
     /// <param name="substituteEnvironmentPath">
     /// Optional callback to customize how references into the environment are rendered when they extend beyond
     /// declared parameter paths. The callback receives the remaining tail path and the already rendered text for the
@@ -608,18 +614,31 @@ public static class StaticExpressionDisplay
     /// </param>
     /// <returns>A textual representation of the program using LF line endings.</returns>
     public static string RenderStaticProgram(
-        StaticProgram staticProgram,
+        StaticProgram<DeclQualifiedName> staticProgram,
+        IReadOnlyDictionary<DeclQualifiedName, StaticProgramFunctionMetadata> functionMetadata,
         Func<IReadOnlyList<int>, string, string?>? substituteEnvironmentPath,
         string kernelApplicationPrefix = "Pine_kernel")
     {
+        FunctionApplicationRendering GetFunctionApplicationRendering(DeclQualifiedName functionName)
+        {
+            if (functionMetadata.TryGetValue(functionName, out var meta))
+            {
+                return new FunctionApplicationRendering(
+                    FunctionName: functionName.ToString()!,
+                    FunctionInterface: meta.Interface);
+            }
+
+            throw new KeyNotFoundException($"Function '{functionName}' not found in function metadata.");
+        }
+
         IReadOnlyList<string> namedFunctionsTexts =
             [..staticProgram.NamedFunctions
             .OrderBy(kvp => kvp.Key.FullName)
             .Select(kvp =>
             RenderNamedFunction(
-                staticProgram,
                 kvp.Key,
-                kvp.Value.body,
+                kvp.Value,
+                GetFunctionApplicationRendering,
                 substituteEnvironmentPath: substituteEnvironmentPath,
                 kernelApplicationPrefix: kernelApplicationPrefix))];
 
@@ -635,9 +654,9 @@ public static class StaticExpressionDisplay
     /// Render a single named function, including its header with parameter placeholders and its body.
     /// The parameter names are inferred from the function interface returned by the program.
     /// </summary>
-    /// <param name="staticProgram">The program that provides function application rendering and interfaces.</param>
     /// <param name="functionName">The name of the function to render.</param>
     /// <param name="functionBody">The static expression representing the function body.</param>
+    /// <param name="getFunctionApplicationRendering">Callback to get rendering metadata for function applications.</param>
     /// <param name="substituteEnvironmentPath">
     /// Optional callback to customize how references into the environment are rendered when they extend beyond
     /// declared parameter paths. The callback receives the remaining tail path and the already rendered text for the
@@ -650,14 +669,14 @@ public static class StaticExpressionDisplay
     /// </param>
     /// <returns>The full function definition text.</returns>
     public static string RenderNamedFunction(
-        StaticProgram staticProgram,
         DeclQualifiedName functionName,
         StaticExpression<DeclQualifiedName> functionBody,
+        Func<DeclQualifiedName, FunctionApplicationRendering> getFunctionApplicationRendering,
         Func<IReadOnlyList<int>, string, string?>? substituteEnvironmentPath,
         string kernelApplicationPrefix = "Pine_kernel")
     {
         var functionInterface =
-            staticProgram.GetFunctionApplicationRendering(functionName).FunctionInterface;
+            getFunctionApplicationRendering(functionName).FunctionInterface;
 
         var functionParameters = functionInterface.ParamsPaths;
 
@@ -695,7 +714,7 @@ public static class StaticExpressionDisplay
             RenderToString(
                 functionBody,
                 valueRenderer: val => RenderValueAsExpression(val, DefaultBlobRenderer),
-                functionApplicationRenderer: staticProgram.GetFunctionApplicationRendering,
+                functionApplicationRenderer: getFunctionApplicationRendering,
                 environmentPathReferenceRenderer: RenderParamRefCombined,
                 indentString: "    ",
                 indentLevel: 1,

@@ -4,41 +4,36 @@ namespace Pine.Core.CodeAnalysis;
 
 /// <summary>
 /// Represents a Pine program in its static (analyzed) form.
-/// A static program is a set of named functions
+/// A static program consists of an optional entry-point expression and a set of named function bodies,
+/// parameterized by the function identifier type.
 /// </summary>
-/// <param name="NamedFunctions">
-/// Map from function name to a tuple of
-/// (<see cref="Expression"/> <c>origExpr</c>, <see cref="StaticExpression{TFunctionIdentifier}"/> <c>body</c>, <see cref="PineValueClass"/> <c>constraint</c>).
-/// <c>origExpr</c> is the original expression before static lowering,
-/// <c>body</c> is the static expression tree using the same function identifiers as in the program,
-/// and <c>constraint</c> contains the value-class constraints inferred/assigned for the function.
+/// <typeparam name="TFuncId">
+/// The type used to identify functions in the program.
+/// For example, <see cref="DeclQualifiedName"/> for named programs or
+/// <see cref="StaticFunctionIdentifier"/> for programs keyed by encoded expression + env class.
+/// </typeparam>
+/// <param name="EntryPoint">
+/// The top-level parsed static expression, or <c>null</c> if the program has no single entry point
+/// (e.g. when representing a collection of named module declarations).
 /// </param>
-public record StaticProgram(
-    IReadOnlyDictionary<DeclQualifiedName, (Expression origExpr, StaticFunctionInterface interf, StaticExpression<DeclQualifiedName> body, PineValueClass constraint)> NamedFunctions)
-{
-    /// <summary>
-    /// Returns a <see cref="StaticExpressionDisplay.FunctionApplicationRendering"/> describing how to render
-    /// an application of the specified function in a static expression display.
-    /// </summary>
-    /// <param name="functionName">The name of the function to retrieve rendering metadata for.</param>
-    /// <returns>A rendering descriptor containing the function name and its static interface.</returns>
-    /// <exception cref="KeyNotFoundException">Thrown when the function name is not present in <see cref="NamedFunctions"/>.</exception>
-    public StaticExpressionDisplay.FunctionApplicationRendering GetFunctionApplicationRendering(DeclQualifiedName functionName)
-    {
-        if (NamedFunctions.TryGetValue(functionName, out var funcInfo))
-        {
-            return
-                new StaticExpressionDisplay.FunctionApplicationRendering
-                (
-                    FunctionName: functionName.FullName,
-                    FunctionInterface: funcInfo.interf
-                );
-        }
+/// <param name="NamedFunctions">
+/// Map from function identifier to the function's parsed body expression.
+/// </param>
+public record StaticProgram<TFuncId>(
+    StaticExpression<TFuncId>? EntryPoint,
+    IReadOnlyDictionary<TFuncId, StaticExpression<TFuncId>> NamedFunctions)
+    where TFuncId : notnull;
 
-        throw new KeyNotFoundException($"Function '{functionName}' not found in static program.");
-    }
-}
-
-
-
-
+/// <summary>
+/// Metadata about a function in a <see cref="StaticProgram{TFuncId}"/> that is derived during
+/// static analysis but not stored in the program itself.
+/// This metadata is computed as a post-processing step and passed to consumers that need it
+/// (e.g., C# code generation, display rendering).
+/// </summary>
+/// <param name="OrigExpr">The original Pine expression before static lowering.</param>
+/// <param name="Interface">The function's parameter structure derived from its body.</param>
+/// <param name="Constraint">The value-class constraints for the function's environment.</param>
+public record StaticProgramFunctionMetadata(
+    Expression OrigExpr,
+    StaticFunctionInterface Interface,
+    PineValueClass Constraint);

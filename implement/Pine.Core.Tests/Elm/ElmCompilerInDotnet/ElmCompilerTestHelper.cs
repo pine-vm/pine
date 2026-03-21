@@ -153,7 +153,7 @@ public class ElmCompilerTestHelper
         };
     }
 
-    public static (ElmInteractiveEnvironment.ParsedInteractiveEnvironment parsedEnv, StaticProgram staticProgram)
+    public static (ElmInteractiveEnvironment.ParsedInteractiveEnvironment parsedEnv, StaticProgram<DeclQualifiedName> staticProgram)
         StaticProgramFromElmModules(
         IReadOnlyList<string> elmModulesTexts,
         bool disableInlining,
@@ -171,7 +171,7 @@ public class ElmCompilerTestHelper
                 parseCache);
     }
 
-    public static (ElmInteractiveEnvironment.ParsedInteractiveEnvironment parsedEnv, StaticProgram staticProgram)
+    public static (ElmInteractiveEnvironment.ParsedInteractiveEnvironment parsedEnv, StaticProgram<DeclQualifiedName> staticProgram)
         StaticProgramFromTestCase(
         TestCase testCase,
         bool disableInlining,
@@ -197,7 +197,7 @@ public class ElmCompilerTestHelper
             ElmInteractiveEnvironment.ParseInteractiveEnvironment(compiledEnv)
             .Extract(err => throw new Exception("Failed parsing interactive environment: " + err));
 
-        var staticProgram =
+        var (staticProgram, _) =
             TestCase.ParseAsStaticMonomorphicProgramAndCrashOnAnyFailure(
                 parsedEnv,
                 includeDeclaration: includeDeclaration,

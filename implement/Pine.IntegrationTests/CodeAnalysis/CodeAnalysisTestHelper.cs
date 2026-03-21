@@ -47,7 +47,7 @@ public class CodeAnalysisTestHelper
             new DeclarationSyntaxContext(usingDirectives);
     }
 
-    public static StaticProgram ParseAsStaticMonomorphicProgramAndCrashOnAnyFailure(
+    public static (StaticProgram<DeclQualifiedName> staticProgram, IReadOnlyDictionary<DeclQualifiedName, StaticProgramFunctionMetadata> functionMetadata) ParseAsStaticMonomorphicProgramAndCrashOnAnyFailure(
         ElmInteractiveEnvironment.ParsedInteractiveEnvironment parsedEnvironment,
         System.Func<DeclQualifiedName, bool> includeDeclaration,
         PineVMParseCache parseCache)
@@ -59,7 +59,7 @@ public class CodeAnalysisTestHelper
                 parseCache);
     }
 
-    public static (ElmInteractiveEnvironment.ParsedInteractiveEnvironment parsedEnv, StaticProgram staticProgram)
+    public static (ElmInteractiveEnvironment.ParsedInteractiveEnvironment parsedEnv, StaticProgram<DeclQualifiedName> staticProgram, IReadOnlyDictionary<DeclQualifiedName, StaticProgramFunctionMetadata> functionMetadata)
         StaticProgramFromElmModules(
         IReadOnlyList<string> elmModulesTexts,
         System.Func<DeclQualifiedName, bool> includeDeclaration,
@@ -86,12 +86,12 @@ public class CodeAnalysisTestHelper
             ElmInteractiveEnvironment.ParseInteractiveEnvironment(compiledEnv)
             .Extract(err => throw new System.Exception("Failed parsing interactive environment: " + err));
 
-        var staticProgram =
+        var (staticProgram, functionMetadata) =
             ParseAsStaticMonomorphicProgramAndCrashOnAnyFailure(
                 parsedEnv,
                 includeDeclaration: includeDeclaration,
                 parseCache);
 
-        return (parsedEnv, staticProgram);
+        return (parsedEnv, staticProgram, functionMetadata);
     }
 }

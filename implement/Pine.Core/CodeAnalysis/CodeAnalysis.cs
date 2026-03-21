@@ -19,7 +19,7 @@ public class CodeAnalysis
 {
 
 
-    public static Result<string, (StaticProgram staticProgram, IReadOnlyDictionary<DeclQualifiedName, string> declsFailed)>
+    public static Result<string, (StaticProgram<DeclQualifiedName> staticProgram, IReadOnlyDictionary<DeclQualifiedName, StaticProgramFunctionMetadata> functionMetadata, IReadOnlyDictionary<DeclQualifiedName, string> declsFailed)>
         ParseAsStaticMonomorphicProgram(
         ElmInteractiveEnvironment.ParsedInteractiveEnvironment parsedEnvironment,
         Func<DeclQualifiedName, bool> includeDeclaration,
@@ -70,7 +70,7 @@ public class CodeAnalysis
                 parseCache);
     }
 
-    public static (StaticProgram staticProgram, IReadOnlyDictionary<DeclQualifiedName, string> declsFailed)
+    public static (StaticProgram<DeclQualifiedName> staticProgram, IReadOnlyDictionary<DeclQualifiedName, StaticProgramFunctionMetadata> functionMetadata, IReadOnlyDictionary<DeclQualifiedName, string> declsFailed)
         ParseAsStaticMonomorphicProgram(
         IReadOnlyDictionary<DeclQualifiedName, FunctionRecord> rootDecls,
         Func<PineValue, PineValueClass, IReadOnlyList<DeclQualifiedName>?> namesForDecl,
@@ -239,9 +239,25 @@ public class CodeAnalysis
                     return (origEntry.origExpr, interf: functionInterface, prunedBody, origEntry.EnvClass);
                 });
 
-        var program = new StaticProgram(mergedFunctions);
+        var programBodies =
+            mergedFunctions
+            .ToFrozenDictionary(
+                keySelector: entry => entry.Key,
+                elementSelector: entry => entry.Value.prunedBody);
 
-        return (program, declsFailures);
+        var functionMetadata =
+            mergedFunctions
+            .ToFrozenDictionary(
+                keySelector: entry => entry.Key,
+                elementSelector: entry =>
+                    new StaticProgramFunctionMetadata(
+                        entry.Value.origExpr,
+                        entry.Value.interf,
+                        entry.Value.EnvClass));
+
+        var program = new StaticProgram<DeclQualifiedName>(EntryPoint: null, programBodies);
+
+        return (program, functionMetadata, declsFailures);
     }
 
     private static StaticFunctionInterface InterfaceForFunction<T>(

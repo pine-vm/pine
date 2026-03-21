@@ -351,7 +351,7 @@ public class OptimizeAndEmitJsonEncodeTests
 
         var parseCache = new PineVMParseCache();
 
-        var (parsedEnv, staticProgram) =
+        var (parsedEnv, staticProgram, functionMetadata) =
             CodeAnalysisTestHelper.StaticProgramFromElmModules(
                 [elmModuleText],
                 includeDeclaration:
@@ -361,11 +361,12 @@ public class OptimizeAndEmitJsonEncodeTests
                 },
                 parseCache);
 
-        var wholeProgramText = StaticExpressionDisplay.RenderStaticProgram(staticProgram);
+        var wholeProgramText = StaticExpressionDisplay.RenderStaticProgram(staticProgram, functionMetadata);
 
         var asCSharp =
             StaticProgramCSharp.FromStaticProgram(
                 staticProgram,
+                functionMetadata,
                 CodeAnalysisTestHelper.DeclarationSyntaxContext);
 
         var moduleTest =
