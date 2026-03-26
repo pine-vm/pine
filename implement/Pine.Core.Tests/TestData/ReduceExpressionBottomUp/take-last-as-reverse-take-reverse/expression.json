@@ -1,0 +1,65 @@
+{
+  "KernelApplication": [
+    "head",
+    {
+      "KernelApplication": [
+        "reverse",
+        {
+          "KernelApplication": [
+            "take",
+            {
+              "List": [
+                [
+                  {
+                    "Literal": [
+                      2
+                    ]
+                  },
+                  {
+                    "KernelApplication": [
+                      "reverse",
+                      {
+                        "List": [
+                          [
+                            {
+                              "Literal": [
+                                {
+                                  "AsBase64": "AQ=="
+                                }
+                              ]
+                            },
+                            {
+                              "Literal": [
+                                {
+                                  "AsBase64": "Ag=="
+                                }
+                              ]
+                            },
+                            {
+                              "Literal": [
+                                {
+                                  "AsBase64": "Aw=="
+                                }
+                              ]
+                            },
+                            {
+                              "Literal": [
+                                {
+                                  "AsBase64": "BA=="
+                                }
+                              ]
+                            }
+                          ]
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

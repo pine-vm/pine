@@ -1,0 +1,69 @@
+{
+  "KernelApplication": [
+    "reverse",
+    {
+      "KernelApplication": [
+        "take",
+        {
+          "List": [
+            [
+              {
+                "Literal": [
+                  2
+                ]
+              },
+              {
+                "KernelApplication": [
+                  "reverse",
+                  {
+                    "Conditional": [
+                      {
+                        "Environment": []
+                      },
+                      {
+                        "Literal": [
+                          [
+                            {
+                              "AsBase64": "Cg=="
+                            },
+                            {
+                              "AsBase64": "Cw=="
+                            },
+                            {
+                              "AsBase64": "DA=="
+                            },
+                            {
+                              "AsBase64": "DQ=="
+                            }
+                          ]
+                        ]
+                      },
+                      {
+                        "Literal": [
+                          [
+                            {
+                              "AsBase64": "FA=="
+                            },
+                            {
+                              "AsBase64": "FQ=="
+                            },
+                            {
+                              "AsBase64": "Fg=="
+                            },
+                            {
+                              "AsBase64": "Fw=="
+                            }
+                          ]
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          ]
+        }
+      ]
+    }
+  ]
+}

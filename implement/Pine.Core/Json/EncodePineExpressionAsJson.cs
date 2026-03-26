@@ -48,7 +48,12 @@ public class EncodePineExpressionAsJson
     /// </summary>
     public static JsonSerializerOptions BuildJsonSerializerOptions()
     {
-        var options = new JsonSerializerOptions { MaxDepth = 1000 };
+        var options =
+            new JsonSerializerOptions
+            {
+                MaxDepth = 1000,
+                NewLine = "\n"
+            };
 
         options.Converters.Add(new JsonConverterForPineValue());
 

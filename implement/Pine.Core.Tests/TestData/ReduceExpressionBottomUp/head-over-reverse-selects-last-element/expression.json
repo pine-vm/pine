@@ -1,0 +1,37 @@
+{
+  "KernelApplication": [
+    "head",
+    {
+      "KernelApplication": [
+        "reverse",
+        {
+          "List": [
+            [
+              {
+                "Literal": [
+                  {
+                    "AsBase64": "AQ=="
+                  }
+                ]
+              },
+              {
+                "Literal": [
+                  {
+                    "AsBase64": "Ag=="
+                  }
+                ]
+              },
+              {
+                "Literal": [
+                  {
+                    "AsBase64": "Aw=="
+                  }
+                ]
+              }
+            ]
+          ]
+        }
+      ]
+    }
+  ]
+}

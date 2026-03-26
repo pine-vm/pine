@@ -1,0 +1,129 @@
+{
+  "KernelApplication": [
+    "head",
+    {
+      "KernelApplication": [
+        "skip",
+        {
+          "List": [
+            [
+              {
+                "Literal": [
+                  2
+                ]
+              },
+              {
+                "KernelApplication": [
+                  "head",
+                  {
+                    "KernelApplication": [
+                      "skip",
+                      {
+                        "List": [
+                          [
+                            {
+                              "Literal": [
+                                1
+                              ]
+                            },
+                            {
+                              "List": [
+                                [
+                                  {
+                                    "List": [
+                                      [
+                                        {
+                                          "Literal": [
+                                            {
+                                              "AsBase64": "AQ=="
+                                            }
+                                          ]
+                                        },
+                                        {
+                                          "Literal": [
+                                            {
+                                              "AsBase64": "Ag=="
+                                            }
+                                          ]
+                                        },
+                                        {
+                                          "Literal": [
+                                            {
+                                              "AsBase64": "Aw=="
+                                            }
+                                          ]
+                                        }
+                                      ]
+                                    ]
+                                  },
+                                  {
+                                    "List": [
+                                      [
+                                        {
+                                          "Literal": [
+                                            {
+                                              "AsBase64": "BA=="
+                                            }
+                                          ]
+                                        },
+                                        {
+                                          "Literal": [
+                                            {
+                                              "AsBase64": "BQ=="
+                                            }
+                                          ]
+                                        },
+                                        {
+                                          "Literal": [
+                                            {
+                                              "AsBase64": "Bg=="
+                                            }
+                                          ]
+                                        }
+                                      ]
+                                    ]
+                                  },
+                                  {
+                                    "List": [
+                                      [
+                                        {
+                                          "Literal": [
+                                            {
+                                              "AsBase64": "Bw=="
+                                            }
+                                          ]
+                                        },
+                                        {
+                                          "Literal": [
+                                            {
+                                              "AsBase64": "CA=="
+                                            }
+                                          ]
+                                        },
+                                        {
+                                          "Literal": [
+                                            {
+                                              "AsBase64": "CQ=="
+                                            }
+                                          ]
+                                        }
+                                      ]
+                                    ]
+                                  }
+                                ]
+                              ]
+                            }
+                          ]
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          ]
+        }
+      ]
+    }
+  ]
+}

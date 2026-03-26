@@ -1,0 +1,31 @@
+{
+  "Conditional": [
+    {
+      "Environment": []
+    },
+    {
+      "Literal": [
+        [
+          {
+            "AsBase64": "Cg=="
+          },
+          {
+            "AsBase64": "Cw=="
+          }
+        ]
+      ]
+    },
+    {
+      "Literal": [
+        [
+          {
+            "AsBase64": "FA=="
+          },
+          {
+            "AsBase64": "FQ=="
+          }
+        ]
+      ]
+    }
+  ]
+}

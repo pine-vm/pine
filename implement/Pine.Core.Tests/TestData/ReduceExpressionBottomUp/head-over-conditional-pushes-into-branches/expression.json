@@ -1,0 +1,52 @@
+{
+  "KernelApplication": [
+    "head",
+    {
+      "Conditional": [
+        {
+          "Environment": []
+        },
+        {
+          "List": [
+            [
+              {
+                "Literal": [
+                  {
+                    "AsBase64": "Cg=="
+                  }
+                ]
+              },
+              {
+                "Literal": [
+                  {
+                    "AsBase64": "Cw=="
+                  }
+                ]
+              }
+            ]
+          ]
+        },
+        {
+          "List": [
+            [
+              {
+                "Literal": [
+                  {
+                    "AsBase64": "FA=="
+                  }
+                ]
+              },
+              {
+                "Literal": [
+                  {
+                    "AsBase64": "FQ=="
+                  }
+                ]
+              }
+            ]
+          ]
+        }
+      ]
+    }
+  ]
+}
