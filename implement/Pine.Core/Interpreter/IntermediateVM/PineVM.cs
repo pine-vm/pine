@@ -21,6 +21,8 @@ public class PineVM : IPineVM
 
     private readonly Action<EvaluationReport>? _reportFunctionApplication;
 
+    private readonly ReportExecutedStackInstruction? _reportExecutedStackInstruction;
+
     private readonly IReadOnlyDictionary<Expression, IReadOnlyList<PineValueClass>>? _compilationEnvClasses;
 
     private readonly bool _disableReductionInCompilation;
@@ -62,7 +64,8 @@ public class PineVM : IPineVM
         Action<PineValue, PineValue>? reportEnterPrecompiledLeaf,
         Action<PineValue, PineValue, PineValue?>? reportExitPrecompiledLeaf,
         OptimizationParametersSerial? optimizationParametersSerial,
-        IFileStore? cacheFileStore)
+        IFileStore? cacheFileStore,
+        ReportExecutedStackInstruction? reportExecutedStackInstruction = null)
     {
         return
             new PineVM(
@@ -79,7 +82,8 @@ public class PineVM : IPineVM
                 reportEnterPrecompiledLeaf: reportEnterPrecompiledLeaf,
                 reportExitPrecompiledLeaf: reportExitPrecompiledLeaf,
                 optimizationParametersSerial: optimizationParametersSerial,
-                cacheFileStore: cacheFileStore);
+                cacheFileStore: cacheFileStore,
+                reportExecutedStackInstruction: reportExecutedStackInstruction);
 
     }
 
@@ -97,13 +101,16 @@ public class PineVM : IPineVM
         Action<PineValue, PineValue>? reportEnterPrecompiledLeaf,
         Action<PineValue, PineValue, PineValue?>? reportExitPrecompiledLeaf,
         OptimizationParametersSerial? optimizationParametersSerial,
-        IFileStore? cacheFileStore)
+        IFileStore? cacheFileStore,
+        ReportExecutedStackInstruction? reportExecutedStackInstruction)
     {
         EvalCache = evalCache;
 
         _evaluationConfigDefault = evaluationConfigDefault;
 
         _reportFunctionApplication = reportFunctionApplication;
+
+        _reportExecutedStackInstruction = reportExecutedStackInstruction;
 
         _compilationEnvClasses = compilationEnvClasses;
 
@@ -701,6 +708,21 @@ public class PineVM : IPineVM
                     currentFrame.Instructions.Instructions[currentFrame.InstructionPointer]
                     ??
                     throw new InvalidOperationException("currentInstruction is null");
+
+                if (_reportExecutedStackInstruction is { } reportExecutedStackInstruction)
+                {
+                    var executedStackInstruction =
+                        new ExecutedStackInstruction(
+                            InstructionIndex: instructionCount - 1,
+                            StackFrameDepth: stack.Count,
+                            InstructionPointer: currentFrame.InstructionPointer,
+                            EvaluationStackDepth: currentFrame.StackPointer,
+                            Instruction: currentInstruction,
+                            FrameExpression: currentFrame.Expression,
+                            FrameInput: currentFrame.InputValues);
+
+                    reportExecutedStackInstruction(in executedStackInstruction);
+                }
 
                 var instructionKind = currentInstruction.Kind;
 
