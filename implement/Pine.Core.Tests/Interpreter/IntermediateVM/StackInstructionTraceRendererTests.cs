@@ -10,7 +10,7 @@ namespace Pine.Core.Tests.Interpreter.IntermediateVM;
 public class StackInstructionTraceRendererTests
 {
     [Fact]
-    public void RenderInstructionTraceWithDefaultBlobRepresentations_renders_index_frame_depth_and_blob_mappings()
+    public void RenderInstructionTraceWithDefaultBlobRepresentations_renders_index_depth_and_blob_mappings()
     {
         var trace =
             new List<ExecutedStackInstruction>
@@ -42,8 +42,8 @@ public class StackInstructionTraceRendererTests
 
         rendered.Should().Be(
             """
-             8. frame-depth=1 ip=4 Build_List_Tagged_Const (Blob [28] (0x0000004c00000069000000740000006500000072000000610000006c | UTF32 "Literal") , 1)
-            12. frame-depth=2 ip=0 Push_Literal (Blob [2] (0x0403 | int 3))
+             8. depth=1 ip=4 Build_List_Tagged_Const (Blob [28] (0x0000004c00000069000000740000006500000072000000610000006c | UTF32 "Literal") , 1)
+            12. depth=2 ip=0 Push_Literal (Blob [2] (0x0403 | int 3))
             """);
     }
 
@@ -72,7 +72,7 @@ public class StackInstructionTraceRendererTests
                 ]);
 
         rendered.Should().Be(
-            "frame-depth=1 ip=0 Push_Literal (Blob [4] (0x0001...))");
+            "depth=1 ip=0 Push_Literal (Blob [4] (0x0001...))");
     }
 
     [Fact]
@@ -98,7 +98,7 @@ public class StackInstructionTraceRendererTests
                 blobRepresentations: [blobRepresentation]);
 
         rendered.Should().Be(
-            "frame-depth=1 ip=0 Push_Literal (Blob [2] (no UTF32 string))");
+            "depth=1 ip=0 Push_Literal (Blob [2] (no UTF32 string))");
     }
 
     [Fact]
@@ -123,7 +123,7 @@ public class StackInstructionTraceRendererTests
                 blobRepresentations: [blobRepresentation]);
 
         rendered.Should().Be(
-            "frame-depth=1 ip=0 Push_Literal (Blob [28] (no int))");
+            "depth=1 ip=0 Push_Literal (Blob [28] (no int))");
     }
 
     [Fact]
@@ -150,7 +150,7 @@ public class StackInstructionTraceRendererTests
 
         rendered.Should().Be(
             """
-            8. frame-depth=1 ip=1 Build_List_Tagged_Const (Blob [28] (tag=0x0000004c00000069000000740000006500000072000000610000006c ; UTF32 "Literal") , 1)
+            8. depth=1 ip=1 Build_List_Tagged_Const (Blob [28] (tag=0x0000004c00000069000000740000006500000072000000610000006c ; UTF32 "Literal") , 1)
             """);
     }
 }

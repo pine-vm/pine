@@ -161,7 +161,7 @@ public static class StackInstructionTraceRenderer
 
                         return
                             prefix +
-                            "frame-depth=" + traceItem.StackFrameDepth +
+                            "depth=" + traceItem.StackFrameDepth +
                             " ip=" + traceItem.InstructionPointer +
                             " " +
                             RenderInstruction(
