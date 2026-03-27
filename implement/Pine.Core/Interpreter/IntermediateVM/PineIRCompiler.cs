@@ -9,12 +9,21 @@ using System.Numerics;
 
 namespace Pine.Core.Interpreter.IntermediateVM;
 
+/// <summary>
+/// Compiles Pine expressions into stack-frame instructions for the intermediate VM.
+/// </summary>
 public class PineIRCompiler
 {
+    /// <summary>
+    /// Accumulates emitted instructions together with the locals reserved for reused expressions.
+    /// </summary>
     public record NodeCompilationResult(
         ImmutableList<StackInstruction> Instructions,
         ImmutableDictionary<Expression, int> LocalsSet)
     {
+        /// <summary>
+        /// Continues compilation from the current state by compiling another expression.
+        /// </summary>
         public NodeCompilationResult ContinueWithExpression(
             Expression expression,
             CompilationContext context,
@@ -27,28 +36,40 @@ public class PineIRCompiler
                     LocalsSet,
                     parseCache);
 
-            return new NodeCompilationResult(
-                Instructions.AddRange(exprResult.Instructions),
-                LocalsSet.AddRange(exprResult.LocalsSet));
+            return
+                new NodeCompilationResult(
+                    Instructions.AddRange(exprResult.Instructions),
+                    LocalsSet.AddRange(exprResult.LocalsSet));
         }
 
+        /// <summary>
+        /// Appends a single instruction to the accumulated result.
+        /// </summary>
         public NodeCompilationResult AppendInstruction(StackInstruction instruction) =>
             AppendInstructions([instruction]);
 
+        /// <summary>
+        /// Appends a sequence of instructions to the accumulated result.
+        /// </summary>
         public NodeCompilationResult AppendInstructions(IEnumerable<StackInstruction> instructions) =>
-            this
-            with
+            this with
             {
                 Instructions = Instructions.AddRange(instructions)
             };
     }
 
+    /// <summary>
+    /// Carries contextual information needed while compiling a single stack frame.
+    /// </summary>
     public record CompilationContext(
         ImmutableHashSet<Expression> CopyToLocal,
         IReadOnlyDictionary<Expression.ParseAndEval, JumpToLoop> TailCallElimination,
         StaticFunctionInterface StackFrameParameters,
         int InstructionOffset)
     {
+        /// <summary>
+        /// Creates the initial compilation context for a function with the given parameters.
+        /// </summary>
         public static CompilationContext Init(
             StaticFunctionInterface stackFrameParameters) =>
             new(
@@ -57,13 +78,18 @@ public class PineIRCompiler
                 StackFrameParameters: stackFrameParameters,
                 InstructionOffset: 0);
 
+        /// <summary>
+        /// Returns a copy of the context with the instruction offset advanced by the given amount.
+        /// </summary>
         public CompilationContext AddInstructionOffset(int offset) =>
-            this
-            with
+            this with
             {
                 InstructionOffset = InstructionOffset + offset
             };
 
+        /// <summary>
+        /// Resolves an expression to an already-available local index when possible.
+        /// </summary>
         public int? IsAvailableAsLocalIndex(Expression expression)
         {
             if (CodeAnalysis.CodeAnalysis.TryParseExprAsPathInEnv(expression) is { } path)
@@ -86,6 +112,9 @@ public class PineIRCompiler
         }
     }
 
+    /// <summary>
+    /// Describes the target instruction and environment slot used for a loop-form tail call.
+    /// </summary>
     public record JumpToLoop(
         int DestinationInstructionIndex,
         int EnvironmentLocalIndex);
@@ -115,6 +144,9 @@ public class PineIRCompiler
                 parseCache);
     }
 
+    /// <summary>
+    /// Enumerates <c>ParseAndEval</c> nodes that can participate in tail-call handling.
+    /// </summary>
     public static IEnumerable<Expression.ParseAndEval> EnumerateTailCalls(Expression expression)
     {
         if (expression is Expression.ParseAndEval parseAndEval)
@@ -153,6 +185,9 @@ public class PineIRCompiler
                 parseCache);
     }
 
+    /// <summary>
+    /// Compiles an expression and ensures the resulting value is addressable as a local.
+    /// </summary>
     public static (NodeCompilationResult nodeResult, int localIndex)
         CompileExpressionTransitiveAsLocal(
         Expression expression,
@@ -181,11 +216,10 @@ public class PineIRCompiler
         }
 
         var contextSettingLocal =
-            context
-            with
+            context with
             {
                 CopyToLocal =
-                    context.CopyToLocal.Add(expression)
+                context.CopyToLocal.Add(expression)
             };
 
         var compiledExpr =
@@ -215,45 +249,43 @@ public class PineIRCompiler
         {
             var allSubexpressions = new HashSet<Expression>();
 
-            foreach (
-                var subexpression in
-                Expression.EnumerateSelfAndDescendants(
-                    expression,
-                    skipDescendants:
-                    subexpression =>
+            foreach (var subexpression in Expression.EnumerateSelfAndDescendants(
+                expression,
+                skipDescendants:
+                subexpression =>
+                {
+                    if (!ExpressionLargeEnoughForCSE(subexpression))
                     {
-                        if (!ExpressionLargeEnoughForCSE(subexpression))
-                        {
-                            return true;
-                        }
+                        return true;
+                    }
 
-                        if (context.IsAvailableAsLocalIndex(expression) is not null)
-                        {
-                            return true;
-                        }
+                    if (context.IsAvailableAsLocalIndex(subexpression) is not null)
+                    {
+                        return true;
+                    }
 
-                        if (prior.LocalsSet.ContainsKey(subexpression))
-                        {
-                            return true;
-                        }
+                    if (prior.LocalsSet.ContainsKey(subexpression))
+                    {
+                        return true;
+                    }
 
-                        if (subexprAppearingMultipleTimesIncludingConditional.Contains(subexpression))
-                        {
-                            return true;
-                        }
+                    if (subexprAppearingMultipleTimesIncludingConditional.Contains(subexpression))
+                    {
+                        return true;
+                    }
 
-                        if (allSubexpressions.Contains(subexpression))
-                        {
-                            subexprAppearingMultipleTimesIncludingConditional.Add(subexpression);
+                    if (allSubexpressions.Contains(subexpression))
+                    {
+                        subexprAppearingMultipleTimesIncludingConditional.Add(subexpression);
 
-                            return true;
-                        }
+                        return true;
+                    }
 
-                        allSubexpressions.Add(subexpression);
+                    allSubexpressions.Add(subexpression);
 
-                        return false;
-                    },
-                    skipConditionalBranches: false))
+                    return false;
+                },
+                skipConditionalBranches: false))
             {
             }
         }
@@ -263,45 +295,43 @@ public class PineIRCompiler
         var subexprAppearingMultipleTimesUnconditional = new HashSet<Expression>();
 
         {
-            foreach (
-                var subexpression in
-                Expression.EnumerateSelfAndDescendants(
-                    expression,
-                    skipDescendants:
-                    subexpression =>
+            foreach (var subexpression in Expression.EnumerateSelfAndDescendants(
+                expression,
+                skipDescendants:
+                subexpression =>
+                {
+                    if (!ExpressionLargeEnoughForCSE(subexpression))
                     {
-                        if (!ExpressionLargeEnoughForCSE(subexpression))
-                        {
-                            return true;
-                        }
+                        return true;
+                    }
 
-                        if (context.IsAvailableAsLocalIndex(expression) is not null)
-                        {
-                            return true;
-                        }
+                    if (context.IsAvailableAsLocalIndex(subexpression) is not null)
+                    {
+                        return true;
+                    }
 
-                        if (prior.LocalsSet.ContainsKey(subexpression))
-                        {
-                            return true;
-                        }
+                    if (prior.LocalsSet.ContainsKey(subexpression))
+                    {
+                        return true;
+                    }
 
-                        if (subexprAppearingMultipleTimesUnconditional.Contains(subexpression))
-                        {
-                            return true;
-                        }
+                    if (subexprAppearingMultipleTimesUnconditional.Contains(subexpression))
+                    {
+                        return true;
+                    }
 
-                        if (allSubexpressionsUnconditional.Contains(subexpression))
-                        {
-                            subexprAppearingMultipleTimesUnconditional.Add(subexpression);
+                    if (allSubexpressionsUnconditional.Contains(subexpression))
+                    {
+                        subexprAppearingMultipleTimesUnconditional.Add(subexpression);
 
-                            return true;
-                        }
+                        return true;
+                    }
 
-                        allSubexpressionsUnconditional.Add(subexpression);
+                    allSubexpressionsUnconditional.Add(subexpression);
 
-                        return false;
-                    },
-                    skipConditionalBranches: true))
+                    return false;
+                },
+                skipConditionalBranches: true))
             {
             }
         }
@@ -314,15 +344,16 @@ public class PineIRCompiler
         var lessCSE =
             CompileExpressionTransitiveLessCSE(
                 expression,
-                context
-                with
+                context with
                 {
                     CopyToLocal = copyToLocalNew
                 },
                 prior,
                 parseCache);
 
-        if (!prior.LocalsSet.ContainsKey(expression) && context.CopyToLocal.Contains(expression))
+        if (!prior.LocalsSet.ContainsKey(expression) &&
+            context.CopyToLocal.Contains(expression) &&
+            context.IsAvailableAsLocalIndex(expression) is null)
         {
             var newLocalIndex =
                 lessCSE.LocalsSet.IsEmpty
@@ -334,8 +365,7 @@ public class PineIRCompiler
             return
                 lessCSE
                 .AppendInstruction(
-                    StackInstruction.Local_Set(newLocalIndex))
-                with
+                    StackInstruction.Local_Set(newLocalIndex)) with
                 {
                     LocalsSet = lessCSE.LocalsSet.Add(expression, newLocalIndex)
                 };
@@ -344,6 +374,9 @@ public class PineIRCompiler
         return lessCSE;
     }
 
+    /// <summary>
+    /// Compiles an expression without first augmenting the compilation context for extra CSE reuse.
+    /// </summary>
     public static NodeCompilationResult CompileExpressionTransitiveLessCSE(
         Expression expr,
         CompilationContext context,
@@ -420,6 +453,9 @@ public class PineIRCompiler
         }
     }
 
+    /// <summary>
+    /// Compiles a list expression by compiling each item and then constructing the list on the stack.
+    /// </summary>
     public static NodeCompilationResult CompileList(
         Expression.List listExpr,
         CompilationContext context,
@@ -487,6 +523,9 @@ public class PineIRCompiler
                 StackInstruction.Build_List(listExpr.Items.Count));
     }
 
+    /// <summary>
+    /// Compiles a conditional expression with explicit branch jumps.
+    /// </summary>
     public static NodeCompilationResult CompileConditional(
         Expression.Conditional conditional,
         CompilationContext context,
@@ -524,8 +563,9 @@ public class PineIRCompiler
             .Instructions;
 
         IReadOnlyList<StackInstruction> falseBranchInstructionsAndJump =
-            [.. falseBranchInstructions,
-                StackInstruction.Jump_Unconditional(trueBranchInstructions.Count + 1)
+            [
+            .. falseBranchInstructions,
+            StackInstruction.Jump_Unconditional(trueBranchInstructions.Count + 1)
             ];
 
         var branchInstruction =
@@ -542,6 +582,9 @@ public class PineIRCompiler
             .AppendInstructions(trueBranchInstructions);
     }
 
+    /// <summary>
+    /// Compiles a <c>ParseAndEval</c> expression, including direct parsing shortcuts and loop-based tail calls.
+    /// </summary>
     public static NodeCompilationResult CompileParseAndEval(
         Expression.ParseAndEval parseAndEvalExpr,
         CompilationContext context,
@@ -592,6 +635,9 @@ public class PineIRCompiler
         }
     }
 
+    /// <summary>
+    /// Compile a <see cref="Expression.KernelApplication"/> to instructions, including dispatching to specialized compilation methods for individual kernel functions and patterns of arguments.
+    /// </summary>
     public static NodeCompilationResult CompileKernelApplication(
         Expression.KernelApplication kernelApplication,
         CompilationContext context,
@@ -727,6 +773,9 @@ public class PineIRCompiler
             };
     }
 
+    /// <summary>
+    /// Compiles the equality kernel application and its specialized fast paths.
+    /// </summary>
     public static NodeCompilationResult CompileKernelApplication_Equal(
         Expression input,
         CompilationContext context,
@@ -925,6 +974,9 @@ public class PineIRCompiler
         return null;
     }
 
+    /// <summary>
+    /// Compiles the head kernel application, including head-of-skip specializations.
+    /// </summary>
     public static NodeCompilationResult CompileKernelApplication_Head(
         Expression input,
         CompilationContext context,
@@ -969,6 +1021,9 @@ public class PineIRCompiler
             .AppendInstruction(StackInstruction.Head_Generic);
     }
 
+    /// <summary>
+    /// Compiles the skip kernel application and its numeric specializations.
+    /// </summary>
     public static NodeCompilationResult CompileKernelApplication_Skip(
         Expression input,
         CompilationContext context,
@@ -1071,6 +1126,9 @@ public class PineIRCompiler
             .AppendInstruction(StackInstruction.Skip_Generic);
     }
 
+    /// <summary>
+    /// Compiles the take kernel application and slice-style specializations.
+    /// </summary>
     public static NodeCompilationResult CompileKernelApplication_Take(
         Expression input,
         CompilationContext context,
@@ -1158,6 +1216,9 @@ public class PineIRCompiler
             .AppendInstruction(StackInstruction.Take_Generic);
     }
 
+    /// <summary>
+    /// Compiles the concat kernel application, including append/prepend list optimizations.
+    /// </summary>
     public static NodeCompilationResult CompileKernelApplication_Concat(
         Expression input,
         CompilationContext context,
@@ -1173,6 +1234,7 @@ public class PineIRCompiler
                 {
                     // Push items in order (first to last)
                     var afterLeftItems = prior;
+
                     for (var i = 0; i < leftListExpr.Items.Count; ++i)
                     {
                         afterLeftItems =
@@ -1208,6 +1270,7 @@ public class PineIRCompiler
 
                     // Then push items in order (first to last)
                     var afterRightItems = afterLeft;
+
                     for (var i = 0; i < rightListExpr.Items.Count; ++i)
                     {
                         afterRightItems =
@@ -1261,6 +1324,9 @@ public class PineIRCompiler
         }
     }
 
+    /// <summary>
+    /// Compiles the reverse kernel application.
+    /// </summary>
     public static NodeCompilationResult CompileKernelApplication_Reverse(
         Expression input,
         CompilationContext context,
@@ -1292,6 +1358,9 @@ public class PineIRCompiler
             .AppendInstruction(StackInstruction.Reverse);
     }
 
+    /// <summary>
+    /// Compiles the negate kernel application and related integer simplifications.
+    /// </summary>
     public static NodeCompilationResult CompileKernelApplication_Negate(
         Expression input,
         CompilationContext context,
@@ -1390,6 +1459,9 @@ public class PineIRCompiler
             .AppendInstruction(StackInstruction.Negate);
     }
 
+    /// <summary>
+    /// Compiles integer addition with constant folding and structural specializations.
+    /// </summary>
     public static NodeCompilationResult CompileKernelApplication_Int_Add(
         Expression input,
         CompilationContext context,
@@ -1661,6 +1733,9 @@ public class PineIRCompiler
         return null;
     }
 
+    /// <summary>
+    /// Compiles integer multiplication with constant folding and algebraic simplifications.
+    /// </summary>
     public static NodeCompilationResult CompileKernelApplication_Int_Mul(
         Expression input,
         CompilationContext context,
@@ -1761,6 +1836,9 @@ public class PineIRCompiler
         }
     }
 
+    /// <summary>
+    /// Compiles the integer sortedness kernel application.
+    /// </summary>
     public static NodeCompilationResult CompileKernelApplication_Int_Is_Sorted_Asc(
         Expression input,
         CompilationContext context,
@@ -1972,6 +2050,9 @@ public class PineIRCompiler
         return null;
     }
 
+    /// <summary>
+    /// Compiles the bitwise-and kernel application.
+    /// </summary>
     public static NodeCompilationResult CompileKernelApplication_Bit_And(
         Expression input,
         CompilationContext context,
@@ -2051,6 +2132,9 @@ public class PineIRCompiler
         }
     }
 
+    /// <summary>
+    /// Compiles the bitwise-or kernel application.
+    /// </summary>
     public static NodeCompilationResult CompileKernelApplication_Bit_Or(
         Expression input,
         CompilationContext context,
@@ -2130,6 +2214,9 @@ public class PineIRCompiler
         }
     }
 
+    /// <summary>
+    /// Compiles the bitwise-xor kernel application.
+    /// </summary>
     public static NodeCompilationResult CompileKernelApplication_Bit_Xor(
         Expression input,
         CompilationContext context,
@@ -2183,6 +2270,9 @@ public class PineIRCompiler
         }
     }
 
+    /// <summary>
+    /// Compiles the bitwise-not kernel application.
+    /// </summary>
     public static NodeCompilationResult CompileKernelApplication_Bit_Not(
         Expression input,
         CompilationContext context,
@@ -2198,6 +2288,9 @@ public class PineIRCompiler
             .AppendInstruction(StackInstruction.Bit_Not);
     }
 
+    /// <summary>
+    /// Compiles the left-shift kernel application.
+    /// </summary>
     public static NodeCompilationResult CompileKernelApplication_Bit_Shift_Left(
         Expression input,
         CompilationContext context,
@@ -2252,6 +2345,9 @@ public class PineIRCompiler
             .AppendInstruction(StackInstruction.Bit_Shift_Left_Generic);
     }
 
+    /// <summary>
+    /// Compiles the right-shift kernel application.
+    /// </summary>
     public static NodeCompilationResult CompileKernelApplication_Bit_Shift_Right(
         Expression input,
         CompilationContext context,
@@ -2306,6 +2402,9 @@ public class PineIRCompiler
             .AppendInstruction(StackInstruction.Bit_Shift_Right_Generic);
     }
 
+    /// <summary>
+    /// Tries to recognize an expression as integer negation and returns the negated operand when successful.
+    /// </summary>
     public static Expression? TryParse_IntNegation(
         Expression expression,
         PineVMParseCache parseCache)
@@ -2433,6 +2532,9 @@ public class PineIRCompiler
             .IsOkOrNull();
     }
 
+    /// <summary>
+    /// Determines whether an expression is substantial enough to consider for common subexpression elimination.
+    /// </summary>
     public static bool ExpressionLargeEnoughForCSE(Expression expression)
     {
         if (expression is Expression.Literal or Expression.Environment)

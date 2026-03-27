@@ -206,7 +206,7 @@ public class ElmParserExpressionTests
 
         CoreLibraryModule.CoreLibraryTestHelper.FormatCounts(report).Should().Be(
             """
-            InstructionCount: 76018
+            InstructionCount: 73854
             InvocationCount: 2165
             BuildListCount: 26749
             LoopIterationCount: 0
@@ -228,7 +228,7 @@ public class ElmParserExpressionTests
 
         CoreLibraryModule.CoreLibraryTestHelper.FormatCounts(report).Should().Be(
             """
-            InstructionCount: 189898
+            InstructionCount: 184464
             InvocationCount: 8075
             BuildListCount: 52639
             LoopIterationCount: 0
@@ -250,7 +250,7 @@ public class ElmParserExpressionTests
 
         CoreLibraryModule.CoreLibraryTestHelper.FormatCounts(report).Should().Be(
             """
-            InstructionCount: 89244
+            InstructionCount: 87271
             InvocationCount: 1591
             BuildListCount: 38752
             LoopIterationCount: 0
@@ -275,7 +275,7 @@ public class ElmParserExpressionTests
 
         CoreLibraryModule.CoreLibraryTestHelper.FormatCounts(report).Should().Be(
             """
-            InstructionCount: 571644
+            InstructionCount: 556911
             InvocationCount: 15671
             BuildListCount: 207912
             LoopIterationCount: 0
@@ -309,7 +309,7 @@ public class ElmParserExpressionTests
 
         CoreLibraryModule.CoreLibraryTestHelper.FormatCounts(report).Should().Be(
             """
-            InstructionCount: 5738744
+            InstructionCount: 5594611
             InvocationCount: 159291
             BuildListCount: 1991532
             LoopIterationCount: 0
@@ -373,7 +373,7 @@ public class ElmParserExpressionTests
 
         CoreLibraryModule.CoreLibraryTestHelper.FormatCounts(report).Should().Be(
             """
-            InstructionCount: 23461544
+            InstructionCount: 22854211
             InvocationCount: 653091
             BuildListCount: 8061732
             LoopIterationCount: 0
@@ -461,7 +461,7 @@ public class ElmParserExpressionTests
 
         CoreLibraryModule.CoreLibraryTestHelper.FormatCounts(report).Should().Be(
             """
-            InstructionCount: 254639944
+            InstructionCount: 248005411
             InvocationCount: 7106611
             BuildListCount: 87790852
             LoopIterationCount: 0

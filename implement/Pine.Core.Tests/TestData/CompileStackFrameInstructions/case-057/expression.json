@@ -1,0 +1,22 @@
+{
+  "List": [
+    [
+      {
+        "KernelApplication": [
+          "head",
+          {
+            "Environment": []
+          }
+        ]
+      },
+      {
+        "KernelApplication": [
+          "head",
+          {
+            "Environment": []
+          }
+        ]
+      }
+    ]
+  ]
+}

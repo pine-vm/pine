@@ -186,7 +186,7 @@ public class FunctionApplicationOverheadTests
     /// Demonstrates overhead from applying a function parameter to one argument.
     /// <c>testApplyIncrement n = Helpers.apply increment n</c> ideally needs
     /// ~1 instruction (the int_add inside increment), but the generic wrapper
-    /// mechanism adds 40 instructions, 5 ParseAndEval invocations, and 12
+    /// mechanism adds 39 instructions, 5 ParseAndEval invocations, and 12
     /// list constructions for the environment management.
     /// </summary>
     [Fact]
@@ -202,7 +202,7 @@ public class FunctionApplicationOverheadTests
 
         CoreLibraryModule.CoreLibraryTestHelper.FormatCounts(report).Should().Be(
             """
-            InstructionCount: 40
+            InstructionCount: 39
             InvocationCount: 5
             BuildListCount: 12
             LoopIterationCount: 0
@@ -214,7 +214,7 @@ public class FunctionApplicationOverheadTests
     /// <c>testApply2Add a b = Helpers.apply2 add a b</c> applies <c>add</c>
     /// through the generic path with two incremental argument applications.
     /// Each additional argument roughly doubles the wrapper overhead compared
-    /// to the unary case: 97 instructions and 9 invocations vs. 40 and 5.
+    /// to the unary case: 96 instructions and 9 invocations vs. 39 and 5.
     /// </summary>
     [Fact]
     public void Apply_function_parameter_binary()
@@ -230,7 +230,7 @@ public class FunctionApplicationOverheadTests
 
         CoreLibraryModule.CoreLibraryTestHelper.FormatCounts(report).Should().Be(
             """
-            InstructionCount: 97
+            InstructionCount: 96
             InvocationCount: 9
             BuildListCount: 38
             LoopIterationCount: 0
@@ -240,7 +240,7 @@ public class FunctionApplicationOverheadTests
     /// <summary>
     /// Demonstrates compounding overhead when a function parameter is
     /// applied twice. <c>applyTwice increment 10</c> calls <c>increment</c>
-    /// through the generic path twice: 52 instructions and 7 invocations
+    /// through the generic path twice: 50 instructions and 7 invocations
     /// for what amounts to adding 2 to a number.
     /// </summary>
     [Fact]
@@ -256,7 +256,7 @@ public class FunctionApplicationOverheadTests
 
         CoreLibraryModule.CoreLibraryTestHelper.FormatCounts(report).Should().Be(
             """
-            InstructionCount: 52
+            InstructionCount: 50
             InvocationCount: 7
             BuildListCount: 14
             LoopIterationCount: 0
@@ -266,7 +266,7 @@ public class FunctionApplicationOverheadTests
     /// <summary>
     /// Demonstrates overhead scaling with list length when applying a function
     /// parameter recursively. Mapping <c>increment</c> over a 3-element list
-    /// requires 121 instructions and 12 invocations. Each element adds
+    /// requires 110 instructions and 12 invocations. Each element adds
     /// a generic function application through ParseAndEval.
     /// </summary>
     [Fact]
@@ -288,7 +288,7 @@ public class FunctionApplicationOverheadTests
 
         CoreLibraryModule.CoreLibraryTestHelper.FormatCounts(report).Should().Be(
             """
-            InstructionCount: 121
+            InstructionCount: 110
             InvocationCount: 12
             BuildListCount: 22
             LoopIterationCount: 0
@@ -299,7 +299,7 @@ public class FunctionApplicationOverheadTests
     /// Demonstrates overhead from calling a closure. <c>makeAdder 5</c>
     /// returns a closure that captures <c>n=5</c>. Applying that closure
     /// requires the generic ParseAndEval path because the closure is a
-    /// dynamically created function value: 76 instructions and 7 invocations
+    /// dynamically created function value: 75 instructions and 7 invocations
     /// for adding 5 to a number.
     /// </summary>
     [Fact]
@@ -315,7 +315,7 @@ public class FunctionApplicationOverheadTests
 
         CoreLibraryModule.CoreLibraryTestHelper.FormatCounts(report).Should().Be(
             """
-            InstructionCount: 76
+            InstructionCount: 75
             InvocationCount: 7
             BuildListCount: 31
             LoopIterationCount: 0
@@ -325,7 +325,7 @@ public class FunctionApplicationOverheadTests
     /// <summary>
     /// Demonstrates how overhead compounds when chaining closures through
     /// the generic application path. Two closures applied via
-    /// <c>Helpers.apply</c> result in 154 instructions and 14 invocations
+    /// <c>Helpers.apply</c> result in 152 instructions and 14 invocations
     /// for adding 10 to a number (3 + 7).
     /// </summary>
     [Fact]
@@ -341,7 +341,7 @@ public class FunctionApplicationOverheadTests
 
         CoreLibraryModule.CoreLibraryTestHelper.FormatCounts(report).Should().Be(
             """
-            InstructionCount: 154
+            InstructionCount: 152
             InvocationCount: 14
             BuildListCount: 62
             LoopIterationCount: 0
