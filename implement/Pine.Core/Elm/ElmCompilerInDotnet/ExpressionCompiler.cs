@@ -1673,8 +1673,9 @@ public class ExpressionCompiler
 
         var paramCount = funcInfo.declaration.Function.Declaration.Value.Arguments.Count;
 
-        // Get the encoded body from the environment
-        // In the environment structure [[envFunctions], [args]], the encoded bodies are at [0][i]
+        // Get the encoded body from the environment.
+        // For declarations compiled with env functions, the root environment uses the flat layout
+        // [envFunctions, arg0, arg1, ...], so the encoded bodies are in the env-functions list at [0][i].
         var encodedBodyExpr =
             ExpressionBuilder.BuildExpressionForPathInExpression(
                 [0, functionIndex],
@@ -1711,7 +1712,7 @@ public class ExpressionCompiler
             var envFuncsListExpr = Expression.ListInstance(envFunctionsExprs);
 
             var callEnvironment =
-                Expression.ListInstance([envFuncsListExpr, Expression.EmptyList]);
+                Expression.ListInstance([envFuncsListExpr]);
 
             return
                 (Result<CompilationError, Expression>)new Expression.ParseAndEval(

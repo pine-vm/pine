@@ -42,6 +42,33 @@ Function applications are grouped into full applications and partial application
 For function applications where the number of arguments equals the number of parameters of the function (non-partial application), we use the following pattern to compile Elm function applications, as a convention:
 The environment is a flat list. The first item in this list contains all the encoded function bodies needed for further applications. This set contains all the transitively referenced functions that have not been inlined. The remaining items in the list are the arguments from the source Elm code, each at its own position in the root list.
 
+The important point here is what **flat** means: The arguments are flat at the
+**root env level**. The env-functions payload itself still remains grouped as
+the first root item. So for a full application with two Elm arguments, the
+shape is:
+
+```txt
+[ [envFunctions]
+, arg0
+, arg1
+]
+```
+
+and **not**:
+
+```txt
+[ [envFunctions]
+, [arg0, arg1]
+]
+```
+
+This distinction matters when reading instruction traces. A trace that shows
+one `Build_List` to materialize the env-functions list and a second
+`Build_List (arity + 1)` to materialize the root env is still following the
+flat-root convention. The former builds the item at root index `0`; the latter
+assembles the complete root env list containing the env-functions at index `0`
+followed by the flattened arguments.
+
 For example, a recursive function, when calling itself via 'ParseAndEval', composes the new environment so that it also contains a representation of the function itself in encoded form, to enable continuing recursion in the non-terminating branch.
 
 The following example illustrates the pattern using a concrete recursive function:
@@ -77,6 +104,13 @@ Because of the direct recursion, the calling function happens to be the called f
 ```
 
 Following this pattern ensures that common inspection and profiling tooling can parse and analyze the invocations. We also use these tools to derive symbols for pseudo-functions rendered as part of snapshot tests.
+
+When implementing or reviewing this compiler path, the key property to preserve
+is: **Every Elm argument of a full application must become a sibling entry in
+the root env list, immediately after the env-functions list.** If a trace shows
+the compiler first assembling a separate root-level args list and then pairing
+that list with the env-functions list, that would be the older nested shape and
+would not satisfy this convention.
 
 ### Composition of the Environment Functions List
 
