@@ -148,17 +148,20 @@ public class CompileKernelFunctionApplication
                                 SyntaxFactory.SeparatedList<ArgumentSyntax>(
                                     new SyntaxNodeOrToken[]
                                     {
-                                    SyntaxFactory.Argument(PineCSharpSyntaxFactory.ExpressionSyntaxForIntegerLiteral((int)takeCountBI))
+                                        SyntaxFactory.Argument(
+                                            PineCSharpSyntaxFactory.ExpressionSyntaxForIntegerLiteral((int)takeCountBI))
                                         .WithNameColon(SyntaxFactory.NameColon(SyntaxFactory.IdentifierName("takeCount"))),
 
-                                    SyntaxFactory.Token(SyntaxKind.CommaToken),
+                                        SyntaxFactory.Token(SyntaxKind.CommaToken),
 
-                                    SyntaxFactory.Argument(skipCountExpr.AsGenericValue(emitEnv.FunctionEnv.DeclarationSyntaxContext))
+                                        SyntaxFactory.Argument(
+                                            skipCountExpr.AsGenericValue(emitEnv.FunctionEnv.DeclarationSyntaxContext))
                                         .WithNameColon(SyntaxFactory.NameColon(SyntaxFactory.IdentifierName("skipCountValue"))),
 
-                                    SyntaxFactory.Token(SyntaxKind.CommaToken),
+                                        SyntaxFactory.Token(SyntaxKind.CommaToken),
 
-                                    SyntaxFactory.Argument(argumentExpr.AsGenericValue(emitEnv.FunctionEnv.DeclarationSyntaxContext))
+                                        SyntaxFactory.Argument(
+                                            argumentExpr.AsGenericValue(emitEnv.FunctionEnv.DeclarationSyntaxContext))
                                         .WithNameColon(SyntaxFactory.NameColon(SyntaxFactory.IdentifierName("argument"))),
                                     })));
 
@@ -194,17 +197,20 @@ public class CompileKernelFunctionApplication
                                 SyntaxFactory.SeparatedList<ArgumentSyntax>(
                                     new SyntaxNodeOrToken[]
                                     {
-                                    SyntaxFactory.Argument(takeCountExpr.AsGenericValue(emitEnv.FunctionEnv.DeclarationSyntaxContext))
+                                        SyntaxFactory.Argument(
+                                            takeCountExpr.AsGenericValue(emitEnv.FunctionEnv.DeclarationSyntaxContext))
                                         .WithNameColon(SyntaxFactory.NameColon(SyntaxFactory.IdentifierName("takeCountValue"))),
 
-                                    SyntaxFactory.Token(SyntaxKind.CommaToken),
+                                        SyntaxFactory.Token(SyntaxKind.CommaToken),
 
-                                    SyntaxFactory.Argument(skipCountExpr.AsGenericValue(emitEnv.FunctionEnv.DeclarationSyntaxContext))
+                                        SyntaxFactory.Argument(
+                                            skipCountExpr.AsGenericValue(emitEnv.FunctionEnv.DeclarationSyntaxContext))
                                         .WithNameColon(SyntaxFactory.NameColon(SyntaxFactory.IdentifierName("skipCountValue"))),
 
-                                    SyntaxFactory.Token(SyntaxKind.CommaToken),
+                                        SyntaxFactory.Token(SyntaxKind.CommaToken),
 
-                                    SyntaxFactory.Argument(argumentExpr.AsGenericValue(emitEnv.FunctionEnv.DeclarationSyntaxContext))
+                                        SyntaxFactory.Argument(
+                                            argumentExpr.AsGenericValue(emitEnv.FunctionEnv.DeclarationSyntaxContext))
                                         .WithNameColon(SyntaxFactory.NameColon(SyntaxFactory.IdentifierName("argument"))),
                                     })));
 
@@ -256,17 +262,20 @@ public class CompileKernelFunctionApplication
                         SyntaxFactory.SeparatedList<ArgumentSyntax>(
                             new SyntaxNodeOrToken[]
                             {
-                                SyntaxFactory.Argument(skipCountExpr.AsGenericValue(emitEnv.FunctionEnv.DeclarationSyntaxContext))
+                                SyntaxFactory.Argument(
+                                    skipCountExpr.AsGenericValue(emitEnv.FunctionEnv.DeclarationSyntaxContext))
                                 .WithNameColon(SyntaxFactory.NameColon(SyntaxFactory.IdentifierName("skipCountValue"))),
 
                                 SyntaxFactory.Token(SyntaxKind.CommaToken),
 
-                                SyntaxFactory.Argument(takeCountExpr.AsGenericValue(emitEnv.FunctionEnv.DeclarationSyntaxContext))
+                                SyntaxFactory.Argument(
+                                    takeCountExpr.AsGenericValue(emitEnv.FunctionEnv.DeclarationSyntaxContext))
                                 .WithNameColon(SyntaxFactory.NameColon(SyntaxFactory.IdentifierName("takeCountValue"))),
 
                                 SyntaxFactory.Token(SyntaxKind.CommaToken),
 
-                                SyntaxFactory.Argument(argumentExpr.AsGenericValue(emitEnv.FunctionEnv.DeclarationSyntaxContext))
+                                SyntaxFactory.Argument(
+                                    argumentExpr.AsGenericValue(emitEnv.FunctionEnv.DeclarationSyntaxContext))
                                 .WithNameColon(SyntaxFactory.NameColon(SyntaxFactory.IdentifierName("argument"))),
                             })));
 
@@ -307,12 +316,15 @@ public class CompileKernelFunctionApplication
                                 SyntaxFactory.SeparatedList<ArgumentSyntax>(
                                     new SyntaxNodeOrToken[]
                                     {
-                                    SyntaxFactory.Argument(PineCSharpSyntaxFactory.ExpressionSyntaxForIntegerLiteral((int)takeLastCountBI))
+                                        SyntaxFactory.Argument(
+                                            PineCSharpSyntaxFactory.ExpressionSyntaxForIntegerLiteral(
+                                                (int)takeLastCountBI))
                                         .WithNameColon(SyntaxFactory.NameColon(SyntaxFactory.IdentifierName("takeCount"))),
 
-                                    SyntaxFactory.Token(SyntaxKind.CommaToken),
+                                        SyntaxFactory.Token(SyntaxKind.CommaToken),
 
-                                    SyntaxFactory.Argument(seqExpr.AsGenericValue(emitEnv.FunctionEnv.DeclarationSyntaxContext))
+                                        SyntaxFactory.Argument(
+                                            seqExpr.AsGenericValue(emitEnv.FunctionEnv.DeclarationSyntaxContext))
                                         .WithNameColon(SyntaxFactory.NameColon(SyntaxFactory.IdentifierName("value")))
                                     })));
 
@@ -356,12 +368,15 @@ public class CompileKernelFunctionApplication
                                 SyntaxFactory.SeparatedList<ArgumentSyntax>(
                                     new SyntaxNodeOrToken[]
                                     {
-                                        SyntaxFactory.Argument(PineCSharpSyntaxFactory.ExpressionSyntaxForIntegerLiteral((int)skipLastCountBI))
+                                        SyntaxFactory.Argument(
+                                            PineCSharpSyntaxFactory.ExpressionSyntaxForIntegerLiteral(
+                                                (int)skipLastCountBI))
                                         .WithNameColon(SyntaxFactory.NameColon(SyntaxFactory.IdentifierName("skipCount"))),
 
                                         SyntaxFactory.Token(SyntaxKind.CommaToken),
 
-                                        SyntaxFactory.Argument(seqExpr.AsGenericValue(emitEnv.FunctionEnv.DeclarationSyntaxContext))
+                                        SyntaxFactory.Argument(
+                                            seqExpr.AsGenericValue(emitEnv.FunctionEnv.DeclarationSyntaxContext))
                                         .WithNameColon(SyntaxFactory.NameColon(SyntaxFactory.IdentifierName("value")))
                                     })));
 
@@ -406,13 +421,15 @@ public class CompileKernelFunctionApplication
                             SyntaxFactory.SeparatedList<ArgumentSyntax>(
                                 new SyntaxNodeOrToken[]
                                 {
-                                    SyntaxFactory.Argument(prefixExpr.AsGenericValue(emitEnv.FunctionEnv.DeclarationSyntaxContext))
-                                        .WithNameColon(SyntaxFactory.NameColon(SyntaxFactory.IdentifierName("prefix"))),
+                                    SyntaxFactory.Argument(
+                                        prefixExpr.AsGenericValue(emitEnv.FunctionEnv.DeclarationSyntaxContext))
+                                    .WithNameColon(SyntaxFactory.NameColon(SyntaxFactory.IdentifierName("prefix"))),
 
                                     SyntaxFactory.Token(SyntaxKind.CommaToken),
 
-                                    SyntaxFactory.Argument(itemToAppendExpr.AsGenericValue(emitEnv.FunctionEnv.DeclarationSyntaxContext))
-                                        .WithNameColon(SyntaxFactory.NameColon(SyntaxFactory.IdentifierName("itemToAppend"))),
+                                    SyntaxFactory.Argument(
+                                        itemToAppendExpr.AsGenericValue(emitEnv.FunctionEnv.DeclarationSyntaxContext))
+                                    .WithNameColon(SyntaxFactory.NameColon(SyntaxFactory.IdentifierName("itemToAppend"))),
                                 })));
 
                 yield return CompiledCSharpExpression.Generic(genericCSharpExpr);
@@ -452,12 +469,14 @@ public class CompileKernelFunctionApplication
                             SyntaxFactory.SeparatedList<ArgumentSyntax>(
                                 new SyntaxNodeOrToken[]
                                 {
-                                    SyntaxFactory.Argument(itemToPrependExpr.AsGenericValue(emitEnv.FunctionEnv.DeclarationSyntaxContext))
+                                    SyntaxFactory.Argument(
+                                        itemToPrependExpr.AsGenericValue(emitEnv.FunctionEnv.DeclarationSyntaxContext))
                                     .WithNameColon(SyntaxFactory.NameColon(SyntaxFactory.IdentifierName("itemToPrepend"))),
 
                                     SyntaxFactory.Token(SyntaxKind.CommaToken),
 
-                                    SyntaxFactory.Argument(suffixExpr.AsGenericValue(emitEnv.FunctionEnv.DeclarationSyntaxContext))
+                                    SyntaxFactory.Argument(
+                                        suffixExpr.AsGenericValue(emitEnv.FunctionEnv.DeclarationSyntaxContext))
                                     .WithNameColon(SyntaxFactory.NameColon(SyntaxFactory.IdentifierName("suffix"))),
                                 })));
             }
@@ -488,12 +507,14 @@ public class CompileKernelFunctionApplication
                             SyntaxFactory.SeparatedList<ArgumentSyntax>(
                                 new SyntaxNodeOrToken[]
                                 {
-                                    SyntaxFactory.Argument(PineCSharpSyntaxFactory.ExpressionSyntaxForIntegerLiteral(byteToPrepend))
+                                    SyntaxFactory.Argument(
+                                        PineCSharpSyntaxFactory.ExpressionSyntaxForIntegerLiteral(byteToPrepend))
                                     .WithNameColon(SyntaxFactory.NameColon(SyntaxFactory.IdentifierName("byteToPrepend"))),
 
                                     SyntaxFactory.Token(SyntaxKind.CommaToken),
 
-                                    SyntaxFactory.Argument(suffixExpr.AsGenericValue(emitEnv.FunctionEnv.DeclarationSyntaxContext))
+                                    SyntaxFactory.Argument(
+                                        suffixExpr.AsGenericValue(emitEnv.FunctionEnv.DeclarationSyntaxContext))
                                     .WithNameColon(SyntaxFactory.NameColon(SyntaxFactory.IdentifierName("suffix"))),
                                 })));
             }
@@ -629,15 +650,18 @@ public class CompileKernelFunctionApplication
                     SyntaxFactory.SeparatedList<ArgumentSyntax>(
                         new SyntaxNodeOrToken[]
                         {
-                            SyntaxFactory.Argument(signIsPositive
-                                ? SyntaxFactory.LiteralExpression(SyntaxKind.TrueLiteralExpression)
-                                : SyntaxFactory.LiteralExpression(SyntaxKind.FalseLiteralExpression))
-                                .WithNameColon(SyntaxFactory.NameColon(SyntaxFactory.IdentifierName("signIsPositive"))),
+                            SyntaxFactory.Argument(
+                                signIsPositive
+                                ?
+                                SyntaxFactory.LiteralExpression(SyntaxKind.TrueLiteralExpression)
+                                :
+                                SyntaxFactory.LiteralExpression(SyntaxKind.FalseLiteralExpression))
+                            .WithNameColon(SyntaxFactory.NameColon(SyntaxFactory.IdentifierName("signIsPositive"))),
 
                             SyntaxFactory.Token(SyntaxKind.CommaToken),
 
                             SyntaxFactory.Argument(unsignedValueSyntax)
-                                .WithNameColon(SyntaxFactory.NameColon(SyntaxFactory.IdentifierName("unsignedValue"))),
+                            .WithNameColon(SyntaxFactory.NameColon(SyntaxFactory.IdentifierName("unsignedValue"))),
                         })));
     }
 

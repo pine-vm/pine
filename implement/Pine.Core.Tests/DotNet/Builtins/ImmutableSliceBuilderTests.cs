@@ -383,13 +383,15 @@ public class ImmutableSliceBuilderTests
     [Fact]
     public void Take_with_PineValue_parses_integer()
     {
-        var original = PineValue.List([
-            PineValue.Blob([1]),
-            PineValue.Blob([2]),
-            PineValue.Blob([3]),
-            PineValue.Blob([4]),
-            PineValue.Blob([5])
-        ]);
+        var original =
+            PineValue.List(
+                [
+                PineValue.Blob([1]),
+                PineValue.Blob([2]),
+                PineValue.Blob([3]),
+                PineValue.Blob([4]),
+                PineValue.Blob([5])
+                ]);
 
         var takeValue = IntegerEncoding.EncodeSignedInteger(3);
         var builder = ImmutableSliceBuilder.Create(original).Take(takeValue);
@@ -403,11 +405,13 @@ public class ImmutableSliceBuilderTests
     [Fact]
     public void Take_with_negative_PineValue_treats_as_zero()
     {
-        var original = PineValue.List([
-            PineValue.Blob([1]),
-            PineValue.Blob([2]),
-            PineValue.Blob([3])
-        ]);
+        var original =
+            PineValue.List(
+                [
+                PineValue.Blob([1]),
+                PineValue.Blob([2]),
+                PineValue.Blob([3])
+                ]);
 
         var takeValue = IntegerEncoding.EncodeSignedInteger(-1);
         var builder = ImmutableSliceBuilder.Create(original).Take(takeValue);
@@ -669,7 +673,8 @@ public class ImmutableSliceBuilderTests
     {
         var original = PineValue.EmptyList;
 
-        var builder = ImmutableSliceBuilder.Create(original)
+        var builder =
+            ImmutableSliceBuilder.Create(original)
             .Skip(0)
             .Take(5);
 
@@ -686,7 +691,8 @@ public class ImmutableSliceBuilderTests
     {
         var original = PineValue.EmptyBlob;
 
-        var builder = ImmutableSliceBuilder.Create(original)
+        var builder =
+            ImmutableSliceBuilder.Create(original)
             .Skip(0)
             .Take(5);
 
@@ -701,11 +707,13 @@ public class ImmutableSliceBuilderTests
     [Fact]
     public void Builder_is_immutable_original_unchanged_after_skip()
     {
-        var original_value = PineValue.List([
-            PineValue.Blob([1]),
-            PineValue.Blob([2]),
-            PineValue.Blob([3])
-        ]);
+        var original_value =
+            PineValue.List(
+                [
+                PineValue.Blob([1]),
+                PineValue.Blob([2]),
+                PineValue.Blob([3])
+                ]);
 
         var original = ImmutableSliceBuilder.Create(original_value);
         var modified = original.Skip(1);
@@ -754,8 +762,7 @@ public class ImmutableSliceBuilderTests
     {
         var original =
             PineValue.List(
-                [.. Enumerable.Range(1, 20).Select(i => PineValue.Blob([(byte)i]))
-                ]);
+                [.. Enumerable.Range(1, 20).Select(i => PineValue.Blob([(byte)i]))]);
 
         var builder =
             ImmutableSliceBuilder.Create(original)
@@ -1229,8 +1236,7 @@ public class ImmutableSliceBuilderTests
     {
         var original =
             PineValue.List(
-                [.. Enumerable.Range(0, 20).Select(i => PineValue.Blob([(byte)i]))
-                ]);
+                [.. Enumerable.Range(0, 20).Select(i => PineValue.Blob([(byte)i]))]);
 
         var builder =
             ImmutableSliceBuilder.Create(original)
@@ -1279,8 +1285,7 @@ public class ImmutableSliceBuilderTests
     {
         var original =
             PineValue.List(
-                [.. Enumerable.Range(1, 30).Select(i => PineValue.Blob([(byte)i]))
-                ]);
+                [.. Enumerable.Range(1, 30).Select(i => PineValue.Blob([(byte)i]))]);
 
         var builder =
             ImmutableSliceBuilder.Create(original)
@@ -1618,6 +1623,7 @@ public class ImmutableSliceBuilderTests
                 ]);
 
         var takeValue = IntegerEncoding.EncodeSignedInteger(3);
+
         var builder =
             ImmutableSliceBuilder.Create(original)
             .TakeLast(takeValue);
@@ -1648,6 +1654,7 @@ public class ImmutableSliceBuilderTests
                 ]);
 
         var takeValue = IntegerEncoding.EncodeSignedInteger(-1);
+
         var builder =
             ImmutableSliceBuilder.Create(original)
             .TakeLast(takeValue);
@@ -1686,8 +1693,7 @@ public class ImmutableSliceBuilderTests
     {
         var original =
             PineValue.List(
-                [.. Enumerable.Range(1, 20).Select(i => PineValue.Blob([(byte)i]))
-                ]);
+                [.. Enumerable.Range(1, 20).Select(i => PineValue.Blob([(byte)i]))]);
 
         var builder =
             ImmutableSliceBuilder.Create(original)
@@ -1796,6 +1802,7 @@ public class ImmutableSliceBuilderTests
 
         // Modified should have the last 2 elements
         var modifiedResult = modified.Evaluate();
+
         var expectedModified =
             PineValue.List(
                 [
@@ -1811,8 +1818,7 @@ public class ImmutableSliceBuilderTests
     {
         var original =
             PineValue.List(
-                [.. Enumerable.Range(1, 10).Select(i => PineValue.Blob([(byte)i]))
-                ]);
+                [.. Enumerable.Range(1, 10).Select(i => PineValue.Blob([(byte)i]))]);
 
         var builder =
             ImmutableSliceBuilder.Create(original)
@@ -1865,8 +1871,7 @@ public class ImmutableSliceBuilderTests
     {
         var original =
             PineValue.List(
-                [.. Enumerable.Range(1, 15).Select(i => PineValue.Blob([(byte)i]))
-                ]);
+                [.. Enumerable.Range(1, 15).Select(i => PineValue.Blob([(byte)i]))]);
 
         var builder =
             ImmutableSliceBuilder.Create(original)
@@ -1911,13 +1916,21 @@ public class ImmutableSliceBuilderTests
             case PineValue.ListValue:
                 isList.Should().BeTrue("Evaluated value is a list, so IsList should be true.");
                 isBlob.Should().BeFalse("Evaluated value is a list, so IsBlob should be false.");
-                length.Should().Be(((PineValue.ListValue)evaluated).Items.Length, "Length should match the number of items in the list.");
+
+                length.Should().Be(
+                    ((PineValue.ListValue)evaluated).Items.Length,
+                    "Length should match the number of items in the list.");
+
                 break;
 
             case PineValue.BlobValue:
                 isBlob.Should().BeTrue("Evaluated value is a blob, so IsBlob should be true.");
                 isList.Should().BeFalse("Evaluated value is a blob, so IsList should be false.");
-                length.Should().Be(((PineValue.BlobValue)evaluated).Bytes.Length, "Length should match the number of bytes in the blob.");
+
+                length.Should().Be(
+                    ((PineValue.BlobValue)evaluated).Bytes.Length,
+                    "Length should match the number of bytes in the blob.");
+
                 break;
 
             default:

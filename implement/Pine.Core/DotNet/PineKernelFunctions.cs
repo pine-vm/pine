@@ -179,8 +179,8 @@ public class PineKernelFunctions
 
                 var parameterTypes =
                     methodInfo
-                        .GetParameters().Select(pi => ParseKernelFunctionParameterType(pi.ParameterType))
-                        .ToImmutableList();
+                    .GetParameters().Select(pi => ParseKernelFunctionParameterType(pi.ParameterType))
+                    .ToImmutableList();
 
                 specializedImpls.Add(
                     new KernelFunctionSpecializedInfo(

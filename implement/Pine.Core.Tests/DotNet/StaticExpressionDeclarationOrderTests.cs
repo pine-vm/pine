@@ -1,7 +1,7 @@
-using System.Linq;
 using AwesomeAssertions;
 using Pine.Core.CodeAnalysis;
 using Pine.Core.DotNet;
+using System.Linq;
 using Xunit;
 
 namespace Pine.Core.Tests.DotNet;
@@ -54,15 +54,18 @@ public class StaticExpressionDeclarationOrderTests
     [Fact]
     public void Orders_function_applications_by_qualified_name()
     {
-        var arguments = StaticExpression<DeclQualifiedName>.ListInstance([StaticExpression<DeclQualifiedName>.EnvironmentInstance]);
+        var arguments =
+            StaticExpression<DeclQualifiedName>.ListInstance([StaticExpression<DeclQualifiedName>.EnvironmentInstance]);
 
-        var bar = StaticExpression<DeclQualifiedName>.FunctionApplicationInstance(
-            new DeclQualifiedName(["Acme"], "Bar"),
-            arguments);
+        var bar =
+            StaticExpression<DeclQualifiedName>.FunctionApplicationInstance(
+                new DeclQualifiedName(["Acme"], "Bar"),
+                arguments);
 
-        var foo = StaticExpression<DeclQualifiedName>.FunctionApplicationInstance(
-            new DeclQualifiedName(["Acme"], "Foo"),
-            arguments);
+        var foo =
+            StaticExpression<DeclQualifiedName>.FunctionApplicationInstance(
+                new DeclQualifiedName(["Acme"], "Foo"),
+                arguments);
 
         var ordered =
             new[] { foo, bar }
@@ -75,13 +78,19 @@ public class StaticExpressionDeclarationOrderTests
     [Fact]
     public void Equal_expressions_compare_as_equal()
     {
-        var first = StaticExpression<DeclQualifiedName>.ListInstance([
-            CreateLiteral(0x05),
-            StaticExpression<DeclQualifiedName>.EnvironmentInstance]);
+        var first =
+            StaticExpression<DeclQualifiedName>.ListInstance(
+                [
+                CreateLiteral(0x05),
+                StaticExpression<DeclQualifiedName>.EnvironmentInstance
+                ]);
 
-        var second = StaticExpression<DeclQualifiedName>.ListInstance([
-            CreateLiteral(0x05),
-            StaticExpression<DeclQualifiedName>.EnvironmentInstance]);
+        var second =
+            StaticExpression<DeclQualifiedName>.ListInstance(
+                [
+                CreateLiteral(0x05),
+                StaticExpression<DeclQualifiedName>.EnvironmentInstance
+                ]);
 
         var comparison = StaticExpressionDeclarationOrder.Instance.Compare(first, second);
 

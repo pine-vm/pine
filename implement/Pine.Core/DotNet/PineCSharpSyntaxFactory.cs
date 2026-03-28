@@ -146,7 +146,7 @@ public static class PineCSharpSyntaxFactory
                                         SyntaxFactory.SeparatedList<CollectionElementSyntax>(
                                             asIntegers
                                             .Select(item => SyntaxFactory.ExpressionElement(ExpressionSyntaxForSignedInt(item))))))))),
-                                            new ValueSyntaxKind.AsListOfSignedIntegers(asIntegers));
+                    new ValueSyntaxKind.AsListOfSignedIntegers(asIntegers));
             }
         }
 
@@ -217,7 +217,7 @@ public static class PineCSharpSyntaxFactory
                                     SyntaxFactory.LiteralExpression(
                                         SyntaxKind.StringLiteralExpression,
                                         SyntaxFactory.Literal(okString)))))),
-                                        new ValueSyntaxKind.AsString(okString));
+                    new ValueSyntaxKind.AsString(okString));
 
             }
 
@@ -554,12 +554,13 @@ public static class PineCSharpSyntaxFactory
                     SyntaxFactory.IdentifierName(nameof(PineValueExtension.ValueFromPathOrEmptyList))))
             .WithArgumentList(
                 SyntaxFactory.ArgumentList(
-                    SyntaxFactory.SeparatedList<ArgumentSyntax>(new SyntaxNodeOrToken[]
-                    {
-                        SyntaxFactory.Argument(compositionExpr),
-                        SyntaxFactory.Token(SyntaxKind.CommaToken),
-                        SyntaxFactory.Argument(pathCollectionExpr)
-                    })));
+                    SyntaxFactory.SeparatedList<ArgumentSyntax>(
+                        new SyntaxNodeOrToken[]
+                        {
+                            SyntaxFactory.Argument(compositionExpr),
+                            SyntaxFactory.Token(SyntaxKind.CommaToken),
+                            SyntaxFactory.Argument(pathCollectionExpr)
+                        })));
     }
 
     public static ExpressionSyntax ExpressionForPineValueBooleanLiteral(
@@ -567,15 +568,15 @@ public static class PineCSharpSyntaxFactory
         DeclarationSyntaxContext declarationSyntaxContext) =>
         SyntaxFactory.MemberAccessExpression(
             SyntaxKind.SimpleMemberAccessExpression,
-                CompileTypeSyntax.TypeSyntaxFromType(
-                    typeof(PineVM.PineKernelValues),
-                    declarationSyntaxContext),
-                SyntaxFactory.IdentifierName(
-                    value
-                    ?
-                    nameof(PineVM.PineKernelValues.TrueValue)
-                    :
-                    nameof(PineVM.PineKernelValues.FalseValue)));
+            CompileTypeSyntax.TypeSyntaxFromType(
+                typeof(PineVM.PineKernelValues),
+                declarationSyntaxContext),
+            SyntaxFactory.IdentifierName(
+                value
+                ?
+                nameof(PineVM.PineKernelValues.TrueValue)
+                :
+                nameof(PineVM.PineKernelValues.FalseValue)));
 
     public static ExpressionSyntax GenericExpressionFromIntegerExpression(
         ExpressionSyntax intExpr,

@@ -10,39 +10,41 @@ public class KernelFunctionSpecializedSpecificityComparer :
 {
     public static readonly KernelFunctionSpecializedSpecificityComparer Instance = new();
 
-    private static int SpecificityRank(KernelFunctionParameterType t) => t switch
-    {
-        // More specific gets a higher rank
+    private static int SpecificityRank(KernelFunctionParameterType t) =>
+        t switch
+        {
+            // More specific gets a higher rank
 
-        KernelFunctionParameterType.Integer =>
-        3,
+            KernelFunctionParameterType.Integer =>
+            3,
 
-        KernelFunctionParameterType.SpanGeneric =>
-        2,
+            KernelFunctionParameterType.SpanGeneric =>
+            2,
 
-        KernelFunctionParameterType.Generic =>
-        1,
+            KernelFunctionParameterType.Generic =>
+            1,
 
-        _ =>
-        0
-    };
+            _ =>
+            0
+        };
 
-    private static int ReturnTypeSpecificityRank(KernelFunctionSpecializedReturnType t) => t switch
-    {
-        // More specific gets a higher rank
+    private static int ReturnTypeSpecificityRank(KernelFunctionSpecializedReturnType t) =>
+        t switch
+        {
+            // More specific gets a higher rank
 
-        KernelFunctionSpecializedReturnType.Boolean =>
-        30,
+            KernelFunctionSpecializedReturnType.Boolean =>
+            30,
 
-        KernelFunctionSpecializedReturnType.Integer =>
-        10,
+            KernelFunctionSpecializedReturnType.Integer =>
+            10,
 
-        KernelFunctionSpecializedReturnType.Generic =>
-        1,
+            KernelFunctionSpecializedReturnType.Generic =>
+            1,
 
-        _ =>
-        0
-    };
+            _ =>
+            0
+        };
 
     public int Compare(KernelFunctionSpecializedInfo? x, KernelFunctionSpecializedInfo? y)
     {
@@ -61,6 +63,7 @@ public class KernelFunctionSpecializedSpecificityComparer :
         // Primary: total specificity (descending)
         var xSum = xParams.Sum(SpecificityRank);
         var ySum = yParams.Sum(SpecificityRank);
+
         if (xSum != ySum)
         {
             return ySum < xSum ? -1 : 1;
@@ -68,6 +71,7 @@ public class KernelFunctionSpecializedSpecificityComparer :
 
         // Secondary: lexicographic compare by per-parameter specificity (descending)
         var commonLen = xParams.Count < yParams.Count ? xParams.Count : yParams.Count;
+
         for (var i = 0; i < commonLen; i++)
         {
             var xr = SpecificityRank(xParams[i]);

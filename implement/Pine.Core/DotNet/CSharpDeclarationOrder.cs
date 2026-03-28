@@ -286,7 +286,8 @@ public class CSharpDeclarationOrder
     /// </remarks>
     /// <param name="listValues">The list values to order.</param>
     /// <returns>An ordered sequence of list values accounting for containment.</returns>
-    public static IEnumerable<PineValue.ListValue> OrderListValuesByContainment(IEnumerable<PineValue.ListValue> listValues)
+    public static IEnumerable<PineValue.ListValue> OrderListValuesByContainment(
+        IEnumerable<PineValue.ListValue> listValues)
     {
         var listValuesSortedBySize =
             listValues
@@ -341,7 +342,8 @@ public class CSharpDeclarationOrder
                 "Unknown value type: " + value.GetType().FullName)
         };
 
-    private static IEnumerable<PineValue.ListValue> EnumerateDescendantListsBreadthFirst(IEnumerable<PineValue.ListValue> roots)
+    private static IEnumerable<PineValue.ListValue> EnumerateDescendantListsBreadthFirst(
+        IEnumerable<PineValue.ListValue> roots)
     {
         var queue = new Queue<PineValue.ListValue>(roots);
 

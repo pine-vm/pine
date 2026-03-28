@@ -26,24 +26,25 @@ public record StaticProgramCSharpClass(
             [
             .. declarations
             .OrderBy(kv => kv.Key)
-            .Select(kv =>
-            RenderFunctionToMethod(
-                selfFunctionName: className.ContainedDeclName(kv.Key),
-                functionInterface: kv.Value.interf,
-                body: kv.Value.body,
-                availableFunctions,
-                availableValueDecls,
-                declarationSyntaxContext))
+            .Select(
+                kv =>
+                RenderFunctionToMethod(
+                    selfFunctionName: className.ContainedDeclName(kv.Key),
+                    functionInterface: kv.Value.interf,
+                    body: kv.Value.body,
+                    availableFunctions,
+                    availableValueDecls,
+                    declarationSyntaxContext))
             ];
 
         var classSyntax =
             SyntaxFactory.ClassDeclaration(className.DeclName)
-                .WithMembers(
-                    SyntaxFactory.List<MemberDeclarationSyntax>([.. functions]))
-                .WithModifiers(
-                     SyntaxFactory.TokenList(
-                         SyntaxFactory.Token(SyntaxKind.PublicKeyword),
-                         SyntaxFactory.Token(SyntaxKind.StaticKeyword)));
+            .WithMembers(
+                SyntaxFactory.List<MemberDeclarationSyntax>([.. functions]))
+            .WithModifiers(
+                SyntaxFactory.TokenList(
+                    SyntaxFactory.Token(SyntaxKind.PublicKeyword),
+                    SyntaxFactory.Token(SyntaxKind.StaticKeyword)));
 
         return new StaticProgramCSharpClass(classSyntax);
     }
@@ -348,7 +349,8 @@ public record StaticProgramCSharpClass(
                                 throw new System.Exception("Internal error: Missing local for param path.");
                             }
 
-                            ExpressionSyntax CompileConcatItem(StaticExpressionExtension.ConcatItem<DeclQualifiedName> concatItem)
+                            ExpressionSyntax CompileConcatItem(
+                                StaticExpressionExtension.ConcatItem<DeclQualifiedName> concatItem)
                             {
                                 var (conditions, item) = concatItem.DeconstructToConditionsAndItem();
 
@@ -523,7 +525,9 @@ public record StaticProgramCSharpClass(
                             tempDeclarations.Add(
                                 SyntaxFactory.LocalDeclarationStatement(
                                     SyntaxFactory.VariableDeclaration(
-                                        CompileTypeSyntax.TypeSyntaxFromType(typeof(PineValue), declarationSyntaxContext))
+                                        CompileTypeSyntax.TypeSyntaxFromType(
+                                            typeof(PineValue),
+                                            declarationSyntaxContext))
                                     .WithVariables(
                                         SyntaxFactory.SingletonSeparatedList(
                                             SyntaxFactory.VariableDeclarator(
@@ -753,6 +757,7 @@ public record StaticProgramCSharpClass(
                 return true;
 
             case StaticExpression<DeclQualifiedName>.Environment:
+
                 // Only allow returning the parameter as a tail leaf.
                 return isTailPosition && paramPath.Count is 0;
 
@@ -829,6 +834,7 @@ public record StaticProgramCSharpClass(
                                 if (!IsGoodForConcatBuilderCandidate(concatInputList.Items[i], selfFunctionName, paramPath, false, ref sawConcatBuilderMutation))
                                     return false;
                             }
+
                             return true;
                         }
 
@@ -844,6 +850,7 @@ public record StaticProgramCSharpClass(
                                 if (!IsGoodForConcatBuilderCandidate(concatInputList.Items[i], selfFunctionName, paramPath, false, ref sawConcatBuilderMutation))
                                     return false;
                             }
+
                             return true;
                         }
                     }
@@ -1164,7 +1171,9 @@ public record StaticProgramCSharpClass(
             var statement =
                 SyntaxFactory.LocalDeclarationStatement(
                     SyntaxFactory.VariableDeclaration(
-                        CompileTypeSyntax.TypeSyntaxFromType(typeof(PineValue), emitEnv.FunctionEnv.DeclarationSyntaxContext))
+                        CompileTypeSyntax.TypeSyntaxFromType(
+                            typeof(PineValue),
+                            emitEnv.FunctionEnv.DeclarationSyntaxContext))
                     .WithVariables(
                         SyntaxFactory.SingletonSeparatedList(
                             SyntaxFactory.VariableDeclarator(
@@ -1501,7 +1510,10 @@ public record StaticProgramCSharpClass(
                 SyntaxFactory.CollectionExpression(
                     SyntaxFactory.SeparatedList<CollectionElementSyntax>(
                         itemExprs
-                        .Select(itemExpr => SyntaxFactory.ExpressionElement(itemExpr.AsGenericValue(emitEnv.FunctionEnv.DeclarationSyntaxContext)))));
+                        .Select(
+                            itemExpr =>
+                            SyntaxFactory.ExpressionElement(
+                                itemExpr.AsGenericValue(emitEnv.FunctionEnv.DeclarationSyntaxContext)))));
 
             // Invoke PineValue.List( ... )
 
@@ -1562,8 +1574,10 @@ public record StaticProgramCSharpClass(
                     SyntaxFactory.ArgumentList(
                         SyntaxFactory.SeparatedList(
                             [
-                            .. arguments.Select(argExpr =>
-                            SyntaxFactory.Argument(argExpr.AsGenericValue(emitEnv.FunctionEnv.DeclarationSyntaxContext)))
+                            .. arguments.Select(
+                                argExpr =>
+                                SyntaxFactory.Argument(
+                                    argExpr.AsGenericValue(emitEnv.FunctionEnv.DeclarationSyntaxContext)))
                             ])));
 
             return [CompiledCSharpExpression.Generic(genericCSharpExpr)];
@@ -2095,7 +2109,8 @@ public record StaticProgramCSharpClass(
                                 SyntaxFactory.LiteralExpression(
                                     SyntaxKind.StringLiteralExpression,
                                     SyntaxFactory.Literal(kernelApp.Function))),
-                            SyntaxFactory.Argument(inputExpr.AsGenericValue(emitEnv.FunctionEnv.DeclarationSyntaxContext))
+                            SyntaxFactory.Argument(
+                                inputExpr.AsGenericValue(emitEnv.FunctionEnv.DeclarationSyntaxContext))
                             ])));
 
             yield return CompiledCSharpExpression.Generic(genericCSharpExpr);

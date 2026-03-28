@@ -59,7 +59,8 @@ public class ImmutableConcatBuilderTests
         var list1 = PineValue.List([PineValue.Blob([1])]);
         var list2 = PineValue.List([PineValue.Blob([2])]);
 
-        var builder = ImmutableConcatBuilder.Create([list1])
+        var builder =
+            ImmutableConcatBuilder.Create([list1])
             .AppendItem(list2);
 
         var result = builder.Evaluate();
@@ -76,7 +77,8 @@ public class ImmutableConcatBuilderTests
         var list2 = PineValue.List([PineValue.Blob([2])]);
         var list3 = PineValue.List([PineValue.Blob([3])]);
 
-        var builder = ImmutableConcatBuilder.Create([list1])
+        var builder =
+            ImmutableConcatBuilder.Create([list1])
             .AppendItems([list2, list3]);
 
         var result = builder.Evaluate();
@@ -91,7 +93,8 @@ public class ImmutableConcatBuilderTests
     {
         var list1 = PineValue.List([PineValue.Blob([1])]);
 
-        var builder = ImmutableConcatBuilder.Create([list1])
+        var builder =
+            ImmutableConcatBuilder.Create([list1])
             .AppendItems([]);
 
         var result = builder.Evaluate();
@@ -107,7 +110,8 @@ public class ImmutableConcatBuilderTests
         var list1 = PineValue.List([PineValue.Blob([2])]);
         var list2 = PineValue.List([PineValue.Blob([1])]);
 
-        var builder = ImmutableConcatBuilder.Create([list1])
+        var builder =
+            ImmutableConcatBuilder.Create([list1])
             .PrependItem(list2);
 
         var result = builder.Evaluate();
@@ -124,7 +128,8 @@ public class ImmutableConcatBuilderTests
         var list2 = PineValue.List([PineValue.Blob([1])]);
         var list3 = PineValue.List([PineValue.Blob([2])]);
 
-        var builder = ImmutableConcatBuilder.Create([list1])
+        var builder =
+            ImmutableConcatBuilder.Create([list1])
             .PrependItems([list2, list3]);
 
         var result = builder.Evaluate();
@@ -139,7 +144,8 @@ public class ImmutableConcatBuilderTests
     {
         var list1 = PineValue.List([PineValue.Blob([1])]);
 
-        var builder = ImmutableConcatBuilder.Create([list1])
+        var builder =
+            ImmutableConcatBuilder.Create([list1])
             .PrependItems([]);
 
         var result = builder.Evaluate();
@@ -157,7 +163,8 @@ public class ImmutableConcatBuilderTests
         var list3 = PineValue.List([PineValue.Blob([3])]);
         var list4 = PineValue.List([PineValue.Blob([4])]);
 
-        var builder = ImmutableConcatBuilder.Create([list1])
+        var builder =
+            ImmutableConcatBuilder.Create([list1])
             .AppendItem(list2)
             .AppendItem(list3)
             .AppendItem(list4);
@@ -177,7 +184,8 @@ public class ImmutableConcatBuilderTests
         var list3 = PineValue.List([PineValue.Blob([2])]);
         var list4 = PineValue.List([PineValue.Blob([1])]);
 
-        var builder = ImmutableConcatBuilder.Create([list1])
+        var builder =
+            ImmutableConcatBuilder.Create([list1])
             .PrependItem(list2)
             .PrependItem(list3)
             .PrependItem(list4);
@@ -198,7 +206,8 @@ public class ImmutableConcatBuilderTests
         var list4 = PineValue.List([PineValue.Blob([1])]);
         var list5 = PineValue.List([PineValue.Blob([5])]);
 
-        var builder = ImmutableConcatBuilder.Create([list1])
+        var builder =
+            ImmutableConcatBuilder.Create([list1])
             .PrependItem(list2)
             .AppendItem(list3)
             .PrependItem(list4)
@@ -298,8 +307,11 @@ public class ImmutableConcatBuilderTests
     [Fact]
     public void Leaf_node_with_multiple_items_evaluates_correctly()
     {
-        PineValue[] items = [.. Enumerable.Range(1, 5)
-            .Select(i => PineValue.List([PineValue.Blob([(byte)i])]))];
+        PineValue[] items =
+            [
+            .. Enumerable.Range(1, 5)
+            .Select(i => PineValue.List([PineValue.Blob([(byte)i])]))
+            ];
 
         var leaf = new ImmutableConcatBuilder.Leaf(items);
 
@@ -329,12 +341,12 @@ public class ImmutableConcatBuilderTests
     public void Node_with_multiple_children_evaluates_correctly()
     {
         PineValue[] items =
-        [
+            [
             PineValue.List([PineValue.Blob([1])]),
             PineValue.List([PineValue.Blob([2])]),
             PineValue.List([PineValue.Blob([3])]),
             PineValue.List([PineValue.Blob([4])])
-        ];
+            ];
 
         var leaf1 = new ImmutableConcatBuilder.Leaf((PineValue[])[items[0], items[1]]);
         var leaf2 = new ImmutableConcatBuilder.Leaf((PineValue[])[items[2], items[3]]);
@@ -351,11 +363,11 @@ public class ImmutableConcatBuilderTests
     public void Node_with_nested_nodes_evaluates_correctly()
     {
         PineValue[] items =
-        [
+            [
             PineValue.List([PineValue.Blob([1])]),
             PineValue.List([PineValue.Blob([2])]),
             PineValue.List([PineValue.Blob([3])])
-        ];
+            ];
 
         var leaf1 = new ImmutableConcatBuilder.Leaf((PineValue[])[items[0]]);
         var leaf2 = new ImmutableConcatBuilder.Leaf((PineValue[])[items[1]]);
@@ -401,16 +413,26 @@ public class ImmutableConcatBuilderTests
     [Fact]
     public void AppendItems_and_PrependItems_with_large_collections()
     {
-        PineValue[] initial = [.. Enumerable.Range(1, 10)
-            .Select(i => PineValue.List([PineValue.Blob([(byte)i])]))];
+        PineValue[] initial =
+            [
+            .. Enumerable.Range(1, 10)
+            .Select(i => PineValue.List([PineValue.Blob([(byte)i])]))
+            ];
 
-        PineValue[] toAppend = [.. Enumerable.Range(11, 10)
-            .Select(i => PineValue.List([PineValue.Blob([(byte)i])]))];
+        PineValue[] toAppend =
+            [
+            .. Enumerable.Range(11, 10)
+            .Select(i => PineValue.List([PineValue.Blob([(byte)i])]))
+            ];
 
-        PineValue[] toPrepend = [.. Enumerable.Range(21, 10)
-            .Select(i => PineValue.List([PineValue.Blob([(byte)i])]))];
+        PineValue[] toPrepend =
+            [
+            .. Enumerable.Range(21, 10)
+            .Select(i => PineValue.List([PineValue.Blob([(byte)i])]))
+            ];
 
-        var builder = ImmutableConcatBuilder.Create(initial)
+        var builder =
+            ImmutableConcatBuilder.Create(initial)
             .AppendItems(toAppend)
             .PrependItems(toPrepend);
 
@@ -1020,7 +1042,8 @@ public class ImmutableConcatBuilderTests
         var emptyList = PineValue.EmptyList;
         var blob2 = PineValue.Blob([3, 4]);
 
-        var builder = ImmutableConcatBuilder.Create([blob1])
+        var builder =
+            ImmutableConcatBuilder.Create([blob1])
             .AppendItem(emptyList)
             .AppendItem(blob2);
 

@@ -18,9 +18,10 @@ public class StaticProgramCSharpMethodCSETests
     {
         var literal = StaticExpression<string>.LiteralInstance(PineValue.EmptyList);
 
-        var result = StaticProgramCSharpMethodCSE.CollectSubexpressionsToSeparate(
-            literal,
-            IgnoreSimple);
+        var result =
+            StaticProgramCSharpMethodCSE.CollectSubexpressionsToSeparate(
+                literal,
+                IgnoreSimple);
 
         result.Should().BeEmpty();
     }
@@ -30,9 +31,10 @@ public class StaticProgramCSharpMethodCSETests
     {
         var env = StaticExpression<string>.EnvironmentInstance;
 
-        var result = StaticProgramCSharpMethodCSE.CollectSubexpressionsToSeparate(
-            env,
-            IgnoreSimple);
+        var result =
+            StaticProgramCSharpMethodCSE.CollectSubexpressionsToSeparate(
+                env,
+                IgnoreSimple);
 
         result.Should().BeEmpty();
     }
@@ -40,13 +42,15 @@ public class StaticProgramCSharpMethodCSETests
     [Fact]
     public void CollectSubexpressionsToSeparate_returns_empty_for_single_kernel_application()
     {
-        var kernelApp = StaticExpression<string>.KernelApplicationInstance(
-            "head",
-            StaticExpression<string>.EnvironmentInstance);
+        var kernelApp =
+            StaticExpression<string>.KernelApplicationInstance(
+                "head",
+                StaticExpression<string>.EnvironmentInstance);
 
-        var result = StaticProgramCSharpMethodCSE.CollectSubexpressionsToSeparate(
-            kernelApp,
-            IgnoreSimple);
+        var result =
+            StaticProgramCSharpMethodCSE.CollectSubexpressionsToSeparate(
+                kernelApp,
+                IgnoreSimple);
 
         result.Should().BeEmpty();
     }
@@ -59,15 +63,17 @@ public class StaticProgramCSharpMethodCSETests
     public void CollectSubexpressionsToSeparate_returns_empty_for_list_with_distinct_elements()
     {
         // List with two different literals - no common subexpressions
-        var list = StaticExpression<string>.ListInstance(
-        [
-            StaticExpression<string>.LiteralInstance(PineValue.EmptyList),
-            StaticExpression<string>.LiteralInstance(PineValue.EmptyBlob)
-        ]);
+        var list =
+            StaticExpression<string>.ListInstance(
+                [
+                StaticExpression<string>.LiteralInstance(PineValue.EmptyList),
+                StaticExpression<string>.LiteralInstance(PineValue.EmptyBlob)
+                ]);
 
-        var result = StaticProgramCSharpMethodCSE.CollectSubexpressionsToSeparate(
-            list,
-            IgnoreSimple);
+        var result =
+            StaticProgramCSharpMethodCSE.CollectSubexpressionsToSeparate(
+                list,
+                IgnoreSimple);
 
         result.Should().BeEmpty();
     }
@@ -76,15 +82,17 @@ public class StaticProgramCSharpMethodCSETests
     public void CollectSubexpressionsToSeparate_identifies_repeated_subexpression_in_list()
     {
         // A kernel application that appears twice in the list
-        var kernelApp = StaticExpression<string>.KernelApplicationInstance(
-            "head",
-            StaticExpression<string>.EnvironmentInstance);
+        var kernelApp =
+            StaticExpression<string>.KernelApplicationInstance(
+                "head",
+                StaticExpression<string>.EnvironmentInstance);
 
         var list = StaticExpression<string>.ListInstance([kernelApp, kernelApp]);
 
-        var result = StaticProgramCSharpMethodCSE.CollectSubexpressionsToSeparate(
-            list,
-            IgnoreSimple);
+        var result =
+            StaticProgramCSharpMethodCSE.CollectSubexpressionsToSeparate(
+                list,
+                IgnoreSimple);
 
         result.Should().HaveCount(1);
         result.Should().Contain(kernelApp);
@@ -94,24 +102,28 @@ public class StaticProgramCSharpMethodCSETests
     public void CollectSubexpressionsToSeparate_identifies_nested_repeated_subexpression()
     {
         // Inner expression that will be repeated
-        var innerKernelApp = StaticExpression<string>.KernelApplicationInstance(
-            "head",
-            StaticExpression<string>.EnvironmentInstance);
+        var innerKernelApp =
+            StaticExpression<string>.KernelApplicationInstance(
+                "head",
+                StaticExpression<string>.EnvironmentInstance);
 
         // Two outer kernel applications that both use the same inner expression
-        var outerKernelApp1 = StaticExpression<string>.KernelApplicationInstance(
-            "length",
-            innerKernelApp);
+        var outerKernelApp1 =
+            StaticExpression<string>.KernelApplicationInstance(
+                "length",
+                innerKernelApp);
 
-        var outerKernelApp2 = StaticExpression<string>.KernelApplicationInstance(
-            "head",
-            innerKernelApp);
+        var outerKernelApp2 =
+            StaticExpression<string>.KernelApplicationInstance(
+                "head",
+                innerKernelApp);
 
         var list = StaticExpression<string>.ListInstance([outerKernelApp1, outerKernelApp2]);
 
-        var result = StaticProgramCSharpMethodCSE.CollectSubexpressionsToSeparate(
-            list,
-            IgnoreSimple);
+        var result =
+            StaticProgramCSharpMethodCSE.CollectSubexpressionsToSeparate(
+                list,
+                IgnoreSimple);
 
         // Should identify the inner kernel app as needing CSE
         result.Should().Contain(innerKernelApp);
@@ -124,24 +136,29 @@ public class StaticProgramCSharpMethodCSETests
     [Fact]
     public void CollectSubexpressionsToSeparate_returns_empty_for_simple_conditional_no_repeats()
     {
-        var condition = StaticExpression<string>.KernelApplicationInstance(
-            "head",
-            StaticExpression<string>.EnvironmentInstance);
+        var condition =
+            StaticExpression<string>.KernelApplicationInstance(
+                "head",
+                StaticExpression<string>.EnvironmentInstance);
 
-        var trueBranch = StaticExpression<string>.LiteralInstance(
-            PineValue.EmptyList);
+        var trueBranch =
+            StaticExpression<string>.LiteralInstance(
+                PineValue.EmptyList);
 
-        var falseBranch = StaticExpression<string>.LiteralInstance(
-            PineValue.EmptyBlob);
+        var falseBranch =
+            StaticExpression<string>.LiteralInstance(
+                PineValue.EmptyBlob);
 
-        var conditional = StaticExpression<string>.ConditionalInstance(
-            condition,
-            falseBranch,
-            trueBranch);
+        var conditional =
+            StaticExpression<string>.ConditionalInstance(
+                condition,
+                falseBranch,
+                trueBranch);
 
-        var result = StaticProgramCSharpMethodCSE.CollectSubexpressionsToSeparate(
-            conditional,
-            IgnoreSimple);
+        var result =
+            StaticProgramCSharpMethodCSE.CollectSubexpressionsToSeparate(
+                conditional,
+                IgnoreSimple);
 
         result.Should().BeEmpty();
     }
@@ -177,30 +194,36 @@ public class StaticProgramCSharpMethodCSETests
     [Fact]
     public void CollectSubexpressionsToSeparate_identifies_expression_in_both_branches()
     {
-        var sharedExpr = StaticExpression<string>.KernelApplicationInstance(
-            "head",
-            StaticExpression<string>.EnvironmentInstance);
+        var sharedExpr =
+            StaticExpression<string>.KernelApplicationInstance(
+                "head",
+                StaticExpression<string>.EnvironmentInstance);
 
-        var condition = StaticExpression<string>.KernelApplicationInstance(
-            "length",
-            StaticExpression<string>.EnvironmentInstance);
+        var condition =
+            StaticExpression<string>.KernelApplicationInstance(
+                "length",
+                StaticExpression<string>.EnvironmentInstance);
 
-        var trueBranch = StaticExpression<string>.KernelApplicationInstance(
-            "length",
-            sharedExpr);
+        var trueBranch =
+            StaticExpression<string>.KernelApplicationInstance(
+                "length",
+                sharedExpr);
 
-        var falseBranch = StaticExpression<string>.KernelApplicationInstance(
-            "head",
-            sharedExpr);
+        var falseBranch =
+            StaticExpression<string>.KernelApplicationInstance(
+                "head",
+                sharedExpr);
 
-        var conditional = StaticExpression<string>.ConditionalInstance(
-            condition,
-            falseBranch,
-            trueBranch);
+        var conditional =
+            StaticExpression<string>.ConditionalInstance(
+                condition,
+                falseBranch,
+                trueBranch);
 
-        var result = StaticProgramCSharpMethodCSE.CollectSubexpressionsToSeparate(
-            conditional,
-            IgnoreSimple);
+        var result =
+            StaticProgramCSharpMethodCSE.CollectSubexpressionsToSeparate(
+                conditional,
+                IgnoreSimple);
 
         // sharedExpr appears in both branches, so it should be treated as unconditional
         // and extracted
@@ -218,33 +241,39 @@ public class StaticProgramCSharpMethodCSETests
         // An expression used in both branches of a nested conditional
         // should be recognized as common to all branches and not returned multiple times
 
-        var sharedExpr = StaticExpression<string>.KernelApplicationInstance(
-            "head",
-            StaticExpression<string>.EnvironmentInstance);
+        var sharedExpr =
+            StaticExpression<string>.KernelApplicationInstance(
+                "head",
+                StaticExpression<string>.EnvironmentInstance);
 
-        var innerCondition = StaticExpression<string>.KernelApplicationInstance(
-            "length",
-            StaticExpression<string>.EnvironmentInstance);
+        var innerCondition =
+            StaticExpression<string>.KernelApplicationInstance(
+                "length",
+                StaticExpression<string>.EnvironmentInstance);
 
         // Inner conditional uses sharedExpr in both branches
-        var innerConditional = StaticExpression<string>.ConditionalInstance(
-            innerCondition,
-            falseBranch: sharedExpr,  // sharedExpr in false branch
-            trueBranch: sharedExpr);  // sharedExpr in true branch
+        var innerConditional =
+            StaticExpression<string>.ConditionalInstance(
+                innerCondition,
+                falseBranch: sharedExpr, // sharedExpr in false branch
+                trueBranch: sharedExpr); // sharedExpr in true branch
 
         // Outer conditional
-        var outerCondition = StaticExpression<string>.KernelApplicationInstance(
-            "head",
-            StaticExpression<string>.EnvironmentInstance);
+        var outerCondition =
+            StaticExpression<string>.KernelApplicationInstance(
+                "head",
+                StaticExpression<string>.EnvironmentInstance);
 
-        var outerConditional = StaticExpression<string>.ConditionalInstance(
-            outerCondition,
-            falseBranch: innerConditional,
-            trueBranch: StaticExpression<string>.LiteralInstance(PineValue.EmptyList));
+        var outerConditional =
+            StaticExpression<string>.ConditionalInstance(
+                outerCondition,
+                falseBranch: innerConditional,
+                trueBranch: StaticExpression<string>.LiteralInstance(PineValue.EmptyList));
 
-        var result = StaticProgramCSharpMethodCSE.CollectSubexpressionsToSeparate(
-            outerConditional,
-            IgnoreSimple);
+        var result =
+            StaticProgramCSharpMethodCSE.CollectSubexpressionsToSeparate(
+                outerConditional,
+                IgnoreSimple);
 
         // Since sharedExpr appears in both branches of the inner conditional,
         // it should be treated as effectively unconditional relative to that conditional
@@ -256,36 +285,44 @@ public class StaticProgramCSharpMethodCSETests
     public void CollectSubexpressionsToSeparate_minimal_set_nested_conditional_both_branches()
     {
         // Expression that appears in both branches of the nested conditional
-        var commonExpr = StaticExpression<string>.KernelApplicationInstance(
-            "head",
-            StaticExpression<string>.EnvironmentInstance);
+        var commonExpr =
+            StaticExpression<string>.KernelApplicationInstance(
+                "head",
+                StaticExpression<string>.EnvironmentInstance);
 
         // Different expressions for different branches
-        var trueBranchExpr = StaticExpression<string>.KernelApplicationInstance(
-            "length",
-            commonExpr);
+        var trueBranchExpr =
+            StaticExpression<string>.KernelApplicationInstance(
+                "length",
+                commonExpr);
 
-        var falseBranchExpr = StaticExpression<string>.KernelApplicationInstance(
-            "skip",
-            commonExpr);
+        var falseBranchExpr =
+            StaticExpression<string>.KernelApplicationInstance(
+                "skip",
+                commonExpr);
 
         // Inner conditional with common expression in both branches
         var innerCondition = StaticExpression<string>.LiteralInstance(PineValue.EmptyList);
-        var innerConditional = StaticExpression<string>.ConditionalInstance(
-            innerCondition,
-            falseBranch: falseBranchExpr,
-            trueBranch: trueBranchExpr);
+
+        var innerConditional =
+            StaticExpression<string>.ConditionalInstance(
+                innerCondition,
+                falseBranch: falseBranchExpr,
+                trueBranch: trueBranchExpr);
 
         // Outer conditional
         var outerCondition = StaticExpression<string>.LiteralInstance(PineValue.EmptyBlob);
-        var outerConditional = StaticExpression<string>.ConditionalInstance(
-            outerCondition,
-            falseBranch: innerConditional,
-            trueBranch: innerConditional);
 
-        var result = StaticProgramCSharpMethodCSE.CollectSubexpressionsToSeparate(
-            outerConditional,
-            IgnoreSimple);
+        var outerConditional =
+            StaticExpression<string>.ConditionalInstance(
+                outerCondition,
+                falseBranch: innerConditional,
+                trueBranch: innerConditional);
+
+        var result =
+            StaticProgramCSharpMethodCSE.CollectSubexpressionsToSeparate(
+                outerConditional,
+                IgnoreSimple);
 
         // commonExpr appears in both branches of inner conditional (via trueBranchExpr and falseBranchExpr)
         // and the inner conditional appears in both branches of outer conditional
@@ -300,28 +337,33 @@ public class StaticProgramCSharpMethodCSETests
     public void CollectSubexpressionsToSeparate_deeply_nested_conditional_returns_minimal_set()
     {
         // Base expression used everywhere
-        var baseExpr = StaticExpression<string>.KernelApplicationInstance(
-            "head",
-            StaticExpression<string>.EnvironmentInstance);
+        var baseExpr =
+            StaticExpression<string>.KernelApplicationInstance(
+                "head",
+                StaticExpression<string>.EnvironmentInstance);
 
         // Build a deeply nested structure where baseExpr appears in all leaf branches
         var level1True = StaticExpression<string>.KernelApplicationInstance("length", baseExpr);
         var level1False = StaticExpression<string>.KernelApplicationInstance("skip", baseExpr);
 
-        var level1Cond = StaticExpression<string>.ConditionalInstance(
-            StaticExpression<string>.LiteralInstance(PineValue.EmptyList),
-            falseBranch: level1False,
-            trueBranch: level1True);
+        var level1Cond =
+            StaticExpression<string>.ConditionalInstance(
+                StaticExpression<string>.LiteralInstance(PineValue.EmptyList),
+                falseBranch: level1False,
+                trueBranch: level1True);
 
         var level2True = StaticExpression<string>.KernelApplicationInstance("reverse", baseExpr);
-        var level2Cond = StaticExpression<string>.ConditionalInstance(
-            StaticExpression<string>.LiteralInstance(PineValue.EmptyBlob),
-            falseBranch: level1Cond,
-            trueBranch: level2True);
 
-        var result = StaticProgramCSharpMethodCSE.CollectSubexpressionsToSeparate(
-            level2Cond,
-            IgnoreSimple);
+        var level2Cond =
+            StaticExpression<string>.ConditionalInstance(
+                StaticExpression<string>.LiteralInstance(PineValue.EmptyBlob),
+                falseBranch: level1Cond,
+                trueBranch: level2True);
+
+        var result =
+            StaticProgramCSharpMethodCSE.CollectSubexpressionsToSeparate(
+                level2Cond,
+                IgnoreSimple);
 
         // baseExpr should be identified as it appears in all branches
         result.Should().Contain(baseExpr);
@@ -330,23 +372,27 @@ public class StaticProgramCSharpMethodCSETests
     [Fact]
     public void CollectSubexpressionsToSeparate_conditional_with_expression_only_in_one_branch()
     {
-        var exprOnlyInTrue = StaticExpression<string>.KernelApplicationInstance(
-            "head",
-            StaticExpression<string>.EnvironmentInstance);
+        var exprOnlyInTrue =
+            StaticExpression<string>.KernelApplicationInstance(
+                "head",
+                StaticExpression<string>.EnvironmentInstance);
 
-        var trueBranch = StaticExpression<string>.ListInstance(
-            [exprOnlyInTrue, exprOnlyInTrue]); // Used twice in true branch
+        var trueBranch =
+            StaticExpression<string>.ListInstance(
+                [exprOnlyInTrue, exprOnlyInTrue]); // Used twice in true branch
 
         var falseBranch = StaticExpression<string>.LiteralInstance(PineValue.EmptyList);
 
-        var conditional = StaticExpression<string>.ConditionalInstance(
-            StaticExpression<string>.EnvironmentInstance,
-            falseBranch,
-            trueBranch);
+        var conditional =
+            StaticExpression<string>.ConditionalInstance(
+                StaticExpression<string>.EnvironmentInstance,
+                falseBranch,
+                trueBranch);
 
-        var result = StaticProgramCSharpMethodCSE.CollectSubexpressionsToSeparate(
-            conditional,
-            IgnoreSimple);
+        var result =
+            StaticProgramCSharpMethodCSE.CollectSubexpressionsToSeparate(
+                conditional,
+                IgnoreSimple);
 
         // Expression appears twice but only in one branch (conditional context)
         // Current implementation does NOT extract it because it never appears unconditionally
@@ -361,19 +407,22 @@ public class StaticProgramCSharpMethodCSETests
     [Fact]
     public void CollectSubexpressionsToSeparate_handles_function_application()
     {
-        var args = StaticExpression<string>.ListInstance(
-        [
-            StaticExpression<string>.EnvironmentInstance,
-            StaticExpression<string>.EnvironmentInstance
-        ]);
+        var args =
+            StaticExpression<string>.ListInstance(
+                [
+                StaticExpression<string>.EnvironmentInstance,
+                StaticExpression<string>.EnvironmentInstance
+                ]);
 
-        var funcApp = StaticExpression<string>.FunctionApplicationInstance(
-            "myFunction",
-            args);
+        var funcApp =
+            StaticExpression<string>.FunctionApplicationInstance(
+                "myFunction",
+                args);
 
-        var result = StaticProgramCSharpMethodCSE.CollectSubexpressionsToSeparate(
-            funcApp,
-            IgnoreSimple);
+        var result =
+            StaticProgramCSharpMethodCSE.CollectSubexpressionsToSeparate(
+                funcApp,
+                IgnoreSimple);
 
         // No repeated subexpressions (environment is ignored)
         result.Should().BeEmpty();
@@ -406,18 +455,20 @@ public class StaticProgramCSharpMethodCSETests
     {
         // Build a hierarchy: expr1 -> expr2 -> expr3
         // Where expr3 is used multiple times
-        var expr3 = StaticExpression<string>.KernelApplicationInstance(
-            "head",
-            StaticExpression<string>.EnvironmentInstance);
+        var expr3 =
+            StaticExpression<string>.KernelApplicationInstance(
+                "head",
+                StaticExpression<string>.EnvironmentInstance);
 
         var expr2a = StaticExpression<string>.KernelApplicationInstance("length", expr3);
         var expr2b = StaticExpression<string>.KernelApplicationInstance("skip", expr3);
 
         var expr1 = StaticExpression<string>.ListInstance([expr2a, expr2b]);
 
-        var result = StaticProgramCSharpMethodCSE.CollectSubexpressionsToSeparate(
-            expr1,
-            IgnoreSimple);
+        var result =
+            StaticProgramCSharpMethodCSE.CollectSubexpressionsToSeparate(
+                expr1,
+                IgnoreSimple);
 
         // expr3 appears twice unconditionally (through expr2a and expr2b)
         result.Should().Contain(expr3);
@@ -427,19 +478,22 @@ public class StaticProgramCSharpMethodCSETests
     public void CollectSubexpressionsToSeparate_returns_minimal_set_no_unnecessary_extractions()
     {
         // This test ensures we don't extract expressions that don't need CSE
-        var expr1 = StaticExpression<string>.KernelApplicationInstance(
-            "head",
-            StaticExpression<string>.EnvironmentInstance);
+        var expr1 =
+            StaticExpression<string>.KernelApplicationInstance(
+                "head",
+                StaticExpression<string>.EnvironmentInstance);
 
-        var expr2 = StaticExpression<string>.KernelApplicationInstance(
-            "length",
-            StaticExpression<string>.EnvironmentInstance);
+        var expr2 =
+            StaticExpression<string>.KernelApplicationInstance(
+                "length",
+                StaticExpression<string>.EnvironmentInstance);
 
         var list = StaticExpression<string>.ListInstance([expr1, expr2]);
 
-        var result = StaticProgramCSharpMethodCSE.CollectSubexpressionsToSeparate(
-            list,
-            IgnoreSimple);
+        var result =
+            StaticProgramCSharpMethodCSE.CollectSubexpressionsToSeparate(
+                list,
+                IgnoreSimple);
 
         // No repeated expressions, so nothing should be extracted
         result.Should().BeEmpty();

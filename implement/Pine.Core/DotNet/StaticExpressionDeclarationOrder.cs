@@ -1,6 +1,6 @@
+using Pine.Core.CodeAnalysis;
 using System;
 using System.Collections.Generic;
-using Pine.Core.CodeAnalysis;
 
 namespace Pine.Core.DotNet;
 
@@ -58,62 +58,66 @@ public sealed class StaticExpressionDeclarationOrder : IComparer<StaticExpressio
         return CompareWithinKind(x, y);
     }
 
-    private static ExpressionKind GetKind(StaticExpression<DeclQualifiedName> expression) => expression switch
-    {
-        StaticExpression<DeclQualifiedName>.Environment =>
-        ExpressionKind.Environment,
+    private static ExpressionKind GetKind(StaticExpression<DeclQualifiedName> expression) =>
+        expression switch
+        {
+            StaticExpression<DeclQualifiedName>.Environment =>
+            ExpressionKind.Environment,
 
-        StaticExpression<DeclQualifiedName>.Literal =>
-        ExpressionKind.Literal,
+            StaticExpression<DeclQualifiedName>.Literal =>
+            ExpressionKind.Literal,
 
-        StaticExpression<DeclQualifiedName>.List =>
-        ExpressionKind.List,
+            StaticExpression<DeclQualifiedName>.List =>
+            ExpressionKind.List,
 
-        StaticExpression<DeclQualifiedName>.KernelApplication =>
-        ExpressionKind.KernelApplication,
+            StaticExpression<DeclQualifiedName>.KernelApplication =>
+            ExpressionKind.KernelApplication,
 
-        StaticExpression<DeclQualifiedName>.FunctionApplication =>
-        ExpressionKind.FunctionApplication,
+            StaticExpression<DeclQualifiedName>.FunctionApplication =>
+            ExpressionKind.FunctionApplication,
 
-        StaticExpression<DeclQualifiedName>.Conditional =>
-        ExpressionKind.Conditional,
+            StaticExpression<DeclQualifiedName>.Conditional =>
+            ExpressionKind.Conditional,
 
-        StaticExpression<DeclQualifiedName>.CrashingParseAndEval =>
-        ExpressionKind.CrashingParseAndEval,
+            StaticExpression<DeclQualifiedName>.CrashingParseAndEval =>
+            ExpressionKind.CrashingParseAndEval,
 
-        _ =>
-        throw new NotSupportedException($"Unknown static expression type: {expression.GetType()}")
-    };
+            _ =>
+            throw new NotSupportedException($"Unknown static expression type: {expression.GetType()}")
+        };
 
-    private int CompareWithinKind(StaticExpression<DeclQualifiedName> x, StaticExpression<DeclQualifiedName> y) => (x, y) switch
-    {
-        (StaticExpression<DeclQualifiedName>.Environment, StaticExpression<DeclQualifiedName>.Environment) =>
-        0,
+    private int CompareWithinKind(StaticExpression<DeclQualifiedName> x, StaticExpression<DeclQualifiedName> y) =>
+        (x, y) switch
+        {
+            (StaticExpression<DeclQualifiedName>.Environment, StaticExpression<DeclQualifiedName>.Environment) =>
+            0,
 
-        (StaticExpression<DeclQualifiedName>.Literal xLiteral, StaticExpression<DeclQualifiedName>.Literal yLiteral) =>
-        CSharpDeclarationOrder.ValueDeclarationOrder.Instance.Compare(xLiteral.Value, yLiteral.Value),
+            (StaticExpression<DeclQualifiedName>.Literal xLiteral, StaticExpression<DeclQualifiedName>.Literal yLiteral) =>
+            CSharpDeclarationOrder.ValueDeclarationOrder.Instance.Compare(xLiteral.Value, yLiteral.Value),
 
-        (StaticExpression<DeclQualifiedName>.List xList, StaticExpression<DeclQualifiedName>.List yList) =>
-        CompareLists(xList, yList),
+            (StaticExpression<DeclQualifiedName>.List xList, StaticExpression<DeclQualifiedName>.List yList) =>
+            CompareLists(xList, yList),
 
-        (StaticExpression<DeclQualifiedName>.KernelApplication xKernel, StaticExpression<DeclQualifiedName>.KernelApplication yKernel) =>
-        CompareKernelApplications(xKernel, yKernel),
+            (StaticExpression<DeclQualifiedName>.KernelApplication xKernel, StaticExpression<DeclQualifiedName>.KernelApplication yKernel) =>
+            CompareKernelApplications(xKernel, yKernel),
 
-        (StaticExpression<DeclQualifiedName>.FunctionApplication xFunction, StaticExpression<DeclQualifiedName>.FunctionApplication yFunction) =>
-        CompareFunctionApplications(xFunction, yFunction),
+            (StaticExpression<DeclQualifiedName>.FunctionApplication xFunction, StaticExpression<DeclQualifiedName>.FunctionApplication yFunction) =>
+            CompareFunctionApplications(xFunction, yFunction),
 
-        (StaticExpression<DeclQualifiedName>.Conditional xConditional, StaticExpression<DeclQualifiedName>.Conditional yConditional) =>
-        CompareConditionals(xConditional, yConditional),
+            (StaticExpression<DeclQualifiedName>.Conditional xConditional, StaticExpression<DeclQualifiedName>.Conditional yConditional) =>
+            CompareConditionals(xConditional, yConditional),
 
-        (StaticExpression<DeclQualifiedName>.CrashingParseAndEval xParseAndEval, StaticExpression<DeclQualifiedName>.CrashingParseAndEval yParseAndEval) =>
-        CompareCrashingParseAndEval(xParseAndEval, yParseAndEval),
+            (StaticExpression<DeclQualifiedName>.CrashingParseAndEval xParseAndEval, StaticExpression<DeclQualifiedName>.CrashingParseAndEval yParseAndEval) =>
+            CompareCrashingParseAndEval(xParseAndEval, yParseAndEval),
 
-        _ =>
-        throw new NotSupportedException(
-            $"Comparison for expression type {x.GetType()} is not implemented.")
-    };
+            _ =>
+            throw new NotSupportedException(
+                $"Comparison for expression type {x.GetType()} is not implemented.")
+        };
 
-    private int CompareLists(StaticExpression<DeclQualifiedName>.List xList, StaticExpression<DeclQualifiedName>.List yList)
+    private int CompareLists(
+        StaticExpression<DeclQualifiedName>.List xList,
+        StaticExpression<DeclQualifiedName>.List yList)
     {
         if (xList.Items.Count != yList.Items.Count)
         {

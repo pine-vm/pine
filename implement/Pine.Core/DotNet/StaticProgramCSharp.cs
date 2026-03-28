@@ -58,21 +58,21 @@ public record StaticProgramCSharp(
             new DeclarationSyntaxContext(
                 UsingDirectives:
                 [
-                    UsingAliasForTypeDefault(typeof(PineValue)),
-                    UsingAliasForTypeDefault(typeof(KernelFunction)),
-                    UsingAliasForTypeDefault(typeof(PineKernelValues)),
-                    UsingAliasForTypeDefault(typeof(PineValueExtension)),
-                    UsingAliasForTypeDefault(typeof(Internal.KernelFunctionFused)),
-                    UsingAliasForTypeDefault(typeof(Internal.KernelFunctionSpecialized)),
+                UsingAliasForTypeDefault(typeof(PineValue)),
+                UsingAliasForTypeDefault(typeof(KernelFunction)),
+                UsingAliasForTypeDefault(typeof(PineKernelValues)),
+                UsingAliasForTypeDefault(typeof(PineValueExtension)),
+                UsingAliasForTypeDefault(typeof(Internal.KernelFunctionFused)),
+                UsingAliasForTypeDefault(typeof(Internal.KernelFunctionSpecialized)),
 
-                    UsingAliasForTypeDefault(typeof(IntegerEncoding)),
-                    UsingAliasForTypeDefault(typeof(StringEncoding)),
-                    UsingAliasForTypeDefault(typeof(ExpressionEncoding)),
-                    UsingAliasForTypeDefault(typeof(ParseExpressionException)),
+                UsingAliasForTypeDefault(typeof(IntegerEncoding)),
+                UsingAliasForTypeDefault(typeof(StringEncoding)),
+                UsingAliasForTypeDefault(typeof(ExpressionEncoding)),
+                UsingAliasForTypeDefault(typeof(ParseExpressionException)),
 
-                    UsingAliasForTypeDefault(typeof(Builtins.ImmutableConcatBuilder)),
-                    UsingAliasForTypeDefault(typeof(Builtins.ImmutableSliceBuilder)),
-                    UsingAliasForTypeDefault(typeof(Builtins.MutatingConcatBuilder)),
+                UsingAliasForTypeDefault(typeof(Builtins.ImmutableConcatBuilder)),
+                UsingAliasForTypeDefault(typeof(Builtins.ImmutableSliceBuilder)),
+                UsingAliasForTypeDefault(typeof(Builtins.MutatingConcatBuilder)),
                 ],
                 CurrentNamespace: null);
     }
@@ -216,7 +216,8 @@ public record StaticProgramCSharp(
                 staticProgram.NamedFunctions
                 .ToFrozenDictionary(
                     kvp => MapFunctionNameToGlobalAnon(kvp.Key),
-                    kvp => (functionMetadata[kvp.Key].OrigExpr, functionMetadata[kvp.Key].Interface, functionMetadata[kvp.Key].Constraint)),
+                    kvp =>
+                    (functionMetadata[kvp.Key].OrigExpr, functionMetadata[kvp.Key].Interface, functionMetadata[kvp.Key].Constraint)),
                 valueHashCache: valueHashCache,
                 existingAvailableDecls: commonValueClass.availableDecls,
                 declarationSyntaxContext: declarationSyntaxContext);
@@ -409,7 +410,7 @@ public record StaticProgramCSharp(
                                     CompileTypeSyntax.TypeSyntaxFromType(
                                         typeof(Dictionary<PineValue, Func<PineValue, PineValue?>>),
                                         context: declarationSyntaxContext))
-                                        .WithArgumentList(SyntaxFactory.ArgumentList()))))));
+                                .WithArgumentList(SyntaxFactory.ArgumentList()))))));
 
         // Build field 'dispatcherDictionary' and builder method
         var buildMethodStatements =
@@ -502,7 +503,9 @@ public record StaticProgramCSharp(
                             SyntaxFactory.InitializerExpression(
                                 SyntaxKind.ArrayInitializerExpression,
                                 SyntaxFactory.SeparatedList(
-                                    path.Select(index => (ExpressionSyntax)PineCSharpSyntaxFactory.ExpressionSyntaxForIntegerLiteral(index)))));
+                                    path.Select(
+                                        index =>
+                                        (ExpressionSyntax)PineCSharpSyntaxFactory.ExpressionSyntaxForIntegerLiteral(index)))));
 
                     var valueFromPathInvocation =
                         PineCSharpSyntaxFactory.BuildCSharpExpressionToGetItemFromPathOrEmptyList(

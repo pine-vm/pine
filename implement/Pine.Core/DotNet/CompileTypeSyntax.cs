@@ -199,9 +199,9 @@ public static class CompileTypeSyntax
             [var firstSegment, ..] =>
             SyntaxFactory.QualifiedName(
                 namespaceSegments
-                    .Skip(1)
-                    .Select(SyntaxFactory.IdentifierName)
-                    .Aggregate(
+                .Skip(1)
+                .Select(SyntaxFactory.IdentifierName)
+                .Aggregate(
                     seed: (NameSyntax)SyntaxFactory.IdentifierName(firstSegment),
                     func: SyntaxFactory.QualifiedName),
                 nameInNamespace)
