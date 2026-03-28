@@ -5,17 +5,33 @@ using System.Linq;
 
 namespace Pine.Core.Interpreter.IntermediateVM;
 
+/// <summary>
+/// Describes the compiled instructions and metadata for executing one stack frame in the intermediate VM.
+/// </summary>
+/// <param name="Parameters">The parameter layout exposed as locals when the frame starts.</param>
+/// <param name="Instructions">The instructions executed by the frame.</param>
+/// <param name="TrackEnvConstraint">Optional environment constraint associated with this instruction variant.</param>
 public record StackFrameInstructions(
     StaticFunctionInterface Parameters,
     IReadOnlyList<StackInstruction> Instructions,
     PineValueClass? TrackEnvConstraint = null)
 {
+    /// <summary>
+    /// Total number of locals required to execute this frame, including parameter locals.
+    /// </summary>
     public int LocalsCount { init; get; } =
         ComputeLocalsCount(Instructions, Parameters);
 
+    /// <summary>
+    /// Maximum evaluation-stack depth required by these instructions.
+    /// </summary>
     public int MaxStackUsage { init; get; } =
         ComputeMaxStackUsage(Instructions);
 
+    /// <summary>
+    /// Computes the maximum stack depth required by a sequence of instructions.
+    /// </summary>
+    /// <param name="instructions">The instructions to analyze.</param>
     public static int ComputeMaxStackUsage(
         IReadOnlyList<StackInstruction> instructions)
     {
@@ -51,6 +67,7 @@ public record StackFrameInstructions(
                     break;
 
                 default:
+
                     // ordinary instruction
                     yield return instructionIndex + 1;
                     break;
@@ -60,7 +77,7 @@ public record StackFrameInstructions(
         var instructionsDetails =
             instructions.Select(StackInstruction.GetDetails).ToArray();
 
-        var stackDepthIn = new int?[instructions.Count];     // stack height *before* executing i
+        var stackDepthIn = new int?[instructions.Count]; // stack height *before* executing i
 
         var worklist = new Stack<int>();
 
@@ -112,6 +129,11 @@ public record StackFrameInstructions(
         return maxDepth;
     }
 
+    /// <summary>
+    /// Computes the number of locals required for a frame based on its parameter layout and local instructions.
+    /// </summary>
+    /// <param name="instructions">The instructions to analyze.</param>
+    /// <param name="parameters">The parameter layout that occupies the initial locals.</param>
     public static int ComputeLocalsCount(
         IReadOnlyList<StackInstruction> instructions,
         StaticFunctionInterface parameters)
@@ -134,14 +156,17 @@ public record StackFrameInstructions(
 
                 aggregateMax =
                     aggregateMax < instrMax
-                    ? instrMax
-                    : aggregateMax;
+                    ?
+                    instrMax
+                    :
+                    aggregateMax;
             }
         }
 
         return aggregateMax;
     }
 
+    /// <inheritdoc/>
     public virtual bool Equals(StackFrameInstructions? other)
     {
         if (ReferenceEquals(this, other))
@@ -158,6 +183,7 @@ public record StackFrameInstructions(
             Instructions.SequenceEqual(notNull.Instructions);
     }
 
+    /// <inheritdoc/>
     public override int GetHashCode()
     {
         var hashCode = new HashCode();
@@ -172,4 +198,3 @@ public record StackFrameInstructions(
         return hashCode.ToHashCode();
     }
 }
-

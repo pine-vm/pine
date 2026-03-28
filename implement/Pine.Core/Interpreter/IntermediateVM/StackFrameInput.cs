@@ -65,9 +65,10 @@ public record StackFrameInput
             arguments[i] = PineValueInProcess.Create(valueAtPath);
         }
 
-        return new StackFrameInput(
-            parameters,
-            arguments);
+        return
+            new StackFrameInput(
+                parameters,
+                arguments);
     }
 
     public static StackFrameInput FromEnvironmentValue(
@@ -89,17 +90,42 @@ public record StackFrameInput
             arguments[i] = valueAtPath;
         }
 
-        return new StackFrameInput(
-            parameters,
-            arguments);
+        return
+            new StackFrameInput(
+                parameters,
+                arguments);
     }
 
     public static StackFrameInput GenericFromEnvironmentValue(
         PineValue environmentValue)
     {
-        return FromEnvironmentValue(
-            environmentValue,
-            StaticFunctionInterface.Generic);
+        return
+            FromEnvironmentValue(
+                environmentValue,
+                StaticFunctionInterface.Generic);
+    }
+
+    /// <summary>
+    /// Creates a <see cref="StackFrameInput"/> from arguments that are forwarded directly to a stack frame.
+    /// </summary>
+    /// <param name="parameters">The parameter layout describing the forwarded arguments.</param>
+    /// <param name="arguments">The argument values to expose to the stack frame.</param>
+    /// <exception cref="ArgumentException">Thrown when the number of arguments does not match the number of parameters.</exception>
+    public static StackFrameInput FromArguments(
+        StaticFunctionInterface parameters,
+        IReadOnlyList<PineValueInProcess> arguments)
+    {
+        if (parameters.ParamsPaths.Count != arguments.Count)
+        {
+            throw new ArgumentException(
+                "Arguments count does not match parameters count.",
+                nameof(arguments));
+        }
+
+        return
+            new StackFrameInput(
+                parameters,
+                arguments);
     }
 
     /// <inheritdoc/>
@@ -108,6 +134,7 @@ public record StackFrameInput
         return _hashCode;
     }
 
+    /// <inheritdoc/>
     public virtual bool Equals(StackFrameInput? obj)
     {
         if (obj is not StackFrameInput other)
@@ -134,6 +161,7 @@ public record StackFrameInput
         return true;
     }
 
+    /// <inheritdoc/>
     override public string ToString()
     {
         return
@@ -149,8 +177,10 @@ public record StackFrameInput
     public PineValueClass ToValueClass()
     {
         IReadOnlyList<KeyValuePair<IReadOnlyList<int>, PineValue>> parsedItems =
-            [..Parameters.ParamsPaths
-            .Select((envPath, index) =>
+            [
+            ..Parameters.ParamsPaths
+            .Select(
+                (envPath, index) =>
                 new KeyValuePair<IReadOnlyList<int>, PineValue>(
                     envPath,
                     _evaluatedArguments[index]))
@@ -166,4 +196,3 @@ public record StackFrameInput
         return PineValueClassExtensions.CreateMinimalValue(asClass);
     }
 }
-

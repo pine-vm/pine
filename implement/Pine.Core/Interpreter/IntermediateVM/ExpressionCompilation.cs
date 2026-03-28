@@ -7,15 +7,29 @@ using System.Linq;
 
 namespace Pine.Core.Interpreter.IntermediateVM;
 
-
+/// <summary>
+/// Represents one environment constraint item used to select a specialized instruction variant at runtime.
+/// </summary>
+/// <param name="Path">The path inside the environment value to inspect.</param>
+/// <param name="Value">The expected value at <paramref name="Path"/>.</param>
 public record struct EnvConstraintItem(
     ReadOnlyMemory<int> Path,
     PineValue Value);
 
+/// <summary>
+/// Holds the generic and specialized instruction variants compiled for one expression.
+/// </summary>
+/// <param name="Generic">The generic instructions used when no specialization matches the concrete environment.</param>
+/// <param name="Specialized">The specialized variants paired with the environment constraints that select them.</param>
 public record ExpressionCompilation(
     StackFrameInstructions Generic,
     IReadOnlyList<(IReadOnlyList<EnvConstraintItem> constraint, StackFrameInstructions instructions)> Specialized)
 {
+    /// <summary>
+    /// Selects the most specific instruction variant whose environment constraints match the supplied environment.
+    /// </summary>
+    /// <param name="environment">The concrete environment for this evaluation.</param>
+    /// <returns>The specialized instructions that match the environment, or <see cref="Generic"/> if none match.</returns>
     public StackFrameInstructions SelectInstructionsForEnvironment(PineValueInProcess environment)
     {
         for (var i = 0; i < Specialized.Count; i++)
@@ -50,7 +64,16 @@ public record ExpressionCompilation(
         return Generic;
     }
 
-
+    /// <summary>
+    /// Compiles an expression into one generic instruction variant and zero or more environment-specialized variants.
+    /// </summary>
+    /// <param name="rootExpression">The expression to compile.</param>
+    /// <param name="specializations">Environment classes to use for specialized compilation variants.</param>
+    /// <param name="parseCache">The parse cache used while compiling nested parse-and-eval expressions.</param>
+    /// <param name="disableReduction">Whether reduction should be disabled during compilation.</param>
+    /// <param name="enableTailRecursionOptimization">Whether tail-recursion optimization should be enabled.</param>
+    /// <param name="skipInlining">Predicate deciding whether a subexpression should skip inlining for a given environment constraint.</param>
+    /// <param name="reducedExpressionCache">Optional cache for reduced expressions reused during compilation.</param>
     public static ExpressionCompilation CompileExpression(
         Expression rootExpression,
         IReadOnlyList<PineValueClass> specializations,
@@ -83,26 +106,29 @@ public record ExpressionCompilation(
             .OrderDescending(PineValueClassSpecificityComparer.Instance)
             .Select(
                 specialization =>
-                            ((IReadOnlyList<EnvConstraintItem>)
-                            [..specialization.ParsedItems
-                        .Select(envItem => new EnvConstraintItem(envItem.Key.ToArray(), envItem.Value))],
-                            new StackFrameInstructions(
-                                genericParameters,
-                                InstructionsFromExpressionTransitive(
-                                    rootExpression,
-                                    envConstraintId: specialization,
-                                    parametersAsLocals: genericParameters,
-                                    parseCache: parseCache,
-                                    disableReduction: disableReduction,
-                                    enableTailRecursionOptimization: enableTailRecursionOptimization,
-                                    skipInlining: skipInlining,
-                                    reducedExpressionCache: reducedExpressionCache),
+                ((IReadOnlyList<EnvConstraintItem>)
+                [
+                ..specialization.ParsedItems
+                .Select(envItem => new EnvConstraintItem(envItem.Key.ToArray(), envItem.Value))
+                ],
+                new StackFrameInstructions(
+                    genericParameters,
+                    InstructionsFromExpressionTransitive(
+                        rootExpression,
+                        envConstraintId: specialization,
+                        parametersAsLocals: genericParameters,
+                        parseCache: parseCache,
+                        disableReduction: disableReduction,
+                        enableTailRecursionOptimization: enableTailRecursionOptimization,
+                        skipInlining: skipInlining,
+                        reducedExpressionCache: reducedExpressionCache),
                     TrackEnvConstraint: specialization)))
             .ToImmutableArray();
 
-        return new ExpressionCompilation(
-            Generic: generic,
-            Specialized: specialized);
+        return
+            new ExpressionCompilation(
+                Generic: generic,
+                Specialized: specialized);
     }
 
     /*
@@ -122,6 +148,17 @@ public record ExpressionCompilation(
      * 
      * */
 
+    /// <summary>
+    /// Compiles an expression into intermediate VM instructions, applying transitive inlining and reduction decisions as configured.
+    /// </summary>
+    /// <param name="rootExpression">The expression to compile.</param>
+    /// <param name="envConstraintId">Optional environment constraint to specialize for.</param>
+    /// <param name="parametersAsLocals">The static parameter layout that should be exposed as locals.</param>
+    /// <param name="parseCache">The parse cache used while compiling nested parse-and-eval expressions.</param>
+    /// <param name="disableReduction">Whether reduction should be disabled during compilation.</param>
+    /// <param name="enableTailRecursionOptimization">Whether tail-recursion optimization should be enabled.</param>
+    /// <param name="skipInlining">Predicate deciding whether a subexpression should skip inlining for a given environment constraint.</param>
+    /// <param name="reducedExpressionCache">Optional cache for reduced expressions reused during compilation.</param>
     public static IReadOnlyList<StackInstruction> InstructionsFromExpressionTransitive(
         Expression rootExpression,
         PineValueClass? envConstraintId,
@@ -222,7 +259,8 @@ public record ExpressionCompilation(
         }
 
         IReadOnlyList<StackInstruction> allInstructions =
-            [.. allInstructionsBeforeReturn,
+            [
+            .. allInstructionsBeforeReturn,
             StackInstruction.Return
             ];
 
@@ -333,59 +371,60 @@ public record ExpressionCompilation(
             bool underConditional)
         {
             return
-            ReducePineExpression.TransformPineExpressionWithOptionalReplacement(
-            findReplacement: expr =>
-            {
-                /*
-                 * Do not inline invocations that are still conditional after substituting for the environment constraint.
-                 * Inlining these cases can lead to suboptimal overall performance for various reasons.
-                 * One reason is that inlining in a generic wrapper causes us to miss an opportunity to select
-                 * a more specialized implementation because this selection only happens on invocation.
-                 * */
-
-                /*
-                 * 2024-07-20 Adaptation, for cases like specializations of `List.map`:
-                 * When optimizing `List.map` (or its recursive helper function) (or `List.foldx` for example),
-                 * better also inline the application of the generic partial application used with the function parameter.
-                 * That application is conditional (list empty?), but we want to inline that to eliminate the generic wrapper for
-                 * the function application and inline the parameter function directly.
-                 * Thus, the new rule also enables inlining under conditional expressions unless it is recursive.
-                 * */
-
-                if (expr is Expression.Conditional conditional)
-                {
-                    var conditionInlined =
-                    InlineParseAndEvalRecursive(
-                        conditional.Condition,
-                        underConditional: underConditional);
-
-                    var falseBranchInlined =
-                    InlineParseAndEvalRecursive(
-                        conditional.FalseBranch,
-                        underConditional: true);
-
-                    var trueBranchInlined =
-                    InlineParseAndEvalRecursive(
-                        conditional.TrueBranch,
-                        underConditional: true);
-
-                    return Expression.ConditionalInstance(
-                        condition: conditionInlined,
-                        falseBranch: falseBranchInlined,
-                        trueBranch: trueBranchInlined);
-                }
-
-                if (expr is Expression.ParseAndEval parseAndEval)
-                {
-                    if (TryInlineParseAndEval(parseAndEval) is { } inlined)
+                ReducePineExpression.TransformPineExpressionWithOptionalReplacement(
+                    findReplacement: expr =>
                     {
-                        return inlined;
-                    }
-                }
+                        /*
+                         * Do not inline invocations that are still conditional after substituting for the environment constraint.
+                         * Inlining these cases can lead to suboptimal overall performance for various reasons.
+                         * One reason is that inlining in a generic wrapper causes us to miss an opportunity to select
+                         * a more specialized implementation because this selection only happens on invocation.
+                         * */
 
-                return null;
-            },
-            expression).expr;
+                        /*
+                         * 2024-07-20 Adaptation, for cases like specializations of `List.map`:
+                         * When optimizing `List.map` (or its recursive helper function) (or `List.foldx` for example),
+                         * better also inline the application of the generic partial application used with the function parameter.
+                         * That application is conditional (list empty?), but we want to inline that to eliminate the generic wrapper for
+                         * the function application and inline the parameter function directly.
+                         * Thus, the new rule also enables inlining under conditional expressions unless it is recursive.
+                         * */
+
+                        if (expr is Expression.Conditional conditional)
+                        {
+                            var conditionInlined =
+                                InlineParseAndEvalRecursive(
+                                    conditional.Condition,
+                                    underConditional: underConditional);
+
+                            var falseBranchInlined =
+                                InlineParseAndEvalRecursive(
+                                    conditional.FalseBranch,
+                                    underConditional: true);
+
+                            var trueBranchInlined =
+                                InlineParseAndEvalRecursive(
+                                    conditional.TrueBranch,
+                                    underConditional: true);
+
+                            return
+                                Expression.ConditionalInstance(
+                                    condition: conditionInlined,
+                                    falseBranch: falseBranchInlined,
+                                    trueBranch: trueBranchInlined);
+                        }
+
+                        if (expr is Expression.ParseAndEval parseAndEval)
+                        {
+                            if (TryInlineParseAndEval(parseAndEval) is { } inlined)
+                            {
+                                return inlined;
+                            }
+                        }
+
+                        return null;
+                    },
+                    expression).expr;
         }
 
         var expressionInlined =
@@ -651,58 +690,59 @@ public record ExpressionCompilation(
         {
             return
                 ReducePineExpression.TransformPineExpressionWithOptionalReplacement(
-                findReplacement: expr =>
-                {
-                    /*
-                     * Do not inline invocations that are still conditional after substituting for the environment constraint.
-                     * Inlining these cases can lead to suboptimal overall performance for various reasons.
-                     * One reason is that inlining in a generic wrapper causes us to miss an opportunity to select
-                     * a more specialized implementation because this selection only happens on invocation.
-                     * */
-
-                    /*
-                     * 2024-07-20 Adaptation, for cases like specializations of `List.map`:
-                     * When optimizing `List.map` (or its recursive helper function) (or `List.foldx` for example),
-                     * better also inline the application of the generic partial application used with the function parameter.
-                     * That application is conditional (list empty?), but we want to inline that to eliminate the generic wrapper for
-                     * the function application and inline the parameter function directly.
-                     * Thus, the new rule also enables inlining under conditional expressions unless it is recursive.
-                     * */
-
-                    if (expr is Expression.Conditional conditional)
+                    findReplacement: expr =>
                     {
-                        var conditionInlined =
-                        InlineParseAndEvalRecursive(
-                            conditional.Condition,
-                            underConditional: underConditional);
+                        /*
+                         * Do not inline invocations that are still conditional after substituting for the environment constraint.
+                         * Inlining these cases can lead to suboptimal overall performance for various reasons.
+                         * One reason is that inlining in a generic wrapper causes us to miss an opportunity to select
+                         * a more specialized implementation because this selection only happens on invocation.
+                         * */
 
-                        var falseBranchInlined =
-                        InlineParseAndEvalRecursive(
-                            conditional.FalseBranch,
-                            underConditional: true);
+                        /*
+                         * 2024-07-20 Adaptation, for cases like specializations of `List.map`:
+                         * When optimizing `List.map` (or its recursive helper function) (or `List.foldx` for example),
+                         * better also inline the application of the generic partial application used with the function parameter.
+                         * That application is conditional (list empty?), but we want to inline that to eliminate the generic wrapper for
+                         * the function application and inline the parameter function directly.
+                         * Thus, the new rule also enables inlining under conditional expressions unless it is recursive.
+                         * */
 
-                        var trueBranchInlined =
-                        InlineParseAndEvalRecursive(
-                            conditional.TrueBranch,
-                            underConditional: true);
-
-                        return Expression.ConditionalInstance(
-                            condition: conditionInlined,
-                            falseBranch: falseBranchInlined,
-                            trueBranch: trueBranchInlined);
-                    }
-
-                    if (expr is Expression.ParseAndEval parseAndEval)
-                    {
-                        if (TryInlineParseAndEval(parseAndEval, noRecursion: underConditional) is { } inlined)
+                        if (expr is Expression.Conditional conditional)
                         {
-                            return inlined;
-                        }
-                    }
+                            var conditionInlined =
+                                InlineParseAndEvalRecursive(
+                                    conditional.Condition,
+                                    underConditional: underConditional);
 
-                    return null;
-                },
-                expression).expr;
+                            var falseBranchInlined =
+                                InlineParseAndEvalRecursive(
+                                    conditional.FalseBranch,
+                                    underConditional: true);
+
+                            var trueBranchInlined =
+                                InlineParseAndEvalRecursive(
+                                    conditional.TrueBranch,
+                                    underConditional: true);
+
+                            return
+                                Expression.ConditionalInstance(
+                                    condition: conditionInlined,
+                                    falseBranch: falseBranchInlined,
+                                    trueBranch: trueBranchInlined);
+                        }
+
+                        if (expr is Expression.ParseAndEval parseAndEval)
+                        {
+                            if (TryInlineParseAndEval(parseAndEval, noRecursion: underConditional) is { } inlined)
+                            {
+                                return inlined;
+                            }
+                        }
+
+                        return null;
+                    },
+                    expression).expr;
         }
 
         var expressionInlined =

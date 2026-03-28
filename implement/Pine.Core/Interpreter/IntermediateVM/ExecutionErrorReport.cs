@@ -33,8 +33,10 @@ public static class ExecutionErrorReportExtensions
 
         var specializationText =
             errorReport.Instructions.TrackEnvConstraint is { } trackEnvConstraint
-            ? "specialized with " + trackEnvConstraint.HashBase16[0..8]
-            : "not specialized";
+            ?
+            "specialized with " + trackEnvConstraint.HashBase16[0..8]
+            :
+            "not specialized";
 
         yield return
             specializationText + " has " +
