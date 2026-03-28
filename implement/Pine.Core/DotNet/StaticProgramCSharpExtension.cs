@@ -49,12 +49,12 @@ public static class StaticProgramCSharpExtension
                 cd => FilePathFromClassDeclaration(cd.declSyntax, [.. namespacePrefix, .. cd.namespaces]),
                 cd =>
                 (ReadOnlyMemory<byte>)
-                    Encoding.UTF8.GetBytes(
-                        BuildCompilationUnitSyntax(
-                            cd.declSyntax,
-                            staticProgram.DeclarationSyntaxContext,
-                            [.. namespacePrefix, .. cd.namespaces]).ToFullString())
-                    .AsMemory(),
+                Encoding.UTF8.GetBytes(
+                    BuildCompilationUnitSyntax(
+                        cd.declSyntax,
+                        staticProgram.DeclarationSyntaxContext,
+                        [.. namespacePrefix, .. cd.namespaces]).ToFullString())
+                .AsMemory(),
                 comparer:
                 EnumerableExtensions.EqualityComparer<IReadOnlyList<string>>());
     }
@@ -91,7 +91,23 @@ public static class StaticProgramCSharpExtension
 
         var normalized = compilationUnitSyntax.NormalizeWhitespace(eol: "\n");
         var tree = CSharpSyntaxTree.ParseText(normalized.ToFullString());
-        var formattedTree = FormatCSharpFile.FormatSyntaxTree(tree);
+
+        var formattedTree =
+            FormatCSharpFile.FormatSyntaxTree(tree) switch
+            {
+                Result<FormatCSharpFile.CycleError, SyntaxTree>.Ok ok => ok.Value,
+
+                Result<FormatCSharpFile.CycleError, SyntaxTree>.Err err =>
+                throw new InvalidOperationException(
+                    "Formatting cycle detected: cycle first string length " +
+                    err.Value.CycleFirstString.Length +
+                    ", cycle last string length " +
+                    err.Value.CycleLastString.Length),
+
+                var other =>
+                throw new NotImplementedException(
+                    "Unexpected result type: " + other.GetType().Name)
+            };
 
         return (CompilationUnitSyntax)formattedTree.GetRoot();
     }

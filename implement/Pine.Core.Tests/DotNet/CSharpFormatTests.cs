@@ -2389,6 +2389,36 @@ public class CSharpFormatTests
 
 
     [Fact]
+    public void Stable_trailing_comment_before_closing_brace()
+    {
+        // Regression test for the oscillation bug described in FormattingTestPerformanceAnalysis.md:
+        // A trailing // comment on the last statement before a closing brace used to cause
+        // FormatSinglePass to never converge. The fix (filtering LineFeeds from StripWhitespace
+        // output in FormatStatementList) ensures that the trailing comment produces exactly
+        // one LineFeed, preventing the double-LineFeed that triggered the oscillation.
+        var inputSyntaxText =
+            """"
+            namespace N;
+
+            class C
+            {
+                void M()
+                {
+                    if (x < 0)
+                    {
+                        x = -x; // negate
+                    }
+
+                    return;
+                }
+            }
+            """";
+
+        AssertFormattedSyntax(inputSyntaxText, inputSyntaxText, scriptMode: false);
+    }
+
+
+    [Fact]
     public void Collection_expression_single_line_exceeding_line_length()
     {
         var inputSyntaxText =
@@ -2976,8 +3006,37 @@ public class CSharpFormatTests
 
             try
             {
-                formattedText = CSharpFormat.FormatCSharpFile(originalText);
-                formattedTwice = CSharpFormat.FormatCSharpFile(formattedText);
+                var firstResult = CSharpFormat.FormatCSharpFile(originalText);
+
+                if (firstResult.IsErrOrNull() is { } firstErr)
+                {
+                    failures.Add($"{relativePath}: formatting cycle detected");
+                    continue;
+                }
+
+                if (firstResult.IsOkOrNull() is not { } firstFormattedText)
+                {
+                    throw new NotImplementedException(
+                        "Unexpected result type: " + firstResult.GetType().Name);
+                }
+
+                formattedText = firstFormattedText;
+
+                var secondResult = CSharpFormat.FormatCSharpFile(formattedText);
+
+                if (secondResult.IsErrOrNull() is { } secondErr)
+                {
+                    failures.Add($"{relativePath}: formatting cycle on second pass");
+                    continue;
+                }
+
+                if (secondResult.IsOkOrNull() is not { } secondFormattedText)
+                {
+                    throw new NotImplementedException(
+                        "Unexpected result type on second pass: " + secondResult.GetType().Name);
+                }
+
+                formattedTwice = secondFormattedText;
             }
             catch (Exception ex)
             {
@@ -3152,9 +3211,9 @@ public class CSharpFormatTests
         Func<string, string> formatOnce =
             scriptMode
             ?
-            CSharpFormat.FormatCSharpScript
+            FormatCSharpScriptOrThrow
             :
-            CSharpFormat.FormatCSharpFile;
+            FormatCSharpFileOrThrow;
 
         var formattedSyntaxText = formatOnce(inputSyntaxText);
 
@@ -3174,8 +3233,19 @@ public class CSharpFormatTests
         SyntaxNode syntaxNode,
         string expectedFormattedText)
     {
+        var formatResult = FormatCSharpFile.FormatSyntaxTree(SyntaxFactory.SyntaxTree(syntaxNode));
+
         var formattedSyntaxText =
-            FormatCSharpFile.FormatSyntaxTree(SyntaxFactory.SyntaxTree(syntaxNode)).ToString();
+            formatResult switch
+            {
+                Result<FormatCSharpFile.CycleError, SyntaxTree>.Ok ok => ok.Value.ToString(),
+
+                Result<FormatCSharpFile.CycleError, SyntaxTree>.Err err =>
+                throw new Exception("Formatting cycle detected"),
+
+                _ =>
+                throw new NotImplementedException()
+            };
 
         formattedSyntaxText.Trim().Should().Be(expectedFormattedText.Trim());
     }
@@ -3191,9 +3261,9 @@ public class CSharpFormatTests
         Func<string, string> formatOnce =
             scriptMode
             ?
-            CSharpFormat.FormatCSharpScript
+            FormatCSharpScriptOrThrow
             :
-            CSharpFormat.FormatCSharpFile;
+            FormatCSharpFileOrThrow;
 
         var formattedOnce = formatOnce(inputSyntaxText);
         var formattedTwice = formatOnce(formattedOnce);
@@ -3211,9 +3281,9 @@ public class CSharpFormatTests
         Func<string, string> formatOnce =
             scriptMode
             ?
-            CSharpFormat.FormatCSharpScript
+            FormatCSharpScriptOrThrow
             :
-            CSharpFormat.FormatCSharpFile;
+            FormatCSharpFileOrThrow;
 
         var formattedOnce = formatOnce(inputSyntaxText);
         var formattedTwice = formatOnce(formattedOnce);
@@ -3231,6 +3301,64 @@ public class CSharpFormatTests
             origNonWs,
             "Formatting must only change whitespace characters");
     }
+
+
+    /// <summary>
+    /// Asserts that the formatter has truly converged: after formatting via the
+    /// multi-pass <see cref="FormatCSharpFile.FormatSyntaxTree"/>, applying one
+    /// additional single formatting pass must not change the output.
+    /// <para>
+    /// This is stricter than <see cref="AssertFormattingIsStable"/> which only checks
+    /// <c>format(format(x)) == format(x)</c>. That weaker check can pass even when
+    /// the formatter oscillates internally, because <see cref="FormatCSharpFile.FormatSyntaxTree"/>
+    /// runs an even number of passes (MaxPasses = 10) and both calls end up at the
+    /// same oscillation phase.
+    /// </para>
+    /// </summary>
+    private static void AssertSinglePassConvergence(string inputSyntaxText)
+    {
+        var formatted = FormatCSharpFileOrThrow(inputSyntaxText);
+
+        var tree =
+            CSharpSyntaxTree.ParseText(
+                formatted,
+                new CSharpParseOptions(kind: SourceCodeKind.Regular));
+
+        var root = (CompilationUnitSyntax)tree.GetRoot();
+
+        var topLevelIndent = 0;
+        var afterOneMorePass = FormatCSharpFile.FormatCompilationUnit(root, topLevelIndent).ToFullString();
+
+        afterOneMorePass.Should().Be(
+            formatted,
+            "Formatter must converge: one additional formatting pass must not change the output");
+    }
+
+
+    private static string FormatCSharpFileOrThrow(string inputSyntaxText) =>
+        CSharpFormat.FormatCSharpFile(inputSyntaxText) switch
+        {
+            Result<FormatCSharpFile.CycleError, string>.Ok ok => ok.Value,
+
+            Result<FormatCSharpFile.CycleError, string>.Err err =>
+            throw new Exception("Formatting cycle detected"),
+
+            _ =>
+            throw new NotImplementedException()
+        };
+
+
+    private static string FormatCSharpScriptOrThrow(string inputSyntaxText) =>
+        CSharpFormat.FormatCSharpScript(inputSyntaxText) switch
+        {
+            Result<FormatCSharpFile.CycleError, string>.Ok ok => ok.Value,
+
+            Result<FormatCSharpFile.CycleError, string>.Err err =>
+            throw new Exception("Formatting cycle detected"),
+
+            _ =>
+            throw new NotImplementedException()
+        };
 
 
     [Fact]

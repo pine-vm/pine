@@ -1,4 +1,5 @@
 using Pine.CLI;
+using Pine.Core;
 using Pine.Core.DotNet;
 using System;
 using System.CommandLine;
@@ -39,20 +40,22 @@ public class CSharpFormatCommand
         formatCommand.Add(yesOption);
         formatCommand.Add(verifyNoChangesOption);
 
-        formatCommand.SetAction((parseResult) =>
-        {
-            var paths = parseResult.GetValue(pathsArgument);
-            var yes = parseResult.GetValue(yesOption);
-            var verifyNoChanges = parseResult.GetValue(verifyNoChangesOption);
+        formatCommand.SetAction(
+            (parseResult) =>
+            {
+                var paths = parseResult.GetValue(pathsArgument);
+                var yes = parseResult.GetValue(yesOption);
+                var verifyNoChanges = parseResult.GetValue(verifyNoChangesOption);
 
-            return FormatCommandShared.Execute(
-                paths: paths!,
-                fileExtension: ".cs",
-                formatFile: FormatCSharpFile,
-                skipPrompt: yes,
-                verifyNoChanges: verifyNoChanges,
-                commandLabel: "csharp-format");
-        });
+                return
+                    FormatCommandShared.Execute(
+                        paths: paths!,
+                        fileExtension: ".cs",
+                        formatFile: FormatCSharpFile,
+                        skipPrompt: yes,
+                        verifyNoChanges: verifyNoChanges,
+                        commandLabel: "csharp-format");
+            });
 
         csharpCommand.Add(formatCommand);
 
@@ -63,7 +66,25 @@ public class CSharpFormatCommand
     {
         try
         {
-            var formatted = CSharpFormat.FormatCSharpFile(fileContent);
+            var formatResult = CSharpFormat.FormatCSharpFile(fileContent);
+
+            if (formatResult.IsErrOrNull() is { } errResult)
+            {
+                Console.Error.WriteLine(
+                    "Warning: Formatting cycle detected. " +
+                    "Cycle first string length: " + errResult.CycleFirstString.Length +
+                    ", cycle last string length: " + errResult.CycleLastString.Length);
+
+                return
+                    new FormatFileResult.Error(
+                        "Formatting cycle detected");
+            }
+
+            var formatted =
+                formatResult.IsOkOrNull()
+                ??
+                throw new NotImplementedException(
+                    "Unexpected result from CSharpFormat.FormatCSharpFile: " + formatResult);
 
             if (fileContent.TrimEnd() == formatted.TrimEnd())
             {

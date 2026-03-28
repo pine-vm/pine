@@ -14,20 +14,24 @@ public class CSharpFormat
 {
     /// <summary>
     /// Formats C# source text parsed as a script (top-level statements allowed).
+    /// Returns <c>Ok</c> with the formatted text, or <c>Err</c> with a <see cref="FormatCSharpFile.CycleError"/>
+    /// if formatting does not converge.
     /// </summary>
     /// <param name="inputSyntaxText">The C# source text to format.</param>
-    public static string FormatCSharpScript(string inputSyntaxText) =>
+    public static Result<FormatCSharpFile.CycleError, string> FormatCSharpScript(string inputSyntaxText) =>
         DotNet.FormatCSharpFile.FormatSyntaxTree(ParseAsCSharpScript(inputSyntaxText))
-        .GetRoot().ToFullString();
+        .Map(tree => tree.GetRoot().ToFullString());
 
 
     /// <summary>
     /// Formats C# source text parsed as a regular file (requires valid compilation unit structure).
+    /// Returns <c>Ok</c> with the formatted text, or <c>Err</c> with a <see cref="FormatCSharpFile.CycleError"/>
+    /// if formatting does not converge.
     /// </summary>
     /// <param name="inputSyntaxText">The C# source text to format.</param>
-    public static string FormatCSharpFile(string inputSyntaxText) =>
+    public static Result<FormatCSharpFile.CycleError, string> FormatCSharpFile(string inputSyntaxText) =>
         DotNet.FormatCSharpFile.FormatSyntaxTree(ParseAsCSharpFile(inputSyntaxText))
-        .GetRoot().ToFullString();
+        .Map(tree => tree.GetRoot().ToFullString());
 
 
     /// <summary>

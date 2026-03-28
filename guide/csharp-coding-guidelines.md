@@ -239,6 +239,19 @@ int x = 1;
 string y = "hello";
 ```
 
+### Trailing Comments
+
+Trailing `//` comments on a code line are preserved with exactly one space separating the code from the `//`. No blank line is added or removed between the trailing comment and the next line (e.g. a closing brace).
+
+For example, the following code must remain unchanged:
+
+```csharp
+if (x < 0)
+{
+    x = -x; // negate
+}
+```
+
 ### Indentation
 
 Indentation must only depend on the content. That means, existing indent before formatting must never influence the resulting indentation after formatting.

@@ -57,10 +57,30 @@ public static class FormatCSharpFile
     // Public entry point
     // ──────────────────────────────────────────────────────────
 
-    /// <summary>Formats a syntax tree using multi-pass convergence until stable.</summary>
-    public static SyntaxTree FormatSyntaxTree(SyntaxTree syntaxTree)
+    /// <summary>
+    /// Describes a formatting cycle: the multi-pass formatter detected that the output
+    /// after some pass matched a previous pass, meaning the formatter will never converge.
+    /// </summary>
+    /// <param name="CycleFirstString">
+    /// The text that was first produced and later re-produced, closing the cycle.
+    /// </param>
+    /// <param name="CycleLastString">
+    /// The text produced in the pass immediately before the cycle was detected
+    /// (i.e. the last unique state before looping back to <see cref="CycleFirstString"/>).
+    /// </param>
+    public record CycleError(string CycleFirstString, string CycleLastString);
+
+    /// <summary>
+    /// Formats a syntax tree using multi-pass convergence until stable.
+    /// Returns <c>Ok</c> when the formatting converges, or <c>Err</c> with a
+    /// <see cref="CycleError"/> when a cycle is detected (any period).
+    /// </summary>
+    public static Result<CycleError, SyntaxTree> FormatSyntaxTree(SyntaxTree syntaxTree)
     {
+        // Keep every state string seen so far to detect cycles of any length.
+        var seenTexts = new HashSet<string>();
         var previousText = syntaxTree.GetRoot().ToFullString();
+        seenTexts.Add(previousText);
 
         for (var pass = 0; pass < MaxPasses; pass++)
         {
@@ -70,11 +90,23 @@ public static class FormatCSharpFile
             if (formattedText == previousText)
                 return formatted;
 
+            // If we have seen this exact text in any earlier pass, we have a cycle.
+            if (!seenTexts.Add(formattedText))
+            {
+                return
+                    new CycleError(
+                        CycleFirstString: formattedText,
+                        CycleLastString: previousText);
+            }
+
             previousText = formattedText;
             syntaxTree = formatted;
         }
 
-        return syntaxTree;
+        return
+            new CycleError(
+                CycleFirstString: syntaxTree.GetRoot().ToFullString(),
+                CycleLastString: previousText);
     }
 
     /// <summary>Runs one formatting pass over the entire syntax tree.</summary>
@@ -1292,6 +1324,11 @@ public static class FormatCSharpFile
 
             foreach (var c in trailingComments)
             {
+                // Skip line breaks: StripWhitespace preserves LineFeeds after single-line
+                // comments, but we always add our own terminating LineFeed below.
+                if (IsLineBreak(c))
+                    continue;
+
                 trailingList.Add(s_space);
                 trailingList.Add(c);
             }
@@ -1547,7 +1584,7 @@ public static class FormatCSharpFile
         var body =
             node.Statement is BlockSyntax block
             ?
-            FormatBlock(block, ctx)
+            EnsureBraceNewline(FormatBlock(block, ctx), ctx.IndentLevel)
             :
             (StatementSyntax)FormatNode(node.Statement, ctx.Indented());
 
@@ -1567,7 +1604,7 @@ public static class FormatCSharpFile
         var body =
             node.Statement is BlockSyntax block
             ?
-            FormatBlock(block, ctx)
+            EnsureBraceNewline(FormatBlock(block, ctx), ctx.IndentLevel)
             :
             ((StatementSyntax)FormatNode(node.Statement, ctx.Indented())).WithLeadingTrivia(
                 s_lineFeed,
@@ -1582,7 +1619,7 @@ public static class FormatCSharpFile
         var body =
             node.Statement is BlockSyntax block
             ?
-            FormatBlock(block, ctx)
+            EnsureBraceNewline(FormatBlock(block, ctx), ctx.IndentLevel)
             :
             (StatementSyntax)FormatNode(node.Statement, ctx.Indented());
 
@@ -1816,7 +1853,22 @@ public static class FormatCSharpFile
     /// <summary>Formats a catch clause with keyword placement and block formatting.</summary>
     private static CatchClauseSyntax FormatCatchClause(CatchClauseSyntax node, FormatContext ctx)
     {
-        var block = FormatBlock(node.Block, ctx);
+        var fmtBlock = FormatBlock(node.Block, ctx);
+
+        // When there is no declaration (bare `catch { ... }`), the previous token
+        // before the open brace is the `catch` keyword itself — whose trailing
+        // trivia gets stripped to default. FormatOpenBrace then relies on
+        // GetPreviousToken() from the original tree, which can oscillate.
+        // EnsureBraceNewline patches this by ensuring a newline exists.
+        // Skip for single-line empty blocks which stay on the same line.
+        var isSingleLineEmpty = node.Declaration is null && IsSingleLineBlock(node.Block);
+
+        var block =
+            (node.Declaration is null && !isSingleLineEmpty)
+            ?
+            EnsureBraceNewline(fmtBlock, ctx.IndentLevel)
+            :
+            fmtBlock;
 
         var catchTrailingTrivia =
             node.Declaration is null && IsSingleLineBlock(node.Block)
@@ -1846,7 +1898,7 @@ public static class FormatCSharpFile
     /// <summary>Formats a finally clause with keyword placement and block formatting.</summary>
     private static FinallyClauseSyntax FormatFinallyClause(FinallyClauseSyntax node, FormatContext ctx)
     {
-        var block = FormatBlock(node.Block, ctx);
+        var block = EnsureBraceNewline(FormatBlock(node.Block, ctx), ctx.IndentLevel);
         var kw = node.FinallyKeyword.WithLeadingTrivia(s_lineFeed, Indent(ctx.IndentLevel)).WithTrailingTrivia();
         return node.WithFinallyKeyword(kw).WithBlock(block);
     }
@@ -2591,9 +2643,15 @@ public static class FormatCSharpFile
 
         if (origSeps.Count >= node.Expressions.Count)
             seps.Add(SyntaxFactory.Token(SyntaxKind.CommaToken).WithLeadingTrivia().WithTrailingTrivia());
-        // Use FormatOpenBrace to avoid double newline when previous token has trailing newline,
-        // but strip the trailing linefeed since the first expression already has a leading one.
-        var openBrace = FormatOpenBrace(node.OpenBraceToken, ctx).WithTrailingTrivia();
+
+        // Multi-line initializer: always place the open brace on its own line.
+        // Using FormatOpenBrace is unreliable here because GetPreviousToken()
+        // reflects the original tree, which may differ between passes.
+        var openBrace =
+            node.OpenBraceToken
+            .WithLeadingTrivia(s_lineFeed, Indent(ctx.IndentLevel))
+            .WithTrailingTrivia();
+
         var closeLeadingTrivia = node.CloseBraceToken.LeadingTrivia;
 
         var close =
@@ -3421,7 +3479,22 @@ public static class FormatCSharpFile
         var r = node.WithArgumentList(FormatArgumentList(node.ArgumentList, ctx));
 
         if (r.Initializer is not null)
-            r = r.WithInitializer(FormatInitializerExpression(r.Initializer, ctx));
+        {
+            var fmtInit = FormatInitializerExpression(r.Initializer, ctx);
+            r = r.WithInitializer(fmtInit);
+
+            // When the initializer is multi-line and has expressions, strip the trailing
+            // newline from the close paren so the initializer brace does not produce a
+            // blank line.
+            if (SpansMultipleLines(fmtInit) && fmtInit.Expressions.Count > 0)
+            {
+                r =
+                    r.WithArgumentList(
+                        r.ArgumentList.WithCloseParenToken(
+                            r.ArgumentList.CloseParenToken.WithTrailingTrivia(
+                                StripWhitespace(r.ArgumentList.CloseParenToken.TrailingTrivia))));
+            }
+        }
 
         return r;
     }
@@ -3431,7 +3504,24 @@ public static class FormatCSharpFile
         ImplicitArrayCreationExpressionSyntax node,
         FormatContext ctx)
     {
-        return node.WithInitializer(FormatInitializerExpression(node.Initializer, ctx));
+        var fmtInit = FormatInitializerExpression(node.Initializer, ctx);
+
+        var r = node.WithInitializer(fmtInit);
+
+        // When the initializer is multi-line and has expressions, strip the trailing
+        // newline from the close bracket so that the initializer's open brace (which
+        // carries its own leading LineFeed) does not produce a blank line.
+        // Empty initializers are returned unchanged by FormatInitializerExpression, so
+        // their trivia must be preserved.
+        if (SpansMultipleLines(fmtInit) && fmtInit.Expressions.Count > 0)
+        {
+            r =
+                r.WithCloseBracketToken(
+                    r.CloseBracketToken.WithTrailingTrivia(
+                        StripWhitespace(r.CloseBracketToken.TrailingTrivia)));
+        }
+
+        return r;
     }
 
     /// <summary>Formats an array creation expression, including its initializer.</summary>
@@ -3439,10 +3529,20 @@ public static class FormatCSharpFile
         ArrayCreationExpressionSyntax node,
         FormatContext ctx)
     {
-        if (node.Initializer is not null)
-            return node.WithInitializer(FormatInitializerExpression(node.Initializer, ctx));
+        if (node.Initializer is null)
+            return node;
 
-        return node;
+        var fmtInit = FormatInitializerExpression(node.Initializer, ctx);
+        var r = node.WithInitializer(fmtInit);
+
+        // When the initializer is multi-line and has expressions, strip any trailing
+        // newline from the type so that the initializer brace does not produce a blank line.
+        if (SpansMultipleLines(fmtInit) && fmtInit.Expressions.Count > 0)
+        {
+            r = r.WithType(r.Type.WithTrailingTrivia(StripWhitespace(r.Type.GetTrailingTrivia())));
+        }
+
+        return r;
     }
 
     /// <summary>Formats an anonymous object creation expression with proper brace indentation.</summary>
