@@ -3022,21 +3022,30 @@ public class CSharpFormatTests
 
                 formattedText = firstFormattedText;
 
-                var secondResult = CSharpFormat.FormatCSharpFile(formattedText);
-
-                if (secondResult.IsErrOrNull() is { } secondErr)
+                // If the file was already formatted (no change on first pass),
+                // skip the stability check — format(x) == x implies format(format(x)) == x.
+                if (formattedText == originalText)
                 {
-                    failures.Add($"{relativePath}: formatting cycle on second pass");
-                    continue;
+                    formattedTwice = formattedText;
                 }
-
-                if (secondResult.IsOkOrNull() is not { } secondFormattedText)
+                else
                 {
-                    throw new NotImplementedException(
-                        "Unexpected result type on second pass: " + secondResult.GetType().Name);
-                }
+                    var secondResult = CSharpFormat.FormatCSharpFile(formattedText);
 
-                formattedTwice = secondFormattedText;
+                    if (secondResult.IsErrOrNull() is { } secondErr)
+                    {
+                        failures.Add($"{relativePath}: formatting cycle on second pass");
+                        continue;
+                    }
+
+                    if (secondResult.IsOkOrNull() is not { } secondFormattedText)
+                    {
+                        throw new NotImplementedException(
+                            "Unexpected result type on second pass: " + secondResult.GetType().Name);
+                    }
+
+                    formattedTwice = secondFormattedText;
+                }
             }
             catch (Exception ex)
             {
