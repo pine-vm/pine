@@ -1,4 +1,5 @@
 using AwesomeAssertions;
+using Pine.Core.CodeAnalysis;
 using Pine.Core.CommonEncodings;
 using Pine.Core.Interpreter.IntermediateVM;
 using System.Collections.Generic;
@@ -152,5 +153,42 @@ public class StackInstructionTraceRendererTests
             """
             8. depth=1 ip=1 Build_List_Tagged_Const (Blob [28] (tag=0x0000004c00000069000000740000006500000072000000610000006c ; UTF32 "Literal") , 1)
             """);
+    }
+
+    [Fact]
+    public void RenderInstructionTrace_renders_invoke_stack_frame_const_description()
+    {
+        var linkedInstructions =
+            new StackFrameInstructions(
+                Parameters: StaticFunctionInterface.FromPathsSorted([[0]]),
+                Instructions:
+                [
+                StackInstruction.Local_Get(0),
+                StackInstruction.Return,
+                ],
+                TrackEnvConstraint: null);
+
+        var invokeInstruction =
+            StackInstruction.Invoke_StackFrame_Const(
+                expression: Expression.LiteralInstance(StringEncoding.ValueFromString("increment")),
+                takeCount: 1);
+
+        invokeInstruction.SetLinkedStackFrameInstructions(linkedInstructions);
+
+        var rendered =
+            StackInstructionTraceRenderer.RenderInstructionTrace(
+                [
+                new ExecutedStackInstruction(
+                    InstructionIndex: 2,
+                    StackFrameDepth: 1,
+                    InstructionPointer: 1,
+                    EvaluationStackDepth: 1,
+                    Instruction: invokeInstruction,
+                    FrameExpression: Expression.EnvironmentInstance,
+                    FrameInput: StackFrameInput.GenericFromEnvironmentValue(PineValue.EmptyBlob))
+                ]);
+
+        rendered.Should().Be(
+            "depth=1 ip=1 Invoke_StackFrame_Const (increment , 1)");
     }
 }

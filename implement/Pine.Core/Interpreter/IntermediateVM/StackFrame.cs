@@ -104,6 +104,7 @@ public record StackFrame(
 
 public record struct StackFrameProfilingBaseline(
     long BeginInstructionCount,
+    long BeginInvocationCount,
     long BeginParseAndEvalCount,
     long BeginStackFrameCount,
     long BeginBuildListCount);

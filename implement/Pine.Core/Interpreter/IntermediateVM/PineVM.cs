@@ -50,6 +50,8 @@ public class PineVM : IPineVM
 
     private readonly IFileStore? _cacheFileStore;
 
+    private readonly IReadOnlyDictionary<Expression, ExpressionCompilation>? _expressionCompilationOverrides;
+
     public static PineVM CreateCustom(
         IDictionary<EvalCacheEntryKey, PineValue>? evalCache,
         EvaluationConfig? evaluationConfigDefault,
@@ -65,7 +67,8 @@ public class PineVM : IPineVM
         Action<PineValue, PineValue, PineValue?>? reportExitPrecompiledLeaf,
         OptimizationParametersSerial? optimizationParametersSerial,
         IFileStore? cacheFileStore,
-        ReportExecutedStackInstruction? reportExecutedStackInstruction = null)
+        ReportExecutedStackInstruction? reportExecutedStackInstruction = null,
+        IReadOnlyDictionary<Expression, ExpressionCompilation>? expressionCompilationOverrides = null)
     {
         return
             new PineVM(
@@ -83,7 +86,8 @@ public class PineVM : IPineVM
                 reportExitPrecompiledLeaf: reportExitPrecompiledLeaf,
                 optimizationParametersSerial: optimizationParametersSerial,
                 cacheFileStore: cacheFileStore,
-                reportExecutedStackInstruction: reportExecutedStackInstruction);
+                reportExecutedStackInstruction: reportExecutedStackInstruction,
+                expressionCompilationOverrides: expressionCompilationOverrides);
 
     }
 
@@ -102,7 +106,8 @@ public class PineVM : IPineVM
         Action<PineValue, PineValue, PineValue?>? reportExitPrecompiledLeaf,
         OptimizationParametersSerial? optimizationParametersSerial,
         IFileStore? cacheFileStore,
-        ReportExecutedStackInstruction? reportExecutedStackInstruction)
+        ReportExecutedStackInstruction? reportExecutedStackInstruction,
+        IReadOnlyDictionary<Expression, ExpressionCompilation>? expressionCompilationOverrides)
     {
         EvalCache = evalCache;
 
@@ -132,6 +137,8 @@ public class PineVM : IPineVM
         _reportExitPrecompiledLeaf = reportExitPrecompiledLeaf;
 
         _optimizationParametersSerial = optimizationParametersSerial;
+
+        _expressionCompilationOverrides = expressionCompilationOverrides;
     }
 
     /// <inheritdoc/>
@@ -217,6 +224,20 @@ public class PineVM : IPineVM
 
     private ExpressionEntry ExpressionEntryLessCache(Expression rootExpression)
     {
+        if (_expressionCompilationOverrides?.TryGetValue(rootExpression, out var overrideCompilation) is true)
+        {
+            var overrideExprValue = EncodeExpressionAsValue(rootExpression);
+
+            var (overrideExprHashBytes, _) =
+                PineValueHashFlat.ComputeHashForValue(overrideExprValue);
+
+            return
+                new ExpressionEntry(
+                    Compilation: overrideCompilation,
+                    ExpressionHashBase16: Convert.ToHexStringLower(overrideExprHashBytes.Span),
+                    OptimizationConfig: null);
+        }
+
         IReadOnlyList<PineValueClass>? specializations = null;
 
         _compilationEnvClasses?.TryGetValue(rootExpression, out specializations);
@@ -274,12 +295,16 @@ public class PineVM : IPineVM
     public record EvaluationConfig(
         int? ParseAndEvalCountLimit);
 
+    /// <summary>
+    /// Evaluates an expression using the intermediate VM stack-frame machinery.
+    /// </summary>
     public Result<string, EvaluationReport> EvaluateExpressionOnCustomStack(
         Expression rootExpression,
         PineValue rootEnvironment,
         EvaluationConfig config)
     {
         long instructionCount = 0;
+        long invocationCount = 0;
         long loopIterationCount = 0;
         long parseAndEvalCount = 0;
         long buildListCount = 0;
@@ -287,6 +312,16 @@ public class PineVM : IPineVM
         long stackFrameReplaceCount = 0;
         long lastCacheEntryInstructionCount = 0;
         long lastCacheEntryParseAndEvalCount = 0;
+
+        var rootInstructions =
+            GetExpressionEntry(rootExpression)
+            .Compilation
+            .SelectInstructionsForEnvironment(PineValueInProcess.Create(rootEnvironment));
+
+        var rootStackFrameInput =
+            StackFrameInput.FromEnvironmentValue(
+                environmentValue: rootEnvironment,
+                parameters: rootInstructions.Parameters);
 
         var stack = new Stack<StackFrame>();
 
@@ -354,6 +389,7 @@ public class PineVM : IPineVM
                                     ProfilingBaseline:
                                     new StackFrameProfilingBaseline(
                                         BeginInstructionCount: instructionCount,
+                                        BeginInvocationCount: invocationCount,
                                         BeginParseAndEvalCount: parseAndEvalCount,
                                         BeginStackFrameCount: stackFrameCount,
                                         BeginBuildListCount: buildListCount),
@@ -494,6 +530,7 @@ public class PineVM : IPineVM
                 :
                 new StackFrameProfilingBaseline(
                     BeginInstructionCount: instructionCount,
+                    BeginInvocationCount: invocationCount,
                     BeginParseAndEvalCount: parseAndEvalCount,
                     BeginStackFrameCount: stackFrameCount,
                     BeginBuildListCount: buildListCount);
@@ -534,6 +571,9 @@ public class PineVM : IPineVM
             {
                 var frameTotalInstructionCount =
                     instructionCount - currentFrame.ProfilingBaseline.BeginInstructionCount;
+
+                var frameInvocationCount =
+                    invocationCount - currentFrame.ProfilingBaseline.BeginInvocationCount;
 
                 var frameParseAndEvalCount = parseAndEvalCount - currentFrame.ProfilingBaseline.BeginParseAndEvalCount;
                 var frameStackFrameCount = stackFrameCount - currentFrame.ProfilingBaseline.BeginStackFrameCount;
@@ -576,7 +616,7 @@ public class PineVM : IPineVM
                         currentFrame.Expression,
                         currentFrame.InputValues,
                         InstructionCount: frameTotalInstructionCount,
-                        InvocationCount: frameParseAndEvalCount,
+                        InvocationCount: frameInvocationCount,
                         BuildListCount: frameBuildListCount,
                         LoopIterationCount: currentFrame.LoopIterationCount,
                         ReturnValue: frameReturnValue,
@@ -593,9 +633,9 @@ public class PineVM : IPineVM
                     new EvaluationReport(
                         ExpressionValue: rootExprValue,
                         Expression: rootExpression,
-                        Input: StackFrameInput.GenericFromEnvironmentValue(rootEnvironment),
+                        Input: rootStackFrameInput,
                         InstructionCount: instructionCount,
-                        InvocationCount: parseAndEvalCount,
+                        InvocationCount: invocationCount,
                         BuildListCount: buildListCount,
                         LoopIterationCount: loopIterationCount,
                         ReturnValue: frameReturnValue,
@@ -623,22 +663,11 @@ public class PineVM : IPineVM
             return stackTrace;
         }
 
-        var compilation =
-            GetExpressionEntry(rootExpression).Compilation;
-
-        var instructions =
-            compilation.SelectInstructionsForEnvironment(PineValueInProcess.Create(rootEnvironment));
-
-        var stackFrameInput =
-            StackFrameInput.FromEnvironmentValue(
-                environmentValue: rootEnvironment,
-                parameters: instructions.Parameters);
-
         BuildAndPushStackFrame(
             expressionValue: null,
             rootExpression,
-            instructions,
-            stackFrameInput,
+            rootInstructions,
+            rootStackFrameInput,
             cacheFileName: null,
             replaceCurrentFrame: false);
 
@@ -1557,6 +1586,7 @@ public class PineVM : IPineVM
                     case StackInstructionKind.Parse_And_Eval_Binary:
                         {
                             {
+                                ++invocationCount;
                                 ++parseAndEvalCount;
 
                                 if (config.ParseAndEvalCountLimit is { } limit && parseAndEvalCount > limit)
@@ -1631,6 +1661,59 @@ public class PineVM : IPineVM
                                 loopIterationCount++;
                                 currentFrame.LoopIterationCount++;
                             }
+
+                            continue;
+                        }
+
+                    case StackInstructionKind.Invoke_StackFrame_Const:
+                        {
+                            ++invocationCount;
+
+                            var targetInstructions =
+                                currentInstruction.LinkedStackFrameInstructions
+                                ??
+                                throw new Exception(
+                                    "Invalid operation form: Missing direct stack-frame invocation target");
+
+                            var invocationExpression =
+                                currentInstruction.OptimizedInvocation?.Expression
+                                ??
+                                throw new Exception(
+                                    "Invalid operation form: Missing direct stack-frame invocation expression");
+
+                            var forwardedValueCount =
+                                currentInstruction.TakeCount
+                                ??
+                                throw new Exception(
+                                    "Invalid operation form: Missing take count for direct stack-frame invocation");
+
+                            var forwardedArguments = new PineValueInProcess[forwardedValueCount];
+
+                            for (var i = 0; i < forwardedValueCount; ++i)
+                            {
+                                var reverseIndex = forwardedValueCount - i - 1;
+
+                                forwardedArguments[reverseIndex] =
+                                    currentFrame.PopTopmostFromStack();
+                            }
+
+                            var directInput =
+                                StackFrameInput.FromArguments(
+                                    targetInstructions.Parameters,
+                                    forwardedArguments);
+
+                            var replaceCurrentFrame =
+                                currentFrame.InstructionPointer + 1 < currentFrame.Instructions.Instructions.Count &&
+                                currentFrame.Instructions.Instructions[currentFrame.InstructionPointer + 1].Kind
+                                is StackInstructionKind.Return;
+
+                            BuildAndPushStackFrame(
+                                expressionValue: currentInstruction.OptimizedInvocation?.ExpressionEncoded,
+                                expression: invocationExpression,
+                                instructions: targetInstructions,
+                                stackFrameInput: directInput,
+                                cacheFileName: null,
+                                replaceCurrentFrame: replaceCurrentFrame);
 
                             continue;
                         }

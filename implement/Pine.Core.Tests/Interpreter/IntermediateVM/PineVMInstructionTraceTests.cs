@@ -31,7 +31,7 @@ public class PineVMInstructionTraceTests
                 optimizationParametersSerial: null,
                 cacheFileStore: null,
                 reportExecutedStackInstruction:
-                (in ExecutedStackInstruction executedStackInstruction) =>
+                (in executedStackInstruction) =>
                 trace.Add(executedStackInstruction));
 
         var expression =
@@ -79,7 +79,7 @@ public class PineVMInstructionTraceTests
                 optimizationParametersSerial: null,
                 cacheFileStore: null,
                 reportExecutedStackInstruction:
-                (in ExecutedStackInstruction executedStackInstruction) =>
+                (in executedStackInstruction) =>
                 trace.Add(executedStackInstruction));
 
         var nestedEnvironment = IntegerEncoding.EncodeSignedInteger(7);

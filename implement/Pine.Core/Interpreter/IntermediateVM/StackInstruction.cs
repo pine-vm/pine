@@ -206,6 +206,11 @@ public enum StackInstructionKind
     Parse_And_Eval_Binary,
 
     /// <summary>
+    /// Invokes a specific stack-frame representation using values forwarded directly from the stack.
+    /// </summary>
+    Invoke_StackFrame_Const,
+
+    /// <summary>
     /// Add the top two values on the stack.
     /// </summary>
     Int_Add_Binary,
@@ -283,6 +288,38 @@ public enum StackInstructionKind
 }
 
 /// <summary>
+/// Holds information to identify the call target for a direct invocation,
+/// and after linking, also a reference to the target stack frame instructions.
+/// 
+/// <para>
+/// In the future, we will probably expand this record with a description of the interface of the callee,
+/// describing both argument layout as well as how a list of returned values is to be
+/// mapped to compose the canonical single return value.
+/// </para>
+/// </summary>
+public record DirectInvocation(
+    Expression Expression,
+    PineValue ExpressionEncoded)
+{
+    StackFrameInstructions? _linkedStackFrameInstructions;
+
+    /// <summary>
+    /// The linked target stack-frame instructions, resolved after compile-time linking.
+    /// </summary>
+    public StackFrameInstructions? LinkedStackFrameInstructions =>
+        _linkedStackFrameInstructions;
+
+    /// <summary>
+    /// Links the target stack-frame instructions for this direct invocation.
+    /// </summary>
+    public void SetLinkedStackFrameInstructions(
+        StackFrameInstructions linkedStackFrameInstructions)
+    {
+        _linkedStackFrameInstructions = linkedStackFrameInstructions;
+    }
+}
+
+/// <summary>
 /// Represents a single instruction for the Pine stack-based virtual machine. 
 /// Depending on the <see cref="Kind"/>, this instruction may consume zero or more values 
 /// from the evaluation stack, optionally produce a new value to push onto the stack, 
@@ -301,9 +338,14 @@ public enum StackInstructionKind
 /// <param name="Literal">An optional literal value (used by push or parse instructions).</param>
 /// <param name="LocalIndex">An optional index for reading/writing to a local variable.</param>
 /// <param name="SkipCount">An optional skip count used in slice/skip operations.</param>
-/// <param name="TakeCount">An optional take count used in slice/build operations.</param>
+/// <param name="TakeCount">An optional take count used in slice/build/direct invocation operations.</param>
 /// <param name="JumpOffset">An optional offset for conditional or unconditional jumps.</param>
 /// <param name="ShiftCount">An optional amount to shift bits, used by bitwise shift instructions.</param>
+/// <param name="IntegerLiteral">An optional integer constant used by comparison and arithmetic instructions
+/// such as <see cref="StackInstructionKind.Length_Equal_Const"/>,
+/// <see cref="StackInstructionKind.Int_Add_Const"/>,
+/// and <see cref="StackInstructionKind.Int_Mul_Const"/>.</param>
+/// <param name="OptimizedInvocation">An optional <see cref="DirectInvocation"/> describing a direct stack-frame invocation target.</param>
 public record StackInstruction(
     StackInstructionKind Kind,
     PineValue? Literal = null,
@@ -312,8 +354,15 @@ public record StackInstruction(
     int? SkipCount = null,
     int? TakeCount = null,
     int? JumpOffset = null,
-    int? ShiftCount = null)
+    int? ShiftCount = null,
+    DirectInvocation? OptimizedInvocation = null)
 {
+    /// <summary>
+    /// The linked target stack-frame instructions, delegated from <see cref="OptimizedInvocation"/>.
+    /// </summary>
+    public StackFrameInstructions? LinkedStackFrameInstructions =>
+        OptimizedInvocation?.LinkedStackFrameInstructions;
+
     public static readonly StackInstruction Return =
         new(StackInstructionKind.Return);
 
@@ -469,6 +518,42 @@ public record StackInstruction(
     public static readonly StackInstruction Parse_And_Eval_Binary =
         new(StackInstructionKind.Parse_And_Eval_Binary);
 
+    public static StackInstruction Invoke_StackFrame_Const(
+        Expression expression,
+        int takeCount) =>
+        Invoke_StackFrame_Const(
+            expression,
+            expressionEncoded: ExpressionEncoding.EncodeExpressionAsValue(expression),
+            takeCount);
+
+    public static StackInstruction Invoke_StackFrame_Const(
+        Expression expression,
+        PineValue expressionEncoded,
+        int takeCount) =>
+        new(
+            StackInstructionKind.Invoke_StackFrame_Const,
+            TakeCount: takeCount,
+            OptimizedInvocation: new DirectInvocation(expression, expressionEncoded));
+
+    public void SetLinkedStackFrameInstructions(
+        StackFrameInstructions linkedStackFrameInstructions)
+    {
+        if (Kind is not StackInstructionKind.Invoke_StackFrame_Const)
+        {
+            throw new InvalidOperationException(
+                "Can link stack-frame instructions only for " +
+                nameof(StackInstructionKind.Invoke_StackFrame_Const) + ".");
+        }
+
+        if (OptimizedInvocation is not { } invocation)
+        {
+            throw new InvalidOperationException(
+                "Cannot link: " + nameof(OptimizedInvocation) + " is null.");
+        }
+
+        invocation.SetLinkedStackFrameInstructions(linkedStackFrameInstructions);
+    }
+
     public static StackInstruction Bit_And_Const(PineValue blobValue) =>
         new(StackInstructionKind.Bit_And_Const, Literal: blobValue);
 
@@ -549,6 +634,21 @@ public record StackInstruction(
         return Kind.ToString() + detailsText;
     }
 
+    public static string RenderInvocationExpression(
+        Expression expression)
+    {
+        if (expression is Expression.Environment)
+            return nameof(Expression.Environment);
+
+        if (expression is Expression.Literal literalExpression &&
+            StringEncoding.StringFromValue(literalExpression.Value).IsOkOrNull() is { } literalString)
+        {
+            return literalString;
+        }
+
+        return expression.ToString();
+    }
+
     public static string LiteralDisplayStringDefault(PineValue value) =>
         value switch
         {
@@ -557,7 +657,8 @@ public record StackInstruction(
             CommandLineInterface.FormatIntegerForDisplay(blob.Bytes.Length) +
             "] ("
             +
-            (IntegerEncoding.ParseSignedIntegerRelaxed(blob.Bytes.Span).IsOkOrNullable() is { } asInt ?
+            (IntegerEncoding.ParseSignedIntegerRelaxed(blob.Bytes.Span).IsOkOrNullable() is { } asInt
+            ?
             "int " + asInt
             :
             "0x" + Convert.ToHexStringLower(blob.Bytes.Span))
@@ -571,7 +672,8 @@ public record StackInstruction(
             CommandLineInterface.FormatIntegerForDisplay(list.NodesCount) +
             ")",
 
-            _ => throw new NotImplementedException(
+            _ =>
+            throw new NotImplementedException(
                 "Unknown PineValue: " + value)
         };
 
@@ -592,523 +694,597 @@ public record StackInstruction(
         instruction.Kind switch
         {
             StackInstructionKind.Push_Literal =>
-                new InstructionDetails(
-                    PopCount: 0,
-                    PushCount: 1,
-                    [literalDisplayString(instruction.Literal
+            new InstructionDetails(
+                PopCount: 0,
+                PushCount: 1,
+                [
+                literalDisplayString(
+                    instruction.Literal
                     ?? throw new Exception(
-                        "Missing Literal for PushLiteral instruction")
-                    )]),
+                        "Missing Literal for PushLiteral instruction"))
+                ]),
 
             StackInstructionKind.Local_Set =>
-                new InstructionDetails(
-                    PopCount: 0,
-                    PushCount: 0,
-                    [instruction.LocalIndex?.ToString()
-                    ?? throw new Exception(
-                        "Missing LocalIndex for LocalSet instruction")]),
+            new InstructionDetails(
+                PopCount: 0,
+                PushCount: 0,
+                [
+                instruction.LocalIndex?.ToString()
+                ?? throw new Exception(
+                    "Missing LocalIndex for LocalSet instruction")
+                ]),
 
             StackInstructionKind.Local_Get =>
-                new InstructionDetails(
-                    PopCount: 0,
-                    PushCount: 1,
-                    [instruction.LocalIndex?.ToString()
-                    ?? throw new Exception(
-                        "Missing LocalIndex for LocalGet instruction")]),
+            new InstructionDetails(
+                PopCount: 0,
+                PushCount: 1,
+                [
+                instruction.LocalIndex?.ToString()
+                ?? throw new Exception(
+                    "Missing LocalIndex for LocalGet instruction")
+                ]),
 
             StackInstructionKind.Pop =>
-                new InstructionDetails(
-                    PopCount: 1,
-                    PushCount: 0,
-                    []),
+            new InstructionDetails(
+                PopCount: 1,
+                PushCount: 0,
+                []),
 
             StackInstructionKind.Length =>
-                new InstructionDetails(
-                    PopCount: 1,
-                    PushCount: 1,
-                    []),
+            new InstructionDetails(
+                PopCount: 1,
+                PushCount: 1,
+                []),
 
             StackInstructionKind.Length_Equal_Const =>
-                new InstructionDetails(
-                    PopCount: 1,
-                    PushCount: 1,
-                    [instruction.IntegerLiteral?.ToString()
-                    ?? throw new Exception(
-                        "Missing IntegerLiteral for LengthEqualConst instruction")]),
+            new InstructionDetails(
+                PopCount: 1,
+                PushCount: 1,
+                [
+                instruction.IntegerLiteral?.ToString()
+                ?? throw new Exception(
+                    "Missing IntegerLiteral for LengthEqualConst instruction")
+                ]),
 
             StackInstructionKind.Concat_Generic =>
-                new InstructionDetails(
-                    PopCount: 1,
-                    PushCount: 1,
-                    []),
+            new InstructionDetails(
+                PopCount: 1,
+                PushCount: 1,
+                []),
 
             StackInstructionKind.Concat_Binary =>
-                new InstructionDetails(
-                    PopCount: 2,
-                    PushCount: 1,
-                    []),
+            new InstructionDetails(
+                PopCount: 2,
+                PushCount: 1,
+                []),
 
             StackInstructionKind.Prepend_List_Items =>
-                new InstructionDetails(
-                    PopCount:
-                    (instruction.TakeCount
-                    ?? throw new Exception(
-                        "Missing TakeCount for Prepend_List_Items instruction")) + 1,
-                    PushCount: 1,
-                    [instruction.TakeCount?.ToString()
-                    ?? throw new Exception(
-                        "Missing TakeCount for Prepend_List_Items instruction")]),
+            new InstructionDetails(
+                PopCount:
+                (instruction.TakeCount
+                ?? throw new Exception(
+                    "Missing TakeCount for Prepend_List_Items instruction")) + 1,
+                PushCount: 1,
+                [
+                instruction.TakeCount?.ToString()
+                ?? throw new Exception(
+                    "Missing TakeCount for Prepend_List_Items instruction")
+                ]),
 
             StackInstructionKind.Append_List_Items =>
-                new InstructionDetails(
-                    PopCount:
-                    (instruction.TakeCount
-                    ?? throw new Exception(
-                        "Missing TakeCount for Append_List_Items instruction")) + 1,
-                    PushCount: 1,
-                    [instruction.TakeCount?.ToString()
-                    ?? throw new Exception(
-                        "Missing TakeCount for Append_List_Items instruction")]),
+            new InstructionDetails(
+                PopCount:
+                (instruction.TakeCount
+                ?? throw new Exception(
+                    "Missing TakeCount for Append_List_Items instruction")) + 1,
+                PushCount: 1,
+                [
+                instruction.TakeCount?.ToString()
+                ?? throw new Exception(
+                    "Missing TakeCount for Append_List_Items instruction")
+                ]),
 
             StackInstructionKind.Slice_Skip_Var_Take_Var =>
-                new InstructionDetails(
-                    PopCount: 3,
-                    PushCount: 1,
-                    []),
+            new InstructionDetails(
+                PopCount: 3,
+                PushCount: 1,
+                []),
 
             StackInstructionKind.Slice_Skip_Var_Take_Const =>
-                new InstructionDetails(
-                    PopCount: 2,
-                    PushCount: 1,
-                    [instruction.TakeCount?.ToString()
-                    ??
-                    throw new Exception(
-                        "Missing TakeCount for SliceSkipVarTakeConst instruction")]),
+            new InstructionDetails(
+                PopCount: 2,
+                PushCount: 1,
+                [
+                instruction.TakeCount?.ToString()
+                ??
+                throw new Exception(
+                    "Missing TakeCount for SliceSkipVarTakeConst instruction")
+                ]),
 
             StackInstructionKind.Skip_Generic =>
-                new InstructionDetails(
-                    PopCount: 1,
-                    PushCount: 1,
-                    []),
+            new InstructionDetails(
+                PopCount: 1,
+                PushCount: 1,
+                []),
 
             StackInstructionKind.Skip_Binary =>
-                new InstructionDetails(
-                    PopCount: 2,
-                    PushCount: 1,
-                    []),
+            new InstructionDetails(
+                PopCount: 2,
+                PushCount: 1,
+                []),
 
             StackInstructionKind.Skip_Const =>
-                new InstructionDetails(
-                    PopCount: 1,
-                    PushCount: 1,
-                    [instruction.SkipCount?.ToString()
-                    ??
-                    throw new Exception(
-                        "Missing SkipCount for SkipConst instruction")]),
+            new InstructionDetails(
+                PopCount: 1,
+                PushCount: 1,
+                [
+                instruction.SkipCount?.ToString()
+                ??
+                throw new Exception(
+                    "Missing SkipCount for SkipConst instruction")
+                ]),
 
             StackInstructionKind.Take_Generic =>
-                new InstructionDetails(
-                    PopCount: 1,
-                    PushCount: 1,
-                    []),
+            new InstructionDetails(
+                PopCount: 1,
+                PushCount: 1,
+                []),
 
             StackInstructionKind.Take_Binary =>
-                new InstructionDetails(
-                    PopCount: 2,
-                    PushCount: 1,
-                    []),
+            new InstructionDetails(
+                PopCount: 2,
+                PushCount: 1,
+                []),
 
             StackInstructionKind.Take_Const =>
-                new InstructionDetails(
-                    PopCount: 1,
-                    PushCount: 1,
-                    [instruction.TakeCount?.ToString()
-                    ??
-                    throw new Exception(
-                        "Missing TakeCount for TakeConst instruction")]),
+            new InstructionDetails(
+                PopCount: 1,
+                PushCount: 1,
+                [
+                instruction.TakeCount?.ToString()
+                ??
+                throw new Exception(
+                    "Missing TakeCount for TakeConst instruction")
+                ]),
 
             StackInstructionKind.Take_Last_Const =>
             new InstructionDetails(
                 PopCount: 1,
                 PushCount: 1,
-                [instruction.TakeCount?.ToString()
-                    ??
-                    throw new Exception(
-                        "Missing TakeCount for TakeLastConst instruction")]),
+                [
+                instruction.TakeCount?.ToString()
+                ??
+                throw new Exception(
+                    "Missing TakeCount for TakeLastConst instruction")
+                ]),
 
             StackInstructionKind.Skip_Head_Binary =>
-                new InstructionDetails(
-                    PopCount: 2,
-                    PushCount: 1,
-                    []),
+            new InstructionDetails(
+                PopCount: 2,
+                PushCount: 1,
+                []),
 
             StackInstructionKind.Skip_Head_Const =>
-                new InstructionDetails(
-                    PopCount: 1,
-                    PushCount: 1,
-                    [instruction.SkipCount?.ToString()
-                    ??
-                    throw new Exception(
-                        "Missing SkipCount for SkipHeadConst instruction")]),
+            new InstructionDetails(
+                PopCount: 1,
+                PushCount: 1,
+                [
+                instruction.SkipCount?.ToString()
+                ??
+                throw new Exception(
+                    "Missing SkipCount for SkipHeadConst instruction")
+                ]),
 
             StackInstructionKind.Head_Generic =>
-                new InstructionDetails(
-                    PopCount: 1,
-                    PushCount: 1,
-                    []),
+            new InstructionDetails(
+                PopCount: 1,
+                PushCount: 1,
+                []),
 
             StackInstructionKind.Reverse =>
-                new InstructionDetails(
-                    PopCount: 1,
-                    PushCount: 1,
-                    []),
+            new InstructionDetails(
+                PopCount: 1,
+                PushCount: 1,
+                []),
 
             StackInstructionKind.Build_List =>
-                new InstructionDetails(
-                    PopCount:
-                    instruction.TakeCount
-                        ?? throw new Exception(
-                            "Missing TakeCount for BuildList instruction"),
-                    PushCount: 1,
-                    [instruction.TakeCount?.ToString()
-                        ?? throw new Exception(
-                            "Missing TakeCount for BuildList instruction")]),
+            new InstructionDetails(
+                PopCount:
+                instruction.TakeCount
+                ?? throw new Exception(
+                    "Missing TakeCount for BuildList instruction"),
+                PushCount: 1,
+                [
+                instruction.TakeCount?.ToString()
+                ?? throw new Exception(
+                    "Missing TakeCount for BuildList instruction")
+                ]),
 
             StackInstructionKind.Build_List_Tagged_Const =>
-                new InstructionDetails(
-                    PopCount:
-                    instruction.TakeCount
-                    ?? throw new Exception(
-                            "Missing TakeCount for BuildList instruction"),
-                    PushCount: 1,
-                    [literalDisplayString(instruction.Literal
+            new InstructionDetails(
+                PopCount:
+                instruction.TakeCount
+                ?? throw new Exception(
+                    "Missing TakeCount for BuildList instruction"),
+                PushCount: 1,
+                [
+                literalDisplayString(
+                    instruction.Literal
                     ?? throw new Exception(
                         "Missing Literal for EqualBinaryConst instruction")),
-                    instruction.TakeCount?.ToString()
-                        ?? throw new Exception(
-                            "Missing TakeCount for BuildList instruction")
-                    ]),
+                instruction.TakeCount?.ToString()
+                ?? throw new Exception(
+                    "Missing TakeCount for BuildList instruction")
+                ]),
 
             StackInstructionKind.Equal_Binary =>
-                new InstructionDetails(
-                    PopCount: 2,
-                    PushCount: 1,
-                    []),
+            new InstructionDetails(
+                PopCount: 2,
+                PushCount: 1,
+                []),
 
             StackInstructionKind.Not_Equal_Binary =>
-                new InstructionDetails(
-                    PopCount: 2,
-                    PushCount: 1,
-                    []),
+            new InstructionDetails(
+                PopCount: 2,
+                PushCount: 1,
+                []),
 
             StackInstructionKind.Equal_Binary_Const =>
-                new InstructionDetails(
-                    PopCount: 1,
-                    PushCount: 1,
-                    [literalDisplayString(instruction.Literal
+            new InstructionDetails(
+                PopCount: 1,
+                PushCount: 1,
+                [
+                literalDisplayString(
+                    instruction.Literal
                     ?? throw new Exception(
-                        "Missing Literal for EqualBinaryConst instruction")
-                    )]),
+                        "Missing Literal for EqualBinaryConst instruction"))
+                ]),
 
             StackInstructionKind.Not_Equal_Binary_Const =>
-                new InstructionDetails(
-                    PopCount: 1,
-                    PushCount: 1,
-                    [literalDisplayString(instruction.Literal
+            new InstructionDetails(
+                PopCount: 1,
+                PushCount: 1,
+                [
+                literalDisplayString(
+                    instruction.Literal
                     ?? throw new Exception(
-                        "Missing Literal for NotEqualBinaryConst instruction")
-                    )]),
+                        "Missing Literal for NotEqualBinaryConst instruction"))
+                ]),
 
             StackInstructionKind.Equal_Generic =>
-                new InstructionDetails(
-                    PopCount: 1,
-                    PushCount: 1,
-                    []),
+            new InstructionDetails(
+                PopCount: 1,
+                PushCount: 1,
+                []),
 
             StackInstructionKind.Is_List_Value =>
-                new InstructionDetails(
-                    PopCount: 1,
-                    PushCount: 1,
-                    []),
+            new InstructionDetails(
+                PopCount: 1,
+                PushCount: 1,
+                []),
 
             StackInstructionKind.Is_Blob_Value =>
-                new InstructionDetails(
-                    PopCount: 1,
-                    PushCount: 1,
-                    []),
+            new InstructionDetails(
+                PopCount: 1,
+                PushCount: 1,
+                []),
 
             StackInstructionKind.Negate =>
-
-                new InstructionDetails(
-                    PopCount: 1,
-                    PushCount: 1,
-                    []),
+            new InstructionDetails(
+                PopCount: 1,
+                PushCount: 1,
+                []),
 
             StackInstructionKind.Int_Is_Sorted_Asc_Generic =>
-                new InstructionDetails(
-                    PopCount: 1,
-                    PushCount: 1,
-                    []),
+            new InstructionDetails(
+                PopCount: 1,
+                PushCount: 1,
+                []),
 
             StackInstructionKind.Int_Less_Than_Binary =>
-                new InstructionDetails(
-                    PopCount: 2,
-                    PushCount: 1,
-                    []),
+            new InstructionDetails(
+                PopCount: 2,
+                PushCount: 1,
+                []),
 
             StackInstructionKind.Int_Less_Than_Or_Equal_Binary =>
-                new InstructionDetails(
-                    PopCount: 2,
-                    PushCount: 1,
-                    []),
+            new InstructionDetails(
+                PopCount: 2,
+                PushCount: 1,
+                []),
 
             StackInstructionKind.Int_Less_Than_Const =>
-                new InstructionDetails(
-                    PopCount: 1,
-                    PushCount: 1,
-                    [instruction.IntegerLiteral?.ToString()
-                    ?? throw new Exception(
-                        "Missing IntegerLiteral for IntLessThanConst instruction")]),
+            new InstructionDetails(
+                PopCount: 1,
+                PushCount: 1,
+                [
+                instruction.IntegerLiteral?.ToString()
+                ?? throw new Exception(
+                    "Missing IntegerLiteral for IntLessThanConst instruction")
+                ]),
 
             StackInstructionKind.Int_Less_Than_Or_Equal_Const =>
-                new InstructionDetails(
-                    PopCount: 1,
-                    PushCount: 1,
-                    [instruction.IntegerLiteral?.ToString()
-                    ?? throw new Exception(
-                        "Missing IntegerLiteral for IntLessThanOrEqualConst instruction")]),
+            new InstructionDetails(
+                PopCount: 1,
+                PushCount: 1,
+                [
+                instruction.IntegerLiteral?.ToString()
+                ?? throw new Exception(
+                    "Missing IntegerLiteral for IntLessThanOrEqualConst instruction")
+                ]),
 
             StackInstructionKind.Int_Unsigned_Less_Than_Or_Equal_Const =>
             new InstructionDetails(
                 PopCount: 1,
                 PushCount: 1,
-                [instruction.IntegerLiteral?.ToString()
+                [
+                instruction.IntegerLiteral?.ToString()
                 ?? throw new Exception(
-                    "Missing IntegerLiteral for Int_Unsigned_Less_Than_Or_Equal_Const instruction")]),
+                    "Missing IntegerLiteral for Int_Unsigned_Less_Than_Or_Equal_Const instruction")
+                ]),
 
             StackInstructionKind.Int_Greater_Than_Or_Equal_Const =>
-                new InstructionDetails(
-                    PopCount: 1,
-                    PushCount: 1,
-                    [instruction.IntegerLiteral?.ToString()
-                    ?? throw new Exception(
-                        "Missing IntegerLiteral for IntGreaterThanOrEqualConst instruction")]),
+            new InstructionDetails(
+                PopCount: 1,
+                PushCount: 1,
+                [
+                instruction.IntegerLiteral?.ToString()
+                ?? throw new Exception(
+                    "Missing IntegerLiteral for IntGreaterThanOrEqualConst instruction")
+                ]),
 
             StackInstructionKind.Int_Unsigned_Greater_Than_Or_Equal_Const =>
             new InstructionDetails(
                 PopCount: 1,
                 PushCount: 1,
-                [instruction.IntegerLiteral?.ToString()
+                [
+                instruction.IntegerLiteral?.ToString()
                 ?? throw new Exception(
-                    "Missing IntegerLiteral for Int_Unsigned_Greater_Than_Or_Equal_Const instruction")]),
+                    "Missing IntegerLiteral for Int_Unsigned_Greater_Than_Or_Equal_Const instruction")
+                ]),
 
             StackInstructionKind.Jump_If_True_Const =>
-                new InstructionDetails(
-                    PopCount: 1,
-                    PushCount: 0,
-                    [instruction.JumpOffset?.ToString()
-                    ?? throw new Exception(
-                        "Missing JumpOffset for JumpIfTrueConst instruction")]),
+            new InstructionDetails(
+                PopCount: 1,
+                PushCount: 0,
+                [
+                instruction.JumpOffset?.ToString()
+                ?? throw new Exception(
+                    "Missing JumpOffset for JumpIfTrueConst instruction")
+                ]),
 
             StackInstructionKind.Jump_Const =>
-                new InstructionDetails(
-                    PopCount: 0,
-                    PushCount: 0,
-                    [instruction.JumpOffset?.ToString()
-                    ?? throw new Exception(
-                        "Missing JumpOffset for JumpConst instruction")]),
-
+            new InstructionDetails(
+                PopCount: 0,
+                PushCount: 0,
+                [
+                instruction.JumpOffset?.ToString()
+                ?? throw new Exception(
+                    "Missing JumpOffset for JumpConst instruction")
+                ]),
 
             StackInstructionKind.Return =>
-                new InstructionDetails(
-                    PopCount: 1,
-                    PushCount: 0,
-                    []),
+            new InstructionDetails(
+                PopCount: 1,
+                PushCount: 0,
+                []),
 
             StackInstructionKind.Parse_And_Eval_Binary =>
-                new InstructionDetails(
-                    PopCount: 2,
-                    PushCount: 1,
-                    []),
+            new InstructionDetails(
+                PopCount: 2,
+                PushCount: 1,
+                []),
+
+            StackInstructionKind.Invoke_StackFrame_Const =>
+            new InstructionDetails(
+                PopCount:
+                instruction.TakeCount
+                ?? throw new Exception(
+                    "Missing TakeCount for Invoke_StackFrame_Const instruction"),
+                PushCount: 1,
+                [
+                RenderInvocationExpression(
+                    instruction.OptimizedInvocation?.Expression
+                    ?? throw new Exception(
+                        "Missing OptimizedInvocation for Invoke_StackFrame_Const instruction")),
+                instruction.TakeCount?.ToString()
+                ?? throw new Exception(
+                    "Missing TakeCount for Invoke_StackFrame_Const instruction")
+                ]),
 
             StackInstructionKind.Int_Add_Binary =>
-
-                new InstructionDetails(
-                    PopCount: 2,
-                    PushCount: 1,
-                    []),
+            new InstructionDetails(
+                PopCount: 2,
+                PushCount: 1,
+                []),
 
             StackInstructionKind.Int_Add_Const =>
-                new InstructionDetails(
-                    PopCount: 1,
-                    PushCount: 1,
-                    [instruction.IntegerLiteral?.ToString()
-                    ?? throw new Exception(
-                        "Missing IntegerLiteral for IntAddConst instruction")]),
+            new InstructionDetails(
+                PopCount: 1,
+                PushCount: 1,
+                [
+                instruction.IntegerLiteral?.ToString()
+                ?? throw new Exception(
+                    "Missing IntegerLiteral for IntAddConst instruction")
+                ]),
 
             StackInstructionKind.Int_Unsigned_Add_Const =>
-                new InstructionDetails(
-                    PopCount: 1,
-                    PushCount: 1,
-                    [instruction.IntegerLiteral?.ToString()
-                    ?? throw new Exception(
-                        "Missing IntegerLiteral for IntUnsignedAddConst instruction")]),
+            new InstructionDetails(
+                PopCount: 1,
+                PushCount: 1,
+                [
+                instruction.IntegerLiteral?.ToString()
+                ?? throw new Exception(
+                    "Missing IntegerLiteral for IntUnsignedAddConst instruction")
+                ]),
 
             StackInstructionKind.Int_Add_Generic =>
-                new InstructionDetails(
-                    PopCount: 1,
-                    PushCount: 1,
-                    []),
+            new InstructionDetails(
+                PopCount: 1,
+                PushCount: 1,
+                []),
 
             StackInstructionKind.Int_Sub_Binary =>
-                new InstructionDetails(
-                    PopCount: 2,
-                    PushCount: 1,
-                    []),
+            new InstructionDetails(
+                PopCount: 2,
+                PushCount: 1,
+                []),
 
             StackInstructionKind.Int_Mul_Binary =>
-                new InstructionDetails(
-                    PopCount: 2,
-                    PushCount: 1,
-                    []),
+            new InstructionDetails(
+                PopCount: 2,
+                PushCount: 1,
+                []),
 
             StackInstructionKind.Int_Mul_Const =>
-                new InstructionDetails(
-                    PopCount: 1,
-                    PushCount: 1,
-                    [instruction.IntegerLiteral?.ToString()
-                    ?? throw new Exception(
-                        "Missing IntegerLiteral for IntMulConst instruction")]),
+            new InstructionDetails(
+                PopCount: 1,
+                PushCount: 1,
+                [
+                instruction.IntegerLiteral?.ToString()
+                ?? throw new Exception(
+                    "Missing IntegerLiteral for IntMulConst instruction")
+                ]),
 
             StackInstructionKind.Int_Mul_Generic =>
-                new InstructionDetails(
-                    PopCount: 1,
-                    PushCount: 1,
-                    []),
+            new InstructionDetails(
+                PopCount: 1,
+                PushCount: 1,
+                []),
 
             StackInstructionKind.Bit_And_Generic =>
-                new InstructionDetails(
-                    PopCount: 1,
-                    PushCount: 1,
-                    []),
+            new InstructionDetails(
+                PopCount: 1,
+                PushCount: 1,
+                []),
 
             StackInstructionKind.Bit_And_Binary =>
-                new InstructionDetails(
-                    PopCount: 2,
-                    PushCount: 1,
-                    []),
+            new InstructionDetails(
+                PopCount: 2,
+                PushCount: 1,
+                []),
 
             StackInstructionKind.Bit_And_Const =>
-                new InstructionDetails(
-                    PopCount: 1,
-                    PushCount: 1,
-                    [literalDisplayString(instruction.Literal
+            new InstructionDetails(
+                PopCount: 1,
+                PushCount: 1,
+                [
+                literalDisplayString(
+                    instruction.Literal
                     ?? throw new Exception(
-                        "Missing Literal for BitAndConst instruction"))]),
+                        "Missing Literal for BitAndConst instruction"))
+                ]),
 
             StackInstructionKind.Bit_Or_Generic =>
-                new InstructionDetails(
-                    PopCount: 1,
-                    PushCount: 1,
-                    []),
+            new InstructionDetails(
+                PopCount: 1,
+                PushCount: 1,
+                []),
 
             StackInstructionKind.Bit_Or_Binary =>
-                new InstructionDetails(
-                    PopCount: 2,
-                    PushCount: 1,
-                    []),
+            new InstructionDetails(
+                PopCount: 2,
+                PushCount: 1,
+                []),
 
             StackInstructionKind.Bit_Or_Const =>
-                new InstructionDetails(
-                    PopCount: 1,
-                    PushCount: 1,
-                    [literalDisplayString(instruction.Literal
+            new InstructionDetails(
+                PopCount: 1,
+                PushCount: 1,
+                [
+                literalDisplayString(
+                    instruction.Literal
                     ?? throw new Exception(
-                        "Missing Literal for BitOrConst instruction"))]),
+                        "Missing Literal for BitOrConst instruction"))
+                ]),
 
             StackInstructionKind.Bit_Xor_Generic =>
-                new InstructionDetails(
-                    PopCount: 1,
-                    PushCount: 1,
-                    []),
+            new InstructionDetails(
+                PopCount: 1,
+                PushCount: 1,
+                []),
 
             StackInstructionKind.Bit_Xor_Binary =>
-                new InstructionDetails(
-                    PopCount: 2,
-                    PushCount: 1,
-                    []),
+            new InstructionDetails(
+                PopCount: 2,
+                PushCount: 1,
+                []),
 
             StackInstructionKind.Bit_Not =>
-                new InstructionDetails(
-                    PopCount: 1,
-                    PushCount: 1,
-                    []),
+            new InstructionDetails(
+                PopCount: 1,
+                PushCount: 1,
+                []),
 
             StackInstructionKind.Bit_Shift_Left_Binary =>
-                new InstructionDetails(
-                    PopCount: 2,
-                    PushCount: 1,
-                    []),
+            new InstructionDetails(
+                PopCount: 2,
+                PushCount: 1,
+                []),
 
             StackInstructionKind.Bit_Shift_Left_Const =>
-                new InstructionDetails(
-                    PopCount: 1,
-                    PushCount: 1,
-                    [instruction.ShiftCount?.ToString()
-                    ?? throw new Exception(
-                        "Missing ShiftCount for BitShiftLeftConst instruction")]),
+            new InstructionDetails(
+                PopCount: 1,
+                PushCount: 1,
+                [
+                instruction.ShiftCount?.ToString()
+                ?? throw new Exception(
+                    "Missing ShiftCount for BitShiftLeftConst instruction")
+                ]),
 
             StackInstructionKind.Bit_Shift_Left_Generic =>
-                new InstructionDetails(
-                    PopCount: 1,
-                    PushCount: 1,
-                    []),
+            new InstructionDetails(
+                PopCount: 1,
+                PushCount: 1,
+                []),
 
             StackInstructionKind.Bit_Shift_Right_Binary =>
-                new InstructionDetails(
-                    PopCount: 2,
-                    PushCount: 1,
-                    []),
+            new InstructionDetails(
+                PopCount: 2,
+                PushCount: 1,
+                []),
 
             StackInstructionKind.Bit_Shift_Right_Const =>
-                new InstructionDetails(
-                    PopCount: 1,
-                    PushCount: 1,
-                    [instruction.ShiftCount?.ToString()
-                    ?? throw new Exception(
-                        "Missing ShiftCount for BitShiftRightConst instruction")]),
+            new InstructionDetails(
+                PopCount: 1,
+                PushCount: 1,
+                [
+                instruction.ShiftCount?.ToString()
+                ?? throw new Exception(
+                    "Missing ShiftCount for BitShiftRightConst instruction")
+                ]),
 
             StackInstructionKind.Bit_Shift_Right_Generic =>
-                new InstructionDetails(
-                    PopCount: 1,
-                    PushCount: 1,
-                    []),
+            new InstructionDetails(
+                PopCount: 1,
+                PushCount: 1,
+                []),
 
             StackInstructionKind.Logical_And_Binary =>
-                new InstructionDetails(
-                    PopCount: 2,
-                    PushCount: 1,
-                    []),
+            new InstructionDetails(
+                PopCount: 2,
+                PushCount: 1,
+                []),
 
             StackInstructionKind.Blob_Trim_Leading_Zeros =>
-                new InstructionDetails(
-                    PopCount: 1,
-                    PushCount: 1,
-                    []),
+            new InstructionDetails(
+                PopCount: 1,
+                PushCount: 1,
+                []),
 
             StackInstructionKind.Starts_With_Const_At_Offset_Var =>
-                new InstructionDetails(
-                    PopCount: 2,
-                    PushCount: 1,
-                    [literalDisplayString(instruction.Literal
-                        ??
-                        throw new Exception("Missing Literal for Starts_With_Const_At_Offset_Var instruction"))
-                    ]),
+            new InstructionDetails(
+                PopCount: 2,
+                PushCount: 1,
+                [
+                literalDisplayString(
+                    instruction.Literal
+                    ??
+                    throw new Exception("Missing Literal for Starts_With_Const_At_Offset_Var instruction"))
+                ]),
 
             var otherKind =>
             throw new NotImplementedException(
                 "Unknown StackInstructionKind: " + otherKind)
         };
 }
-
-
