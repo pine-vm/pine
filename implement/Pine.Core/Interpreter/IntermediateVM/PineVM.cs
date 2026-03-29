@@ -23,6 +23,8 @@ public class PineVM : IPineVM
 
     private readonly ReportExecutedStackInstruction? _reportExecutedStackInstruction;
 
+    private readonly ReportEnteredStackFrame? _reportEnteredStackFrame;
+
     private readonly IReadOnlyDictionary<Expression, IReadOnlyList<PineValueClass>>? _compilationEnvClasses;
 
     private readonly bool _disableReductionInCompilation;
@@ -68,6 +70,7 @@ public class PineVM : IPineVM
         OptimizationParametersSerial? optimizationParametersSerial,
         IFileStore? cacheFileStore,
         ReportExecutedStackInstruction? reportExecutedStackInstruction = null,
+        ReportEnteredStackFrame? reportEnteredStackFrame = null,
         IReadOnlyDictionary<Expression, ExpressionCompilation>? expressionCompilationOverrides = null)
     {
         return
@@ -87,6 +90,7 @@ public class PineVM : IPineVM
                 optimizationParametersSerial: optimizationParametersSerial,
                 cacheFileStore: cacheFileStore,
                 reportExecutedStackInstruction: reportExecutedStackInstruction,
+                reportEnteredStackFrame: reportEnteredStackFrame,
                 expressionCompilationOverrides: expressionCompilationOverrides);
 
     }
@@ -107,6 +111,7 @@ public class PineVM : IPineVM
         OptimizationParametersSerial? optimizationParametersSerial,
         IFileStore? cacheFileStore,
         ReportExecutedStackInstruction? reportExecutedStackInstruction,
+        ReportEnteredStackFrame? reportEnteredStackFrame,
         IReadOnlyDictionary<Expression, ExpressionCompilation>? expressionCompilationOverrides)
     {
         EvalCache = evalCache;
@@ -116,6 +121,8 @@ public class PineVM : IPineVM
         _reportFunctionApplication = reportFunctionApplication;
 
         _reportExecutedStackInstruction = reportExecutedStackInstruction;
+
+        _reportEnteredStackFrame = reportEnteredStackFrame;
 
         _compilationEnvClasses = compilationEnvClasses;
 
@@ -561,6 +568,20 @@ public class PineVM : IPineVM
             stack.Push(newFrame);
 
             ++stackFrameCount;
+
+            if (_reportEnteredStackFrame is { } reportEnteredStackFrame &&
+                newFrame.Instructions is { } frameInstructions)
+            {
+                var enteredStackFrame =
+                    new EnteredStackFrame(
+                        FrameIndex: stackFrameCount - 1,
+                        StackFrameDepth: stack.Count,
+                        Instructions: frameInstructions,
+                        FrameExpression: newFrame.Expression,
+                        FrameInput: newFrame.InputValues);
+
+                reportEnteredStackFrame(in enteredStackFrame);
+            }
         }
 
         EvaluationReport? ReturnFromStackFrame(PineValueInProcess frameReturnValue)

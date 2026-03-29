@@ -103,4 +103,60 @@ public class PineVMInstructionTraceTests
         nestedFrameTrace.FrameInput.EvaluatedArguments.Should().Equal([nestedEnvironment]);
         nestedFrameTrace.Instruction.Should().Be(StackInstruction.Local_Get(0));
     }
+
+    [Fact]
+    public void PineVM_reports_each_entered_stack_frame()
+    {
+        var enteredFrames = new List<EnteredStackFrame>();
+
+        var vm =
+            Core.Interpreter.IntermediateVM.PineVM.CreateCustom(
+                evalCache: null,
+                evaluationConfigDefault: null,
+                reportFunctionApplication: null,
+                compilationEnvClasses: null,
+                disableReductionInCompilation: true,
+                selectPrecompiled: null,
+                skipInlineForExpression: _ => false,
+                enableTailRecursionOptimization: false,
+                parseCache: null,
+                precompiledLeaves: null,
+                reportEnterPrecompiledLeaf: null,
+                reportExitPrecompiledLeaf: null,
+                optimizationParametersSerial: null,
+                cacheFileStore: null,
+                reportEnteredStackFrame:
+                (in enteredStackFrame) =>
+                enteredFrames.Add(enteredStackFrame));
+
+        var nestedEnvironment = IntegerEncoding.EncodeSignedInteger(7);
+
+        var expression =
+            new Expression.ParseAndEval(
+                encoded:
+                Expression.LiteralInstance(
+                    ExpressionEncoding.EncodeExpressionAsValue(Expression.EnvironmentInstance)),
+                environment:
+                Expression.LiteralInstance(nestedEnvironment));
+
+        var result = vm.EvaluateExpression(expression, PineValue.EmptyBlob);
+
+        result.IsOkOrNull().Should().Be(nestedEnvironment);
+
+        // The root frame is replaced by the nested ParseAndEval frame (tail position),
+        // so we see 2 frame entries total.
+        enteredFrames.Should().HaveCount(2);
+
+        enteredFrames[0].FrameIndex.Should().Be(0);
+        enteredFrames[0].StackFrameDepth.Should().Be(1);
+
+        // The nested frame replaces the root frame (tail call optimization),
+        // so stack depth stays at 1.
+        enteredFrames[1].FrameIndex.Should().Be(1);
+        enteredFrames[1].StackFrameDepth.Should().Be(1);
+        enteredFrames[1].FrameExpression.Should().Be(Expression.EnvironmentInstance);
+        enteredFrames[1].FrameInput.EvaluatedArguments.Should().Equal([nestedEnvironment]);
+        enteredFrames[1].Instructions.Should().NotBeNull();
+        enteredFrames[1].Instructions.Instructions.Should().NotBeEmpty();
+    }
 }

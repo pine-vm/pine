@@ -198,6 +198,40 @@ public static class StackInstructionTraceRenderer
                 maxUtf32StringCharCount: maxUtf32StringCharCount),
             renderBlobContents: renderBlobContents);
 
+    /// <summary>
+    /// Renders the instructions in a <see cref="StackFrameInstructions"/> instance as a multi-line text.
+    /// Each instruction is prefixed with its zero-based index and rendered using the default blob representations.
+    /// </summary>
+    /// <param name="frameInstructions">The frame instructions to render.</param>
+    /// <param name="blobRepresentations">
+    /// Ordered list of blob renderers. If omitted, <see cref="DefaultBlobRepresentations"/> is used.
+    /// </param>
+    /// <param name="renderBlobContents">
+    /// Optional callback for custom blob-content rendering.
+    /// </param>
+    public static string RenderStackFrameInstructions(
+        StackFrameInstructions frameInstructions,
+        IReadOnlyList<BlobRepresentation>? blobRepresentations = null,
+        Func<PineValue.BlobValue, IReadOnlyList<string>, string>? renderBlobContents = null)
+    {
+        if (frameInstructions.Instructions.Count is 0)
+            return "";
+
+        var indexWidth =
+            (frameInstructions.Instructions.Count - 1).ToString().Length;
+
+        return
+            string.Join(
+                '\n',
+                frameInstructions.Instructions.Select(
+                    (instruction, index) =>
+                    index.ToString().PadLeft(indexWidth) + ": " +
+                    RenderInstruction(
+                        instruction,
+                        blobRepresentations: blobRepresentations,
+                        renderBlobContents: renderBlobContents)));
+    }
+
     private static string RenderInstruction(
         StackInstruction instruction,
         IReadOnlyList<BlobRepresentation>? blobRepresentations,
