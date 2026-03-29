@@ -2978,15 +2978,15 @@ public class CSharpFormatTests
     {
         var gitDir = FindGitDirectory();
 
-        var allFiles = GitCore.LoadFromLocalFiles.LoadTreeContentsFromHead(gitDir);
+        var pineCoreFiles =
+            GitCore.LoadFromLocalFiles.LoadSubdirectoryContentsFromHead(
+                gitDir,
+                ["implement", "Pine.Core"]);
 
         var csFiles =
-            allFiles
+            pineCoreFiles
             .Where(
                 kvp =>
-                kvp.Key.Count >= 3 &&
-                kvp.Key[0] == "implement" &&
-                kvp.Key[1] == "Pine.Core" &&
                 kvp.Key[kvp.Key.Count - 1].EndsWith(".cs", StringComparison.OrdinalIgnoreCase))
             .ToList();
 
@@ -2997,8 +2997,8 @@ public class CSharpFormatTests
 
         foreach (var file in csFiles)
         {
-            // Skip the "implement" and "Pine.Core" path segments to get the relative path within Pine.Core
-            var relativePath = string.Join("/", file.Key.Skip(2));
+            // Paths are already relative to the Pine.Core subdirectory
+            var relativePath = string.Join("/", file.Key);
             var originalText = Encoding.UTF8.GetString(file.Value.Span);
 
             string formattedText;
