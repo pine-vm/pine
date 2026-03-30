@@ -1739,11 +1739,16 @@ public class PineVM : IPineVM
                             continue;
                         }
 
-                    case StackInstructionKind.Jump_If_True_Const:
+                    case StackInstructionKind.Jump_If_Equal_Const:
                         {
                             var conditionValue = currentFrame.PopTopmostFromStack();
 
-                            if (PineValueInProcess.AreEqual(conditionValue, PineKernelValues.TrueValue))
+                            var literal =
+                                currentInstruction.Literal
+                                ??
+                                throw new Exception("Invalid operation form: Missing literal value");
+
+                            if (PineValueInProcess.AreEqual(conditionValue, literal))
                             {
                                 var jumpOffset =
                                     currentInstruction.JumpOffset

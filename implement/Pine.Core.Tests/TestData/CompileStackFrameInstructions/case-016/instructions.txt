@@ -6,9 +6,9 @@ Int_Mul_Binary
 Local_Set (1)
 Local_Get (1)
 Build_List (2)
-Jump_If_True_Const (6)
+Jump_If_Equal_Const (Blob [1] (0x04) , 6)
 Local_Get (1)
-Jump_If_True_Const (2)
+Jump_If_Equal_Const (Blob [1] (0x04) , 2)
 Push_Literal (Blob [2] (int 27))
 Return
 Push_Literal (Blob [2] (int 23))

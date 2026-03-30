@@ -1,0 +1,20 @@
+{
+  "Conditional": [
+    {
+      "KernelApplication": [
+        "negate",
+        {
+          "KernelApplication": [
+            "head",
+            {
+              "Environment": [
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    { "Literal": [ 17 ] },
+    { "Literal": [ 21 ] }
+  ]
+}

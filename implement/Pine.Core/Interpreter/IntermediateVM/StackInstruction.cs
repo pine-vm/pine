@@ -1,4 +1,5 @@
 using Pine.Core.CommonEncodings;
+using Pine.Core.PineVM;
 using System;
 using System.Collections.Generic;
 using System.Numerics;
@@ -185,9 +186,12 @@ public enum StackInstructionKind
     Int_Unsigned_Greater_Than_Or_Equal_Const,
 
     /// <summary>
-    /// Jump to the offset from <see cref="StackInstruction.JumpOffset"/> if the top value on the stack is true.
+    /// Jump to the offset from <see cref="StackInstruction.JumpOffset"/> if the top value on the stack
+    /// is equal to the value from <see cref="StackInstruction.Literal"/>.
+    /// This generalizes the old Jump_If_True_Const by allowing any literal for comparison,
+    /// enabling fusion of Equal_Binary_Const + Jump_If_True_Const into a single instruction.
     /// </summary>
-    Jump_If_True_Const,
+    Jump_If_Equal_Const,
 
     /// <summary>
     /// Unconditional jump to the offset from <see cref="StackInstruction.JumpOffset"/>.
@@ -370,10 +374,18 @@ public record StackInstruction(
         new(StackInstructionKind.Jump_Const, JumpOffset: offset);
 
     /// <summary>
+    /// Creates a new instruction to jump to the specified offset if the top value on the stack
+    /// is equal to the given literal value.
+    /// </summary>
+    public static StackInstruction Jump_If_Equal(int offset, PineValue literal) =>
+        new(StackInstructionKind.Jump_If_Equal_Const, JumpOffset: offset, Literal: literal);
+
+    /// <summary>
     /// Creates a new instruction to jump to the specified offset if the top value on the stack is true.
+    /// This is a convenience wrapper around <see cref="Jump_If_Equal"/> using <see cref="PineKernelValues.TrueValue"/>.
     /// </summary>
     public static StackInstruction Jump_If_True(int offset) =>
-        new(StackInstructionKind.Jump_If_True_Const, JumpOffset: offset);
+        Jump_If_Equal(offset, PineKernelValues.TrueValue);
 
     public static StackInstruction Push_Literal(PineValue literal) =>
         new(StackInstructionKind.Push_Literal, Literal: literal);
@@ -1043,14 +1055,18 @@ public record StackInstruction(
                     "Missing IntegerLiteral for Int_Unsigned_Greater_Than_Or_Equal_Const instruction")
                 ]),
 
-            StackInstructionKind.Jump_If_True_Const =>
+            StackInstructionKind.Jump_If_Equal_Const =>
             new InstructionDetails(
                 PopCount: 1,
                 PushCount: 0,
                 [
+                literalDisplayString(
+                    instruction.Literal
+                    ?? throw new Exception(
+                        "Missing Literal for Jump_If_Equal_Const instruction")),
                 instruction.JumpOffset?.ToString()
                 ?? throw new Exception(
-                    "Missing JumpOffset for JumpIfTrueConst instruction")
+                    "Missing JumpOffset for Jump_If_Equal_Const instruction")
                 ]),
 
             StackInstructionKind.Jump_Const =>

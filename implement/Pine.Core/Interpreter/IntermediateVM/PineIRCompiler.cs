@@ -524,7 +524,8 @@ public class PineIRCompiler
     }
 
     /// <summary>
-    /// Compiles a conditional expression with explicit branch jumps.
+    /// Compiles a conditional expression with explicit branch jumps,
+    /// applying fusion to peel layers of equal/negate from the condition.
     /// </summary>
     public static NodeCompilationResult CompileConditional(
         Expression.Conditional conditional,
@@ -532,16 +533,94 @@ public class PineIRCompiler
         NodeCompilationResult prior,
         PineVMParseCache parseCache)
     {
+        // Fuse the condition into a Jump_If_Equal_Const instruction by analyzing the
+        // condition expression and extracting a comparison value.
+        // This loop peels nested layers of equal/negate to produce the most efficient jump.
+        //
+        // Pattern 1: condition is equal(var, const) or equal(const, var)
+        // → emit var then Jump_If_Equal_Const(const, offset)
+        // Pattern 2: condition is negate(expr)
+        // → negate(x) is true when x == FalseValue, so emit expr then Jump_If_Equal_Const(FalseValue, offset)
+
+        var conditionExpression = conditional.Condition;
+        var jumpLiteralValue = PineKernelValues.TrueValue;
+
+        while (conditionExpression is Expression.KernelApplication condKernelApp)
+        {
+            if (condKernelApp.Function is nameof(KernelFunction.equal) &&
+                condKernelApp.Input is Expression.List equalList && equalList.Items.Count is 2)
+            {
+                if (jumpLiteralValue == PineKernelValues.TrueValue)
+                {
+                    if (TryEvalIndependent(equalList.Items[0], parseCache) is { } leftConst)
+                    {
+                        conditionExpression = equalList.Items[1];
+                        jumpLiteralValue = leftConst;
+                        continue;
+                    }
+
+                    if (TryEvalIndependent(equalList.Items[1], parseCache) is { } rightConst)
+                    {
+                        conditionExpression = equalList.Items[0];
+                        jumpLiteralValue = rightConst;
+                        continue;
+                    }
+                }
+
+                break;
+            }
+
+            if (condKernelApp.Function is nameof(KernelFunction.negate))
+            {
+                conditionExpression = condKernelApp.Input;
+
+                jumpLiteralValue =
+                    jumpLiteralValue == PineKernelValues.TrueValue
+                    ?
+                    PineKernelValues.FalseValue
+                    :
+                    PineKernelValues.TrueValue;
+
+                continue;
+            }
+
+            break;
+        }
+
+        return
+            CompileConditionalWithoutFusion(
+                conditionExpression: conditionExpression,
+                jumpLiteralValue: jumpLiteralValue,
+                falseBranch: conditional.FalseBranch,
+                trueBranch: conditional.TrueBranch,
+                context: context,
+                prior: prior,
+                parseCache: parseCache);
+    }
+
+    /// <summary>
+    /// Compiles a conditional with an already-resolved condition expression and jump literal,
+    /// emitting condition instructions followed by branch jumps.
+    /// </summary>
+    public static NodeCompilationResult CompileConditionalWithoutFusion(
+        Expression conditionExpression,
+        PineValue jumpLiteralValue,
+        Expression falseBranch,
+        Expression trueBranch,
+        CompilationContext context,
+        NodeCompilationResult prior,
+        PineVMParseCache parseCache)
+    {
         var afterCondition =
             CompileExpressionTransitive(
-                conditional.Condition,
+                conditionExpression,
                 context,
                 prior,
                 parseCache);
 
         var falseBranchInstructions =
             CompileExpressionTransitive(
-                conditional.FalseBranch,
+                falseBranch,
                 context
                 .AddInstructionOffset(afterCondition.Instructions.Count + 1),
                 new NodeCompilationResult(
@@ -552,7 +631,7 @@ public class PineIRCompiler
 
         var trueBranchInstructions =
             CompileExpressionTransitive(
-                conditional.TrueBranch,
+                trueBranch,
                 context
                 .AddInstructionOffset(afterCondition.Instructions.Count + 1)
                 .AddInstructionOffset(falseBranchInstructions.Count + 1),
@@ -569,8 +648,9 @@ public class PineIRCompiler
             ];
 
         var branchInstruction =
-            StackInstruction.Jump_If_True(
-                offset: falseBranchInstructionsAndJump.Count);
+            StackInstruction.Jump_If_Equal(
+                offset: falseBranchInstructionsAndJump.Count,
+                literal: jumpLiteralValue);
 
         var afterConditionAndJump =
             afterCondition

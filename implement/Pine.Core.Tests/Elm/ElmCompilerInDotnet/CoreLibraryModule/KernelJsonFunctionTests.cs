@@ -1155,7 +1155,7 @@ public class KernelJsonFunctionTests
 
         CoreLibraryTestHelper.FormatCounts(report).Should().Be(
             """
-            InstructionCount: 10926
+            InstructionCount: 9570
             InvocationCount: 411
             BuildListCount: 1003
             LoopIterationCount: 0
@@ -1177,7 +1177,7 @@ public class KernelJsonFunctionTests
 
         CoreLibraryTestHelper.FormatCounts(report).Should().Be(
             """
-            InstructionCount: 7826
+            InstructionCount: 6847
             InvocationCount: 289
             BuildListCount: 720
             LoopIterationCount: 0
@@ -1234,7 +1234,7 @@ public class KernelJsonFunctionTests
 
         formattedCounts.Should().Be(
             """
-            InstructionCount: 13241
+            InstructionCount: 11637
             InvocationCount: 496
             BuildListCount: 1205
             LoopIterationCount: 0
@@ -1257,7 +1257,7 @@ public class KernelJsonFunctionTests
 
         formattedCounts.Should().Be(
             """
-            InstructionCount: 16867
+            InstructionCount: 14994
             InvocationCount: 642
             BuildListCount: 1570
             LoopIterationCount: 0
@@ -1280,7 +1280,7 @@ public class KernelJsonFunctionTests
 
         CoreLibraryTestHelper.FormatCounts(report).Should().Be(
             """
-            InstructionCount: 7975
+            InstructionCount: 7011
             InvocationCount: 279
             BuildListCount: 707
             LoopIterationCount: 0
@@ -1301,7 +1301,7 @@ public class KernelJsonFunctionTests
 
         CoreLibraryTestHelper.FormatCounts(report).Should().Be(
             """
-            InstructionCount: 7975
+            InstructionCount: 7011
             InvocationCount: 279
             BuildListCount: 707
             LoopIterationCount: 0
@@ -1364,7 +1364,7 @@ public class KernelJsonFunctionTests
 
         CoreLibraryTestHelper.FormatCounts(report).Should().Be(
             """
-            InstructionCount: 11749
+            InstructionCount: 10154
             InvocationCount: 405
             BuildListCount: 966
             LoopIterationCount: 0
@@ -1384,7 +1384,7 @@ public class KernelJsonFunctionTests
 
         CoreLibraryTestHelper.FormatCounts(report).Should().Be(
             """
-            InstructionCount: 10928
+            InstructionCount: 9381
             InvocationCount: 372
             BuildListCount: 891
             LoopIterationCount: 0
@@ -1432,7 +1432,7 @@ public class KernelJsonFunctionTests
 
         CoreLibraryTestHelper.FormatCounts(report).Should().Be(
             """
-            InstructionCount: 9353
+            InstructionCount: 7990
             InvocationCount: 272
             BuildListCount: 703
             LoopIterationCount: 0
@@ -1477,7 +1477,7 @@ public class KernelJsonFunctionTests
 
         CoreLibraryTestHelper.FormatCounts(report).Should().Be(
             """
-            InstructionCount: 21569
+            InstructionCount: 19576
             InvocationCount: 816
             BuildListCount: 1887
             LoopIterationCount: 0
