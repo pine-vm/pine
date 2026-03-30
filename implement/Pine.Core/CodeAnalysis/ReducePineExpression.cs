@@ -658,6 +658,57 @@ public class ReducePineExpression
                         return conditional.TrueBranch;
                     }
 
+                    if (conditional.Condition is Expression.KernelApplication
+                        {
+                            Function: "equal",
+                            Input: Expression.List equalArgsList
+                        }
+                        && equalArgsList.Items.Count is 2)
+                    {
+                        if (equalArgsList.Items[1] is Expression.Literal { Value: var val1 })
+                        {
+                            if (val1 == PineKernelValues.FalseValue)
+                            {
+                                return
+                                    Expression.ConditionalInstance(
+                                        condition: equalArgsList.Items[0],
+                                        trueBranch: conditional.FalseBranch,
+                                        falseBranch: conditional.TrueBranch);
+
+                            }
+
+                            if (val1 == PineKernelValues.TrueValue)
+                            {
+                                return
+                                    Expression.ConditionalInstance(
+                                        condition: equalArgsList.Items[0],
+                                        falseBranch: conditional.FalseBranch,
+                                        trueBranch: conditional.TrueBranch);
+                            }
+                        }
+
+                        if (equalArgsList.Items[0] is Expression.Literal { Value: var val0 })
+                        {
+                            if (val0 == PineKernelValues.FalseValue)
+                            {
+                                return
+                                    Expression.ConditionalInstance(
+                                        condition: equalArgsList.Items[1],
+                                        trueBranch: conditional.FalseBranch,
+                                        falseBranch: conditional.TrueBranch);
+                            }
+
+                            if (val0 == PineKernelValues.TrueValue)
+                            {
+                                return
+                                    Expression.ConditionalInstance(
+                                        condition: equalArgsList.Items[1],
+                                        falseBranch: conditional.FalseBranch,
+                                        trueBranch: conditional.TrueBranch);
+                            }
+                        }
+                    }
+
                     return AttemptReduceViaEval();
                 }
 
@@ -1133,8 +1184,10 @@ public class ReducePineExpression
         // If none of the subexpressions changed, return the original; else build a new list.
         return
             changed
-            ? Expression.ListInstance(newItems)
-            : listExpr;
+            ?
+            Expression.ListInstance(newItems)
+            :
+            listExpr;
     }
 
     /// <summary>
@@ -1168,10 +1221,11 @@ public class ReducePineExpression
                     product *= c;
                 }
 
-                var newItems = new List<Expression>(capacity: constants.variables.Count + 1)
-                {
-                    Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(product))
-                };
+                var newItems =
+                    new List<Expression>(capacity: constants.variables.Count + 1)
+                    {
+                        Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(product))
+                    };
 
                 newItems.AddRange(constants.variables);
 
@@ -1193,10 +1247,11 @@ public class ReducePineExpression
                     sum += c;
                 }
 
-                var newItems = new List<Expression>(capacity: constants.variables.Count + 1)
-                {
-                    Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(sum))
-                };
+                var newItems =
+                    new List<Expression>(capacity: constants.variables.Count + 1)
+                    {
+                        Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(sum))
+                    };
 
                 newItems.AddRange(constants.variables);
 
@@ -1300,10 +1355,11 @@ public class ReducePineExpression
             return conditional;
         }
 
-        return Expression.ConditionalInstance(
-            condition: reducedCondition,
-            falseBranch: reducedFalse,
-            trueBranch: reducedTrue);
+        return
+            Expression.ConditionalInstance(
+                condition: reducedCondition,
+                falseBranch: reducedFalse,
+                trueBranch: reducedTrue);
     }
 
     /// <summary>
@@ -1586,7 +1642,11 @@ public class ReducePineExpression
                     if (ApplyKernelFunctionHeadToAllBranches(cond.FalseBranch) is { } falseOk &&
                         ApplyKernelFunctionHeadToAllBranches(cond.TrueBranch) is { } trueOk)
                     {
-                        return Expression.ConditionalInstance(condition: cond.Condition, falseBranch: falseOk, trueBranch: trueOk);
+                        return
+                            Expression.ConditionalInstance(
+                                condition: cond.Condition,
+                                falseBranch: falseOk,
+                                trueBranch: trueOk);
                     }
 
                     return null;
@@ -1655,10 +1715,11 @@ public class ReducePineExpression
 
                     if (falseOut is not null && trueOut is not null)
                     {
-                        return Expression.ConditionalInstance(
-                            condition: cond.Condition,
-                            falseBranch: falseOut,
-                            trueBranch: trueOut);
+                        return
+                            Expression.ConditionalInstance(
+                                condition: cond.Condition,
+                                falseBranch: falseOut,
+                                trueBranch: trueOut);
                     }
 
                     return null;

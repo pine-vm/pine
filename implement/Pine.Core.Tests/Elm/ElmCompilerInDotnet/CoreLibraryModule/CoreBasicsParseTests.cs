@@ -1633,10 +1633,7 @@ public class CoreBasicsParseTests
 
             Test.alfa param_1_0 param_1_1 =
                 if
-                    Pine_builtin.equal
-                        [ param_1_0
-                        , True
-                        ]
+                    param_1_0
                 then
                     param_1_1
 
@@ -1723,10 +1720,7 @@ public class CoreBasicsParseTests
 
             Test.alfa param_1_0 param_1_1 =
                 if
-                    Pine_builtin.equal
-                        [ param_1_0
-                        , True
-                        ]
+                    param_1_0
                 then
                     param_1_1
 
@@ -1770,10 +1764,7 @@ public class CoreBasicsParseTests
 
             Test.alfa param_1_0 param_1_1 =
                 if
-                    Pine_builtin.equal
-                        [ param_1_0
-                        , True
-                        ]
+                    param_1_0
                 then
                     True
 
@@ -1867,10 +1858,7 @@ public class CoreBasicsParseTests
 
             Test.alfa param_1_0 param_1_1 =
                 if
-                    Pine_builtin.equal
-                        [ param_1_0
-                        , True
-                        ]
+                    param_1_0
                 then
                     True
 

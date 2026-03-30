@@ -1,0 +1,37 @@
+{
+  "Conditional": [
+    {
+      "KernelApplication": [
+        "equal",
+        {
+          "List": [
+            [
+              { "Environment": [] },
+              {
+                "Literal": [
+                  {
+                    "AsBase64": "BA=="
+                  }
+                ]
+              }
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "Literal": [
+        {
+          "AsBase64": "Bw=="
+        }
+      ]
+    },
+    {
+      "Literal": [
+        {
+          "AsBase64": "CQ=="
+        }
+      ]
+    }
+  ]
+}
