@@ -42,12 +42,6 @@ public class CanonicalizationResultExtensions
     /// <remarks>The returned canonicalization result aggregates the values and errors from each individual
     /// projection. The order of the output values matches the order of the input sequence. If no errors are
     /// encountered, the Errors collection in the result will be empty.</remarks>
-    /// <typeparam name="ItemIn">The type of elements in the input sequence.</typeparam>
-    /// <typeparam name="ItemOut">The type of elements produced by the projector function.</typeparam>
-    /// <param name="items">The sequence of input elements to be projected. Cannot be null.</param>
-    /// <param name="projector">A function that transforms each input element into a canonicalization result. Cannot be null.</param>
-    /// <returns>A canonicalization result containing a read-only list of projected values and a combined list of all errors
-    /// encountered during projection.</returns>
     public static CanonicalizationResult<IReadOnlyList<ItemOut>> ConcatMap<ItemIn, ItemOut>(
         IEnumerable<ItemIn> items,
         Func<ItemIn, CanonicalizationResult<ItemOut>> projector)
@@ -70,13 +64,6 @@ public class CanonicalizationResultExtensions
     /// <summary>
     /// Combines two canonicalization results using a combiner function.
     /// </summary>
-    /// <typeparam name="T1">The type of the first result.</typeparam>
-    /// <typeparam name="T2">The type of the second result.</typeparam>
-    /// <typeparam name="TResult">The type of the combined result.</typeparam>
-    /// <param name="result1">The first result.</param>
-    /// <param name="result2">The second result.</param>
-    /// <param name="combiner">Function to combine the two values.</param>
-    /// <returns>A result with the combined value and merged errors from both inputs.</returns>
     public static CanonicalizationResult<TResult> Map2<T1, T2, TResult>(
         CanonicalizationResult<T1> result1,
         CanonicalizationResult<T2> result2,
@@ -94,15 +81,6 @@ public class CanonicalizationResultExtensions
     /// <summary>
     /// Combines three canonicalization results using a combiner function.
     /// </summary>
-    /// <typeparam name="T1">The type of the first result.</typeparam>
-    /// <typeparam name="T2">The type of the second result.</typeparam>
-    /// <typeparam name="T3">The type of the third result.</typeparam>
-    /// <typeparam name="TResult">The type of the combined result.</typeparam>
-    /// <param name="result1">The first result.</param>
-    /// <param name="result2">The second result.</param>
-    /// <param name="result3">The third result.</param>
-    /// <param name="combiner">Function to combine the three values.</param>
-    /// <returns>A result with the combined value and merged errors from all inputs.</returns>
     public static CanonicalizationResult<TResult> Map3<T1, T2, T3, TResult>(
         CanonicalizationResult<T1> result1,
         CanonicalizationResult<T2> result2,
