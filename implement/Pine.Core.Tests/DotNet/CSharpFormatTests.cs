@@ -3311,39 +3311,6 @@ public class CSharpFormatTests
             "Formatting must only change whitespace characters");
     }
 
-
-    /// <summary>
-    /// Asserts that the formatter has truly converged: after formatting via the
-    /// multi-pass <see cref="FormatCSharpFile.FormatSyntaxTree"/>, applying one
-    /// additional single formatting pass must not change the output.
-    /// <para>
-    /// This is stricter than <see cref="AssertFormattingIsStable"/> which only checks
-    /// <c>format(format(x)) == format(x)</c>. That weaker check can pass even when
-    /// the formatter oscillates internally, because <see cref="FormatCSharpFile.FormatSyntaxTree"/>
-    /// runs an even number of passes (MaxPasses = 10) and both calls end up at the
-    /// same oscillation phase.
-    /// </para>
-    /// </summary>
-    private static void AssertSinglePassConvergence(string inputSyntaxText)
-    {
-        var formatted = FormatCSharpFileOrThrow(inputSyntaxText);
-
-        var tree =
-            CSharpSyntaxTree.ParseText(
-                formatted,
-                new CSharpParseOptions(kind: SourceCodeKind.Regular));
-
-        var root = (CompilationUnitSyntax)tree.GetRoot();
-
-        var topLevelIndent = 0;
-        var afterOneMorePass = FormatCSharpFile.FormatCompilationUnit(root, topLevelIndent).ToFullString();
-
-        afterOneMorePass.Should().Be(
-            formatted,
-            "Formatter must converge: one additional formatting pass must not change the output");
-    }
-
-
     private static string FormatCSharpFileOrThrow(string inputSyntaxText) =>
         CSharpFormat.FormatCSharpFile(inputSyntaxText) switch
         {
@@ -5662,8 +5629,10 @@ public class CSharpFormatTests
             """"
             var effectiveBaseRef =
                 chainBaseColumn.HasValue
-                ? context // If chain base provided, context is already at that position
-                : context.SetIndentToCurrentColumn();
+                ?
+                context // If chain base provided, context is already at that position
+                :
+                context.SetIndentToCurrentColumn();
             """";
 
         AssertFormattedSyntax(input, expected, scriptMode: true);
@@ -5796,6 +5765,138 @@ public class CSharpFormatTests
             var baseAddressBase16 =
                 System.Text.RegularExpressions.Regex.Match(fileSubpathAndContent.filePath.Single(), @"0x(.+)testing").Groups[1]
                 .Value;
+            """";
+
+        AssertFormattedSyntax(input, expected, scriptMode: true);
+    }
+
+    [Fact]
+    public void Preserves_pragma_directive_at_start_of_line()
+    {
+        var input =
+            """"
+            public abstract record Maybe<JustT>
+            {
+                /// <summary>
+                /// Explicit constructor for the 'Nothing' case.
+                /// </summary>
+            #pragma warning disable IDE1006 // Default analyzer fails to consider naming clash.
+                public static Maybe<JustT> nothing() => new Nothing();
+
+                /// <summary>
+                /// Explicit constructor for the 'Just' case.
+                /// </summary>
+                public static Maybe<JustT> just(JustT just) => new Just(just);
+
+            #pragma warning restore IDE1006
+            }
+            """";
+
+        AssertFormattedSyntax(input, input, scriptMode: true);
+    }
+
+    [Fact]
+    public void Preserves_lock_block()
+    {
+        var input =
+            """"
+            lock (_pineVMLock)
+            {
+                return pineVM.EvaluateExpression(expression, environment);
+            }
+            """";
+
+        AssertFormattedSyntax(input, input, scriptMode: true);
+    }
+
+    [Fact]
+    public void Preserves_using_block()
+    {
+        var input =
+            """"
+            // Decompress GZip to a TAR stream
+            using (var gzip = new GZipStream(compressedStream, CompressionMode.Decompress))
+            {
+                gzip.CopyTo(decompressedTarStream);
+            }
+            """";
+
+        AssertFormattedSyntax(input, input, scriptMode: true);
+    }
+
+    [Fact]
+    public void Formats_conditional_with_comment_trailing_colon()
+    {
+        var input =
+            """"
+            return
+                charValue is 39 ? "\\'" : // single quote must be escaped in Elm char literals
+                CharDefaultEscaping(charValue) ??
+                char.ConvertFromUtf32(charValue);
+            """";
+
+        var expected =
+            """"
+            return
+                charValue is 39
+                ?
+                "\\'"
+                : // single quote must be escaped in Elm char literals
+                CharDefaultEscaping(charValue) ??
+                char.ConvertFromUtf32(charValue);
+            """";
+
+        AssertFormattedSyntax(input, expected, scriptMode: true);
+    }
+
+    [Fact]
+    public void Formats_conditional_with_comment_trailing_true_expression()
+    {
+        var input =
+            """"
+            var effectiveBaseRef =
+                chainBaseColumn.HasValue
+                ?
+                context // If chain base provided, context is already at that position
+
+                :
+                context.SetIndentToCurrentColumn();
+            """";
+
+        var expected =
+            """"
+            var effectiveBaseRef =
+                chainBaseColumn.HasValue
+                ?
+                context // If chain base provided, context is already at that position
+                :
+                context.SetIndentToCurrentColumn();
+            """";
+
+        AssertFormattedSyntax(input, expected, scriptMode: true);
+    }
+
+    [Fact]
+    public void Indents_invocation_chain_in_if_condition_expression()
+    {
+        var input =
+            """"
+            if (valueBytes
+              .Slice(start: offset, length: prefixBlob.Bytes.Length)
+                 .SequenceEqual(prefixBlob.Bytes.Span))
+            {
+                return true;
+            }
+            """";
+
+        var expected =
+            """"
+            if (valueBytes
+                .Slice(start: offset, length: prefixBlob.Bytes.Length)
+                .SequenceEqual(prefixBlob.Bytes.Span))
+            {
+                return true;
+            }
             """";
 
         AssertFormattedSyntax(input, expected, scriptMode: true);

@@ -331,8 +331,8 @@ public static class FormatCSharpFile
             {
                 // Structured trivia (doc comments, preprocessor directives)
                 // They contain their own internal newlines.
-                // We need indent before them.
-                if (atLineStart)
+                // Preprocessor directives stay at column 0; others get indented.
+                if (atLineStart && !IsDirectiveTrivia(t))
                     r.Add(Indent(indent));
 
                 r.Add(t);
@@ -439,7 +439,10 @@ public static class FormatCSharpFile
 
         foreach (var t in preserved)
         {
-            r.Add(Indent(indent));
+            // Preprocessor directives stay at column 0; others get indented.
+            if (!IsDirectiveTrivia(t))
+                r.Add(Indent(indent));
+
             r.Add(ReindentMultiLineComment(t, indent));
             // Doc comments include their own trailing newline; others need one
             if (!t.HasStructure)
@@ -1610,7 +1613,11 @@ public static class FormatCSharpFile
                 s_lineFeed,
                 Indent(ctx.IndentLevel + 1));
 
-        return node.WithUsingKeyword(node.UsingKeyword.WithTrailingTrivia(s_space)).WithStatement(body);
+        return
+            node
+            .WithUsingKeyword(node.UsingKeyword.WithTrailingTrivia(s_space))
+            .WithCloseParenToken(node.CloseParenToken.WithLeadingTrivia().WithTrailingTrivia())
+            .WithStatement(body);
     }
 
     /// <summary>Formats a lock statement with correct keyword and body placement.</summary>
@@ -1623,7 +1630,11 @@ public static class FormatCSharpFile
             :
             (StatementSyntax)FormatNode(node.Statement, ctx.Indented());
 
-        return node.WithLockKeyword(node.LockKeyword.WithTrailingTrivia(s_space)).WithStatement(body);
+        return
+            node
+            .WithLockKeyword(node.LockKeyword.WithTrailingTrivia(s_space))
+            .WithCloseParenToken(node.CloseParenToken.WithLeadingTrivia().WithTrailingTrivia())
+            .WithStatement(body);
     }
 
     // ──────────────────────────────────────────────────────────
@@ -2862,51 +2873,23 @@ public static class FormatCSharpFile
         var fmtCond = (ExpressionSyntax)FormatNode(node.Condition, ctx);
         var fmtTrue = (ExpressionSyntax)FormatNode(node.WhenTrue, ctx);
         var fmtFalse = (ExpressionSyntax)FormatNode(node.WhenFalse, ctx);
-        var whenTrueHasTrailingComment = node.WhenTrue.GetTrailingTrivia().Any(IsComment);
-
-        var keepFalseOnColonLine =
-            whenTrueHasTrailingComment &&
-            !SpansMultipleLines(fmtFalse.ToFullString().Trim());
 
         return
             node
             .WithCondition(fmtCond.WithTrailingTrivia())
             .WithQuestionToken(
                 node.QuestionToken.WithLeadingTrivia(s_lineFeed, ci)
-                .WithTrailingTrivia(
-                    whenTrueHasTrailingComment
-                    ?
-                    new SyntaxTriviaList(s_space)
-                    :
-                    default))
+                .WithTrailingTrivia())
             .WithWhenTrue(
-                fmtTrue.WithLeadingTrivia(
-                    whenTrueHasTrailingComment
-                    ?
-                    default
-                    :
-                    new SyntaxTriviaList(s_lineFeed, ci))
+                fmtTrue.WithLeadingTrivia(new SyntaxTriviaList(s_lineFeed, ci))
                 .WithTrailingTrivia(
-                    whenTrueHasTrailingComment
-                    ?
-                    EnsureSpaceBeforeComments(StripWhitespace(node.WhenTrue.GetTrailingTrivia()))
-                    :
-                    StripWhitespace(node.WhenTrue.GetTrailingTrivia())))
+                    EnsureSpaceBeforeComments(StripWhitespace(node.WhenTrue.GetTrailingTrivia()))))
             .WithColonToken(
                 node.ColonToken.WithLeadingTrivia(s_lineFeed, ci)
                 .WithTrailingTrivia(
-                    keepFalseOnColonLine
-                    ?
-                    new SyntaxTriviaList(s_space)
-                    :
-                    StripWhitespace(node.ColonToken.TrailingTrivia)))
+                    EnsureSpaceBeforeComments(StripWhitespace(node.ColonToken.TrailingTrivia))))
             .WithWhenFalse(
-                fmtFalse.WithLeadingTrivia(
-                    keepFalseOnColonLine
-                    ?
-                    default
-                    :
-                    new SyntaxTriviaList(s_lineFeed, ci)));
+                fmtFalse.WithLeadingTrivia(new SyntaxTriviaList(s_lineFeed, ci)));
     }
 
     /// <summary>Formats a switch expression with arms on separate lines.</summary>
@@ -3112,20 +3095,7 @@ public static class FormatCSharpFile
 
         if (exprEnd != dotLine)
         {
-            // Dot is already on a separate line — preserve the original dot
-            // indent if it is within [indent, indent+1]. When the original column
-            // is deeper (e.g. code was relocated from a different context), fall
-            // back to indent.
             var dotIndent = GetMemberAccessContinuationIndent(node, ctx);
-            var dotLoc = node.OperatorToken.GetLocation();
-
-            if (dotIndent > ctx.IndentLevel && dotLoc != Location.None)
-            {
-                var dotColIndent = dotLoc.GetLineSpan().StartLinePosition.Character / IndentSize;
-
-                if (dotColIndent <= dotIndent)
-                    dotIndent = Math.Max(ctx.IndentLevel, dotColIndent);
-            }
 
             return
                 node.WithExpression(
@@ -3290,7 +3260,12 @@ public static class FormatCSharpFile
             chainTop = chainTop.Parent;
         }
 
-        return chainTop.Parent is ExpressionStatementSyntax ? ctx.IndentLevel + 1 : ctx.IndentLevel;
+        return
+            chainTop.Parent is ExpressionStatementSyntax or IfStatementSyntax
+            ?
+            ctx.IndentLevel + 1
+            :
+            ctx.IndentLevel;
     }
 
     /// <summary>Formats an invocation expression, including its argument list.</summary>
