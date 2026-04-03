@@ -48,10 +48,11 @@ public static class ElmValueEncoding
 
         if (pineValue is PineValue.ListValue listValue)
         {
-            return PineListValueAsElmValue(
-                listValue,
-                additionalReusableDecodings,
-                reportNewDecoding);
+            return
+                PineListValueAsElmValue(
+                    listValue,
+                    additionalReusableDecodings,
+                    reportNewDecoding);
         }
 
         throw new NotImplementedException(
@@ -63,13 +64,18 @@ public static class ElmValueEncoding
     private static readonly ElmValue s_emptyList = new ElmValue.ElmList([]);
 
     private static readonly IReadOnlyList<Result<string, ElmValue>> s_reusedBlobSingle =
-        [..Enumerable.Range(0, 0x1_00)
-        .Select(b => PineBlobValueAsElmValue((PineValue.BlobValue)PineValue.Blob([(byte)b])))];
+        [
+        ..Enumerable.Range(0, 0x1_00)
+        .Select(b => PineBlobValueAsElmValue((PineValue.BlobValue)PineValue.Blob([(byte)b])))
+        ];
 
     private static readonly IReadOnlyList<Result<string, ElmValue>> s_reusedBlobTuple =
-        [..Enumerable.Range(0, 0x1_00_00)
-        .Select(twoBytes =>
-        PineBlobValueAsElmValue((PineValue.BlobValue)PineValue.Blob([(byte)(twoBytes >> 8), (byte)twoBytes])))];
+        [
+        ..Enumerable.Range(0, 0x1_00_00)
+        .Select(
+            twoBytes =>
+            PineBlobValueAsElmValue((PineValue.BlobValue)PineValue.Blob([(byte)(twoBytes >> 8), (byte)twoBytes])))
+        ];
 
     /// <summary>
     /// Converts a Pine blob into an <see cref="ElmValue"/>, recognizing small integers and characters when possible.
@@ -615,11 +621,14 @@ public static class ElmValueEncoding
                 ElmValue.ElmTag elmTag =>
                 TagAsPineValue(
                     elmTag.TagName,
-                    [..elmTag.Arguments
-                    .Select(item => ElmValueAsPineValue(
-                        item,
-                        additionalReusableEncodings,
-                        reportNewEncoding))]),
+                    [
+                    ..elmTag.Arguments
+                    .Select(
+                        item => ElmValueAsPineValue(
+                            item,
+                            additionalReusableEncodings,
+                            reportNewEncoding))
+                    ]),
 
                 ElmValue.ElmRecord elmRecord =>
                 ElmRecordAsPineValue(
@@ -629,17 +638,21 @@ public static class ElmValueEncoding
 
                 ElmValue.ElmBytes elmBytes =>
                 PineValue.List(
-                    [ElmValue.ElmBytesTypeTagNameAsValue,
-                    PineValue.List([PineValue.Blob(elmBytes.Value)])]),
+                    [
+                    ElmValue.ElmBytesTypeTagNameAsValue,
+                    PineValue.List([PineValue.Blob(elmBytes.Value)])
+                    ]),
 
                 ElmValue.ElmFloat elmFloat =>
                 PineValue.List(
-                    [ElmValue.ElmFloatTypeTagNameAsValue,
+                    [
+                    ElmValue.ElmFloatTypeTagNameAsValue,
                     PineValue.List(
                         [
                         IntegerEncoding.EncodeSignedInteger(elmFloat.Numerator),
                         IntegerEncoding.EncodeSignedInteger(elmFloat.Denominator)
-                        ])]),
+                        ])
+                    ]),
 
                 _ =>
                 throw new NotImplementedException(
@@ -737,19 +750,21 @@ public static class ElmValueEncoding
             fieldsValues[i] =
                 PineValue.List(
                     [
-                        StringEncoding.ValueFromString(field.FieldName),
-                        ElmValueAsPineValue(
-                            field.FieldValue,
-                            additionalReusableEncodings,
-                            reportNewEncoding)
+                    StringEncoding.ValueFromString(field.FieldName),
+                    ElmValueAsPineValue(
+                        field.FieldValue,
+                        additionalReusableEncodings,
+                        reportNewEncoding)
                     ]);
         }
 
         return
             PineValue.List(
-                [ElmValue.ElmRecordTypeTagNameAsValue,
+                [
+                ElmValue.ElmRecordTypeTagNameAsValue,
                 PineValue.List(
-                    [PineValue.List(fieldsValues)])]);
+                    [PineValue.List(fieldsValues)])
+                ]);
     }
 
     /// <summary>
@@ -771,16 +786,18 @@ public static class ElmValueEncoding
             fieldsValues[i] =
                 PineValue.List(
                     [
-                        StringEncoding.ValueFromString(field.FieldName),
-                        field.FieldValue
+                    StringEncoding.ValueFromString(field.FieldName),
+                    field.FieldValue
                     ]);
         }
 
         return
             PineValue.List(
-                [ElmValue.ElmRecordTypeTagNameAsValue,
+                [
+                ElmValue.ElmRecordTypeTagNameAsValue,
                 PineValue.List(
-                    [PineValue.List(fieldsValues)])]);
+                    [PineValue.List(fieldsValues)])
+                ]);
     }
 
     /// <summary>
@@ -792,8 +809,8 @@ public static class ElmValueEncoding
     public static PineValue TagAsPineValue(string tagName, IReadOnlyList<PineValue> tagArguments) =>
         PineValue.List(
             [
-                StringEncoding.ValueFromString(tagName),
-                PineValue.List([..tagArguments])
+            StringEncoding.ValueFromString(tagName),
+            PineValue.List([..tagArguments])
             ]);
 
     /// <summary>
@@ -818,7 +835,7 @@ public static class ElmValueEncoding
     public static PineValue AsElmBytesBytes(ReadOnlyMemory<byte> bytes) =>
         PineValue.List(
             [
-                ElmValue.ElmBytesTypeTagNameAsValue,
-                PineValue.List([PineValue.Blob(bytes)])
+            ElmValue.ElmBytesTypeTagNameAsValue,
+            PineValue.List([PineValue.Blob(bytes)])
             ]);
 }

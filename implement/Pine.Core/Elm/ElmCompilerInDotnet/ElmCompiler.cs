@@ -242,9 +242,9 @@ public class ElmCompiler
                 lambdaLiftedModules.Select(
                     moduleSyntax =>
                     dict[SyntaxTypes.Module.GetModuleName(moduleSyntax.ModuleDefinition.Value).Value])
-                    .Select(LambdaLifting.LiftLambdas)
-                    .ToList())
-                .Extract(err => throw new Exception("Inlining failed: " + err));
+                .Select(LambdaLifting.LiftLambdas)
+                .ToList())
+            .Extract(err => throw new Exception("Inlining failed: " + err));
 
         var allFunctions =
             new Dictionary<SyntaxModelTypes.QualifiedNameRef, (string moduleName, string functionName, SyntaxTypes.Declaration.FunctionDeclaration declaration)>();

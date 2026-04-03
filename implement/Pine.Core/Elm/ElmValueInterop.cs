@@ -69,7 +69,8 @@ public class ElmValueInterop
         }
 
         {
-            if (ReusedInstances.Instance.ElmValueEncodedAsInElmCompiler?.TryGetValue(pineValue, out var reused) ?? false)
+            if (ReusedInstances.Instance.ElmValueEncodedAsInElmCompiler?.TryGetValue(pineValue, out var reused) ??
+                false)
             {
                 return reused;
             }
@@ -95,6 +96,7 @@ public class ElmValueInterop
 
                     return encoded;
                 }
+
             case PineValue.ListValue listValue:
                 {
                     var elementsSpan = listValue.Items.Span;
@@ -160,23 +162,23 @@ public class ElmValueInterop
                     tag.Arguments switch
                     {
                         [ElmValue.ElmList firstArgument] =>
-                            ElmValueBlobValueDecodedAsInElmCompiler(firstArgument.Items),
+                        ElmValueBlobValueDecodedAsInElmCompiler(firstArgument.Items),
 
                         _ =>
-                            "Invalid arguments for BlobValue tag"
+                        "Invalid arguments for BlobValue tag"
                     },
 
                     "ListValue" =>
                     tag.Arguments switch
                     {
                         [ElmValue.ElmList firstArgument] =>
-                            ElmValueListValueDecodedAsInElmCompiler(
-                                firstArgument.Items,
-                                additionalReusableDecodings,
-                                reportNewDecoding),
+                        ElmValueListValueDecodedAsInElmCompiler(
+                            firstArgument.Items,
+                            additionalReusableDecodings,
+                            reportNewDecoding),
 
                         _ =>
-                            "Invalid arguments for ListValue tag"
+                        "Invalid arguments for ListValue tag"
                     },
 
                     _ =>
@@ -308,7 +310,8 @@ public class ElmValueInterop
             return "Unexpected type of ElmValue: " + elmValue.GetType().FullName;
         }
 
-        if (additionalReusableDecodings?.TryGetValue(elmValue, out var reusedDecoding) ?? false &&
+        if (additionalReusableDecodings?.TryGetValue(elmValue, out var reusedDecoding) ??
+            false &&
             reusedDecoding is not null)
         {
             return reusedDecoding;
@@ -545,10 +548,11 @@ public class ElmValueInterop
                         "Unexpected result type for true branch: " + trueBranchResult.GetType().FullName);
                 }
 
-                return Expression.ConditionalInstance(
-                    condition: conditionOk,
-                    falseBranch: falseBranchOk,
-                    trueBranch: trueBranchOk);
+                return
+                    Expression.ConditionalInstance(
+                        condition: conditionOk,
+                        falseBranch: falseBranchOk,
+                        trueBranch: trueBranchOk);
             }
 
             if (tag.TagName is "EnvironmentExpression")
@@ -696,9 +700,10 @@ public class ElmValueInterop
 
             if (tagArgumentsListValue.Items.Length is not 1)
             {
-                return invalid(
-                    "Tag 'Err' arguments does not have 1 item, but " +
-                    tagArgumentsListValue.Items.Length);
+                return
+                    invalid(
+                        "Tag 'Err' arguments does not have 1 item, but " +
+                        tagArgumentsListValue.Items.Length);
             }
 
             return err(tagArgumentsListValue.Items.Span[0]);
@@ -715,9 +720,10 @@ public class ElmValueInterop
 
             if (tagArgumentsListValue.Items.Length is not 1)
             {
-                return invalid(
-                    "Tag 'Ok' arguments does not have 1 item, but " +
-                    tagArgumentsListValue.Items.Length);
+                return
+                    invalid(
+                        "Tag 'Ok' arguments does not have 1 item, but " +
+                        tagArgumentsListValue.Items.Length);
             }
 
             return ok(tagArgumentsListValue.Items.Span[0]);
@@ -751,9 +757,10 @@ public class ElmValueInterop
         {
             if (resultTag.Arguments.Count is not 1)
             {
-                return invalid(
-                    "Tag arguments does not have 1 item, but " +
-                    resultTag.Arguments.Count);
+                return
+                    invalid(
+                        "Tag arguments does not have 1 item, but " +
+                        resultTag.Arguments.Count);
             }
 
             return err(resultTag.Arguments[0]);
@@ -763,9 +770,10 @@ public class ElmValueInterop
         {
             if (resultTag.Arguments.Count is not 1)
             {
-                return invalid(
-                    "Tag arguments does not have 1 item, but " +
-                    resultTag.Arguments.Count);
+                return
+                    invalid(
+                        "Tag arguments does not have 1 item, but " +
+                        resultTag.Arguments.Count);
             }
 
             return ok(resultTag.Arguments[0]);

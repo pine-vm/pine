@@ -154,13 +154,15 @@ public class ElmMakeReportConverter : JsonConverter<ElmMakeReport>
         {
             "compile-errors" =>
             JsonSerializer.Deserialize<ElmMakeReport.ElmMakeReportCompileErrors>(
-                root.GetRawText(), options) ??
-                throw new JsonException("Failed to deserialize as compile-errors"),
+                root.GetRawText(),
+                options) ??
+            throw new JsonException("Failed to deserialize as compile-errors"),
 
             "error" =>
             JsonSerializer.Deserialize<ElmMakeReport.ElmMakeReportError>(
-                root.GetRawText(), options) ??
-                throw new JsonException("Failed to deserialize as error"),
+                root.GetRawText(),
+                options) ??
+            throw new JsonException("Failed to deserialize as error"),
 
             _ =>
             throw new JsonException($"Unexpected 'type' value: {typeVal}")
@@ -175,9 +177,11 @@ public class ElmMakeReportConverter : JsonConverter<ElmMakeReport>
             case ElmMakeReport.ElmMakeReportCompileErrors compileErrors:
                 JsonSerializer.Serialize(writer, compileErrors, options);
                 break;
+
             case ElmMakeReport.ElmMakeReportError error:
                 JsonSerializer.Serialize(writer, error, options);
                 break;
+
             default:
                 throw new JsonException("Unexpected ElmMakeReport subtype");
         }
@@ -190,7 +194,10 @@ public class ElmMakeReportConverter : JsonConverter<ElmMakeReport>
 public class MessageItemArrayConverter : JsonConverter<IReadOnlyList<MessageItem>>
 {
     /// <inheritdoc />
-    public override IReadOnlyList<MessageItem> Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+    public override IReadOnlyList<MessageItem> Read(
+        ref Utf8JsonReader reader,
+        Type typeToConvert,
+        JsonSerializerOptions options)
     {
         var list = new List<MessageItem>();
 
@@ -212,10 +219,12 @@ public class MessageItemArrayConverter : JsonConverter<IReadOnlyList<MessageItem
     public override void Write(Utf8JsonWriter writer, IReadOnlyList<MessageItem> value, JsonSerializerOptions options)
     {
         writer.WriteStartArray();
+
         foreach (var item in value)
         {
             JsonSerializer.Serialize(writer, item, options);
         }
+
         writer.WriteEndArray();
     }
 }

@@ -108,7 +108,11 @@ public record ModuleCompilationContext(
     /// <summary>
     /// Creates a new context with the specified function added to the cache.
     /// </summary>
-    public ModuleCompilationContext WithCompiledFunction(string name, PineValue value, PineValue encodedBody, IReadOnlyList<string> dependencyLayout) =>
+    public ModuleCompilationContext WithCompiledFunction(
+        string name,
+        PineValue value,
+        PineValue encodedBody,
+        IReadOnlyList<string> dependencyLayout) =>
         WithCompiledFunction(QualifiedNameHelper.FromQualifiedNameString(name), value, encodedBody, dependencyLayout);
 
     /// <summary>

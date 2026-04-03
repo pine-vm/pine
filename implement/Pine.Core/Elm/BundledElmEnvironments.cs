@@ -110,8 +110,9 @@ public partial class BundledElmEnvironments
 
         try
         {
-            return Result<string, IReadOnlyDictionary<string, PineValue>>.ok(
-                StringNamedPineValueBinaryEncoding.Decode(asMemory).decls);
+            return
+                Result<string, IReadOnlyDictionary<string, PineValue>>.ok(
+                    StringNamedPineValueBinaryEncoding.Decode(asMemory).decls);
         }
         catch (Exception e)
         {

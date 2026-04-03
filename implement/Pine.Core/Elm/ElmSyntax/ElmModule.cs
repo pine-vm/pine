@@ -162,9 +162,9 @@ public static partial class ElmModule
             [
             .. s_elmCoreAutoImportedModulesNames,
             .. includedModulesNames
-                .OrderBy(moduleName => string.Join(".", moduleName))
-                .SelectMany(moduleName => ListImportsOfModuleTransitive(moduleName).Prepend(moduleName))
-                .OrderBy(moduleName => ListImportsOfModuleTransitive(moduleName).Count),
+            .OrderBy(moduleName => string.Join(".", moduleName))
+            .SelectMany(moduleName => ListImportsOfModuleTransitive(moduleName).Prepend(moduleName))
+            .OrderBy(moduleName => ListImportsOfModuleTransitive(moduleName).Count),
             ];
 
         var includedModulesNamesOrdered =

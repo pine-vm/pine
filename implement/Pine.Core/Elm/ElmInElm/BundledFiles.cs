@@ -22,7 +22,8 @@ public class BundledFiles
         new(
             () => FileTree.FromSetOfFilesWithStringPath(
                 LoadElmCompilerSourceCodeFiles()
-                .Extract(error => throw new NotImplementedException(nameof(LoadElmCompilerSourceCodeFiles) + ": " + error))));
+                .Extract(
+                    error => throw new NotImplementedException(nameof(LoadElmCompilerSourceCodeFiles) + ": " + error))));
 
     /// <summary>
     /// Loads all Elm compiler source code files from the manifest embedded file provider

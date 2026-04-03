@@ -710,7 +710,8 @@ public static class TypeInference
     /// </summary>
     /// <param name="declaration">The function declaration.</param>
     /// <returns>List of parameter types, or empty list if not determinable.</returns>
-    public static IReadOnlyList<InferredType> GetFunctionParameterTypes(SyntaxTypes.Declaration.FunctionDeclaration declaration)
+    public static IReadOnlyList<InferredType> GetFunctionParameterTypes(
+        SyntaxTypes.Declaration.FunctionDeclaration declaration)
     {
         return GetFunctionParameterTypes(declaration.Function);
     }

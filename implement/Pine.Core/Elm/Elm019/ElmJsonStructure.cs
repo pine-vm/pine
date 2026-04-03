@@ -200,32 +200,33 @@ public record ElmJsonStructure(
 
         return
             segmentsStrings
-                .Aggregate(
-                    seed: initialRecord,
-                    func: (aggregate, nextSegment) =>
-                        nextSegment switch
-                        {
-                            ".." =>
-                                0 < aggregate.Subdirectories.Count ?
-                                    aggregate with
-                                    {
-                                        Subdirectories = [.. aggregate.Subdirectories.SkipLast(1)]
-                                    }
-                                    :
-                                    aggregate with
-                                    {
-                                        ParentLevel = aggregate.ParentLevel + 1
-                                    },
+            .Aggregate(
+                seed: initialRecord,
+                func: (aggregate, nextSegment) =>
+                nextSegment switch
+                {
+                    ".." =>
+                    0 < aggregate.Subdirectories.Count
+                    ?
+                    aggregate with
+                    {
+                        Subdirectories = [.. aggregate.Subdirectories.SkipLast(1)]
+                    }
+                    :
+                    aggregate with
+                    {
+                        ParentLevel = aggregate.ParentLevel + 1
+                    },
 
-                            "." =>
-                            aggregate,
+                    "." =>
+                    aggregate,
 
-                            _ =>
-                                aggregate with
-                                {
-                                    Subdirectories = [.. aggregate.Subdirectories, nextSegment]
-                                }
-                        });
+                    _ =>
+                    aggregate with
+                    {
+                        Subdirectories = [.. aggregate.Subdirectories, nextSegment]
+                    }
+                });
     }
 
     /// <summary>
@@ -262,7 +263,10 @@ public class ExposedModulesConverter : JsonConverter<IReadOnlyList<string>>
     /// <summary>
     /// Reads the <c>exposed-modules</c> value as either an array of strings or a dictionary of sections.
     /// </summary>
-    public override IReadOnlyList<string> Read(ref Utf8JsonReader reader, System.Type typeToConvert, JsonSerializerOptions options)
+    public override IReadOnlyList<string> Read(
+        ref Utf8JsonReader reader,
+        System.Type typeToConvert,
+        JsonSerializerOptions options)
     {
         if (reader.TokenType == JsonTokenType.StartArray)
         {
@@ -325,12 +329,14 @@ public class DependenciesConverter : JsonConverter<ElmJsonStructure.Dependencies
         {
             if (hasDirect)
             {
-                direct = JsonSerializer.Deserialize<Dictionary<string, string>>(directElement.GetRawText(), options) ?? [];
+                direct =
+                    JsonSerializer.Deserialize<Dictionary<string, string>>(directElement.GetRawText(), options) ?? [];
             }
 
             if (hasIndirect)
             {
-                indirect = JsonSerializer.Deserialize<Dictionary<string, string>>(indirectElement.GetRawText(), options) ?? [];
+                indirect =
+                    JsonSerializer.Deserialize<Dictionary<string, string>>(indirectElement.GetRawText(), options) ?? [];
             }
 
             // Anything else becomes "flat"

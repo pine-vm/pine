@@ -30,7 +30,7 @@ public class ElmPackageSource
     /// </summary>
     public static IReadOnlyList<string> LocalCacheDirectoriesDefault =>
         [
-            Path.Combine(Filesystem.CacheDirectory, "elm-package"),
+        Path.Combine(Filesystem.CacheDirectory, "elm-package"),
         ];
 
     /// <summary>

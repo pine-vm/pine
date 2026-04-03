@@ -29,9 +29,10 @@ public record AppCompilationUnits(
     public static AppCompilationUnits WithoutPackages(
         FileTree appCode)
     {
-        return new AppCompilationUnits(
-            appCode,
-            Packages: []);
+        return
+            new AppCompilationUnits(
+                appCode,
+                Packages: []);
     }
 }
 
@@ -93,27 +94,33 @@ public class ElmAppDependencyResolution
 
         IReadOnlyList<KeyValuePair<IReadOnlyList<string>, IReadOnlyList<IReadOnlyList<string>>>>
             remainingElmModulesNameAndImports =
-            [.. sourceFilesFiltered
+            [
+            .. sourceFilesFiltered
             .EnumerateFilesTransitive()
             .Where(blob => blob.path.Last().EndsWith(".elm", StringComparison.OrdinalIgnoreCase))
-            .Select(blob =>
-            {
-                var moduleText = Encoding.UTF8.GetString(blob.fileContent.Span);
-
-                if (ElmModule.ParseModuleName(moduleText).IsOkOrNull() is not { } moduleName)
+            .Select(
+                blob =>
                 {
-                    throw new Exception("Failed to parse module name from file: " + string.Join("/", blob.path));
-                }
+                    var moduleText = Encoding.UTF8.GetString(blob.fileContent.Span);
 
-                return new KeyValuePair<IReadOnlyList<string>, IReadOnlyList<IReadOnlyList<string>>>(
-                    moduleName,
-                    [.. ElmModule.ParseModuleImportedModulesNames(moduleText)]);
-            })];
+                    if (ElmModule.ParseModuleName(moduleText).IsOkOrNull() is not { } moduleName)
+                    {
+                        throw new Exception("Failed to parse module name from file: " + string.Join("/", blob.path));
+                    }
+
+                    return
+                        new KeyValuePair<IReadOnlyList<string>, IReadOnlyList<IReadOnlyList<string>>>(
+                            moduleName,
+                            [.. ElmModule.ParseModuleImportedModulesNames(moduleText)]);
+                })
+            ];
 
         var remainingElmModulesImports =
             remainingElmModulesNameAndImports
             .SelectMany(kv => kv.Value)
-            .Where(importedModuleName => !remainingElmModulesNameAndImports.Any(kv => kv.Key.SequenceEqual(importedModuleName)))
+            .Where(
+                importedModuleName =>
+                !remainingElmModulesNameAndImports.Any(kv => kv.Key.SequenceEqual(importedModuleName)))
             .ToImmutableHashSet(EnumerableExtensions.EqualityComparer<IReadOnlyList<string>>());
 
         var packages = LoadPackagesForElmApp(sourceFilesDict);
@@ -132,38 +139,40 @@ public class ElmAppDependencyResolution
 
         var packagesFromExposedModuleName =
             aggregateExposedModuleNames
-            .Select(moduleName =>
-            {
-                return
-                    new KeyValuePair<string, IReadOnlySet<string>>(
-                        moduleName,
-                        packages
-                        .Where(package => package.Value.elmJson.ExposedModules.Contains(moduleName))
-                        .Select(package => package.Key)
-                        .ToImmutableHashSet());
-            })
+            .Select(
+                moduleName =>
+                {
+                    return
+                        new KeyValuePair<string, IReadOnlySet<string>>(
+                            moduleName,
+                            packages
+                            .Where(package => package.Value.elmJson.ExposedModules.Contains(moduleName))
+                            .Select(package => package.Key)
+                            .ToImmutableHashSet());
+                })
             .ToImmutableDictionary();
 
         var packagesToIncludeRootsNames =
             remainingElmModulesImports
-            .Select(importedModuleName =>
-            {
-                var importedModuleNameFlat = string.Join(".", importedModuleName);
-
-                if (!packagesFromExposedModuleName.TryGetValue(importedModuleNameFlat, out var packages))
+            .Select(
+                importedModuleName =>
                 {
-                    throw new Exception("Failed to find package for imported module: " + importedModuleNameFlat);
-                }
+                    var importedModuleNameFlat = string.Join(".", importedModuleName);
 
-                if (packages.Count is not 1)
-                {
-                    throw new Exception(
-                        "Imported module " + importedModuleNameFlat +
-                        " is exposed by multiple packages: " + string.Join(", ", packages));
-                }
+                    if (!packagesFromExposedModuleName.TryGetValue(importedModuleNameFlat, out var packages))
+                    {
+                        throw new Exception("Failed to find package for imported module: " + importedModuleNameFlat);
+                    }
 
-                return packages.First();
-            })
+                    if (packages.Count is not 1)
+                    {
+                        throw new Exception(
+                            "Imported module " + importedModuleNameFlat +
+                            " is exposed by multiple packages: " + string.Join(", ", packages));
+                    }
+
+                    return packages.First();
+                })
             .ToImmutableHashSet();
 
         IEnumerable<string> EnumeratePackageDependenciesTransitive(string packageName)
@@ -209,7 +218,7 @@ public class ElmAppDependencyResolution
             (new AppCompilationUnits(
                 sourceFilesFiltered,
                 Packages: [.. packagesOrdered.Select(pkg => pkg.Value)]),
-                moduleName);
+            moduleName);
     }
 
     /// <summary>
@@ -234,29 +243,30 @@ public class ElmAppDependencyResolution
 
         var elmJsonAggregateDependenciesVersions =
             elmJsonFiles
-            .SelectMany(elmJsonFile =>
-            {
-                try
+            .SelectMany(
+                elmJsonFile =>
                 {
-                    var elmJsonParsed =
-                    System.Text.Json.JsonSerializer.Deserialize<ElmJsonStructure>(elmJsonFile.Value.Span);
-
-                    return
-                    new[]
+                    try
                     {
-                        elmJsonParsed?.Dependencies.Direct,
-                        elmJsonParsed?.Dependencies.Indirect,
-                        elmJsonParsed?.Dependencies.Flat
-                    }
-                    .WhereNotNull();
-                }
-                catch (Exception e)
-                {
-                    Console.WriteLine("Failed to parse elm.json file: " + e);
+                        var elmJsonParsed =
+                            System.Text.Json.JsonSerializer.Deserialize<ElmJsonStructure>(elmJsonFile.Value.Span);
 
-                    return [];
-                }
-            })
+                        return
+                            new[]
+                            {
+                                elmJsonParsed?.Dependencies.Direct,
+                                elmJsonParsed?.Dependencies.Indirect,
+                                elmJsonParsed?.Dependencies.Flat
+                            }
+                            .WhereNotNull();
+                    }
+                    catch (Exception e)
+                    {
+                        Console.WriteLine("Failed to parse elm.json file: " + e);
+
+                        return [];
+                    }
+                })
             .SelectMany(dependency => dependency)
             .ToImmutableDictionary();
 
@@ -289,16 +299,17 @@ public class ElmAppDependencyResolution
                         }
 
                         var elmJsonParsed =
-                        System.Text.Json.JsonSerializer.Deserialize<ElmJsonStructure>(elmJsonFile.Span)
-                        ??
-                        throw new Exception("Parsing elm.json returned null");
+                            System.Text.Json.JsonSerializer.Deserialize<ElmJsonStructure>(elmJsonFile.Span)
+                            ??
+                            throw new Exception("Parsing elm.json returned null");
 
                         return (FileTree.FromSetOfFilesWithStringPath(kv.Value), elmJsonParsed);
                     }
                     catch (Exception e)
                     {
                         throw new Exception(
-                            "Failed to load package: " + kv.Key + ": " + e.Message, e);
+                            "Failed to load package: " + kv.Key + ": " + e.Message,
+                            e);
                     }
                 });
     }
@@ -361,11 +372,12 @@ public class ElmAppDependencyResolution
     {
         var trees =
             rootFilePaths
-            .Select(rootFilePath =>
-            FilterTreeForCompilationRoot(
-                tree,
-                rootFilePath,
-                skipFilteringForSourceDirs: skipFilteringForSourceDirs))
+            .Select(
+                rootFilePath =>
+                FilterTreeForCompilationRoot(
+                    tree,
+                    rootFilePath,
+                    skipFilteringForSourceDirs: skipFilteringForSourceDirs))
             .ToImmutableArray();
 
         return
@@ -415,15 +427,15 @@ public class ElmAppDependencyResolution
         var elmModulesIncluded =
             ElmModule.ModulesTextOrderedForCompilationByDependencies(
                 rootModulesTexts:
-                [.. rootElmFiles.Select(file => Encoding.UTF8.GetString(file.fileContent.Span))
-                ],
+                [.. rootElmFiles.Select(file => Encoding.UTF8.GetString(file.fileContent.Span))],
                 availableModulesTexts:
-                [.. availableElmFiles.Select(file => Encoding.UTF8.GetString(file.fileContent.Span))
-                ]);
+                [.. availableElmFiles.Select(file => Encoding.UTF8.GetString(file.fileContent.Span))]);
 
         var filePathsExcluded =
             allAvailableElmFiles
-            .Where(elmFile => !elmModulesIncluded.Any(included => Encoding.UTF8.GetString(elmFile.fileContent.Span) == included))
+            .Where(
+                elmFile =>
+                !elmModulesIncluded.Any(included => Encoding.UTF8.GetString(elmFile.fileContent.Span) == included))
             .Select(elmFile => elmFile.path)
             .ToImmutableHashSet(EnumerableExtensions.EqualityComparer<IReadOnlyList<string>>());
 
@@ -474,7 +486,8 @@ public class ElmAppDependencyResolution
                 [.. elmJsonDirectoryPath.SkipLast(sourceDirectory.ParentLevel)];
 
             IReadOnlyList<string> mappedSourceDirectory =
-                [..mappedPrefix,
+                [
+                ..mappedPrefix,
                 ..sourceDirectory.Subdirectories
                 ];
 
@@ -520,31 +533,32 @@ public class ElmAppDependencyResolution
         var elmJsonFiles =
             sourceFiles
             .EnumerateFilesTransitive()
-            .SelectMany(pathAndContent =>
-            {
-                if (!pathAndContent.path.Last().EndsWith("elm.json", StringComparison.OrdinalIgnoreCase))
+            .SelectMany(
+                pathAndContent =>
                 {
-                    return [];
-                }
+                    if (!pathAndContent.path.Last().EndsWith("elm.json", StringComparison.OrdinalIgnoreCase))
+                    {
+                        return [];
+                    }
 
-                var elmJsonContent = pathAndContent.fileContent;
+                    var elmJsonContent = pathAndContent.fileContent;
 
-                try
-                {
-                    var elmJsonParsed =
-                        System.Text.Json.JsonSerializer.Deserialize<ElmJsonStructure>(elmJsonContent.Span);
+                    try
+                    {
+                        var elmJsonParsed =
+                            System.Text.Json.JsonSerializer.Deserialize<ElmJsonStructure>(elmJsonContent.Span);
 
-                    return
-                        new[]
-                        {
-                            (filePath: (IReadOnlyList<string>)pathAndContent.path, elmJsonParsed)
-                        };
-                }
-                catch (Exception)
-                {
-                    return [];
-                }
-            })
+                        return
+                            new[]
+                            {
+                                (filePath: (IReadOnlyList<string>)pathAndContent.path, elmJsonParsed)
+                            };
+                    }
+                    catch (Exception)
+                    {
+                        return [];
+                    }
+                })
             .ToImmutableDictionary(
                 keySelector: entry => entry.filePath,
                 elementSelector: entry => entry.elmJsonParsed,
@@ -565,7 +579,9 @@ public class ElmAppDependencyResolution
                 // We found an elm.json in the current directory; now check if it includes the entry point
                 // by verifying that entryPointFilePath is under one of its source-directories:
                 if (ElmJsonIncludesEntryPoint(
-                    currentDirectory, elmJsonParsed, entryPointFilePath))
+                    currentDirectory,
+                    elmJsonParsed,
+                    entryPointFilePath))
                 {
                     return (elmJsonFilePath, elmJsonParsed);
                 }

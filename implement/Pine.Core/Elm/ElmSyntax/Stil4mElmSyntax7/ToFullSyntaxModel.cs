@@ -243,7 +243,7 @@ public static class ToFullSyntaxModel
             Constructors:
             [
             .. typeStruct.Constructors
-                .Select(
+            .Select(
                 (c, i) => (PipeTokenLocation: i > 0 ? s_defaultLocation : (Location?)null,
                 Constructor: ConvertNode(c, Convert)))
             ]);
