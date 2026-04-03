@@ -374,7 +374,8 @@ public record StackInstruction(
         new(StackInstructionKind.Jump_Const, JumpOffset: offset);
 
     /// <summary>
-    /// Creates a new instruction to jump to the specified offset if the top value on the stack
+    /// Creates a new instruction to jump to the specified offset from the current instruction
+    /// if the top value on the stack
     /// is equal to the given literal value.
     /// </summary>
     public static StackInstruction Jump_If_Equal(int offset, PineValue literal) =>

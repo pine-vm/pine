@@ -1,7 +1,7 @@
 Push_Literal (Blob [2] (int 11))
-Jump_If_Equal_Const (Blob [1] (0x04) , 8)
+Jump_If_Equal_Const (Blob [1] (0x04) , 9)
 Push_Literal (Blob [2] (int 13))
-Jump_If_Equal_Const (Blob [1] (0x04) , 4)
+Jump_If_Equal_Const (Blob [1] (0x04) , 5)
 Local_Get (0)
 Local_Get (0)
 Parse_And_Eval_Binary

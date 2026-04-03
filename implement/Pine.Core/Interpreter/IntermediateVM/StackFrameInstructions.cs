@@ -60,7 +60,7 @@ public record StackFrameInstructions(
                     yield return instructionIndex + 1;
 
                     yield return
-                        instructionIndex + 1 +
+                        instructionIndex +
                         (inst.JumpOffset ?? throw new InvalidOperationException(
                             $"Jump without offset at {instructionIndex}."));
 

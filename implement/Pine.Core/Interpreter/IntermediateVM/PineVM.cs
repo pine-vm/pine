@@ -1755,7 +1755,7 @@ public class PineVM : IPineVM
                                     ??
                                     throw new Exception("Invalid operation form: Missing jump offset");
 
-                                currentFrame.InstructionPointer += 1 + jumpOffset;
+                                currentFrame.InstructionPointer += jumpOffset;
 
                                 if (jumpOffset < 0)
                                 {

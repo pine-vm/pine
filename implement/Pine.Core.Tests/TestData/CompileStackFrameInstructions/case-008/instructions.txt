@@ -1,5 +1,5 @@
 Push_Literal (Blob [2] (int 11))
-Jump_If_Equal_Const (Blob [1] (0x04) , 2)
+Jump_If_Equal_Const (Blob [1] (0x04) , 3)
 Push_Literal (Blob [2] (int 17))
 Return
 Push_Literal (Blob [2] (int 13))

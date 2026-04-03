@@ -1,5 +1,5 @@
 Local_Get (0)
-Jump_If_Equal_Const (Blob [2] (int 37) , 2)
+Jump_If_Equal_Const (Blob [2] (int 37) , 3)
 Push_Literal (Blob [2] (int 41))
 Return
 Push_Literal (Blob [2] (int 43))

@@ -649,7 +649,7 @@ public class PineIRCompiler
 
         var branchInstruction =
             StackInstruction.Jump_If_Equal(
-                offset: falseBranchInstructionsAndJump.Count,
+                offset: falseBranchInstructionsAndJump.Count + 1,
                 literal: jumpLiteralValue);
 
         var afterConditionAndJump =

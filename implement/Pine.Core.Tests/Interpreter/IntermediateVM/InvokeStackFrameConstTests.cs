@@ -41,7 +41,7 @@ public class InvokeStackFrameConstTests
                 [
                 StackInstruction.Local_Get(0),
                 StackInstruction.Length_Equal_Const(0),
-                StackInstruction.Jump_If_True(5),
+                StackInstruction.Jump_If_True(6),
                 StackInstruction.Local_Get(0),
                 StackInstruction.Skip_Const(1),
                 listLengthInvoke,
@@ -131,7 +131,7 @@ public class InvokeStackFrameConstTests
                 [
                 StackInstruction.Local_Get(1),
                 StackInstruction.Length_Equal_Const(0),
-                StackInstruction.Jump_If_True(9),
+                StackInstruction.Jump_If_True(10),
                 StackInstruction.Local_Get(1),
                 StackInstruction.Head_Generic,
                 incrementInvoke,
@@ -240,7 +240,7 @@ public class InvokeStackFrameConstTests
                 [
                 StackInstruction.Local_Get(0),
                 StackInstruction.Int_Less_Than_Or_Equal_Const(1),
-                StackInstruction.Jump_If_True(6),
+                StackInstruction.Jump_If_True(7),
                 StackInstruction.Local_Get(0),
                 StackInstruction.Int_Add_Const(-1),
                 factorialRecursiveInvoke,
@@ -370,7 +370,7 @@ public class InvokeStackFrameConstTests
                 [
                 StackInstruction.Local_Get(0),
                 StackInstruction.Int_Less_Than_Or_Equal_Const(1),
-                StackInstruction.Jump_If_True(8),
+                StackInstruction.Jump_If_True(9),
                 StackInstruction.Local_Get(0),
                 StackInstruction.Int_Add_Const(-2),
                 fibonacciRecursiveInvoke,
@@ -600,7 +600,7 @@ public class InvokeStackFrameConstTests
                 [
                 StackInstruction.Local_Get(1),
                 StackInstruction.Length_Equal_Const(0),
-                StackInstruction.Jump_If_True(9),
+                StackInstruction.Jump_If_True(10),
                 StackInstruction.Local_Get(1),
                 StackInstruction.Head_Generic,
                 incrementInvoke,
