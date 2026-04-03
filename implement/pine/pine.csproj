@@ -5,7 +5,7 @@
     <TargetFramework>net10.0</TargetFramework>
     <AssemblyName>pine</AssemblyName>
     <RootNamespace>Pine</RootNamespace>
-    <Version>0.4.30</Version>
+    <Version>0.4.31</Version>
     <InformationalVersion>pine $(Version)</InformationalVersion>
     <SourceRevisionId></SourceRevisionId>
     <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
@@ -44,7 +44,7 @@
     <PackageReference Include="GitCore" Version="0.2.4" />
     <PackageReference Include="Microsoft.Extensions.FileProviders.Embedded" Version="10.0.5" />
     <PackageReference Include="ReadLine" Version="2.0.1" />
-    <PackageReference Include="SharpCompress" Version="0.47.0" />
+    <PackageReference Include="SharpCompress" Version="0.47.3" />
     <PackageReference Include="StreamJsonRpc" Version="2.24.84" />
     <PackageReference Include="System.CommandLine" Version="2.0.5" />
     <PackageReference Include="TupleAsJsonArray" Version="1.0.2" />
