@@ -106,7 +106,7 @@ public class Canonicalization
                     mergedOperatorToFunction =
                         mergedOperatorToFunction.Add(
                             kvp.Key,
-                            ((IReadOnlyList<string>)[.. kvp.Value.ModuleName], kvp.Value.FunctionName));
+                            ([.. kvp.Value.ModuleName], kvp.Value.FunctionName));
                 }
             }
 
@@ -1801,7 +1801,7 @@ public class Canonicalization
                 caseItem.Pattern.Value,
                 caseItem.Pattern.Range,
                 existingScope,
-                ImmutableHashSet<string>.Empty);
+                []);
 
         var extendedLocalDeclarations = context.LocalDeclarations.Union(collectedVars);
         var contextWithPatternVars = context.WithLocalDeclarations(extendedLocalDeclarations);
@@ -1862,7 +1862,7 @@ public class Canonicalization
                         letDestr.Pattern.Value,
                         letDestr.Pattern.Range,
                         existingScope,
-                        ImmutableHashSet<string>.Empty);
+                        []);
 
                 shadowErrors.AddRange(errors);
                 extendedLocalDeclarations = extendedLocalDeclarations.Union(collectedVars);

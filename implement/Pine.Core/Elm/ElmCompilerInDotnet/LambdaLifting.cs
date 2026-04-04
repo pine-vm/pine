@@ -46,7 +46,7 @@ public static class LambdaLifting
                 var context =
                     new LiftingContext(
                         functionName,
-                        BoundVariables: ImmutableHashSet<string>.Empty,
+                        BoundVariables: [],
                         LambdaCounter:
                         nextLiftedIdentifierByFunctionName.TryGetValue(functionName, out var nextIdentifier)
                         ?

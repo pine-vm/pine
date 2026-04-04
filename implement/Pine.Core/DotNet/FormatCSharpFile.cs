@@ -238,7 +238,7 @@ public static class FormatCSharpFile
     /// Count consecutive EndOfLineTrivia in a trivia list.
     /// </summary>
     private static int CountLineBreaks(SyntaxTriviaList trivia) =>
-        trivia.Count(t => IsLineBreak(t));
+        trivia.Count(IsLineBreak);
 
     /// <summary>Counts line breaks after the last comment in a trivia list.</summary>
     private static int CountBreaksAfterLastComment(SyntaxTriviaList trivia)
@@ -1141,7 +1141,7 @@ public static class FormatCSharpFile
     private static SyntaxToken FormatOpenBrace(SyntaxToken brace, FormatContext ctx)
     {
         var prev = brace.GetPreviousToken();
-        var prevHasNewline = prev.TrailingTrivia.Any(t => IsLineBreak(t));
+        var prevHasNewline = prev.TrailingTrivia.Any(IsLineBreak);
 
         // Preserve any comments from the brace's original leading trivia
         var hasComments =
@@ -1180,7 +1180,7 @@ public static class FormatCSharpFile
     {
         var brace = block.OpenBraceToken;
 
-        if (brace.LeadingTrivia.Any(t => IsLineBreak(t)))
+        if (brace.LeadingTrivia.Any(IsLineBreak))
             return block;
 
         return

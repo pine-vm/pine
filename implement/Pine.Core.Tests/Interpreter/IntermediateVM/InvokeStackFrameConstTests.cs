@@ -18,6 +18,7 @@ public class InvokeStackFrameConstTests
         var trace = new List<ExecutedStackInstruction>();
         var listLengthExpression = EnvironmentPathExpression([0]);
         var expectedReturnValue = IntegerEncoding.EncodeSignedInteger(3);
+
         var rootEnvironment =
             PineValue.List(
                 [
@@ -83,6 +84,7 @@ public class InvokeStackFrameConstTests
         var incrementExpression = EnvironmentPathExpression([0]);
         var listMapExpression = EnvironmentPathExpression([0]);
         var incrementToken = StringEncoding.ValueFromString("increment");
+
         var expectedReturnValue =
             PineValue.List(
                 [
@@ -90,6 +92,7 @@ public class InvokeStackFrameConstTests
                 IntegerEncoding.EncodeSignedInteger(3),
                 IntegerEncoding.EncodeSignedInteger(4),
                 ]);
+
         var rootEnvironment =
             PineValue.List(
                 [
@@ -221,6 +224,7 @@ public class InvokeStackFrameConstTests
                         ])));
 
         var expectedReturnValue = IntegerEncoding.EncodeSignedInteger(120);
+
         var rootEnvironment =
             PineValue.List(
                 [
@@ -351,6 +355,7 @@ public class InvokeStackFrameConstTests
                         ])));
 
         var expectedReturnValue = IntegerEncoding.EncodeSignedInteger(13);
+
         var rootEnvironment =
             PineValue.List(
                 [
@@ -432,6 +437,7 @@ public class InvokeStackFrameConstTests
         var incrementExpression = EnvironmentPathExpression([0]);
         var directRootExpression = EnvironmentPathExpression([0]);
         var expectedReturnValue = IntegerEncoding.EncodeSignedInteger(42);
+
         var rootEnvironment =
             PineValue.List(
                 [
@@ -496,6 +502,7 @@ public class InvokeStackFrameConstTests
         var incrementToken = StringEncoding.ValueFromString("increment");
         var incrementExpression = EnvironmentPathExpression([0]);
         var expectedReturnValue = IntegerEncoding.EncodeSignedInteger(42);
+
         var rootEnvironment =
             PineValue.List(
                 [
@@ -557,6 +564,7 @@ public class InvokeStackFrameConstTests
         var trace = new List<ExecutedStackInstruction>();
         var incrementExpression = EnvironmentPathExpression([0]);
         var listMapDispatchExpression = EnvironmentPathExpression([0]);
+
         var expectedReturnValue =
             PineValue.List(
                 [
@@ -665,15 +673,15 @@ public class InvokeStackFrameConstTests
                 (constraint: [new EnvConstraintItem(new[] { 0 }, incrementToken)],
                 instructions:
                     BuildEnvironmentValueFrame(
-                        parameterPaths: [[0], [1]],
-                        instructions:
-                        [
-                        StackInstruction.Local_Get(0),
-                        StackInstruction.Local_Get(1),
-                        specializedEntryInvoke,
-                        StackInstruction.Return,
-                        ],
-                        trackEnvConstraint: mapEnvironmentClass))
+                    parameterPaths: [[0], [1]],
+                    instructions:
+                    [
+                    StackInstruction.Local_Get(0),
+                    StackInstruction.Local_Get(1),
+                    specializedEntryInvoke,
+                    StackInstruction.Return,
+                    ],
+                    trackEnvConstraint: mapEnvironmentClass))
                 ]);
 
         report.ReturnValue.Evaluate().Should().Be(expectedReturnValue);
@@ -769,9 +777,10 @@ public class InvokeStackFrameConstTests
 
         var directInterpreter = new DirectInterpreter(new PineVMParseCache(), evalCache: null);
 
-        return directInterpreter.EvaluateExpressionDefault(
-            wrappedRootExpression,
-            wrappedRootEnvironment);
+        return
+            directInterpreter.EvaluateExpressionDefault(
+                wrappedRootExpression,
+                wrappedRootEnvironment);
     }
 
     private static StackFrameInstructions BuildForwardedArgumentsFrame(
