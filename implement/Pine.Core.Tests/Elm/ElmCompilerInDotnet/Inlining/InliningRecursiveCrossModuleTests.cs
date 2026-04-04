@@ -7,7 +7,7 @@ using Inlining = Core.Elm.ElmCompilerInDotnet.Inlining;
 
 public class InliningRecursiveCrossModuleTests
 {
-    [Fact(Skip = "Recursive functions not supported for now")]
+    [Fact]
     public void List_map_Variant_1()
     {
         var listModuleText =
@@ -44,21 +44,20 @@ public class InliningRecursiveCrossModuleTests
             module App exposing (..)
 
 
-            mapInst : List a -> List (List a)
+            mapInst : List.List a -> List.List List.List a
             mapInst xs =
-                mapInst_mapHelp_1 xs []
+                mapHelp__specialized__1
+                    xs
+                    []
 
 
-            mapInst_mapHelp_1 : List a -> List b -> List b
-            mapInst_mapHelp_1 remaining acc =
+            mapHelp__specialized__1 remaining acc =
                 case remaining of
                     x :: xs ->
-                        mapInst_mapHelp_1
+                        mapHelp__specialized__1
                             xs
                             (Pine_kernel.concat
-                                [ [ x, x ]
-                                , acc
-                                ]
+                                [ [ [ x, x ] ], acc ]
                             )
 
                     _ ->

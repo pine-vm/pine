@@ -236,6 +236,19 @@ Examples for specializations that can result in varied forms of a function:
 
 ## Compilation Stages
 
+### Overall Pipeline
+
+At a high level, the compiler processes Elm modules in the following order:
+
+1. Parse Elm source into Elm syntax trees.
+2. Canonicalize names across the application and its dependencies.
+3. Lambda-lift closures into top-level helper functions.
+4. Run the inlining stage, unless the caller disables it.
+5. Run lambda lifting again on code introduced by inlining and specialization.
+6. Compile the resulting Elm expressions and declarations to Pine values.
+
+The inlining stage therefore works on already-canonicalized, already-lambda-lifted Elm syntax. It is still operating on Elm syntax trees at this point; it does not work on Pine expressions yet.
+
 ### Canonicalization
 
 #### Input to Canonicalization
@@ -255,6 +268,55 @@ The module syntax models returned by canonicalization do not contain any import 
 Where necessary to avoid name clashes between transitively imported packages, canonicalization adds prefixes to module namespaces. To optimize readability during inspection, prefixes are added only where necessary. Different versions of packages in a dependency diamond do not force prefixing, since the contents of the actually used modules can still be the same.
 
 Besides canonicalizing references in module contents, the canonicalization stage also produces errors like ‘Name Error’ and ‘Name Clash’, including the source ranges to render error messages in the right places.
+
+### Inlining
+
+The dedicated inlining stage runs after the first lambda-lifting pass and before the final Elm-to-Pine compilation. The compiler enters this stage from `ElmCompiler.cs` by calling `Inlining.Inline(...)` on the lambda-lifted modules. If inlining is enabled, the compiler then runs lambda lifting a second time on the transformed modules, because inlining and specialization can introduce fresh helper declarations that should again be normalized into the form expected by the later compilation steps.
+
+#### Scope of the Inlining Stage
+
+The inlining stage is not a general-purpose “inline everything” pass. In its current configuration, it focuses on function applications that become simpler because one or more arguments are known function-shaped values.
+
+This includes the following categories:
+
++ Inlining direct calls where the supplied arguments make substitution profitable.
++ Beta-reducing lambda applications.
++ Specializing higher-order functions when a function parameter is bound to a concrete top-level function, inline lambda, or record-access function such as `.fieldName`.
++ Specializing functions that destructure single-constructor custom types, so the specialized variant can receive the inner fields directly instead of repeatedly wrapping and unwrapping the outer tag.
++ Rewriting call sites to use precomputed specialized variants when the same specialization pattern appears repeatedly.
+
+The stage operates on whole modules and can therefore rewrite both same-module and cross-module call sites, as long as the referenced function is available in the compiler's module set.
+
+#### Shape of the Transformation
+
+Inlining uses two main passes:
+
+1. A collection pass walks expressions and records which function specializations are needed.
+2. A rewrite pass deduplicates those requests, assigns stable generated names, adds the specialized declarations to modules, and updates call sites to use them.
+
+This split is important because recursive and mutually recursive functions often need a named specialized variant instead of direct substitution at the original call site.
+
+#### What the Inlining Stage Produces
+
+The input to the stage is a set of Elm module syntax trees after lambda lifting. The output is another set of Elm module syntax trees:
+
++ Existing declarations may have rewritten bodies.
++ Modules may gain additional generated function declarations representing specialized variants.
++ The transformed syntax remains in Elm form so that later pipeline stages can continue to use the same syntax model and compilation logic.
+
+Generated specialized functions are named deterministically. Tooling and inspection code can therefore show both original declarations and their specialized variants in a stable way.
+
+#### Boundaries and Non-Goals
+
+The current stage also has deliberate limits:
+
++ It is optional and can be disabled by the caller.
++ It does not try to inline every non-function argument call site; the current compiler configuration restricts it to function-oriented opportunities.
++ It avoids relying on local let-bound helper references as specialization triggers, because those can interact poorly with lifted dependencies across module boundaries.
++ It preserves recursion by generating specialized recursive variants instead of blindly expanding recursive calls inline.
++ It skips specialization for very large function bodies to avoid excessive work and code growth.
+
+Because of these limits, there are optimizations that remain outside this stage. For example, simpler let-block substitution is described separately below and is not the same as the dedicated whole-module inlining pass.
 
 ## Let Blocks
 

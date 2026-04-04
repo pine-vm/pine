@@ -8,6 +8,193 @@ using Inlining = Core.Elm.ElmCompilerInDotnet.Inlining;
 public class InliningCrossModuleTests
 {
     [Fact]
+    public void Tokens_characterLiteralMapWithRange_reduced()
+    {
+        var parserFastModuleText =
+            """"
+            module ParserFast exposing (..)
+
+
+            type alias Location =
+                { row : Int
+                , column : Int
+                }
+
+
+            type alias Range =
+                { start : Location
+                , end : Location
+                }
+
+
+            type Parser a
+                = Parser (() -> a)
+
+
+            symbol : String -> res -> Parser res
+            symbol _ res =
+                Parser (\() -> res)
+
+
+            symbolFollowedBy : String -> Parser next -> Parser next
+            symbolFollowedBy _ (Parser parseNext) =
+                Parser (\() -> parseNext ())
+
+
+            followedBySymbol : String -> Parser a -> Parser a
+            followedBySymbol _ (Parser parsePrevious) =
+                Parser (\() -> parsePrevious ())
+
+
+            anyChar : Parser Char
+            anyChar =
+                Parser (\() -> 'x')
+
+
+            oneOf2MapWithStartRowColumnAndEndRowColumn :
+                (Int -> Int -> first -> Int -> Int -> choice)
+                -> Parser first
+                -> (Int -> Int -> second -> Int -> Int -> choice)
+                -> Parser second
+                -> Parser choice
+            oneOf2MapWithStartRowColumnAndEndRowColumn firstToChoice (Parser attemptFirst) _ _ =
+                Parser
+                    (\() ->
+                        firstToChoice 11 22 (attemptFirst ()) 33 44
+                    )
+            """";
+
+        var tokensModuleText =
+            """"
+            module Elm.Parser.Tokens exposing (..)
+
+            import ParserFast
+
+
+            identityChar : Char -> Char
+            identityChar char =
+                char
+
+
+            escapedCharValueMap : (Char -> res) -> ParserFast.Parser res
+            escapedCharValueMap charToRes =
+                ParserFast.symbol "n" (charToRes '\n')
+
+
+            characterLiteralMapWithRange : (ParserFast.Range -> Char -> res) -> ParserFast.Parser res
+            characterLiteralMapWithRange rangeAndCharToRes =
+                ParserFast.symbolFollowedBy "'"
+                    (ParserFast.oneOf2MapWithStartRowColumnAndEndRowColumn
+                        (\startRow startColumn char endRow endColumn ->
+                            rangeAndCharToRes
+                                { start = { row = startRow, column = startColumn - 1 }
+                                , end = { row = endRow, column = endColumn + 1 }
+                                }
+                                char
+                        )
+                        (ParserFast.symbolFollowedBy "\\" (escapedCharValueMap identityChar))
+                        (\startRow startColumn char endRow endColumn ->
+                            rangeAndCharToRes
+                                { start = { row = startRow, column = startColumn - 1 }
+                                , end = { row = endRow, column = endColumn + 1 }
+                                }
+                                char
+                        )
+                        ParserFast.anyChar
+                        |> ParserFast.followedBySymbol "'"
+                    )
+            """";
+
+        var appModuleText =
+            """"
+            module App exposing (..)
+
+            import Elm.Parser.Tokens
+            import ParserFast
+
+
+            type alias Captured =
+                { startColumn : Int
+                , endColumn : Int
+                , char : Char
+                }
+
+
+            capture : ParserFast.Range -> Char -> Captured
+            capture range char =
+                { startColumn = range.start.column
+                , endColumn = range.end.column
+                , char = char
+                }
+
+
+            charLiteral : ParserFast.Parser Captured
+            charLiteral =
+                Elm.Parser.Tokens.characterLiteralMapWithRange capture
+            """";
+
+        var appModule =
+            InliningTestHelper.CanonicalizeAndInlineAndGetSingleModule(
+                [
+                parserFastModuleText,
+                tokensModuleText,
+                appModuleText,
+                ],
+                ["App"],
+                Inlining.Config.OnlyFunctions);
+
+        var rendered =
+            InliningTestHelper.RenderModuleForSnapshotTests(appModule);
+
+        InliningTestHelper.CanonicalizeRenderedSnapshotText(rendered.Trim()).Should().Be(
+            InliningTestHelper.CanonicalizeRenderedSnapshotText(
+                """
+            module App exposing (..)
+            
+            
+            type alias Captured =
+                { startColumn : Int, endColumn : Int, char : Char }
+            
+            
+            capture : ParserFast.Range -> Char -> App.Captured
+            capture range char =
+                { startColumn = range.start.column
+                , endColumn = range.end.column
+                , char = char
+                }
+            
+            
+            charLiteral : ParserFast.Parser App.Captured
+            charLiteral =
+                (ParserFast.followedBySymbol "'"
+                    (ParserFast.Parser
+                        (\() ->
+                            App.capture
+                                { start =
+                                    { row = 11
+                                    , column =
+                                        Basics.sub
+                                            22
+                                            1
+                                    }
+                                , end =
+                                    { row = 33
+                                    , column =
+                                        Basics.add
+                                            44
+                                            1
+                                    }
+                                }
+                                (Elm.Parser.Tokens.identityChar
+                                    '\n'
+                            )
+                        )
+                    )
+                )
+            """.Trim()));
+    }
+
+    [Fact]
     public void Tokens_typeName_Variant_1()
     {
         var parserFastModuleText =
@@ -198,8 +385,7 @@ public class InliningCrossModuleTests
                             let
                                 s1 : ParserFast.State
                                 s1 =
-                                    ParserFast.skipWhileWithoutLinebreakHelp
-                                        Elm.Parser.Tokens.isAlphaNumOrUnderscore
+                                    skipWhileWithoutLinebreakHelp__specialized__1
                                         (Pine_kernel.int_add
                                             [ sOffset, 4 ]
                                         )
@@ -244,6 +430,56 @@ public class InliningCrossModuleTests
                                     sCol
                                 )
                     )
+
+
+            skipWhileWithoutLinebreakHelp__specialized__1 offset row col srcBytes indent =
+                let
+                    nextChar : Int
+                    nextChar =
+                        Pine_kernel.take
+                            [ 4
+                            , Pine_kernel.skip
+                                [ offset, srcBytes ]
+                            ]
+                in
+                if
+                    Pine_kernel.equal
+                        [ Pine_kernel.length
+                            nextChar
+                        , 0
+                        ]
+                then
+                    ParserFast.PState
+                        srcBytes
+                        offset
+                        indent
+                        row
+                        col
+
+                else if
+                    Elm.Parser.Tokens.isAlphaNumOrUnderscore
+                        nextChar
+                then
+                    skipWhileWithoutLinebreakHelp__specialized__1
+                        (Basics.add
+                            offset
+                            4
+                        )
+                        row
+                        (Basics.add
+                            col
+                            1
+                        )
+                        srcBytes
+                        indent
+
+                else
+                    ParserFast.PState
+                        srcBytes
+                        offset
+                        indent
+                        row
+                        col
 
             """";
 
@@ -508,7 +744,7 @@ public class InliningCrossModuleTests
             expectedDeclarationsModuleText.Trim());
     }
 
-    [Fact(Skip = "TODO")]
+    [Fact]
     public void Declarations_infixDirectionOnlyTwo()
     {
         /*
@@ -691,11 +927,57 @@ public class InliningCrossModuleTests
                 = Left
                 | Right
                 | Non
-            
 
-            infixDirectionOnlyTwo : Parser (Node InfixDirection)
+
+            infixDirectionOnlyTwo : ParserFast.Parser ParserFast.Node Infix.InfixDirection
             infixDirectionOnlyTwo =
-                -- TODO: Sketch
+                let
+                    (ParserFast.Parser attemptFirst) =
+                        (ParserFast.mapWithRange
+                            ParserFast.Node
+                            (ParserFast.keyword
+                                "right"
+                                Infix.Right
+                            )
+                        )
+
+                    (ParserFast.Parser attemptSecond) =
+                        (ParserFast.mapWithRange
+                            ParserFast.Node
+                            (ParserFast.keyword
+                                "left"
+                                Infix.Left
+                            )
+                        )
+                in
+                ParserFast.Parser
+                    (\s ->
+                        case attemptFirst s of
+                            (ParserFast.Good _ _) as firstGood ->
+                                firstGood
+
+                            (ParserFast.Bad firstCommitted firstX) as firstBad ->
+                                if firstCommitted then
+                                    firstBad
+
+                                else
+                                    case attemptSecond s of
+                                        (ParserFast.Good _ _) as secondGood ->
+                                            secondGood
+
+                                        (ParserFast.Bad secondCommitted secondX) as secondBad ->
+                                            if secondCommitted then
+                                                secondBad
+
+                                            else
+                                                ParserFast.Bad
+                                                    Basics.False
+                                                    (ParserFast.ExpectingOneOf
+                                                        firstX
+                                                        secondX
+                                                        []
+                                                    )
+                    )
             """";
 
         var declarationsModule =

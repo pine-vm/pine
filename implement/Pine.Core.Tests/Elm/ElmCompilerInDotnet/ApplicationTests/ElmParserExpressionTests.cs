@@ -70,6 +70,16 @@ public class ElmParserExpressionTests
                     ""
 
 
+        parseCharLiteral : String -> String
+        parseCharLiteral input =
+            case parseExpression input of
+                Ok (CharLiteral c) ->
+                    String.fromChar c
+        
+                _ ->
+                    ""
+        
+        
         expressionTag : String -> String
         expressionTag input =
             case parseExpression input of
@@ -102,8 +112,6 @@ public class ElmParserExpressionTests
                     "Other"
         """"
         ;
-
-    // ---------- compilation + environment ----------
 
     private static readonly Lazy<ElmInteractiveEnvironment.ParsedInteractiveEnvironment> s_env =
         new(
@@ -191,8 +199,6 @@ public class ElmParserExpressionTests
             expr
             ]);
 
-    // ===== Int literal =====
-
     [Fact]
     public void Expression_int_literal()
     {
@@ -206,14 +212,12 @@ public class ElmParserExpressionTests
 
         CoreLibraryModule.CoreLibraryTestHelper.FormatCounts(report).Should().Be(
             """
-            InstructionCount: 70831
-            InvocationCount: 2165
-            BuildListCount: 26749
+            InstructionCount: 60959
+            InvocationCount: 1785
+            BuildListCount: 23241
             LoopIterationCount: 0
             """);
     }
-
-    // ===== String literal =====
 
     [Fact]
     public void Expression_string_literal()
@@ -228,14 +232,32 @@ public class ElmParserExpressionTests
 
         CoreLibraryModule.CoreLibraryTestHelper.FormatCounts(report).Should().Be(
             """
-            InstructionCount: 176191
-            InvocationCount: 8075
-            BuildListCount: 52639
+            InstructionCount: 102503
+            InvocationCount: 5049
+            BuildListCount: 22473
             LoopIterationCount: 0
             """);
     }
 
-    // ===== Empty list =====
+    [Fact]
+    public void Expression_char_literal()
+    {
+        var (value, report) =
+            CoreLibraryModule.CoreLibraryTestHelper.ApplyAndProfileUnary(
+                GetTestFunction("parseCharLiteral"),
+                ElmString("'&'"),
+                s_vm);
+
+        value.Should().Be(ElmString("&"));
+
+        CoreLibraryModule.CoreLibraryTestHelper.FormatCounts(report).Should().Be(
+            """
+            InstructionCount: 62830
+            InvocationCount: 2035
+            BuildListCount: 22537
+            LoopIterationCount: 0
+            """);
+    }
 
     [Fact]
     public void Expression_empty_list()
@@ -250,14 +272,12 @@ public class ElmParserExpressionTests
 
         CoreLibraryModule.CoreLibraryTestHelper.FormatCounts(report).Should().Be(
             """
-            InstructionCount: 86411
-            InvocationCount: 1591
-            BuildListCount: 38752
+            InstructionCount: 52164
+            InvocationCount: 1151
+            BuildListCount: 22480
             LoopIterationCount: 0
             """);
     }
-
-    // ===== List with one item =====
 
     [Fact]
     public void Expression_list_one_item()
@@ -275,14 +295,12 @@ public class ElmParserExpressionTests
 
         CoreLibraryModule.CoreLibraryTestHelper.FormatCounts(report).Should().Be(
             """
-            InstructionCount: 537571
-            InvocationCount: 15671
-            BuildListCount: 207912
+            InstructionCount: 354724
+            InvocationCount: 10239
+            BuildListCount: 135808
             LoopIterationCount: 0
             """);
     }
-
-    // ===== List with ten items =====
 
     [Fact]
     public void Expression_list_ten_items()
@@ -309,14 +327,36 @@ public class ElmParserExpressionTests
 
         CoreLibraryModule.CoreLibraryTestHelper.FormatCounts(report).Should().Be(
             """
-            InstructionCount: 5359811
-            InvocationCount: 159291
-            BuildListCount: 1991532
+            InstructionCount: 3508836
+            InvocationCount: 100367
+            BuildListCount: 1292784
             LoopIterationCount: 0
             """);
     }
 
-    // ===== Flat list with 40 items =====
+    [Fact]
+    public void Expression_application_with_various_argument_kinds()
+    {
+        var (value, report) =
+            CoreLibraryModule.CoreLibraryTestHelper.ApplyAndProfileUnary(
+                GetTestFunction("parseExpression"),
+                ElmString("alfa 79 \"hello world\" beta [41] (\\gamma -> delta gamma)"),
+                s_vm);
+
+        var valueAsExpression =
+            ElmValue.RenderAsElmExpression(value);
+
+        valueAsExpression.expressionString.Should().Be(
+            """Ok (Application [ Node { end = { column = 5, row = 1 }, start = { column = 1, row = 1 } } (FunctionOrValue [] "alfa"), Node { end = { column = 8, row = 1 }, start = { column = 6, row = 1 } } (Integer 79), Node { end = { column = 22, row = 1 }, start = { column = 9, row = 1 } } (Literal "hello world"), Node { end = { column = 27, row = 1 }, start = { column = 23, row = 1 } } (FunctionOrValue [] "beta"), Node { end = { column = 32, row = 1 }, start = { column = 28, row = 1 } } (ListExpr [ Node { end = { column = 31, row = 1 }, start = { column = 29, row = 1 } } (Integer 41) ]), Node { end = { column = 56, row = 1 }, start = { column = 33, row = 1 } } (ParenthesizedExpression (Node { end = { column = 55, row = 1 }, start = { column = 34, row = 1 } } (LambdaExpression { args = [ Node { end = { column = 40, row = 1 }, start = { column = 35, row = 1 } } (VarPattern "gamma") ], expression = Node { end = { column = 55, row = 1 }, start = { column = 44, row = 1 } } (Application [ Node { end = { column = 49, row = 1 }, start = { column = 44, row = 1 } } (FunctionOrValue [] "delta"), Node { end = { column = 55, row = 1 }, start = { column = 50, row = 1 } } (FunctionOrValue [] "gamma") ]) }))) ])""");
+
+        CoreLibraryModule.CoreLibraryTestHelper.FormatCounts(report).Should().Be(
+            """
+            InstructionCount: 6495938
+            InvocationCount: 230711
+            BuildListCount: 1609682
+            LoopIterationCount: 0
+            """);
+    }
 
     [Fact]
     public void Expression_flat_list_forty_items()
@@ -373,14 +413,12 @@ public class ElmParserExpressionTests
 
         CoreLibraryModule.CoreLibraryTestHelper.FormatCounts(report).Should().Be(
             """
-            InstructionCount: 21884051
-            InvocationCount: 653091
-            BuildListCount: 8061732
+            InstructionCount: 14280660
+            InvocationCount: 409007
+            BuildListCount: 5215824
             LoopIterationCount: 0
             """);
     }
-
-    // ===== Nested list: 4 sublists of 10 items each (same 40 leaf items) =====
 
     [Fact]
     public void Expression_nested_list_four_by_ten()
@@ -461,9 +499,9 @@ public class ElmParserExpressionTests
 
         CoreLibraryModule.CoreLibraryTestHelper.FormatCounts(report).Should().Be(
             """
-            InstructionCount: 237562051
-            InvocationCount: 7106611
-            BuildListCount: 87790852
+            InstructionCount: 120192100
+            InvocationCount: 3459071
+            BuildListCount: 44065776
             LoopIterationCount: 0
             """);
     }

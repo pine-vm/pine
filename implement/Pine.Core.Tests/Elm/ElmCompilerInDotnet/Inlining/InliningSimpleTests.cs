@@ -32,7 +32,7 @@ public class InliningSimpleTests
     {
         // apply f x = f x
         // result = apply (\y -> y * 2) 5
-        // After inlining: result = (\y -> y * 2) 5
+        // After inlining apply and beta-reducing: result = y * 2 [y := 5] = int_multiply [5, 2]
 
         var elmModuleText =
             """"
@@ -57,13 +57,8 @@ public class InliningSimpleTests
 
 
             result =
-                (\y ->
-                    Pine_kernel.int_multiply
-                        [ y
-                        , 2
-                        ]
-                )
-                    5
+                Pine_kernel.int_multiply
+                    [ 5, 2 ]
             """";
 
         var rendered =
@@ -81,7 +76,8 @@ public class InliningSimpleTests
     {
         // combine f g x = f (g x)
         // result = combine (\a -> a + 1) (\b -> b * 2) 3
-        // After inlining: result = (\a -> a + 1) ((\b -> b * 2) 3)
+        // After inlining combine and beta-reducing both lambdas:
+        // (\a -> a + 1) ((\b -> b * 2) 3) → (\a -> a + 1) (int_multiply [3, 2]) → int_add [int_multiply [3, 2], 1]
 
         var elmModuleText =
             """"
@@ -112,20 +108,10 @@ public class InliningSimpleTests
 
 
             result =
-                (\a ->
-                    Pine_kernel.int_add
-                        [ a
-                        , 1
-                        ]
-                )
-                    ((\b ->
-                        Pine_kernel.int_multiply
-                            [ b
-                            , 2
-                            ]
-                     )
-                        3
-                    )
+                Pine_kernel.int_add
+                    [ (Pine_kernel.int_multiply
+                        [ 3, 2 ]
+                      ), 1 ]
             """";
 
         var rendered =

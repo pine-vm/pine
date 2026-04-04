@@ -255,7 +255,7 @@ public static class ToFullSyntaxModel
         ValueConstructor constructor) =>
         new(
             Name: ConvertNodePreserveValue(constructor.Name),
-            Arguments: ConvertNodes(constructor.Arguments, Convert));
+            Arguments: [.. constructor.Arguments.Select(ConvertConstructorArgument)]);
 
     /// <summary>
     /// Converts a TypeAnnotation.
@@ -644,6 +644,16 @@ public static class ToFullSyntaxModel
 
         return ConvertNode(node, Convert);
     }
+
+    /// <summary>
+    /// Converts a type annotation used as a constructor argument.
+    /// Constructor arguments that are function types need parentheses, since
+    /// <c>TaggedFunc (a -> b)</c> is different from <c>TaggedFunc a -> b</c>.
+    /// The same wrapping logic as <see cref="ConvertFunctionTypeArgument"/> applies.
+    /// </summary>
+    private static Node<FullTypes.TypeAnnotation> ConvertConstructorArgument(
+        Node<TypeAnnotation> node) =>
+        ConvertFunctionTypeArgument(node);
 
     private static Node<TResult> ConvertNode<TSource, TResult>(
         Node<TSource> node,
