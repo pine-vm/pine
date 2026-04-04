@@ -663,7 +663,9 @@ public class OptimizeAndEmitJsonEncodeTests
                             continue;
                         }
 
-                        PineValue local_012 =
+                        PineValue local_010 = KernelFunctionFused.BlobPrependByte(byteToPrepend: 4, suffix: local_004);
+
+                        PineValue local_011 =
                             KernelFunctionFused.CanonicalIntegerFromUnsigned(signIsPositive: true, unsignedValue: local_004);
 
                         {
@@ -683,9 +685,9 @@ public class OptimizeAndEmitJsonEncodeTests
                                         ])
                                     :
                                     PineValue.EmptyList,
-                                    KernelFunctionSpecialized.int_is_sorted_asc(0, local_012, 65_535) == PineKernelValues.TrueValue
+                                    KernelFunctionSpecialized.int_is_sorted_asc(0, local_011, 65_535) == PineKernelValues.TrueValue
                                     ?
-                                    KernelFunctionSpecialized.concat(CommonReusedValues.List_599c92a7, Test.hex4(local_012))
+                                    KernelFunctionSpecialized.concat(CommonReusedValues.List_599c92a7, Test.hex4(local_011))
                                     :
                                     KernelFunction.concat(
                                         PineValue.List(
@@ -696,14 +698,14 @@ public class OptimizeAndEmitJsonEncodeTests
                                                     55_296,
                                                     KernelFunctionSpecialized.bit_shift_right(
                                                         10,
-                                                        KernelFunctionSpecialized.int_add(-65_536, local_012)))),
+                                                        KernelFunctionSpecialized.int_add(-65_536, local_010)))),
                                             CommonReusedValues.List_599c92a7,
                                             Test.hex4(
                                                 KernelFunctionSpecialized.int_add(
                                                     56_320,
                                                     KernelFunctionSpecialized.bit_and(
                                                         IntegerEncoding.EncodeSignedInteger(1_023),
-                                                        KernelFunctionSpecialized.int_add(-65_536, local_012))))
+                                                        KernelFunctionSpecialized.int_add(-65_536, local_010))))
                                             ]))
                                     ]);
 

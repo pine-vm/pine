@@ -1,0 +1,19 @@
+{
+  "KernelApplication": [
+    "head",
+    {
+      "List": [
+        [
+          {
+            "Environment": []
+          },
+          {
+            "Literal": [
+              42
+            ]
+          }
+        ]
+      ]
+    }
+  ]
+}

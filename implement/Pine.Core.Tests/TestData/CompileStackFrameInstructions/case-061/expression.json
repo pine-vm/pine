@@ -1,0 +1,31 @@
+{
+  "Conditional": [
+    {
+      "KernelApplication": [
+        "equal",
+        {
+          "List": [
+            [
+              {
+                "KernelApplication": [
+                  "equal",
+                  {
+                    "List": [
+                      [
+                        {"KernelApplication": ["length", {"Environment": []}]},
+                        {"Literal": [0]}
+                      ]
+                    ]
+                  }
+                ]
+              },
+              {"Literal": [{"AsBase64": "Ag=="}]}
+            ]
+          ]
+        }
+      ]
+    },
+    {"Literal": [41]},
+    {"Literal": [43]}
+  ]
+}

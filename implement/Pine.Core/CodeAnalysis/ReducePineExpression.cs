@@ -634,6 +634,44 @@ public class ReducePineExpression
                             return AttemptReduceViaEval();
                         }
 
+                    case nameof(KernelFunction.int_add):
+                        {
+                            if (rootKernelApp.Input is Expression.List addInputList)
+                            {
+                                var reducedKernelApplication =
+                                    ReduceFlattenedIntegerKernelApplication(
+                                        nameof(KernelFunction.int_add),
+                                        addInputList.Items,
+                                        parseCache);
+
+                                if (reducedKernelApplication is not null)
+                                {
+                                    return reducedKernelApplication;
+                                }
+                            }
+
+                            return AttemptReduceViaEval();
+                        }
+
+                    case nameof(KernelFunction.int_mul):
+                        {
+                            if (rootKernelApp.Input is Expression.List mulInputList)
+                            {
+                                var reducedKernelApplication =
+                                    ReduceFlattenedIntegerKernelApplication(
+                                        nameof(KernelFunction.int_mul),
+                                        mulInputList.Items,
+                                        parseCache);
+
+                                if (reducedKernelApplication is not null)
+                                {
+                                    return reducedKernelApplication;
+                                }
+                            }
+
+                            return AttemptReduceViaEval();
+                        }
+
                     default:
                         return AttemptReduceViaEval();
                 }
@@ -715,6 +753,111 @@ public class ReducePineExpression
             default:
                 return AttemptReduceViaEval();
         }
+    }
+
+
+    /// <summary>
+    /// Attempts to flatten nested kernel applications of the same function.
+    /// For example, <c>int_add([int_add([a, b]), c])</c> becomes <c>[a, b, c]</c>.
+    /// Returns <c>null</c> if no flattening was possible (no nested same-function applications found).
+    /// </summary>
+    private static IReadOnlyList<Expression>? FlattenNestedKernelApplication(
+        string functionName,
+        IReadOnlyList<Expression> items)
+    {
+        var anyFlattened = false;
+        var flattened = new List<Expression>(capacity: items.Count);
+
+        for (var i = 0; i < items.Count; i++)
+        {
+            var item = items[i];
+
+            if (item is Expression.KernelApplication innerKernel &&
+                innerKernel.Function == functionName &&
+                innerKernel.Input is Expression.List innerList)
+            {
+                anyFlattened = true;
+
+                for (var j = 0; j < innerList.Items.Count; j++)
+                {
+                    flattened.Add(innerList.Items[j]);
+                }
+            }
+            else
+            {
+                flattened.Add(item);
+            }
+        }
+
+        return anyFlattened ? flattened : null;
+    }
+
+    private static Expression? ReduceFlattenedIntegerKernelApplication(
+        string functionName,
+        IReadOnlyList<Expression> originalItems,
+        PineVMParseCache parseCache)
+    {
+        var flattenedItems =
+            FlattenNestedKernelApplication(functionName, originalItems);
+
+        var reducedItems =
+            flattenedItems ?? originalItems;
+
+        var changed =
+            flattenedItems is not null;
+
+        var constants =
+            CollectConstantIntegers(reducedItems);
+
+        if (1 < constants.constants.Count)
+        {
+            BigInteger foldedConstant =
+                functionName switch
+                {
+                    nameof(KernelFunction.int_add) => BigInteger.Zero,
+                    nameof(KernelFunction.int_mul) => BigInteger.One,
+                    _ => throw new NotSupportedException($"Unsupported integer kernel application: {functionName}")
+                };
+
+            foreach (var constant in constants.constants)
+            {
+                foldedConstant =
+                    functionName switch
+                    {
+                        nameof(KernelFunction.int_add) => foldedConstant + constant,
+                        nameof(KernelFunction.int_mul) => foldedConstant * constant,
+                        _ => throw new NotSupportedException($"Unsupported integer kernel application: {functionName}")
+                    };
+            }
+
+            reducedItems =
+                [
+                    Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(foldedConstant)),
+                    .. constants.variables
+                ];
+
+            changed = true;
+        }
+
+        if (!changed)
+        {
+            return null;
+        }
+
+        var reducedExpr =
+            Expression.KernelApplicationInstance(
+                functionName,
+                Expression.ListInstance(reducedItems));
+
+        if (!reducedExpr.ReferencesEnvironment)
+        {
+            if (TryEvaluateExpressionIndependent(reducedExpr, parseCache).IsOkOrNull() is { } okValue)
+            {
+                return Expression.LiteralInstance(okValue);
+            }
+        }
+
+        return reducedExpr;
     }
 
     /// <summary>

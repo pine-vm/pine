@@ -504,7 +504,7 @@ public class ParserFastTests
 
         CoreLibraryModule.CoreLibraryTestHelper.FormatCounts(report).Should().Be(
             """
-            InstructionCount: 271
+            InstructionCount: 270
             InvocationCount: 10
             BuildListCount: 12
             LoopIterationCount: 0
@@ -524,7 +524,7 @@ public class ParserFastTests
 
         CoreLibraryModule.CoreLibraryTestHelper.FormatCounts(report).Should().Be(
             """
-            InstructionCount: 239
+            InstructionCount: 238
             InvocationCount: 10
             BuildListCount: 12
             LoopIterationCount: 0
@@ -544,7 +544,7 @@ public class ParserFastTests
 
         CoreLibraryModule.CoreLibraryTestHelper.FormatCounts(report).Should().Be(
             """
-            InstructionCount: 259
+            InstructionCount: 258
             InvocationCount: 9
             BuildListCount: 15
             LoopIterationCount: 0
@@ -564,7 +564,7 @@ public class ParserFastTests
 
         CoreLibraryModule.CoreLibraryTestHelper.FormatCounts(report).Should().Be(
             """
-            InstructionCount: 1006
+            InstructionCount: 1005
             InvocationCount: 52
             BuildListCount: 54
             LoopIterationCount: 0

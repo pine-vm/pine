@@ -1,0 +1,38 @@
+{
+  "KernelApplication": [
+    "concat",
+    {
+      "List": [
+        [
+          {
+            "List": [
+              [
+                {
+                  "Literal": [
+                    1
+                  ]
+                },
+                {
+                  "Literal": [
+                    2
+                  ]
+                }
+              ]
+            ]
+          },
+          {
+            "List": [
+              [
+                {
+                  "Literal": [
+                    3
+                  ]
+                }
+              ]
+            ]
+          }
+        ]
+      ]
+    }
+  ]
+}

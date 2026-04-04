@@ -1,0 +1,21 @@
+{
+  "KernelApplication": [
+    "int_add",
+    {
+      "List": [
+        [
+          {
+            "Literal": [
+              3
+            ]
+          },
+          {
+            "Literal": [
+              5
+            ]
+          }
+        ]
+      ]
+    }
+  ]
+}
