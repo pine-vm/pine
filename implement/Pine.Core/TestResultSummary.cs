@@ -88,6 +88,7 @@ public static class TestResultSummary
 
         var caseDirs =
             Directory.GetDirectories(testDataDir)
+            .Where(d => Directory.EnumerateFiles(d, "*", SearchOption.AllDirectories).Any())
             .Order()
             .ToArray();
 
