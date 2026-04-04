@@ -6,8 +6,15 @@ using System.Security.Cryptography;
 
 namespace Pine.Core.Interpreter.IntermediateVM;
 
+/// <summary>
+/// Computes and caches SHA-256 hashes for <see cref="StackFrameInput"/> instances,
+/// using separate caches for <see cref="PineValue"/> and <see cref="StaticFunctionInterface"/> hashes.
+/// </summary>
 public class StackFrameInputHash
 {
+    /// <summary>
+    /// Pairs a hash result with the total number of bytes that were hashed to produce it.
+    /// </summary>
     public record HashWithStats(
         ReadOnlyMemory<byte> HashBytes,
         long HashedBytesCount);
@@ -16,6 +23,10 @@ public class StackFrameInputHash
 
     private readonly Dictionary<StaticFunctionInterface, ReadOnlyMemory<byte>> _functionInterfaceHashCache = [];
 
+    /// <summary>
+    /// Computes a composite SHA-256 hash for the given <see cref="StackFrameInput"/>,
+    /// combining the hash of the parameter layout with the hashes of all argument values.
+    /// </summary>
     public HashWithStats
         ComposeHashBytes(
         StackFrameInput stackFrameInput)
@@ -68,6 +79,9 @@ public class StackFrameInputHash
         return new HashWithStats(new ReadOnlyMemory<byte>(finalHashBytes), aggregateHashedBytesCount);
     }
 
+    /// <summary>
+    /// Returns the cached hash for the given <see cref="PineValue"/>, or computes and caches it.
+    /// </summary>
     public HashWithStats
         GetOrComputeHashForValue(
         PineValue value)
@@ -85,6 +99,9 @@ public class StackFrameInputHash
         return new HashWithStats(hashBytes, encodingBytesLength);
     }
 
+    /// <summary>
+    /// Returns the cached hash for the given <see cref="StaticFunctionInterface"/>, or computes and caches it.
+    /// </summary>
     public ReadOnlyMemory<byte> GetOrComputeHashForFunctionInterface(
         StaticFunctionInterface functionInterface)
     {
@@ -101,6 +118,10 @@ public class StackFrameInputHash
         return hashBytes;
     }
 
+    /// <summary>
+    /// Computes a hash for the given <see cref="StaticFunctionInterface"/> by
+    /// encoding its hash string as UTF-8 bytes.
+    /// </summary>
     public static ReadOnlyMemory<byte> HashBytes(
         StaticFunctionInterface functionInterface)
     {

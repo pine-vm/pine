@@ -6,14 +6,27 @@ using System.Linq;
 
 namespace Pine.Core.Interpreter.IntermediateVM;
 
+/// <summary>
+/// Represents the input to a stack frame, consisting of a parameter layout and the corresponding argument values.
+/// Equality and hashing are based on the evaluated argument values and the parameter layout.
+/// </summary>
 public record StackFrameInput
 {
+    /// <summary>
+    /// The parameter layout describing which paths in the environment are used as parameters.
+    /// </summary>
     public StaticFunctionInterface Parameters { get; }
 
+    /// <summary>
+    /// The argument values supplied to this stack frame, before evaluation.
+    /// </summary>
     public IReadOnlyList<PineValueInProcess> Arguments { get; }
 
     private readonly PineValue[] _evaluatedArguments;
 
+    /// <summary>
+    /// The argument values after evaluation, corresponding to <see cref="Arguments"/>.
+    /// </summary>
     public IReadOnlyList<PineValue> EvaluatedArguments => _evaluatedArguments;
 
     private readonly int _hashCode;
@@ -47,6 +60,10 @@ public record StackFrameInput
         _hashCode = hashCode.ToHashCode();
     }
 
+    /// <summary>
+    /// Creates a <see cref="StackFrameInput"/> by extracting argument values from the given environment value
+    /// according to the paths defined in the parameter layout.
+    /// </summary>
     public static StackFrameInput FromEnvironmentValue(
         PineValue environmentValue,
         StaticFunctionInterface parameters)
@@ -71,6 +88,10 @@ public record StackFrameInput
                 arguments);
     }
 
+    /// <summary>
+    /// Creates a <see cref="StackFrameInput"/> by extracting argument values from the given
+    /// <see cref="PineValueInProcess"/> environment according to the paths defined in the parameter layout.
+    /// </summary>
     public static StackFrameInput FromEnvironmentValue(
         PineValueInProcess environmentValue,
         StaticFunctionInterface parameters)
@@ -96,6 +117,10 @@ public record StackFrameInput
                 arguments);
     }
 
+    /// <summary>
+    /// Creates a <see cref="StackFrameInput"/> using the generic parameter layout,
+    /// which treats the entire environment value as a single argument.
+    /// </summary>
     public static StackFrameInput GenericFromEnvironmentValue(
         PineValue environmentValue)
     {
@@ -174,6 +199,10 @@ public record StackFrameInput
             "])";
     }
 
+    /// <summary>
+    /// Converts this input to a <see cref="PineValueClass"/> by pairing each parameter path
+    /// with its corresponding evaluated argument value.
+    /// </summary>
     public PineValueClass ToValueClass()
     {
         IReadOnlyList<KeyValuePair<IReadOnlyList<int>, PineValue>> parsedItems =
@@ -189,6 +218,10 @@ public record StackFrameInput
         return PineValueClass.Create(parsedItems);
     }
 
+    /// <summary>
+    /// Creates a minimal <see cref="PineValue"/> representation of this input,
+    /// containing only the data needed to reconstruct the argument values at their parameter paths.
+    /// </summary>
     public PineValue CreateMinimalValue()
     {
         var asClass = ToValueClass();
