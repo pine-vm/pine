@@ -116,6 +116,9 @@ public class SnapshotTestFormat
                 new ExpressionSyntax.ListExpr(
                     Elements: MapSeparatedList(listExpr.Elements, FormatExpression)),
 
+                ExpressionSyntax.TupledExpression tuple when ShouldFormatTupleAsMultiline(tuple) =>
+                FormatTupledExpression(node.Range, tuple),
+
                 ExpressionSyntax.TupledExpression tuple =>
                 new ExpressionSyntax.TupledExpression(
                     Elements: MapSeparatedList(tuple.Elements, FormatExpression)),
@@ -261,6 +264,25 @@ public class SnapshotTestFormat
             }
         }
 
+        // For multiline tuples, create a new node with a multiline range
+        if (node.Value is ExpressionSyntax.TupledExpression originalTuple &&
+            formattedValue is ExpressionSyntax.TupledExpression formattedTuple
+            && ShouldFormatTupleAsMultiline(originalTuple))
+        {
+            if (formattedTuple.Elements.Count > 0)
+            {
+                var firstElem = formattedTuple.Elements[0];
+                var lastElem = formattedTuple.Elements[^1];
+
+                var newRange =
+                    new Range(
+                        Start: new Location(Row: firstElem.Range.Start.Row, Column: 1),
+                        End: new Location(Row: lastElem.Range.End.Row + 1, Column: 15));
+
+                return new Node<ExpressionSyntax>(newRange, formattedValue);
+            }
+        }
+
         // For lambda expressions, create a new node with a multiline range
         if (formattedValue is ExpressionSyntax.LambdaExpression lambdaExpr)
         {
@@ -375,6 +397,31 @@ public class SnapshotTestFormat
             || opApp.Left.Value is ExpressionSyntax.RecordExpr;
     }
 
+    private static bool ShouldFormatTupleAsMultiline(ExpressionSyntax.TupledExpression tuple)
+    {
+        // Format tuple as multiline if any element is an application, record,
+        // or a multiline list - same criteria used for lists.
+
+        for (var i = 0; i < tuple.Elements.Count; i++)
+        {
+            var elem = tuple.Elements[i];
+
+            if (elem.Value is ExpressionSyntax.Application)
+                return true;
+
+            if (elem.Value is ExpressionSyntax.RecordExpr)
+                return true;
+
+            if (elem.Value is ExpressionSyntax.ListExpr innerList && ShouldFormatListAsMultiline(innerList))
+                return true;
+
+            if (elem.Value is ExpressionSyntax.OperatorApplication)
+                return true;
+        }
+
+        return false;
+    }
+
     private static bool ShouldFormatApplicationAsMultiline(ExpressionSyntax.Application app)
     {
         // Application should be multiline if any argument is a complex (multiline) list or record
@@ -484,6 +531,51 @@ public class SnapshotTestFormat
         return
             new ExpressionSyntax.ListExpr(
                 Elements: ToSeparatedList(formattedElements, list.Elements));
+    }
+
+    private static ExpressionSyntax FormatTupledExpression(
+        Range originalRange,
+        ExpressionSyntax.TupledExpression tuple)
+    {
+        // Format tuple to multiline when it contains multiline elements (applications, records, etc.)
+
+        if (tuple.Elements.Count is 0)
+            return tuple;
+
+        var formattedElements = tuple.Elements.Nodes.Select(FormatExpression).ToList();
+
+        // Use original row as base
+        var fakeRow = originalRange.Start.Row;
+
+        // Put each element on a different row
+        var itemsWithLocation = new List<Node<ExpressionSyntax>>();
+
+        for (var i = 0; i < formattedElements.Count; i++)
+        {
+            var elem = formattedElements[i];
+            var elemRow = fakeRow + i + 1; // +1 to account for opening paren
+
+            // Preserve multiline ranges for elements that are already multiline
+            var elemEndRow =
+                elem.Range.End.Row > elem.Range.Start.Row
+                ?
+                elemRow + (elem.Range.End.Row - elem.Range.Start.Row)
+                :
+                elemRow;
+
+            itemsWithLocation.Add(
+                elem with
+                {
+                    Range =
+                    new Range(
+                        Start: new Location(Row: elemRow, Column: 5),
+                        End: new Location(Row: elemEndRow + 1, Column: 15))
+                });
+        }
+
+        return
+            new ExpressionSyntax.TupledExpression(
+                Elements: ToSeparatedList(itemsWithLocation, tuple.Elements));
     }
 
     private static ExpressionSyntax FormatRecordExpr(Range originalRange, ExpressionSyntax.RecordExpr record)

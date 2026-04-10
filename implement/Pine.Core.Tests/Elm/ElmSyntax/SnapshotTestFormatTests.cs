@@ -363,6 +363,33 @@ public class SnapshotTestFormatTests
                 
                 """",
             },
+
+            // Regression: tuple with function applications on a single line
+            // should become multiline when applications are expanded.
+            new
+            {
+                Input =
+                """"
+                module Test exposing (..)
+
+
+                result value =
+                    ( someFunc value, anotherFunc value )
+                """",
+
+                Expected =
+                """"
+                module Test exposing (..)
+
+
+                result value =
+                    ( someFunc
+                        value
+                    , anotherFunc
+                        value
+                    )
+                """"
+            },
         };
 
         for (var i = 0; i < testCases.Length; i++)
