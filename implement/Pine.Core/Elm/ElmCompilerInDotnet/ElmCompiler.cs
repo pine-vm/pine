@@ -236,15 +236,31 @@ public class ElmCompiler
             ?
             lambdaLiftedModules
             :
-            Inlining.Inline(lambdaLiftedModules, Inlining.Config.OnlyFunctions)
+            ElmSyntaxSpecialization.Apply(lambdaLiftedModules, Inlining.Config.OnlyFunctions)
             .Map(
-                dict =>
+                specializedModules =>
                 lambdaLiftedModules.Select(
                     moduleSyntax =>
-                    dict[SyntaxTypes.Module.GetModuleName(moduleSyntax.ModuleDefinition.Value).Value])
-                .Select(LambdaLifting.LiftLambdas)
+                    specializedModules[SyntaxTypes.Module.GetModuleName(moduleSyntax.ModuleDefinition.Value).Value])
                 .ToList())
-            .Extract(err => throw new Exception("Inlining failed: " + err));
+            .AndThen(
+                specializedModules =>
+                ElmSyntaxInlining.Apply(specializedModules, Inlining.Config.OnlyFunctions)
+                .Map(
+                    inlinedModules =>
+                    specializedModules.Select(
+                        moduleSyntax =>
+                        inlinedModules[SyntaxTypes.Module.GetModuleName(moduleSyntax.ModuleDefinition.Value).Value])
+                    .Select(LambdaLifting.LiftLambdas)
+                    .ToList()))
+            .AndThen(BuiltinOperatorLowering.Apply)
+            .Map(
+                loweredModules =>
+                lambdaLiftedModules.Select(
+                    moduleSyntax =>
+                    loweredModules[SyntaxTypes.Module.GetModuleName(moduleSyntax.ModuleDefinition.Value).Value])
+                .ToList())
+            .Extract(err => throw new Exception("Elm syntax optimization failed: " + err));
 
         var allFunctions =
             new Dictionary<SyntaxModelTypes.QualifiedNameRef, (string moduleName, string functionName, SyntaxTypes.Declaration.FunctionDeclaration declaration)>();

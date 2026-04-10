@@ -13,17 +13,18 @@ public class AddInferredTypeAnnotationsTests
     [Fact]
     public void Infers_type_from_top_level_literal_int()
     {
-        var scenario = TestCase.DefaultAppWithoutPackages(
-        [
-            """"
-            module Test exposing (..)
+        var scenario =
+            TestCase.DefaultAppWithoutPackages(
+                [
+                """"
+                module Test exposing (..)
 
 
-            alfa =
-                41
+                alfa =
+                    41
 
-            """",
-        ]);
+                """",
+                ]);
 
         var expectedModuleText =
             """"
@@ -47,17 +48,18 @@ public class AddInferredTypeAnnotationsTests
     [Fact]
     public void Infers_type_from_top_level_literal_string()
     {
-        var scenario = TestCase.DefaultAppWithoutPackages(
-        [
-            """"
-            module Test exposing (..)
+        var scenario =
+            TestCase.DefaultAppWithoutPackages(
+                [
+                """"
+                module Test exposing (..)
 
 
-            alfa =
-                "Hello World"
+                alfa =
+                    "Hello World"
 
-            """",
-        ]);
+                """",
+                ]);
 
         var expectedModuleText =
             """"
@@ -81,17 +83,18 @@ public class AddInferredTypeAnnotationsTests
     [Fact]
     public void Infers_type_from_top_level_operator_integer_division()
     {
-        var scenario = TestCase.DefaultAppWithoutPackages(
-        [
-            """"
-            module Test exposing (..)
+        var scenario =
+            TestCase.DefaultAppWithoutPackages(
+                [
+                """"
+                module Test exposing (..)
 
 
-            alfa =
-                41 // 17
+                alfa =
+                    41 // 17
 
-            """",
-        ]);
+                """",
+                ]);
 
         var expectedModuleText =
             """"
@@ -115,17 +118,18 @@ public class AddInferredTypeAnnotationsTests
     [Fact]
     public void Infers_type_from_top_level_function_with_operator_multiply()
     {
-        var scenario = TestCase.DefaultAppWithoutPackages(
-        [
-            """"
-            module Test exposing (..)
+        var scenario =
+            TestCase.DefaultAppWithoutPackages(
+                [
+                """"
+                module Test exposing (..)
 
 
-            alfa a b =
-                a * b
+                alfa a b =
+                    a * b
 
-            """",
-        ]);
+                """",
+                ]);
 
         var expectedModuleText =
             """"
@@ -149,17 +153,18 @@ public class AddInferredTypeAnnotationsTests
     [Fact]
     public void Infers_type_from_top_level_list_expression_containing_integer_literals()
     {
-        var scenario = TestCase.DefaultAppWithoutPackages(
-        [
-            """"
-            module Test exposing (..)
+        var scenario =
+            TestCase.DefaultAppWithoutPackages(
+                [
+                """"
+                module Test exposing (..)
 
 
-            alfa =
-                [ 13, 17, 19 ]
+                alfa =
+                    [ 13, 17, 19 ]
 
-            """",
-        ]);
+                """",
+                ]);
 
         var expectedModuleText =
             """"
@@ -183,27 +188,28 @@ public class AddInferredTypeAnnotationsTests
     [Fact]
     public void Infers_type_from_top_level_concrete_choice_tag_application_complete()
     {
-        var scenario = TestCase.DefaultAppWithoutPackages(
-        [
-            """"
-            module Test exposing (..)
+        var scenario =
+            TestCase.DefaultAppWithoutPackages(
+                [
+                """"
+                module Test exposing (..)
 
 
-            type Alfa
-                = ChoiceA Int
-                | ChoiceB String
+                type Alfa
+                    = ChoiceA Int
+                    | ChoiceB String
 
 
-            type Beta
-                = ChoiceC Float
-                | ChoiceD Bool
+                type Beta
+                    = ChoiceC Float
+                    | ChoiceD Bool
 
 
-            alfa =
-                ChoiceD True
+                alfa =
+                    ChoiceD True
 
-            """",
-        ]);
+                """",
+                ]);
 
         var expectedModuleText =
             """"
@@ -237,27 +243,28 @@ public class AddInferredTypeAnnotationsTests
     [Fact]
     public void Infers_type_from_top_level_concrete_choice_tag_application_partial_zero()
     {
-        var scenario = TestCase.DefaultAppWithoutPackages(
-        [
-            """"
-            module Test exposing (..)
+        var scenario =
+            TestCase.DefaultAppWithoutPackages(
+                [
+                """"
+                module Test exposing (..)
 
 
-            type Alfa
-                = ChoiceA Int
-                | ChoiceB String
+                type Alfa
+                    = ChoiceA Int
+                    | ChoiceB String
 
 
-            type Beta
-                = ChoiceC Float
-                | ChoiceD Bool
+                type Beta
+                    = ChoiceC Float
+                    | ChoiceD Bool
 
 
-            alfa =
-                ChoiceD
+                alfa =
+                    ChoiceD
 
-            """",
-        ]);
+                """",
+                ]);
 
         var expectedModuleText =
             """"
@@ -291,26 +298,27 @@ public class AddInferredTypeAnnotationsTests
     [Fact]
     public void Infers_type_from_top_level_concrete_choice_tag_application_partial_first()
     {
-        var scenario = TestCase.DefaultAppWithoutPackages(
-        [
-            """"
-            module Test exposing (..)
+        var scenario =
+            TestCase.DefaultAppWithoutPackages(
+                [
+                """"
+                module Test exposing (..)
 
 
-            type Combined
-                = ChoiceA () Int
-                | ChoiceB ( String, Int ) Int String
+                type Combined
+                    = ChoiceA () Int
+                    | ChoiceB ( String, Int ) Int String
 
 
-            alfa =
-                ChoiceA ()
+                alfa =
+                    ChoiceA ()
 
 
-            beta =
-                ChoiceB ("Test", 17)
+                beta =
+                    ChoiceB ("Test", 17)
 
-            """",
-        ]);
+                """",
+                ]);
 
         var expectedModuleText =
             """"
@@ -344,21 +352,22 @@ public class AddInferredTypeAnnotationsTests
     [Fact]
     public void Infers_type_from_let_declaration_literal_int()
     {
-        var scenario = TestCase.DefaultAppWithoutPackages(
-        [
-            """"
-            module Test exposing (..)
+        var scenario =
+            TestCase.DefaultAppWithoutPackages(
+                [
+                """"
+                module Test exposing (..)
 
 
-            alfa =
-                let
-                    t0 =
-                        41
-                in
-                t0
+                alfa =
+                    let
+                        t0 =
+                            41
+                    in
+                    t0
 
-            """",
-        ]);
+                """",
+                ]);
 
         var expectedModuleText =
             """"
@@ -389,26 +398,27 @@ public class AddInferredTypeAnnotationsTests
     {
         // Since 'a' is passed to 'beta' as second parameter which is Int, 'a' must be Int.
 
-        var scenario = TestCase.DefaultAppWithoutPackages(
-        [
-            """"
-            module Test exposing (..)
+        var scenario =
+            TestCase.DefaultAppWithoutPackages(
+                [
+                """"
+                module Test exposing (..)
 
 
-            alfa a =
-                let
-                    t0 =
-                        beta "Test" a
-                in
-                "Test"
+                alfa a =
+                    let
+                        t0 =
+                            beta "Test" a
+                    in
+                    "Test"
 
 
-            beta : String -> Int -> {}
-            beta s i =
-                ""
+                beta : String -> Int -> {}
+                beta s i =
+                    ""
 
-            """",
-        ]);
+                """",
+                ]);
 
         var expectedModuleText =
             """"
@@ -502,6 +512,33 @@ public class AddInferredTypeAnnotationsTests
                 returnType: TypeInference.InferredType.Function(
                     argType: TypeInference.InferredType.Int(),
                     returnType: TypeInference.InferredType.Int())));
+    }
+
+    [Fact]
+    public void Infers_type_int_from_addition_of_let_bound_int_values()
+    {
+        var moduleText =
+            """"
+            module Test exposing (..)
+
+
+            alfa =
+                let
+                    sColInt : Int
+                    sColInt =
+                        41
+
+                    kwdLengthInt : Int
+                    kwdLengthInt =
+                        1
+                in
+                sColInt + kwdLengthInt
+
+            """";
+
+        var inferredType = ElmCompilerTestHelper.GetInferredTypeForDeclaration(moduleText, "alfa");
+
+        inferredType.Should().Be(TypeInference.InferredType.Int());
     }
 
     [Fact]
@@ -651,19 +688,20 @@ public class AddInferredTypeAnnotationsTests
     [Fact]
     public void Infers_type_from_top_level_record_expression()
     {
-        var scenario = TestCase.DefaultAppWithoutPackages(
-        [
-            """"
-            module Test exposing (..)
+        var scenario =
+            TestCase.DefaultAppWithoutPackages(
+                [
+                """"
+                module Test exposing (..)
 
 
-            alfa =
-                { field = "Hello"
-                , anotherField = 17
-                }
+                alfa =
+                    { field = "Hello"
+                    , anotherField = 17
+                    }
 
-            """",
-        ]);
+                """",
+                ]);
 
         var expectedModuleText =
             """"
@@ -689,33 +727,34 @@ public class AddInferredTypeAnnotationsTests
     [Fact]
     public void Infers_type_from_top_level_record_constructor_application_partial_zero()
     {
-        var scenario = TestCase.DefaultAppWithoutPackages(
-        [
-            """"
-            module Test exposing (..)
+        var scenario =
+            TestCase.DefaultAppWithoutPackages(
+                [
+                """"
+                module Test exposing (..)
 
 
-            type alias Alfa =
-                { field : String
-                , anotherField : Int
-                }
+                type alias Alfa =
+                    { field : String
+                    , anotherField : Int
+                    }
 
 
-            type alias Beta =
-                { anotherField : Int
-                , field : String
-                }
+                type alias Beta =
+                    { anotherField : Int
+                    , field : String
+                    }
 
 
-            alfa =
-                Alfa
+                alfa =
+                    Alfa
 
 
-            beta =
-                Beta
+                beta =
+                    Beta
 
-            """",
-        ]);
+                """",
+                ]);
 
         var expectedModuleText =
             """"
@@ -762,10 +801,11 @@ public class AddInferredTypeAnnotationsTests
             return true;
         }
 
-        return AddTypeAnnotationsAndFormatToString(
-            scenario,
-            moduleName,
-            IncludeDeclaration);
+        return
+            AddTypeAnnotationsAndFormatToString(
+                scenario,
+                moduleName,
+                IncludeDeclaration);
     }
 
     private static string AddTypeAnnotationsAndFormatToString(

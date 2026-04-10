@@ -367,4 +367,124 @@ public class InliningTestHelper
 
         return allInlinedModules[moduleName];
     }
+
+    public static Stil4mElmSyntax7.File CanonicalizeAndOptimizeAndGetSingleModule(
+        IReadOnlyList<string> elmModulesTexts,
+        IReadOnlyList<string> moduleName,
+        Inlining.Config config)
+    {
+        var parsedModules =
+            elmModulesTexts
+            .Select(
+                text =>
+                ElmSyntaxParser.ParseModuleText(text)
+                .Extract(err => throw new System.Exception("Failed parsing: " + err)))
+            .Select(Stil4mElmSyntax7.FromFullSyntaxModel.Convert)
+            .ToList();
+
+        var canonicalizeResult =
+            Canonicalization.Canonicalize(parsedModules);
+
+        var modulesDict =
+            canonicalizeResult
+            .Extract(err => throw new System.Exception("Failed canonicalization: " + err));
+
+        var canonicalizedModules =
+            modulesDict
+            .ToDictionary(
+                kvp => kvp.Key,
+                kvp => kvp.Value
+                .Extract(err => throw new System.Exception($"Module {string.Join(".", kvp.Key)} has errors: " + err)));
+
+        var canonicalizedOrderedModules =
+            parsedModules
+            .Select(
+                module =>
+                canonicalizedModules[Stil4mElmSyntax7.Module.GetModuleName(module.ModuleDefinition.Value).Value])
+            .ToList();
+
+        var specializedModules =
+            Core.Elm.ElmCompilerInDotnet.ElmSyntaxSpecialization.Apply(canonicalizedOrderedModules, config)
+            .Extract(err => throw new System.Exception("Failed specialization: " + err));
+
+        var specializedOrderedModules =
+            canonicalizedOrderedModules
+            .Select(
+                module =>
+                specializedModules[Stil4mElmSyntax7.Module.GetModuleName(module.ModuleDefinition.Value).Value])
+            .ToList();
+
+        var inlinedModules =
+            Core.Elm.ElmCompilerInDotnet.ElmSyntaxInlining.Apply(specializedOrderedModules, config)
+            .Extract(err => throw new System.Exception("Failed inlining stage: " + err));
+
+        var inlinedOrderedModules =
+            specializedOrderedModules
+            .Select(
+                module =>
+                inlinedModules[Stil4mElmSyntax7.Module.GetModuleName(module.ModuleDefinition.Value).Value])
+            .Select(Core.Elm.ElmCompilerInDotnet.LambdaLifting.LiftLambdas)
+            .ToList();
+
+        var loweredModules =
+            Core.Elm.ElmCompilerInDotnet.BuiltinOperatorLowering.Apply(inlinedOrderedModules)
+            .Extract(err => throw new System.Exception("Failed builtin operator lowering: " + err));
+
+        return loweredModules[moduleName];
+    }
+
+    public static Stil4mElmSyntax7.File CanonicalizeAndInlineAndLowerOperatorsAndGetSingleModule(
+        IReadOnlyList<string> elmModulesTexts,
+        IReadOnlyList<string> moduleName,
+        Inlining.Config config)
+    {
+        var parsedModules =
+            elmModulesTexts
+            .Select(
+                text =>
+                ElmSyntaxParser.ParseModuleText(text)
+                .Extract(err => throw new System.Exception("Failed parsing: " + err)))
+            .Select(Stil4mElmSyntax7.FromFullSyntaxModel.Convert)
+            .ToList();
+
+        var canonicalizeResult =
+            Canonicalization.Canonicalize(parsedModules);
+
+        var modulesDict =
+            canonicalizeResult
+            .Extract(err => throw new System.Exception("Failed canonicalization: " + err));
+
+        var canonicalizedModules =
+            modulesDict
+            .ToDictionary(
+                kvp => kvp.Key,
+                kvp => kvp.Value
+                .Extract(err => throw new System.Exception($"Module {string.Join(".", kvp.Key)} has errors: " + err)));
+
+        var orderedCanonicalizedModules =
+            parsedModules
+            .Select(
+                module =>
+                canonicalizedModules[Stil4mElmSyntax7.Module.GetModuleName(module.ModuleDefinition.Value).Value])
+            .ToList();
+
+        var inlinedModules =
+            Inlining.Inline(
+                orderedCanonicalizedModules,
+                config)
+            .Extract(err => throw new System.Exception("Failed inlining: " + err));
+
+        var orderedInlinedModules =
+            orderedCanonicalizedModules
+            .Select(
+                module =>
+                inlinedModules[Stil4mElmSyntax7.Module.GetModuleName(module.ModuleDefinition.Value).Value])
+            .ToList();
+
+        var loweredModules =
+            Core.Elm.ElmCompilerInDotnet.BuiltinOperatorLowering.Apply(orderedInlinedModules)
+            .Extract(err => throw new System.Exception("Failed builtin operator lowering: " + err));
+
+        return loweredModules[moduleName];
+    }
 }

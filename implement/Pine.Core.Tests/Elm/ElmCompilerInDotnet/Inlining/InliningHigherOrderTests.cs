@@ -202,7 +202,7 @@ public class InliningHigherOrderTests
             """";
 
         // After specialization: two specialized functions are generated,
-        // one for 'increment' (index 1) and one for 'double' (index 2).
+        // one for 'double' (index 1, alphabetically first) and one for 'increment' (index 2).
         var expectedAppModuleText =
             """"
             module App exposing (..)
@@ -222,26 +222,11 @@ public class InliningHigherOrderTests
 
             result : List.List Int -> List.List List.List Int
             result list =
-                [ listMap__specialized__1
+                [ listMap__specialized__2
                     list
-                , listMap__specialized__2
+                , listMap__specialized__1
                     list
                 ]
-
-
-            listMap__specialized__1 list =
-                case list of
-                    [] ->
-                        []
-
-                    first :: rest ->
-                        List.cons
-                            (App.increment
-                                first
-                            )
-                            (listMap__specialized__1
-                                rest
-                            )
 
 
             listMap__specialized__2 list =
@@ -251,10 +236,25 @@ public class InliningHigherOrderTests
 
                     first :: rest ->
                         List.cons
-                            (App.double
+                            (App.increment
                                 first
                             )
                             (listMap__specialized__2
+                                rest
+                            )
+
+
+            listMap__specialized__1 list =
+                case list of
+                    [] ->
+                        []
+
+                    first :: rest ->
+                        List.cons
+                            (App.double
+                                first
+                            )
+                            (listMap__specialized__1
                                 rest
                             )
             """";

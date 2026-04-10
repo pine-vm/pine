@@ -716,6 +716,40 @@ public static class TypeInference
         return GetFunctionParameterTypes(declaration.Function);
     }
 
+    public static InferredType? BuildFunctionTypeFromSignatureOrNull(
+        SyntaxTypes.FunctionStruct function)
+    {
+        if (function.Signature?.Value is null)
+        {
+            return null;
+        }
+
+        var returnType = GetFunctionReturnType(function);
+
+        if (returnType is InferredType.UnknownType)
+        {
+            return null;
+        }
+
+        var annotatedParameterTypes = GetFunctionParameterTypes(function);
+
+        var parameterTypesByName = ImmutableDictionary.CreateBuilder<string, InferredType>();
+
+        for (var i = 0; i < annotatedParameterTypes.Count && i < function.Declaration.Value.Arguments.Count; i++)
+        {
+            if (function.Declaration.Value.Arguments[i].Value is SyntaxTypes.Pattern.VarPattern varPattern)
+            {
+                parameterTypesByName[varPattern.Name] = annotatedParameterTypes[i];
+            }
+        }
+
+        return
+            BuildFunctionType(
+                function.Declaration.Value.Arguments,
+                parameterTypesByName.ToImmutable(),
+                returnType);
+    }
+
     /// <summary>
     /// Infers the type of an Elm expression based on its structure and operands.
     /// </summary>
@@ -759,6 +793,32 @@ public static class TypeInference
         if (expression is SyntaxTypes.Expression.Floatable)
         {
             return s_floatType;
+        }
+
+        // Negation preserves numeric type
+        if (expression is SyntaxTypes.Expression.Negation negation)
+        {
+            var innerType =
+                InferExpressionType(
+                    negation.Expression.Value,
+                    parameterNames,
+                    parameterTypes,
+                    localBindingTypes,
+                    currentModuleName,
+                    functionTypes);
+
+            return
+                innerType switch
+                {
+                    InferredType.IntType => s_intType,
+                    InferredType.FloatType => s_floatType,
+                    InferredType.NumberType => s_numberType,
+                    InferredType.UnknownType => s_numberType,
+                    InferredType.TypeVariable => s_numberType,
+
+                    _ =>
+                    innerType
+                };
         }
 
         // String literal
@@ -1034,6 +1094,8 @@ public static class TypeInference
                     var funcName = letFunc.Function.Declaration.Value.Name.Value;
 
                     var funcType =
+                        BuildFunctionTypeFromSignatureOrNull(letFunc.Function)
+                        ??
                         InferExpressionType(
                             letFunc.Function.Declaration.Value.Expression.Value,
                             parameterNames,

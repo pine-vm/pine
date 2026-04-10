@@ -300,4 +300,22 @@ public class TypeInferenceCoreBasicsTests
                 argType: TypeInference.InferredType.Int(),
                 returnType: TypeInference.InferredType.Int()));
     }
+
+    [Fact]
+    public void Negative_integer_literal_infers_number_type()
+    {
+        var moduleText =
+            """"
+            module Test exposing (..)
+
+
+            alfa =
+                -1
+
+            """";
+
+        var inferredType = ElmCompilerTestHelper.GetInferredTypeForDeclaration(moduleText, "alfa");
+
+        inferredType.Should().Be(TypeInference.InferredType.Number());
+    }
 }

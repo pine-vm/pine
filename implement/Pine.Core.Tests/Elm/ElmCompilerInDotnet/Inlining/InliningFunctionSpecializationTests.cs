@@ -1,10 +1,12 @@
 using AwesomeAssertions;
+using Pine.Core.CodeAnalysis;
 using System.Collections.Immutable;
 using Xunit;
 
 namespace Pine.Core.Tests.Elm.ElmCompilerInDotnet.Inlining;
 
-using InliningFunctionSpecialization = Core.Elm.ElmCompilerInDotnet.InliningFunctionSpecialization;
+using Core.Elm.ElmCompilerInDotnet;
+
 using SyntaxTypes = Core.Elm.ElmSyntax.Stil4mElmSyntax7;
 using ModuleName = System.Collections.Generic.IReadOnlyList<string>;
 
@@ -16,15 +18,13 @@ public class InliningFunctionSpecializationTests
         ModuleName moduleNameA = ["App"];
         ModuleName moduleNameB = ["App"];
 
-        InliningFunctionSpecialization.ParameterSpecialization left =
-            new InliningFunctionSpecialization.ParameterSpecialization.ConcreteFunctionValue(
-                moduleNameA,
-                "increment");
+        ParameterSpecialization left =
+            new ParameterSpecialization.ConcreteFunctionValue(
+                new DeclQualifiedName(moduleNameA, "increment"));
 
-        InliningFunctionSpecialization.ParameterSpecialization right =
-            new InliningFunctionSpecialization.ParameterSpecialization.ConcreteFunctionValue(
-                moduleNameB,
-                "increment");
+        ParameterSpecialization right =
+            new ParameterSpecialization.ConcreteFunctionValue(
+                new DeclQualifiedName(moduleNameB, "increment"));
 
         left.Equals(right).Should().BeTrue();
         left.GetHashCode().Should().Be(right.GetHashCode());
@@ -38,16 +38,16 @@ public class InliningFunctionSpecializationTests
                 new Core.Elm.ElmSyntax.SyntaxModel.Location(1, 1),
                 new Core.Elm.ElmSyntax.SyntaxModel.Location(1, 10));
 
-        InliningFunctionSpecialization.ParameterSpecialization left =
-            new InliningFunctionSpecialization.ParameterSpecialization.ConcreteLambdaValue(
+        ParameterSpecialization left =
+            new ParameterSpecialization.ConcreteLambdaValue(
                 new SyntaxTypes.LambdaStruct(
                     [
                     new Core.Elm.ElmSyntax.SyntaxModel.Node<SyntaxTypes.Pattern>(range, new SyntaxTypes.Pattern.VarPattern("x"))
                     ],
                     new Core.Elm.ElmSyntax.SyntaxModel.Node<SyntaxTypes.Expression>(range, new SyntaxTypes.Expression.Integer(42))));
 
-        InliningFunctionSpecialization.ParameterSpecialization right =
-            new InliningFunctionSpecialization.ParameterSpecialization.ConcreteLambdaValue(
+        ParameterSpecialization right =
+            new ParameterSpecialization.ConcreteLambdaValue(
                 new SyntaxTypes.LambdaStruct(
                     [
                     new Core.Elm.ElmSyntax.SyntaxModel.Node<SyntaxTypes.Pattern>(range, new SyntaxTypes.Pattern.VarPattern("x"))
@@ -64,23 +64,23 @@ public class InliningFunctionSpecializationTests
         ModuleName moduleNameA = ["App"];
         ModuleName moduleNameB = ["App"];
 
-        InliningFunctionSpecialization.ParameterSpecialization left =
-            new InliningFunctionSpecialization.ParameterSpecialization.SingleChoiceTagUnwrap(
-                new SyntaxTypes.QualifiedNameRef(moduleNameA, "Outer"),
-                ImmutableDictionary<int, InliningFunctionSpecialization.ParameterSpecialization>.Empty.Add(
+        ParameterSpecialization left =
+            new ParameterSpecialization.SingleChoiceTagUnwrap(
+                new DeclQualifiedName(moduleNameA, "Outer"),
+                ImmutableDictionary<int, ParameterSpecialization>.Empty.Add(
                     0,
-                    new InliningFunctionSpecialization.ParameterSpecialization.SingleChoiceTagUnwrap(
-                        new SyntaxTypes.QualifiedNameRef(moduleNameA, "Inner"),
-                        ImmutableDictionary<int, InliningFunctionSpecialization.ParameterSpecialization>.Empty)));
+                    new ParameterSpecialization.SingleChoiceTagUnwrap(
+                        new DeclQualifiedName(moduleNameA, "Inner"),
+                        [])));
 
-        InliningFunctionSpecialization.ParameterSpecialization right =
-            new InliningFunctionSpecialization.ParameterSpecialization.SingleChoiceTagUnwrap(
-                new SyntaxTypes.QualifiedNameRef(moduleNameB, "Outer"),
-                ImmutableDictionary<int, InliningFunctionSpecialization.ParameterSpecialization>.Empty.Add(
+        ParameterSpecialization right =
+            new ParameterSpecialization.SingleChoiceTagUnwrap(
+                new DeclQualifiedName(moduleNameB, "Outer"),
+                ImmutableDictionary<int, ParameterSpecialization>.Empty.Add(
                     0,
-                    new InliningFunctionSpecialization.ParameterSpecialization.SingleChoiceTagUnwrap(
-                        new SyntaxTypes.QualifiedNameRef(moduleNameB, "Inner"),
-                        ImmutableDictionary<int, InliningFunctionSpecialization.ParameterSpecialization>.Empty)));
+                    new ParameterSpecialization.SingleChoiceTagUnwrap(
+                        new DeclQualifiedName(moduleNameB, "Inner"),
+                        [])));
 
         left.Equals(right).Should().BeTrue();
         left.GetHashCode().Should().Be(right.GetHashCode());
@@ -93,32 +93,28 @@ public class InliningFunctionSpecializationTests
         ModuleName moduleNameB = ["App"];
 
         var left =
-            new InliningFunctionSpecialization.FunctionSpecialization(
-                "alfa",
-                moduleNameA,
-                ImmutableDictionary<int, InliningFunctionSpecialization.ParameterSpecialization>.Empty.Add(
+            new FunctionSpecialization(
+                ImmutableDictionary<int, ParameterSpecialization>.Empty.Add(
                     1,
-                    new InliningFunctionSpecialization.ParameterSpecialization.SingleChoiceTagUnwrap(
-                        new SyntaxTypes.QualifiedNameRef(moduleNameA, "Outer"),
-                        ImmutableDictionary<int, InliningFunctionSpecialization.ParameterSpecialization>.Empty.Add(
+                    new ParameterSpecialization.SingleChoiceTagUnwrap(
+                        new DeclQualifiedName(moduleNameA, "Outer"),
+                        ImmutableDictionary<int, ParameterSpecialization>.Empty.Add(
                             0,
-                            new InliningFunctionSpecialization.ParameterSpecialization.SingleChoiceTagUnwrap(
-                                new SyntaxTypes.QualifiedNameRef(moduleNameA, "Inner"),
-                                ImmutableDictionary<int, InliningFunctionSpecialization.ParameterSpecialization>.Empty)))));
+                            new ParameterSpecialization.SingleChoiceTagUnwrap(
+                                new DeclQualifiedName(moduleNameA, "Inner"),
+                                [])))));
 
         var right =
-            new InliningFunctionSpecialization.FunctionSpecialization(
-                "alfa",
-                moduleNameB,
-                ImmutableDictionary<int, InliningFunctionSpecialization.ParameterSpecialization>.Empty.Add(
+            new FunctionSpecialization(
+                ImmutableDictionary<int, ParameterSpecialization>.Empty.Add(
                     1,
-                    new InliningFunctionSpecialization.ParameterSpecialization.SingleChoiceTagUnwrap(
-                        new SyntaxTypes.QualifiedNameRef(moduleNameB, "Outer"),
-                        ImmutableDictionary<int, InliningFunctionSpecialization.ParameterSpecialization>.Empty.Add(
+                    new ParameterSpecialization.SingleChoiceTagUnwrap(
+                        new DeclQualifiedName(moduleNameB, "Outer"),
+                        ImmutableDictionary<int, ParameterSpecialization>.Empty.Add(
                             0,
-                            new InliningFunctionSpecialization.ParameterSpecialization.SingleChoiceTagUnwrap(
-                                new SyntaxTypes.QualifiedNameRef(moduleNameB, "Inner"),
-                                ImmutableDictionary<int, InliningFunctionSpecialization.ParameterSpecialization>.Empty)))));
+                            new ParameterSpecialization.SingleChoiceTagUnwrap(
+                                new DeclQualifiedName(moduleNameB, "Inner"),
+                                [])))));
 
         left.Equals(right).Should().BeTrue();
         left.GetHashCode().Should().Be(right.GetHashCode());

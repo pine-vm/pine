@@ -1280,9 +1280,9 @@ public class KernelJsonFunctionTests
 
         CoreLibraryTestHelper.FormatCounts(report).Should().Be(
             """
-            InstructionCount: 7059
+            InstructionCount: 7011
             InvocationCount: 279
-            BuildListCount: 738
+            BuildListCount: 707
             LoopIterationCount: 0
             """);
     }
@@ -1301,9 +1301,9 @@ public class KernelJsonFunctionTests
 
         CoreLibraryTestHelper.FormatCounts(report).Should().Be(
             """
-            InstructionCount: 7059
+            InstructionCount: 7011
             InvocationCount: 279
-            BuildListCount: 738
+            BuildListCount: 707
             LoopIterationCount: 0
             """);
     }

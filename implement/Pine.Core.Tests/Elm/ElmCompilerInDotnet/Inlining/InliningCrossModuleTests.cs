@@ -134,7 +134,7 @@ public class InliningCrossModuleTests
             """";
 
         var appModule =
-            InliningTestHelper.CanonicalizeAndInlineAndGetSingleModule(
+            InliningTestHelper.CanonicalizeAndInlineAndLowerOperatorsAndGetSingleModule(
                 [
                 parserFastModuleText,
                 tokensModuleText,
@@ -173,16 +173,19 @@ public class InliningCrossModuleTests
                                 { start =
                                     { row = 11
                                     , column =
-                                        Basics.sub
-                                            22
-                                            1
+                                        Pine_builtin.int_add
+                                            [ 22
+                                            , Pine_builtin.int_mul
+                                                [ -1
+                                                , 1
+                                                ]
+                                            ]
                                     }
                                 , end =
                                     { row = 33
                                     , column =
-                                        Basics.add
-                                            44
-                                            1
+                                        Pine_builtin.int_add
+                                            [ 44, 1 ]
                                     }
                                 }
                                 (Elm.Parser.Tokens.identityChar
@@ -267,9 +270,8 @@ public class InliningCrossModuleTests
                                         afterFirstIsOkay
                                         (Pine_kernel.int_add [ sOffset, 4 ])
                                         sRow
-                                        (Basics.add
-                                            sColInt
-                                            1
+                                        (Pine_builtin.int_add
+                                            [ sColInt, 1 ]
                                         )
                                         sSrcBytes
                                         sIndent
@@ -390,9 +392,8 @@ public class InliningCrossModuleTests
                                             [ sOffset, 4 ]
                                         )
                                         sRow
-                                        (Basics.add
-                                            sColInt
-                                            1
+                                        (Pine_builtin.int_add
+                                            [ sColInt, 1 ]
                                         )
                                         sSrcBytes
                                         sIndent
@@ -461,14 +462,12 @@ public class InliningCrossModuleTests
                         nextChar
                 then
                     skipWhileWithoutLinebreakHelp__specialized__1
-                        (Basics.add
-                            offset
-                            4
+                        (Pine_builtin.int_add
+                            [ offset, 4 ]
                         )
                         row
-                        (Basics.add
-                            col
-                            1
+                        (Pine_builtin.int_add
+                            [ col, 1 ]
                         )
                         srcBytes
                         indent
@@ -484,7 +483,7 @@ public class InliningCrossModuleTests
             """";
 
         var tokensModule =
-            InliningTestHelper.CanonicalizeAndInlineAndGetSingleModule(
+            InliningTestHelper.CanonicalizeAndInlineAndLowerOperatorsAndGetSingleModule(
                 [
                 parserFastModuleText,
                 tokensModuleText,
@@ -728,7 +727,7 @@ public class InliningCrossModuleTests
             """";
 
         var declarationsModule =
-            InliningTestHelper.CanonicalizeAndInlineAndGetSingleModule(
+            InliningTestHelper.CanonicalizeAndInlineAndLowerOperatorsAndGetSingleModule(
                 [
                 parserFastModuleText,
                 declarationsModuleText,
@@ -981,7 +980,7 @@ public class InliningCrossModuleTests
             """";
 
         var declarationsModule =
-            InliningTestHelper.CanonicalizeAndInlineAndGetSingleModule(
+            InliningTestHelper.CanonicalizeAndInlineAndLowerOperatorsAndGetSingleModule(
                 [
                 parserFastModuleText,
                 declarationsModuleText,

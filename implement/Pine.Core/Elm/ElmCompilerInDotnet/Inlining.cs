@@ -1,3 +1,4 @@
+using Pine.Core.CodeAnalysis;
 using Pine.Core.Elm.ElmSyntax.SyntaxModel;
 using System;
 using System.Collections.Generic;
@@ -30,11 +31,6 @@ public class Inlining
     /// </summary>
     private static readonly Range s_zeroRange = new(Start: s_zeroLocation, End: s_zeroLocation);
 
-    /// <summary>
-    /// Singleton comparer for module name tuples to avoid repeated allocations.
-    /// </summary>
-    private static readonly ModuleNameTupleComparer s_moduleNameTupleComparer = new();
-
     public abstract record Config
     {
         /// <summary>
@@ -66,21 +62,96 @@ public class Inlining
         int FieldCount);
 
     /// <summary>
+    /// Merges two immutable specialization collections, unioning the sets for matching keys.
+    /// </summary>
+    private static ImmutableDictionary<DeclQualifiedName, ImmutableHashSet<FunctionSpecialization>> MergeCollected(
+        ImmutableDictionary<DeclQualifiedName, ImmutableHashSet<FunctionSpecialization>> left,
+        ImmutableDictionary<DeclQualifiedName, ImmutableHashSet<FunctionSpecialization>> right)
+    {
+        if (left.IsEmpty)
+            return right;
+
+        if (right.IsEmpty)
+            return left;
+
+        var result = left;
+
+        foreach (var kvp in right)
+        {
+            result =
+                result.SetItem(
+                    kvp.Key,
+                    result.TryGetValue(kvp.Key, out var existing)
+                    ?
+                    existing.Union(kvp.Value)
+                    :
+                    kvp.Value);
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Adds a single specialization to the immutable collection.
+    /// </summary>
+    private static ImmutableDictionary<DeclQualifiedName, ImmutableHashSet<FunctionSpecialization>> AddToCollected(
+        ImmutableDictionary<DeclQualifiedName, ImmutableHashSet<FunctionSpecialization>> collected,
+        DeclQualifiedName targetName,
+        FunctionSpecialization spec)
+    {
+        return
+            collected.SetItem(
+                targetName,
+                collected.TryGetValue(targetName, out var existing)
+                ?
+                existing.Add(spec)
+                :
+                [spec]);
+    }
+
+    private static readonly ImmutableDictionary<DeclQualifiedName, ImmutableHashSet<FunctionSpecialization>> s_emptyCollected =
+        [];
+
+    private enum PipelineStage
+    {
+        Combined,
+        SpecializationOnly,
+        InliningOnly,
+    }
+
+    /// <summary>
     /// Context for inlining operations, including all function definitions and configuration.
     /// </summary>
     private record InliningContext(
-        ImmutableDictionary<(ModuleName ModuleName, string FunctionName), FunctionInfo> FunctionsByQualifiedName,
+        ImmutableDictionary<DeclQualifiedName, FunctionInfo> FunctionsByQualifiedName,
         ImmutableDictionary<SyntaxTypes.QualifiedNameRef, SingleChoiceConstructorInfo> SingleChoiceConstructors,
         ImmutableDictionary<string, TypeInference.InferredType> FunctionSignatures,
         Config Config,
-        ImmutableHashSet<(ModuleName ModuleName, string FunctionName)> InliningStack,
-        InliningFunctionSpecialization.SpecializationCatalog SpecializationCatalog,
+        ImmutableHashSet<DeclQualifiedName> InliningStack,
+        SpecializationCatalog SpecializationCatalog,
+        PipelineStage Stage,
         ModuleName? CurrentModuleName = null);
 
 
     public static Result<string, IReadOnlyDictionary<ModuleName, SyntaxTypes.File>> Inline(
         IReadOnlyList<SyntaxTypes.File> modules,
-        Config config)
+        Config config) =>
+        RewriteModules(modules, config, PipelineStage.Combined);
+
+    internal static Result<string, IReadOnlyDictionary<ModuleName, SyntaxTypes.File>> RunSpecializationStage(
+        IReadOnlyList<SyntaxTypes.File> modules,
+        Config config) =>
+        RewriteModules(modules, config, PipelineStage.SpecializationOnly);
+
+    internal static Result<string, IReadOnlyDictionary<ModuleName, SyntaxTypes.File>> RunInliningStage(
+        IReadOnlyList<SyntaxTypes.File> modules,
+        Config config) =>
+        RewriteModules(modules, config, PipelineStage.InliningOnly);
+
+    private static Result<string, IReadOnlyDictionary<ModuleName, SyntaxTypes.File>> RewriteModules(
+        IReadOnlyList<SyntaxTypes.File> modules,
+        Config config,
+        PipelineStage stage)
     {
         // Build a dictionary of all function declarations across all modules
         var functionsByQualifiedName = BuildFunctionDictionary(modules);
@@ -101,9 +172,9 @@ public class Inlining
                 singleChoiceConstructors,
                 functionSignatures,
                 config,
-                ImmutableHashSet<(ModuleName ModuleName, string FunctionName)>.Empty
-                .WithComparer(s_moduleNameTupleComparer),
-                SpecializationCatalog: InliningFunctionSpecialization.SpecializationCatalog.Empty);
+                ImmutableHashSet<DeclQualifiedName>.Empty,
+                SpecializationCatalog: SpecializationCatalog.Empty,
+                Stage: stage);
 
         var collectedSpecializations =
             CollectSpecializationsFromModules(modules, collectionContext);
@@ -118,9 +189,9 @@ public class Inlining
                 singleChoiceConstructors,
                 functionSignatures,
                 config,
-                ImmutableHashSet<(ModuleName ModuleName, string FunctionName)>.Empty
-                .WithComparer(s_moduleNameTupleComparer),
-                SpecializationCatalog: catalog);
+                ImmutableHashSet<DeclQualifiedName>.Empty,
+                SpecializationCatalog: catalog,
+                Stage: stage);
 
         var result =
             new Dictionary<ModuleName, SyntaxTypes.File>(
@@ -137,17 +208,23 @@ public class Inlining
         return result;
     }
 
+    private static bool EnablesSpecialization(InliningContext context) =>
+        context.Stage is PipelineStage.Combined or PipelineStage.SpecializationOnly;
+
+    private static bool EnablesClassicInlining(InliningContext context) =>
+        context.Stage is PipelineStage.Combined or PipelineStage.InliningOnly;
+
     /// <summary>
     /// Pass 1: Walk all modules and collect specialization requests.
     /// This simulates the inlining walk (including expanding non-recursive functions)
     /// but instead of creating specialized declarations, it records what specializations
-    /// are needed via <see cref="InliningFunctionSpecialization.FunctionSpecialization"/>.
+    /// are needed via <see cref="FunctionSpecialization"/>.
     /// </summary>
-    private static List<InliningFunctionSpecialization.FunctionSpecialization> CollectSpecializationsFromModules(
+    private static ImmutableDictionary<DeclQualifiedName, ImmutableHashSet<FunctionSpecialization>> CollectSpecializationsFromModules(
         IReadOnlyList<SyntaxTypes.File> modules,
         InliningContext context)
     {
-        var collected = new List<InliningFunctionSpecialization.FunctionSpecialization>();
+        var collected = s_emptyCollected;
 
         foreach (var module in modules)
         {
@@ -158,10 +235,12 @@ public class Inlining
             {
                 if (decl.Value is SyntaxTypes.Declaration.FunctionDeclaration funcDecl)
                 {
-                    CollectSpecializationsFromExpression(
-                        funcDecl.Function.Declaration.Value.Expression,
-                        moduleContext,
-                        collected);
+                    collected =
+                        MergeCollected(
+                            collected,
+                            CollectSpecializationsFromExpression(
+                                funcDecl.Function.Declaration.Value.Expression,
+                                moduleContext));
                 }
             }
         }
@@ -171,125 +250,163 @@ public class Inlining
 
     /// <summary>
     /// Recursively walks an expression tree to find call sites that would trigger
-    /// specialization, and collects the corresponding <see cref="InliningFunctionSpecialization.FunctionSpecialization"/>
-    /// requests.
+    /// specialization, and collects the corresponding <see cref="FunctionSpecialization"/>
+    /// requests. Returns an immutable dictionary mapping target function names to their
+    /// deduplicated specialization sets.
     /// </summary>
-    private static void CollectSpecializationsFromExpression(
+    private static ImmutableDictionary<DeclQualifiedName, ImmutableHashSet<FunctionSpecialization>> CollectSpecializationsFromExpression(
         Node<SyntaxTypes.Expression> exprNode,
-        InliningContext context,
-        List<InliningFunctionSpecialization.FunctionSpecialization> collected)
+        InliningContext context)
     {
         switch (exprNode.Value)
         {
             case SyntaxTypes.Expression.Application app:
-                CollectSpecializationsFromApplication(app, context, collected);
-                break;
+                return CollectSpecializationsFromApplication(app, context);
 
             case SyntaxTypes.Expression.ParenthesizedExpression paren:
-                CollectSpecializationsFromExpression(paren.Expression, context, collected);
-                break;
+                return CollectSpecializationsFromExpression(paren.Expression, context);
 
             case SyntaxTypes.Expression.IfBlock ifBlock:
-                CollectSpecializationsFromExpression(ifBlock.Condition, context, collected);
-                CollectSpecializationsFromExpression(ifBlock.ThenBlock, context, collected);
-                CollectSpecializationsFromExpression(ifBlock.ElseBlock, context, collected);
-                break;
-
-            case SyntaxTypes.Expression.CaseExpression caseExpr:
-                CollectSpecializationsFromExpression(caseExpr.CaseBlock.Expression, context, collected);
-
-                foreach (var branch in caseExpr.CaseBlock.Cases)
-                    CollectSpecializationsFromExpression(branch.Expression, context, collected);
-
-                break;
-
-            case SyntaxTypes.Expression.LetExpression letExpr:
-                foreach (var d in letExpr.Value.Declarations)
                 {
-                    switch (d.Value)
-                    {
-                        case SyntaxTypes.Expression.LetDeclaration.LetFunction letFunc:
-                            CollectSpecializationsFromExpression(
-                                letFunc.Function.Declaration.Value.Expression,
-                                context,
-                                collected);
-
-                            break;
-
-                        case SyntaxTypes.Expression.LetDeclaration.LetDestructuring letDestr:
-                            CollectSpecializationsFromExpression(letDestr.Expression, context, collected);
-                            break;
-                    }
+                    var result = CollectSpecializationsFromExpression(ifBlock.Condition, context);
+                    result = MergeCollected(result, CollectSpecializationsFromExpression(ifBlock.ThenBlock, context));
+                    result = MergeCollected(result, CollectSpecializationsFromExpression(ifBlock.ElseBlock, context));
+                    return result;
                 }
 
-                CollectSpecializationsFromExpression(letExpr.Value.Expression, context, collected);
-                break;
+            case SyntaxTypes.Expression.CaseExpression caseExpr:
+                {
+                    var result = CollectSpecializationsFromExpression(caseExpr.CaseBlock.Expression, context);
+
+                    foreach (var branch in caseExpr.CaseBlock.Cases)
+                        result =
+                            MergeCollected(result, CollectSpecializationsFromExpression(branch.Expression, context));
+
+                    return result;
+                }
+
+            case SyntaxTypes.Expression.LetExpression letExpr:
+                {
+                    var result = s_emptyCollected;
+
+                    foreach (var d in letExpr.Value.Declarations)
+                    {
+                        switch (d.Value)
+                        {
+                            case SyntaxTypes.Expression.LetDeclaration.LetFunction letFunc:
+                                result =
+                                    MergeCollected(
+                                        result,
+                                        CollectSpecializationsFromExpression(
+                                            letFunc.Function.Declaration.Value.Expression,
+                                            context));
+
+                                break;
+
+                            case SyntaxTypes.Expression.LetDeclaration.LetDestructuring letDestr:
+                                result =
+                                    MergeCollected(result, CollectSpecializationsFromExpression(letDestr.Expression, context));
+
+                                break;
+                        }
+                    }
+
+                    result =
+                        MergeCollected(
+                            result,
+                            CollectSpecializationsFromExpression(letExpr.Value.Expression, context));
+
+                    return result;
+                }
 
             case SyntaxTypes.Expression.LambdaExpression lambda:
-                CollectSpecializationsFromExpression(lambda.Lambda.Expression, context, collected);
-                break;
+                return CollectSpecializationsFromExpression(lambda.Lambda.Expression, context);
 
             case SyntaxTypes.Expression.ListExpr listExpr:
-                foreach (var elem in listExpr.Elements)
-                    CollectSpecializationsFromExpression(elem, context, collected);
+                {
+                    var result = s_emptyCollected;
 
-                break;
+                    foreach (var elem in listExpr.Elements)
+                        result = MergeCollected(result, CollectSpecializationsFromExpression(elem, context));
+
+                    return result;
+                }
 
             case SyntaxTypes.Expression.TupledExpression tupled:
-                foreach (var elem in tupled.Elements)
-                    CollectSpecializationsFromExpression(elem, context, collected);
+                {
+                    var result = s_emptyCollected;
 
-                break;
+                    foreach (var elem in tupled.Elements)
+                        result = MergeCollected(result, CollectSpecializationsFromExpression(elem, context));
+
+                    return result;
+                }
 
             case SyntaxTypes.Expression.RecordExpr recordExpr:
-                foreach (var field in recordExpr.Fields)
-                    CollectSpecializationsFromExpression(field.Value.Item2, context, collected);
+                {
+                    var result = s_emptyCollected;
 
-                break;
+                    foreach (var field in recordExpr.Fields)
+                        result =
+                            MergeCollected(result, CollectSpecializationsFromExpression(field.Value.Item2, context));
+
+                    return result;
+                }
 
             case SyntaxTypes.Expression.RecordUpdateExpression recordUpdate:
-                foreach (var field in recordUpdate.Fields)
-                    CollectSpecializationsFromExpression(field.Value.Item2, context, collected);
+                {
+                    var result = s_emptyCollected;
 
-                break;
+                    foreach (var field in recordUpdate.Fields)
+                        result =
+                            MergeCollected(result, CollectSpecializationsFromExpression(field.Value.Item2, context));
+
+                    return result;
+                }
 
             case SyntaxTypes.Expression.RecordAccess recordAccess:
-                CollectSpecializationsFromExpression(recordAccess.Record, context, collected);
-                break;
+                return CollectSpecializationsFromExpression(recordAccess.Record, context);
 
             case SyntaxTypes.Expression.Negation negation:
-                CollectSpecializationsFromExpression(negation.Expression, context, collected);
-                break;
+                return CollectSpecializationsFromExpression(negation.Expression, context);
 
             case SyntaxTypes.Expression.OperatorApplication opApp:
-                CollectSpecializationsFromExpression(opApp.Left, context, collected);
-                CollectSpecializationsFromExpression(opApp.Right, context, collected);
-                break;
+                {
+                    var result = CollectSpecializationsFromExpression(opApp.Left, context);
+                    result = MergeCollected(result, CollectSpecializationsFromExpression(opApp.Right, context));
+                    return result;
+                }
+
+            default:
+                return s_emptyCollected;
         }
     }
 
     /// <summary>
     /// Analyzes a function application to determine if it requires specialization.
-    /// If so, adds a <see cref="InliningFunctionSpecialization.FunctionSpecialization"/> to the collection.
+    /// If so, includes a <see cref="FunctionSpecialization"/> in the returned collection.
     /// Also recurses into inlined function bodies to discover nested specialization needs.
     /// </summary>
-    private static void CollectSpecializationsFromApplication(
+    private static ImmutableDictionary<DeclQualifiedName, ImmutableHashSet<FunctionSpecialization>> CollectSpecializationsFromApplication(
         SyntaxTypes.Expression.Application app,
-        InliningContext context,
-        List<InliningFunctionSpecialization.FunctionSpecialization> collected)
+        InliningContext context)
     {
-        if (app.Arguments.Count < 2)
+        if (!EnablesSpecialization(context) || app.Arguments.Count < 2)
         {
-            foreach (var arg in app.Arguments)
-                CollectSpecializationsFromExpression(arg, context, collected);
+            var result = s_emptyCollected;
 
-            return;
+            foreach (var arg in app.Arguments)
+                result = MergeCollected(result, CollectSpecializationsFromExpression(arg, context));
+
+            return result;
         }
 
+        var collected = s_emptyCollected;
         var funcExpr = app.Arguments[0].Value;
 
         // Handle pipe operators: recurse into desugared form
-        if (app.Arguments.Count >= 3 &&
+        if (EnablesClassicInlining(context) &&
+            app.Arguments.Count >= 3 &&
             funcExpr is SyntaxTypes.Expression.FunctionOrValue pipeFunc &&
             pipeFunc.ModuleName.Count is 1 && pipeFunc.ModuleName[0] is "Basics")
         {
@@ -298,45 +415,46 @@ public class Inlining
                 var desugaredArgs = new List<Node<SyntaxTypes.Expression>> { app.Arguments[2], app.Arguments[1] };
                 desugaredArgs.AddRange(app.Arguments.Skip(3));
 
-                CollectSpecializationsFromApplication(
-                    new SyntaxTypes.Expression.Application([.. desugaredArgs]),
-                    context,
-                    collected);
-
-                return;
+                return
+                    CollectSpecializationsFromApplication(
+                        new SyntaxTypes.Expression.Application([.. desugaredArgs]),
+                        context);
             }
 
             if (pipeFunc.Name is "apL")
             {
                 var desugaredArgs = new List<Node<SyntaxTypes.Expression>>(app.Arguments.Skip(1));
 
-                CollectSpecializationsFromApplication(
-                    new SyntaxTypes.Expression.Application([.. desugaredArgs]),
-                    context,
-                    collected);
-
-                return;
+                return
+                    CollectSpecializationsFromApplication(
+                        new SyntaxTypes.Expression.Application([.. desugaredArgs]),
+                        context);
             }
 
             if (pipeFunc.Name is "composeR" or "composeL")
             {
-                foreach (var arg in app.Arguments.Skip(1))
-                    CollectSpecializationsFromExpression(arg, context, collected);
+                var result = s_emptyCollected;
 
-                return;
+                foreach (var arg in app.Arguments.Skip(1))
+                    result = MergeCollected(result, CollectSpecializationsFromExpression(arg, context));
+
+                return result;
             }
         }
 
         // Check for known function call
         if (funcExpr is SyntaxTypes.Expression.FunctionOrValue funcOrValue)
         {
-            var qualifiedName = (funcOrValue.ModuleName, funcOrValue.Name);
-
-            if (context.FunctionsByQualifiedName.TryGetValue(qualifiedName, out var funcInfo))
+            if (TryResolveKnownFunctionReference(
+                funcOrValue,
+                context,
+                out var qualifiedName,
+                out var funcInfo))
             {
                 var funcImpl = funcInfo.Function.Declaration.Value;
                 var funcParams = funcImpl.Arguments;
                 var appArgs = app.Arguments.Skip(1).ToList();
+                var targetDeclName = new DeclQualifiedName(funcInfo.ModuleName, funcImpl.Name.Value);
 
                 // Check for single-choice tag specialization opportunity
                 var tagSpec =
@@ -347,21 +465,27 @@ public class Inlining
                         context);
 
                 if (tagSpec is not null)
-                    collected.Add(tagSpec);
+                {
+                    collected = AddToCollected(collected, targetDeclName, tagSpec);
+                }
 
                 // Check for higher-order recursive specialization opportunity
                 if (funcInfo.IsRecursive && ShouldInline(funcParams, funcImpl.Expression, appArgs, context))
                 {
-                    var hoSpec =
+                    var (hoSpec, groupMemberSpecs) =
                         TryBuildFunctionSpecializationForHigherOrder(
                             funcInfo,
                             funcImpl,
                             appArgs,
                             context,
-                            additionalCollected: collected);
+                            includeGroupMembers: true);
 
                     if (hoSpec is not null)
-                        collected.Add(hoSpec);
+                    {
+                        collected = AddToCollected(collected, targetDeclName, hoSpec);
+                    }
+
+                    collected = MergeCollected(collected, groupMemberSpecs);
                 }
 
                 // For non-recursive functions that would be inlined, recurse into the inlined body
@@ -384,22 +508,26 @@ public class Inlining
                     }
 
                     var substitutedBody = SubstituteInExpression(funcImpl.Expression, substitutions);
-                    CollectSpecializationsFromExpression(substitutedBody, newContext, collected);
+
+                    collected =
+                        MergeCollected(collected, CollectSpecializationsFromExpression(substitutedBody, newContext));
                 }
             }
         }
 
         // Always recurse into arguments
         foreach (var arg in app.Arguments)
-            CollectSpecializationsFromExpression(arg, context, collected);
+            collected = MergeCollected(collected, CollectSpecializationsFromExpression(arg, context));
+
+        return collected;
     }
 
     /// <summary>
-    /// Builds a <see cref="InliningFunctionSpecialization.FunctionSpecialization"/> for a
+    /// Builds a <see cref="FunctionSpecialization"/> for a
     /// single-choice tag specialization opportunity.
     /// Returns null if no single-choice tag specialization is applicable.
     /// </summary>
-    private static InliningFunctionSpecialization.FunctionSpecialization?
+    private static FunctionSpecialization?
         TryBuildFunctionSpecializationForSingleChoiceTag(
         FunctionInfo funcInfo,
         SyntaxTypes.FunctionImplementation funcImpl,
@@ -415,29 +543,27 @@ public class Inlining
             return null;
 
         var paramSpecs =
-            ImmutableDictionary.CreateBuilder<int, InliningFunctionSpecialization.ParameterSpecialization>();
+            ImmutableDictionary.CreateBuilder<int, ParameterSpecialization>();
 
         paramSpecs[specialization.ParamIndex] =
             BuildSingleChoiceTagUnwrapSpec(specialization, context);
 
         return
-            new InliningFunctionSpecialization.FunctionSpecialization(
-                funcImpl.Name.Value,
-                funcInfo.ModuleName,
+            new FunctionSpecialization(
                 paramSpecs.ToImmutable());
     }
 
     /// <summary>
-    /// Builds a <see cref="InliningFunctionSpecialization.ParameterSpecialization.SingleChoiceTagUnwrap"/>
+    /// Builds a <see cref="ParameterSpecialization.SingleChoiceTagUnwrap"/>
     /// that includes function field specializations for proper deduplication.
     /// </summary>
-    private static InliningFunctionSpecialization.ParameterSpecialization.SingleChoiceTagUnwrap
+    private static ParameterSpecialization.SingleChoiceTagUnwrap
         BuildSingleChoiceTagUnwrapSpec(
         SingleChoiceTagSpecialization specialization,
         InliningContext context)
     {
         var fieldSpecs =
-            ImmutableDictionary.CreateBuilder<int, InliningFunctionSpecialization.ParameterSpecialization>();
+            ImmutableDictionary.CreateBuilder<int, ParameterSpecialization>();
 
         foreach (var fieldPlan in specialization.FieldPlans)
         {
@@ -448,30 +574,32 @@ public class Inlining
         }
 
         return
-            new InliningFunctionSpecialization.ParameterSpecialization.SingleChoiceTagUnwrap(
-                specialization.ConstructorName,
+            new ParameterSpecialization.SingleChoiceTagUnwrap(
+                new DeclQualifiedName(specialization.ConstructorName.ModuleName, specialization.ConstructorName.Name),
                 fieldSpecs.ToImmutable());
     }
 
     /// <summary>
-    /// Builds a <see cref="InliningFunctionSpecialization.FunctionSpecialization"/> for a
+    /// Builds a <see cref="FunctionSpecialization"/> for a
     /// higher-order recursive function specialization opportunity.
-    /// Returns null if no specialization is applicable.
+    /// Returns null spec if no specialization is applicable.
+    /// When <paramref name="includeGroupMembers"/> is true, also returns specializations
+    /// for mutual recursion group members via the second tuple element.
     /// </summary>
-    private static InliningFunctionSpecialization.FunctionSpecialization?
+    private static (FunctionSpecialization? Spec, ImmutableDictionary<DeclQualifiedName, ImmutableHashSet<FunctionSpecialization>> GroupMemberSpecs)
         TryBuildFunctionSpecializationForHigherOrder(
         FunctionInfo funcInfo,
         SyntaxTypes.FunctionImplementation funcImpl,
         IReadOnlyList<Node<SyntaxTypes.Expression>> appArgs,
         InliningContext context,
-        List<InliningFunctionSpecialization.FunctionSpecialization>? additionalCollected = null)
+        bool includeGroupMembers = false)
     {
         var funcParams = funcImpl.Arguments;
         var funcName = funcImpl.Name.Value;
         var funcModuleName = funcInfo.ModuleName;
 
         var paramSpecs =
-            ImmutableDictionary.CreateBuilder<int, InliningFunctionSpecialization.ParameterSpecialization>();
+            ImmutableDictionary.CreateBuilder<int, ParameterSpecialization>();
 
         for (var i = 0; i < funcParams.Count && i < appArgs.Count; i++)
         {
@@ -485,7 +613,7 @@ public class Inlining
                     funcImpl.Expression.Value, funcName, funcModuleName, varPattern.Name, i))
                 continue;
 
-            var classified = InliningFunctionSpecialization.ClassifyArgument(appArgs[i].Value);
+            var classified = ParameterSpecialization.ClassifyArgument(appArgs[i].Value);
 
             if (classified is not null)
             {
@@ -497,24 +625,46 @@ public class Inlining
                 // fall back to treating them as a lambda-like specialization keyed by the expression.
                 // We still record the specialization since the concrete argument will be substituted.
                 paramSpecs[i] =
-                    new InliningFunctionSpecialization.ParameterSpecialization.ConcreteLambdaValue(
+                    new ParameterSpecialization.ConcreteLambdaValue(
                         new SyntaxTypes.LambdaStruct(
                             Arguments: [],
                             Expression: appArgs[i]));
             }
         }
 
+        if (paramSpecs.Count > 0 &&
+            TryBuildSingleChoiceTagSpecialization(
+                funcImpl,
+                appArgs,
+                funcInfo,
+                context) is { } singleChoiceTagSpecialization &&
+            TryGetAliasNameFromPattern(funcImpl.Arguments[singleChoiceTagSpecialization.ParamIndex].Value) is { } aliasName &&
+            IsLoopInvariantInRecursiveCalls(
+                funcImpl.Expression.Value,
+                funcName,
+                funcModuleName,
+                aliasName,
+                singleChoiceTagSpecialization.ParamIndex))
+        {
+            paramSpecs[singleChoiceTagSpecialization.ParamIndex] =
+                BuildSingleChoiceTagUnwrapSpec(
+                    singleChoiceTagSpecialization,
+                    context);
+        }
+
         if (paramSpecs.Count is 0)
-            return null;
+            return (null, s_emptyCollected);
 
         // Skip specialization for very large function bodies
         if (CountExpressionNodes(funcImpl.Expression.Value) > 2000)
-            return null;
+            return (null, s_emptyCollected);
 
         var builtParamSpecs = paramSpecs.ToImmutable();
 
         // Also collect specializations for mutual recursion group members.
-        if (additionalCollected is not null)
+        var groupMemberSpecs = s_emptyCollected;
+
+        if (includeGroupMembers)
         {
             var invariantIndicesSet = new HashSet<int>(paramSpecs.Keys);
             var groupMembers = FindMutualRecursionGroupMembers(funcInfo, invariantIndicesSet, context);
@@ -523,69 +673,38 @@ public class Inlining
             {
                 var memberImpl = member.Function.Declaration.Value;
 
-                additionalCollected.Add(
-                    new InliningFunctionSpecialization.FunctionSpecialization(
-                        memberImpl.Name.Value,
-                        member.ModuleName,
-                        builtParamSpecs));
+                groupMemberSpecs =
+                    AddToCollected(
+                        groupMemberSpecs,
+                        new DeclQualifiedName(member.ModuleName, memberImpl.Name.Value),
+                        new FunctionSpecialization(builtParamSpecs));
             }
         }
 
-        return
-            new InliningFunctionSpecialization.FunctionSpecialization(
-                funcName,
-                funcModuleName,
-                builtParamSpecs);
+        return (new FunctionSpecialization(builtParamSpecs), groupMemberSpecs);
     }
 
     /// <summary>
-    /// Builds a <see cref="InliningFunctionSpecialization.SpecializationCatalog"/> from collected
-    /// specialization requests. Deduplicates requests per function and assigns deterministic names.
+    /// Builds a <see cref="SpecializationCatalog"/> from collected specialization requests.
+    /// The input dictionary already contains deduplicated specialization sets per function
+    /// (via <see cref="ImmutableHashSet{T}"/>), so no additional deduplication is needed.
     /// </summary>
-    private static InliningFunctionSpecialization.SpecializationCatalog BuildCatalogFromCollectedSpecializations(
-        List<InliningFunctionSpecialization.FunctionSpecialization> collected)
+    private static SpecializationCatalog BuildCatalogFromCollectedSpecializations(
+        ImmutableDictionary<DeclQualifiedName, ImmutableHashSet<FunctionSpecialization>> collected)
     {
-        // Group by target function
-        var byFunction =
-            new Dictionary<(ModuleName, string), List<InliningFunctionSpecialization.FunctionSpecialization>>(
-                InliningFunctionSpecialization.ModuleNameTupleComparer.Instance);
-
-        foreach (var spec in collected)
-        {
-            var key = (spec.TargetModuleName, spec.TargetFunction);
-
-            if (!byFunction.TryGetValue(key, out var list))
-            {
-                list = [];
-                byFunction[key] = list;
-            }
-
-            // Deduplicate: only add if not already present
-            var isDuplicate = false;
-
-            foreach (var existing in list)
-            {
-                if (existing.Equals(spec))
-                {
-                    isDuplicate = true;
-                    break;
-                }
-            }
-
-            if (!isDuplicate)
-                list.Add(spec);
-        }
-
         // Name and build catalog
-        var allNamed = new List<InliningFunctionSpecialization.NamedSpecialization>();
+        var allNamed = new List<NamedSpecialization>();
 
-        foreach (var kvp in byFunction)
+        foreach (var kvp in collected)
         {
-            var named = InliningFunctionSpecialization.NameSpecializations(kvp.Key.Item2, kvp.Value);
+            // Sort deterministically before naming to ensure stable __specialized__N numbering
+            // regardless of ImmutableHashSet iteration order.
+            var sorted = kvp.Value.OrderBy(s => s.DeterministicSortKey).ToList();
+            var named = SpecializationCatalog.NameSpecializations(kvp.Key, sorted);
             allNamed.AddRange(named);
         }
 
-        return InliningFunctionSpecialization.BuildCatalog(allNamed);
+        return SpecializationCatalog.BuildCatalog(allNamed);
     }
 
     /// <summary>
@@ -594,22 +713,17 @@ public class Inlining
     /// Returns null if no matching specialization was found in the catalog.
     /// </summary>
     private static string? LookupSpecializedName(
-        string funcName,
-        ModuleName funcModuleName,
+        DeclQualifiedName targetFunctionName,
         int paramIndex,
-        InliningFunctionSpecialization.ParameterSpecialization paramSpec,
+        ParameterSpecialization paramSpec,
         InliningContext context)
     {
-        var key = ((ModuleName)funcModuleName, funcName);
-
-        if (!context.SpecializationCatalog.SpecializationsByFunction.TryGetValue(key, out var specializations))
+        if (!context.SpecializationCatalog.SpecializationsByFunction.TryGetValue(targetFunctionName, out var specializations))
             return null;
 
         var target =
-            new InliningFunctionSpecialization.FunctionSpecialization(
-                funcName,
-                funcModuleName,
-                ImmutableDictionary<int, InliningFunctionSpecialization.ParameterSpecialization>.Empty
+            new FunctionSpecialization(
+                ImmutableDictionary<int, ParameterSpecialization>.Empty
                 .Add(paramIndex, paramSpec));
 
         foreach (var named in specializations)
@@ -627,20 +741,15 @@ public class Inlining
     /// Returns null if no matching specialization was found in the catalog.
     /// </summary>
     private static string? LookupSpecializedNameForHigherOrder(
-        string funcName,
-        ModuleName funcModuleName,
-        ImmutableDictionary<int, InliningFunctionSpecialization.ParameterSpecialization> paramSpecs,
+        DeclQualifiedName targetFunctionName,
+        ImmutableDictionary<int, ParameterSpecialization> paramSpecs,
         InliningContext context)
     {
-        var key = ((ModuleName)funcModuleName, funcName);
-
-        if (!context.SpecializationCatalog.SpecializationsByFunction.TryGetValue(key, out var specializations))
+        if (!context.SpecializationCatalog.SpecializationsByFunction.TryGetValue(targetFunctionName, out var specializations))
             return null;
 
         var target =
-            new InliningFunctionSpecialization.FunctionSpecialization(
-                funcName,
-                funcModuleName,
+            new FunctionSpecialization(
                 paramSpecs);
 
         foreach (var named in specializations)
@@ -652,8 +761,8 @@ public class Inlining
         return null;
     }
 
-    private static ImmutableDictionary<(ModuleName ModuleName, string FunctionName), FunctionInfo> MarkRecursiveFunctions(
-        ImmutableDictionary<(ModuleName ModuleName, string FunctionName), FunctionInfo> functions)
+    private static ImmutableDictionary<DeclQualifiedName, FunctionInfo> MarkRecursiveFunctions(
+        ImmutableDictionary<DeclQualifiedName, FunctionInfo> functions)
     {
         var builder = functions.ToBuilder();
 
@@ -668,7 +777,7 @@ public class Inlining
                     funcKey,
                     funcInfo.Function,
                     functions,
-                    ImmutableHashSet<(ModuleName, string)>.Empty.WithComparer(s_moduleNameTupleComparer));
+                    ImmutableHashSet<DeclQualifiedName>.Empty);
 
             builder[funcKey] = funcInfo with { IsRecursive = isRecursive };
         }
@@ -677,10 +786,10 @@ public class Inlining
     }
 
     private static bool IsRecursiveFunction(
-        (ModuleName ModuleName, string FunctionName) funcKey,
+        DeclQualifiedName funcKey,
         SyntaxTypes.FunctionStruct func,
-        ImmutableDictionary<(ModuleName ModuleName, string FunctionName), FunctionInfo> allFunctions,
-        ImmutableHashSet<(ModuleName, string)> visited)
+        ImmutableDictionary<DeclQualifiedName, FunctionInfo> allFunctions,
+        ImmutableHashSet<DeclQualifiedName> visited)
     {
         // Collect all function references in the function body
         var references = CollectFunctionReferences(func.Declaration.Value.Expression.Value);
@@ -688,7 +797,7 @@ public class Inlining
         foreach (var refKey in references)
         {
             // Check if this reference is the function itself (direct recursion)
-            if (s_moduleNameTupleComparer.Equals(refKey, funcKey))
+            if (refKey.Equals(funcKey))
             {
                 return true;
             }
@@ -714,13 +823,13 @@ public class Inlining
         return false;
     }
 
-    private static IEnumerable<(ModuleName ModuleName, string FunctionName)> CollectFunctionReferences(
+    private static IEnumerable<DeclQualifiedName> CollectFunctionReferences(
         SyntaxTypes.Expression expr)
     {
         return expr switch
         {
             SyntaxTypes.Expression.FunctionOrValue funcOrValue =>
-            [(funcOrValue.ModuleName, funcOrValue.Name)],
+            [new DeclQualifiedName(funcOrValue.ModuleName, funcOrValue.Name)],
 
             SyntaxTypes.Expression.Application app =>
             app.Arguments.SelectMany(a => CollectFunctionReferences(a.Value)),
@@ -771,7 +880,7 @@ public class Inlining
         };
     }
 
-    private static IEnumerable<(ModuleName ModuleName, string FunctionName)> CollectFunctionReferencesFromLetDeclaration(
+    private static IEnumerable<DeclQualifiedName> CollectFunctionReferencesFromLetDeclaration(
         SyntaxTypes.Expression.LetDeclaration letDecl)
     {
         return letDecl switch
@@ -787,12 +896,11 @@ public class Inlining
         };
     }
 
-    private static ImmutableDictionary<(ModuleName ModuleName, string FunctionName), FunctionInfo> BuildFunctionDictionary(
+    private static ImmutableDictionary<DeclQualifiedName, FunctionInfo> BuildFunctionDictionary(
         IReadOnlyList<SyntaxTypes.File> modules)
     {
         var builder =
-            ImmutableDictionary.CreateBuilder<(ModuleName ModuleName, string FunctionName), FunctionInfo>(
-                s_moduleNameTupleComparer);
+            ImmutableDictionary.CreateBuilder<DeclQualifiedName, FunctionInfo>();
 
         foreach (var module in modules)
         {
@@ -803,7 +911,7 @@ public class Inlining
                 if (decl.Value is SyntaxTypes.Declaration.FunctionDeclaration funcDecl)
                 {
                     var funcName = funcDecl.Function.Declaration.Value.Name.Value;
-                    var key = (moduleName, funcName);
+                    var key = new DeclQualifiedName(moduleName, funcName);
                     builder[key] = new FunctionInfo(moduleName, funcDecl.Function, IsRecursive: false);
                 }
             }
@@ -1453,18 +1561,13 @@ public class Inlining
             return false;
         }
 
-        var substitutions = new Dictionary<string, Node<SyntaxTypes.Expression>>();
         var consumedArgs = Math.Min(lambda.Lambda.Arguments.Count, app.Arguments.Count - 1);
 
-        for (var index = 0; index < consumedArgs; index++)
-        {
-            if (UnwrapParenthesizedPattern(lambda.Lambda.Arguments[index].Value) is SyntaxTypes.Pattern.VarPattern varPattern)
-            {
-                substitutions[varPattern.Name] = app.Arguments[index + 1];
-            }
-        }
-
-        var substitutedBody = SubstituteInExpression(lambda.Lambda.Expression, substitutions);
+        var substitutedBody =
+            ApplyConsumedArgumentBindings(
+                lambda.Lambda.Expression,
+                lambda.Lambda.Arguments,
+                [.. app.Arguments.Skip(1).Take(consumedArgs)]);
 
         if (app.Arguments.Count - 1 < lambda.Lambda.Arguments.Count)
         {
@@ -1488,6 +1591,57 @@ public class Inlining
                 [.. new[] { substitutedBody }.Concat(app.Arguments.Skip(lambda.Lambda.Arguments.Count + 1))]);
 
         return true;
+    }
+
+    private static Node<SyntaxTypes.Expression> ApplyConsumedArgumentBindings(
+        Node<SyntaxTypes.Expression> body,
+        IReadOnlyList<Node<SyntaxTypes.Pattern>> parameters,
+        IReadOnlyList<Node<SyntaxTypes.Expression>> consumedArgs)
+    {
+        var letDeclarations = new List<Node<SyntaxTypes.Expression.LetDeclaration>>();
+        var substitutions = new Dictionary<string, Node<SyntaxTypes.Expression>>();
+
+        for (var index = 0; index < consumedArgs.Count; index++)
+        {
+            var parameter = parameters[index];
+            var argument = consumedArgs[index];
+
+            switch (UnwrapParenthesizedPattern(parameter.Value))
+            {
+                case SyntaxTypes.Pattern.VarPattern varPattern:
+                    substitutions[varPattern.Name] = argument;
+                    break;
+
+                case SyntaxTypes.Pattern.AllPattern:
+                case SyntaxTypes.Pattern.UnitPattern:
+                    break;
+
+                default:
+                    letDeclarations.Add(
+                        new Node<SyntaxTypes.Expression.LetDeclaration>(
+                            s_zeroRange,
+                            new SyntaxTypes.Expression.LetDeclaration.LetDestructuring(
+                                Pattern: parameter,
+                                Expression: argument)));
+
+                    break;
+            }
+        }
+
+        var substitutedBody = SubstituteInExpression(body, substitutions);
+
+        if (letDeclarations.Count is 0)
+        {
+            return substitutedBody;
+        }
+
+        return
+            new Node<SyntaxTypes.Expression>(
+                s_zeroRange,
+                new SyntaxTypes.Expression.LetExpression(
+                    new SyntaxTypes.Expression.LetBlock(
+                        Declarations: [.. letDeclarations],
+                        Expression: substitutedBody)));
     }
 
     private static bool IsReferencePreservingWrapperField(
@@ -1856,6 +2010,7 @@ public class Inlining
         }
 
         // Beta-reduce lambda applications: (\x -> body) arg  →  body[x := arg]
+        if (EnablesClassicInlining(context))
         {
             var unwrapped = UnwrapParenthesized(funcExpr);
 
@@ -1871,6 +2026,7 @@ public class Inlining
         // This turns shapes like `.transform ops first` into `increment first` once `ops`
         // resolves to a concrete record value, which directly reduces remaining
         // higher-order applications in specialized parser-like loops.
+        if (EnablesClassicInlining(context))
         {
             var unwrapped = UnwrapParenthesized(funcExpr);
 
@@ -1925,33 +2081,23 @@ public class Inlining
         // Check if this is a call to a known function
         if (funcExpr is SyntaxTypes.Expression.FunctionOrValue funcOrValue)
         {
-            var qualifiedName = (funcOrValue.ModuleName, funcOrValue.Name);
-
-            if (context.FunctionsByQualifiedName.TryGetValue(qualifiedName, out var funcInfo))
+            if (TryResolveKnownFunctionReference(
+                funcOrValue,
+                context,
+                out var qualifiedName,
+                out var funcInfo))
             {
                 var funcImpl = funcInfo.Function.Declaration.Value;
                 var funcParams = funcImpl.Arguments;
                 var appArgs = app.Arguments.Skip(1).ToList();
 
-                var (singleChoiceTagSpecialized, singleChoiceDecls) =
-                    TrySpecializeSingleChoiceTagCall(
-                        funcInfo,
-                        funcImpl,
-                        appArgs,
-                        context);
-
-                newDecls.AddRange(singleChoiceDecls);
-
-                if (singleChoiceTagSpecialized is not null)
-                {
-                    return (singleChoiceTagSpecialized, newDecls.ToImmutable());
-                }
-
-                if (funcInfo.IsRecursive)
+                if (funcInfo.IsRecursive || !EnablesClassicInlining(context))
                 {
                     // Try to specialize the recursive function by substituting
                     // loop-invariant function arguments with concrete values.
-                    if (ShouldInline(funcParams, funcImpl.Expression, appArgs, context))
+                    if (funcInfo.IsRecursive &&
+                        EnablesSpecialization(context) &&
+                        ShouldInline(funcParams, funcImpl.Expression, appArgs, context))
                     {
                         var (specialized, specDecls) =
                             TrySpecializeRecursiveCall(
@@ -1968,10 +2114,44 @@ public class Inlining
                         }
                     }
 
+                    if (EnablesSpecialization(context))
+                    {
+                        var (singleChoiceTagSpecialized, singleChoiceDecls) =
+                            TrySpecializeSingleChoiceTagCall(
+                                funcInfo,
+                                funcImpl,
+                                appArgs,
+                                context);
+
+                        newDecls.AddRange(singleChoiceDecls);
+
+                        if (singleChoiceTagSpecialized is not null)
+                        {
+                            return (singleChoiceTagSpecialized, newDecls.ToImmutable());
+                        }
+                    }
+
                     return
                         (new SyntaxTypes.Expression.Application(
                             [.. app.Arguments.Select(Inline)]),
                         newDecls.ToImmutable());
+                }
+
+                if (EnablesSpecialization(context))
+                {
+                    var (singleChoiceTagSpecialized, singleChoiceDecls) =
+                        TrySpecializeSingleChoiceTagCall(
+                            funcInfo,
+                            funcImpl,
+                            appArgs,
+                            context);
+
+                    newDecls.AddRange(singleChoiceDecls);
+
+                    if (singleChoiceTagSpecialized is not null)
+                    {
+                        return (singleChoiceTagSpecialized, newDecls.ToImmutable());
+                    }
                 }
 
                 // Skip if we're already in the process of inlining this function (prevents infinite recursion)
@@ -2239,18 +2419,20 @@ public class Inlining
             return result;
         }
 
-        var substitutions = new Dictionary<string, Node<SyntaxTypes.Expression>>();
         var consumedArgs = Math.Min(lambda.Arguments.Count, args.Count);
+        var consumedInlinedArgs = new List<Node<SyntaxTypes.Expression>>(consumedArgs);
 
         for (var i = 0; i < consumedArgs; i++)
         {
-            if (lambda.Arguments[i].Value is SyntaxTypes.Pattern.VarPattern varPat)
-            {
-                substitutions[varPat.Name] = Inline(args[i]);
-            }
+            consumedInlinedArgs.Add(Inline(args[i]));
         }
 
-        var body = SubstituteInExpression(lambda.Expression, substitutions);
+        var body =
+            ApplyConsumedArgumentBindings(
+                lambda.Expression,
+                lambda.Arguments,
+                consumedInlinedArgs);
+
         body = Inline(body);
 
         if (args.Count < lambda.Arguments.Count)
@@ -2446,12 +2628,66 @@ public class Inlining
             SyntaxTypes.Expression.RecordAccessFunction =>
             true,
 
+            SyntaxTypes.Expression.Application app =>
+            ApplicationReturnsFunction(app, context),
+
             SyntaxTypes.Expression.ParenthesizedExpression paren =>
             IsFunctionExpression(paren.Expression.Value, context),
 
             _ =>
             false
         };
+    }
+
+    private static bool ApplicationReturnsFunction(
+        SyntaxTypes.Expression.Application app,
+        InliningContext context)
+    {
+        if (app.Arguments.Count is 0 ||
+            UnwrapParenthesized(app.Arguments[0].Value) is not SyntaxTypes.Expression.FunctionOrValue funcOrValue ||
+            !TryGetFunctionReferenceInferredType(funcOrValue, context, out var inferredType))
+        {
+            return false;
+        }
+
+        var resultType = inferredType;
+
+        for (var i = 1; i < app.Arguments.Count && resultType is TypeInference.InferredType.FunctionType functionType; i++)
+        {
+            resultType = functionType.ReturnType;
+        }
+
+        return resultType is TypeInference.InferredType.FunctionType;
+    }
+
+    private static bool TryGetFunctionReferenceInferredType(
+        SyntaxTypes.Expression.FunctionOrValue funcOrValue,
+        InliningContext context,
+        out TypeInference.InferredType inferredType)
+    {
+        if (funcOrValue.ModuleName.Count > 0)
+        {
+            var qualifiedName = string.Join(".", funcOrValue.ModuleName) + "." + funcOrValue.Name;
+
+            if (context.FunctionSignatures.TryGetValue(qualifiedName, out inferredType))
+            {
+                return true;
+            }
+        }
+
+        if (funcOrValue.ModuleName.Count is 0 &&
+            context.CurrentModuleName is { } currentModuleName)
+        {
+            var qualifiedName = string.Join(".", currentModuleName) + "." + funcOrValue.Name;
+
+            if (context.FunctionSignatures.TryGetValue(qualifiedName, out inferredType))
+            {
+                return true;
+            }
+        }
+
+        inferredType = default!;
+        return false;
     }
 
     /// <summary>
@@ -2470,14 +2706,16 @@ public class Inlining
         // and avoids inlining based on local let-bound helpers, which can introduce lifted
         // dependencies the current compiler pipeline does not yet propagate robustly.
         if (funcOrValue.ModuleName.Count > 0 &&
-            context.FunctionsByQualifiedName.ContainsKey((funcOrValue.ModuleName, funcOrValue.Name)))
+            context.FunctionsByQualifiedName.ContainsKey(
+                new DeclQualifiedName(funcOrValue.ModuleName, funcOrValue.Name)))
         {
             return true;
         }
 
         if (funcOrValue.ModuleName.Count is 0 &&
             context.CurrentModuleName is { } currentModuleName &&
-            context.FunctionsByQualifiedName.ContainsKey((currentModuleName, funcOrValue.Name)))
+            context.FunctionsByQualifiedName.ContainsKey(
+                new DeclQualifiedName(currentModuleName, funcOrValue.Name)))
         {
             return true;
         }
@@ -2505,6 +2743,29 @@ public class Inlining
             {
                 return true;
             }
+        }
+
+        if (IsKnownCoreFunctionReference(funcOrValue))
+        {
+            return true;
+        }
+
+        return false;
+    }
+
+    private static bool IsKnownCoreFunctionReference(
+        SyntaxTypes.Expression.FunctionOrValue funcOrValue)
+    {
+        if (funcOrValue.ModuleName.Count is 0)
+        {
+            return funcOrValue.Name is "::";
+        }
+
+        if (funcOrValue.ModuleName.Count is 1 &&
+            funcOrValue.ModuleName[0] is "List" &&
+            funcOrValue.Name is "reverse")
+        {
+            return true;
         }
 
         return false;
@@ -2681,7 +2942,7 @@ public class Inlining
     private sealed record SingleChoiceTagFieldPlan(
         int FieldIndex,
         string? BoundVariableName,
-        InliningFunctionSpecialization.ParameterSpecialization? ParameterSpecialization,
+        ParameterSpecialization? ParameterSpecialization,
         IReadOnlyList<Node<SyntaxTypes.Pattern>> FlattenedParameters,
         IReadOnlyList<Node<SyntaxTypes.Expression>> FlattenedActualArguments,
         Node<SyntaxTypes.Expression> ReplacementExpression,
@@ -2711,12 +2972,18 @@ public class Inlining
     {
         if (IsFunctionExpression(actualFieldExpression.Value, context))
         {
+            var fieldSpecialization =
+                ParameterSpecialization.ClassifyArgument(actualFieldExpression.Value) ??
+                new ParameterSpecialization.ConcreteLambdaValue(
+                    new SyntaxTypes.LambdaStruct(
+                        Arguments: [],
+                        Expression: actualFieldExpression));
+
             return
                 new SingleChoiceTagFieldPlan(
                     FieldIndex: fieldIndex,
                     BoundVariableName: fieldName,
-                    ParameterSpecialization:
-                    InliningFunctionSpecialization.ClassifyArgument(actualFieldExpression.Value),
+                    ParameterSpecialization: fieldSpecialization,
                     FlattenedParameters: [],
                     FlattenedActualArguments: [],
                     ReplacementExpression: actualFieldExpression,
@@ -2799,7 +3066,7 @@ public class Inlining
         }
 
         var nestedSpecFields =
-            ImmutableDictionary.CreateBuilder<int, InliningFunctionSpecialization.ParameterSpecialization>();
+            ImmutableDictionary.CreateBuilder<int, ParameterSpecialization>();
 
         foreach (var nestedFieldPlan in nestedFieldPlans)
         {
@@ -2814,8 +3081,8 @@ public class Inlining
                 FieldIndex: fieldIndex,
                 BoundVariableName: fieldName,
                 ParameterSpecialization:
-                new InliningFunctionSpecialization.ParameterSpecialization.SingleChoiceTagUnwrap(
-                    constructorName,
+                new ParameterSpecialization.SingleChoiceTagUnwrap(
+                    new DeclQualifiedName(constructorName.ModuleName, constructorName.Name),
                     nestedSpecFields.ToImmutable()),
                 FlattenedParameters: [.. nestedFieldPlans.SelectMany(plan => plan.FlattenedParameters)],
                 FlattenedActualArguments: [.. nestedFieldPlans.SelectMany(plan => plan.FlattenedActualArguments)],
@@ -2850,8 +3117,7 @@ public class Inlining
         // Look up the pre-assigned name from the specialization catalog
         var specializedName =
             LookupSpecializedName(
-                funcImpl.Name.Value,
-                funcInfo.ModuleName,
+                new DeclQualifiedName(funcInfo.ModuleName, funcImpl.Name.Value),
                 specialization.ParamIndex,
                 BuildSingleChoiceTagUnwrapSpec(specialization, context),
                 context);
@@ -3076,43 +3342,13 @@ public class Inlining
                         break;
                     }
 
-                    if (IsFunctionExpression(actualFieldExpressions[fieldIndex].Value, context))
-                    {
-                        fieldPlans.Add(
-                            new SingleChoiceTagFieldPlan(
-                                FieldIndex: fieldIndex,
-                                BoundVariableName: fieldVarPattern.Name,
-                                ParameterSpecialization:
-                                InliningFunctionSpecialization.ClassifyArgument(
-                                    actualFieldExpressions[fieldIndex].Value),
-                                FlattenedParameters: [],
-                                FlattenedActualArguments: [],
-                                ReplacementExpression: actualFieldExpressions[fieldIndex],
-                                NestedFieldPlans: []));
-
-                        continue;
-                    }
-
                     fieldPlans.Add(
-                        new SingleChoiceTagFieldPlan(
-                            FieldIndex: fieldIndex,
-                            BoundVariableName: fieldVarPattern.Name,
-                            ParameterSpecialization: null,
-                            FlattenedParameters:
-                            [
-                            new Node<SyntaxTypes.Pattern>(
-                                s_zeroRange,
-                                new SyntaxTypes.Pattern.VarPattern(fieldVarPattern.Name))
-                            ],
-                            FlattenedActualArguments:
-                            [
-                            actualFieldExpressions[fieldIndex]
-                            ],
-                            ReplacementExpression:
-                            new Node<SyntaxTypes.Expression>(
-                                s_zeroRange,
-                                new SyntaxTypes.Expression.FunctionOrValue([], fieldVarPattern.Name)),
-                            NestedFieldPlans: []));
+                        BuildFieldPlanForVarPatternField(
+                            fieldIndex,
+                            fieldVarPattern.Name,
+                            actualFieldExpressions[fieldIndex],
+                            funcInfo.ModuleName,
+                            context));
                 }
 
                 if (!allFieldsHandled)
@@ -3552,6 +3788,15 @@ public class Inlining
             (left.ModuleName.Count is 0 || right.ModuleName.Count is 0));
     }
 
+    private static bool AreEquivalentConstructorNames(
+        SyntaxTypes.QualifiedNameRef left,
+        DeclQualifiedName right)
+    {
+        return
+            (left.Name == right.DeclName &&
+            (left.ModuleName.Count is 0 || left.ModuleName.SequenceEqual(right.Namespaces)));
+    }
+
     private static int CountUnshadowedLocalVariableReferences(
         SyntaxTypes.Expression expr,
         string variableName)
@@ -3779,37 +4024,98 @@ public class Inlining
                     context);
         }
 
-        // Build parameter specializations for catalog lookup.
-        var paramSpecs =
-            ImmutableDictionary.CreateBuilder<int, InliningFunctionSpecialization.ParameterSpecialization>();
+        NamedSpecialization? bestSpecialization = null;
 
-        foreach (var paramIndex in invariantFuncParamIndices)
+        if (context.SpecializationCatalog.SpecializationsByFunction.TryGetValue(
+            new DeclQualifiedName(funcModuleName, funcName),
+            out var availableSpecializations))
         {
-            var classified = InliningFunctionSpecialization.ClassifyArgument(appArgs[paramIndex].Value);
+            bestSpecialization =
+                SpecializationCatalog.FindBestSpecialization(
+                    availableSpecializations,
+                    [.. appArgs.Select(arg => arg.Value)]);
+        }
 
-            if (classified is not null)
+        if (bestSpecialization is null ||
+            bestSpecialization.Specialization.SpecializedAwayCount is 0)
+        {
+            var fallbackParamSpecs =
+                ImmutableDictionary.CreateBuilder<int, ParameterSpecialization>();
+
+            foreach (var paramIndex in invariantFuncParamIndices)
             {
-                paramSpecs[paramIndex] = classified;
+                var classified = ParameterSpecialization.ClassifyArgument(appArgs[paramIndex].Value);
+
+                if (classified is not null)
+                {
+                    fallbackParamSpecs[paramIndex] = classified;
+                }
+                else
+                {
+                    fallbackParamSpecs[paramIndex] =
+                        new ParameterSpecialization.ConcreteLambdaValue(
+                            new SyntaxTypes.LambdaStruct(
+                                Arguments: [],
+                                Expression: appArgs[paramIndex]));
+                }
             }
-            else
+
+            var fallbackSpecializedName =
+                LookupSpecializedNameForHigherOrder(
+                    new DeclQualifiedName(funcModuleName, funcName),
+                    fallbackParamSpecs.ToImmutable(),
+                    context);
+
+            if (fallbackSpecializedName is not null)
             {
-                paramSpecs[paramIndex] =
-                    new InliningFunctionSpecialization.ParameterSpecialization.ConcreteLambdaValue(
-                        new SyntaxTypes.LambdaStruct(
-                            Arguments: [],
-                            Expression: appArgs[paramIndex]));
+                bestSpecialization =
+                    new NamedSpecialization(
+                        new DeclQualifiedName(funcModuleName, funcName),
+                        new FunctionSpecialization(fallbackParamSpecs.ToImmutable()),
+                        fallbackSpecializedName);
             }
         }
 
-        var specializedName =
-            LookupSpecializedNameForHigherOrder(
-                funcName,
-                funcModuleName,
-                paramSpecs.ToImmutable(),
-                context);
-
-        if (specializedName is null)
+        if (bestSpecialization is null ||
+            bestSpecialization.Specialization.SpecializedAwayCount is 0)
+        {
             return (null, []);
+        }
+
+        var selectedHigherOrderParamIndices =
+            bestSpecialization.Specialization.ParameterSpecializations
+            .Where(kvp => kvp.Value is not ParameterSpecialization.SingleChoiceTagUnwrap)
+            .Select(kvp => kvp.Key)
+            .OrderBy(i => i)
+            .ToList();
+
+        var selectedHigherOrderParamIndicesSet = new HashSet<int>(selectedHigherOrderParamIndices);
+
+        var selectedSingleChoiceTagParamIndex =
+            bestSpecialization.Specialization.ParameterSpecializations
+            .Where(kvp => kvp.Value is ParameterSpecialization.SingleChoiceTagUnwrap)
+            .Select(kvp => (int?)kvp.Key)
+            .FirstOrDefault();
+
+        if (selectedSingleChoiceTagParamIndex is { } singleChoiceTagParamIndex &&
+            TryBuildSingleChoiceTagSpecialization(
+                funcImpl,
+                appArgs,
+                funcInfo,
+                context) is { } combinedSingleChoiceTagSpecialization &&
+            combinedSingleChoiceTagSpecialization.ParamIndex == singleChoiceTagParamIndex)
+        {
+            return
+                TrySpecializeRecursiveCallWithCombinedSingleChoiceTagAndHigherOrder(
+                    funcInfo,
+                    funcImpl,
+                    appArgs,
+                    bestSpecialization.SpecializedFunctionName,
+                    combinedSingleChoiceTagSpecialization,
+                    context);
+        }
+
+        var specializedName = bestSpecialization.SpecializedFunctionName;
 
         // Step 1: Rewrite recursive self-calls in the body to use the specialized name
         // and strip the invariant arguments.
@@ -3819,12 +4125,12 @@ public class Inlining
                 funcName,
                 funcModuleName,
                 specializedName,
-                invariantIndicesSet);
+                selectedHigherOrderParamIndicesSet);
 
         // Step 2: Substitute invariant parameter names with concrete argument expressions.
         var substitutions = new Dictionary<string, Node<SyntaxTypes.Expression>>();
 
-        foreach (var paramIndex in invariantFuncParamIndices)
+        foreach (var paramIndex in selectedHigherOrderParamIndices)
         {
             var varPattern = (SyntaxTypes.Pattern.VarPattern)funcParams[paramIndex].Value;
             substitutions[varPattern.Name] = appArgs[paramIndex];
@@ -3842,7 +4148,7 @@ public class Inlining
         // Build remaining parameter list (non-invariant params only).
         var remainingParams =
             funcParams
-            .Where((_, i) => !invariantIndicesSet.Contains(i))
+            .Where((_, i) => !selectedHigherOrderParamIndices.Contains(i))
             .ToImmutableArray();
 
         // Create the specialized function as a module-level declaration.
@@ -3872,10 +4178,162 @@ public class Inlining
 
         for (var i = 0; i < appArgs.Count; i++)
         {
-            if (i < funcParams.Count && invariantIndicesSet.Contains(i))
+            if (i < funcParams.Count && selectedHigherOrderParamIndices.Contains(i))
                 continue;
 
             callArgs.Add(appArgs[i]);
+        }
+
+        SyntaxTypes.Expression callExpr =
+            callArgs.Count is 1
+            ?
+            callArgs[0].Value
+            :
+            new SyntaxTypes.Expression.Application([.. callArgs]);
+
+        return (callExpr, ImmutableList.Create(newDecl));
+    }
+
+    private static (SyntaxTypes.Expression?, ImmutableList<Node<SyntaxTypes.Declaration>>)
+        TrySpecializeRecursiveCallWithCombinedSingleChoiceTagAndHigherOrder(
+        FunctionInfo funcInfo,
+        SyntaxTypes.FunctionImplementation funcImpl,
+        IReadOnlyList<Node<SyntaxTypes.Expression>> appArgs,
+        string specializedName,
+        SingleChoiceTagSpecialization singleChoiceTagSpecialization,
+        InliningContext context)
+    {
+        var bodyAfterTagRewrite =
+            RewriteRecursiveCallsForSingleChoiceTagSpecialization(
+                funcImpl.Expression,
+                funcImpl.Name.Value,
+                funcInfo.ModuleName,
+                specializedName,
+                singleChoiceTagSpecialization);
+
+        bodyAfterTagRewrite =
+            SubstituteInExpression(
+                bodyAfterTagRewrite,
+                new Dictionary<string, Node<SyntaxTypes.Expression>>
+                {
+                    [singleChoiceTagSpecialization.ParamName] = singleChoiceTagSpecialization.ReplacementArgument
+                });
+
+        var directPatternFieldSubstitutions = new Dictionary<string, Node<SyntaxTypes.Expression>>();
+
+        CollectDirectFieldSubstitutions(
+            singleChoiceTagSpecialization.FieldPlans,
+            directPatternFieldSubstitutions);
+
+        if (directPatternFieldSubstitutions.Count > 0)
+        {
+            bodyAfterTagRewrite =
+                SubstituteInExpression(
+                    bodyAfterTagRewrite,
+                    directPatternFieldSubstitutions);
+        }
+
+        var parametersAfterTagRewrite =
+            BuildSingleChoiceTagSpecializedParameters(
+                funcImpl.Arguments,
+                singleChoiceTagSpecialization);
+
+        var callArgumentsAfterTagRewrite =
+            BuildSingleChoiceTagSpecializedCallArguments(
+                specializedName,
+                appArgs,
+                funcImpl.Arguments.Count,
+                singleChoiceTagSpecialization)
+            .Skip(1)
+            .ToList();
+
+        var invariantHigherOrderParamIndices = new HashSet<int>();
+
+        for (var i = 0; i < parametersAfterTagRewrite.Length && i < callArgumentsAfterTagRewrite.Count; i++)
+        {
+            if (parametersAfterTagRewrite[i].Value is not SyntaxTypes.Pattern.VarPattern varPattern)
+                continue;
+
+            if (!IsFunctionExpression(callArgumentsAfterTagRewrite[i].Value, context))
+                continue;
+
+            if (!IsLoopInvariantInRecursiveCalls(
+                    bodyAfterTagRewrite.Value,
+                    specializedName,
+                    funcInfo.ModuleName,
+                    varPattern.Name,
+                    i))
+                continue;
+
+            invariantHigherOrderParamIndices.Add(i);
+        }
+
+        var bodyAfterHigherOrderRewrite =
+            invariantHigherOrderParamIndices.Count is 0
+            ?
+            bodyAfterTagRewrite
+            :
+            RewriteGroupCallsInExpression(
+                bodyAfterTagRewrite,
+                [(specializedName, [], specializedName)],
+                invariantHigherOrderParamIndices);
+
+        var higherOrderSubstitutions = new Dictionary<string, Node<SyntaxTypes.Expression>>();
+
+        foreach (var paramIndex in invariantHigherOrderParamIndices)
+        {
+            var varPattern = (SyntaxTypes.Pattern.VarPattern)parametersAfterTagRewrite[paramIndex].Value;
+            higherOrderSubstitutions[varPattern.Name] = callArgumentsAfterTagRewrite[paramIndex];
+        }
+
+        if (higherOrderSubstitutions.Count > 0)
+        {
+            bodyAfterHigherOrderRewrite =
+                SubstituteInExpression(
+                    bodyAfterHigherOrderRewrite,
+                    higherOrderSubstitutions);
+        }
+
+        var qualifiedBody =
+            QualifyLiftedHelperReferencesFromCalleeModule(
+                bodyAfterHigherOrderRewrite,
+                funcInfo.ModuleName,
+                context);
+
+        var remainingParameters =
+            parametersAfterTagRewrite
+            .Where((_, i) => !invariantHigherOrderParamIndices.Contains(i))
+            .ToImmutableArray();
+
+        var specializedImpl =
+            new SyntaxTypes.FunctionImplementation(
+                Name: new Node<string>(s_zeroRange, specializedName),
+                Arguments: remainingParameters,
+                Expression: qualifiedBody);
+
+        var specializedFunc =
+            new SyntaxTypes.FunctionStruct(
+                Documentation: null,
+                Signature: null,
+                Declaration: new Node<SyntaxTypes.FunctionImplementation>(s_zeroRange, specializedImpl));
+
+        var newDecl =
+            new Node<SyntaxTypes.Declaration>(
+                s_zeroRange,
+                new SyntaxTypes.Declaration.FunctionDeclaration(specializedFunc));
+
+        var callArgs =
+            new List<Node<SyntaxTypes.Expression>>
+            {
+                new(s_zeroRange, new SyntaxTypes.Expression.FunctionOrValue([], specializedName))
+            };
+
+        for (var i = 0; i < callArgumentsAfterTagRewrite.Count; i++)
+        {
+            if (invariantHigherOrderParamIndices.Contains(i))
+                continue;
+
+            callArgs.Add(callArgumentsAfterTagRewrite[i]);
         }
 
         SyntaxTypes.Expression callExpr =
@@ -4159,7 +4617,7 @@ public class Inlining
 
         var startFuncName = startFunc.Function.Declaration.Value.Name.Value;
         var startFuncModule = startFunc.ModuleName;
-        var startKey = (startFuncModule, startFuncName);
+        var startKey = new DeclQualifiedName(startFuncModule, startFuncName);
         var startBody = startFunc.Function.Declaration.Value.Expression.Value;
 
         var candidates = new List<FunctionInfo>();
@@ -4167,11 +4625,11 @@ public class Inlining
         // Find functions referenced directly in the start function's body
         var directRefs =
             CollectFunctionReferences(startBody)
-            .Distinct(s_moduleNameTupleComparer);
+            .Distinct();
 
         foreach (var refKey in directRefs)
         {
-            if (s_moduleNameTupleComparer.Equals(refKey, startKey))
+            if (refKey.Equals(startKey))
                 continue;
 
             if (!context.FunctionsByQualifiedName.TryGetValue(refKey, out var refFunc))
@@ -4186,7 +4644,7 @@ public class Inlining
             // Check if this function references back to the start function (direct mutual recursion)
             var refRefs = CollectFunctionReferences(refBody);
 
-            if (!refRefs.Any(r => s_moduleNameTupleComparer.Equals(r, startKey)))
+            if (!refRefs.Any(r => r.Equals(startKey)))
                 continue;
 
             // Check that the function has enough parameters for all invariant positions
@@ -5061,7 +5519,7 @@ public class Inlining
             return true;
         }
 
-        if (fieldPlan.ParameterSpecialization is not InliningFunctionSpecialization.ParameterSpecialization.SingleChoiceTagUnwrap nestedTagUnwrap ||
+        if (fieldPlan.ParameterSpecialization is not ParameterSpecialization.SingleChoiceTagUnwrap nestedTagUnwrap ||
             !TryDeconstructConstructorApplication(
                 fieldExpression,
                 out var constructorName,
@@ -5179,11 +5637,11 @@ public class Inlining
 
         // Build parameter specializations for catalog lookup (same for all group members).
         var paramSpecs =
-            ImmutableDictionary.CreateBuilder<int, InliningFunctionSpecialization.ParameterSpecialization>();
+            ImmutableDictionary.CreateBuilder<int, ParameterSpecialization>();
 
         foreach (var paramIndex in invariantIndicesSet)
         {
-            var classified = InliningFunctionSpecialization.ClassifyArgument(appArgs[paramIndex].Value);
+            var classified = ParameterSpecialization.ClassifyArgument(appArgs[paramIndex].Value);
 
             if (classified is not null)
             {
@@ -5192,7 +5650,7 @@ public class Inlining
             else
             {
                 paramSpecs[paramIndex] =
-                    new InliningFunctionSpecialization.ParameterSpecialization.ConcreteLambdaValue(
+                    new ParameterSpecialization.ConcreteLambdaValue(
                         new SyntaxTypes.LambdaStruct(
                             Arguments: [],
                             Expression: appArgs[paramIndex]));
@@ -5204,8 +5662,7 @@ public class Inlining
         // Look up the start function's specialized name from the catalog.
         var startSpecializedName =
             LookupSpecializedNameForHigherOrder(
-                startImpl.Name.Value,
-                startFunc.ModuleName,
+                new DeclQualifiedName(startFunc.ModuleName, startImpl.Name.Value),
                 builtParamSpecs,
                 context);
 
@@ -5225,8 +5682,7 @@ public class Inlining
 
             var memberSpecName =
                 LookupSpecializedNameForHigherOrder(
-                    memberImpl.Name.Value,
-                    member.ModuleName,
+                    new DeclQualifiedName(member.ModuleName, memberImpl.Name.Value),
                     builtParamSpecs,
                     context);
 
@@ -5598,7 +6054,8 @@ public class Inlining
             {
                 SyntaxTypes.Expression.FunctionOrValue funcOrValue when funcOrValue.ModuleName.Count is 0 &&
                     funcOrValue.Name.Contains("__lifted__", StringComparison.Ordinal) &&
-                    context.FunctionsByQualifiedName.ContainsKey((calleeModuleName, funcOrValue.Name)) =>
+                    context.FunctionsByQualifiedName.ContainsKey(
+                        new DeclQualifiedName(calleeModuleName, funcOrValue.Name)) =>
                 new SyntaxTypes.Expression.FunctionOrValue(calleeModuleName, funcOrValue.Name),
 
                 SyntaxTypes.Expression.Application app =>
@@ -6342,7 +6799,8 @@ public class Inlining
         // Already a qualified function reference
         if (expr is SyntaxTypes.Expression.FunctionOrValue fov &&
             fov.ModuleName.Count > 0 &&
-            context.FunctionsByQualifiedName.ContainsKey((fov.ModuleName, fov.Name)))
+            context.FunctionsByQualifiedName.ContainsKey(
+                new DeclQualifiedName(fov.ModuleName, fov.Name)))
             return (exprNode, ImmutableList<Node<SyntaxTypes.Declaration>>.Empty);
 
         // Parenthesized expression
@@ -6353,9 +6811,11 @@ public class Inlining
         if (expr is SyntaxTypes.Expression.Application app && app.Arguments.Count >= 2 &&
             app.Arguments[0].Value is SyntaxTypes.Expression.FunctionOrValue funcOrValue)
         {
-            var qualifiedName = (funcOrValue.ModuleName, funcOrValue.Name);
-
-            if (context.FunctionsByQualifiedName.TryGetValue(qualifiedName, out var funcInfo) &&
+            if (TryResolveKnownFunctionReference(
+                funcOrValue,
+                context,
+                out var qualifiedName,
+                out var funcInfo) &&
                 !funcInfo.IsRecursive &&
                 !context.InliningStack.Contains(qualifiedName))
             {
@@ -6385,7 +6845,7 @@ public class Inlining
                         if (inlinedResult is SyntaxTypes.Expression.FunctionOrValue resultFov &&
                             (resultFov.ModuleName.Count is 0 ||
                             !context.FunctionsByQualifiedName.ContainsKey(
-                                (resultFov.ModuleName, resultFov.Name))))
+                                new DeclQualifiedName(resultFov.ModuleName, resultFov.Name))))
                         {
                             // Not a known function reference, discard declarations
                             return (null, []);
@@ -6447,18 +6907,18 @@ public class Inlining
     private static bool TryResolveKnownFunctionReference(
         SyntaxTypes.Expression.FunctionOrValue funcOrValue,
         InliningContext context,
-        out (ModuleName ModuleName, string FunctionName) qualifiedName,
+        out DeclQualifiedName qualifiedName,
         out FunctionInfo funcInfo)
     {
         if (funcOrValue.ModuleName.Count > 0)
         {
-            qualifiedName = (funcOrValue.ModuleName, funcOrValue.Name);
+            qualifiedName = new DeclQualifiedName(funcOrValue.ModuleName, funcOrValue.Name);
             return context.FunctionsByQualifiedName.TryGetValue(qualifiedName, out funcInfo!);
         }
 
         if (context.CurrentModuleName is { } currentModuleName)
         {
-            qualifiedName = (currentModuleName, funcOrValue.Name);
+            qualifiedName = new DeclQualifiedName(currentModuleName, funcOrValue.Name);
             return context.FunctionsByQualifiedName.TryGetValue(qualifiedName, out funcInfo!);
         }
 
@@ -6526,32 +6986,4 @@ public class Inlining
             newDecls);
     }
 
-    /// <summary>
-    /// Comparer for module name tuples that handles collection equality properly.
-    /// </summary>
-    private sealed class ModuleNameTupleComparer : IEqualityComparer<(ModuleName ModuleName, string FunctionName)>
-    {
-        public bool Equals(
-            (ModuleName ModuleName, string FunctionName) x,
-            (ModuleName ModuleName, string FunctionName) y)
-        {
-            return
-                x.FunctionName == y.FunctionName &&
-                x.ModuleName.SequenceEqual(y.ModuleName);
-        }
-
-        public int GetHashCode((ModuleName ModuleName, string FunctionName) obj)
-        {
-            var hash = new HashCode();
-
-            foreach (var part in obj.ModuleName)
-            {
-                hash.Add(part);
-            }
-
-            hash.Add(obj.FunctionName);
-
-            return hash.ToHashCode();
-        }
-    }
 }
