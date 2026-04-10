@@ -141,6 +141,10 @@ public static class FormatCSharpFile
     private static bool IsDirectiveTrivia(SyntaxTrivia t) =>
         t.GetStructure() is DirectiveTriviaSyntax;
 
+    /// <summary>Returns true if the trivia is a <c>#region</c> or <c>#endregion</c> directive.</summary>
+    private static bool IsRegionDirective(SyntaxTrivia t) =>
+        t.GetStructure() is RegionDirectiveTriviaSyntax or EndRegionDirectiveTriviaSyntax;
+
     /// <summary>
     /// Returns true when the trivia list contains a comment followed by a blank line
     /// (2+ line breaks before the next non-whitespace trivia or end of list).
@@ -331,8 +335,9 @@ public static class FormatCSharpFile
             {
                 // Structured trivia (doc comments, preprocessor directives)
                 // They contain their own internal newlines.
-                // Preprocessor directives stay at column 0; others get indented.
-                if (atLineStart && !IsDirectiveTrivia(t))
+                // Preprocessor directives stay at column 0, except region directives
+                // which are indented to match their scope.
+                if (atLineStart && (!IsDirectiveTrivia(t) || IsRegionDirective(t)))
                     r.Add(Indent(indent));
 
                 r.Add(t);
@@ -439,8 +444,9 @@ public static class FormatCSharpFile
 
         foreach (var t in preserved)
         {
-            // Preprocessor directives stay at column 0; others get indented.
-            if (!IsDirectiveTrivia(t))
+            // Preprocessor directives stay at column 0, except region directives
+            // which are indented to match their scope.
+            if (!IsDirectiveTrivia(t) || IsRegionDirective(t))
                 r.Add(Indent(indent));
 
             r.Add(ReindentMultiLineComment(t, indent));
@@ -966,6 +972,12 @@ public static class FormatCSharpFile
                 // The previous member already has a trailing \n.
                 // So for 1 blank line we need 1 more \n in the leading trivia.
                 var minLeadingBreaks = needsOneBlank ? 1 : 0;
+
+                // If the previous member's last token has a region directive in its
+                // leading trivia, that directive's internal newline already provides
+                // one break of separation, so reduce the required leading breaks.
+                if (minLeadingBreaks > 0 && result[^1].GetLastToken().LeadingTrivia.Any(IsRegionDirective))
+                    minLeadingBreaks--;
 
                 var leading = fmt.GetLeadingTrivia();
                 // Count existing leading line breaks (not including prev member's trailing)
@@ -2545,7 +2557,24 @@ public static class FormatCSharpFile
                 e = ee.WithExpression((ExpressionSyntax)FormatNode(ee.Expression, ctx));
 
             else if (e is SpreadElementSyntax se)
-                e = se.WithExpression((ExpressionSyntax)FormatNode(se.Expression, ctx));
+            {
+                var fmtExpr = (ExpressionSyntax)FormatNode(se.Expression, ctx);
+
+                // If the spread operator and expression are split across lines,
+                // join them so ..expr stays on the same line.
+                if (se.OperatorToken.TrailingTrivia.Any(IsLineBreak) ||
+                    se.Expression.GetLeadingTrivia().Any(IsLineBreak))
+                {
+                    e =
+                        se
+                        .WithOperatorToken(se.OperatorToken.WithTrailingTrivia())
+                        .WithExpression(fmtExpr.WithLeadingTrivia());
+                }
+                else
+                {
+                    e = se.WithExpression(fmtExpr);
+                }
+            }
 
             // Preserve blank lines between elements by counting original breaks.
             // Subtract comment count because EnsureLeadingBreaks adds a break

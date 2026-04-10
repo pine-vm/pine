@@ -5796,6 +5796,81 @@ public class CSharpFormatTests
     }
 
     [Fact]
+    public void Preserves_region_directive_indented()
+    {
+        var input =
+            """"
+            class Test
+            {
+                #region Helper Methods
+
+                void Method()
+                {
+                    #region Nested Region
+                    // Some code here
+                    #endregion
+                }
+
+                #endregion
+            }
+            class Test
+            {
+                #region Helper Methods
+
+                void Method()
+                {
+                    #region Nested Region
+                    // Some code here
+                    #endregion
+                }
+
+                #endregion
+            }
+            """";
+
+        AssertFormattedSyntax(input, input, scriptMode: false);
+    }
+
+    [Fact]
+    public void Formats_collection_spread_token_on_same_line()
+    {
+        var input =
+            """"
+            return inferredType switch
+            {
+                TypeInference.InferredType.RecordType recordType =>
+                    new TypeInference.InferredType.RecordType(
+                        [..
+                        recordType.Fields.Select(
+                            field => (field.FieldName, ExpandAliasType(field.FieldType, aliasTypes) ?? field.FieldType))
+                        ]),
+
+                _ =>
+                inferredType
+            };
+            """";
+
+        var expected =
+            """"
+            return
+                inferredType switch
+                {
+                    TypeInference.InferredType.RecordType recordType =>
+                    new TypeInference.InferredType.RecordType(
+                        [
+                        ..recordType.Fields.Select(
+                            field => (field.FieldName, ExpandAliasType(field.FieldType, aliasTypes) ?? field.FieldType))
+                        ]),
+
+                    _ =>
+                    inferredType
+                };
+            """";
+
+        AssertFormattedSyntax(input, expected, scriptMode: true);
+    }
+
+    [Fact]
     public void Preserves_lock_block()
     {
         var input =
