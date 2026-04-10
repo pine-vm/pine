@@ -789,17 +789,15 @@ public static class BuiltinOperatorLowering
             }
 
             return
-                ExtractFunctionParameterTypes(functionSignatureType)
+                [.. ExtractFunctionParameterTypes(functionSignatureType)
                 .Select(parameterType => ExpandAliasType(parameterType, context.AliasTypes))
-                .Cast<TypeInference.InferredType?>()
-                .ToList();
+                .Cast<TypeInference.InferredType?>()];
         }
 
         return
-            functionTypeInfo.ParameterTypes
+            [.. functionTypeInfo.ParameterTypes
             .Select(parameterType => ExpandAliasType(parameterType, context.AliasTypes))
-            .Cast<TypeInference.InferredType?>()
-            .ToList();
+            .Cast<TypeInference.InferredType?>()];
     }
 
     private static IReadOnlyList<TypeInference.InferredType> ExtractFunctionParameterTypes(
