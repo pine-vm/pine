@@ -9,41 +9,24 @@ using ModuleName = System.Collections.Generic.IReadOnlyList<string>;
 
 using SyntaxTypes = Pine.Core.Elm.ElmSyntax.Stil4mElmSyntax7;
 
-// Alias to avoid ambiguity with System.Range
-using Range = Pine.Core.Elm.ElmSyntax.SyntaxModel.Range;
-
-using CollectedSpecializations = System.Collections.Immutable.ImmutableDictionary<
-    Pine.Core.CodeAnalysis.DeclQualifiedName,
-    System.Collections.Immutable.ImmutableHashSet<Pine.Core.Elm.ElmCompilerInDotnet.FunctionSpecialization>>;
-
 namespace Pine.Core.Elm.ElmCompilerInDotnet;
 
 /// <summary>
 /// See the file 'explore-early-instantiation-stage.md' for design notes.
 /// </summary>
-public class Inlining
+public partial class Inlining
 {
-    /// <summary>
-    /// Zero-based location used for generated syntax nodes.
-    /// Per design notes: "we use the value 0 for all locations (row, column) and ranges for newly created syntax nodes."
-    /// These will be used in future cross-module inlining when creating new syntax nodes.
-    /// </summary>
-    private static readonly Location s_zeroLocation = new(Row: 0, Column: 0);
 
-    /// <summary>
-    /// Zero range used for generated syntax nodes. See <see cref="s_zeroLocation"/> for details.
-    /// </summary>
-    private static readonly Range s_zeroRange = new(Start: s_zeroLocation, End: s_zeroLocation);
 
     public abstract record Config
     {
         /// <summary>
-        /// Attempt inlining only for function applications which supply functions as arguments.
+        /// Inline function applications which supply functions as arguments (higher-order inlining).
         /// </summary>
         public static readonly Config OnlyFunctions = new InlineOnlyFunctions();
 
         /// <summary>
-        /// Attempt inlining only for function applications which supply functions as arguments.
+        /// Inline function applications which supply functions as arguments (higher-order inlining).
         /// </summary>
         internal sealed record InlineOnlyFunctions
             : Config;
@@ -64,57 +47,6 @@ public class Inlining
     private record SingleChoiceConstructorInfo(
         SyntaxTypes.QualifiedNameRef ConstructorName,
         int FieldCount);
-
-    /// <summary>
-    /// Merges two immutable specialization collections, unioning the sets for matching keys.
-    /// </summary>
-    private static CollectedSpecializations MergeCollected(
-        CollectedSpecializations left,
-        CollectedSpecializations right)
-    {
-        if (left.IsEmpty)
-            return right;
-
-        if (right.IsEmpty)
-            return left;
-
-        var result = left;
-
-        foreach (var kvp in right)
-        {
-            result =
-                result.SetItem(
-                    kvp.Key,
-                    result.TryGetValue(kvp.Key, out var existing)
-                    ?
-                    existing.Union(kvp.Value)
-                    :
-                    kvp.Value);
-        }
-
-        return result;
-    }
-
-    /// <summary>
-    /// Adds a single specialization to the immutable collection.
-    /// </summary>
-    private static CollectedSpecializations AddToCollected(
-        CollectedSpecializations collected,
-        DeclQualifiedName targetName,
-        FunctionSpecialization spec)
-    {
-        return
-            collected.SetItem(
-                targetName,
-                collected.TryGetValue(targetName, out var existing)
-                ?
-                existing.Add(spec)
-                :
-                [spec]);
-    }
-
-    private static readonly CollectedSpecializations s_emptyCollected =
-        [];
 
     private enum PipelineStage
     {
@@ -139,13 +71,6 @@ public class Inlining
         SpecializationCatalog SpecializationCatalog,
         PipelineStage Stage);
 
-    /// <summary>
-    /// Result of deconstructing an expression into a constructor application
-    /// with its name and field expressions.
-    /// </summary>
-    private sealed record ConstructorApplication(
-        SyntaxTypes.QualifiedNameRef ConstructorName,
-        IReadOnlyList<Node<SyntaxTypes.Expression>> FieldExpressions);
 
     /// <summary>
     /// Result of resolving a function reference to its qualified name and function info.
@@ -248,498 +173,6 @@ public class Inlining
 
     private static bool EnablesClassicInlining(InliningContext context) =>
         context.Stage is PipelineStage.Combined or PipelineStage.InliningOnly;
-
-    /// <summary>
-    /// Pass 1: Walk all modules and collect specialization requests.
-    /// This simulates the inlining walk (including expanding non-recursive functions)
-    /// but instead of creating specialized declarations, it records what specializations
-    /// are needed via <see cref="FunctionSpecialization"/>.
-    /// </summary>
-    private static CollectedSpecializations CollectSpecializationsFromModules(
-        IReadOnlyList<SyntaxTypes.File> modules,
-        InliningContext context)
-    {
-        var collected = s_emptyCollected;
-
-        foreach (var module in modules)
-        {
-            var moduleName = SyntaxTypes.Module.GetModuleName(module.ModuleDefinition.Value).Value;
-
-            var moduleContext =
-                context with { Resolution = context.Resolution with { CurrentModuleName = moduleName } };
-
-            foreach (var decl in module.Declarations)
-            {
-                if (decl.Value is SyntaxTypes.Declaration.FunctionDeclaration funcDecl)
-                {
-                    collected =
-                        MergeCollected(
-                            collected,
-                            CollectSpecializationsFromExpression(
-                                funcDecl.Function.Declaration.Value.Expression,
-                                moduleContext));
-                }
-            }
-        }
-
-        return collected;
-    }
-
-    /// <summary>
-    /// Recursively walks an expression tree to find call sites that would trigger
-    /// specialization, and collects the corresponding <see cref="FunctionSpecialization"/>
-    /// requests. Returns an immutable dictionary mapping target function names to their
-    /// deduplicated specialization sets.
-    /// </summary>
-    private static CollectedSpecializations CollectSpecializationsFromExpression(
-        Node<SyntaxTypes.Expression> exprNode,
-        InliningContext context)
-    {
-        switch (exprNode.Value)
-        {
-            case SyntaxTypes.Expression.Application app:
-                return CollectSpecializationsFromApplication(app, context);
-
-            case SyntaxTypes.Expression.ParenthesizedExpression paren:
-                return CollectSpecializationsFromExpression(paren.Expression, context);
-
-            case SyntaxTypes.Expression.IfBlock ifBlock:
-                {
-                    var result = CollectSpecializationsFromExpression(ifBlock.Condition, context);
-                    result = MergeCollected(result, CollectSpecializationsFromExpression(ifBlock.ThenBlock, context));
-                    result = MergeCollected(result, CollectSpecializationsFromExpression(ifBlock.ElseBlock, context));
-                    return result;
-                }
-
-            case SyntaxTypes.Expression.CaseExpression caseExpr:
-                {
-                    var result = CollectSpecializationsFromExpression(caseExpr.CaseBlock.Expression, context);
-
-                    foreach (var branch in caseExpr.CaseBlock.Cases)
-                        result =
-                            MergeCollected(result, CollectSpecializationsFromExpression(branch.Expression, context));
-
-                    return result;
-                }
-
-            case SyntaxTypes.Expression.LetExpression letExpr:
-                {
-                    var result = s_emptyCollected;
-
-                    foreach (var d in letExpr.Value.Declarations)
-                    {
-                        switch (d.Value)
-                        {
-                            case SyntaxTypes.Expression.LetDeclaration.LetFunction letFunc:
-                                result =
-                                    MergeCollected(
-                                        result,
-                                        CollectSpecializationsFromExpression(
-                                            letFunc.Function.Declaration.Value.Expression,
-                                            context));
-
-                                break;
-
-                            case SyntaxTypes.Expression.LetDeclaration.LetDestructuring letDestr:
-                                result =
-                                    MergeCollected(result, CollectSpecializationsFromExpression(letDestr.Expression, context));
-
-                                break;
-                        }
-                    }
-
-                    result =
-                        MergeCollected(
-                            result,
-                            CollectSpecializationsFromExpression(letExpr.Value.Expression, context));
-
-                    return result;
-                }
-
-            case SyntaxTypes.Expression.LambdaExpression lambda:
-                return CollectSpecializationsFromExpression(lambda.Lambda.Expression, context);
-
-            case SyntaxTypes.Expression.ListExpr listExpr:
-                {
-                    var result = s_emptyCollected;
-
-                    foreach (var elem in listExpr.Elements)
-                        result = MergeCollected(result, CollectSpecializationsFromExpression(elem, context));
-
-                    return result;
-                }
-
-            case SyntaxTypes.Expression.TupledExpression tupled:
-                {
-                    var result = s_emptyCollected;
-
-                    foreach (var elem in tupled.Elements)
-                        result = MergeCollected(result, CollectSpecializationsFromExpression(elem, context));
-
-                    return result;
-                }
-
-            case SyntaxTypes.Expression.RecordExpr recordExpr:
-                {
-                    var result = s_emptyCollected;
-
-                    foreach (var field in recordExpr.Fields)
-                        result =
-                            MergeCollected(result, CollectSpecializationsFromExpression(field.Value.Item2, context));
-
-                    return result;
-                }
-
-            case SyntaxTypes.Expression.RecordUpdateExpression recordUpdate:
-                {
-                    var result = s_emptyCollected;
-
-                    foreach (var field in recordUpdate.Fields)
-                        result =
-                            MergeCollected(result, CollectSpecializationsFromExpression(field.Value.Item2, context));
-
-                    return result;
-                }
-
-            case SyntaxTypes.Expression.RecordAccess recordAccess:
-                return CollectSpecializationsFromExpression(recordAccess.Record, context);
-
-            case SyntaxTypes.Expression.Negation negation:
-                return CollectSpecializationsFromExpression(negation.Expression, context);
-
-            case SyntaxTypes.Expression.OperatorApplication opApp:
-                {
-                    var result = CollectSpecializationsFromExpression(opApp.Left, context);
-                    result = MergeCollected(result, CollectSpecializationsFromExpression(opApp.Right, context));
-                    return result;
-                }
-
-            default:
-                return s_emptyCollected;
-        }
-    }
-
-    /// <summary>
-    /// Analyzes a function application to determine if it requires specialization.
-    /// If so, includes a <see cref="FunctionSpecialization"/> in the returned collection.
-    /// Also recurses into inlined function bodies to discover nested specialization needs.
-    /// </summary>
-    private static CollectedSpecializations CollectSpecializationsFromApplication(
-        SyntaxTypes.Expression.Application app,
-        InliningContext context)
-    {
-        if (!EnablesSpecialization(context) || app.Arguments.Count < 2)
-        {
-            var result = s_emptyCollected;
-
-            foreach (var arg in app.Arguments)
-                result = MergeCollected(result, CollectSpecializationsFromExpression(arg, context));
-
-            return result;
-        }
-
-        var collected = s_emptyCollected;
-        var funcExpr = app.Arguments[0].Value;
-
-        // Handle pipe operators: recurse into desugared form
-        if (EnablesClassicInlining(context) &&
-            app.Arguments.Count >= 3 &&
-            funcExpr is SyntaxTypes.Expression.FunctionOrValue pipeFunc &&
-            pipeFunc.ModuleName.Count is 1 && pipeFunc.ModuleName[0] is "Basics")
-        {
-            if (pipeFunc.Name is "apR")
-            {
-                var desugaredArgs = new List<Node<SyntaxTypes.Expression>> { app.Arguments[2], app.Arguments[1] };
-                desugaredArgs.AddRange(app.Arguments.Skip(3));
-
-                return
-                    CollectSpecializationsFromApplication(
-                        new SyntaxTypes.Expression.Application([.. desugaredArgs]),
-                        context);
-            }
-
-            if (pipeFunc.Name is "apL")
-            {
-                var desugaredArgs = new List<Node<SyntaxTypes.Expression>>(app.Arguments.Skip(1));
-
-                return
-                    CollectSpecializationsFromApplication(
-                        new SyntaxTypes.Expression.Application([.. desugaredArgs]),
-                        context);
-            }
-
-            if (pipeFunc.Name is "composeR" or "composeL")
-            {
-                var result = s_emptyCollected;
-
-                foreach (var arg in app.Arguments.Skip(1))
-                    result = MergeCollected(result, CollectSpecializationsFromExpression(arg, context));
-
-                return result;
-            }
-        }
-
-        // Check for known function call
-        if (funcExpr is SyntaxTypes.Expression.FunctionOrValue funcOrValue)
-        {
-            if (TryResolveKnownFunctionReference(funcOrValue, context) is { } resolved)
-            {
-                var funcImpl = resolved.FunctionInfo.Function.Declaration.Value;
-                var funcParams = funcImpl.Arguments;
-                var appArgs = app.Arguments.Skip(1).ToList();
-                var targetDeclName = new DeclQualifiedName(resolved.FunctionInfo.ModuleName, funcImpl.Name.Value);
-
-                // Check for single-choice tag specialization opportunity
-                var tagSpec =
-                    TryBuildFunctionSpecializationForSingleChoiceTag(
-                        resolved.FunctionInfo,
-                        funcImpl,
-                        appArgs,
-                        context);
-
-                if (tagSpec is not null)
-                {
-                    collected = AddToCollected(collected, targetDeclName, tagSpec);
-                }
-
-                // Check for higher-order recursive specialization opportunity
-                if (resolved.FunctionInfo.IsRecursive &&
-                    ShouldInline(funcParams, funcImpl.Expression, appArgs, context))
-                {
-                    var (hoSpec, groupMemberSpecs) =
-                        TryBuildFunctionSpecializationForHigherOrder(
-                            resolved.FunctionInfo,
-                            funcImpl,
-                            appArgs,
-                            context,
-                            includeGroupMembers: true);
-
-                    if (hoSpec is not null)
-                    {
-                        collected = AddToCollected(collected, targetDeclName, hoSpec);
-                    }
-
-                    collected = MergeCollected(collected, groupMemberSpecs);
-                }
-
-                // For non-recursive functions that would be inlined, recurse into the inlined body
-                if (!resolved.FunctionInfo.IsRecursive &&
-                    !context.InliningStack.Contains(resolved.QualifiedName) &&
-                    ShouldInline(funcParams, funcImpl.Expression, appArgs, context))
-                {
-                    var newContext = context with { InliningStack = context.InliningStack.Add(resolved.QualifiedName) };
-
-                    // Simulate inlining: substitute parameters and collect from the body
-                    var substitutions = new Dictionary<string, Node<SyntaxTypes.Expression>>();
-                    var count = Math.Min(funcParams.Count, appArgs.Count);
-
-                    for (var i = 0; i < count; i++)
-                    {
-                        if (funcParams[i].Value is SyntaxTypes.Pattern.VarPattern varPattern)
-                        {
-                            substitutions[varPattern.Name] = appArgs[i];
-                        }
-                    }
-
-                    var substitutedBody = SubstituteInExpression(funcImpl.Expression, substitutions);
-
-                    collected =
-                        MergeCollected(collected, CollectSpecializationsFromExpression(substitutedBody, newContext));
-                }
-            }
-        }
-
-        // Always recurse into arguments
-        foreach (var arg in app.Arguments)
-            collected = MergeCollected(collected, CollectSpecializationsFromExpression(arg, context));
-
-        return collected;
-    }
-
-    /// <summary>
-    /// Builds a <see cref="FunctionSpecialization"/> for a
-    /// single-choice tag specialization opportunity.
-    /// Returns null if no single-choice tag specialization is applicable.
-    /// </summary>
-    private static FunctionSpecialization?
-        TryBuildFunctionSpecializationForSingleChoiceTag(
-        FunctionInfo funcInfo,
-        SyntaxTypes.FunctionImplementation funcImpl,
-        IReadOnlyList<Node<SyntaxTypes.Expression>> appArgs,
-        InliningContext context)
-    {
-        if (appArgs.Count < funcImpl.Arguments.Count)
-            return null;
-
-        var specialization = TryBuildSingleChoiceTagSpecialization(funcImpl, appArgs, funcInfo, context);
-
-        if (specialization is null)
-            return null;
-
-        var paramSpecs =
-            ImmutableDictionary.CreateBuilder<int, ParameterSpecialization>();
-
-        paramSpecs[specialization.ParamIndex] =
-            BuildSingleChoiceTagUnwrapSpec(specialization, context);
-
-        return
-            new FunctionSpecialization(
-                paramSpecs.ToImmutable());
-    }
-
-    /// <summary>
-    /// Builds a <see cref="ParameterSpecialization.SingleChoiceTagUnwrap"/>
-    /// that includes function field specializations for proper deduplication.
-    /// </summary>
-    private static ParameterSpecialization.SingleChoiceTagUnwrap
-        BuildSingleChoiceTagUnwrapSpec(
-        SingleChoiceTagSpecialization specialization,
-        InliningContext context)
-    {
-        var fieldSpecs =
-            ImmutableDictionary.CreateBuilder<int, ParameterSpecialization>();
-
-        foreach (var fieldPlan in specialization.FieldPlans)
-        {
-            if (fieldPlan.ParameterSpecialization is { } nestedSpecialization)
-            {
-                fieldSpecs[fieldPlan.FieldIndex] = nestedSpecialization;
-            }
-        }
-
-        return
-            new ParameterSpecialization.SingleChoiceTagUnwrap(
-                new DeclQualifiedName(specialization.ConstructorName.ModuleName, specialization.ConstructorName.Name),
-                fieldSpecs.ToImmutable());
-    }
-
-    /// <summary>
-    /// Builds a <see cref="FunctionSpecialization"/> for a
-    /// higher-order recursive function specialization opportunity.
-    /// Returns null spec if no specialization is applicable.
-    /// When <paramref name="includeGroupMembers"/> is true, also returns specializations
-    /// for mutual recursion group members via the second tuple element.
-    /// </summary>
-    private static (FunctionSpecialization? Spec, CollectedSpecializations GroupMemberSpecs)
-        TryBuildFunctionSpecializationForHigherOrder(
-        FunctionInfo funcInfo,
-        SyntaxTypes.FunctionImplementation funcImpl,
-        IReadOnlyList<Node<SyntaxTypes.Expression>> appArgs,
-        InliningContext context,
-        bool includeGroupMembers = false)
-    {
-        var funcParams = funcImpl.Arguments;
-        var funcName = funcImpl.Name.Value;
-        var funcModuleName = funcInfo.ModuleName;
-
-        var paramSpecs =
-            ImmutableDictionary.CreateBuilder<int, ParameterSpecialization>();
-
-        for (var i = 0; i < funcParams.Count && i < appArgs.Count; i++)
-        {
-            if (funcParams[i].Value is not SyntaxTypes.Pattern.VarPattern varPattern)
-                continue;
-
-            if (!IsFunctionExpression(appArgs[i].Value, context))
-                continue;
-
-            if (!IsLoopInvariantInRecursiveCalls(
-                    funcImpl.Expression.Value, funcName, funcModuleName, varPattern.Name, i))
-                continue;
-
-            var classified = ParameterSpecialization.ClassifyArgument(appArgs[i].Value);
-
-            if (classified is not null)
-            {
-                paramSpecs[i] = classified;
-            }
-            else
-            {
-                // For expressions that can't be classified into the model (e.g. complex expressions),
-                // fall back to treating them as a lambda-like specialization keyed by the expression.
-                // We still record the specialization since the concrete argument will be substituted.
-                paramSpecs[i] =
-                    new ParameterSpecialization.ConcreteLambdaValue(
-                        new SyntaxTypes.LambdaStruct(
-                            Arguments: [],
-                            Expression: appArgs[i]));
-            }
-        }
-
-        if (paramSpecs.Count > 0 &&
-            TryBuildSingleChoiceTagSpecialization(
-                funcImpl,
-                appArgs,
-                funcInfo,
-                context) is { } singleChoiceTagSpecialization &&
-            TryGetAliasNameFromPattern(funcImpl.Arguments[singleChoiceTagSpecialization.ParamIndex].Value) is { } aliasName &&
-            IsLoopInvariantInRecursiveCalls(
-                funcImpl.Expression.Value,
-                funcName,
-                funcModuleName,
-                aliasName,
-                singleChoiceTagSpecialization.ParamIndex))
-        {
-            paramSpecs[singleChoiceTagSpecialization.ParamIndex] =
-                BuildSingleChoiceTagUnwrapSpec(
-                    singleChoiceTagSpecialization,
-                    context);
-        }
-
-        if (paramSpecs.Count is 0)
-            return (null, s_emptyCollected);
-
-        // Skip specialization for very large function bodies
-        if (CountExpressionNodes(funcImpl.Expression.Value) > 2000)
-            return (null, s_emptyCollected);
-
-        var builtParamSpecs = paramSpecs.ToImmutable();
-
-        // Also collect specializations for mutual recursion group members.
-        var groupMemberSpecs = s_emptyCollected;
-
-        if (includeGroupMembers)
-        {
-            var invariantIndicesSet = new HashSet<int>(paramSpecs.Keys);
-            var groupMembers = FindMutualRecursionGroupMembers(funcInfo, invariantIndicesSet, context);
-
-            foreach (var member in groupMembers)
-            {
-                var memberImpl = member.Function.Declaration.Value;
-
-                groupMemberSpecs =
-                    AddToCollected(
-                        groupMemberSpecs,
-                        new DeclQualifiedName(member.ModuleName, memberImpl.Name.Value),
-                        new FunctionSpecialization(builtParamSpecs));
-            }
-        }
-
-        return (new FunctionSpecialization(builtParamSpecs), groupMemberSpecs);
-    }
-
-    /// <summary>
-    /// Builds a <see cref="SpecializationCatalog"/> from collected specialization requests.
-    /// The input dictionary already contains deduplicated specialization sets per function
-    /// (via <see cref="ImmutableHashSet{T}"/>), so no additional deduplication is needed.
-    /// </summary>
-    private static SpecializationCatalog BuildCatalogFromCollectedSpecializations(
-        CollectedSpecializations collected)
-    {
-        // Name and build catalog
-        var allNamed = new List<NamedSpecialization>();
-
-        foreach (var kvp in collected)
-        {
-            // Sort deterministically before naming to ensure stable __specialized__N numbering
-            // regardless of ImmutableHashSet iteration order.
-            var sorted = kvp.Value.OrderBy(s => s.DeterministicSortKey).ToList();
-            var named = SpecializationCatalog.NameSpecializations(kvp.Key, sorted);
-            allNamed.AddRange(named);
-        }
-
-        return SpecializationCatalog.BuildCatalog(allNamed);
-    }
 
     /// <summary>
     /// Looks up the pre-assigned specialized name from the catalog for a given function
@@ -864,7 +297,7 @@ public class Inlining
                 results.Add(new DeclQualifiedName(funcOrValue.ModuleName, funcOrValue.Name));
             }
 
-            EnqueueChildExpressions(current, worklist);
+            ElmSyntaxTransformations.EnqueueChildExpressions(current, worklist);
         }
 
         return results;
@@ -1014,40 +447,12 @@ public class Inlining
         // Post-process: ensure all Application arguments are parenthesized where necessary
         var parenthesized =
             simplified
-            .Select(ParenthesizeDeclaration)
+            .Select(ElmSyntaxTransformations.ParenthesizeDeclaration)
             .ToList();
 
         return module with { Declarations = parenthesized };
     }
 
-    private static Node<SyntaxTypes.Declaration> ParenthesizeDeclaration(
-        Node<SyntaxTypes.Declaration> declNode)
-    {
-        if (declNode.Value is not SyntaxTypes.Declaration.FunctionDeclaration funcDecl)
-        {
-            return declNode;
-        }
-
-        var impl = funcDecl.Function.Declaration.Value;
-
-        var parenthesizedExpr = ParenthesizeApplicationArgumentsRecursive(impl.Expression);
-
-        var newImpl = impl with { Expression = parenthesizedExpr };
-
-        var newFunc =
-            funcDecl.Function with
-            {
-                Declaration =
-                new Node<SyntaxTypes.FunctionImplementation>(
-                    funcDecl.Function.Declaration.Range,
-                    newImpl)
-            };
-
-        return
-            new Node<SyntaxTypes.Declaration>(
-                declNode.Range,
-                new SyntaxTypes.Declaration.FunctionDeclaration(newFunc));
-    }
 
     private static Node<SyntaxTypes.Declaration> SimplifyGeneratedDeclaration(
         Node<SyntaxTypes.Declaration> declNode,
@@ -1095,7 +500,7 @@ public class Inlining
                     {
                         return
                             SimplifyGeneratedExpressionRecursive(
-                                new Node<SyntaxTypes.Expression>(s_zeroRange, simplifiedLet),
+                                new Node<SyntaxTypes.Expression>(ElmSyntaxTransformations.s_zeroRange, simplifiedLet),
                                 context);
                     }
 
@@ -1136,7 +541,7 @@ public class Inlining
 
                     var simplifiedBody = Recurse(letExpr.Value.Expression);
 
-                    if (TryCollapseSingleChoiceWrapperPassThroughLet(
+                    if (ElmSyntaxTransformations.TryCollapseSingleChoiceWrapperPassThroughLet(
                         simplifiedDeclarations,
                         simplifiedBody,
                         out var collapsedLetExpr))
@@ -1167,9 +572,7 @@ public class Inlining
                     var simplifiedApp =
                         new SyntaxTypes.Expression.Application([.. app.Arguments.Select(Recurse)]);
 
-                    if (TryBetaReduceGeneratedApplication(
-                        simplifiedApp,
-                        out var reducedApp) &&
+                    if (ElmSyntaxTransformations.TryBetaReduceGeneratedApplication(simplifiedApp) is { } reducedApp &&
                         !reducedApp.Equals(simplifiedApp))
                     {
                         return
@@ -1291,53 +694,6 @@ public class Inlining
         }
     }
 
-    private static bool TryCollapseSingleChoiceWrapperPassThroughLet(
-        IReadOnlyList<Node<SyntaxTypes.Expression.LetDeclaration>> declarations,
-        Node<SyntaxTypes.Expression> body,
-        out Node<SyntaxTypes.Expression> collapsed)
-    {
-        collapsed = null!;
-
-        if (declarations.Count is not 1 ||
-            declarations[0].Value is not SyntaxTypes.Expression.LetDeclaration.LetDestructuring letDestr)
-        {
-            return false;
-        }
-
-        var namedPattern = TryUnwrapToNamedPattern(letDestr.Pattern.Value);
-
-        if (namedPattern is null)
-        {
-            return false;
-        }
-
-        if (TryDeconstructConstructorApplication(body) is not { } ctorApp)
-        {
-            return false;
-        }
-
-        if (!AreEquivalentConstructorNames(namedPattern.Name, ctorApp.ConstructorName) ||
-            namedPattern.Arguments.Count != ctorApp.FieldExpressions.Count)
-        {
-            return false;
-        }
-
-        for (var index = 0; index < namedPattern.Arguments.Count; index++)
-        {
-            if (UnwrapParenthesizedPattern(namedPattern.Arguments[index].Value) is not SyntaxTypes.Pattern.VarPattern varPattern)
-            {
-                return false;
-            }
-
-            if (!IsReferencePreservingWrapperField(ctorApp.FieldExpressions[index].Value, varPattern.Name))
-            {
-                return false;
-            }
-        }
-
-        collapsed = letDestr.Expression;
-        return true;
-    }
 
     private static bool TryCollapseSingleChoiceWrapperSingleUseLet(
         IReadOnlyList<Node<SyntaxTypes.Expression.LetDeclaration>> declarations,
@@ -1356,7 +712,7 @@ public class Inlining
         if (TryDeconstructKnownConstructorApplicationForGeneratedSimplification(
             letDestr.Expression,
             context) is not { } ctorResult ||
-            TryBindSingleChoiceTagPattern(
+            ElmSyntaxTransformations.TryBindSingleChoiceTagPattern(
                 letDestr.Pattern.Value,
                 ctorResult.ConstructorName,
                 ctorResult.FieldExpressions) is not { } patternBindings ||
@@ -1367,199 +723,27 @@ public class Inlining
 
         foreach (var binding in patternBindings)
         {
-            if (CountUnshadowedLocalVariableReferences(body.Value, binding.Key) is not 1)
+            if (ElmSyntaxTransformations.CountUnshadowedLocalVariableReferences(body.Value, binding.Key) is not 1)
             {
                 return false;
             }
         }
 
-        collapsed = SubstituteInExpression(body, patternBindings);
+        collapsed = ElmSyntaxTransformations.SubstituteInExpression(body, patternBindings);
         return true;
     }
 
-    private static ConstructorApplication? TryDeconstructKnownConstructorApplicationForGeneratedSimplification(
+    private static ElmSyntaxTransformations.ConstructorApplication? TryDeconstructKnownConstructorApplicationForGeneratedSimplification(
         Node<SyntaxTypes.Expression> exprNode,
         InliningContext context)
     {
         return TryDeconstructKnownConstructorApplication(exprNode, context, requireExplicitConstructor: true);
     }
 
-    /// <summary>
-    /// Like <see cref="TryDeconstructConstructorApplication(SyntaxTypes.Expression)"/> but
-    /// restricted to references whose name starts with an uppercase letter (i.e. looks like a constructor).
-    /// </summary>
-    private static ConstructorApplication? TryDeconstructExplicitConstructorApplication(
-        SyntaxTypes.Expression expr)
-    {
-        if (TryDeconstructConstructorApplication(expr) is { } result &&
-            LooksLikeConstructorName(result.ConstructorName.Name))
-        {
-            return result;
-        }
 
-        return null;
-    }
 
-    private static bool LooksLikeConstructorName(string name) =>
-        name.Length > 0 && char.IsUpper(name[0]);
 
-    private static bool TryBetaReduceGeneratedApplication(
-        SyntaxTypes.Expression.Application app,
-        out SyntaxTypes.Expression reduced)
-    {
-        reduced = null!;
 
-        if (app.Arguments.Count < 2 ||
-            UnwrapParenthesized(app.Arguments[0].Value) is not SyntaxTypes.Expression.LambdaExpression lambda)
-        {
-            return false;
-        }
-
-        var consumedArgs = Math.Min(lambda.Lambda.Arguments.Count, app.Arguments.Count - 1);
-
-        var substitutedBody =
-            ApplyConsumedArgumentBindings(
-                lambda.Lambda.Expression,
-                lambda.Lambda.Arguments,
-                [.. app.Arguments.Skip(1).Take(consumedArgs)]);
-
-        if (app.Arguments.Count - 1 < lambda.Lambda.Arguments.Count)
-        {
-            reduced =
-                new SyntaxTypes.Expression.LambdaExpression(
-                    new SyntaxTypes.LambdaStruct(
-                        [.. lambda.Lambda.Arguments.Skip(app.Arguments.Count - 1)],
-                        substitutedBody));
-
-            return true;
-        }
-
-        if (app.Arguments.Count - 1 == lambda.Lambda.Arguments.Count)
-        {
-            reduced = substitutedBody.Value;
-            return true;
-        }
-
-        reduced =
-            new SyntaxTypes.Expression.Application(
-                [.. new[] { substitutedBody }.Concat(app.Arguments.Skip(lambda.Lambda.Arguments.Count + 1))]);
-
-        return true;
-    }
-
-    private static Node<SyntaxTypes.Expression> ApplyConsumedArgumentBindings(
-        Node<SyntaxTypes.Expression> body,
-        IReadOnlyList<Node<SyntaxTypes.Pattern>> parameters,
-        IReadOnlyList<Node<SyntaxTypes.Expression>> consumedArgs)
-    {
-        var letDeclarations = new List<Node<SyntaxTypes.Expression.LetDeclaration>>();
-        var substitutions = new Dictionary<string, Node<SyntaxTypes.Expression>>();
-
-        for (var index = 0; index < consumedArgs.Count; index++)
-        {
-            var parameter = parameters[index];
-            var argument = consumedArgs[index];
-
-            switch (UnwrapParenthesizedPattern(parameter.Value))
-            {
-                case SyntaxTypes.Pattern.VarPattern varPattern:
-                    substitutions[varPattern.Name] = argument;
-                    break;
-
-                case SyntaxTypes.Pattern.AllPattern:
-                case SyntaxTypes.Pattern.UnitPattern:
-                    break;
-
-                default:
-                    letDeclarations.Add(
-                        new Node<SyntaxTypes.Expression.LetDeclaration>(
-                            s_zeroRange,
-                            new SyntaxTypes.Expression.LetDeclaration.LetDestructuring(
-                                Pattern: parameter,
-                                Expression: argument)));
-
-                    break;
-            }
-        }
-
-        var substitutedBody = SubstituteInExpression(body, substitutions);
-
-        if (letDeclarations.Count is 0)
-        {
-            return substitutedBody;
-        }
-
-        return
-            new Node<SyntaxTypes.Expression>(
-                s_zeroRange,
-                new SyntaxTypes.Expression.LetExpression(
-                    new SyntaxTypes.Expression.LetBlock(
-                        Declarations: [.. letDeclarations],
-                        Expression: substitutedBody)));
-    }
-
-    private static bool IsReferencePreservingWrapperField(
-        SyntaxTypes.Expression expr,
-        string variableName)
-    {
-        expr = UnwrapParenthesized(expr);
-
-        if (IsLocalVariableReference(expr, variableName))
-        {
-            return true;
-        }
-
-        if (expr is not SyntaxTypes.Expression.LambdaExpression lambda)
-        {
-            return false;
-        }
-
-        var expectedArguments = new List<Node<SyntaxTypes.Expression>>();
-
-        foreach (var parameter in lambda.Lambda.Arguments)
-        {
-            switch (UnwrapParenthesizedPattern(parameter.Value))
-            {
-                case SyntaxTypes.Pattern.VarPattern varPattern:
-                    expectedArguments.Add(
-                        new Node<SyntaxTypes.Expression>(
-                            s_zeroRange,
-                            new SyntaxTypes.Expression.FunctionOrValue([], varPattern.Name)));
-
-                    break;
-
-                case SyntaxTypes.Pattern.UnitPattern:
-                    expectedArguments.Add(
-                        new Node<SyntaxTypes.Expression>(
-                            s_zeroRange,
-                            new SyntaxTypes.Expression.UnitExpr()));
-
-                    break;
-
-                default:
-                    return false;
-            }
-        }
-
-        var lambdaBody = UnwrapParenthesized(lambda.Lambda.Expression.Value);
-
-        if (lambdaBody is not SyntaxTypes.Expression.Application app ||
-            app.Arguments.Count != expectedArguments.Count + 1 ||
-            !IsLocalVariableReference(UnwrapParenthesized(app.Arguments[0].Value), variableName))
-        {
-            return false;
-        }
-
-        for (var index = 0; index < expectedArguments.Count; index++)
-        {
-            if (!expectedArguments[index].Value.Equals(UnwrapParenthesized(app.Arguments[index + 1].Value)))
-            {
-                return false;
-            }
-        }
-
-        return true;
-    }
 
     private static (Node<SyntaxTypes.Declaration>, ImmutableList<Node<SyntaxTypes.Declaration>>) InlineDeclaration(
         Node<SyntaxTypes.Declaration> declNode,
@@ -1775,7 +959,7 @@ public class Inlining
 
                 return
                     new InliningResult(
-                        ParenthesizeApplicationArguments(result),
+                        ElmSyntaxTransformations.ParenthesizeApplicationArguments(result),
                         newDecls.ToImmutable());
             }
 
@@ -1791,7 +975,7 @@ public class Inlining
 
                 return
                     new InliningResult(
-                        ParenthesizeApplicationArguments(result),
+                        ElmSyntaxTransformations.ParenthesizeApplicationArguments(result),
                         newDecls.ToImmutable());
             }
 
@@ -1811,26 +995,26 @@ public class Inlining
                     // No application argument: produce a lambda \composeArg -> outer (inner composeArg)
                     var param =
                         new Node<SyntaxTypes.Pattern>(
-                            s_zeroRange,
+                            ElmSyntaxTransformations.s_zeroRange,
                             new SyntaxTypes.Pattern.VarPattern("composeArg"));
 
                     var paramRef =
                         new Node<SyntaxTypes.Expression>(
-                            s_zeroRange,
+                            ElmSyntaxTransformations.s_zeroRange,
                             new SyntaxTypes.Expression.FunctionOrValue([], "composeArg"));
 
                     var innerApp =
                         new Node<SyntaxTypes.Expression>(
-                            s_zeroRange,
+                            ElmSyntaxTransformations.s_zeroRange,
                             new SyntaxTypes.Expression.Application([inner, paramRef]));
 
                     var parenInnerApp =
                         new Node<SyntaxTypes.Expression>(
-                            s_zeroRange,
+                            ElmSyntaxTransformations.s_zeroRange,
                             new SyntaxTypes.Expression.ParenthesizedExpression(innerApp));
 
                     var bodyExpr = new SyntaxTypes.Expression.Application([outer, parenInnerApp]);
-                    var bodyNode = new Node<SyntaxTypes.Expression>(s_zeroRange, bodyExpr);
+                    var bodyNode = new Node<SyntaxTypes.Expression>(ElmSyntaxTransformations.s_zeroRange, bodyExpr);
                     var inlinedBody = Inline(bodyNode);
 
                     return
@@ -1844,12 +1028,12 @@ public class Inlining
                     // Has application argument: composeR f g x [extra...]  →  g (f x) [extra...]
                     var innerApp =
                         new Node<SyntaxTypes.Expression>(
-                            s_zeroRange,
+                            ElmSyntaxTransformations.s_zeroRange,
                             new SyntaxTypes.Expression.Application([inner, app.Arguments[3]]));
 
                     var parenInnerApp =
                         new Node<SyntaxTypes.Expression>(
-                            s_zeroRange,
+                            ElmSyntaxTransformations.s_zeroRange,
                             new SyntaxTypes.Expression.ParenthesizedExpression(innerApp));
 
                     var desugaredArgs = new List<Node<SyntaxTypes.Expression>> { outer, parenInnerApp };
@@ -1862,7 +1046,7 @@ public class Inlining
 
                     return
                         new InliningResult(
-                            ParenthesizeApplicationArguments(result),
+                            ElmSyntaxTransformations.ParenthesizeApplicationArguments(result),
                             newDecls.ToImmutable());
                 }
             }
@@ -1871,7 +1055,7 @@ public class Inlining
         // Beta-reduce lambda applications: (\x -> body) arg  →  body[x := arg]
         if (EnablesClassicInlining(context))
         {
-            var unwrapped = UnwrapParenthesized(funcExpr);
+            var unwrapped = ElmSyntaxTransformations.UnwrapParenthesized(funcExpr);
 
             if (unwrapped is SyntaxTypes.Expression.LambdaExpression lambda)
             {
@@ -1887,7 +1071,7 @@ public class Inlining
         // higher-order applications in specialized parser-like loops.
         if (EnablesClassicInlining(context))
         {
-            var unwrapped = UnwrapParenthesized(funcExpr);
+            var unwrapped = ElmSyntaxTransformations.UnwrapParenthesized(funcExpr);
 
             if (unwrapped is SyntaxTypes.Expression.RecordAccessFunction recordAccessFunction &&
                 app.Arguments.Count >= 2)
@@ -2034,96 +1218,9 @@ public class Inlining
                 newDecls.ToImmutable());
     }
 
-    /// <summary>
-    /// Wraps Application arguments (except the function position) in ParenthesizedExpression
-    /// when they are themselves Application expressions with multiple arguments.
-    /// This ensures correct rendering after pipe operator desugaring and specialization.
-    /// </summary>
-    private static SyntaxTypes.Expression ParenthesizeApplicationArguments(SyntaxTypes.Expression expr)
-    {
-        if (expr is not SyntaxTypes.Expression.Application app || app.Arguments.Count < 2)
-        {
-            return expr;
-        }
 
-        var newArgs = new List<Node<SyntaxTypes.Expression>>(app.Arguments.Count) { app.Arguments[0] };
 
-        for (var i = 1; i < app.Arguments.Count; i++)
-        {
-            var arg = app.Arguments[i];
 
-            if (NeedsParenthesesInApplicationArgument(arg.Value))
-            {
-                newArgs.Add(
-                    new Node<SyntaxTypes.Expression>(
-                        arg.Range,
-                        new SyntaxTypes.Expression.ParenthesizedExpression(arg)));
-            }
-            else
-            {
-                newArgs.Add(arg);
-            }
-        }
-
-        return new SyntaxTypes.Expression.Application([.. newArgs]);
-    }
-
-    private static bool NeedsParenthesesInApplicationArgument(SyntaxTypes.Expression argument) =>
-        argument switch
-        {
-            SyntaxTypes.Expression.Application innerApp => innerApp.Arguments.Count > 1,
-            SyntaxTypes.Expression.LetExpression => true,
-            SyntaxTypes.Expression.CaseExpression => true,
-            SyntaxTypes.Expression.LambdaExpression => true,
-            SyntaxTypes.Expression.IfBlock => true,
-            SyntaxTypes.Expression.OperatorApplication => true,
-            SyntaxTypes.Expression.Negation => true,
-
-            _ =>
-            false
-        };
-
-    /// <summary>
-    /// Recursively walks all expressions in a declaration and ensures that Application arguments
-    /// that are themselves Applications are wrapped in ParenthesizedExpression.
-    /// This is applied as a post-processing step after inlining to ensure all generated
-    /// expressions have correct parenthesization for rendering.
-    /// </summary>
-    internal static Node<SyntaxTypes.Expression> ParenthesizeApplicationArgumentsRecursive(
-        Node<SyntaxTypes.Expression> exprNode)
-    {
-        var expr = exprNode.Value;
-
-        static Node<SyntaxTypes.Expression> Recurse(Node<SyntaxTypes.Expression> e) =>
-            ParenthesizeApplicationArgumentsRecursive(e);
-
-        var result =
-            expr switch
-            {
-                SyntaxTypes.Expression.Application app when app.Arguments.Count >= 2 =>
-                ParenthesizeApplicationArguments(
-                    new SyntaxTypes.Expression.Application(
-                        [.. app.Arguments.Select(Recurse)])),
-
-                _ =>
-                MapChildExpressions(expr, Recurse)
-            };
-
-        return new Node<SyntaxTypes.Expression>(exprNode.Range, result);
-    }
-
-    /// <summary>
-    /// Unwraps nested ParenthesizedExpression wrappers to get the inner expression.
-    /// </summary>
-    private static SyntaxTypes.Expression UnwrapParenthesized(SyntaxTypes.Expression expr)
-    {
-        while (expr is SyntaxTypes.Expression.ParenthesizedExpression paren)
-        {
-            expr = paren.Expression.Value;
-        }
-
-        return expr;
-    }
 
     /// <summary>
     /// Beta-reduces a lambda application: <c>(\x -> body) arg</c> becomes <c>body[x := arg]</c>.
@@ -2152,7 +1249,7 @@ public class Inlining
         }
 
         var body =
-            ApplyConsumedArgumentBindings(
+            ElmSyntaxTransformations.ApplyConsumedArgumentBindings(
                 lambda.Expression,
                 lambda.Arguments,
                 consumedInlinedArgs);
@@ -2196,6 +1293,7 @@ public class Inlining
         return new InliningResult(body.Value, newDecls.ToImmutable());
     }
 
+
     private static bool ShouldInline(
         IReadOnlyList<Node<SyntaxTypes.Pattern>> funcParams,
         Node<SyntaxTypes.Expression> funcBody,
@@ -2203,11 +1301,6 @@ public class Inlining
         InliningContext context)
     {
         if (appArgs.Count < funcParams.Count)
-        {
-            return false;
-        }
-
-        if (context.Config is not Config.InlineOnlyFunctions)
         {
             return false;
         }
@@ -2228,17 +1321,17 @@ public class Inlining
             }
 
             // If the parameter uses a constructor pattern (like `(Parser f)`), only inline
-            // when the supplied argument itself looks like a function-bearing computation.
-            // This keeps Config.OnlyFunctions focused on higher-order use cases and avoids
+            // when the supplied argument itself looks like a function-bearing computation,
+            // focusing on higher-order use cases and avoiding
             // inlining data-oriented constructor-pattern calls such as String.split before.
-            if (IsConstructorPattern(param) && IsFunctionBearingExpression(arg, context))
+            if (ElmSyntaxTransformations.IsConstructorPattern(param) && IsFunctionBearingExpression(arg, context))
             {
                 return true;
             }
 
             if (param is SyntaxTypes.Pattern.VarPattern varPattern &&
                 IsFunctionBearingExpression(arg, context) &&
-                BodyUnwrapsParameterAsConstructor(funcBody, varPattern.Name))
+                ElmSyntaxTransformations.BodyUnwrapsParameterAsConstructor(funcBody, varPattern.Name))
             {
                 return true;
             }
@@ -2247,58 +1340,7 @@ public class Inlining
         return false;
     }
 
-    private static bool BodyUnwrapsParameterAsConstructor(
-        Node<SyntaxTypes.Expression> exprNode,
-        string parameterName)
-    {
-        var worklist = new Stack<SyntaxTypes.Expression>();
-        worklist.Push(exprNode.Value);
 
-        while (worklist.Count > 0)
-        {
-            var expr = worklist.Pop();
-
-            switch (expr)
-            {
-                case SyntaxTypes.Expression.LetExpression letExpr:
-                    if (letExpr.Value.Declarations.Any(
-                        declaration =>
-                        declaration.Value is SyntaxTypes.Expression.LetDeclaration.LetDestructuring letDestr &&
-                        IsLocalVariableReference(letDestr.Expression.Value, parameterName) &&
-                        IsConstructorPattern(letDestr.Pattern.Value)))
-                        return true;
-
-                    break;
-
-                case SyntaxTypes.Expression.CaseExpression caseExpr:
-                    if (IsLocalVariableReference(caseExpr.CaseBlock.Expression.Value, parameterName) &&
-                        caseExpr.CaseBlock.Cases.Any(c => IsConstructorPattern(c.Pattern.Value)))
-                        return true;
-
-                    break;
-            }
-
-            EnqueueChildExpressions(expr, worklist);
-        }
-
-        return false;
-    }
-
-    private static bool IsConstructorPattern(SyntaxTypes.Pattern pattern)
-    {
-        return pattern switch
-        {
-            SyntaxTypes.Pattern.NamedPattern => true,
-
-            // Alias patterns like `((Parser parse) as element)` still represent a constructor
-            // pattern for specialization purposes, so unwrap the alias and inspect the inner pattern.
-            SyntaxTypes.Pattern.AsPattern asPattern => IsConstructorPattern(asPattern.Pattern.Value),
-            SyntaxTypes.Pattern.ParenthesizedPattern paren => IsConstructorPattern(paren.Pattern.Value),
-
-            _ =>
-            false
-        };
-    }
 
     private static bool IsFunctionExpression(SyntaxTypes.Expression expr, InliningContext context)
     {
@@ -2330,7 +1372,7 @@ public class Inlining
         InliningContext context)
     {
         if (app.Arguments.Count is 0 ||
-            UnwrapParenthesized(app.Arguments[0].Value) is not SyntaxTypes.Expression.FunctionOrValue funcOrValue ||
+            ElmSyntaxTransformations.UnwrapParenthesized(app.Arguments[0].Value) is not SyntaxTypes.Expression.FunctionOrValue funcOrValue ||
             TryGetFunctionReferenceInferredType(funcOrValue, context) is not { } inferredType)
         {
             return false;
@@ -2386,7 +1428,7 @@ public class Inlining
         InliningContext context)
     {
         // Syntax-based check: qualified reference to a known function definition.
-        // This keeps Config.OnlyFunctions focused on stable top-level / cross-module references
+        // This focuses on stable top-level / cross-module references
         // and avoids inlining based on local let-bound helpers, which can introduce lifted
         // dependencies the current compiler pipeline does not yet propagate robustly.
         if (funcOrValue.ModuleName.Count > 0 &&
@@ -2507,13 +1549,13 @@ public class Inlining
                 // Simple variable pattern - direct substitution
                 substitutions[varPattern.Name] = arg;
             }
-            else if (UnwrapParenthesizedPattern(param.Value) is SyntaxTypes.Pattern.AllPattern)
+            else if (ElmSyntaxTransformations.UnwrapParenthesizedPattern(param.Value) is SyntaxTypes.Pattern.AllPattern)
             {
                 // Wildcard patterns do not bind anything, so there is no need to retain a
                 // generated let-destructuring binding for them in the inlined body.
             }
             else if (TryDeconstructKnownConstructorApplication(arg, context) is { } knownCtorApp &&
-                TryBindSingleChoiceTagPattern(
+                ElmSyntaxTransformations.TryBindSingleChoiceTagPattern(
                     param.Value,
                     knownCtorApp.ConstructorName,
                     knownCtorApp.FieldExpressions) is { } patternBindings)
@@ -2523,12 +1565,49 @@ public class Inlining
                     substitutions[binding.Key] = binding.Value;
                 }
 
-                if (TryGetAliasNameFromPattern(param.Value) is { } aliasName)
+                if (ElmSyntaxTransformations.TryGetAliasNameFromPattern(param.Value) is { } aliasName)
                 {
                     substitutions[aliasName] =
-                        BuildConstructorApplication(
+                        ElmSyntaxTransformations.BuildConstructorApplication(
                             knownCtorApp.ConstructorName,
                             knownCtorApp.FieldExpressions);
+                }
+            }
+            else if (ElmSyntaxTransformations.UnwrapParenthesizedPattern(param.Value) is SyntaxTypes.Pattern.TuplePattern tuplePattern &&
+                arg.Value is SyntaxTypes.Expression.TupledExpression tupleArg &&
+                tuplePattern.Elements.Count == tupleArg.Elements.Count)
+            {
+                // Tuple pattern matched with tuple expression — directly substitute each element.
+                // This avoids creating a let-destructuring like `let (a,b) = (x,y)` that can
+                // shadow outer variables when the pattern names match the expression's references,
+                // which breaks FindFreeVariables and lambda lifting capture analysis.
+                for (var j = 0; j < tuplePattern.Elements.Count; j++)
+                {
+                    var elemPattern = tuplePattern.Elements[j].Value;
+                    var elemArg = tupleArg.Elements[j];
+
+                    if (elemPattern is SyntaxTypes.Pattern.VarPattern elemVar)
+                    {
+                        substitutions[elemVar.Name] = elemArg;
+                    }
+                    else if (elemPattern is SyntaxTypes.Pattern.AllPattern)
+                    {
+                        // Wildcard — skip
+                    }
+                    else
+                    {
+                        // Nested non-trivial pattern inside tuple — fall back to let-destructuring
+                        // for the entire tuple to keep pattern matching intact.
+                        var letDestr =
+                            new SyntaxTypes.Expression.LetDeclaration.LetDestructuring(
+                                Pattern: param,
+                                Expression: arg);
+
+                        letDeclarations.Add(
+                            new Node<SyntaxTypes.Expression.LetDeclaration>(ElmSyntaxTransformations.s_zeroRange, letDestr));
+
+                        goto nextParam;
+                    }
                 }
             }
             else
@@ -2540,12 +1619,15 @@ public class Inlining
                         Pattern: param,
                         Expression: arg);
 
-                letDeclarations.Add(new Node<SyntaxTypes.Expression.LetDeclaration>(s_zeroRange, letDestr));
+                letDeclarations.Add(
+                    new Node<SyntaxTypes.Expression.LetDeclaration>(ElmSyntaxTransformations.s_zeroRange, letDestr));
             }
+
+nextParam:;
         }
 
         // Substitute in the function body
-        var substitutedBody = SubstituteInExpression(funcBody, substitutions);
+        var substitutedBody = ElmSyntaxTransformations.SubstituteInExpression(funcBody, substitutions);
 
         var qualifiedLiftedHelperReferences =
             QualifyLiftedHelperReferencesFromCalleeModule(
@@ -2553,7 +1635,7 @@ public class Inlining
                 calleeModuleName,
                 context);
 
-        // Recursively inline in the substituted body
+        // Recursively inline in the substituted body.
         var inlinedBody = Inline(qualifiedLiftedHelperReferences);
 
         // If we have let declarations, wrap the body in a let expression
@@ -2577,7 +1659,7 @@ public class Inlining
         {
             var (normalizedResult, normalizedDecls) =
                 InlineExpression(
-                    new Node<SyntaxTypes.Expression>(s_zeroRange, resultExpr),
+                    new Node<SyntaxTypes.Expression>(ElmSyntaxTransformations.s_zeroRange, resultExpr),
                     context);
 
             newDecls.AddRange(normalizedDecls);
@@ -2594,7 +1676,7 @@ public class Inlining
             var allArgs =
                 new List<Node<SyntaxTypes.Expression>>
                 {
-                    new(s_zeroRange, resultExpr)
+                    new(ElmSyntaxTransformations.s_zeroRange, resultExpr)
                 };
 
             allArgs.AddRange(remainingArgs);
@@ -2612,7 +1694,8 @@ public class Inlining
                     new SyntaxTypes.Expression.LambdaExpression(
                         new SyntaxTypes.LambdaStruct(
                             Arguments: remainingParams,
-                            Expression: new Node<SyntaxTypes.Expression>(s_zeroRange, resultExpr))),
+                            Expression:
+                            new Node<SyntaxTypes.Expression>(ElmSyntaxTransformations.s_zeroRange, resultExpr))),
                     newDecls.ToImmutable());
         }
 
@@ -2635,7 +1718,7 @@ public class Inlining
         string ParamName)
     {
         public Node<SyntaxTypes.Expression> ReplacementArgument =>
-            BuildConstructorApplication(
+            ElmSyntaxTransformations.BuildConstructorApplication(
                 ConstructorName,
                 [.. FieldPlans.Select(plan => plan.ReplacementExpression)]);
     }
@@ -2680,20 +1763,19 @@ public class Inlining
             fieldName,
             actualFieldExpression,
             currentModuleName,
-            context,
-            out var nestedFieldPlan))
+            context) is { } nestedFieldPlan)
         {
             return nestedFieldPlan;
         }
 
         var replacementParameter =
             new Node<SyntaxTypes.Pattern>(
-                s_zeroRange,
+                ElmSyntaxTransformations.s_zeroRange,
                 new SyntaxTypes.Pattern.VarPattern(fieldName));
 
         var replacementExpression =
             new Node<SyntaxTypes.Expression>(
-                s_zeroRange,
+                ElmSyntaxTransformations.s_zeroRange,
                 new SyntaxTypes.Expression.FunctionOrValue([], fieldName));
 
         return
@@ -2707,21 +1789,18 @@ public class Inlining
                 NestedFieldPlans: []);
     }
 
-    private static bool TryBuildNestedSingleChoiceTagFieldPlan(
+    private static SingleChoiceTagFieldPlan? TryBuildNestedSingleChoiceTagFieldPlan(
         int fieldIndex,
         string fieldName,
         Node<SyntaxTypes.Expression> actualFieldExpression,
         ModuleName currentModuleName,
-        InliningContext context,
-        out SingleChoiceTagFieldPlan fieldPlan)
+        InliningContext context)
     {
-        fieldPlan = null!;
-
         if (TryDeconstructKnownConstructorApplicationForSpecialization(
                 actualFieldExpression,
                 context) is not { } specCtorApp)
         {
-            return false;
+            return null;
         }
 
         var constructorName = specCtorApp.ConstructorName;
@@ -2735,7 +1814,7 @@ public class Inlining
         if (!context.Resolution.SingleChoiceConstructors.TryGetValue(constructorName, out var constructorInfo) ||
             constructorInfo.FieldCount != actualFieldExpressions.Count)
         {
-            return false;
+            return null;
         }
 
         var nestedFieldPlans = new List<SingleChoiceTagFieldPlan>();
@@ -2762,7 +1841,7 @@ public class Inlining
             }
         }
 
-        fieldPlan =
+        return
             new SingleChoiceTagFieldPlan(
                 FieldIndex: fieldIndex,
                 BoundVariableName: fieldName,
@@ -2773,12 +1852,10 @@ public class Inlining
                 FlattenedParameters: [.. nestedFieldPlans.SelectMany(plan => plan.FlattenedParameters)],
                 FlattenedActualArguments: [.. nestedFieldPlans.SelectMany(plan => plan.FlattenedActualArguments)],
                 ReplacementExpression:
-                BuildConstructorApplication(
+                ElmSyntaxTransformations.BuildConstructorApplication(
                     constructorName,
                     [.. nestedFieldPlans.Select(plan => plan.ReplacementExpression)]),
                 NestedFieldPlans: nestedFieldPlans);
-
-        return true;
     }
 
     private static InliningResult? TrySpecializeSingleChoiceTagCall(
@@ -2824,7 +1901,7 @@ public class Inlining
             funcImpl.Expression;
 
         var substitutedBody =
-            SubstituteInExpression(
+            ElmSyntaxTransformations.SubstituteInExpression(
                 rewrittenBody,
                 new Dictionary<string, Node<SyntaxTypes.Expression>>
                 {
@@ -2840,7 +1917,7 @@ public class Inlining
         if (directPatternFieldSubstitutions.Count > 0)
         {
             substitutedBody =
-                SubstituteInExpression(
+                ElmSyntaxTransformations.SubstituteInExpression(
                     substitutedBody,
                     directPatternFieldSubstitutions);
         }
@@ -2858,7 +1935,7 @@ public class Inlining
 
         var specializedImpl =
             new SyntaxTypes.FunctionImplementation(
-                Name: new Node<string>(s_zeroRange, specializedName),
+                Name: new Node<string>(ElmSyntaxTransformations.s_zeroRange, specializedName),
                 Arguments: specializedParams,
                 Expression: qualifiedBody);
 
@@ -2866,11 +1943,12 @@ public class Inlining
             new SyntaxTypes.FunctionStruct(
                 Documentation: null,
                 Signature: null,
-                Declaration: new Node<SyntaxTypes.FunctionImplementation>(s_zeroRange, specializedImpl));
+                Declaration:
+                new Node<SyntaxTypes.FunctionImplementation>(ElmSyntaxTransformations.s_zeroRange, specializedImpl));
 
         var newDecl =
             new Node<SyntaxTypes.Declaration>(
-                s_zeroRange,
+                ElmSyntaxTransformations.s_zeroRange,
                 new SyntaxTypes.Declaration.FunctionDeclaration(specializedFunc));
 
         var callArgs =
@@ -2975,7 +2053,8 @@ public class Inlining
             // Case 2: NamedPattern parameter (direct parameter-level destructuring)
             // e.g., alfa factor (MyConstructor x) = ...
             {
-                var namedPattern = TryUnwrapToNamedPattern(funcImpl.Arguments[paramIndex].Value);
+                var namedPattern =
+                    ElmSyntaxTransformations.TryUnwrapToNamedPattern(funcImpl.Arguments[paramIndex].Value);
 
                 if (namedPattern is null)
                     continue;
@@ -3018,7 +2097,8 @@ public class Inlining
 
                 for (var fieldIndex = 0; fieldIndex < actualFieldExpressions.Count; fieldIndex++)
                 {
-                    var fieldPatternUnwrapped = UnwrapParenthesizedPattern(namedPattern.Arguments[fieldIndex].Value);
+                    var fieldPatternUnwrapped =
+                        ElmSyntaxTransformations.UnwrapParenthesizedPattern(namedPattern.Arguments[fieldIndex].Value);
 
                     if (fieldPatternUnwrapped is not SyntaxTypes.Pattern.VarPattern fieldVarPattern)
                     {
@@ -3043,7 +2123,7 @@ public class Inlining
                 // If the pattern is an alias pattern like `((Parser parse) as element)`,
                 // preserve the alias name so recursive-call rewriting can still match it.
                 var syntheticParamName =
-                    TryGetAliasNameFromPattern(funcImpl.Arguments[paramIndex].Value)
+                    ElmSyntaxTransformations.TryGetAliasNameFromPattern(funcImpl.Arguments[paramIndex].Value)
                     ?? "__param_" + paramIndex + "_pattern__";
 
                 return
@@ -3058,41 +2138,8 @@ public class Inlining
         return null;
     }
 
-    private static SyntaxTypes.Pattern.NamedPattern? TryUnwrapToNamedPattern(SyntaxTypes.Pattern pattern)
-    {
-        return pattern switch
-        {
-            SyntaxTypes.Pattern.NamedPattern np => np,
-            SyntaxTypes.Pattern.AsPattern ap => TryUnwrapToNamedPattern(ap.Pattern.Value),
-            SyntaxTypes.Pattern.ParenthesizedPattern pp => TryUnwrapToNamedPattern(pp.Pattern.Value),
 
-            _ =>
-            null
-        };
-    }
 
-    private static string? TryGetAliasNameFromPattern(SyntaxTypes.Pattern pattern)
-    {
-        return pattern switch
-        {
-            SyntaxTypes.Pattern.AsPattern ap => ap.Name.Value,
-            SyntaxTypes.Pattern.ParenthesizedPattern pp => TryGetAliasNameFromPattern(pp.Pattern.Value),
-
-            _ =>
-            null
-        };
-    }
-
-    private static SyntaxTypes.Pattern UnwrapParenthesizedPattern(SyntaxTypes.Pattern pattern)
-    {
-        return pattern switch
-        {
-            SyntaxTypes.Pattern.ParenthesizedPattern pp => UnwrapParenthesizedPattern(pp.Pattern.Value),
-
-            _ =>
-            pattern
-        };
-    }
 
     private static ImmutableArray<Node<SyntaxTypes.Pattern>> BuildSingleChoiceTagSpecializedParameters(
         IReadOnlyList<Node<SyntaxTypes.Pattern>> originalParams,
@@ -3109,7 +2156,7 @@ public class Inlining
                 {
                     specializedParams.Add(
                         new Node<SyntaxTypes.Pattern>(
-                            s_zeroRange,
+                            ElmSyntaxTransformations.s_zeroRange,
                             new SyntaxTypes.Pattern.TuplePattern(
                                 [.. flattenedParameters])));
                 }
@@ -3136,7 +2183,9 @@ public class Inlining
         var callArgs =
             new List<Node<SyntaxTypes.Expression>>
             {
-                new(s_zeroRange, new SyntaxTypes.Expression.FunctionOrValue([], specializedName))
+                new(
+                    ElmSyntaxTransformations.s_zeroRange,
+                    new SyntaxTypes.Expression.FunctionOrValue([], specializedName))
             };
 
         var flattenedActualArguments = GetFlattenedActualArguments(specialization);
@@ -3149,7 +2198,7 @@ public class Inlining
                 {
                     callArgs.Add(
                         new Node<SyntaxTypes.Expression>(
-                            s_zeroRange,
+                            ElmSyntaxTransformations.s_zeroRange,
                             new SyntaxTypes.Expression.TupledExpression([.. flattenedActualArguments])));
                 }
                 else
@@ -3166,47 +2215,18 @@ public class Inlining
         return callArgs;
     }
 
-    private static ConstructorApplication? TryDeconstructConstructorApplication(
-        Node<SyntaxTypes.Expression> exprNode)
-    {
-        return TryDeconstructConstructorApplication(exprNode.Value);
-    }
 
-    private static ConstructorApplication? TryDeconstructConstructorApplication(
-        SyntaxTypes.Expression expr)
-    {
-        switch (UnwrapParenthesized(expr))
-        {
-            case SyntaxTypes.Expression.FunctionOrValue funcOrValue:
-                return
-                    new ConstructorApplication(
-                        new SyntaxTypes.QualifiedNameRef(funcOrValue.ModuleName, funcOrValue.Name),
-                        []);
 
-            case SyntaxTypes.Expression.Application app
-            when app.Arguments.Count > 0 &&
-                     app.Arguments[0].Value is SyntaxTypes.Expression.FunctionOrValue constructorRef:
-
-                return
-                    new ConstructorApplication(
-                        new SyntaxTypes.QualifiedNameRef(constructorRef.ModuleName, constructorRef.Name),
-                        [.. app.Arguments.Skip(1)]);
-
-            default:
-                return null;
-        }
-    }
-
-    private static ConstructorApplication? TryDeconstructKnownConstructorApplication(
+    private static ElmSyntaxTransformations.ConstructorApplication? TryDeconstructKnownConstructorApplication(
         Node<SyntaxTypes.Expression> exprNode,
         InliningContext context,
         bool requireExplicitConstructor = false)
     {
         if ((requireExplicitConstructor
             ?
-            TryDeconstructExplicitConstructorApplication(exprNode.Value)
+            ElmSyntaxTransformations.TryDeconstructExplicitConstructorApplication(exprNode.Value)
             :
-            TryDeconstructConstructorApplication(exprNode))
+            ElmSyntaxTransformations.TryDeconstructConstructorApplication(exprNode))
             is { } directResult)
         {
             return directResult;
@@ -3223,7 +2243,8 @@ public class Inlining
 
             case SyntaxTypes.Expression.LetExpression letExpr:
                 {
-                    if (AreLetDeclarationsIgnorableForConstructorResolution(letExpr.Value.Declarations))
+                    if (ElmSyntaxTransformations.AreLetDeclarationsIgnorableForConstructorResolution(
+                        letExpr.Value.Declarations))
                     {
                         return
                             TryDeconstructKnownConstructorApplication(
@@ -3237,7 +2258,7 @@ public class Inlining
                     if (letDecls.Count is 0)
                     {
                         if (inlinedLet is SyntaxTypes.Expression.LetExpression inlinedLetExpr &&
-                            AreLetDeclarationsIgnorableForConstructorResolution(
+                            ElmSyntaxTransformations.AreLetDeclarationsIgnorableForConstructorResolution(
                                 inlinedLetExpr.Value.Declarations))
                         {
                             return
@@ -3251,7 +2272,7 @@ public class Inlining
                         {
                             return
                                 TryDeconstructKnownConstructorApplication(
-                                    new Node<SyntaxTypes.Expression>(s_zeroRange, inlinedLet),
+                                    new Node<SyntaxTypes.Expression>(ElmSyntaxTransformations.s_zeroRange, inlinedLet),
                                     context,
                                     requireExplicitConstructor);
                         }
@@ -3313,7 +2334,7 @@ public class Inlining
                         {
                             return
                                 TryDeconstructKnownConstructorApplication(
-                                    new Node<SyntaxTypes.Expression>(s_zeroRange, inlinedResult),
+                                    new Node<SyntaxTypes.Expression>(ElmSyntaxTransformations.s_zeroRange, inlinedResult),
                                     context,
                                     requireExplicitConstructor);
                         }
@@ -3326,7 +2347,7 @@ public class Inlining
         return null;
     }
 
-    private static ConstructorApplication? TryDeconstructKnownConstructorApplicationForSpecialization(
+    private static ElmSyntaxTransformations.ConstructorApplication? TryDeconstructKnownConstructorApplicationForSpecialization(
         Node<SyntaxTypes.Expression> exprNode,
         InliningContext context)
     {
@@ -3367,12 +2388,14 @@ public class Inlining
         if (inlinedDecls.Count is 0 &&
             !inlinedResult.Equals(exprNode.Value) &&
             TryDeconstructKnownConstructorApplication(
-                new Node<SyntaxTypes.Expression>(s_zeroRange, inlinedResult),
+                new Node<SyntaxTypes.Expression>(ElmSyntaxTransformations.s_zeroRange, inlinedResult),
                 context) is { } resolvedCtorApp &&
             resolvedCtorApp.FieldExpressions.Count > 0 &&
             context.Resolution.SingleChoiceConstructors.ContainsKey(resolvedCtorApp.ConstructorName) &&
             resolvedCtorApp.FieldExpressions.Any(
-                fieldExpr => UnwrapParenthesized(fieldExpr.Value) is SyntaxTypes.Expression.LambdaExpression))
+                fieldExpr =>
+                ElmSyntaxTransformations.UnwrapParenthesized(fieldExpr.Value) is
+                SyntaxTypes.Expression.LambdaExpression))
         {
             return resolvedCtorApp;
         }
@@ -3380,225 +2403,12 @@ public class Inlining
         return null;
     }
 
-    private static bool AreLetDeclarationsIgnorableForConstructorResolution(
-        IReadOnlyList<Node<SyntaxTypes.Expression.LetDeclaration>> declarations)
-    {
-        foreach (var declaration in declarations)
-        {
-            if (declaration.Value is not SyntaxTypes.Expression.LetDeclaration.LetDestructuring letDestr)
-            {
-                return false;
-            }
 
-            if (UnwrapParenthesizedPattern(letDestr.Pattern.Value) is not SyntaxTypes.Pattern.AllPattern)
-            {
-                return false;
-            }
-        }
 
-        return declarations.Count > 0;
-    }
 
-    private static Node<SyntaxTypes.Expression> BuildConstructorApplication(
-        SyntaxTypes.QualifiedNameRef constructorName,
-        IReadOnlyList<Node<SyntaxTypes.Expression>> fieldExpressions)
-    {
-        var constructorExpr =
-            new Node<SyntaxTypes.Expression>(
-                s_zeroRange,
-                new SyntaxTypes.Expression.FunctionOrValue(constructorName.ModuleName, constructorName.Name));
 
-        if (fieldExpressions.Count is 0)
-            return constructorExpr;
 
-        return
-            new Node<SyntaxTypes.Expression>(
-                s_zeroRange,
-                new SyntaxTypes.Expression.Application(
-                    [.. new[] { constructorExpr }.Concat(fieldExpressions)]));
-    }
 
-    private static bool IsLocalVariableReference(
-        SyntaxTypes.Expression expr,
-        string variableName)
-    {
-        return
-            UnwrapParenthesized(expr) is SyntaxTypes.Expression.FunctionOrValue funcOrValue &&
-            funcOrValue.ModuleName.Count is 0 &&
-            funcOrValue.Name == variableName;
-    }
-
-    private static bool AreEquivalentConstructorNames(
-        SyntaxTypes.QualifiedNameRef left,
-        SyntaxTypes.QualifiedNameRef right)
-    {
-        return
-            left.Equals(right) ||
-            (left.Name == right.Name &&
-            (left.ModuleName.Count is 0 || right.ModuleName.Count is 0));
-    }
-
-    private static bool AreEquivalentConstructorNames(
-        SyntaxTypes.QualifiedNameRef left,
-        DeclQualifiedName right)
-    {
-        return
-            (left.Name == right.DeclName &&
-            (left.ModuleName.Count is 0 || left.ModuleName.SequenceEqual(right.Namespaces)));
-    }
-
-    private static int CountUnshadowedLocalVariableReferences(
-        SyntaxTypes.Expression expr,
-        string variableName)
-    {
-        return CountUnshadowedLocalVariableReferences(expr, variableName, shadowed: false);
-    }
-
-    private static int CountUnshadowedLocalVariableReferences(
-        SyntaxTypes.Expression expr,
-        string variableName,
-        bool shadowed)
-    {
-        switch (expr)
-        {
-            case SyntaxTypes.Expression.FunctionOrValue funcOrValue:
-                return
-                    shadowed ||
-                    funcOrValue.ModuleName.Count is not 0 ||
-                    funcOrValue.Name != variableName
-                    ?
-                    0
-                    :
-                    1;
-
-            case SyntaxTypes.Expression.Application app:
-                return
-                    app.Arguments.Sum(
-                        argument => CountUnshadowedLocalVariableReferences(argument.Value, variableName, shadowed));
-
-            case SyntaxTypes.Expression.ParenthesizedExpression paren:
-                return CountUnshadowedLocalVariableReferences(paren.Expression.Value, variableName, shadowed);
-
-            case SyntaxTypes.Expression.IfBlock ifBlock:
-                return
-                    CountUnshadowedLocalVariableReferences(ifBlock.Condition.Value, variableName, shadowed) +
-                    CountUnshadowedLocalVariableReferences(ifBlock.ThenBlock.Value, variableName, shadowed) +
-                    CountUnshadowedLocalVariableReferences(ifBlock.ElseBlock.Value, variableName, shadowed);
-
-            case SyntaxTypes.Expression.CaseExpression caseExpr:
-                {
-                    var caseExprCount =
-                        CountUnshadowedLocalVariableReferences(caseExpr.CaseBlock.Expression.Value, variableName, shadowed);
-
-                    foreach (var caseItem in caseExpr.CaseBlock.Cases)
-                    {
-                        caseExprCount +=
-                            CountUnshadowedLocalVariableReferences(
-                                caseItem.Expression.Value,
-                                variableName,
-                                shadowed || CollectPatternNames(caseItem.Pattern.Value).Contains(variableName));
-                    }
-
-                    return caseExprCount;
-                }
-
-            case SyntaxTypes.Expression.LetExpression letExpr:
-                {
-                    var letBoundNames = new HashSet<string>();
-                    var letExprCount = 0;
-
-                    foreach (var declaration in letExpr.Value.Declarations)
-                    {
-                        switch (declaration.Value)
-                        {
-                            case SyntaxTypes.Expression.LetDeclaration.LetFunction letFunc:
-                                {
-                                    var functionName = letFunc.Function.Declaration.Value.Name.Value;
-                                    var functionShadowed = shadowed || functionName == variableName;
-
-                                    letExprCount +=
-                                        CountUnshadowedLocalVariableReferences(
-                                            letFunc.Function.Declaration.Value.Expression.Value,
-                                            variableName,
-                                            functionShadowed ||
-                                            letFunc.Function.Declaration.Value.Arguments.Any(
-                                                arg => CollectPatternNames(arg.Value).Contains(variableName)));
-
-                                    letBoundNames.Add(functionName);
-                                    break;
-                                }
-
-                            case SyntaxTypes.Expression.LetDeclaration.LetDestructuring letDestr:
-                                letExprCount +=
-                                    CountUnshadowedLocalVariableReferences(
-                                        letDestr.Expression.Value,
-                                        variableName,
-                                        shadowed);
-
-                                foreach (var boundName in CollectPatternNames(letDestr.Pattern.Value))
-                                {
-                                    letBoundNames.Add(boundName);
-                                }
-
-                                break;
-                        }
-                    }
-
-                    letExprCount +=
-                        CountUnshadowedLocalVariableReferences(
-                            letExpr.Value.Expression.Value,
-                            variableName,
-                            shadowed || letBoundNames.Contains(variableName));
-
-                    return letExprCount;
-                }
-
-            case SyntaxTypes.Expression.LambdaExpression lambda:
-                return
-                    CountUnshadowedLocalVariableReferences(
-                        lambda.Lambda.Expression.Value,
-                        variableName,
-                        shadowed ||
-                        lambda.Lambda.Arguments.Any(
-                            arg => CollectPatternNames(arg.Value).Contains(variableName)));
-
-            case SyntaxTypes.Expression.ListExpr listExpr:
-                return
-                    listExpr.Elements.Sum(
-                        element => CountUnshadowedLocalVariableReferences(element.Value, variableName, shadowed));
-
-            case SyntaxTypes.Expression.TupledExpression tupled:
-                return
-                    tupled.Elements.Sum(
-                        element => CountUnshadowedLocalVariableReferences(element.Value, variableName, shadowed));
-
-            case SyntaxTypes.Expression.RecordExpr recordExpr:
-                return
-                    recordExpr.Fields.Sum(
-                        field =>
-                        CountUnshadowedLocalVariableReferences(field.Value.valueExpr.Value, variableName, shadowed));
-
-            case SyntaxTypes.Expression.RecordUpdateExpression recordUpdate:
-                return
-                    recordUpdate.Fields.Sum(
-                        field =>
-                        CountUnshadowedLocalVariableReferences(field.Value.valueExpr.Value, variableName, shadowed));
-
-            case SyntaxTypes.Expression.RecordAccess recordAccess:
-                return CountUnshadowedLocalVariableReferences(recordAccess.Record.Value, variableName, shadowed);
-
-            case SyntaxTypes.Expression.Negation negation:
-                return CountUnshadowedLocalVariableReferences(negation.Expression.Value, variableName, shadowed);
-
-            case SyntaxTypes.Expression.OperatorApplication opApp:
-                return
-                    CountUnshadowedLocalVariableReferences(opApp.Left.Value, variableName, shadowed) +
-                    CountUnshadowedLocalVariableReferences(opApp.Right.Value, variableName, shadowed);
-
-            default:
-                return 0;
-        }
-    }
 
     /// <summary>
     /// Attempts to specialize a recursive function call by substituting loop-invariant
@@ -3653,7 +2463,7 @@ public class Inlining
 
         // Skip specialization for very large function bodies to avoid
         // stack overflow in the recursive AST rewriting pass.
-        if (CountExpressionNodes(funcImpl.Expression.Value) > 2000)
+        if (ElmSyntaxTransformations.CountExpressionNodes(funcImpl.Expression.Value) > 2000)
             return null;
 
         var invariantIndicesSet = new HashSet<int>(invariantFuncParamIndices);
@@ -3786,7 +2596,7 @@ public class Inlining
             substitutions[varPattern.Name] = appArgs[paramIndex];
         }
 
-        var substitutedBody = SubstituteInExpression(rewrittenBody, substitutions);
+        var substitutedBody = ElmSyntaxTransformations.SubstituteInExpression(rewrittenBody, substitutions);
 
         // Step 3: Qualify lifted helper references from the callee module.
         var qualifiedBody =
@@ -3804,7 +2614,7 @@ public class Inlining
         // Create the specialized function as a module-level declaration.
         var specializedImpl =
             new SyntaxTypes.FunctionImplementation(
-                Name: new Node<string>(s_zeroRange, specializedName),
+                Name: new Node<string>(ElmSyntaxTransformations.s_zeroRange, specializedName),
                 Arguments: remainingParams,
                 Expression: qualifiedBody);
 
@@ -3812,18 +2622,21 @@ public class Inlining
             new SyntaxTypes.FunctionStruct(
                 Documentation: null,
                 Signature: null,
-                Declaration: new Node<SyntaxTypes.FunctionImplementation>(s_zeroRange, specializedImpl));
+                Declaration:
+                new Node<SyntaxTypes.FunctionImplementation>(ElmSyntaxTransformations.s_zeroRange, specializedImpl));
 
         var newDecl =
             new Node<SyntaxTypes.Declaration>(
-                s_zeroRange,
+                ElmSyntaxTransformations.s_zeroRange,
                 new SyntaxTypes.Declaration.FunctionDeclaration(specializedFunc));
 
         // Build the call to the specialized function with remaining (non-invariant) arguments.
         var callArgs =
             new List<Node<SyntaxTypes.Expression>>
             {
-                new(s_zeroRange, new SyntaxTypes.Expression.FunctionOrValue([], specializedName))
+                new(
+                    ElmSyntaxTransformations.s_zeroRange,
+                    new SyntaxTypes.Expression.FunctionOrValue([], specializedName))
             };
 
         for (var i = 0; i < appArgs.Count; i++)
@@ -3862,7 +2675,7 @@ public class Inlining
                 singleChoiceTagSpecialization);
 
         bodyAfterTagRewrite =
-            SubstituteInExpression(
+            ElmSyntaxTransformations.SubstituteInExpression(
                 bodyAfterTagRewrite,
                 new Dictionary<string, Node<SyntaxTypes.Expression>>
                 {
@@ -3878,7 +2691,7 @@ public class Inlining
         if (directPatternFieldSubstitutions.Count > 0)
         {
             bodyAfterTagRewrite =
-                SubstituteInExpression(
+                ElmSyntaxTransformations.SubstituteInExpression(
                     bodyAfterTagRewrite,
                     directPatternFieldSubstitutions);
         }
@@ -3939,7 +2752,7 @@ public class Inlining
         if (higherOrderSubstitutions.Count > 0)
         {
             bodyAfterHigherOrderRewrite =
-                SubstituteInExpression(
+                ElmSyntaxTransformations.SubstituteInExpression(
                     bodyAfterHigherOrderRewrite,
                     higherOrderSubstitutions);
         }
@@ -3957,7 +2770,7 @@ public class Inlining
 
         var specializedImpl =
             new SyntaxTypes.FunctionImplementation(
-                Name: new Node<string>(s_zeroRange, specializedName),
+                Name: new Node<string>(ElmSyntaxTransformations.s_zeroRange, specializedName),
                 Arguments: remainingParameters,
                 Expression: qualifiedBody);
 
@@ -3965,17 +2778,20 @@ public class Inlining
             new SyntaxTypes.FunctionStruct(
                 Documentation: null,
                 Signature: null,
-                Declaration: new Node<SyntaxTypes.FunctionImplementation>(s_zeroRange, specializedImpl));
+                Declaration:
+                new Node<SyntaxTypes.FunctionImplementation>(ElmSyntaxTransformations.s_zeroRange, specializedImpl));
 
         var newDecl =
             new Node<SyntaxTypes.Declaration>(
-                s_zeroRange,
+                ElmSyntaxTransformations.s_zeroRange,
                 new SyntaxTypes.Declaration.FunctionDeclaration(specializedFunc));
 
         var callArgs =
             new List<Node<SyntaxTypes.Expression>>
             {
-                new(s_zeroRange, new SyntaxTypes.Expression.FunctionOrValue([], specializedName))
+                new(
+                    ElmSyntaxTransformations.s_zeroRange,
+                    new SyntaxTypes.Expression.FunctionOrValue([], specializedName))
             };
 
         for (var i = 0; i < callArgumentsAfterTagRewrite.Count; i++)
@@ -4053,7 +2869,7 @@ public class Inlining
                 }
             }
 
-            EnqueueChildExpressions(expr, worklist);
+            ElmSyntaxTransformations.EnqueueChildExpressions(expr, worklist);
         }
 
         return true;
@@ -4115,7 +2931,7 @@ public class Inlining
                 continue;
 
             // Size check
-            if (CountExpressionNodes(refBody) > 2000)
+            if (ElmSyntaxTransformations.CountExpressionNodes(refBody) > 2000)
                 continue;
 
             candidates.Add(refFunc);
@@ -4208,283 +3024,9 @@ public class Inlining
         return false;
     }
 
-    /// <summary>
-    /// Enqueues all immediate child expressions of an expression node onto the given worklist.
-    /// This centralizes the ~15-case expression variant traversal for iterative walkers,
-    /// ensuring consistency and avoiding the need to duplicate the switch in every walker.
-    /// Uses an iterative worklist to avoid stack overflow on deeply nested expressions.
-    /// </summary>
-    private static void EnqueueChildExpressions(
-        SyntaxTypes.Expression expr,
-        Stack<SyntaxTypes.Expression> worklist)
-    {
-        switch (expr)
-        {
-            case SyntaxTypes.Expression.Application app:
-                foreach (var arg in app.Arguments)
-                    worklist.Push(arg.Value);
 
-                break;
 
-            case SyntaxTypes.Expression.ParenthesizedExpression paren:
-                worklist.Push(paren.Expression.Value);
-                break;
 
-            case SyntaxTypes.Expression.IfBlock ifBlock:
-                worklist.Push(ifBlock.Condition.Value);
-                worklist.Push(ifBlock.ThenBlock.Value);
-                worklist.Push(ifBlock.ElseBlock.Value);
-                break;
-
-            case SyntaxTypes.Expression.CaseExpression caseExpr:
-                worklist.Push(caseExpr.CaseBlock.Expression.Value);
-
-                foreach (var c in caseExpr.CaseBlock.Cases)
-                    worklist.Push(c.Expression.Value);
-
-                break;
-
-            case SyntaxTypes.Expression.LetExpression letExpr:
-                foreach (var decl in letExpr.Value.Declarations)
-                {
-                    switch (decl.Value)
-                    {
-                        case SyntaxTypes.Expression.LetDeclaration.LetFunction lf:
-                            worklist.Push(lf.Function.Declaration.Value.Expression.Value);
-                            break;
-
-                        case SyntaxTypes.Expression.LetDeclaration.LetDestructuring ld:
-                            worklist.Push(ld.Expression.Value);
-                            break;
-                    }
-                }
-
-                worklist.Push(letExpr.Value.Expression.Value);
-                break;
-
-            case SyntaxTypes.Expression.LambdaExpression lambda:
-                worklist.Push(lambda.Lambda.Expression.Value);
-                break;
-
-            case SyntaxTypes.Expression.ListExpr listExpr:
-                foreach (var e in listExpr.Elements)
-                    worklist.Push(e.Value);
-
-                break;
-
-            case SyntaxTypes.Expression.TupledExpression tupled:
-                foreach (var e in tupled.Elements)
-                    worklist.Push(e.Value);
-
-                break;
-
-            case SyntaxTypes.Expression.RecordExpr recordExpr:
-                foreach (var f in recordExpr.Fields)
-                    worklist.Push(f.Value.valueExpr.Value);
-
-                break;
-
-            case SyntaxTypes.Expression.RecordUpdateExpression recordUpdate:
-                foreach (var f in recordUpdate.Fields)
-                    worklist.Push(f.Value.valueExpr.Value);
-
-                break;
-
-            case SyntaxTypes.Expression.RecordAccess recordAccess:
-                worklist.Push(recordAccess.Record.Value);
-                break;
-
-            case SyntaxTypes.Expression.Negation negation:
-                worklist.Push(negation.Expression.Value);
-                break;
-
-            case SyntaxTypes.Expression.OperatorApplication opApp:
-                worklist.Push(opApp.Left.Value);
-                worklist.Push(opApp.Right.Value);
-                break;
-        }
-    }
-
-    /// <summary>
-    /// Rebuilds an expression by applying <paramref name="mapChild"/> to all immediate child
-    /// expression nodes. This centralizes the ~15-case expression variant reconstruction pattern
-    /// for tree-mapping operations (substitution, qualification, parenthesization, rewriting).
-    /// Leaf expressions (FunctionOrValue, Literal, etc.) are returned unchanged.
-    /// </summary>
-    private static SyntaxTypes.Expression MapChildExpressions(
-        SyntaxTypes.Expression expr,
-        Func<Node<SyntaxTypes.Expression>, Node<SyntaxTypes.Expression>> mapChild)
-    {
-        return expr switch
-        {
-            SyntaxTypes.Expression.Application app =>
-            new SyntaxTypes.Expression.Application(
-                [.. app.Arguments.Select(mapChild)]),
-
-            SyntaxTypes.Expression.ParenthesizedExpression paren =>
-            new SyntaxTypes.Expression.ParenthesizedExpression(
-                mapChild(paren.Expression)),
-
-            SyntaxTypes.Expression.IfBlock ifBlock =>
-            new SyntaxTypes.Expression.IfBlock(
-                mapChild(ifBlock.Condition),
-                mapChild(ifBlock.ThenBlock),
-                mapChild(ifBlock.ElseBlock)),
-
-            SyntaxTypes.Expression.CaseExpression caseExpr =>
-            new SyntaxTypes.Expression.CaseExpression(
-                new SyntaxTypes.CaseBlock(
-                    mapChild(caseExpr.CaseBlock.Expression),
-                    [
-                    .. caseExpr.CaseBlock.Cases.Select(
-                        c => new SyntaxTypes.Case(c.Pattern, mapChild(c.Expression)))
-                    ])),
-
-            SyntaxTypes.Expression.LetExpression letExpr =>
-            new SyntaxTypes.Expression.LetExpression(
-                new SyntaxTypes.Expression.LetBlock(
-                    Declarations:
-                    [
-                    .. letExpr.Value.Declarations.Select(
-                        d =>
-                        {
-                            var rewrittenDecl =
-                                d.Value switch
-                                {
-                                    SyntaxTypes.Expression.LetDeclaration.LetFunction letFunc =>
-                                    (SyntaxTypes.Expression.LetDeclaration)
-                                    new SyntaxTypes.Expression.LetDeclaration.LetFunction(
-                                        letFunc.Function with
-                                        {
-                                            Declaration =
-                                            new Node<SyntaxTypes.FunctionImplementation>(
-                                                letFunc.Function.Declaration.Range,
-                                                letFunc.Function.Declaration.Value with
-                                                {
-                                                    Expression =
-                                                    mapChild(letFunc.Function.Declaration.Value.Expression)
-                                                })
-                                        }),
-
-                                    SyntaxTypes.Expression.LetDeclaration.LetDestructuring letDestr =>
-                                    new SyntaxTypes.Expression.LetDeclaration.LetDestructuring(
-                                        letDestr.Pattern,
-                                        mapChild(letDestr.Expression)),
-
-                                    _ =>
-                                    d.Value
-                                };
-
-                            return new Node<SyntaxTypes.Expression.LetDeclaration>(d.Range, rewrittenDecl);
-                        })
-                    ],
-                    Expression:
-                    mapChild(letExpr.Value.Expression))),
-
-            SyntaxTypes.Expression.LambdaExpression lambda =>
-            new SyntaxTypes.Expression.LambdaExpression(
-                new SyntaxTypes.LambdaStruct(
-                    lambda.Lambda.Arguments,
-                    mapChild(lambda.Lambda.Expression))),
-
-            SyntaxTypes.Expression.ListExpr listExpr =>
-            new SyntaxTypes.Expression.ListExpr(
-                [.. listExpr.Elements.Select(mapChild)]),
-
-            SyntaxTypes.Expression.TupledExpression tupled =>
-            new SyntaxTypes.Expression.TupledExpression(
-                [.. tupled.Elements.Select(mapChild)]),
-
-            SyntaxTypes.Expression.RecordExpr recordExpr =>
-            new SyntaxTypes.Expression.RecordExpr(
-                [
-                .. recordExpr.Fields.Select(
-                    f =>
-                    new Node<(Node<string> fieldName, Node<SyntaxTypes.Expression> valueExpr)>(
-                        f.Range,
-                        (f.Value.fieldName, mapChild(f.Value.valueExpr))))
-                ]),
-
-            SyntaxTypes.Expression.RecordUpdateExpression recordUpdate =>
-            new SyntaxTypes.Expression.RecordUpdateExpression(
-                recordUpdate.RecordName,
-                [
-                .. recordUpdate.Fields.Select(
-                    f =>
-                    new Node<(Node<string> fieldName, Node<SyntaxTypes.Expression> valueExpr)>(
-                        f.Range,
-                        (f.Value.fieldName, mapChild(f.Value.valueExpr))))
-                ]),
-
-            SyntaxTypes.Expression.RecordAccess recordAccess =>
-            new SyntaxTypes.Expression.RecordAccess(
-                mapChild(recordAccess.Record),
-                recordAccess.FieldName),
-
-            SyntaxTypes.Expression.Negation negation =>
-            new SyntaxTypes.Expression.Negation(
-                mapChild(negation.Expression)),
-
-            SyntaxTypes.Expression.OperatorApplication opApp =>
-            new SyntaxTypes.Expression.OperatorApplication(
-                opApp.Operator,
-                opApp.Direction,
-                mapChild(opApp.Left),
-                mapChild(opApp.Right)),
-
-            _ =>
-            expr
-        };
-    }
-
-    /// <summary>
-    /// Counts the number of expression nodes in the AST, up to a maximum.
-    /// Uses an iterative worklist to avoid stack overflow.
-    /// </summary>
-    private static int CountExpressionNodes(SyntaxTypes.Expression body, int max = 3000)
-    {
-        var count = 0;
-        var worklist = new Stack<SyntaxTypes.Expression>();
-        worklist.Push(body);
-
-        while (worklist.Count > 0 && count < max)
-        {
-            count++;
-            EnqueueChildExpressions(worklist.Pop(), worklist);
-        }
-
-        return count;
-    }
-
-    /// <summary>
-    /// Unified expression tree rewriter. Recursively traverses all expression variants,
-    /// delegating <see cref="SyntaxTypes.Expression.Application"/> nodes to the supplied
-    /// <paramref name="rewriteApplication"/> function. All other expression variants are
-    /// structurally rebuilt with their children rewritten via <see cref="MapChildExpressions"/>.
-    /// </summary>
-    private static Node<SyntaxTypes.Expression> RewriteExpressionTree(
-        Node<SyntaxTypes.Expression> exprNode,
-        Func<SyntaxTypes.Expression.Application,
-            Func<Node<SyntaxTypes.Expression>, Node<SyntaxTypes.Expression>>,
-            SyntaxTypes.Expression> rewriteApplication)
-    {
-        Node<SyntaxTypes.Expression> Recurse(Node<SyntaxTypes.Expression> node) =>
-            RewriteExpressionTree(node, rewriteApplication);
-
-        var expr = exprNode.Value;
-
-        var rewrittenExpr =
-            expr switch
-            {
-                SyntaxTypes.Expression.Application app =>
-                rewriteApplication(app, Recurse),
-
-                _ =>
-                MapChildExpressions(expr, Recurse)
-            };
-
-        return new Node<SyntaxTypes.Expression>(exprNode.Range, rewrittenExpr);
-    }
 
     /// <summary>
     /// Rewrites all recursive self-calls in the expression from the original function name
@@ -4498,7 +3040,7 @@ public class Inlining
         HashSet<int> invariantParamIndices)
     {
         return
-            RewriteExpressionTree(
+            ElmSyntaxTransformations.RewriteExpressionTree(
                 exprNode,
                 (app, recurse) =>
                 RewriteRecursiveCallApplication(
@@ -4526,7 +3068,9 @@ public class Inlining
             var newArgs =
                 new List<Node<SyntaxTypes.Expression>>
                 {
-                    new(s_zeroRange, new SyntaxTypes.Expression.FunctionOrValue([], specializedName))
+                    new(
+                        ElmSyntaxTransformations.s_zeroRange,
+                        new SyntaxTypes.Expression.FunctionOrValue([], specializedName))
                 };
 
             for (var i = 1; i < app.Arguments.Count; i++)
@@ -4560,7 +3104,7 @@ public class Inlining
         SingleChoiceTagSpecialization specialization)
     {
         return
-            RewriteExpressionTree(
+            ElmSyntaxTransformations.RewriteExpressionTree(
                 exprNode,
                 (app, recurse) =>
                 RewriteRecursiveCallApplicationForSingleChoiceTagSpecialization(
@@ -4587,7 +3131,9 @@ public class Inlining
             var newArgs =
                 new List<Node<SyntaxTypes.Expression>>
                 {
-                    new(s_zeroRange, new SyntaxTypes.Expression.FunctionOrValue([], specializedName))
+                    new(
+                        ElmSyntaxTransformations.s_zeroRange,
+                        new SyntaxTypes.Expression.FunctionOrValue([], specializedName))
                 };
 
             for (var i = 1; i < app.Arguments.Count; i++)
@@ -4597,14 +3143,16 @@ public class Inlining
                 if (argIndex == specialization.ParamIndex)
                 {
                     var constructorArgument =
-                        IsLocalVariableReference(app.Arguments[i].Value, specialization.ParamName)
+                        ElmSyntaxTransformations.IsLocalVariableReference(
+                            app.Arguments[i].Value,
+                            specialization.ParamName)
                         ?
                         specialization.ReplacementArgument
                         :
                         app.Arguments[i];
 
-                    if (TryDeconstructConstructorApplication(constructorArgument) is not { } ctorApp ||
-                        !AreEquivalentConstructorNames(ctorApp.ConstructorName, specialization.ConstructorName))
+                    if (ElmSyntaxTransformations.TryDeconstructConstructorApplication(constructorArgument) is not { } ctorApp ||
+                        !ElmSyntaxTransformations.AreEquivalentConstructorNames(ctorApp.ConstructorName, specialization.ConstructorName))
                     {
                         return
                             new SyntaxTypes.Expression.Application(
@@ -4637,7 +3185,7 @@ public class Inlining
                     {
                         newArgs.Add(
                             new Node<SyntaxTypes.Expression>(
-                                s_zeroRange,
+                                ElmSyntaxTransformations.s_zeroRange,
                                 new SyntaxTypes.Expression.TupledExpression([.. flattenedSpecializedArgs])));
                     }
                     else
@@ -4679,8 +3227,8 @@ public class Inlining
         }
 
         if (fieldPlan.ParameterSpecialization is not ParameterSpecialization.SingleChoiceTagUnwrap nestedTagUnwrap ||
-            TryDeconstructConstructorApplication(fieldExpression) is not { } ctorApp ||
-            !AreEquivalentConstructorNames(ctorApp.ConstructorName, nestedTagUnwrap.ConstructorName))
+            ElmSyntaxTransformations.TryDeconstructConstructorApplication(fieldExpression) is not { } ctorApp ||
+            !ElmSyntaxTransformations.AreEquivalentConstructorNames(ctorApp.ConstructorName, nestedTagUnwrap.ConstructorName))
         {
             rewrittenArguments = [];
             return false;
@@ -4820,7 +3368,7 @@ public class Inlining
                 substitutions[varPattern.Name] = appArgs[paramIndex];
             }
 
-            var substitutedBody = SubstituteInExpression(rewrittenBody, substitutions);
+            var substitutedBody = ElmSyntaxTransformations.SubstituteInExpression(rewrittenBody, substitutions);
 
             // Step 3: Qualify lifted helper references from the callee module.
             var qualifiedBody =
@@ -4837,7 +3385,7 @@ public class Inlining
 
             var specializedImpl =
                 new SyntaxTypes.FunctionImplementation(
-                    Name: new Node<string>(s_zeroRange, specName),
+                    Name: new Node<string>(ElmSyntaxTransformations.s_zeroRange, specName),
                     Arguments: remainingParams,
                     Expression: qualifiedBody);
 
@@ -4845,11 +3393,12 @@ public class Inlining
                 new SyntaxTypes.FunctionStruct(
                     Documentation: null,
                     Signature: null,
-                    Declaration: new Node<SyntaxTypes.FunctionImplementation>(s_zeroRange, specializedImpl));
+                    Declaration:
+                    new Node<SyntaxTypes.FunctionImplementation>(ElmSyntaxTransformations.s_zeroRange, specializedImpl));
 
             newDecls.Add(
                 new Node<SyntaxTypes.Declaration>(
-                    s_zeroRange,
+                    ElmSyntaxTransformations.s_zeroRange,
                     new SyntaxTypes.Declaration.FunctionDeclaration(specializedFunc)));
         }
 
@@ -4859,7 +3408,7 @@ public class Inlining
         var callArgs =
             new List<Node<SyntaxTypes.Expression>>
             {
-                new(s_zeroRange, new SyntaxTypes.Expression.FunctionOrValue([], startSpecName))
+                new(ElmSyntaxTransformations.s_zeroRange, new SyntaxTypes.Expression.FunctionOrValue([], startSpecName))
             };
 
         for (var i = 0; i < appArgs.Count; i++)
@@ -4890,7 +3439,7 @@ public class Inlining
         HashSet<int> invariantParamIndices)
     {
         return
-            RewriteExpressionTree(
+            ElmSyntaxTransformations.RewriteExpressionTree(
                 exprNode,
                 (app, recurse) =>
                 RewriteGroupCallApplication(app, groupMapping, invariantParamIndices, recurse));
@@ -4912,7 +3461,9 @@ public class Inlining
                     var newArgs =
                         new List<Node<SyntaxTypes.Expression>>
                         {
-                            new(s_zeroRange, new SyntaxTypes.Expression.FunctionOrValue([], specName))
+                            new(
+                                ElmSyntaxTransformations.s_zeroRange,
+                                new SyntaxTypes.Expression.FunctionOrValue([], specName))
                         };
 
                     for (var i = 1; i < app.Arguments.Count; i++)
@@ -4952,13 +3503,14 @@ public class Inlining
             expr switch
             {
                 SyntaxTypes.Expression.FunctionOrValue funcOrValue when funcOrValue.ModuleName.Count is 0 &&
-                    funcOrValue.Name.Contains("__lifted__", StringComparison.Ordinal) &&
+                    (funcOrValue.Name.Contains("__lifted__", StringComparison.Ordinal) ||
+                    funcOrValue.Name.Contains("__specialized__", StringComparison.Ordinal)) &&
                     context.Resolution.FunctionsByQualifiedName.ContainsKey(
                         new DeclQualifiedName(calleeModuleName, funcOrValue.Name)) =>
                 new SyntaxTypes.Expression.FunctionOrValue(calleeModuleName, funcOrValue.Name),
 
                 _ =>
-                MapChildExpressions(
+                ElmSyntaxTransformations.MapChildExpressions(
                     expr,
                     child => QualifyLiftedHelperReferencesFromCalleeModule(child, calleeModuleName, context))
             };
@@ -4966,367 +3518,18 @@ public class Inlining
         return new Node<SyntaxTypes.Expression>(exprNode.Range, qualifiedExpr);
     }
 
-    private static Node<SyntaxTypes.Expression> SubstituteInExpression(
-        Node<SyntaxTypes.Expression> exprNode,
-        IReadOnlyDictionary<string, Node<SyntaxTypes.Expression>> substitutions)
-    {
-        var expr = exprNode.Value;
 
-        var substitutedExpr =
-            expr switch
-            {
-                SyntaxTypes.Expression.FunctionOrValue funcOrValue when funcOrValue.ModuleName.Count is 0 &&
-                    substitutions.TryGetValue(funcOrValue.Name, out var replacement) =>
-                replacement.Value,
 
-                SyntaxTypes.Expression.CaseExpression caseExpr =>
-                TrySubstituteSingleChoiceTagCase(caseExpr.CaseBlock, substitutions)?.Value ??
-                new SyntaxTypes.Expression.CaseExpression(
-                    SubstituteInCaseBlock(caseExpr.CaseBlock, substitutions)),
 
-                SyntaxTypes.Expression.LetExpression letExpr =>
-                new SyntaxTypes.Expression.LetExpression(
-                    SubstituteInLetBlock(letExpr.Value, substitutions)),
 
-                SyntaxTypes.Expression.LambdaExpression lambda =>
-                new SyntaxTypes.Expression.LambdaExpression(
-                    SubstituteInLambdaStruct(lambda.Lambda, substitutions)),
 
-                _ =>
-                MapChildExpressions(expr, child => SubstituteInExpression(child, substitutions))
-            };
 
-        return new Node<SyntaxTypes.Expression>(exprNode.Range, substitutedExpr);
-    }
 
-    private static Node<SyntaxTypes.Expression>? TrySubstituteSingleChoiceTagCase(
-        SyntaxTypes.CaseBlock caseBlock,
-        IReadOnlyDictionary<string, Node<SyntaxTypes.Expression>> substitutions)
-    {
-        if (caseBlock.Cases.Count is not 1)
-            return null;
 
-        var substitutedScrutinee = SubstituteInExpression(caseBlock.Expression, substitutions);
 
-        if (TryDeconstructConstructorApplication(substitutedScrutinee) is not { } ctorApp)
-            return null;
 
-        var onlyCase = caseBlock.Cases[0];
 
-        if (TryBindSingleChoiceTagPattern(
-                onlyCase.Pattern.Value,
-                ctorApp.ConstructorName,
-                ctorApp.FieldExpressions) is not { } patternBindings)
-            return null;
 
-        var shadowedNames = CollectPatternNames(onlyCase.Pattern.Value);
-
-        var combinedSubstitutions =
-            substitutions
-            .Where(kvp => !shadowedNames.Contains(kvp.Key))
-            .ToDictionary(kvp => kvp.Key, kvp => kvp.Value);
-
-        foreach (var binding in patternBindings)
-        {
-            combinedSubstitutions[binding.Key] = binding.Value;
-        }
-
-        return SubstituteInExpression(onlyCase.Expression, combinedSubstitutions);
-    }
-
-    private static Dictionary<string, Node<SyntaxTypes.Expression>>? TryBindSingleChoiceTagPattern(
-        SyntaxTypes.Pattern pattern,
-        SyntaxTypes.QualifiedNameRef constructorName,
-        IReadOnlyList<Node<SyntaxTypes.Expression>> fieldExpressions)
-    {
-        switch (pattern)
-        {
-            case SyntaxTypes.Pattern.ParenthesizedPattern parenthesizedPattern:
-                return
-                    TryBindSingleChoiceTagPattern(
-                        parenthesizedPattern.Pattern.Value,
-                        constructorName,
-                        fieldExpressions);
-
-            case SyntaxTypes.Pattern.NamedPattern namedPattern
-            when AreEquivalentConstructorNames(namedPattern.Name, constructorName) &&
-                     namedPattern.Arguments.Count == fieldExpressions.Count:
-
-                var bindings = new Dictionary<string, Node<SyntaxTypes.Expression>>();
-
-                for (var i = 0; i < namedPattern.Arguments.Count; i++)
-                {
-                    if (!TryBindSingleChoiceTagFieldPattern(
-                            namedPattern.Arguments[i].Value,
-                            fieldExpressions[i],
-                            bindings))
-                    {
-                        return null;
-                    }
-                }
-
-                return bindings;
-
-            default:
-                return null;
-        }
-    }
-
-    private static bool TryBindSingleChoiceTagFieldPattern(
-        SyntaxTypes.Pattern pattern,
-        Node<SyntaxTypes.Expression> fieldExpression,
-        Dictionary<string, Node<SyntaxTypes.Expression>> bindings)
-    {
-        switch (pattern)
-        {
-            case SyntaxTypes.Pattern.VarPattern varPattern:
-                bindings[varPattern.Name] = fieldExpression;
-                return true;
-
-            case SyntaxTypes.Pattern.AllPattern:
-                return true;
-
-            case SyntaxTypes.Pattern.ParenthesizedPattern parenthesizedPattern:
-                return
-                    TryBindSingleChoiceTagFieldPattern(
-                        parenthesizedPattern.Pattern.Value,
-                        fieldExpression,
-                        bindings);
-
-            default:
-                return false;
-        }
-    }
-
-    private static SyntaxTypes.CaseBlock SubstituteInCaseBlock(
-        SyntaxTypes.CaseBlock caseBlock,
-        IReadOnlyDictionary<string, Node<SyntaxTypes.Expression>> substitutions)
-    {
-        return
-            new SyntaxTypes.CaseBlock(
-                Expression: SubstituteInExpression(caseBlock.Expression, substitutions),
-                Cases: [.. caseBlock.Cases.Select(c => SubstituteInCase(c, substitutions))]);
-    }
-
-    private static SyntaxTypes.Case SubstituteInCase(
-        SyntaxTypes.Case caseItem,
-        IReadOnlyDictionary<string, Node<SyntaxTypes.Expression>> substitutions)
-    {
-        // Remove substitutions shadowed by the pattern
-        var shadowedNames = CollectPatternNames(caseItem.Pattern.Value);
-
-        var filteredSubstitutions =
-            substitutions
-            .Where(kvp => !shadowedNames.Contains(kvp.Key))
-            .ToDictionary(kvp => kvp.Key, kvp => kvp.Value);
-
-        return
-            new SyntaxTypes.Case(
-                Pattern: caseItem.Pattern,
-                Expression: SubstituteInExpression(caseItem.Expression, filteredSubstitutions));
-    }
-
-    private static SyntaxTypes.Expression.LetBlock SubstituteInLetBlock(
-        SyntaxTypes.Expression.LetBlock letBlock,
-        IReadOnlyDictionary<string, Node<SyntaxTypes.Expression>> substitutions)
-    {
-        // Collect names introduced by let declarations
-        var letNames = new HashSet<string>();
-
-        foreach (var decl in letBlock.Declarations)
-        {
-            if (decl.Value is SyntaxTypes.Expression.LetDeclaration.LetFunction letFunc)
-            {
-                letNames.Add(letFunc.Function.Declaration.Value.Name.Value);
-            }
-            else if (decl.Value is SyntaxTypes.Expression.LetDeclaration.LetDestructuring letDestr)
-            {
-                foreach (var name in CollectPatternNames(letDestr.Pattern.Value))
-                {
-                    letNames.Add(name);
-                }
-            }
-        }
-
-        // Filter substitutions for the body (names introduced by let shadow outer substitutions)
-        var filteredSubstitutions =
-            substitutions
-            .Where(kvp => !letNames.Contains(kvp.Key))
-            .ToDictionary(kvp => kvp.Key, kvp => kvp.Value);
-
-        return
-            new SyntaxTypes.Expression.LetBlock(
-                Declarations: [.. letBlock.Declarations.Select(d => SubstituteInLetDeclaration(d, substitutions))],
-                Expression: SubstituteInExpression(letBlock.Expression, filteredSubstitutions));
-    }
-
-    private static Node<SyntaxTypes.Expression.LetDeclaration> SubstituteInLetDeclaration(
-        Node<SyntaxTypes.Expression.LetDeclaration> declNode,
-        IReadOnlyDictionary<string, Node<SyntaxTypes.Expression>> substitutions)
-    {
-        var decl = declNode.Value;
-
-        var substitutedDecl =
-            decl switch
-            {
-                SyntaxTypes.Expression.LetDeclaration.LetFunction letFunc =>
-                new SyntaxTypes.Expression.LetDeclaration.LetFunction(
-                    SubstituteInFunctionStruct(letFunc.Function, substitutions)),
-
-                SyntaxTypes.Expression.LetDeclaration.LetDestructuring letDestr =>
-                new SyntaxTypes.Expression.LetDeclaration.LetDestructuring(
-                    letDestr.Pattern,
-                    SubstituteInExpression(letDestr.Expression, substitutions)),
-
-                _ =>
-                decl
-            };
-
-        return new Node<SyntaxTypes.Expression.LetDeclaration>(declNode.Range, substitutedDecl);
-    }
-
-    private static SyntaxTypes.FunctionStruct SubstituteInFunctionStruct(
-        SyntaxTypes.FunctionStruct func,
-        IReadOnlyDictionary<string, Node<SyntaxTypes.Expression>> substitutions)
-    {
-        var impl = func.Declaration.Value;
-
-        // Remove substitutions shadowed by function parameters
-        var paramNames = new HashSet<string>();
-
-        foreach (var param in impl.Arguments)
-        {
-            foreach (var name in CollectPatternNames(param.Value))
-            {
-                paramNames.Add(name);
-            }
-        }
-
-        var filteredSubstitutions =
-            substitutions
-            .Where(kvp => !paramNames.Contains(kvp.Key))
-            .ToDictionary(kvp => kvp.Key, kvp => kvp.Value);
-
-        var substitutedImpl =
-            new SyntaxTypes.FunctionImplementation(
-                Name: impl.Name,
-                Arguments: impl.Arguments,
-                Expression: SubstituteInExpression(impl.Expression, filteredSubstitutions));
-
-        return
-            func with
-            {
-                Declaration =
-                new Node<SyntaxTypes.FunctionImplementation>(
-                    func.Declaration.Range,
-                    substitutedImpl)
-            };
-    }
-
-    private static SyntaxTypes.LambdaStruct SubstituteInLambdaStruct(
-        SyntaxTypes.LambdaStruct lambda,
-        IReadOnlyDictionary<string, Node<SyntaxTypes.Expression>> substitutions)
-    {
-        // Remove substitutions shadowed by lambda parameters
-        var paramNames = new HashSet<string>();
-
-        foreach (var param in lambda.Arguments)
-        {
-            foreach (var name in CollectPatternNames(param.Value))
-            {
-                paramNames.Add(name);
-            }
-        }
-
-        var filteredSubstitutions =
-            substitutions
-            .Where(kvp => !paramNames.Contains(kvp.Key))
-            .ToDictionary(kvp => kvp.Key, kvp => kvp.Value);
-
-        return
-            new SyntaxTypes.LambdaStruct(
-                Arguments: lambda.Arguments,
-                Expression: SubstituteInExpression(lambda.Expression, filteredSubstitutions));
-    }
-
-    private static Node<(Node<string>, Node<SyntaxTypes.Expression>)> SubstituteInRecordField(
-        Node<(Node<string> fieldName, Node<SyntaxTypes.Expression> valueExpr)> fieldNode,
-        IReadOnlyDictionary<string, Node<SyntaxTypes.Expression>> substitutions)
-    {
-        var (fieldName, valueExpr) = fieldNode.Value;
-
-        return
-            new Node<(Node<string>, Node<SyntaxTypes.Expression>)>(
-                fieldNode.Range,
-                (fieldName, SubstituteInExpression(valueExpr, substitutions)));
-    }
-
-    private static HashSet<string> CollectPatternNames(SyntaxTypes.Pattern pattern)
-    {
-        var names = new HashSet<string>();
-
-        CollectPatternNamesRecursive(pattern, names);
-
-        return names;
-    }
-
-    private static void CollectPatternNamesRecursive(SyntaxTypes.Pattern pattern, HashSet<string> names)
-    {
-        switch (pattern)
-        {
-            case SyntaxTypes.Pattern.VarPattern varPattern:
-                names.Add(varPattern.Name);
-                break;
-
-            case SyntaxTypes.Pattern.TuplePattern tuplePattern:
-                foreach (var elem in tuplePattern.Elements)
-                {
-                    CollectPatternNamesRecursive(elem.Value, names);
-                }
-
-                break;
-
-            case SyntaxTypes.Pattern.RecordPattern recordPattern:
-                foreach (var field in recordPattern.Fields)
-                {
-                    names.Add(field.Value);
-                }
-
-                break;
-
-            case SyntaxTypes.Pattern.UnConsPattern unconsPattern:
-                CollectPatternNamesRecursive(unconsPattern.Head.Value, names);
-                CollectPatternNamesRecursive(unconsPattern.Tail.Value, names);
-                break;
-
-            case SyntaxTypes.Pattern.ListPattern listPattern:
-                foreach (var elem in listPattern.Elements)
-                {
-                    CollectPatternNamesRecursive(elem.Value, names);
-                }
-
-                break;
-
-            case SyntaxTypes.Pattern.NamedPattern namedPattern:
-                foreach (var arg in namedPattern.Arguments)
-                {
-                    CollectPatternNamesRecursive(arg.Value, names);
-                }
-
-                break;
-
-            case SyntaxTypes.Pattern.AsPattern asPattern:
-                names.Add(asPattern.Name.Value);
-                CollectPatternNamesRecursive(asPattern.Pattern.Value, names);
-                break;
-
-            case SyntaxTypes.Pattern.ParenthesizedPattern parenPattern:
-                CollectPatternNamesRecursive(parenPattern.Pattern.Value, names);
-                break;
-
-                // Other pattern types don't introduce names
-        }
-    }
 
     private static (SyntaxTypes.CaseBlock, ImmutableList<Node<SyntaxTypes.Declaration>>) InlineCaseBlock(
         SyntaxTypes.CaseBlock caseBlock,
@@ -5414,7 +3617,8 @@ public class Inlining
                 }
             }
             else if (declNode.Value is SyntaxTypes.Expression.LetDeclaration.LetDestructuring letDestr &&
-                UnwrapParenthesizedPattern(letDestr.Pattern.Value) is SyntaxTypes.Pattern.AllPattern)
+                ElmSyntaxTransformations.UnwrapParenthesizedPattern(letDestr.Pattern.Value) is
+                SyntaxTypes.Pattern.AllPattern)
             {
                 propagated = true;
             }
@@ -5422,7 +3626,7 @@ public class Inlining
                 TryDeconstructKnownConstructorApplication(
                     letDestrToPropagate.Expression,
                     context) is { } knownCtorApp &&
-                TryBindSingleChoiceTagPattern(
+                ElmSyntaxTransformations.TryBindSingleChoiceTagPattern(
                     letDestrToPropagate.Pattern.Value,
                     knownCtorApp.ConstructorName,
                     knownCtorApp.FieldExpressions) is { } patternBindings)
@@ -5432,10 +3636,10 @@ public class Inlining
                     substitutions[binding.Key] = binding.Value;
                 }
 
-                if (TryGetAliasNameFromPattern(letDestrToPropagate.Pattern.Value) is { } aliasName)
+                if (ElmSyntaxTransformations.TryGetAliasNameFromPattern(letDestrToPropagate.Pattern.Value) is { } aliasName)
                 {
                     substitutions[aliasName] =
-                        BuildConstructorApplication(
+                        ElmSyntaxTransformations.BuildConstructorApplication(
                             knownCtorApp.ConstructorName,
                             knownCtorApp.FieldExpressions);
                 }
@@ -5452,7 +3656,7 @@ public class Inlining
 
         if (substitutions.Count > 0)
         {
-            body = SubstituteInExpression(body, substitutions);
+            body = ElmSyntaxTransformations.SubstituteInExpression(body, substitutions);
         }
 
         var (inlinedBody, bodyDecls) = InlineExpression(body, context);
@@ -5537,7 +3741,7 @@ public class Inlining
                             return (null, []);
                         }
 
-                        return (new Node<SyntaxTypes.Expression>(s_zeroRange, inlinedResult), inlinedDecls);
+                        return (new Node<SyntaxTypes.Expression>(ElmSyntaxTransformations.s_zeroRange, inlinedResult), inlinedDecls);
                     }
                 }
             }
@@ -5582,7 +3786,7 @@ public class Inlining
 
                 if (inlinedResult is SyntaxTypes.Expression.RecordExpr)
                 {
-                    return (new Node<SyntaxTypes.Expression>(s_zeroRange, inlinedResult), inlinedDecls);
+                    return (new Node<SyntaxTypes.Expression>(ElmSyntaxTransformations.s_zeroRange, inlinedResult), inlinedDecls);
                 }
             }
         }

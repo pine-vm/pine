@@ -199,8 +199,7 @@ public static class BuiltinOperatorLowering
                 SyntaxTypes.Expression.ListExpr listExpression =>
                 new SyntaxTypes.Expression.ListExpr(
                     [
-                    ..
-                    listExpression.Elements.Select(
+                    ..listExpression.Elements.Select(
                         element =>
                         RewriteExpression(
                             element,
@@ -517,7 +516,8 @@ public static class BuiltinOperatorLowering
             context with
             {
                 ParameterNames = BuildParameterNames(lambda.Arguments),
-                ParameterTypes = MergeExpectedLambdaParameterTypes(
+                ParameterTypes =
+                MergeExpectedLambdaParameterTypes(
                     lambda.Arguments,
                     inferred.parameterTypes,
                     expectedType),
@@ -560,7 +560,9 @@ public static class BuiltinOperatorLowering
             }
 
             mergedParameterTypes[varPattern.Name] =
-                ChooseLambdaParameterType(functionType.ArgumentType, mergedParameterTypes.GetValueOrDefault(varPattern.Name));
+                ChooseLambdaParameterType(
+                    functionType.ArgumentType,
+                    mergedParameterTypes.GetValueOrDefault(varPattern.Name));
 
             remainingExpectedType = functionType.ReturnType;
         }
@@ -580,8 +582,12 @@ public static class BuiltinOperatorLowering
         return expectedType switch
         {
             TypeInference.InferredType.UnknownType or TypeInference.InferredType.TypeVariable => inferredType,
-            TypeInference.InferredType.NumberType when inferredType is TypeInference.InferredType.IntType or TypeInference.InferredType.FloatType => inferredType,
-            _ => expectedType
+
+            TypeInference.InferredType.NumberType when inferredType is TypeInference.InferredType.IntType or TypeInference.InferredType.FloatType =>
+            inferredType,
+
+            _ =>
+            expectedType
         };
     }
 
@@ -789,15 +795,19 @@ public static class BuiltinOperatorLowering
             }
 
             return
-                [.. ExtractFunctionParameterTypes(functionSignatureType)
+                [
+                .. ExtractFunctionParameterTypes(functionSignatureType)
                 .Select(parameterType => ExpandAliasType(parameterType, context.AliasTypes))
-                .Cast<TypeInference.InferredType?>()];
+                .Cast<TypeInference.InferredType?>()
+                ];
         }
 
         return
-            [.. functionTypeInfo.ParameterTypes
+            [
+            .. functionTypeInfo.ParameterTypes
             .Select(parameterType => ExpandAliasType(parameterType, context.AliasTypes))
-            .Cast<TypeInference.InferredType?>()];
+            .Cast<TypeInference.InferredType?>()
+            ];
     }
 
     private static IReadOnlyList<TypeInference.InferredType> ExtractFunctionParameterTypes(
@@ -829,11 +839,11 @@ public static class BuiltinOperatorLowering
             ExpandAliasType(aliasType, aliasTypes),
 
             TypeInference.InferredType.RecordType recordType =>
-                new TypeInference.InferredType.RecordType(
-                    [..
-                    recordType.Fields.Select(
-                        field => (field.FieldName, ExpandAliasType(field.FieldType, aliasTypes) ?? field.FieldType))
-                    ]),
+            new TypeInference.InferredType.RecordType(
+                [
+                ..recordType.Fields.Select(
+                    field => (field.FieldName, ExpandAliasType(field.FieldType, aliasTypes) ?? field.FieldType))
+                ]),
 
             TypeInference.InferredType.ListType listType =>
             new TypeInference.InferredType.ListType(

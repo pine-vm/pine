@@ -236,31 +236,7 @@ public class ElmCompiler
             ?
             lambdaLiftedModules
             :
-            ElmSyntaxSpecialization.Apply(lambdaLiftedModules, Inlining.Config.OnlyFunctions)
-            .Map(
-                specializedModules =>
-                lambdaLiftedModules.Select(
-                    moduleSyntax =>
-                    specializedModules[SyntaxTypes.Module.GetModuleName(moduleSyntax.ModuleDefinition.Value).Value])
-                .ToList())
-            .AndThen(
-                specializedModules =>
-                ElmSyntaxInlining.Apply(specializedModules, Inlining.Config.OnlyFunctions)
-                .Map(
-                    inlinedModules =>
-                    specializedModules.Select(
-                        moduleSyntax =>
-                        inlinedModules[SyntaxTypes.Module.GetModuleName(moduleSyntax.ModuleDefinition.Value).Value])
-                    .Select(LambdaLifting.LiftLambdas)
-                    .ToList()))
-            .AndThen(BuiltinOperatorLowering.Apply)
-            .Map(
-                loweredModules =>
-                lambdaLiftedModules.Select(
-                    moduleSyntax =>
-                    loweredModules[SyntaxTypes.Module.GetModuleName(moduleSyntax.ModuleDefinition.Value).Value])
-                .ToList())
-            .Extract(err => throw new Exception("Elm syntax optimization failed: " + err));
+            ApplyOptimizationPipeline(lambdaLiftedModules);
 
         var allFunctions =
             new Dictionary<SyntaxModelTypes.QualifiedNameRef, (string moduleName, string functionName, SyntaxTypes.Declaration.FunctionDeclaration declaration)>();
@@ -1255,6 +1231,65 @@ public class ElmCompiler
          * */
 
         return PineValue.List([StringEncoding.ValueFromString(name), pineValue]);
+    }
+
+    /// <summary>
+    /// Runs the optimization pipeline:
+    /// Specialization → Higher-order Inlining → Lambda Lifting → Operator Lowering.
+    /// <para>
+    /// <strong>Pipeline ordering rationale:</strong>
+    /// Specialization runs first because it creates specialized function variants for known argument patterns
+    /// (e.g., <c>map2__specialized__Parser</c>). These specialized functions must exist before inlining,
+    /// so that the inliner can resolve calls to them.
+    /// </para>
+    /// <para>
+    /// Higher-order inlining runs second, substituting function bodies at call sites where function
+    /// arguments are known. Lambda lifting follows to re-lift any lambdas introduced by inlining.
+    /// </para>
+    /// </summary>
+    private static List<SyntaxTypes.File> ApplyOptimizationPipeline(
+        List<SyntaxTypes.File> lambdaLiftedModules)
+    {
+        // Phase 1: Specialization — create specialized versions of functions for known argument patterns.
+        var afterSpecialization =
+            ElmSyntaxSpecialization.Apply(lambdaLiftedModules, Inlining.Config.OnlyFunctions)
+            .Map(dict => ResolveModulesInSourceOrder(lambdaLiftedModules, dict))
+            .Extract(err => throw new Exception("Specialization failed: " + err));
+
+        // Phase 2: Higher-order inlining — inline functions that receive function arguments.
+        var afterHigherOrderInlining =
+            ElmSyntaxInlining.Apply(afterSpecialization, Inlining.Config.OnlyFunctions)
+            .Map(dict => ResolveModulesInSourceOrder(afterSpecialization, dict))
+            .Extract(err => throw new Exception("Higher-order inlining failed: " + err));
+
+        // Phase 3: Lambda lifting — re-lift any lambdas introduced by higher-order inlining.
+        var afterLambdaLifting =
+            afterHigherOrderInlining
+            .Select(LambdaLifting.LiftLambdas)
+            .ToList();
+
+        // Phase 4: Operator lowering — convert operators to Pine built-in calls.
+        var afterLowering =
+            BuiltinOperatorLowering.Apply(afterLambdaLifting)
+            .Map(dict => ResolveModulesInSourceOrder(afterLambdaLifting, dict))
+            .Extract(err => throw new Exception("Operator lowering failed: " + err));
+
+        return afterLowering;
+    }
+
+    /// <summary>
+    /// Given a source-ordered list of module files and a dictionary of transformed modules keyed by module name,
+    /// returns the transformed modules in the same order as the source list.
+    /// </summary>
+    private static List<SyntaxTypes.File> ResolveModulesInSourceOrder(
+        IReadOnlyList<SyntaxTypes.File> sourceModules,
+        IReadOnlyDictionary<IReadOnlyList<string>, SyntaxTypes.File> transformedDict)
+    {
+        return
+            [
+            .. sourceModules.Select(
+                m => transformedDict[SyntaxTypes.Module.GetModuleName(m.ModuleDefinition.Value).Value])
+            ];
     }
 
     public static PineValue Compile(

@@ -956,6 +956,7 @@ public static class LambdaLifting
             case SyntaxTypes.Expression.LetExpression letExpr:
                 var letBound = boundVariables;
 
+                // Collect function names first (they are mutually recursive in Elm)
                 foreach (var decl in letExpr.Value.Declarations)
                 {
                     switch (decl.Value)
@@ -986,7 +987,16 @@ public static class LambdaLifting
                             break;
 
                         case SyntaxTypes.Expression.LetDeclaration.LetDestructuring letDestr:
-                            letFreeVars = letFreeVars.Union(FindFreeVariables(letDestr.Expression, letBound));
+
+                            // Destructuring patterns are NOT self-referencing: the RHS is
+                            // evaluated in the OUTER scope, so the pattern's own bindings
+                            // must not shadow variables in the RHS.
+                            // Example: `let (a, b) = (a, b)` — the RHS `a` and `b` refer
+                            // to outer-scope variables, not the pattern-bound names.
+                            var destrPatternNames = CollectPatternNames([letDestr.Pattern]);
+                            var destrBound = letBound.Except(destrPatternNames);
+
+                            letFreeVars = letFreeVars.Union(FindFreeVariables(letDestr.Expression, destrBound));
                             break;
                     }
                 }
