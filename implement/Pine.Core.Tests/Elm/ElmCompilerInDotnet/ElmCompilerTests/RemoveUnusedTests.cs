@@ -50,7 +50,7 @@ public class RemoveUnusedTests
 
         var parseCache = new PineVMParseCache();
 
-        var parsedEnv =
+        var (parsedEnv, _) =
             ElmCompilerTestHelper.CompileElmModules(
                 [elmModuleText],
                 disableInlining: true);

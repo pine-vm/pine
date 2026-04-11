@@ -50,7 +50,7 @@ public class CompilationWithIncompleteModules
 
         var parseCache = new PineVMParseCache();
 
-        var parsedEnv =
+        var (parsedEnv, _) =
             ElmCompilerTestHelper.CompileElmModules(
                 [mainModuleText, alfaModuleText, betaModuleText],
                 disableInlining: false);
@@ -153,6 +153,7 @@ public class CompilationWithIncompleteModules
                 appCodeTree,
                 rootFilePaths: rootFilePaths,
                 disableInlining: false)
+            .Map(r => r.compiledEnvValue)
             .Extract(err => throw new Exception(err));
 
         var parsedEnv =

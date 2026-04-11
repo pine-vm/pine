@@ -728,6 +728,7 @@ public class KernelParserFunctionTests
                         treeWithTest,
                         rootFilePaths: rootFilePaths,
                         disableInlining: false)
+                    .Map(r => r.compiledEnvValue)
                     .Extract(err => throw new Exception("Failed compiling: " + err));
 
                 return

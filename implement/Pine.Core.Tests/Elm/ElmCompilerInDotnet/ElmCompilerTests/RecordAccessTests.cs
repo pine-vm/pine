@@ -25,7 +25,7 @@ public class RecordAccessTests
 
         var parseCache = new PineVMParseCache();
 
-        var parsedEnv =
+        var (parsedEnv, _) =
             ElmCompilerTestHelper.CompileElmModules(
                 [elmModuleText],
                 disableInlining: false);
@@ -105,7 +105,7 @@ public class RecordAccessTests
 
         var parseCache = new PineVMParseCache();
 
-        var parsedEnv =
+        var (parsedEnv, _) =
             ElmCompilerTestHelper.CompileElmModules(
                 [elmModuleText],
                 disableInlining: false);
@@ -170,7 +170,7 @@ public class RecordAccessTests
 
         var parseCache = new PineVMParseCache();
 
-        var parsedEnv =
+        var (parsedEnv, _) =
             ElmCompilerTestHelper.CompileElmModules(
                 [elmModuleText],
                 disableInlining: false);
@@ -236,7 +236,7 @@ public class RecordAccessTests
 
         var parseCache = new PineVMParseCache();
 
-        var parsedEnv =
+        var (parsedEnv, _) =
             ElmCompilerTestHelper.CompileElmModules(
                 [elmModuleText],
                 disableInlining: false);
@@ -296,7 +296,7 @@ public class RecordAccessTests
 
         var parseCache = new PineVMParseCache();
 
-        var parsedEnv =
+        var (parsedEnv, _) =
             ElmCompilerTestHelper.CompileElmModules(
                 [elmModuleText],
                 disableInlining: false);
@@ -348,7 +348,7 @@ public class RecordAccessTests
 
         var parseCache = new PineVMParseCache();
 
-        var parsedEnv =
+        var (parsedEnv, _) =
             ElmCompilerTestHelper.CompileElmModules(
                 [elmModuleText],
                 disableInlining: false);
@@ -415,7 +415,7 @@ public class RecordAccessTests
 
         var parseCache = new PineVMParseCache();
 
-        var parsedEnv =
+        var (parsedEnv, _) =
             ElmCompilerTestHelper.CompileElmModules(
                 [elmModuleText],
                 disableInlining: false);

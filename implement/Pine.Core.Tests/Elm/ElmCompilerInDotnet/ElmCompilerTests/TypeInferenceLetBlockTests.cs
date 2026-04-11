@@ -30,7 +30,7 @@ public class TypeInferenceLetBlockTests
 
         var parseCache = new PineVMParseCache();
 
-        var parsedEnv =
+        var (parsedEnv, _) =
             ElmCompilerTestHelper.CompileElmModules(
                 [elmModuleText],
                 disableInlining: true);
@@ -78,7 +78,7 @@ public class TypeInferenceLetBlockTests
 
         var parseCache = new PineVMParseCache();
 
-        var parsedEnv =
+        var (parsedEnv, _) =
             ElmCompilerTestHelper.CompileElmModules(
                 [elmModuleText],
                 disableInlining: true);
@@ -127,7 +127,7 @@ public class TypeInferenceLetBlockTests
 
         var parseCache = new PineVMParseCache();
 
-        var parsedEnv =
+        var (parsedEnv, _) =
             ElmCompilerTestHelper.CompileElmModules(
                 [elmModuleText],
                 disableInlining: true);
@@ -176,7 +176,7 @@ public class TypeInferenceLetBlockTests
 
         var parseCache = new PineVMParseCache();
 
-        var parsedEnv =
+        var (parsedEnv, _) =
             ElmCompilerTestHelper.CompileElmModules(
                 [elmModuleText],
                 disableInlining: true);

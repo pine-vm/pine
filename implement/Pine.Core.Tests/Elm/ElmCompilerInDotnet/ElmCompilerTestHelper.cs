@@ -98,10 +98,11 @@ public class ElmCompilerTestHelper
     }
 
     /// <summary>
-    /// Compiles Elm modules and returns the parsed environment without static program analysis.
-    /// Use this for tests that only need to invoke functions at runtime without static analysis.
+    /// Compiles Elm modules and returns the parsed environment together with intermediate pipeline stage results.
+    /// The <see cref="CompilationPipelineStageResults"/> contain the Elm syntax trees after each compiler stage
+    /// (canonicalization, specialization, inlining, etc.), enabling inspection and debugging of the pipeline.
     /// </summary>
-    public static ElmInteractiveEnvironment.ParsedInteractiveEnvironment
+    public static (ElmInteractiveEnvironment.ParsedInteractiveEnvironment parsedEnv, CompilationPipelineStageResults pipelineStageResults)
         CompileElmModules(
         IReadOnlyList<string> elmModulesTexts,
         bool disableInlining)
@@ -117,7 +118,7 @@ public class ElmCompilerTestHelper
             .Select(b => b.path)
             .ToList();
 
-        var compiledEnv =
+        var (compiledEnv, pipelineStageResults) =
             ElmCompiler.CompileInteractiveEnvironment(
                 appCodeTree,
                 rootFilePaths: rootFilePaths,
@@ -128,7 +129,7 @@ public class ElmCompilerTestHelper
             ElmInteractiveEnvironment.ParseInteractiveEnvironment(compiledEnv)
             .Extract(err => throw new Exception("Failed parsing interactive environment: " + err));
 
-        return parsedEnv;
+        return (parsedEnv, pipelineStageResults);
     }
 
     /// <summary>
@@ -153,7 +154,7 @@ public class ElmCompilerTestHelper
         };
     }
 
-    public static (ElmInteractiveEnvironment.ParsedInteractiveEnvironment parsedEnv, StaticProgram<DeclQualifiedName> staticProgram)
+    public static (ElmInteractiveEnvironment.ParsedInteractiveEnvironment parsedEnv, StaticProgram<DeclQualifiedName> staticProgram, CompilationPipelineStageResults pipelineStageResults)
         StaticProgramFromElmModules(
         IReadOnlyList<string> elmModulesTexts,
         bool disableInlining,
@@ -171,7 +172,7 @@ public class ElmCompilerTestHelper
                 parseCache);
     }
 
-    public static (ElmInteractiveEnvironment.ParsedInteractiveEnvironment parsedEnv, StaticProgram<DeclQualifiedName> staticProgram)
+    public static (ElmInteractiveEnvironment.ParsedInteractiveEnvironment parsedEnv, StaticProgram<DeclQualifiedName> staticProgram, CompilationPipelineStageResults pipelineStageResults)
         StaticProgramFromTestCase(
         TestCase testCase,
         bool disableInlining,
@@ -186,7 +187,7 @@ public class ElmCompilerTestHelper
             .Select(b => b.path)
             .ToList();
 
-        var compiledEnv =
+        var (compiledEnv, pipelineStageResults) =
             ElmCompiler.CompileInteractiveEnvironment(
                 appCodeTree,
                 rootFilePaths: rootFilePaths,
@@ -203,7 +204,7 @@ public class ElmCompilerTestHelper
                 includeDeclaration: includeDeclaration,
                 parseCache);
 
-        return (parsedEnv, staticProgram);
+        return (parsedEnv, staticProgram, pipelineStageResults);
     }
 
     /// <summary>

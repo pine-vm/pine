@@ -269,7 +269,7 @@ public class FunctionApplicationOverheadTests
     private static readonly ElmInteractiveEnvironment.ParsedInteractiveEnvironment s_parsedEnv =
         ElmCompilerTestHelper.CompileElmModules(
             [HelpersModuleText, TestModuleText],
-            disableInlining: false);
+            disableInlining: false).parsedEnv;
 
     private static PineValue GetTestFunction(string name) =>
         s_parsedEnv.Modules

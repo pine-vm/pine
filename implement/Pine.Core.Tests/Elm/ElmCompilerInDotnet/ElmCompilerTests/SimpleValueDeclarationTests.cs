@@ -19,7 +19,7 @@ public class SimpleValueDeclarationTests
 
         var parseCache = new PineVMParseCache();
 
-        var parsedEnv =
+        var (parsedEnv, _) =
             ElmCompilerTestHelper.CompileElmModules(
                 [elmModuleText],
                 disableInlining: true);
@@ -53,7 +53,7 @@ public class SimpleValueDeclarationTests
 
         var parseCache = new PineVMParseCache();
 
-        var parsedEnv =
+        var (parsedEnv, _) =
             ElmCompilerTestHelper.CompileElmModules(
                 [elmModuleText],
                 disableInlining: true);
@@ -88,7 +88,7 @@ public class SimpleValueDeclarationTests
 
         var parseCache = new PineVMParseCache();
 
-        var parsedEnv =
+        var (parsedEnv, _) =
             ElmCompilerTestHelper.CompileElmModules(
                 [elmModuleText],
                 disableInlining: true);
@@ -123,7 +123,7 @@ public class SimpleValueDeclarationTests
 
         var parseCache = new PineVMParseCache();
 
-        var parsedEnv =
+        var (parsedEnv, _) =
             ElmCompilerTestHelper.CompileElmModules(
                 [elmModuleText],
                 disableInlining: true);

@@ -84,7 +84,7 @@ public class ChoiceTypeTagCollisionTests
                 ModuleB.matchGood (ModuleB.makeGood n)
             """;
 
-        var parsedEnv =
+        var (parsedEnv, _) =
             ElmCompilerTestHelper.CompileElmModules(
                 [moduleA, moduleB, moduleTest],
                 disableInlining: true);

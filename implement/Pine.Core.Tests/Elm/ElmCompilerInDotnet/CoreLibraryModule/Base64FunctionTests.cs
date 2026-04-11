@@ -262,6 +262,7 @@ public class Base64FunctionTests
                         treeWithTest,
                         rootFilePaths: rootFilePaths,
                         disableInlining: true)
+                    .Map(r => r.compiledEnvValue)
                     .Extract(err => throw new Exception("Failed compiling: " + err));
 
                 return

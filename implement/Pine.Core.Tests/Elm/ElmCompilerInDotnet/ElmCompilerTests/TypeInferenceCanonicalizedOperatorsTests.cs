@@ -31,7 +31,7 @@ public class TypeInferenceCanonicalizedOperatorsTests
 
         var parseCache = new PineVMParseCache();
 
-        var parsedEnv =
+        var (parsedEnv, _) =
             ElmCompilerTestHelper.CompileElmModules(
                 [elmModuleText],
                 disableInlining: true);
@@ -74,7 +74,7 @@ public class TypeInferenceCanonicalizedOperatorsTests
 
         var parseCache = new PineVMParseCache();
 
-        var parsedEnv =
+        var (parsedEnv, _) =
             ElmCompilerTestHelper.CompileElmModules(
                 [elmModuleText],
                 disableInlining: true);
@@ -120,7 +120,7 @@ public class TypeInferenceCanonicalizedOperatorsTests
 
         var parseCache = new PineVMParseCache();
 
-        var parsedEnv =
+        var (parsedEnv, _) =
             ElmCompilerTestHelper.CompileElmModules(
                 [elmModuleText],
                 disableInlining: true);
@@ -171,7 +171,7 @@ public class TypeInferenceCanonicalizedOperatorsTests
 
         var parseCache = new PineVMParseCache();
 
-        var parsedEnv =
+        var (parsedEnv, _) =
             ElmCompilerTestHelper.CompileElmModules(
                 [elmModuleText],
                 disableInlining: true);
@@ -210,7 +210,7 @@ public class TypeInferenceCanonicalizedOperatorsTests
 
         var parseCache = new PineVMParseCache();
 
-        var parsedEnv =
+        var (parsedEnv, _) =
             ElmCompilerTestHelper.CompileElmModules(
                 [elmModuleText],
                 disableInlining: true);
@@ -259,7 +259,7 @@ public class TypeInferenceCanonicalizedOperatorsTests
 
         var parseCache = new PineVMParseCache();
 
-        var parsedEnv =
+        var (parsedEnv, _) =
             ElmCompilerTestHelper.CompileElmModules(
                 [elmModuleText],
                 disableInlining: true);

@@ -30,7 +30,7 @@ public class RecordExpressionTests
         var parseCache = new PineVMParseCache();
 
         // Use the simpler compile method that doesn't require static analysis
-        var parsedEnv =
+        var (parsedEnv, _) =
             ElmCompilerTestHelper.CompileElmModules(
                 [elmModuleText],
                 disableInlining: false);
@@ -81,7 +81,7 @@ public class RecordExpressionTests
         var parseCache = new PineVMParseCache();
 
         // Use the simpler compile method that doesn't require static analysis
-        var parsedEnv =
+        var (parsedEnv, _) =
             ElmCompilerTestHelper.CompileElmModules(
                 [elmModuleText],
                 disableInlining: false);
@@ -178,7 +178,7 @@ public class RecordExpressionTests
         var parseCache = new PineVMParseCache();
 
         // Use the simpler compile method that doesn't require static analysis
-        var parsedEnv =
+        var (parsedEnv, _) =
             ElmCompilerTestHelper.CompileElmModules(
                 [elmModuleText],
                 disableInlining: false);
@@ -276,7 +276,7 @@ public class RecordExpressionTests
         var parseCache = new PineVMParseCache();
 
         // Use the simpler compile method that doesn't require static analysis
-        var parsedEnv =
+        var (parsedEnv, _) =
             ElmCompilerTestHelper.CompileElmModules(
                 [elmModuleText],
                 disableInlining: false);
@@ -374,7 +374,7 @@ public class RecordExpressionTests
         var parseCache = new PineVMParseCache();
 
         // Use the simpler compile method that doesn't require static analysis
-        var parsedEnv =
+        var (parsedEnv, _) =
             ElmCompilerTestHelper.CompileElmModules(
                 [elmModuleText],
                 disableInlining: false);
@@ -496,7 +496,7 @@ public class RecordExpressionTests
 
         var parseCache = new PineVMParseCache();
 
-        var parsedEnv =
+        var (parsedEnv, _) =
             ElmCompilerTestHelper.CompileElmModules(
                 [elmModuleText],
                 disableInlining: false);
@@ -565,7 +565,7 @@ public class RecordExpressionTests
 
         var parseCache = new PineVMParseCache();
 
-        var parsedEnv =
+        var (parsedEnv, _) =
             ElmCompilerTestHelper.CompileElmModules(
                 [elmModuleText],
                 disableInlining: false);

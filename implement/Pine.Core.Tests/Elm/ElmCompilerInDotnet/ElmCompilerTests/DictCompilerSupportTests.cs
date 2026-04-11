@@ -28,7 +28,7 @@ public class DictCompilerSupportTests
     {
         return ElmCompilerTestHelper.CompileElmModules(
             [elmModuleText],
-            disableInlining: true);
+            disableInlining: true).parsedEnv;
     }
 
     private static PineValue GetFunction(
@@ -439,11 +439,12 @@ public class DictCompilerSupportTests
                 .ToList();
 
             var compiledEnv =
-                ElmCompiler.CompileInteractiveEnvironment(
-                    kernelModulesTree,
-                    rootFilePaths: rootFilePaths,
-                    disableInlining: false)
-                .Extract(err => throw new Exception("Failed compiling Dict: " + err));
+                    ElmCompiler.CompileInteractiveEnvironment(
+                        kernelModulesTree,
+                        rootFilePaths: rootFilePaths,
+                        disableInlining: false)
+                    .Map(r => r.compiledEnvValue)
+                    .Extract(err => throw new Exception("Failed compiling Dict: " + err));
 
             return
                 ElmInteractiveEnvironment.ParseInteractiveEnvironment(compiledEnv)

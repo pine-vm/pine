@@ -34,6 +34,7 @@ public class CoreSetFunctionTests
                         kernelModulesTree,
                         rootFilePaths: rootFilePaths,
                         disableInlining: false)
+                    .Map(r => r.compiledEnvValue)
                     .Extract(err => throw new Exception("Failed compiling elm-kernel-modules: " + err));
 
                 return

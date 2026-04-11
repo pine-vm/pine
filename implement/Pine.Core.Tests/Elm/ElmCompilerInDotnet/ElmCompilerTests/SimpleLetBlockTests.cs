@@ -37,7 +37,7 @@ public class SimpleLetBlockTests
 
         var parseCache = new PineVMParseCache();
 
-        var parsedEnv =
+        var (parsedEnv, _) =
             ElmCompilerTestHelper.CompileElmModules(
                 [elmModuleText],
                 disableInlining: false);
@@ -133,7 +133,7 @@ public class SimpleLetBlockTests
 
         var parseCache = new PineVMParseCache();
 
-        var parsedEnv =
+        var (parsedEnv, _) =
             ElmCompilerTestHelper.CompileElmModules(
                 [elmModuleText],
                 disableInlining: false);
@@ -228,7 +228,7 @@ public class SimpleLetBlockTests
 
         var parseCache = new PineVMParseCache();
 
-        var parsedEnv =
+        var (parsedEnv, _) =
             ElmCompilerTestHelper.CompileElmModules(
                 [elmModuleText],
                 disableInlining: false);
@@ -322,7 +322,7 @@ public class SimpleLetBlockTests
 
         var parseCache = new PineVMParseCache();
 
-        var parsedEnv =
+        var (parsedEnv, _) =
             ElmCompilerTestHelper.CompileElmModules(
                 [elmModuleText],
                 disableInlining: false);
@@ -415,7 +415,7 @@ public class SimpleLetBlockTests
 
         var parseCache = new PineVMParseCache();
 
-        var parsedEnv =
+        var (parsedEnv, _) =
             ElmCompilerTestHelper.CompileElmModules(
                 [elmModuleText],
                 disableInlining: false);
@@ -506,7 +506,7 @@ public class SimpleLetBlockTests
 
         var parseCache = new PineVMParseCache();
 
-        var parsedEnv =
+        var (parsedEnv, _) =
             ElmCompilerTestHelper.CompileElmModules(
                 [elmModuleText],
                 disableInlining: false);
@@ -716,12 +716,12 @@ public class SimpleLetBlockTests
         var parsedEnvWithLet =
             ElmCompilerTestHelper.CompileElmModules(
                 [elmModuleWithLet],
-                disableInlining: false);
+                disableInlining: false).parsedEnv;
 
         var parsedEnvInlined =
             ElmCompilerTestHelper.CompileElmModules(
                 [elmModuleInlined],
-                disableInlining: false);
+                disableInlining: false).parsedEnv;
 
         var testModuleWithLet =
             parsedEnvWithLet.Modules.FirstOrDefault(c => c.moduleName is "TestA");

@@ -40,7 +40,7 @@ public class ApplyChoiceTypeTagTests
 
         var parseCache = new PineVMParseCache();
 
-        var parsedEnv =
+        var (parsedEnv, _) =
             ElmCompilerTestHelper.CompileElmModules(
                 [elmModuleText],
                 disableInlining: true);
@@ -101,7 +101,7 @@ public class ApplyChoiceTypeTagTests
 
         var parseCache = new PineVMParseCache();
 
-        var parsedEnv =
+        var (parsedEnv, _) =
             ElmCompilerTestHelper.CompileElmModules(
                 [elmModuleText],
                 disableInlining: false);
@@ -159,7 +159,7 @@ public class ApplyChoiceTypeTagTests
 
         var parseCache = new PineVMParseCache();
 
-        var parsedEnv =
+        var (parsedEnv, _) =
             ElmCompilerTestHelper.CompileElmModules(
                 [elmModuleText],
                 disableInlining: false);
@@ -241,7 +241,7 @@ public class ApplyChoiceTypeTagTests
 
         var parseCache = new PineVMParseCache();
 
-        var parsedEnv =
+        var (parsedEnv, _) =
             ElmCompilerTestHelper.CompileElmModules(
                 [elmModuleText],
                 disableInlining: false);
@@ -375,7 +375,7 @@ public class ApplyChoiceTypeTagTests
 
         var parseCache = new PineVMParseCache();
 
-        var parsedEnv =
+        var (parsedEnv, _) =
             ElmCompilerTestHelper.CompileElmModules(
                 [alfaModuleText, testModuleText],
                 disableInlining: false);
@@ -441,7 +441,7 @@ public class ApplyChoiceTypeTagTests
 
         var parseCache = new PineVMParseCache();
 
-        var parsedEnv =
+        var (parsedEnv, _) =
             ElmCompilerTestHelper.CompileElmModules(
                 [alfaModuleText, testModuleText],
                 disableInlining: false);
@@ -526,7 +526,7 @@ public class ApplyChoiceTypeTagTests
 
         var parseCache = new PineVMParseCache();
 
-        var parsedEnv =
+        var (parsedEnv, _) =
             ElmCompilerTestHelper.CompileElmModules(
                 [alfaModuleText, testModuleText],
                 disableInlining: false);
@@ -663,7 +663,7 @@ public class ApplyChoiceTypeTagTests
 
         var parseCache = new PineVMParseCache();
 
-        var parsedEnv =
+        var (parsedEnv, _) =
             ElmCompilerTestHelper.CompileElmModules(
                 [alfaModuleText, testModuleText],
                 disableInlining: false);

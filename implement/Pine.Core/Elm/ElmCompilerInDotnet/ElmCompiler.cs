@@ -14,6 +14,48 @@ using SyntaxTypes = Pine.Core.Elm.ElmSyntax.Stil4mElmSyntax7;
 namespace Pine.Core.Elm.ElmCompilerInDotnet;
 
 /// <summary>
+/// Holds the intermediate results of each stage in the Elm compilation pipeline.
+/// Each property contains the list of Elm modules (as syntax tree <see cref="SyntaxTypes.File"/> objects)
+/// produced at the corresponding pipeline stage. This enables inspection and debugging of how modules
+/// are transformed through canonicalization, specialization, inlining, and other stages.
+/// </summary>
+/// <param name="Canonicalized">
+/// Modules after canonicalization: all names are resolved to fully-qualified forms.
+/// </param>
+/// <param name="LambdaLifted">
+/// Modules after the initial lambda lifting pass: closures are transformed into top-level functions.
+/// </param>
+/// <param name="Specialized">
+/// Modules after specialization: specialized function variants are created for known argument patterns.
+/// This is <c>null</c> when <c>disableInlining</c> is true, as the optimization pipeline is skipped.
+/// </param>
+/// <param name="Inlined">
+/// Modules after higher-order inlining: functions that receive function arguments are inlined.
+/// This is <c>null</c> when <c>disableInlining</c> is true, as the optimization pipeline is skipped.
+/// </param>
+/// <param name="ModulesForCompilation">
+/// The final list of modules passed into the compilation backend.
+/// When the optimization pipeline is enabled, this is the result after operator lowering.
+/// When disabled, this equals <see cref="LambdaLifted"/>.
+/// </param>
+public record CompilationPipelineStageResults(
+    IReadOnlyList<SyntaxTypes.File> Canonicalized,
+    IReadOnlyList<SyntaxTypes.File> LambdaLifted,
+    IReadOnlyList<SyntaxTypes.File>? Specialized,
+    IReadOnlyList<SyntaxTypes.File>? Inlined,
+    IReadOnlyList<SyntaxTypes.File> ModulesForCompilation);
+
+/// <summary>
+/// Holds the intermediate results of each stage in the optimization pipeline
+/// (specialization, inlining, lambda re-lifting, operator lowering).
+/// </summary>
+internal record OptimizationPipelineStageResults(
+    IReadOnlyList<SyntaxTypes.File> AfterSpecialization,
+    IReadOnlyList<SyntaxTypes.File> AfterHigherOrderInlining,
+    IReadOnlyList<SyntaxTypes.File> AfterLambdaLifting,
+    IReadOnlyList<SyntaxTypes.File> AfterLowering);
+
+/// <summary>
 /// Methods for compiling Elm source code and environments into Pine values, using the standard packaging for
 /// Elm functions and modules as found at
 /// <see href="https://github.com/pine-vm/pine/blob/391100e6734a50d2bede29ee49bca1afc8868fed/implement/pine/Elm/elm-compiler/src/FirCompiler.elm#L2179-L2242"></see>
@@ -44,7 +86,7 @@ public class ElmCompiler
             "Basics",
             ]);
 
-    public static Result<string, PineValue> CompileInteractiveEnvironment(
+    public static Result<string, (PineValue compiledEnvValue, CompilationPipelineStageResults pipelineStageResults)> CompileInteractiveEnvironment(
         FileTree appCodeTree,
         IReadOnlyList<IReadOnlyList<string>> rootFilePaths,
         bool disableInlining)
@@ -231,12 +273,14 @@ public class ElmCompiler
             .Select(LambdaLifting.LiftLambdas)
             .ToList();
 
+        OptimizationPipelineStageResults? optimizationResults = null;
+
         var modulesForCompilation =
             disableInlining
             ?
             lambdaLiftedModules
             :
-            ApplyOptimizationPipeline(lambdaLiftedModules);
+            ApplyOptimizationPipelineWithStageResults(lambdaLiftedModules, out optimizationResults);
 
         var allFunctions =
             new Dictionary<SyntaxModelTypes.QualifiedNameRef, (string moduleName, string functionName, SyntaxTypes.Declaration.FunctionDeclaration declaration)>();
@@ -434,7 +478,15 @@ public class ElmCompiler
                 ..compiledModuleEntries
                 ]);
 
-        return compiledEnvValue;
+        var pipelineStageResults =
+            new CompilationPipelineStageResults(
+                Canonicalized: canonicalizedModules,
+                LambdaLifted: lambdaLiftedModules,
+                Specialized: optimizationResults?.AfterSpecialization,
+                Inlined: optimizationResults?.AfterHigherOrderInlining,
+                ModulesForCompilation: modulesForCompilation);
+
+        return (compiledEnvValue, pipelineStageResults);
     }
 
     /// <summary>
@@ -1250,6 +1302,13 @@ public class ElmCompiler
     private static List<SyntaxTypes.File> ApplyOptimizationPipeline(
         List<SyntaxTypes.File> lambdaLiftedModules)
     {
+        return ApplyOptimizationPipelineWithStageResults(lambdaLiftedModules, out _);
+    }
+
+    private static List<SyntaxTypes.File> ApplyOptimizationPipelineWithStageResults(
+        List<SyntaxTypes.File> lambdaLiftedModules,
+        out OptimizationPipelineStageResults stageResults)
+    {
         // Phase 1: Specialization — create specialized versions of functions for known argument patterns.
         var afterSpecialization =
             ElmSyntaxSpecialization.Apply(lambdaLiftedModules, Inlining.Config.OnlyFunctions)
@@ -1273,6 +1332,13 @@ public class ElmCompiler
             BuiltinOperatorLowering.Apply(afterLambdaLifting)
             .Map(dict => ResolveModulesInSourceOrder(afterLambdaLifting, dict))
             .Extract(err => throw new Exception("Operator lowering failed: " + err));
+
+        stageResults =
+            new OptimizationPipelineStageResults(
+                AfterSpecialization: afterSpecialization,
+                AfterHigherOrderInlining: afterHigherOrderInlining,
+                AfterLambdaLifting: afterLambdaLifting,
+                AfterLowering: afterLowering);
 
         return afterLowering;
     }

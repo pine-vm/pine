@@ -38,12 +38,12 @@ public class InliningCompilerIntegrationTests
         var envWithoutInlining =
             ElmCompilerTestHelper.CompileElmModules(
                 [ProviderModuleText, ConsumerModuleText],
-                disableInlining: true);
+                disableInlining: true).parsedEnv;
 
         var envWithInlining =
             ElmCompilerTestHelper.CompileElmModules(
                 [ProviderModuleText, ConsumerModuleText],
-                disableInlining: false);
+                disableInlining: false).parsedEnv;
 
         var compiledWithoutInlining =
             envWithoutInlining.Modules
@@ -107,7 +107,7 @@ public class InliningCompilerIntegrationTests
         var envWithInlining =
             ElmCompilerTestHelper.CompileElmModules(
                 [ProviderModuleText, ConsumerModuleText],
-                disableInlining: false);
+                disableInlining: false).parsedEnv;
 
         var compiledWithInlining =
             envWithInlining.Modules

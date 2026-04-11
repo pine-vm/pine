@@ -27,7 +27,7 @@ public class PartialApplicationTests
 
         var parseCache = new PineVMParseCache();
 
-        var parsedEnv =
+        var (parsedEnv, _) =
             ElmCompilerTestHelper.CompileElmModules(
                 [elmModuleText],
                 disableInlining: false);
@@ -109,7 +109,7 @@ public class PartialApplicationTests
 
         var parseCache = new PineVMParseCache();
 
-        var parsedEnv =
+        var (parsedEnv, _) =
             ElmCompilerTestHelper.CompileElmModules(
                 [elmModuleText],
                 disableInlining: false);
@@ -218,7 +218,7 @@ public class PartialApplicationTests
 
         // Use the simpler compile method that doesn't require static analysis
         // (returning function values produces dynamic expressions that can't be statically analyzed)
-        var parsedEnv =
+        var (parsedEnv, _) =
             ElmCompilerTestHelper.CompileElmModules(
                 [elmModuleText],
                 disableInlining: false);
