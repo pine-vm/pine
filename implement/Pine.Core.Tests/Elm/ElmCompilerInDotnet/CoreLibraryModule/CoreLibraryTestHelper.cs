@@ -256,7 +256,7 @@ public static class CoreLibraryTestHelper
                 vm.EvaluateExpressionOnCustomStack(
                     asIndependent,
                     PineValue.EmptyBlob,
-                    config: new Core.Interpreter.IntermediateVM.PineVM.EvaluationConfig(ParseAndEvalCountLimit: null))
+                    config: ElmCompilerTestHelper.DefaultTestEvaluationConfig)
                 .Extract(err => throw new System.Exception("Failed eval: " + err));
 
             currentValue = report.ReturnValue.Evaluate();

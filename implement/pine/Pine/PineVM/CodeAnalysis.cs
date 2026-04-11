@@ -235,7 +235,7 @@ public class CodeAnalysis
                 .EvaluateExpressionOnCustomStack(
                     parseSubExpr.ParseAndEvalExpr.Environment,
                     PineValueClassExtensions.CreateMinimalValue(environment),
-                    config: new Core.Interpreter.IntermediateVM.PineVM.EvaluationConfig(ParseAndEvalCountLimit: 100))
+                    config: new Core.Interpreter.IntermediateVM.PineVM.EvaluationConfig(InvocationCountLimit: 100, LoopIterationCountLimit: null))
                 .Unpack(
                     fromErr: _ => null,
                     fromOk: ok => ok.ReturnValue.Evaluate());

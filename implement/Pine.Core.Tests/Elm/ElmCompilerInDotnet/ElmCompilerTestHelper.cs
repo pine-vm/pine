@@ -337,10 +337,29 @@ public class ElmCompilerTestHelper
         return vm;
     }
 
+    /// <summary>
+    /// Default evaluation configuration for tests, with both invocation and loop iteration limits set to 10 million.
+    /// </summary>
+    public static readonly Core.Interpreter.IntermediateVM.PineVM.EvaluationConfig DefaultTestEvaluationConfig =
+        new(InvocationCountLimit: 10_000_000, LoopIterationCountLimit: 10_000_000);
+
+    /// <summary>
+    /// Evaluates an expression with profiling using the <see cref="DefaultTestEvaluationConfig"/>.
+    /// </summary>
     public static (EvaluationReport evalReport, IReadOnlyList<EvaluationReport> invocations)
         EvaluateWithProfiling(
         Expression expression,
-        PineValue environment)
+        PineValue environment) =>
+        EvaluateWithProfiling(expression, environment, DefaultTestEvaluationConfig);
+
+    /// <summary>
+    /// Evaluates an expression with profiling using the specified evaluation configuration.
+    /// </summary>
+    public static (EvaluationReport evalReport, IReadOnlyList<EvaluationReport> invocations)
+        EvaluateWithProfiling(
+        Expression expression,
+        PineValue environment,
+        Core.Interpreter.IntermediateVM.PineVM.EvaluationConfig config)
     {
         var invocationReports = new List<EvaluationReport>();
         var vm = PineVMForProfiling(invocationReports.Add);
@@ -349,7 +368,7 @@ public class ElmCompilerTestHelper
             vm.EvaluateExpressionOnCustomStack(
                 expression,
                 environment,
-                config: new Core.Interpreter.IntermediateVM.PineVM.EvaluationConfig(ParseAndEvalCountLimit: null))
+                config: config)
             .Extract(err => throw new Exception(err));
 
         return (evalResult, invocationReports);

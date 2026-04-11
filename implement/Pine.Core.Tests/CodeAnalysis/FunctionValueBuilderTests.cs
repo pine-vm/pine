@@ -1967,12 +1967,12 @@ public class FunctionValueBuilderTests
     /// </summary>
     /// <param name="expression">The expression to evaluate.</param>
     /// <param name="environment">The environment value to pass to the expression.</param>
-    /// <param name="parseAndEvalCountLimit">Optional limit on ParseAndEval operations (default: 100).</param>
+    /// <param name="invocationCountLimit">Optional limit on invocations (default: 100).</param>
     /// <returns>The result of evaluating the expression.</returns>
     private static PineValue EvaluateExpression(
         Expression expression,
         PineValue environment,
-        int parseAndEvalCountLimit = 100)
+        int invocationCountLimit = 100)
     {
         var vm =
             PineVM.CreateCustom(
@@ -1995,7 +1995,7 @@ public class FunctionValueBuilderTests
             vm.EvaluateExpressionOnCustomStack(
                 expression,
                 environment,
-                config: new PineVM.EvaluationConfig(ParseAndEvalCountLimit: parseAndEvalCountLimit))
+                config: new PineVM.EvaluationConfig(InvocationCountLimit: invocationCountLimit, LoopIterationCountLimit: null))
             .Extract(err => throw new InvalidOperationException($"Evaluation failed: {err}"));
 
         return result.ReturnValue.Evaluate();
@@ -2007,18 +2007,18 @@ public class FunctionValueBuilderTests
     /// </summary>
     /// <param name="encodedExpression">The encoded expression value to parse and evaluate.</param>
     /// <param name="environment">The environment value to pass to the expression.</param>
-    /// <param name="parseAndEvalCountLimit">Optional limit on ParseAndEval operations (default: 100).</param>
+    /// <param name="invocationCountLimit">Optional limit on invocations (default: 100).</param>
     /// <returns>The result of evaluating the expression.</returns>
     private static PineValue EvaluateEncodedExpression(
         PineValue encodedExpression,
         PineValue environment,
-        int parseAndEvalCountLimit = 100)
+        int invocationCountLimit = 100)
     {
         var parsed =
             s_parseCache.ParseExpression(encodedExpression)
             .Extract(err => throw new InvalidOperationException($"Failed to parse expression: {err}"));
 
-        return EvaluateExpression(parsed, environment, parseAndEvalCountLimit);
+        return EvaluateExpression(parsed, environment, invocationCountLimit);
     }
 
     #endregion

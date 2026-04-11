@@ -158,7 +158,7 @@ public class PineVM : IPineVM
                 expression,
                 environment,
                 config:
-                _evaluationConfigDefault ?? new EvaluationConfig(ParseAndEvalCountLimit: null));
+                _evaluationConfigDefault ?? new EvaluationConfig(InvocationCountLimit: null, LoopIterationCountLimit: null));
 
         if (evalReportResult.IsErrOrNull() is { } err)
         {
@@ -299,8 +299,20 @@ public class PineVM : IPineVM
                 OptimizationConfig: optimizationConfig);
     }
 
+    /// <summary>
+    /// Configuration controlling evaluation limits in the intermediate VM.
+    /// </summary>
+    /// <param name="InvocationCountLimit">
+    /// Maximum number of invocations (both parse-and-eval and direct stack-frame invocations) allowed
+    /// before the evaluation returns an error. When <c>null</c>, no invocation limit is enforced.
+    /// </param>
+    /// <param name="LoopIterationCountLimit">
+    /// Maximum number of loop iterations (backward jumps) allowed before the evaluation returns an error.
+    /// When <c>null</c>, no loop iteration limit is enforced.
+    /// </param>
     public record EvaluationConfig(
-        int? ParseAndEvalCountLimit);
+        int? InvocationCountLimit,
+        int? LoopIterationCountLimit);
 
     /// <summary>
     /// Evaluates an expression using the intermediate VM stack-frame machinery.
@@ -319,6 +331,53 @@ public class PineVM : IPineVM
         long stackFrameReplaceCount = 0;
         long lastCacheEntryInstructionCount = 0;
         long lastCacheEntryParseAndEvalCount = 0;
+
+        string? IncrementInvocationCountAndEnforceLimits()
+        {
+            ++invocationCount;
+
+            if (config.InvocationCountLimit is { } limit && invocationCount > limit)
+            {
+                var stackTraceHashes =
+                    CompileStackTrace(100)
+                    .Select(expr => s_mutableCacheValueHash.GetHash(EncodeExpressionAsValue(expr)))
+                    .ToArray();
+
+                return
+                    "Invocation count limit exceeded: " +
+                    CommandLineInterface.FormatIntegerForDisplay(limit) +
+                    "\nLast stack frames expressions:\n" +
+                    string.Join(
+                        "\n",
+                        stackTraceHashes.Select(hash => Convert.ToHexStringLower(hash.Span)[..8]));
+            }
+
+            return null;
+        }
+
+        string? IncrementLoopIterationCountAndEnforceLimits(StackFrame frame)
+        {
+            loopIterationCount++;
+            frame.LoopIterationCount++;
+
+            if (config.LoopIterationCountLimit is { } limit && loopIterationCount > limit)
+            {
+                var stackTraceHashes =
+                    CompileStackTrace(100)
+                    .Select(expr => s_mutableCacheValueHash.GetHash(EncodeExpressionAsValue(expr)))
+                    .ToArray();
+
+                return
+                    "Loop iteration count limit exceeded: " +
+                    CommandLineInterface.FormatIntegerForDisplay(limit) +
+                    "\nLast stack frames expressions:\n" +
+                    string.Join(
+                        "\n",
+                        stackTraceHashes.Select(hash => Convert.ToHexStringLower(hash.Span)[..8]));
+            }
+
+            return null;
+        }
 
         var rootInstructions =
             GetExpressionEntry(rootExpression)
@@ -1606,25 +1665,11 @@ public class PineVM : IPineVM
 
                     case StackInstructionKind.Parse_And_Eval_Binary:
                         {
+                            ++parseAndEvalCount;
+
+                            if (IncrementInvocationCountAndEnforceLimits() is { } limitError)
                             {
-                                ++invocationCount;
-                                ++parseAndEvalCount;
-
-                                if (config.ParseAndEvalCountLimit is { } limit && parseAndEvalCount > limit)
-                                {
-                                    var stackTraceHashes =
-                                        CompileStackTrace(100)
-                                        .Select(expr => s_mutableCacheValueHash.GetHash(EncodeExpressionAsValue(expr)))
-                                        .ToArray();
-
-                                    return
-                                        "Parse and eval count limit exceeded: " +
-                                        CommandLineInterface.FormatIntegerForDisplay(limit) +
-                                        "\nLast stack frames expressions:\n" +
-                                        string.Join(
-                                            "\n",
-                                            stackTraceHashes.Select(hash => Convert.ToHexStringLower(hash.Span)[..8]));
-                                }
+                                return limitError;
                             }
 
                             var expressionValue = currentFrame.PopTopmostFromStack().Evaluate();
@@ -1679,8 +1724,10 @@ public class PineVM : IPineVM
 
                             if (jumpOffset < 0)
                             {
-                                loopIterationCount++;
-                                currentFrame.LoopIterationCount++;
+                                if (IncrementLoopIterationCountAndEnforceLimits(currentFrame) is { } loopLimitError)
+                                {
+                                    return loopLimitError;
+                                }
                             }
 
                             continue;
@@ -1688,7 +1735,10 @@ public class PineVM : IPineVM
 
                     case StackInstructionKind.Invoke_StackFrame_Const:
                         {
-                            ++invocationCount;
+                            if (IncrementInvocationCountAndEnforceLimits() is { } limitError)
+                            {
+                                return limitError;
+                            }
 
                             var targetInstructions =
                                 currentInstruction.LinkedStackFrameInstructions
@@ -1759,8 +1809,10 @@ public class PineVM : IPineVM
 
                                 if (jumpOffset < 0)
                                 {
-                                    loopIterationCount++;
-                                    currentFrame.LoopIterationCount++;
+                                    if (IncrementLoopIterationCountAndEnforceLimits(currentFrame) is { } loopLimitError)
+                                    {
+                                        return loopLimitError;
+                                    }
                                 }
 
                                 continue;

@@ -726,7 +726,7 @@ public class InvokeStackFrameConstTests
             vm.EvaluateExpressionOnCustomStack(
                 rootExpression: rootExpression,
                 rootEnvironment: rootEnvironment,
-                config: new Core.Interpreter.IntermediateVM.PineVM.EvaluationConfig(ParseAndEvalCountLimit: null))
+                config: new Core.Interpreter.IntermediateVM.PineVM.EvaluationConfig(InvocationCountLimit: null, LoopIterationCountLimit: null))
             .Extract(err => throw new InvalidOperationException("Failed eval: " + err));
     }
 

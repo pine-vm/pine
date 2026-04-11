@@ -278,7 +278,7 @@ public class PGOTests
                 pineVM.EvaluateExpressionOnCustomStack(
                     composedArgs.expression,
                     composedArgs.environment,
-                    new Core.Interpreter.IntermediateVM.PineVM.EvaluationConfig(ParseAndEvalCountLimit: 1234))
+                    new Core.Interpreter.IntermediateVM.PineVM.EvaluationConfig(InvocationCountLimit: 1234, LoopIterationCountLimit: null))
                 .Map(evalReport =>
                 {
                     evalReport.ReturnValue.Should().Be(scenario.expected);
@@ -881,7 +881,7 @@ public class PGOTests
                 pineVM.EvaluateExpressionOnCustomStack(
                     composedArgs.expression,
                     composedArgs.environment,
-                    new Core.Interpreter.IntermediateVM.PineVM.EvaluationConfig(ParseAndEvalCountLimit: 1234))
+                    new Core.Interpreter.IntermediateVM.PineVM.EvaluationConfig(InvocationCountLimit: 1234, LoopIterationCountLimit: null))
                 .Map(evalReport =>
                 {
                     evalReport.ReturnValue.Should().Be(
@@ -1286,7 +1286,7 @@ public class PGOTests
                 pineVM.EvaluateExpressionOnCustomStack(
                     composedArgs.expression,
                     composedArgs.environment,
-                    new Core.Interpreter.IntermediateVM.PineVM.EvaluationConfig(ParseAndEvalCountLimit: 12345))
+                    new Core.Interpreter.IntermediateVM.PineVM.EvaluationConfig(InvocationCountLimit: 12345, LoopIterationCountLimit: null))
                 .Map(evalReport =>
                 {
                     evalReport.ReturnValue.Should().Be(
@@ -1657,7 +1657,7 @@ public class PGOTests
                 pineVM.EvaluateExpressionOnCustomStack(
                     composedArgs.expression,
                     composedArgs.environment,
-                    new Core.Interpreter.IntermediateVM.PineVM.EvaluationConfig(ParseAndEvalCountLimit: 12345))
+                    new Core.Interpreter.IntermediateVM.PineVM.EvaluationConfig(InvocationCountLimit: 12345, LoopIterationCountLimit: null))
                 .Map(evalReport =>
                 {
                     if (scenarioExpected is not null)
