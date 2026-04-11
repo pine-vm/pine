@@ -136,35 +136,8 @@ public static class CoreLibraryTestHelper
     public static PineValue ApplyGenericPine(
         PineValue functionValue,
         IReadOnlyList<PineValue> arguments,
-        Core.Interpreter.IntermediateVM.PineVM vm)
-    {
-        var currentValue = functionValue;
-
-        for (var i = 0; i < arguments.Count; i++)
-        {
-            var asIndependent =
-                new Expression.ParseAndEval(
-                    encoded: Expression.LiteralInstance(currentValue),
-                    environment: Expression.LiteralInstance(arguments[i]));
-
-            currentValue =
-                vm.EvaluateExpression(asIndependent, PineValue.EmptyBlob)
-                .Extract(err => throw new System.Exception("Failed eval: " + err));
-        }
-
-        return currentValue;
-    }
-
-    public static ElmValue ApplyWithPineArgs(
-        PineValue functionValue,
-        params PineValue[] pineArgs)
-    {
-        var resultPineValue = ApplyGenericPine(functionValue, pineArgs);
-
-        return
-            ElmValueEncoding.PineValueAsElmValue(resultPineValue, null, null)
-            .Extract(err => throw new System.Exception("Failed decode as Elm value: " + err));
-    }
+        Core.Interpreter.IntermediateVM.PineVM vm) =>
+        ElmCompilerTestHelper.ApplyGenericPine(functionValue, arguments, vm);
 
     public static ElmValue ApplyWithPineArgs(
         Core.Interpreter.IntermediateVM.PineVM vm,

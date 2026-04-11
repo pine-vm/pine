@@ -374,6 +374,49 @@ public class ElmCompilerTestHelper
         return (evalResult, invocationReports);
     }
 
+    /// <summary>
+    /// <see href="https://github.com/pine-vm/pine/blob/2c3b26abb48769712eff1ce8834eb6579cb11add/implement/Pine.Core/Elm/ElmCompilerInDotnet/elm-compiler-implementation-guide.md#function-values-and-generic-function-application"/>
+    /// </summary>
+    public static PineValue ApplyGenericPine(
+        PineValue functionValue,
+        IReadOnlyList<PineValue> arguments,
+        Core.Interpreter.IntermediateVM.PineVM vm) =>
+        ApplyGenericPine(functionValue, arguments, vm, DefaultTestEvaluationConfig);
+
+    /// <summary>
+    /// <see href="https://github.com/pine-vm/pine/blob/2c3b26abb48769712eff1ce8834eb6579cb11add/implement/Pine.Core/Elm/ElmCompilerInDotnet/elm-compiler-implementation-guide.md#function-values-and-generic-function-application"/>
+    /// </summary>
+    public static PineValue ApplyGenericPine(
+        PineValue functionValue,
+        IReadOnlyList<PineValue> arguments,
+        Core.Interpreter.IntermediateVM.PineVM vm,
+        Core.Interpreter.IntermediateVM.PineVM.EvaluationConfig evaluationConfig)
+    {
+        var currentValue = functionValue;
+
+        for (var i = 0; i < arguments.Count; i++)
+        {
+            var asIndependent =
+                new Expression.ParseAndEval(
+                    encoded: Expression.LiteralInstance(currentValue),
+                    environment: Expression.LiteralInstance(arguments[i]));
+
+            var currentResult =
+                vm.EvaluateExpressionOnCustomStack(
+                    asIndependent,
+                    PineValue.EmptyBlob,
+                    evaluationConfig);
+
+            currentValue =
+                currentResult
+                .Extract(err => throw new System.Exception("Failed eval: " + err))
+                .ReturnValue.Evaluate();
+
+        }
+
+        return currentValue;
+    }
+
     public static string ParseAndRenderStaticProgram(
         ElmInteractiveEnvironment.ParsedInteractiveEnvironment parsedInteractiveEnvironment,
         Func<DeclQualifiedName, bool> includeDeclaration,
