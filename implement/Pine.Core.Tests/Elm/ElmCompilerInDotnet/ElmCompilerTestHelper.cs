@@ -341,7 +341,7 @@ public class ElmCompilerTestHelper
     /// Default evaluation configuration for tests, with both invocation and loop iteration limits set to 10 million.
     /// </summary>
     public static readonly Core.Interpreter.IntermediateVM.PineVM.EvaluationConfig DefaultTestEvaluationConfig =
-        new(InvocationCountLimit: 10_000_000, LoopIterationCountLimit: 10_000_000);
+        new(InvocationCountLimit: 10_000_000, LoopIterationCountLimit: 10_000_000, StackDepthLimit: 100_000);
 
     /// <summary>
     /// Evaluates an expression with profiling using the <see cref="DefaultTestEvaluationConfig"/>.

@@ -61,7 +61,7 @@ public class InteractiveSessionPine : IInteractiveSession
             BuildPineVM(
                 caching: caching,
                 autoPGO: autoPGO,
-                new PineVM.EvaluationConfig(InvocationCountLimit: 10_000_000, LoopIterationCountLimit: 10_000_000)))
+                new PineVM.EvaluationConfig(InvocationCountLimit: 10_000_000, LoopIterationCountLimit: 10_000_000, StackDepthLimit: 100_000)))
     {
     }
 
@@ -81,7 +81,7 @@ public class InteractiveSessionPine : IInteractiveSession
             BuildPineVM(
                 caching: caching,
                 autoPGO: autoPGO,
-                new PineVM.EvaluationConfig(InvocationCountLimit: 10_000_000, LoopIterationCountLimit: 10_000_000)))
+                new PineVM.EvaluationConfig(InvocationCountLimit: 10_000_000, LoopIterationCountLimit: 10_000_000, StackDepthLimit: 100_000)))
     {
     }
 

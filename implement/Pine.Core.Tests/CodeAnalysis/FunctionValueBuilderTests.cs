@@ -1995,7 +1995,7 @@ public class FunctionValueBuilderTests
             vm.EvaluateExpressionOnCustomStack(
                 expression,
                 environment,
-                config: new PineVM.EvaluationConfig(InvocationCountLimit: invocationCountLimit, LoopIterationCountLimit: null))
+                config: new PineVM.EvaluationConfig(InvocationCountLimit: invocationCountLimit, LoopIterationCountLimit: null, StackDepthLimit: null))
             .Extract(err => throw new InvalidOperationException($"Evaluation failed: {err}"));
 
         return result.ReturnValue.Evaluate();

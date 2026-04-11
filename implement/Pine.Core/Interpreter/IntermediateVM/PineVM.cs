@@ -158,7 +158,8 @@ public class PineVM : IPineVM
                 expression,
                 environment,
                 config:
-                _evaluationConfigDefault ?? new EvaluationConfig(InvocationCountLimit: null, LoopIterationCountLimit: null));
+                _evaluationConfigDefault ??
+                new EvaluationConfig(InvocationCountLimit: null, LoopIterationCountLimit: null, StackDepthLimit: null));
 
         if (evalReportResult.IsErrOrNull() is { } err)
         {
@@ -310,9 +311,14 @@ public class PineVM : IPineVM
     /// Maximum number of loop iterations (backward jumps) allowed before the evaluation returns an error.
     /// When <c>null</c>, no loop iteration limit is enforced.
     /// </param>
+    /// <param name="StackDepthLimit">
+    /// Maximum number of stack frames allowed on the evaluation stack before the evaluation returns an error.
+    /// When <c>null</c>, no stack depth limit is enforced.
+    /// </param>
     public record EvaluationConfig(
         int? InvocationCountLimit,
-        int? LoopIterationCountLimit);
+        int? LoopIterationCountLimit,
+        int? StackDepthLimit);
 
     /// <summary>
     /// Evaluates an expression using the intermediate VM stack-frame machinery.
@@ -462,11 +468,10 @@ public class PineVM : IPineVM
                                     Specialization: specialization.Stepwise,
                                     CacheFileName: null);
 
-                            PushStackFrame(
-                                newFrame,
-                                replaceCurrentFrame: false);
-
-                            return null;
+                            return
+                                PushStackFrame(
+                                    newFrame,
+                                    replaceCurrentFrame: false);
                         }
 
                     default:
@@ -568,20 +573,19 @@ public class PineVM : IPineVM
                     }
                 }
 
-                BuildAndPushStackFrame
-                (
-                    expressionValue: expressionValue,
-                    expression: expression,
-                    instructions: instructions,
-                    stackFrameInput: stackFrameInput,
-                    cacheFileName: cacheFileName,
-                    replaceCurrentFrame: replaceCurrentFrame);
-
-                return null;
+                return
+                    BuildAndPushStackFrame
+                    (
+                        expressionValue: expressionValue,
+                        expression: expression,
+                        instructions: instructions,
+                        stackFrameInput: stackFrameInput,
+                        cacheFileName: cacheFileName,
+                        replaceCurrentFrame: replaceCurrentFrame);
             }
         }
 
-        void BuildAndPushStackFrame(
+        string? BuildAndPushStackFrame(
             PineValue? expressionValue,
             Expression expression,
             StackFrameInstructions instructions,
@@ -610,10 +614,10 @@ public class PineVM : IPineVM
                     cacheFileName: cacheFileName,
                     profilingBaseline: newFrameProfilingBaseline);
 
-            PushStackFrame(newFrame, replaceCurrentFrame: replaceCurrentFrame);
+            return PushStackFrame(newFrame, replaceCurrentFrame: replaceCurrentFrame);
         }
 
-        void PushStackFrame(
+        string? PushStackFrame(
             StackFrame newFrame,
             bool replaceCurrentFrame)
         {
@@ -628,6 +632,22 @@ public class PineVM : IPineVM
 
             ++stackFrameCount;
 
+            if (config.StackDepthLimit is { } stackDepthLimit && stack.Count > stackDepthLimit)
+            {
+                var stackTraceHashes =
+                    CompileStackTrace(100)
+                    .Select(expr => s_mutableCacheValueHash.GetHash(EncodeExpressionAsValue(expr)))
+                    .ToArray();
+
+                return
+                    "Stack depth limit exceeded: " +
+                    CommandLineInterface.FormatIntegerForDisplay(stackDepthLimit) +
+                    "\nLast stack frames expressions:\n" +
+                    string.Join(
+                        "\n",
+                        stackTraceHashes.Select(hash => Convert.ToHexStringLower(hash.Span)[..8]));
+            }
+
             if (_reportEnteredStackFrame is { } reportEnteredStackFrame &&
                 newFrame.Instructions is { } frameInstructions)
             {
@@ -641,6 +661,8 @@ public class PineVM : IPineVM
 
                 reportEnteredStackFrame(in enteredStackFrame);
             }
+
+            return null;
         }
 
         EvaluationReport? ReturnFromStackFrame(PineValueInProcess frameReturnValue)
@@ -743,13 +765,16 @@ public class PineVM : IPineVM
             return stackTrace;
         }
 
-        BuildAndPushStackFrame(
+        if (BuildAndPushStackFrame(
             expressionValue: null,
             rootExpression,
             rootInstructions,
             rootStackFrameInput,
             cacheFileName: null,
-            replaceCurrentFrame: false);
+            replaceCurrentFrame: false) is { } rootStackDepthError)
+        {
+            return rootStackDepthError;
+        }
 
         static ExecutionErrorReport BuildErrorReport(StackFrame stackFrame)
         {
@@ -1778,13 +1803,16 @@ public class PineVM : IPineVM
                                 currentFrame.Instructions.Instructions[currentFrame.InstructionPointer + 1].Kind
                                 is StackInstructionKind.Return;
 
-                            BuildAndPushStackFrame(
+                            if (BuildAndPushStackFrame(
                                 expressionValue: currentInstruction.OptimizedInvocation?.ExpressionEncoded,
                                 expression: invocationExpression,
                                 instructions: targetInstructions,
                                 stackFrameInput: directInput,
                                 cacheFileName: null,
-                                replaceCurrentFrame: replaceCurrentFrame);
+                                replaceCurrentFrame: replaceCurrentFrame) is { } stackDepthError)
+                            {
+                                return stackDepthError;
+                            }
 
                             continue;
                         }
