@@ -4,7 +4,6 @@ using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
 
-using SyntaxModelTypes = Pine.Core.Elm.ElmSyntax.SyntaxModel;
 using SyntaxTypes = Pine.Core.Elm.ElmSyntax.Stil4mElmSyntax7;
 
 namespace Pine.Core.Elm.ElmCompilerInDotnet;
@@ -21,10 +20,10 @@ public static class TypeInference
     private static string QualifiedNameToString(SyntaxTypes.Expression.FunctionOrValue functionOrValue) =>
         QualifiedNameHelper.ToQualifiedNameString(functionOrValue.ModuleName, functionOrValue.Name);
 
-    private static SyntaxModelTypes.QualifiedNameRef QualifiedNameToRef(SyntaxTypes.QualifiedNameRef qualifiedNameRef) =>
+    private static QualifiedNameRef QualifiedNameToRef(SyntaxTypes.QualifiedNameRef qualifiedNameRef) =>
         new(qualifiedNameRef.ModuleName, qualifiedNameRef.Name);
 
-    private static SyntaxModelTypes.QualifiedNameRef ResolveQualifiedNameRef(
+    private static QualifiedNameRef ResolveQualifiedNameRef(
         IReadOnlyList<string> moduleName,
         string name,
         string? currentModuleName)
@@ -781,7 +780,7 @@ public static class TypeInference
         IReadOnlyDictionary<string, InferredType> parameterTypes,
         IReadOnlyDictionary<string, InferredType>? localBindingTypes,
         string? currentModuleName,
-        IReadOnlyDictionary<SyntaxModelTypes.QualifiedNameRef, FunctionTypeInfo>? functionTypes)
+        IReadOnlyDictionary<QualifiedNameRef, FunctionTypeInfo>? functionTypes)
     {
         // Integer literal - in Elm, this has type "number" (polymorphic), not forced to Int
         if (expression is SyntaxTypes.Expression.Integer)
@@ -1285,7 +1284,7 @@ public static class TypeInference
         IReadOnlyDictionary<string, InferredType> parameterTypes,
         IReadOnlyDictionary<string, InferredType>? localBindingTypes,
         string? currentModuleName,
-        IReadOnlyDictionary<SyntaxModelTypes.QualifiedNameRef, FunctionTypeInfo>? functionTypes)
+        IReadOnlyDictionary<QualifiedNameRef, FunctionTypeInfo>? functionTypes)
     {
         // Check if operator has explicit type constraints
         if (s_operatorConstraints.TryGetValue(operatorApp.Operator, out var constraints))
@@ -1350,7 +1349,7 @@ public static class TypeInference
     /// <returns>A new dictionary containing all constraints (existing plus newly discovered).</returns>
     public static ImmutableDictionary<string, InferredType> ExtractTypeConstraintsFromTagApplications(
         SyntaxTypes.Expression expression,
-        IReadOnlyDictionary<SyntaxModelTypes.QualifiedNameRef, IReadOnlyList<InferredType>>? constructorArgumentTypes,
+        IReadOnlyDictionary<QualifiedNameRef, IReadOnlyList<InferredType>>? constructorArgumentTypes,
         ImmutableDictionary<string, InferredType> existingConstraints)
     {
         if (constructorArgumentTypes is null)
@@ -1365,7 +1364,7 @@ public static class TypeInference
 
     private static ImmutableDictionary<string, InferredType> ExtractTypeConstraintsFromTagApplicationsInternal(
         SyntaxTypes.Expression expression,
-        IReadOnlyDictionary<SyntaxModelTypes.QualifiedNameRef, IReadOnlyList<InferredType>> constructorArgumentTypes,
+        IReadOnlyDictionary<QualifiedNameRef, IReadOnlyList<InferredType>> constructorArgumentTypes,
         ImmutableDictionary<string, InferredType> constraints)
     {
         switch (expression)
@@ -1522,7 +1521,7 @@ public static class TypeInference
     /// <returns>A new dictionary containing all constraints (existing plus newly discovered).</returns>
     public static ImmutableDictionary<string, InferredType> ExtractTypeConstraintsFromFunctionApplications(
         SyntaxTypes.Expression expression,
-        IReadOnlyDictionary<SyntaxModelTypes.QualifiedNameRef, FunctionTypeInfo>? functionTypes,
+        IReadOnlyDictionary<QualifiedNameRef, FunctionTypeInfo>? functionTypes,
         string currentModuleName,
         ImmutableDictionary<string, InferredType> existingConstraints)
     {
@@ -1539,7 +1538,7 @@ public static class TypeInference
 
     private static ImmutableDictionary<string, InferredType> ExtractTypeConstraintsFromFunctionApplicationsInternal(
         SyntaxTypes.Expression expression,
-        IReadOnlyDictionary<SyntaxModelTypes.QualifiedNameRef, FunctionTypeInfo> functionTypes,
+        IReadOnlyDictionary<QualifiedNameRef, FunctionTypeInfo> functionTypes,
         string currentModuleName,
         ImmutableDictionary<string, InferredType> constraints)
     {
@@ -1947,7 +1946,7 @@ public static class TypeInference
     /// <returns>A new dictionary containing all bindings (existing plus newly discovered).</returns>
     public static ImmutableDictionary<string, InferredType> ExtractPatternBindingTypesWithConstructors(
         SyntaxTypes.Pattern pattern,
-        IReadOnlyDictionary<SyntaxModelTypes.QualifiedNameRef, IReadOnlyList<InferredType>>? constructorArgumentTypes,
+        IReadOnlyDictionary<QualifiedNameRef, IReadOnlyList<InferredType>>? constructorArgumentTypes,
         ImmutableDictionary<string, InferredType> existingBindings)
     {
         if (constructorArgumentTypes is null)
@@ -1958,7 +1957,7 @@ public static class TypeInference
 
     private static ImmutableDictionary<string, InferredType> ExtractPatternBindingTypesWithConstructorsInternal(
         SyntaxTypes.Pattern pattern,
-        IReadOnlyDictionary<SyntaxModelTypes.QualifiedNameRef, IReadOnlyList<InferredType>> constructorArgumentTypes,
+        IReadOnlyDictionary<QualifiedNameRef, IReadOnlyList<InferredType>> constructorArgumentTypes,
         ImmutableDictionary<string, InferredType> bindings)
     {
         switch (pattern)
@@ -2035,7 +2034,7 @@ public static class TypeInference
         SyntaxTypes.Pattern pattern,
         InferredType inferredType,
         ImmutableDictionary<string, InferredType> existingBindings,
-        IReadOnlyDictionary<SyntaxModelTypes.QualifiedNameRef, IReadOnlyList<InferredType>>? constructorArgumentTypes)
+        IReadOnlyDictionary<QualifiedNameRef, IReadOnlyList<InferredType>>? constructorArgumentTypes)
     {
         return ExtractPatternBindingTypesFromInferredInternal(pattern, inferredType, existingBindings, constructorArgumentTypes);
     }
@@ -2044,7 +2043,7 @@ public static class TypeInference
         SyntaxTypes.Pattern pattern,
         InferredType inferredType,
         ImmutableDictionary<string, InferredType> bindings,
-        IReadOnlyDictionary<SyntaxModelTypes.QualifiedNameRef, IReadOnlyList<InferredType>>? constructorArgumentTypes)
+        IReadOnlyDictionary<QualifiedNameRef, IReadOnlyList<InferredType>>? constructorArgumentTypes)
     {
         switch (pattern)
         {

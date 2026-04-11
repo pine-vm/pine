@@ -103,6 +103,64 @@ public class BuiltinOperatorLoweringTests
     }
 
     [Fact]
+    public void Lowers_eq_operator_application_for_Int_arguments()
+    {
+        var loweredModule =
+            LowerOperators(
+                """
+                module Test exposing (..)
+
+
+                eqInt : Int -> Int -> Bool
+                eqInt left right =
+                    left == right
+                """);
+
+        RenderCanonicalized(loweredModule).Should().Be(
+            RenderCanonicalized(
+                """
+                module Test exposing (..)
+
+
+                eqInt : Int -> Int -> Bool
+                eqInt left right =
+                    Pine_builtin.equal
+                        [ left
+                        , right
+                        ]
+                """));
+    }
+
+    [Fact]
+    public void Lowers_eq_operator_application_for_String_arguments()
+    {
+        var loweredModule =
+            LowerOperators(
+                """
+                module Test exposing (..)
+
+
+                eqString : String -> String -> Bool
+                eqString left right =
+                    left == right
+                """);
+
+        RenderCanonicalized(loweredModule).Should().Be(
+            RenderCanonicalized(
+                """
+                module Test exposing (..)
+
+
+                eqString : String -> String -> Bool
+                eqString left right =
+                    Pine_builtin.equal
+                        [ left
+                        , right
+                        ]
+                """));
+    }
+
+    [Fact]
     public void Lowers_Basics_eq_application_for_String_arguments()
     {
         var loweredModule =
@@ -261,6 +319,311 @@ public class BuiltinOperatorLoweringTests
                                 ]
                             )
                         )
+                """));
+    }
+
+    [Fact]
+    public void Lowers_int_le_operator_application()
+    {
+        var loweredModule =
+            LowerOperators(
+                """
+                module Test exposing (..)
+
+
+                isLe : Int -> Int -> Bool
+                isLe left right =
+                    left <= right
+                """);
+
+        RenderCanonicalized(loweredModule).Should().Be(
+            RenderCanonicalized(
+                """
+                module Test exposing (..)
+
+
+                isLe : Int -> Int -> Bool
+                isLe left right =
+                    Pine_builtin.int_is_sorted_asc
+                        [ left
+                        , right
+                        ]
+                """));
+    }
+
+    [Fact]
+    public void Lowers_int_ge_operator_application()
+    {
+        var loweredModule =
+            LowerOperators(
+                """
+                module Test exposing (..)
+
+
+                isGe : Int -> Int -> Bool
+                isGe left right =
+                    left >= right
+                """);
+
+        RenderCanonicalized(loweredModule).Should().Be(
+            RenderCanonicalized(
+                """
+                module Test exposing (..)
+
+
+                isGe : Int -> Int -> Bool
+                isGe left right =
+                    Pine_builtin.int_is_sorted_asc
+                        [ right
+                        , left
+                        ]
+                """));
+    }
+
+    [Fact]
+    public void Lowers_int_lt_operator_application()
+    {
+        var loweredModule =
+            LowerOperators(
+                """
+                module Test exposing (..)
+
+
+                isLt : Int -> Int -> Bool
+                isLt left right =
+                    left < right
+                """);
+
+        RenderCanonicalized(loweredModule).Should().Be(
+            RenderCanonicalized(
+                """
+                module Test exposing (..)
+
+
+                isLt : Int -> Int -> Bool
+                isLt left right =
+                    Pine_builtin.int_is_sorted_asc
+                        [ Pine_builtin.int_add
+                            [ left
+                            , 1
+                            ]
+                        , right
+                        ]
+                """));
+    }
+
+    [Fact]
+    public void Lowers_int_lt_with_literal_left_operand()
+    {
+        var loweredModule =
+            LowerOperators(
+                """
+                module Test exposing (..)
+
+
+                isLtLiteralLeft : Int -> Bool
+                isLtLiteralLeft right =
+                    3 < right
+                """);
+
+        RenderCanonicalized(loweredModule).Should().Be(
+            RenderCanonicalized(
+                """
+                module Test exposing (..)
+
+
+                isLtLiteralLeft : Int -> Bool
+                isLtLiteralLeft right =
+                    Pine_builtin.int_is_sorted_asc
+                        [ 4
+                        , right
+                        ]
+                """));
+    }
+
+    [Fact]
+    public void Lowers_int_lt_with_literal_right_operand()
+    {
+        var loweredModule =
+            LowerOperators(
+                """
+                module Test exposing (..)
+
+
+                isLtLiteralRight : Int -> Bool
+                isLtLiteralRight left =
+                    left < 5
+                """);
+
+        RenderCanonicalized(loweredModule).Should().Be(
+            RenderCanonicalized(
+                """
+                module Test exposing (..)
+
+
+                isLtLiteralRight : Int -> Bool
+                isLtLiteralRight left =
+                    Pine_builtin.int_is_sorted_asc
+                        [ left
+                        , 4
+                        ]
+                """));
+    }
+
+    [Fact]
+    public void Lowers_int_gt_operator_application()
+    {
+        var loweredModule =
+            LowerOperators(
+                """
+                module Test exposing (..)
+
+
+                isGt : Int -> Int -> Bool
+                isGt left right =
+                    left > right
+                """);
+
+        RenderCanonicalized(loweredModule).Should().Be(
+            RenderCanonicalized(
+                """
+                module Test exposing (..)
+
+
+                isGt : Int -> Int -> Bool
+                isGt left right =
+                    Pine_builtin.int_is_sorted_asc
+                        [ Pine_builtin.int_add
+                            [ right
+                            , 1
+                            ]
+                        , left
+                        ]
+                """));
+    }
+
+    [Fact]
+    public void Lowers_int_gt_with_literal_left_operand()
+    {
+        var loweredModule =
+            LowerOperators(
+                """
+                module Test exposing (..)
+
+
+                isGtLiteralLeft : Int -> Bool
+                isGtLiteralLeft right =
+                    5 > right
+                """);
+
+        RenderCanonicalized(loweredModule).Should().Be(
+            RenderCanonicalized(
+                """
+                module Test exposing (..)
+
+
+                isGtLiteralLeft : Int -> Bool
+                isGtLiteralLeft right =
+                    Pine_builtin.int_is_sorted_asc
+                        [ right
+                        , 4
+                        ]
+                """));
+    }
+
+    [Fact]
+    public void Lowers_int_gt_with_literal_right_operand()
+    {
+        var loweredModule =
+            LowerOperators(
+                """
+                module Test exposing (..)
+
+
+                isGtLiteralRight : Int -> Bool
+                isGtLiteralRight left =
+                    left > 3
+                """);
+
+        RenderCanonicalized(loweredModule).Should().Be(
+            RenderCanonicalized(
+                """
+                module Test exposing (..)
+
+
+                isGtLiteralRight : Int -> Bool
+                isGtLiteralRight left =
+                    Pine_builtin.int_is_sorted_asc
+                        [ 4
+                        , left
+                        ]
+                """));
+    }
+
+    [Fact]
+    public void Lowers_chained_int_le_to_merged_int_is_sorted_asc()
+    {
+        var loweredModule =
+            LowerOperators(
+                """
+                module Test exposing (..)
+
+
+                isChainedLe : Int -> Int -> Int -> Bool
+                isChainedLe alfa beta gamma =
+                    alfa <= beta && beta <= gamma
+                """);
+
+        RenderCanonicalized(loweredModule).Should().Be(
+            RenderCanonicalized(
+                """
+                module Test exposing (..)
+
+
+                isChainedLe : Int -> Int -> Int -> Bool
+                isChainedLe alfa beta gamma =
+                    Pine_builtin.int_is_sorted_asc
+                        [ alfa
+                        , beta
+                        , gamma
+                        ]
+                """));
+    }
+
+    [Fact]
+    public void Lowers_chained_int_lt_to_merged_int_is_sorted_asc()
+    {
+        var loweredModule =
+            LowerOperators(
+                """
+                module Test exposing (..)
+
+
+                isChainedLt : Int -> Int -> Int -> Bool
+                isChainedLt alfa beta gamma =
+                    alfa < beta && beta < gamma
+                """);
+
+        RenderCanonicalized(loweredModule).Should().Be(
+            RenderCanonicalized(
+                """
+                module Test exposing (..)
+
+
+                isChainedLt : Int -> Int -> Int -> Bool
+                isChainedLt alfa beta gamma =
+                    Pine_builtin.int_is_sorted_asc
+                        [ Pine_builtin.int_add
+                            [ alfa
+                            , 1
+                            ]
+                        , beta
+                        , Pine_builtin.int_add
+                            [ beta
+                            , 1
+                            ]
+                        , gamma
+                        ]
                 """));
     }
 

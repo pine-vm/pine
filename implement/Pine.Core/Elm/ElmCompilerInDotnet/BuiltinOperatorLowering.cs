@@ -4,7 +4,6 @@ using System.Collections.Immutable;
 using System.Linq;
 
 using ModuleName = System.Collections.Generic.IReadOnlyList<string>;
-using SyntaxModelTypes = Pine.Core.Elm.ElmSyntax.SyntaxModel;
 using SyntaxTypes = Pine.Core.Elm.ElmSyntax.Stil4mElmSyntax7;
 
 namespace Pine.Core.Elm.ElmCompilerInDotnet;
@@ -15,6 +14,23 @@ namespace Pine.Core.Elm.ElmCompilerInDotnet;
 /// </summary>
 public static class BuiltinOperatorLowering
 {
+    /// <summary>
+    /// Enumerates the Elm operators recognized by the lowering stage.
+    /// Each member represents a distinct lowering strategy, not a Pine builtin name.
+    /// </summary>
+    private enum LoweredOperator
+    {
+        IntAdd,
+        IntSub,
+        IntMul,
+        Equal,
+        IntLt,
+        IntGt,
+        IntLe,
+        IntGe,
+        BoolAnd,
+    }
+
     /// <summary>
     /// Zero-based location used for generated syntax nodes introduced by lowering.
     /// </summary>
@@ -33,8 +49,8 @@ public static class BuiltinOperatorLowering
         ImmutableDictionary<string, int> ParameterNames,
         ImmutableDictionary<string, TypeInference.InferredType> ParameterTypes,
         ImmutableDictionary<string, TypeInference.InferredType> LocalBindingTypes,
-        IReadOnlyDictionary<SyntaxModelTypes.QualifiedNameRef, FunctionTypeInfo> FunctionTypes,
-        IReadOnlyDictionary<SyntaxModelTypes.QualifiedNameRef, TypeInference.InferredType> AliasTypes,
+        IReadOnlyDictionary<QualifiedNameRef, FunctionTypeInfo> FunctionTypes,
+        IReadOnlyDictionary<QualifiedNameRef, TypeInference.InferredType> AliasTypes,
         ImmutableDictionary<string, TypeInference.InferredType> FunctionSignatures);
 
     /// <summary>
@@ -66,8 +82,8 @@ public static class BuiltinOperatorLowering
 
     private static SyntaxTypes.File RewriteModule(
         SyntaxTypes.File module,
-        IReadOnlyDictionary<SyntaxModelTypes.QualifiedNameRef, FunctionTypeInfo> functionTypes,
-        IReadOnlyDictionary<SyntaxModelTypes.QualifiedNameRef, TypeInference.InferredType> aliasTypes,
+        IReadOnlyDictionary<QualifiedNameRef, FunctionTypeInfo> functionTypes,
+        IReadOnlyDictionary<QualifiedNameRef, TypeInference.InferredType> aliasTypes,
         ImmutableDictionary<string, TypeInference.InferredType> functionSignatures)
     {
         var moduleName = SyntaxTypes.Module.GetModuleName(module.ModuleDefinition.Value).Value;
@@ -91,8 +107,8 @@ public static class BuiltinOperatorLowering
     private static Node<SyntaxTypes.Declaration> RewriteDeclaration(
         Node<SyntaxTypes.Declaration> declarationNode,
         string moduleName,
-        IReadOnlyDictionary<SyntaxModelTypes.QualifiedNameRef, FunctionTypeInfo> functionTypes,
-        IReadOnlyDictionary<SyntaxModelTypes.QualifiedNameRef, TypeInference.InferredType> aliasTypes,
+        IReadOnlyDictionary<QualifiedNameRef, FunctionTypeInfo> functionTypes,
+        IReadOnlyDictionary<QualifiedNameRef, TypeInference.InferredType> aliasTypes,
         ImmutableDictionary<string, TypeInference.InferredType> functionSignatures)
     {
         if (declarationNode.Value is not SyntaxTypes.Declaration.FunctionDeclaration functionDeclaration)
@@ -292,7 +308,7 @@ public static class BuiltinOperatorLowering
         }
 
         if (rewrittenArguments.Count is 3 &&
-            TryMapBuiltinOperator(rewrittenArguments[0].Value, out var builtinName))
+            TryMapBuiltinOperator(rewrittenArguments[0].Value) is { } loweredOp)
         {
             var leftType =
                 TypeInference.InferExpressionType(
@@ -312,34 +328,62 @@ public static class BuiltinOperatorLowering
                     context.CurrentModuleName,
                     context.FunctionTypes);
 
-            if (builtinName is "equal")
+            if (loweredOp is LoweredOperator.Equal)
             {
                 if (ProvesPrimitiveEqualityBuiltin(leftType, rightType))
                 {
                     return
                         BuildBuiltinApplication(
-                            builtinName,
+                            "equal",
                             rewrittenArguments[1],
                             rewrittenArguments[2]);
+                }
+            }
+            else if (loweredOp is LoweredOperator.IntLt or LoweredOperator.IntGt or LoweredOperator.IntLe or LoweredOperator.IntGe)
+            {
+                if (ProvesIntegerBuiltin(leftType, rightType))
+                {
+                    return
+                        BuildIntComparisonApplication(
+                            loweredOp,
+                            rewrittenArguments[1],
+                            rewrittenArguments[2]);
+                }
+            }
+            else if (loweredOp is LoweredOperator.BoolAnd)
+            {
+                if (TryMergeChainedIntIsSortedAsc(
+                    rewrittenArguments[1].Value,
+                    rewrittenArguments[2].Value) is { } merged)
+                {
+                    return merged;
                 }
             }
             else if (expectedType is TypeInference.InferredType.IntType ||
                 ProvesIntegerBuiltin(leftType, rightType))
             {
-                return
-                    builtinName switch
-                    {
-                        "int_sub" =>
-                        BuildBuiltinSubtractionApplication(
-                            rewrittenArguments[1],
-                            rewrittenArguments[2]),
+                return loweredOp switch
+                {
+                    LoweredOperator.IntSub =>
+                    BuildBuiltinSubtractionApplication(
+                        rewrittenArguments[1],
+                        rewrittenArguments[2]),
 
-                        _ =>
-                        BuildBuiltinApplication(
-                            builtinName,
-                            rewrittenArguments[1],
-                            rewrittenArguments[2])
-                    };
+                    LoweredOperator.IntAdd =>
+                    BuildBuiltinApplication(
+                        "int_add",
+                        rewrittenArguments[1],
+                        rewrittenArguments[2]),
+
+                    LoweredOperator.IntMul =>
+                    BuildBuiltinApplication(
+                        "int_mul",
+                        rewrittenArguments[1],
+                        rewrittenArguments[2]),
+
+                    _ =>
+                    new SyntaxTypes.Expression.Application(rewrittenArguments)
+                };
             }
         }
 
@@ -591,68 +635,50 @@ public static class BuiltinOperatorLowering
         };
     }
 
-    private static bool TryMapBuiltinOperator(
-        SyntaxTypes.Expression functionExpression,
-        out string builtinName)
+    private static LoweredOperator? TryMapBuiltinOperator(
+        SyntaxTypes.Expression functionExpression)
     {
         if (functionExpression is SyntaxTypes.Expression.FunctionOrValue functionOrValue &&
             functionOrValue.ModuleName.Count is 1 &&
             functionOrValue.ModuleName[0] is "Basics")
         {
-            if (functionOrValue.Name is "add")
+            return functionOrValue.Name switch
             {
-                builtinName = "int_add";
-                return true;
-            }
+                "add" => LoweredOperator.IntAdd,
+                "sub" => LoweredOperator.IntSub,
+                "mul" => LoweredOperator.IntMul,
+                "eq" => LoweredOperator.Equal,
+                "lt" => LoweredOperator.IntLt,
+                "gt" => LoweredOperator.IntGt,
+                "le" => LoweredOperator.IntLe,
+                "ge" => LoweredOperator.IntGe,
+                "and" => LoweredOperator.BoolAnd,
 
-            if (functionOrValue.Name is "sub")
-            {
-                builtinName = "int_sub";
-                return true;
-            }
-
-            if (functionOrValue.Name is "mul")
-            {
-                builtinName = "int_mul";
-                return true;
-            }
-
-            if (functionOrValue.Name is "eq")
-            {
-                builtinName = "equal";
-                return true;
-            }
+                _ =>
+                null
+            };
         }
 
         if (functionExpression is SyntaxTypes.Expression.PrefixOperator prefixOperator)
         {
-            if (prefixOperator.Operator is "+")
+            return prefixOperator.Operator switch
             {
-                builtinName = "int_add";
-                return true;
-            }
+                "+" => LoweredOperator.IntAdd,
+                "-" => LoweredOperator.IntSub,
+                "*" => LoweredOperator.IntMul,
+                "==" => LoweredOperator.Equal,
+                "<" => LoweredOperator.IntLt,
+                ">" => LoweredOperator.IntGt,
+                "<=" => LoweredOperator.IntLe,
+                ">=" => LoweredOperator.IntGe,
+                "&&" => LoweredOperator.BoolAnd,
 
-            if (prefixOperator.Operator is "-")
-            {
-                builtinName = "int_sub";
-                return true;
-            }
-
-            if (prefixOperator.Operator is "*")
-            {
-                builtinName = "int_mul";
-                return true;
-            }
-
-            if (prefixOperator.Operator is "==")
-            {
-                builtinName = "equal";
-                return true;
-            }
+                _ =>
+                null
+            };
         }
 
-        builtinName = "";
-        return false;
+        return null;
     }
 
     private static SyntaxTypes.Expression BuildBuiltinApplication(
@@ -690,10 +716,288 @@ public static class BuiltinOperatorLowering
         return BuildBuiltinApplication("int_add", left, negatedRight);
     }
 
-    private static ImmutableDictionary<SyntaxModelTypes.QualifiedNameRef, FunctionTypeInfo> BuildFunctionTypes(
+    /// <summary>
+    /// Builds an <c>int_is_sorted_asc</c> application for Int comparison operators.
+    /// <para>
+    /// All four comparison operators (<c>lt</c>, <c>gt</c>, <c>le</c>, <c>ge</c>) are expressed
+    /// using <c>Pine_builtin.int_is_sorted_asc</c>:
+    /// </para>
+    /// <list type="bullet">
+    /// <item><c>a &lt;= b</c> → <c>int_is_sorted_asc [ a, b ]</c></item>
+    /// <item><c>a &gt;= b</c> → <c>int_is_sorted_asc [ b, a ]</c></item>
+    /// <item><c>a &lt; b</c>  → <c>int_is_sorted_asc [ int_add [ a, 1 ], b ]</c> (with literal optimization)</item>
+    /// <item><c>a &gt; b</c>  → <c>int_is_sorted_asc [ int_add [ b, 1 ], a ]</c> (with literal optimization)</item>
+    /// </list>
+    /// </summary>
+    private static SyntaxTypes.Expression BuildIntComparisonApplication(
+        LoweredOperator loweredOp,
+        Node<SyntaxTypes.Expression> left,
+        Node<SyntaxTypes.Expression> right)
+    {
+        var isStrict = loweredOp is LoweredOperator.IntLt or LoweredOperator.IntGt;
+        var swapOperands = loweredOp is LoweredOperator.IntGt or LoweredOperator.IntGe;
+
+        var (first, second) = swapOperands ? (right, left) : (left, right);
+
+        if (isStrict)
+        {
+            return BuildStrictIntIsSortedAscApplication(first, second);
+        }
+
+        return BuildIntIsSortedAscApplication([first, second]);
+    }
+
+    /// <summary>
+    /// Builds a strict integer comparison (<c>&lt;</c> / <c>&gt;</c>) using <c>int_is_sorted_asc</c>
+    /// with an offset of +1 on the first operand.
+    /// <para>
+    /// Since <c>int_is_sorted_asc</c> checks <c>&lt;=</c>, we convert strict <c>&lt;</c>
+    /// to <c>a + 1 &lt;= b</c>. When either operand is a literal, the offset is folded
+    /// into the literal to avoid emitting <c>int_add</c>.
+    /// </para>
+    /// </summary>
+    private static SyntaxTypes.Expression BuildStrictIntIsSortedAscApplication(
+        Node<SyntaxTypes.Expression> first,
+        Node<SyntaxTypes.Expression> second)
+    {
+        // If the first operand is a literal, fold +1 into it directly.
+        if (first.Value is SyntaxTypes.Expression.Integer firstLiteral)
+        {
+            var adjustedFirst =
+                new Node<SyntaxTypes.Expression>(
+                    s_zeroRange,
+                    new SyntaxTypes.Expression.Integer(firstLiteral.Value + 1));
+
+            return BuildIntIsSortedAscApplication([adjustedFirst, second]);
+        }
+
+        // If the first operand is a negation of a literal, fold +1 into it.
+        if (first.Value is SyntaxTypes.Expression.Negation { Expression: { Value: SyntaxTypes.Expression.Integer negatedLiteral } })
+        {
+            var adjustedFirst =
+                new Node<SyntaxTypes.Expression>(
+                    s_zeroRange,
+                    new SyntaxTypes.Expression.Integer(-negatedLiteral.Value + 1));
+
+            return BuildIntIsSortedAscApplication([adjustedFirst, second]);
+        }
+
+        // If the second operand is a literal, subtract 1 from it to avoid int_add on first.
+        if (second.Value is SyntaxTypes.Expression.Integer secondLiteral)
+        {
+            var adjustedSecond =
+                new Node<SyntaxTypes.Expression>(
+                    s_zeroRange,
+                    new SyntaxTypes.Expression.Integer(secondLiteral.Value - 1));
+
+            return BuildIntIsSortedAscApplication([first, adjustedSecond]);
+        }
+
+        // If the second operand is a negation of a literal, fold -1 into it.
+        if (second.Value is SyntaxTypes.Expression.Negation { Expression: { Value: SyntaxTypes.Expression.Integer negatedSecondLiteral } })
+        {
+            var adjustedSecond =
+                new Node<SyntaxTypes.Expression>(
+                    s_zeroRange,
+                    new SyntaxTypes.Expression.Integer(-negatedSecondLiteral.Value - 1));
+
+            return BuildIntIsSortedAscApplication([first, adjustedSecond]);
+        }
+
+        // General case: offset the first operand with int_add [first, 1].
+        var offsetFirst =
+            new Node<SyntaxTypes.Expression>(
+                s_zeroRange,
+                BuildBuiltinApplication(
+                    "int_add",
+                    first,
+                    new Node<SyntaxTypes.Expression>(
+                        s_zeroRange,
+                        new SyntaxTypes.Expression.Integer(1))));
+
+        return BuildIntIsSortedAscApplication([offsetFirst, second]);
+    }
+
+    /// <summary>
+    /// Builds a <c>Pine_builtin.int_is_sorted_asc</c> application with the given operands list.
+    /// </summary>
+    private static SyntaxTypes.Expression BuildIntIsSortedAscApplication(
+        IReadOnlyList<Node<SyntaxTypes.Expression>> operands)
+    {
+        var builtinReference =
+            new Node<SyntaxTypes.Expression>(
+                s_zeroRange,
+                new SyntaxTypes.Expression.FunctionOrValue(["Pine_builtin"], "int_is_sorted_asc"));
+
+        var operandsList =
+            new Node<SyntaxTypes.Expression>(
+                s_zeroRange,
+                new SyntaxTypes.Expression.ListExpr([.. operands]));
+
+        return new SyntaxTypes.Expression.Application([builtinReference, operandsList]);
+    }
+
+    /// <summary>
+    /// Tries to merge two <c>int_is_sorted_asc</c> applications connected by <c>&amp;&amp;</c>
+    /// into a single call when they share a common middle operand.
+    /// <para>
+    /// For non-strict comparisons (<c>&lt;=</c>), when the last element of the left list
+    /// equals the first element of the right list, they are merged by removing the duplicate:
+    /// <c>int_is_sorted_asc [ a, b ] &amp;&amp; int_is_sorted_asc [ b, c ]</c>
+    /// → <c>int_is_sorted_asc [ a, b, c ]</c>.
+    /// </para>
+    /// <para>
+    /// For strict comparisons (<c>&lt;</c>), when the first element of the right list is
+    /// <c>int_add [ lastOfLeft, 1 ]</c>, both lists are concatenated (keeping all elements):
+    /// <c>int_is_sorted_asc [ a+1, b ] &amp;&amp; int_is_sorted_asc [ b+1, c ]</c>
+    /// → <c>int_is_sorted_asc [ a+1, b, b+1, c ]</c>.
+    /// </para>
+    /// </summary>
+    private static SyntaxTypes.Expression? TryMergeChainedIntIsSortedAsc(
+        SyntaxTypes.Expression leftExpr,
+        SyntaxTypes.Expression rightExpr)
+    {
+        if (TryExtractIntIsSortedAscOperands(leftExpr) is not { } leftOperands ||
+            TryExtractIntIsSortedAscOperands(rightExpr) is not { } rightOperands)
+        {
+            return null;
+        }
+
+        if (leftOperands.Count is 0 || rightOperands.Count is 0)
+        {
+            return null;
+        }
+
+        var leftLast = leftOperands[^1];
+        var rightFirst = rightOperands[0];
+
+        // Case 1: Exact match on shared middle operand (e.g., <= chains).
+        if (SyntaxExpressionsAreEqual(leftLast.Value, rightFirst.Value))
+        {
+            var mergedOperands = new List<Node<SyntaxTypes.Expression>>(leftOperands.Count + rightOperands.Count - 1);
+            mergedOperands.AddRange(leftOperands);
+
+            for (var i = 1; i < rightOperands.Count; i++)
+            {
+                mergedOperands.Add(rightOperands[i]);
+            }
+
+            return BuildIntIsSortedAscApplication(mergedOperands);
+        }
+
+        // Case 2: Strict chain where rightFirst is int_add [leftLast, 1] (e.g., < chains).
+        if (IsIntAddOffsetByOne(leftLast.Value, rightFirst.Value))
+        {
+            var mergedOperands = new List<Node<SyntaxTypes.Expression>>(leftOperands.Count + rightOperands.Count);
+            mergedOperands.AddRange(leftOperands);
+            mergedOperands.AddRange(rightOperands);
+
+            return BuildIntIsSortedAscApplication(mergedOperands);
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Checks whether <paramref name="candidate"/> is <c>int_add [ <paramref name="baseExpr"/>, 1 ]</c>,
+    /// indicating a +1 offset relationship used in strict comparison chains.
+    /// </summary>
+    private static bool IsIntAddOffsetByOne(
+        SyntaxTypes.Expression baseExpr,
+        SyntaxTypes.Expression candidate)
+    {
+        if (candidate is not SyntaxTypes.Expression.Application app ||
+            app.Arguments.Count is not 2 ||
+            app.Arguments[0].Value is not SyntaxTypes.Expression.FunctionOrValue fv ||
+            fv.ModuleName is not ["Pine_builtin"] ||
+            fv.Name is not "int_add" ||
+            app.Arguments[1].Value is not SyntaxTypes.Expression.ListExpr listExpr ||
+            listExpr.Elements.Count is not 2)
+        {
+            return false;
+        }
+
+        return
+            (SyntaxExpressionsAreEqual(listExpr.Elements[0].Value, baseExpr) &&
+            listExpr.Elements[1].Value is SyntaxTypes.Expression.Integer { Value: 1 }) ||
+            (SyntaxExpressionsAreEqual(listExpr.Elements[1].Value, baseExpr) &&
+            listExpr.Elements[0].Value is SyntaxTypes.Expression.Integer { Value: 1 });
+    }
+
+    /// <summary>
+    /// Extracts the operand list from an <c>int_is_sorted_asc</c> application,
+    /// or returns null if the expression is not such an application.
+    /// </summary>
+    private static IReadOnlyList<Node<SyntaxTypes.Expression>>? TryExtractIntIsSortedAscOperands(
+        SyntaxTypes.Expression expression)
+    {
+        if (expression is not SyntaxTypes.Expression.Application application ||
+            application.Arguments.Count is not 2)
+        {
+            return null;
+        }
+
+        if (application.Arguments[0].Value is not SyntaxTypes.Expression.FunctionOrValue functionOrValue ||
+            functionOrValue.ModuleName is not ["Pine_builtin"] ||
+            functionOrValue.Name is not "int_is_sorted_asc")
+        {
+            return null;
+        }
+
+        if (application.Arguments[1].Value is not SyntaxTypes.Expression.ListExpr listExpr)
+        {
+            return null;
+        }
+
+        return listExpr.Elements;
+    }
+
+    /// <summary>
+    /// Compares two syntax expressions for structural equality,
+    /// used to detect shared middle operands in chained comparisons.
+    /// <para>
+    /// Only handles expression types that typically appear as comparison operands:
+    /// variable references, integer literals, applications (like <c>int_add</c>), lists, and negations.
+    /// Other expression types (if-blocks, let-blocks, records, etc.) return <c>false</c>,
+    /// which safely prevents chain merging for those cases.
+    /// </para>
+    /// </summary>
+    private static bool SyntaxExpressionsAreEqual(
+        SyntaxTypes.Expression left,
+        SyntaxTypes.Expression right)
+    {
+        return (left, right) switch
+        {
+            (SyntaxTypes.Expression.FunctionOrValue leftFv, SyntaxTypes.Expression.FunctionOrValue rightFv) =>
+            leftFv.Name == rightFv.Name &&
+            leftFv.ModuleName.Count == rightFv.ModuleName.Count &&
+            leftFv.ModuleName.Zip(rightFv.ModuleName).All(pair => pair.First == pair.Second),
+
+            (SyntaxTypes.Expression.Integer leftInt, SyntaxTypes.Expression.Integer rightInt) =>
+            leftInt.Value == rightInt.Value,
+
+            (SyntaxTypes.Expression.Application leftApp, SyntaxTypes.Expression.Application rightApp) =>
+            leftApp.Arguments.Count == rightApp.Arguments.Count &&
+            leftApp.Arguments.Zip(rightApp.Arguments).All(
+                pair => SyntaxExpressionsAreEqual(pair.First.Value, pair.Second.Value)),
+
+            (SyntaxTypes.Expression.ListExpr leftList, SyntaxTypes.Expression.ListExpr rightList) =>
+            leftList.Elements.Count == rightList.Elements.Count &&
+            leftList.Elements.Zip(rightList.Elements).All(
+                pair => SyntaxExpressionsAreEqual(pair.First.Value, pair.Second.Value)),
+
+            (SyntaxTypes.Expression.Negation leftNeg, SyntaxTypes.Expression.Negation rightNeg) =>
+            SyntaxExpressionsAreEqual(leftNeg.Expression.Value, rightNeg.Expression.Value),
+
+            _ =>
+            false
+        };
+    }
+
+    private static ImmutableDictionary<QualifiedNameRef, FunctionTypeInfo> BuildFunctionTypes(
         IReadOnlyList<SyntaxTypes.File> modules)
     {
-        var result = new Dictionary<SyntaxModelTypes.QualifiedNameRef, FunctionTypeInfo>();
+        var result = new Dictionary<QualifiedNameRef, FunctionTypeInfo>();
 
         foreach (var module in modules)
         {
@@ -713,10 +1017,10 @@ public static class BuiltinOperatorLowering
         return result.ToImmutableDictionary();
     }
 
-    private static ImmutableDictionary<SyntaxModelTypes.QualifiedNameRef, TypeInference.InferredType> BuildAliasTypes(
+    private static ImmutableDictionary<QualifiedNameRef, TypeInference.InferredType> BuildAliasTypes(
         IReadOnlyList<SyntaxTypes.File> modules)
     {
-        var result = new Dictionary<SyntaxModelTypes.QualifiedNameRef, TypeInference.InferredType>();
+        var result = new Dictionary<QualifiedNameRef, TypeInference.InferredType>();
 
         foreach (var module in modules)
         {
@@ -777,7 +1081,7 @@ public static class BuiltinOperatorLowering
             return [];
         }
 
-        SyntaxModelTypes.QualifiedNameRef qualifiedName =
+        QualifiedNameRef qualifiedName =
             functionOrValue.ModuleName.Count > 0
             ?
             QualifiedNameHelper.ToQualifiedNameRef(functionOrValue.ModuleName, functionOrValue.Name)
@@ -827,7 +1131,7 @@ public static class BuiltinOperatorLowering
 
     private static TypeInference.InferredType? ExpandAliasType(
         TypeInference.InferredType? inferredType,
-        IReadOnlyDictionary<SyntaxModelTypes.QualifiedNameRef, TypeInference.InferredType> aliasTypes)
+        IReadOnlyDictionary<QualifiedNameRef, TypeInference.InferredType> aliasTypes)
     {
         return inferredType switch
         {

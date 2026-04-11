@@ -410,7 +410,7 @@ public class ElmCompilerTestHelper
 
             currentValue =
                 currentResult
-                .Extract(err => throw new System.Exception("Failed eval: " + err))
+                .Extract(err => throw new Exception("Failed eval: " + err))
                 .ReturnValue.Evaluate();
 
         }

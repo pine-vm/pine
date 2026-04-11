@@ -363,6 +363,15 @@ This stage stays in Elm syntax, but it rewrites certain canonicalized Elm operat
 + `Basics.mul` / `(*)` to `Pine_builtin.int_mul`
 + `Basics.sub` / `(-)` to `Pine_builtin.int_add` combined with `Pine_builtin.int_mul [ -1, right ]`
 
+When type inference proves a comparison is on `Int`, the stage also lowers comparison operators to `Pine_builtin.int_is_sorted_asc`:
+
++ `Basics.le` / `(<=)` to `Pine_builtin.int_is_sorted_asc [ left, right ]`
++ `Basics.ge` / `(>=)` to `Pine_builtin.int_is_sorted_asc [ right, left ]` (operands swapped)
++ `Basics.lt` / `(<)` to `Pine_builtin.int_is_sorted_asc [ Pine_builtin.int_add [ left, 1 ], right ]` — since `int_is_sorted_asc` checks `<=`, adding 1 to the left operand converts the check to strict `<`. When either operand is a literal, the compiler folds the +1 offset into the literal instead of emitting `int_add`.
++ `Basics.gt` / `(>)` to `Pine_builtin.int_is_sorted_asc [ Pine_builtin.int_add [ right, 1 ], left ]` — operands swapped with the same offset strategy as `<`.
+
+Additionally, when the stage encounters `Basics.and` / `(&&)` combining two `int_is_sorted_asc` applications that share a common middle operand, it merges them into a single call. For example, `a <= b && b <= c` becomes `Pine_builtin.int_is_sorted_asc [ a, b, c ]`. For strict comparisons (`<`), the merged form preserves all operands including the offset elements, resulting in `Pine_builtin.int_is_sorted_asc [ int_add [ a, 1 ], b, int_add [ b, 1 ], c ]`.
+
 ### Current Implementation Deviations From This Conceptual Split
 
 The current implementation already uses separate pipeline stages in `ElmCompiler.cs`, but it still deviates from the conceptual split above in a few ways:
