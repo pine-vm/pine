@@ -41,20 +41,6 @@ public static class BuiltinOperatorLowering
     /// </summary>
     private static readonly Range s_zeroRange = new(Start: s_zeroLocation, End: s_zeroLocation);
 
-    /// <summary>
-    /// Describes a single value constructor of a custom type,
-    /// storing the inferred types of its positional arguments.
-    /// </summary>
-    private record ChoiceTypeConstructor(
-        string TagName,
-        IReadOnlyList<TypeInference.InferredType> ArgumentTypes);
-
-    /// <summary>
-    /// Describes all value constructors of a custom type (union type / ADT).
-    /// </summary>
-    private record ChoiceTypeDefinition(
-        IReadOnlyList<ChoiceTypeConstructor> Constructors);
-
     private record RewriteContext(
         string CurrentModuleName,
         ImmutableDictionary<string, int> ParameterNames,
@@ -62,7 +48,7 @@ public static class BuiltinOperatorLowering
         ImmutableDictionary<string, TypeInference.InferredType> LocalBindingTypes,
         IReadOnlyDictionary<QualifiedNameRef, FunctionTypeInfo> FunctionTypes,
         IReadOnlyDictionary<QualifiedNameRef, TypeInference.InferredType> AliasTypes,
-        IReadOnlyDictionary<QualifiedNameRef, ChoiceTypeDefinition> ChoiceTypeDefinitions,
+        IReadOnlyDictionary<QualifiedNameRef, TypeInference.ChoiceTypeDefinition> ChoiceTypeDefinitions,
         ImmutableDictionary<string, TypeInference.InferredType> FunctionSignatures);
 
     /// <summary>
@@ -76,7 +62,7 @@ public static class BuiltinOperatorLowering
     {
         var functionTypes = BuildFunctionTypes(modules);
         var aliasTypes = BuildAliasTypes(modules);
-        var choiceTypeDefinitions = BuildChoiceTypeDefinitions(modules);
+        var choiceTypeDefinitions = TypeInference.BuildChoiceTypeDefinitions(modules);
         var functionSignatures = BuildFunctionSignatures(modules);
 
         var result =
@@ -97,7 +83,7 @@ public static class BuiltinOperatorLowering
         SyntaxTypes.File module,
         IReadOnlyDictionary<QualifiedNameRef, FunctionTypeInfo> functionTypes,
         IReadOnlyDictionary<QualifiedNameRef, TypeInference.InferredType> aliasTypes,
-        IReadOnlyDictionary<QualifiedNameRef, ChoiceTypeDefinition> choiceTypeDefinitions,
+        IReadOnlyDictionary<QualifiedNameRef, TypeInference.ChoiceTypeDefinition> choiceTypeDefinitions,
         ImmutableDictionary<string, TypeInference.InferredType> functionSignatures)
     {
         var moduleName = SyntaxTypes.Module.GetModuleName(module.ModuleDefinition.Value).Value;
@@ -124,7 +110,7 @@ public static class BuiltinOperatorLowering
         string moduleName,
         IReadOnlyDictionary<QualifiedNameRef, FunctionTypeInfo> functionTypes,
         IReadOnlyDictionary<QualifiedNameRef, TypeInference.InferredType> aliasTypes,
-        IReadOnlyDictionary<QualifiedNameRef, ChoiceTypeDefinition> choiceTypeDefinitions,
+        IReadOnlyDictionary<QualifiedNameRef, TypeInference.ChoiceTypeDefinition> choiceTypeDefinitions,
         ImmutableDictionary<string, TypeInference.InferredType> functionSignatures)
     {
         if (declarationNode.Value is not SyntaxTypes.Declaration.FunctionDeclaration functionDeclaration)
@@ -1118,42 +1104,6 @@ public static class BuiltinOperatorLowering
             {
                 result[QualifiedNameHelper.ToQualifiedNameRef(moduleName, declaration.TypeAlias.Name.Value)] =
                     TypeInference.TypeAnnotationToInferredType(declaration.TypeAlias.TypeAnnotation.Value);
-            }
-        }
-
-        return result.ToImmutableDictionary();
-    }
-
-    private static ImmutableDictionary<QualifiedNameRef, ChoiceTypeDefinition> BuildChoiceTypeDefinitions(
-        IReadOnlyList<SyntaxTypes.File> modules)
-    {
-        var result = new Dictionary<QualifiedNameRef, ChoiceTypeDefinition>();
-
-        foreach (var module in modules)
-        {
-            var moduleName = SyntaxTypes.Module.GetModuleName(module.ModuleDefinition.Value).Value;
-
-            foreach (var declaration in module.Declarations.Select(node => node.Value)
-                .OfType<SyntaxTypes.Declaration.CustomTypeDeclaration>())
-            {
-                var typeStruct = declaration.TypeDeclaration;
-
-                var constructors =
-                    typeStruct.Constructors
-                    .Select(ctorNode =>
-                    {
-                        var ctor = ctorNode.Value;
-                        var argTypes =
-                            ctor.Arguments
-                            .Select(argNode => TypeInference.TypeAnnotationToInferredType(argNode.Value))
-                            .ToList();
-
-                        return new ChoiceTypeConstructor(ctor.Name.Value, argTypes);
-                    })
-                    .ToList();
-
-                result[QualifiedNameHelper.ToQualifiedNameRef(moduleName, typeStruct.Name.Value)] =
-                    new ChoiceTypeDefinition(constructors);
             }
         }
 
