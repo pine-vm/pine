@@ -376,7 +376,7 @@ Additionally, when the stage encounters `Basics.and` / `(&&)` combining two `int
 
 The stage also lowers `Basics.eq` / `(==)` to `Pine_builtin.equal` when type inference proves that the operand type supports *primitive equality* — meaning Pine structural equality is equivalent to Elm equality.
 
-In Elm, only `Dict` and `Set` values can have different Pine representations that must be treated as equal (because the concrete red-black tree structure depends on insertion order). Similarly, `Float` (and the polymorphic `number` constraint) can have different Pine representations for the same value (different numerator/denominator pairs). Any type that is guaranteed to never contain a `Dict`, `Set`, or `Float` value can therefore use `Pine_builtin.equal` directly, avoiding the overhead of the generic `Basics.eq` function.
+In Elm, only `Dict` and `Set` values can have different Pine representations that must be treated as equal (because the concrete red-black tree structure depends on insertion order). Similarly, `Float` (and the polymorphic `number` constraint) can have different Pine representations for the same value (The current implementation will sometimes reduce to a plain integer if the denominator is `1`). Any type that is guaranteed to never contain a `Dict`, `Set`, or `Float` value can therefore use `Pine_builtin.equal` directly, avoiding the overhead of the generic `Basics.eq` function.
 
 The check is recursive over composite types via a single `TypeSupportsPrimitiveEquality` method:
 
@@ -384,7 +384,7 @@ The check is recursive over composite types via a single `TypeSupportsPrimitiveE
 + **Primitive types NOT safe:** `Float`, `number` (different Pine representations for the same value)
 + **Tuple types:** safe if every element type is safe (recursive)
 + **List types:** safe if the element type is safe (recursive)
-+ **Custom types (ADTs):** safe if every argument type of every constructor tag is safe (recursive), with cycle detection for recursive types
++ **Choice types (Sum types):** safe if every argument type of every constructor tag is safe (recursive), with cycle detection for recursive types
 + **Type aliases:** expanded before checking
 + **Built-in collection types:** `List.List a` is treated as a list; `Dict.Dict` and `Set.Set` are always unsafe
 + **Type variables and unknown types:** not safe (could contain anything)
