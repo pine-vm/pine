@@ -85,7 +85,8 @@ public partial class Inlining
         ImmutableHashSet<DeclQualifiedName> InliningStack,
         SpecializationCatalog SpecializationCatalog,
         PipelineStage Stage,
-        ImmutableHashSet<string> LocalNames = default!)
+        ImmutableHashSet<string> LocalNames = default!,
+        ImmutableHashSet<string> ModuleLevelNames = default!)
     {
         /// <summary>
         /// Names of local variables currently in scope (from let bindings, function parameters,
@@ -93,6 +94,13 @@ public partial class Inlining
         /// to module-level functions during inlining.
         /// </summary>
         public ImmutableHashSet<string> LocalNames { get; init; } = LocalNames ?? [];
+
+        /// <summary>
+        /// Names declared at module level in the current module. New binders introduced while
+        /// inlining must avoid these names as well because canonicalization reports shadowing
+        /// against top-level declarations.
+        /// </summary>
+        public ImmutableHashSet<string> ModuleLevelNames { get; init; } = ModuleLevelNames ?? [];
     }
 
 
@@ -419,6 +427,12 @@ public partial class Inlining
 
     private static SyntaxTypes.File InlineModule(SyntaxTypes.File module, InliningContext context)
     {
+        context =
+            context with
+            {
+                ModuleLevelNames = CollectModuleLevelDeclarationNames(module)
+            };
+
         var newDecls = ImmutableList.CreateBuilder<Node<SyntaxTypes.Declaration>>();
         var inlinedDeclarations = new List<Node<SyntaxTypes.Declaration>>();
 
@@ -476,6 +490,48 @@ public partial class Inlining
 
         return module with { Declarations = parenthesized };
     }
+
+    private static ImmutableHashSet<string> CollectModuleLevelDeclarationNames(
+        SyntaxTypes.File module)
+    {
+        var names = ImmutableHashSet.CreateBuilder<string>();
+
+        foreach (var declaration in module.Declarations)
+        {
+            switch (declaration.Value)
+            {
+                case SyntaxTypes.Declaration.FunctionDeclaration functionDeclaration:
+                    names.Add(functionDeclaration.Function.Declaration.Value.Name.Value);
+                    break;
+
+                case SyntaxTypes.Declaration.CustomTypeDeclaration customTypeDeclaration:
+                    names.Add(customTypeDeclaration.TypeDeclaration.Name.Value);
+
+                    foreach (var constructor in customTypeDeclaration.TypeDeclaration.Constructors)
+                        names.Add(constructor.Value.Name.Value);
+
+                    break;
+
+                case SyntaxTypes.Declaration.AliasDeclaration aliasDeclaration:
+                    names.Add(aliasDeclaration.TypeAlias.Name.Value);
+                    break;
+
+                case SyntaxTypes.Declaration.InfixDeclaration infixDeclaration:
+                    names.Add(infixDeclaration.Infix.Operator.Value);
+                    break;
+
+                case SyntaxTypes.Declaration.PortDeclaration portDeclaration:
+                    names.Add(portDeclaration.Signature.Name.Value);
+                    break;
+            }
+        }
+
+        return names.ToImmutable();
+    }
+
+    private static ImmutableHashSet<string> NamesToAvoidForFreshBindings(
+        InliningContext context) =>
+        context.LocalNames.Union(context.ModuleLevelNames);
 
 
     private static Node<SyntaxTypes.Declaration> SimplifyGeneratedDeclaration(
@@ -1293,6 +1349,13 @@ public partial class Inlining
         IReadOnlyList<Node<SyntaxTypes.Expression>> args,
         InliningContext context)
     {
+        var namesToAvoid = NamesToAvoidForFreshBindings(context);
+
+        if (namesToAvoid.Count > 0)
+        {
+            lambda = ElmSyntaxTransformations.FreshenLocalBindings(lambda, namesToAvoid);
+        }
+
         var newDecls = ImmutableList.CreateBuilder<Node<SyntaxTypes.Declaration>>();
 
         Node<SyntaxTypes.Expression> Inline(Node<SyntaxTypes.Expression> e)
@@ -1323,11 +1386,21 @@ public partial class Inlining
             // Partial application: return remaining lambda
             var remainingParams = lambda.Arguments.Skip(args.Count).ToImmutableArray();
 
-            return
-                new InliningResult(
+            var partialApplication =
+                new Node<SyntaxTypes.Expression>(
+                    ElmSyntaxTransformations.s_zeroRange,
                     new SyntaxTypes.Expression.LambdaExpression(
-                        new SyntaxTypes.LambdaStruct(remainingParams, body)),
-                    newDecls.ToImmutable());
+                        new SyntaxTypes.LambdaStruct(remainingParams, body)));
+
+            if (namesToAvoid.Count > 0)
+            {
+                partialApplication =
+                    ElmSyntaxTransformations.FreshenLocalBindings(
+                        partialApplication,
+                        namesToAvoid);
+            }
+
+            return new InliningResult(partialApplication.Value, newDecls.ToImmutable());
         }
 
         if (args.Count > lambda.Arguments.Count)
@@ -1348,10 +1421,28 @@ public partial class Inlining
 
             newDecls.AddRange(appDecls);
 
-            return new InliningResult(appResult, newDecls.ToImmutable());
+            var applicationResult =
+                new Node<SyntaxTypes.Expression>(
+                    ElmSyntaxTransformations.s_zeroRange,
+                    appResult);
+
+            if (namesToAvoid.Count > 0)
+            {
+                applicationResult =
+                    ElmSyntaxTransformations.FreshenLocalBindings(
+                        applicationResult,
+                        namesToAvoid);
+            }
+
+            return new InliningResult(applicationResult.Value, newDecls.ToImmutable());
         }
 
         // Exact application
+        if (namesToAvoid.Count > 0)
+        {
+            body = ElmSyntaxTransformations.FreshenLocalBindings(body, namesToAvoid);
+        }
+
         return new InliningResult(body.Value, newDecls.ToImmutable());
     }
 
@@ -1711,6 +1802,13 @@ public partial class Inlining
         InliningContext context,
         bool recursivelyInlineBody)
     {
+        var namesToAvoid = NamesToAvoidForFreshBindings(context);
+
+        if (namesToAvoid.Count > 0)
+        {
+            funcImpl = ElmSyntaxTransformations.FreshenLocalBindings(funcImpl, namesToAvoid);
+        }
+
         var newDecls = ImmutableList.CreateBuilder<Node<SyntaxTypes.Declaration>>();
 
         Node<SyntaxTypes.Expression> Inline(Node<SyntaxTypes.Expression> e)
@@ -1864,6 +1962,15 @@ nextParam:;
 
             newDecls.AddRange(normalizedDecls);
             resultExpr = normalizedResult.Value;
+        }
+
+        if (namesToAvoid.Count > 0)
+        {
+            resultExpr =
+                ElmSyntaxTransformations.FreshenLocalBindings(
+                    new Node<SyntaxTypes.Expression>(ElmSyntaxTransformations.s_zeroRange, resultExpr),
+                    namesToAvoid)
+                .Value;
         }
 
         // If we have more arguments than parameters, we need to create an application

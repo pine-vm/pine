@@ -47,7 +47,8 @@ public class Canonicalization
         ImmutableDictionary<string, ModuleName> AliasMap,
         ImmutableHashSet<string> ModuleLevelDeclarations,
         ImmutableHashSet<string> LocalDeclarations,
-        IImmutableDictionary<string, (ModuleName ModuleName, string FunctionName)> OperatorToFunction)
+        IImmutableDictionary<string, (ModuleName ModuleName, string FunctionName)> OperatorToFunction,
+        ImmutableList<string> DeclarationPath)
     {
         /// <summary>
         /// Creates a new context with additional local declarations added.
@@ -189,7 +190,7 @@ public class Canonicalization
             new Dictionary<ModuleName, Result<string, SyntaxTypes.File>>(
                 EnumerableExtensions.EqualityComparer<ModuleName>());
 
-        foreach (var (moduleName, (file, errors)) in allowingErrorsModules)
+        foreach (var (moduleName, (file, errors, _)) in allowingErrorsModules)
         {
             if (errors.Count > 0)
             {
@@ -232,9 +233,9 @@ public class Canonicalization
             new Dictionary<ModuleName, ModuleCanonicalizationResult>(
                 EnumerableExtensions.EqualityComparer<ModuleName>());
 
-        foreach (var (moduleName, (file, errors)) in allowingErrorsModules)
+        foreach (var (moduleName, (file, errors, shadowings)) in allowingErrorsModules)
         {
-            resultDictionary[moduleName] = new ModuleCanonicalizationResult(file, errors);
+            resultDictionary[moduleName] = new ModuleCanonicalizationResult(file, errors, shadowings);
         }
 
         return new CanonicalizationResultWithErrors(resultDictionary);
@@ -254,7 +255,7 @@ public class Canonicalization
     /// On success, returns a dictionary mapping module names to tuples of (canonicalized file, errors).
     /// On failure (e.g., duplicate module names), returns an error message.
     /// </returns>
-    public static Result<string, IReadOnlyDictionary<ModuleName, (SyntaxTypes.File File, IReadOnlyList<CanonicalizationError> Errors)>> CanonicalizeAllowingErrors(
+    public static Result<string, IReadOnlyDictionary<ModuleName, (SyntaxTypes.File File, IReadOnlyList<CanonicalizationError> Errors, ImmutableDictionary<string, ShadowingLocation> Shadowings)>> CanonicalizeAllowingErrors(
         IReadOnlyList<SyntaxTypes.File> modules)
     {
         return
@@ -277,10 +278,10 @@ public class Canonicalization
     /// Configuration for implicit imports to be added to each module.
     /// </param>
     /// <returns>
-    /// On success, returns a dictionary mapping module names to tuples of (canonicalized file, errors).
+    /// On success, returns a dictionary mapping module names to tuples of (canonicalized file, errors, shadowings).
     /// On failure (e.g., duplicate module names), returns an error message.
     /// </returns>
-    public static Result<string, IReadOnlyDictionary<ModuleName, (SyntaxTypes.File File, IReadOnlyList<CanonicalizationError> Errors)>> CanonicalizeAllowingErrors(
+    public static Result<string, IReadOnlyDictionary<ModuleName, (SyntaxTypes.File File, IReadOnlyList<CanonicalizationError> Errors, ImmutableDictionary<string, ShadowingLocation> Shadowings)>> CanonicalizeAllowingErrors(
         IReadOnlyList<SyntaxTypes.File> modules,
         ImplicitImportConfig implicitImportConfig)
     {
@@ -305,7 +306,7 @@ public class Canonicalization
                 .ToList();
 
             return
-                Result<string, IReadOnlyDictionary<ModuleName, (SyntaxTypes.File, IReadOnlyList<CanonicalizationError>)>>.err(
+                Result<string, IReadOnlyDictionary<ModuleName, (SyntaxTypes.File, IReadOnlyList<CanonicalizationError>, ImmutableDictionary<string, ShadowingLocation>)>>.err(
                     $"Duplicate module names: {string.Join(", ", duplicateNames)}");
         }
 
@@ -316,7 +317,7 @@ public class Canonicalization
         var moduleInfixMap = BuildModuleInfixMap(modules);
 
         var resultDictionary =
-            new Dictionary<ModuleName, (SyntaxTypes.File File, IReadOnlyList<CanonicalizationError> Errors)>(
+            new Dictionary<ModuleName, (SyntaxTypes.File File, IReadOnlyList<CanonicalizationError> Errors, ImmutableDictionary<string, ShadowingLocation> Shadowings)>(
                 EnumerableExtensions.EqualityComparer<ModuleName>());
 
         foreach (var module in modules)
@@ -344,8 +345,13 @@ public class Canonicalization
                     AliasMap: aliasMap,
                     ModuleLevelDeclarations: moduleLevelDeclarations,
                     LocalDeclarations: [],
-                    OperatorToFunction: operatorToFunction)
+                    OperatorToFunction: operatorToFunction,
+                    DeclarationPath: [])
                 .WithDefaults(implicitImportConfig);
+
+            // Detect module-level declarations that shadow imported names
+            var moduleLevelShadowings =
+                CollectModuleLevelShadowings(module, context.ValueImportMap, context.TypeImportMap);
 
             // Canonicalize declarations and collect errors
             var canonicalizedDeclarationsWithErrors =
@@ -359,6 +365,15 @@ public class Canonicalization
                 canonicalizedDeclarationsWithErrors
                 .SelectMany(result => result.Errors)
                 .ToList();
+
+            // Aggregate all shadowings from declarations and module-level shadowings
+            var allShadowings = moduleLevelShadowings;
+
+            foreach (var declResult in canonicalizedDeclarationsWithErrors)
+            {
+                allShadowings =
+                    CanonicalizationResult<object>.MergeShadowings(allShadowings, declResult.Shadowings);
+            }
 
             // Extract canonicalized declarations
             var canonicalizedDeclarations =
@@ -374,8 +389,8 @@ public class Canonicalization
                     Imports = []
                 };
 
-            // Always return the file along with any errors
-            resultDictionary[currentModuleName] = (canonicalizedModule, allErrors);
+            // Always return the file along with any errors and shadowings
+            resultDictionary[currentModuleName] = (canonicalizedModule, allErrors, allShadowings);
         }
 
         return resultDictionary;
@@ -423,6 +438,104 @@ public class Canonicalization
         }
 
         return localDeclarationsBuilder.ToImmutable();
+    }
+
+    /// <summary>
+    /// Detects module-level declarations that shadow imported names.
+    /// Module-level declarations are allowed to shadow imports in Elm, but we track them for analysis.
+    /// </summary>
+    private static ImmutableDictionary<string, ShadowingLocation> CollectModuleLevelShadowings(
+        SyntaxTypes.File module,
+        ImmutableDictionary<string, ImmutableList<ModuleName>> valueImportMap,
+        ImmutableDictionary<string, ImmutableList<ModuleName>> typeImportMap)
+    {
+        var emptyPath = ImmutableList<string>.Empty;
+        var shadowings = ImmutableDictionary<string, ShadowingLocation>.Empty;
+
+        foreach (var decl in module.Declarations)
+        {
+            switch (decl.Value)
+            {
+                case SyntaxTypes.Declaration.FunctionDeclaration funcDecl:
+                    {
+                        var nameNode = funcDecl.Function.Declaration.Value.Name;
+
+                        if (valueImportMap.ContainsKey(nameNode.Value) &&
+                            !shadowings.ContainsKey(nameNode.Value))
+                        {
+                            shadowings =
+                                shadowings.Add(
+                                    nameNode.Value,
+                                    new ShadowingLocation(nameNode.Range, emptyPath));
+                        }
+
+                        break;
+                    }
+
+                case SyntaxTypes.Declaration.CustomTypeDeclaration typeDecl:
+                    {
+                        var nameNode = typeDecl.TypeDeclaration.Name;
+
+                        if (typeImportMap.ContainsKey(nameNode.Value) &&
+                            !shadowings.ContainsKey(nameNode.Value))
+                        {
+                            shadowings =
+                                shadowings.Add(
+                                    nameNode.Value,
+                                    new ShadowingLocation(nameNode.Range, emptyPath));
+                        }
+
+                        // Also check type constructors
+                        foreach (var ctor in typeDecl.TypeDeclaration.Constructors)
+                        {
+                            if (valueImportMap.ContainsKey(ctor.Value.Name.Value) &&
+                                !shadowings.ContainsKey(ctor.Value.Name.Value))
+                            {
+                                shadowings =
+                                    shadowings.Add(
+                                        ctor.Value.Name.Value,
+                                        new ShadowingLocation(ctor.Value.Name.Range, emptyPath));
+                            }
+                        }
+
+                        break;
+                    }
+
+                case SyntaxTypes.Declaration.AliasDeclaration aliasDecl:
+                    {
+                        var nameNode = aliasDecl.TypeAlias.Name;
+
+                        if (typeImportMap.ContainsKey(nameNode.Value) &&
+                            !shadowings.ContainsKey(nameNode.Value))
+                        {
+                            shadowings =
+                                shadowings.Add(
+                                    nameNode.Value,
+                                    new ShadowingLocation(nameNode.Range, emptyPath));
+                        }
+
+                        break;
+                    }
+
+                case SyntaxTypes.Declaration.PortDeclaration portDecl:
+                    {
+                        var nameNode = portDecl.Signature.Name;
+
+                        if (valueImportMap.ContainsKey(nameNode.Value) &&
+                            !shadowings.ContainsKey(nameNode.Value))
+                        {
+                            shadowings =
+                                shadowings.Add(
+                                    nameNode.Value,
+                                    new ShadowingLocation(nameNode.Range, emptyPath));
+                        }
+
+                        break;
+                    }
+            }
+        }
+
+        return shadowings;
     }
 
     private static ImmutableDictionary<string, ModuleExports> BuildModuleExportsMap(
@@ -797,19 +910,26 @@ public class Canonicalization
         SyntaxTypes.Declaration canonicalizedDecl;
 
         IReadOnlyList<CanonicalizationError> errors;
+        ImmutableDictionary<string, ShadowingLocation> shadowings;
 
         switch (decl)
         {
             case SyntaxTypes.Declaration.FunctionDeclaration funcDecl:
                 {
+                    var funcName = funcDecl.Function.Declaration.Value.Name.Value;
+
+                    var contextWithDeclPath =
+                        context with { DeclarationPath = [funcName] };
+
                     var funcResult =
                         CanonicalizeFunctionStruct(
                             funcDecl.Function,
-                            context);
+                            contextWithDeclPath);
 
                     canonicalizedDecl = new SyntaxTypes.Declaration.FunctionDeclaration(funcResult.Value);
 
                     errors = funcResult.Errors;
+                    shadowings = funcResult.Shadowings;
                     break;
                 }
 
@@ -823,6 +943,7 @@ public class Canonicalization
                     canonicalizedDecl = new SyntaxTypes.Declaration.CustomTypeDeclaration(typeResult.Value);
 
                     errors = typeResult.Errors;
+                    shadowings = typeResult.Shadowings;
                     break;
                 }
 
@@ -836,6 +957,7 @@ public class Canonicalization
                     canonicalizedDecl = new SyntaxTypes.Declaration.AliasDeclaration(aliasResult.Value);
 
                     errors = aliasResult.Errors;
+                    shadowings = aliasResult.Shadowings;
                     break;
                 }
 
@@ -849,12 +971,14 @@ public class Canonicalization
                     canonicalizedDecl = new SyntaxTypes.Declaration.PortDeclaration(signatureResult.Value);
 
                     errors = signatureResult.Errors;
+                    shadowings = signatureResult.Shadowings;
                     break;
                 }
 
             case SyntaxTypes.Declaration.InfixDeclaration:
                 canonicalizedDecl = decl; // No canonicalization needed for infix declarations
                 errors = [];
+                shadowings = [];
                 break;
 
             default:
@@ -870,7 +994,8 @@ public class Canonicalization
         return
             new CanonicalizationResult<Node<SyntaxTypes.Declaration>>(
                 canonicalizedNode,
-                errors);
+                errors,
+                shadowings);
     }
 
     private static CanonicalizationResult<SyntaxTypes.FunctionStruct> CanonicalizeFunctionStruct(
@@ -913,19 +1038,22 @@ public class Canonicalization
         var parameterVariables = ImmutableHashSet<string>.Empty;
 
         var shadowErrors = new List<CanonicalizationError>();
+        var paramShadowings = ImmutableDictionary<string, ShadowingLocation>.Empty;
 
         foreach (var arg in impl.Arguments)
         {
             // Check if any parameter shadows a module-level declaration
-            var (collectedVars, errors) =
+            var (collectedVars, errors, argShadowings) =
                 CollectPatternVariablesWithShadowCheck(
                     arg.Value,
                     arg.Range,
                     context.ModuleLevelDeclarations, // Check against module-level declarations
-                    parameterVariables);
+                    parameterVariables,
+                    context.DeclarationPath);
 
             parameterVariables = parameterVariables.Union(collectedVars);
             shadowErrors.AddRange(errors);
+            paramShadowings = CanonicalizationResult<object>.MergeShadowings(paramShadowings, argShadowings);
         }
 
         // Create new context with parameter variables added to local declarations
@@ -942,6 +1070,11 @@ public class Canonicalization
         var argumentErrors =
             argumentResults.SelectMany(r => r.Errors).ToList();
 
+        var argumentShadowings =
+            argumentResults.Aggregate(
+                ImmutableDictionary<string, ShadowingLocation>.Empty,
+                (acc, r) => CanonicalizationResult<object>.MergeShadowings(acc, r.Shadowings));
+
         var exprResult =
             CanonicalizeExpressionNode(
                 impl.Expression,
@@ -956,7 +1089,12 @@ public class Canonicalization
         var allErrors =
             shadowErrors.Concat(argumentErrors).Concat(exprResult.Errors).ToList();
 
-        return new CanonicalizationResult<SyntaxTypes.FunctionImplementation>(functionImplementation, allErrors);
+        var allShadowings =
+            CanonicalizationResult<object>.MergeShadowings(
+                CanonicalizationResult<object>.MergeShadowings(paramShadowings, argumentShadowings),
+                exprResult.Shadowings);
+
+        return new CanonicalizationResult<SyntaxTypes.FunctionImplementation>(functionImplementation, allErrors, allShadowings);
     }
 
     private static ImmutableHashSet<string> CollectPatternVariables(
@@ -1074,15 +1212,18 @@ public class Canonicalization
     /// <param name="patternRange">The source range of the pattern for error reporting.</param>
     /// <param name="existingVariables">Variables already in scope that would be shadowed.</param>
     /// <param name="collectedVariables">Variables collected so far in this pattern.</param>
-    /// <returns>A tuple of (collected variables, shadowing errors).</returns>
-    private static (ImmutableHashSet<string> Variables, IReadOnlyList<CanonicalizationError> Errors)
+    /// <param name="declarationPath">The declaration path for recording shadowings.</param>
+    /// <returns>A tuple of (collected variables, shadowing errors, detected shadowings).</returns>
+    private static (ImmutableHashSet<string> Variables, IReadOnlyList<CanonicalizationError> Errors, ImmutableDictionary<string, ShadowingLocation> Shadowings)
         CollectPatternVariablesWithShadowCheck(
         SyntaxTypes.Pattern pattern,
         Range patternRange,
         ImmutableHashSet<string> existingVariables,
-        ImmutableHashSet<string> collectedVariables)
+        ImmutableHashSet<string> collectedVariables,
+        ImmutableList<string> declarationPath)
     {
         var errors = new List<CanonicalizationError>();
+        var shadowings = ImmutableDictionary<string, ShadowingLocation>.Empty;
 
         switch (pattern)
         {
@@ -1093,7 +1234,7 @@ public class Canonicalization
             case SyntaxTypes.Pattern.IntPattern:
             case SyntaxTypes.Pattern.HexPattern:
             case SyntaxTypes.Pattern.FloatPattern:
-                return (collectedVariables, errors);
+                return (collectedVariables, errors, shadowings);
 
             case SyntaxTypes.Pattern.VarPattern varPattern:
                 {
@@ -1103,9 +1244,17 @@ public class Canonicalization
                             new CanonicalizationError(
                                 patternRange,
                                 $"This `{varPattern.Name}` pattern is shadowing an existing `{varPattern.Name}` variable. Rename one of them to avoid the ambiguity."));
+
+                        if (!shadowings.ContainsKey(varPattern.Name))
+                        {
+                            shadowings =
+                                shadowings.Add(
+                                    varPattern.Name,
+                                    new ShadowingLocation(patternRange, declarationPath));
+                        }
                     }
 
-                    return (collectedVariables.Add(varPattern.Name), errors);
+                    return (collectedVariables.Add(varPattern.Name), errors, shadowings);
                 }
 
             case SyntaxTypes.Pattern.TuplePattern tuple:
@@ -1114,18 +1263,20 @@ public class Canonicalization
 
                     foreach (var elem in tuple.Elements)
                     {
-                        var (newVars, newErrors) =
+                        var (newVars, newErrors, newShadowings) =
                             CollectPatternVariablesWithShadowCheck(
                                 elem.Value,
                                 elem.Range,
                                 existingVariables.Union(result),
-                                result);
+                                result,
+                                declarationPath);
 
                         result = newVars;
                         errors.AddRange(newErrors);
+                        shadowings = CanonicalizationResult<object>.MergeShadowings(shadowings, newShadowings);
                     }
 
-                    return (result, errors);
+                    return (result, errors, shadowings);
                 }
 
             case SyntaxTypes.Pattern.RecordPattern recordPattern:
@@ -1138,31 +1289,42 @@ public class Canonicalization
                                 new CanonicalizationError(
                                     field.Range,
                                     $"This `{field.Value}` pattern is shadowing an existing `{field.Value}` variable. Rename one of them to avoid the ambiguity."));
+
+                            if (!shadowings.ContainsKey(field.Value))
+                            {
+                                shadowings =
+                                    shadowings.Add(
+                                        field.Value,
+                                        new ShadowingLocation(field.Range, declarationPath));
+                            }
                         }
                     }
 
-                    return (collectedVariables.Union(recordPattern.Fields.Select(f => f.Value)), errors);
+                    return (collectedVariables.Union(recordPattern.Fields.Select(f => f.Value)), errors, shadowings);
                 }
 
             case SyntaxTypes.Pattern.UnConsPattern unCons:
                 {
-                    var (headVars, headErrors) =
+                    var (headVars, headErrors, headShadowings) =
                         CollectPatternVariablesWithShadowCheck(
                             unCons.Head.Value,
                             unCons.Head.Range,
                             existingVariables,
-                            collectedVariables);
+                            collectedVariables,
+                            declarationPath);
 
-                    var (tailVars, tailErrors) =
+                    var (tailVars, tailErrors, tailShadowings) =
                         CollectPatternVariablesWithShadowCheck(
                             unCons.Tail.Value,
                             unCons.Tail.Range,
                             existingVariables.Union(headVars),
-                            headVars);
+                            headVars,
+                            declarationPath);
 
                     errors.AddRange(headErrors);
                     errors.AddRange(tailErrors);
-                    return (tailVars, errors);
+                    shadowings = CanonicalizationResult<object>.MergeShadowings(headShadowings, tailShadowings);
+                    return (tailVars, errors, shadowings);
                 }
 
             case SyntaxTypes.Pattern.ListPattern list:
@@ -1171,18 +1333,20 @@ public class Canonicalization
 
                     foreach (var elem in list.Elements)
                     {
-                        var (newVars, newErrors) =
+                        var (newVars, newErrors, newShadowings) =
                             CollectPatternVariablesWithShadowCheck(
                                 elem.Value,
                                 elem.Range,
                                 existingVariables.Union(result),
-                                result);
+                                result,
+                                declarationPath);
 
                         result = newVars;
                         errors.AddRange(newErrors);
+                        shadowings = CanonicalizationResult<object>.MergeShadowings(shadowings, newShadowings);
                     }
 
-                    return (result, errors);
+                    return (result, errors, shadowings);
                 }
 
             case SyntaxTypes.Pattern.NamedPattern named:
@@ -1191,30 +1355,34 @@ public class Canonicalization
 
                     foreach (var arg in named.Arguments)
                     {
-                        var (newVars, newErrors) =
+                        var (newVars, newErrors, newShadowings) =
                             CollectPatternVariablesWithShadowCheck(
                                 arg.Value,
                                 arg.Range,
                                 existingVariables.Union(result),
-                                result);
+                                result,
+                                declarationPath);
 
                         result = newVars;
                         errors.AddRange(newErrors);
+                        shadowings = CanonicalizationResult<object>.MergeShadowings(shadowings, newShadowings);
                     }
 
-                    return (result, errors);
+                    return (result, errors, shadowings);
                 }
 
             case SyntaxTypes.Pattern.AsPattern asPattern:
                 {
-                    var (patternVars, patternErrors) =
+                    var (patternVars, patternErrors, patternShadowings) =
                         CollectPatternVariablesWithShadowCheck(
                             asPattern.Pattern.Value,
                             asPattern.Pattern.Range,
                             existingVariables,
-                            collectedVariables);
+                            collectedVariables,
+                            declarationPath);
 
                     errors.AddRange(patternErrors);
+                    shadowings = patternShadowings;
 
                     if (existingVariables.Contains(asPattern.Name.Value))
                     {
@@ -1222,9 +1390,17 @@ public class Canonicalization
                             new CanonicalizationError(
                                 asPattern.Name.Range,
                                 $"This `{asPattern.Name.Value}` pattern is shadowing an existing `{asPattern.Name.Value}` variable. Rename one of them to avoid the ambiguity."));
+
+                        if (!shadowings.ContainsKey(asPattern.Name.Value))
+                        {
+                            shadowings =
+                                shadowings.Add(
+                                    asPattern.Name.Value,
+                                    new ShadowingLocation(asPattern.Name.Range, declarationPath));
+                        }
                     }
 
-                    return (patternVars.Add(asPattern.Name.Value), errors);
+                    return (patternVars.Add(asPattern.Name.Value), errors, shadowings);
                 }
 
             case SyntaxTypes.Pattern.ParenthesizedPattern parenPattern:
@@ -1233,7 +1409,8 @@ public class Canonicalization
                         parenPattern.Pattern.Value,
                         parenPattern.Pattern.Range,
                         existingVariables,
-                        collectedVariables);
+                        collectedVariables,
+                        declarationPath);
 
             default:
                 throw new NotImplementedException(
@@ -1796,12 +1973,13 @@ public class Canonicalization
         // module-level declarations and local declarations
         var existingScope = context.ModuleLevelDeclarations.Union(context.LocalDeclarations);
 
-        var (collectedVars, shadowErrors) =
+        var (collectedVars, shadowErrors, patternShadowings) =
             CollectPatternVariablesWithShadowCheck(
                 caseItem.Pattern.Value,
                 caseItem.Pattern.Range,
                 existingScope,
-                []);
+                [],
+                context.DeclarationPath);
 
         var extendedLocalDeclarations = context.LocalDeclarations.Union(collectedVars);
         var contextWithPatternVars = context.WithLocalDeclarations(extendedLocalDeclarations);
@@ -1822,7 +2000,13 @@ public class Canonicalization
                 Expression: exprResult.Value);
 
         var allErrors = shadowErrors.Concat(patternResult.Errors).Concat(exprResult.Errors).ToList();
-        return new CanonicalizationResult<SyntaxTypes.Case>(canonicalizedCase, allErrors);
+
+        var allShadowings =
+            CanonicalizationResult<object>.MergeShadowings(
+                CanonicalizationResult<object>.MergeShadowings(patternShadowings, patternResult.Shadowings),
+                exprResult.Shadowings);
+
+        return new CanonicalizationResult<SyntaxTypes.Case>(canonicalizedCase, allErrors, allShadowings);
     }
 
     private static CanonicalizationResult<SyntaxTypes.Expression.LetBlock> CanonicalizeLetBlock(
@@ -1832,6 +2016,7 @@ public class Canonicalization
         // Collect let bindings while checking for shadowing against module-level and outer local declarations
         var extendedLocalDeclarations = context.LocalDeclarations;
         var shadowErrors = new List<CanonicalizationError>();
+        var letShadowings = ImmutableDictionary<string, ShadowingLocation>.Empty;
 
         // The existing scope includes module-level declarations and outer local declarations
         var existingScope = context.ModuleLevelDeclarations.Union(context.LocalDeclarations);
@@ -1850,6 +2035,14 @@ public class Canonicalization
                         new CanonicalizationError(
                             funcNameRange,
                             $"This `{funcName}` declaration is shadowing an existing `{funcName}` declaration. Rename one of them to avoid the ambiguity."));
+
+                    if (!letShadowings.ContainsKey(funcName))
+                    {
+                        letShadowings =
+                            letShadowings.Add(
+                                funcName,
+                                new ShadowingLocation(funcNameRange, context.DeclarationPath));
+                    }
                 }
 
                 extendedLocalDeclarations = extendedLocalDeclarations.Add(funcName);
@@ -1857,14 +2050,16 @@ public class Canonicalization
             }
             else if (decl.Value is SyntaxTypes.Expression.LetDeclaration.LetDestructuring letDestr)
             {
-                var (collectedVars, errors) =
+                var (collectedVars, errors, destrShadowings) =
                     CollectPatternVariablesWithShadowCheck(
                         letDestr.Pattern.Value,
                         letDestr.Pattern.Range,
                         existingScope,
-                        []);
+                        [],
+                        context.DeclarationPath);
 
                 shadowErrors.AddRange(errors);
+                letShadowings = CanonicalizationResult<object>.MergeShadowings(letShadowings, destrShadowings);
                 extendedLocalDeclarations = extendedLocalDeclarations.Union(collectedVars);
                 existingScope = existingScope.Union(collectedVars);
             }
@@ -1892,7 +2087,11 @@ public class Canonicalization
 
         // Combine shadow errors with any errors from canonicalization
         var allErrors = shadowErrors.Concat(canonicalizedLetBlock.Errors).ToList();
-        return new CanonicalizationResult<SyntaxTypes.Expression.LetBlock>(canonicalizedLetBlock.Value, allErrors);
+
+        var allShadowings =
+            CanonicalizationResult<object>.MergeShadowings(letShadowings, canonicalizedLetBlock.Shadowings);
+
+        return new CanonicalizationResult<SyntaxTypes.Expression.LetBlock>(canonicalizedLetBlock.Value, allErrors, allShadowings);
     }
 
     private static CanonicalizationResult<Node<SyntaxTypes.Expression.LetDeclaration>> CanonicalizeLetDeclarationNode(

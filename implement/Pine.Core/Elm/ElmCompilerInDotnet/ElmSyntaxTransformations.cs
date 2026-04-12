@@ -1408,4 +1408,533 @@ internal static class ElmSyntaxTransformations
         }
     }
 
+    internal static string GenerateFreshLocalName(
+        string baseName,
+        ISet<string> usedNames)
+    {
+        for (var suffix = 0; ; suffix++)
+        {
+            var candidate = baseName + "_" + suffix;
+
+            if (!usedNames.Contains(candidate))
+                return candidate;
+        }
+    }
+
+    internal static SyntaxTypes.FunctionImplementation FreshenLocalBindings(
+        SyntaxTypes.FunctionImplementation implementation,
+        IReadOnlySet<string> namesAlreadyInScope)
+    {
+        var namesInScope = new HashSet<string>(namesAlreadyInScope);
+        var activeRenames = new Dictionary<string, string>();
+
+        var freshArguments =
+            implementation.Arguments
+            .Select(
+                argument =>
+                {
+                    var (freshArgument, argumentBindings) = FreshenPatternNode(argument, namesInScope);
+
+                    foreach (var binding in argumentBindings)
+                        activeRenames[binding.Key] = binding.Value;
+
+                    return freshArgument;
+                })
+            .ToList();
+
+        var freshExpression =
+            FreshenExpressionNode(
+                implementation.Expression,
+                activeRenames,
+                namesInScope);
+
+        return
+            implementation with
+            {
+                Arguments = [.. freshArguments],
+                Expression = freshExpression
+            };
+    }
+
+    internal static SyntaxTypes.LambdaStruct FreshenLocalBindings(
+        SyntaxTypes.LambdaStruct lambda,
+        IReadOnlySet<string> namesAlreadyInScope)
+    {
+        var namesInScope = new HashSet<string>(namesAlreadyInScope);
+        var activeRenames = new Dictionary<string, string>();
+
+        var freshArguments =
+            lambda.Arguments
+            .Select(
+                argument =>
+                {
+                    var (freshArgument, argumentBindings) = FreshenPatternNode(argument, namesInScope);
+
+                    foreach (var binding in argumentBindings)
+                        activeRenames[binding.Key] = binding.Value;
+
+                    return freshArgument;
+                })
+            .ToList();
+
+        var freshExpression =
+            FreshenExpressionNode(
+                lambda.Expression,
+                activeRenames,
+                namesInScope);
+
+        return new SyntaxTypes.LambdaStruct([.. freshArguments], freshExpression);
+    }
+
+    internal static Node<SyntaxTypes.Expression> FreshenLocalBindings(
+        Node<SyntaxTypes.Expression> expression,
+        IReadOnlySet<string> namesAlreadyInScope)
+    {
+        return
+            FreshenExpressionNode(
+                expression,
+                new Dictionary<string, string>(),
+                new HashSet<string>(namesAlreadyInScope));
+    }
+
+    private static Node<SyntaxTypes.Expression> FreshenExpressionNode(
+        Node<SyntaxTypes.Expression> expressionNode,
+        IReadOnlyDictionary<string, string> activeRenames,
+        IReadOnlySet<string> namesInScope)
+    {
+        SyntaxTypes.Expression FreshenExpressionValue(SyntaxTypes.Expression expression)
+        {
+            switch (expression)
+            {
+                case SyntaxTypes.Expression.FunctionOrValue funcOrValue
+                when funcOrValue.ModuleName.Count is 0 &&
+                     activeRenames.TryGetValue(funcOrValue.Name, out var renamedVariable):
+
+                    return new SyntaxTypes.Expression.FunctionOrValue([], renamedVariable);
+
+                case SyntaxTypes.Expression.LambdaExpression lambdaExpression:
+                    {
+                        var lambdaScopeNames = new HashSet<string>(namesInScope);
+                        var lambdaRenames = new Dictionary<string, string>(activeRenames);
+
+                        var freshArguments =
+                            lambdaExpression.Lambda.Arguments
+                            .Select(
+                                argument =>
+                                {
+                                    var (freshArgument, argumentBindings) =
+                                        FreshenPatternNode(argument, lambdaScopeNames);
+
+                                    foreach (var binding in argumentBindings)
+                                        lambdaRenames[binding.Key] = binding.Value;
+
+                                    return freshArgument;
+                                })
+                            .ToList();
+
+                        var freshBody =
+                            FreshenExpressionNode(
+                                lambdaExpression.Lambda.Expression,
+                                lambdaRenames,
+                                lambdaScopeNames);
+
+                        return
+                            new SyntaxTypes.Expression.LambdaExpression(
+                                new SyntaxTypes.LambdaStruct([.. freshArguments], freshBody));
+                    }
+
+                case SyntaxTypes.Expression.CaseExpression caseExpression:
+                    {
+                        var freshCaseExpression =
+                            FreshenExpressionNode(
+                                caseExpression.CaseBlock.Expression,
+                                activeRenames,
+                                namesInScope);
+
+                        var freshCases =
+                            caseExpression.CaseBlock.Cases
+                            .Select(
+                                caseItem =>
+                                {
+                                    var branchScopeNames = new HashSet<string>(namesInScope);
+                                    var branchRenames = new Dictionary<string, string>(activeRenames);
+
+                                    var (freshPattern, patternBindings) =
+                                        FreshenPatternNode(caseItem.Pattern, branchScopeNames);
+
+                                    foreach (var binding in patternBindings)
+                                        branchRenames[binding.Key] = binding.Value;
+
+                                    var freshBody =
+                                        FreshenExpressionNode(
+                                            caseItem.Expression,
+                                            branchRenames,
+                                            branchScopeNames);
+
+                                    return new SyntaxTypes.Case(freshPattern, freshBody);
+                                })
+                            .ToList();
+
+                        return
+                            new SyntaxTypes.Expression.CaseExpression(
+                                new SyntaxTypes.CaseBlock(
+                                    freshCaseExpression,
+                                    [.. freshCases]));
+                    }
+
+                case SyntaxTypes.Expression.LetExpression letExpression:
+                    {
+                        var letScopeNames = new HashSet<string>(namesInScope);
+                        var letVisibleRenames = new Dictionary<string, string>(activeRenames);
+
+                        var freshenedNames = new List<Node<string>?>(letExpression.Value.Declarations.Count);
+
+                        var freshenedPatterns =
+                            new List<Node<SyntaxTypes.Pattern>?>(letExpression.Value.Declarations.Count);
+
+                        var destructuringBindings =
+                            new List<Dictionary<string, string>?>(letExpression.Value.Declarations.Count);
+
+                        foreach (var declaration in letExpression.Value.Declarations)
+                        {
+                            switch (declaration.Value)
+                            {
+                                case SyntaxTypes.Expression.LetDeclaration.LetFunction letFunction:
+                                    {
+                                        var originalName = letFunction.Function.Declaration.Value.Name.Value;
+
+                                        var chosenName =
+                                            letScopeNames.Contains(originalName)
+                                            ?
+                                            GenerateFreshLocalName(originalName, letScopeNames)
+                                            :
+                                            originalName;
+
+                                        letScopeNames.Add(chosenName);
+                                        letVisibleRenames[originalName] = chosenName;
+
+                                        freshenedNames.Add(
+                                            originalName == chosenName
+                                            ?
+                                            letFunction.Function.Declaration.Value.Name
+                                            :
+                                            new Node<string>(
+                                                letFunction.Function.Declaration.Value.Name.Range,
+                                                chosenName));
+
+                                        freshenedPatterns.Add(null);
+                                        destructuringBindings.Add(null);
+                                        break;
+                                    }
+
+                                case SyntaxTypes.Expression.LetDeclaration.LetDestructuring letDestructuring:
+                                    {
+                                        var (freshPattern, patternBindings) =
+                                            FreshenPatternNode(
+                                                letDestructuring.Pattern,
+                                                letScopeNames);
+
+                                        foreach (var binding in patternBindings)
+                                            letVisibleRenames[binding.Key] = binding.Value;
+
+                                        freshenedNames.Add(null);
+                                        freshenedPatterns.Add(freshPattern);
+                                        destructuringBindings.Add(patternBindings);
+                                        break;
+                                    }
+
+                                default:
+                                    freshenedNames.Add(null);
+                                    freshenedPatterns.Add(null);
+                                    destructuringBindings.Add(null);
+                                    break;
+                            }
+                        }
+
+                        var freshDeclarations =
+                            new List<Node<SyntaxTypes.Expression.LetDeclaration>>(letExpression.Value.Declarations.Count);
+
+                        for (var declarationIndex = 0;
+                            declarationIndex < letExpression.Value.Declarations.Count;
+                            declarationIndex++)
+                        {
+                            var declaration = letExpression.Value.Declarations[declarationIndex];
+
+                            switch (declaration.Value)
+                            {
+                                case SyntaxTypes.Expression.LetDeclaration.LetFunction letFunction:
+                                    {
+                                        var functionScopeNames = new HashSet<string>(letScopeNames);
+                                        var functionRenames = new Dictionary<string, string>(letVisibleRenames);
+                                        var functionArguments = new List<Node<SyntaxTypes.Pattern>>();
+
+                                        foreach (var argument in letFunction.Function.Declaration.Value.Arguments)
+                                        {
+                                            var (freshArgument, argumentBindings) =
+                                                FreshenPatternNode(argument, functionScopeNames);
+
+                                            foreach (var binding in argumentBindings)
+                                                functionRenames[binding.Key] = binding.Value;
+
+                                            functionArguments.Add(freshArgument);
+                                        }
+
+                                        var freshFunctionExpression =
+                                            FreshenExpressionNode(
+                                                letFunction.Function.Declaration.Value.Expression,
+                                                functionRenames,
+                                                functionScopeNames);
+
+                                        var freshImplementation =
+                                            letFunction.Function.Declaration.Value with
+                                            {
+                                                Name =
+                                                freshenedNames[declarationIndex] ??
+                                                letFunction.Function.Declaration.Value.Name,
+                                                Arguments = [.. functionArguments],
+                                                Expression = freshFunctionExpression
+                                            };
+
+                                        freshDeclarations.Add(
+                                            new Node<SyntaxTypes.Expression.LetDeclaration>(
+                                                declaration.Range,
+                                                new SyntaxTypes.Expression.LetDeclaration.LetFunction(
+                                                    letFunction.Function with
+                                                    {
+                                                        Declaration =
+                                                        new Node<SyntaxTypes.FunctionImplementation>(
+                                                            letFunction.Function.Declaration.Range,
+                                                            freshImplementation)
+                                                    })));
+
+                                        break;
+                                    }
+
+                                case SyntaxTypes.Expression.LetDeclaration.LetDestructuring letDestructuring:
+                                    {
+                                        var destructuringRenames = new Dictionary<string, string>(letVisibleRenames);
+                                        var destructuringScopeNames = new HashSet<string>(letScopeNames);
+                                        var patternBindings = destructuringBindings[declarationIndex] ?? [];
+
+                                        foreach (var binding in patternBindings)
+                                        {
+                                            destructuringScopeNames.Remove(binding.Value);
+
+                                            if (activeRenames.TryGetValue(binding.Key, out var visibleOuterName))
+                                                destructuringRenames[binding.Key] = visibleOuterName;
+
+                                            else
+                                                destructuringRenames.Remove(binding.Key);
+                                        }
+
+                                        var freshExpression =
+                                            FreshenExpressionNode(
+                                                letDestructuring.Expression,
+                                                destructuringRenames,
+                                                destructuringScopeNames);
+
+                                        freshDeclarations.Add(
+                                            new Node<SyntaxTypes.Expression.LetDeclaration>(
+                                                declaration.Range,
+                                                new SyntaxTypes.Expression.LetDeclaration.LetDestructuring(
+                                                    freshenedPatterns[declarationIndex] ?? letDestructuring.Pattern,
+                                                    freshExpression)));
+
+                                        break;
+                                    }
+
+                                default:
+                                    freshDeclarations.Add(declaration);
+                                    break;
+                            }
+                        }
+
+                        var freshBody =
+                            FreshenExpressionNode(
+                                letExpression.Value.Expression,
+                                letVisibleRenames,
+                                letScopeNames);
+
+                        return
+                            new SyntaxTypes.Expression.LetExpression(
+                                new SyntaxTypes.Expression.LetBlock(
+                                    [.. freshDeclarations],
+                                    freshBody));
+                    }
+
+                default:
+                    return
+                        MapChildExpressions(
+                            expression,
+                            child => FreshenExpressionNode(child, activeRenames, namesInScope));
+            }
+        }
+
+        return new Node<SyntaxTypes.Expression>(expressionNode.Range, FreshenExpressionValue(expressionNode.Value));
+    }
+
+    private static (Node<SyntaxTypes.Pattern> Pattern, Dictionary<string, string> Bindings) FreshenPatternNode(
+        Node<SyntaxTypes.Pattern> patternNode,
+        ISet<string> namesInScope)
+    {
+        var bindings = new Dictionary<string, string>();
+
+        SyntaxTypes.Pattern FreshenPatternValue(SyntaxTypes.Pattern pattern)
+        {
+            switch (pattern)
+            {
+                case SyntaxTypes.Pattern.VarPattern varPattern:
+                    {
+                        var chosenName =
+                            namesInScope.Contains(varPattern.Name)
+                            ?
+                            GenerateFreshLocalName(varPattern.Name, namesInScope)
+                            :
+                            varPattern.Name;
+
+                        namesInScope.Add(chosenName);
+                        bindings[varPattern.Name] = chosenName;
+
+                        return new SyntaxTypes.Pattern.VarPattern(chosenName);
+                    }
+
+                case SyntaxTypes.Pattern.TuplePattern tuplePattern:
+                    {
+                        var freshElements = new List<Node<SyntaxTypes.Pattern>>(tuplePattern.Elements.Count);
+
+                        foreach (var element in tuplePattern.Elements)
+                        {
+                            var (freshElement, elementBindings) = FreshenPatternNode(element, namesInScope);
+
+                            foreach (var binding in elementBindings)
+                                bindings[binding.Key] = binding.Value;
+
+                            freshElements.Add(freshElement);
+                        }
+
+                        return new SyntaxTypes.Pattern.TuplePattern([.. freshElements]);
+                    }
+
+                case SyntaxTypes.Pattern.RecordPattern recordPattern:
+                    return
+                        new SyntaxTypes.Pattern.RecordPattern(
+                            [
+                            .. recordPattern.Fields.Select(
+                                field =>
+                                {
+                                    var chosenName =
+                                        namesInScope.Contains(field.Value)
+                                        ?
+                                        GenerateFreshLocalName(field.Value, namesInScope)
+                                        :
+                                        field.Value;
+
+                                    namesInScope.Add(chosenName);
+                                    bindings[field.Value] = chosenName;
+
+                                    return
+                                        field.Value == chosenName
+                                        ?
+                                        field
+                                        :
+                                        new Node<string>(field.Range, chosenName);
+                                })
+                            ]);
+
+                case SyntaxTypes.Pattern.UnConsPattern unconsPattern:
+                    {
+                        var (freshHead, headBindings) = FreshenPatternNode(unconsPattern.Head, namesInScope);
+                        var (freshTail, tailBindings) = FreshenPatternNode(unconsPattern.Tail, namesInScope);
+
+                        foreach (var binding in headBindings)
+                            bindings[binding.Key] = binding.Value;
+
+                        foreach (var binding in tailBindings)
+                            bindings[binding.Key] = binding.Value;
+
+                        return new SyntaxTypes.Pattern.UnConsPattern(freshHead, freshTail);
+                    }
+
+                case SyntaxTypes.Pattern.ListPattern listPattern:
+                    {
+                        var freshElements = new List<Node<SyntaxTypes.Pattern>>(listPattern.Elements.Count);
+
+                        foreach (var element in listPattern.Elements)
+                        {
+                            var (freshElement, elementBindings) = FreshenPatternNode(element, namesInScope);
+
+                            foreach (var binding in elementBindings)
+                                bindings[binding.Key] = binding.Value;
+
+                            freshElements.Add(freshElement);
+                        }
+
+                        return new SyntaxTypes.Pattern.ListPattern([.. freshElements]);
+                    }
+
+                case SyntaxTypes.Pattern.NamedPattern namedPattern:
+                    {
+                        var freshArguments = new List<Node<SyntaxTypes.Pattern>>(namedPattern.Arguments.Count);
+
+                        foreach (var argument in namedPattern.Arguments)
+                        {
+                            var (freshArgument, argumentBindings) = FreshenPatternNode(argument, namesInScope);
+
+                            foreach (var binding in argumentBindings)
+                                bindings[binding.Key] = binding.Value;
+
+                            freshArguments.Add(freshArgument);
+                        }
+
+                        return new SyntaxTypes.Pattern.NamedPattern(namedPattern.Name, [.. freshArguments]);
+                    }
+
+                case SyntaxTypes.Pattern.AsPattern asPattern:
+                    {
+                        var (freshInnerPattern, innerBindings) = FreshenPatternNode(asPattern.Pattern, namesInScope);
+
+                        foreach (var binding in innerBindings)
+                            bindings[binding.Key] = binding.Value;
+
+                        var chosenAlias =
+                            namesInScope.Contains(asPattern.Name.Value)
+                            ?
+                            GenerateFreshLocalName(asPattern.Name.Value, namesInScope)
+                            :
+                            asPattern.Name.Value;
+
+                        namesInScope.Add(chosenAlias);
+                        bindings[asPattern.Name.Value] = chosenAlias;
+
+                        return
+                            new SyntaxTypes.Pattern.AsPattern(
+                                freshInnerPattern,
+                                asPattern.Name.Value == chosenAlias
+                                ?
+                                asPattern.Name
+                                :
+                                new Node<string>(asPattern.Name.Range, chosenAlias));
+                    }
+
+                case SyntaxTypes.Pattern.ParenthesizedPattern parenthesizedPattern:
+                    {
+                        var (freshPattern, childBindings) =
+                            FreshenPatternNode(parenthesizedPattern.Pattern, namesInScope);
+
+                        foreach (var binding in childBindings)
+                            bindings[binding.Key] = binding.Value;
+
+                        return new SyntaxTypes.Pattern.ParenthesizedPattern(freshPattern);
+                    }
+
+                default:
+                    return pattern;
+            }
+        }
+
+        return
+            (new Node<SyntaxTypes.Pattern>(patternNode.Range, FreshenPatternValue(patternNode.Value)),
+            bindings);
+    }
+
 }

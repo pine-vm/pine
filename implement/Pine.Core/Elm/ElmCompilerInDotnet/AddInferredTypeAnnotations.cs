@@ -150,7 +150,7 @@ public class AddInferredTypeAnnotations
 
         var canonicalizedFilesByModuleName = new Dictionary<string, AbstractSyntaxTypes.File>(StringComparer.Ordinal);
 
-        foreach (var (moduleName, (canonicalizedFile, _errors)) in canonicalizedModules)
+        foreach (var (moduleName, (canonicalizedFile, _errors, _shadowings)) in canonicalizedModules)
         {
             // We ignore canonicalization errors (like undefined local variables) since they
             // don't prevent us from inferring types for cross-module references

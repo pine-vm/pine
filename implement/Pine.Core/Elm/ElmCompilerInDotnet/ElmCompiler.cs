@@ -248,7 +248,7 @@ public class ElmCompiler
         // Surface canonicalization errors for any module in the dependency set.
         var moduleErrors = new List<string>();
 
-        foreach (var (moduleName, (_, errors)) in canonicalizedModulesDict)
+        foreach (var (moduleName, (_, errors, _)) in canonicalizedModulesDict)
         {
             if (errors.Count > 0)
             {
@@ -273,14 +273,29 @@ public class ElmCompiler
             .Select(LambdaLifting.LiftLambdas)
             .ToList();
 
+        if (CheckForShadowings(lambdaLiftedModules, "Lambda lifting (initial)") is { } lambdaLiftShadowErr)
+            return lambdaLiftShadowErr;
+
         OptimizationPipelineStageResults? optimizationResults = null;
 
-        var modulesForCompilation =
-            disableInlining
-            ?
-            lambdaLiftedModules
-            :
-            ApplyOptimizationPipelineWithStageResults(lambdaLiftedModules, out optimizationResults);
+        List<SyntaxTypes.File> modulesForCompilation;
+
+        if (disableInlining)
+        {
+            modulesForCompilation = lambdaLiftedModules;
+        }
+        else
+        {
+            var pipelineResult = ApplyOptimizationPipelineWithStageResults(lambdaLiftedModules);
+
+            if (pipelineResult.IsErrOrNull() is { } pipelineErr)
+                return pipelineErr;
+
+            var pipelineOk = pipelineResult.Extract(err => throw new NotImplementedException());
+
+            modulesForCompilation = pipelineOk.Modules;
+            optimizationResults = pipelineOk.StageResults;
+        }
 
         var allFunctions =
             new Dictionary<SyntaxModelTypes.QualifiedNameRef, (string moduleName, string functionName, SyntaxTypes.Declaration.FunctionDeclaration declaration)>();
@@ -1307,27 +1322,44 @@ public class ElmCompiler
     /// See <c>docs/2026-04-10-cascading-inlining-bug.md</c> for the full investigation.
     /// </para>
     /// </summary>
-    private static List<SyntaxTypes.File> ApplyOptimizationPipeline(
+    private static Result<string, List<SyntaxTypes.File>> ApplyOptimizationPipeline(
         List<SyntaxTypes.File> lambdaLiftedModules)
     {
-        return ApplyOptimizationPipelineWithStageResults(lambdaLiftedModules, out _);
+        return
+            ApplyOptimizationPipelineWithStageResults(lambdaLiftedModules)
+            .Map(tuple => tuple.Modules);
     }
 
-    private static List<SyntaxTypes.File> ApplyOptimizationPipelineWithStageResults(
-        List<SyntaxTypes.File> lambdaLiftedModules,
-        out OptimizationPipelineStageResults stageResults)
+    private static Result<string, (List<SyntaxTypes.File> Modules, OptimizationPipelineStageResults StageResults)> ApplyOptimizationPipelineWithStageResults(
+        List<SyntaxTypes.File> lambdaLiftedModules)
     {
         // Phase 1: Specialization — create specialized versions of functions for known argument patterns.
-        var afterSpecialization =
+        var afterSpecializationResult =
             ElmSyntaxSpecialization.Apply(lambdaLiftedModules, Inlining.Config.OnlyFunctions)
-            .Map(dict => ResolveModulesInSourceOrder(lambdaLiftedModules, dict))
-            .Extract(err => throw new Exception("Specialization failed: " + err));
+            .Map(dict => ResolveModulesInSourceOrder(lambdaLiftedModules, dict));
+
+        if (afterSpecializationResult.IsErrOrNull() is { } specErr)
+            return "Specialization failed: " + specErr;
+
+        if (afterSpecializationResult.IsOkOrNull() is not { } afterSpecialization)
+            throw new NotImplementedException("Unexpected result type");
+
+        if (CheckForShadowings(afterSpecialization, "Specialization") is { } specShadowErr)
+            return specShadowErr;
 
         // Phase 2: Higher-order inlining — inline functions that receive function arguments.
-        var afterHigherOrderInlining =
+        var afterHigherOrderInliningResult =
             ElmSyntaxInlining.Apply(afterSpecialization, Inlining.Config.OnlyFunctions)
-            .Map(dict => ResolveModulesInSourceOrder(afterSpecialization, dict))
-            .Extract(err => throw new Exception("Higher-order inlining failed: " + err));
+            .Map(dict => ResolveModulesInSourceOrder(afterSpecialization, dict));
+
+        if (afterHigherOrderInliningResult.IsErrOrNull() is { } hoInlineErr)
+            return "Higher-order inlining failed: " + hoInlineErr;
+
+        if (afterHigherOrderInliningResult.IsOkOrNull() is not { } afterHigherOrderInlining)
+            throw new NotImplementedException("Unexpected result type");
+
+        if (CheckForShadowings(afterHigherOrderInlining, "Higher-order inlining") is { } hoInlineShadowErr)
+            return hoInlineShadowErr;
 
         // Phase 3: Lambda lifting — re-lift any lambdas introduced by higher-order inlining.
         var afterFirstLambdaLifting =
@@ -1335,14 +1367,25 @@ public class ElmCompiler
             .Select(LambdaLifting.LiftLambdas)
             .ToList();
 
+        if (CheckForShadowings(afterFirstLambdaLifting, "Lambda lifting (after higher-order inlining)") is { } ll1ShadowErr)
+            return ll1ShadowErr;
+
         // Phase 4: Size-based inlining and plain value inlining.
         // Runs after higher-order inlining and lambda lifting to avoid cascading.
         // Inlines small wrapper functions (≤10 AST nodes, no complex expressions) and
         // plain zero-parameter declarations with simple bodies.
-        var afterSizeBasedInlining =
+        var afterSizeBasedInliningResult =
             ElmSyntaxInlining.Apply(afterFirstLambdaLifting, Inlining.Config.SmallFunctionsAndPlainValues)
-            .Map(dict => ResolveModulesInSourceOrder(afterFirstLambdaLifting, dict))
-            .Extract(err => throw new Exception("Size-based inlining failed: " + err));
+            .Map(dict => ResolveModulesInSourceOrder(afterFirstLambdaLifting, dict));
+
+        if (afterSizeBasedInliningResult.IsErrOrNull() is { } sizeInlineErr)
+            return "Size-based inlining failed: " + sizeInlineErr;
+
+        if (afterSizeBasedInliningResult.IsOkOrNull() is not { } afterSizeBasedInlining)
+            throw new NotImplementedException("Unexpected result type");
+
+        if (CheckForShadowings(afterSizeBasedInlining, "Size-based inlining") is { } sizeInlineShadowErr)
+            return sizeInlineShadowErr;
 
         // Phase 5: Lambda lifting — re-lift any lambdas that size-based inlining may have introduced.
         // Although size-based inlining targets simple bodies without complex expressions,
@@ -1352,20 +1395,64 @@ public class ElmCompiler
             .Select(LambdaLifting.LiftLambdas)
             .ToList();
 
-        // Phase 6: Operator lowering — convert operators to Pine built-in calls.
-        var afterLowering =
-            BuiltinOperatorLowering.Apply(afterSecondLambdaLifting)
-            .Map(dict => ResolveModulesInSourceOrder(afterSecondLambdaLifting, dict))
-            .Extract(err => throw new Exception("Operator lowering failed: " + err));
+        if (CheckForShadowings(afterSecondLambdaLifting, "Lambda lifting (after size-based inlining)") is { } ll2ShadowErr)
+            return ll2ShadowErr;
 
-        stageResults =
+        // Phase 6: Operator lowering — convert operators to Pine built-in calls.
+        var afterLoweringResult =
+            BuiltinOperatorLowering.Apply(afterSecondLambdaLifting)
+            .Map(dict => ResolveModulesInSourceOrder(afterSecondLambdaLifting, dict));
+
+        if (afterLoweringResult.IsErrOrNull() is { } lowerErr)
+            return "Operator lowering failed: " + lowerErr;
+
+        if (afterLoweringResult.IsOkOrNull() is not { } afterLowering)
+            throw new NotImplementedException("Unexpected result type");
+
+        if (CheckForShadowings(afterLowering, "Operator lowering") is { } lowerShadowErr)
+            return lowerShadowErr;
+
+        var stageResults =
             new OptimizationPipelineStageResults(
                 AfterSpecialization: afterSpecialization,
                 AfterHigherOrderInlining: afterHigherOrderInlining,
                 AfterLambdaLifting: afterSecondLambdaLifting,
                 AfterLowering: afterLowering);
 
-        return afterLowering;
+        return (afterLowering, stageResults);
+    }
+
+    /// <summary>
+    /// Checks all modules for shadowings by running canonicalization and inspecting the results.
+    /// Returns an error message if any shadowings are found, or null if none are found.
+    /// Shadowings in the output of a compilation stage indicate a defect in that stage
+    /// (e.g., inlining introduced a naming conflict).
+    /// </summary>
+    private static string? CheckForShadowings(
+        IReadOnlyList<SyntaxTypes.File> modules,
+        string stageName)
+    {
+        var canonResult = Canonicalization.CanonicalizeAllowingErrors(modules);
+
+        if (canonResult.IsOkOrNull() is not { } canonModules)
+            return null;
+
+        var allShadowedNames = new List<string>();
+
+        foreach (var (_, (_, _, shadowings)) in canonModules)
+        {
+            foreach (var kvp in shadowings)
+            {
+                allShadowedNames.Add(kvp.Key);
+            }
+        }
+
+        if (allShadowedNames.Count is 0)
+            return null;
+
+        return
+            stageName + " produced " + allShadowedNames.Count +
+            " shadowing(s): " + string.Join(", ", allShadowedNames);
     }
 
     /// <summary>

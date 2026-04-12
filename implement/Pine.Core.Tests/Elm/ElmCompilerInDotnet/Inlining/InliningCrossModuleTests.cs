@@ -1403,7 +1403,7 @@ public class InliningCrossModuleTests
             
                                 else
                                     case let
-                                            (ParserFast.PState sSrcBytes sOffsetBytes sIndent sRow sCol) =
+                                            (ParserFast.PState sSrcBytes sOffsetBytes sIndent sRow_0 sCol_0) =
                                                 s
                                          in
                                          let
@@ -1417,14 +1417,14 @@ public class InliningCrossModuleTests
             
                                             sColInt : Int
                                             sColInt =
-                                                sCol
+                                                sCol_0
             
                                             sRowInt : Int
                                             sRowInt =
-                                                sRow
+                                                sRow_0
                                          in
                                          if Pine_builtin.equal [ newOffset, (-1) ] then
-                                            ParserFast.Bad Basics.False (ParserFast.ExpectingAnyChar sRow sCol)
+                                            ParserFast.Bad Basics.False (ParserFast.ExpectingAnyChar sRow_0 sCol_0)
 
                                          else if Pine_builtin.equal [ newOffset, (-2) ] then
                                             ParserFast.Good '\n' (ParserFast.PState sSrcBytes (Pine_builtin.int_add [ sOffsetBytesInt, 4 ]) sIndent (Pine_builtin.int_add [ sRowInt, 1 ]) 1)
@@ -1436,7 +1436,7 @@ public class InliningCrossModuleTests
                                                     Pine_kernel.take [ 4, Pine_kernel.skip [ sOffsetBytesInt, sSrcBytes ] ]
                                             in
                                             if Pine_kernel.equal [ Pine_kernel.length foundChar, 0 ] then
-                                                ParserFast.Bad Basics.False (ParserFast.ExpectingAnyChar sRowInt sCol)
+                                                ParserFast.Bad Basics.False (ParserFast.ExpectingAnyChar sRowInt sCol_0)
             
                                             else
                                                 ParserFast.Good foundChar (ParserFast.PState sSrcBytes newOffset sIndent sRowInt (Pine_builtin.int_add [ sColInt, 1 ])) of
