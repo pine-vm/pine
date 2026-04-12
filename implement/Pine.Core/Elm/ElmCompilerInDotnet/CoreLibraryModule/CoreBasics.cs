@@ -2404,6 +2404,12 @@ public class CoreBasics
     private static readonly Expression s_elmStringTypeTagNameLiteral =
         Expression.LiteralInstance(ElmValue.ElmStringTypeTagNameAsValue);
 
+    private static readonly Expression s_elmDictNotEmptyTagNameLiteral =
+        Expression.LiteralInstance(ElmValue.ElmDictNotEmptyTagNameAsValue);
+
+    private static readonly Expression s_elmSetTypeTagNameLiteral =
+        Expression.LiteralInstance(ElmValue.ElmSetTypeTagNameAsValue);
+
     // ========== Internal Comparison Implementations ==========
 
     private static readonly Expression s_trueValue =
@@ -2433,100 +2439,287 @@ public class CoreBasics
         Expression right)
     {
         /*
+        Matches the Elm kernel Basics.elm implementation of eq:
+
         eq : a -> a -> Bool
         eq a b =
             if Pine_kernel.equal [ a, b ] then
                 True
             else
-                -- For simplicity in the C# implementation, we use Pine_kernel.equal directly
-                -- For Float comparisons, we need to handle the case where one is Float and other is Int
-                False
+                case ( a, b ) of
+                    ( Elm_Float numA denomA, intB ) ->
+                        if Pine_kernel.equal [ numA, intB ] then
+                            Pine_kernel.equal [ denomA, 1 ]
+                        else False
+                    ( intA, Elm_Float numB denomB ) ->
+                        if Pine_kernel.equal [ intA, numB ] then
+                            Pine_kernel.equal [ denomB, 1 ]
+                        else False
+                    _ ->
+                        if isPineBlob a then False
+                        else if Pine_kernel.equal [ Pine_kernel.length a, Pine_kernel.length b ] then
+                            case a of
+                                String _ -> False
+                                RBNode_elm_builtin _ _ _ _ _ ->
+                                    Pine_kernel.equal [ dictToList a, dictToList b ]
+                                Set_elm_builtin dictA ->
+                                    Pine_kernel.equal [ dictKeys dictA, dictKeys dictB ]
+                                _ -> listsEqualRecursive a b
+                        else False
+
+        We implement eq as a recursive function (eqDeep) that passes itself through the
+        environment. listsEqualRecursive is a separate recursive function that calls eqDeep
+        for element equality. The two are mutually recursive through the environment.
+
+        Step 1: Build listsEqualRecursive body (encoded independently, no circular dependency).
+        Step 2: Build eqDeep body that embeds the encoded listsEqHelper as a literal.
+        Step 3: Return a ParseAndEval that sets up the recursive env and calls eqDeep.
         */
 
-        var directEqual = BuiltinHelpers.ApplyBuiltinEqualBinary(left, right);
+        // === Step 1: Build listsEqualRecursive body ===
+        // env = [envFunctions, [listA, listB]]
+        // envFunctions[0] = self (listsEqHelper encoded body)
+        // envFunctions[1] = eqDeep function (encoded body, passed from caller)
+        var leqEnvFunctions =
+            ExpressionBuilder.BuildExpressionForPathInExpression([0], Expression.EnvironmentInstance);
+        var leqSelf =
+            ExpressionBuilder.BuildExpressionForPathInExpression([0, 0], Expression.EnvironmentInstance);
+        var leqEqFunc =
+            ExpressionBuilder.BuildExpressionForPathInExpression([0, 1], Expression.EnvironmentInstance);
+        var leqListA =
+            ExpressionBuilder.BuildExpressionForPathInExpression([1, 0], Expression.EnvironmentInstance);
+        var leqListB =
+            ExpressionBuilder.BuildExpressionForPathInExpression([1, 1], Expression.EnvironmentInstance);
 
-        // Check if left is a float
-        var leftIsFloat =
-            BuiltinHelpers.ApplyBuiltinEqualBinary(
-                BuiltinHelpers.ApplyBuiltinHead(left),
-                s_elmFloatTypeTagNameLiteral);
+        var leqEmptyList = Expression.ListInstance([]);
+        var leqListAIsEmpty = BuiltinHelpers.ApplyBuiltinEqualBinary(leqListA, leqEmptyList);
 
-        // Check if right is a float
-        var rightIsFloat =
-            BuiltinHelpers.ApplyBuiltinEqualBinary(
-                BuiltinHelpers.ApplyBuiltinHead(right),
-                s_elmFloatTypeTagNameLiteral);
+        var leqHeadA = BuiltinHelpers.ApplyBuiltinHead(leqListA);
+        var leqHeadB = BuiltinHelpers.ApplyBuiltinHead(leqListB);
+        var leqTailA = BuiltinHelpers.ApplyBuiltinSkip(1, leqListA);
+        var leqTailB = BuiltinHelpers.ApplyBuiltinSkip(1, leqListB);
 
-        // Extract float components for left
-        var leftTagArgs = BuiltinHelpers.ApplyBuiltinHead(BuiltinHelpers.ApplyBuiltinSkip(1, left));
+        // Call eqDeep(headA, headB):
+        // ParseAndEval(leqEqFunc, [[leqEqFunc], [headA, headB]])
+        // eqDeep expects env = [envFunctions, [a, b]] where envFunctions[0] = eqDeep self
+        var eqHeadCall =
+            new Expression.ParseAndEval(
+                encoded: leqEqFunc,
+                environment: Expression.ListInstance(
+                    [
+                    Expression.ListInstance([leqEqFunc]),
+                    Expression.ListInstance([leqHeadA, leqHeadB])
+                    ]));
 
-        var leftNumerator = BuiltinHelpers.ApplyBuiltinHead(leftTagArgs);
-        var leftDenominator = BuiltinHelpers.ApplyBuiltinHead(BuiltinHelpers.ApplyBuiltinSkip(1, leftTagArgs));
+        var leqHeadsEqualIsTrue = BuiltinHelpers.ApplyBuiltinEqualBinary(eqHeadCall, s_trueValue);
 
-        // Extract float components for right
-        var rightTagArgs = BuiltinHelpers.ApplyBuiltinHead(BuiltinHelpers.ApplyBuiltinSkip(1, right));
+        // Recursive call: self(tailA, tailB) with same envFunctions
+        var leqRecursiveTailCall =
+            new Expression.ParseAndEval(
+                encoded: leqSelf,
+                environment: Expression.ListInstance(
+                    [
+                    leqEnvFunctions,
+                    Expression.ListInstance([leqTailA, leqTailB])
+                    ]));
 
-        var rightNumerator = BuiltinHelpers.ApplyBuiltinHead(rightTagArgs);
-        var rightDenominator = BuiltinHelpers.ApplyBuiltinHead(BuiltinHelpers.ApplyBuiltinSkip(1, rightTagArgs));
-
-        // Float vs Int: Elm_Float numA denomA == intB
-        // True if numA == intB && denomA == 1
-        var floatIntEqual =
+        var leqBody =
             Expression.ConditionalInstance(
-                condition: BuiltinHelpers.ApplyBuiltinEqualBinary(leftNumerator, right),
+                condition: leqListAIsEmpty,
+                trueBranch: s_trueValue,
+                falseBranch: Expression.ConditionalInstance(
+                    condition: leqHeadsEqualIsTrue,
+                    trueBranch: leqRecursiveTailCall,
+                    falseBranch: s_falseValue));
+
+        var leqEncodedBody = ExpressionEncoding.EncodeExpressionAsValue(leqBody);
+
+        // === Step 2: Build eqDeep body ===
+        // env = [envFunctions, [a, b]]
+        // envFunctions[0] = self (eqDeep encoded body)
+        var eqSelf =
+            ExpressionBuilder.BuildExpressionForPathInExpression([0, 0], Expression.EnvironmentInstance);
+        var eqA =
+            ExpressionBuilder.BuildExpressionForPathInExpression([1, 0], Expression.EnvironmentInstance);
+        var eqB =
+            ExpressionBuilder.BuildExpressionForPathInExpression([1, 1], Expression.EnvironmentInstance);
+
+        var eqDirectEqual = BuiltinHelpers.ApplyBuiltinEqualBinary(eqA, eqB);
+
+        // Float checks
+        var eqLeftIsFloat =
+            BuiltinHelpers.ApplyBuiltinEqualBinary(
+                BuiltinHelpers.ApplyBuiltinHead(eqA),
+                s_elmFloatTypeTagNameLiteral);
+        var eqRightIsFloat =
+            BuiltinHelpers.ApplyBuiltinEqualBinary(
+                BuiltinHelpers.ApplyBuiltinHead(eqB),
+                s_elmFloatTypeTagNameLiteral);
+
+        var eqLeftTagArgs = BuiltinHelpers.ApplyBuiltinHead(BuiltinHelpers.ApplyBuiltinSkip(1, eqA));
+        var eqLeftNumerator = BuiltinHelpers.ApplyBuiltinHead(eqLeftTagArgs);
+        var eqLeftDenominator = BuiltinHelpers.ApplyBuiltinHead(BuiltinHelpers.ApplyBuiltinSkip(1, eqLeftTagArgs));
+
+        var eqRightTagArgs = BuiltinHelpers.ApplyBuiltinHead(BuiltinHelpers.ApplyBuiltinSkip(1, eqB));
+        var eqRightNumerator = BuiltinHelpers.ApplyBuiltinHead(eqRightTagArgs);
+        var eqRightDenominator = BuiltinHelpers.ApplyBuiltinHead(BuiltinHelpers.ApplyBuiltinSkip(1, eqRightTagArgs));
+
+        var eqFloatIntEqual =
+            Expression.ConditionalInstance(
+                condition: BuiltinHelpers.ApplyBuiltinEqualBinary(eqLeftNumerator, eqB),
                 trueBranch: Expression.ConditionalInstance(
-                    condition: BuiltinHelpers.ApplyBuiltinEqualBinary(leftDenominator, LiteralInt(1)),
+                    condition: BuiltinHelpers.ApplyBuiltinEqualBinary(eqLeftDenominator, LiteralInt(1)),
                     trueBranch: s_trueValue,
                     falseBranch: s_falseValue),
                 falseBranch: s_falseValue);
 
-        // Int vs Float: intA == Elm_Float numB denomB
-        // True if intA == numB && denomB == 1
-        var intFloatEqual =
+        var eqIntFloatEqual =
             Expression.ConditionalInstance(
-                condition: BuiltinHelpers.ApplyBuiltinEqualBinary(left, rightNumerator),
+                condition: BuiltinHelpers.ApplyBuiltinEqualBinary(eqA, eqRightNumerator),
                 trueBranch: Expression.ConditionalInstance(
-                    condition: BuiltinHelpers.ApplyBuiltinEqualBinary(rightDenominator, LiteralInt(1)),
+                    condition: BuiltinHelpers.ApplyBuiltinEqualBinary(eqRightDenominator, LiteralInt(1)),
                     trueBranch: s_trueValue,
                     falseBranch: s_falseValue),
                 falseBranch: s_falseValue);
 
-        // Float vs Float: compare cross-products (numA * denomB == numB * denomA)
-        var floatFloatLeftProduct = BuiltinMul(leftNumerator, rightDenominator);
-
-        var floatFloatRightProduct = BuiltinMul(rightNumerator, leftDenominator);
-
-        var floatFloatEqual =
+        var eqFloatFloatLeftProduct = BuiltinMul(eqLeftNumerator, eqRightDenominator);
+        var eqFloatFloatRightProduct = BuiltinMul(eqRightNumerator, eqLeftDenominator);
+        var eqFloatFloatEqual =
             Expression.ConditionalInstance(
-                condition: BuiltinHelpers.ApplyBuiltinEqualBinary(floatFloatLeftProduct, floatFloatRightProduct),
+                condition: BuiltinHelpers.ApplyBuiltinEqualBinary(eqFloatFloatLeftProduct, eqFloatFloatRightProduct),
                 trueBranch: s_trueValue,
                 falseBranch: s_falseValue);
 
-        // When left is Float
-        var leftFloatBranch =
+        var eqLeftFloatBranch =
             Expression.ConditionalInstance(
-                condition: rightIsFloat,
-                trueBranch: floatFloatEqual, // Both floats - compare cross-products
-                falseBranch: floatIntEqual);
+                condition: eqRightIsFloat,
+                trueBranch: eqFloatFloatEqual,
+                falseBranch: eqFloatIntEqual);
 
-        // When left is not Float
-        var leftNotFloatBranch =
-            Expression.ConditionalInstance(
-                condition: rightIsFloat,
-                trueBranch: intFloatEqual, // Left is Int, Right is Float: use intFloatEqual
-                falseBranch: s_falseValue); // Neither is float: directEqual already returned false, so not equal
+        // Non-float fallback
+        var eqEmptyBlob = BuiltinHelpers.ApplyBuiltinTake(0, LiteralInt(0));
+        var eqLeftTakeZero = BuiltinHelpers.ApplyBuiltinTake(0, eqA);
+        var eqLeftIsBlob = BuiltinHelpers.ApplyBuiltinEqualBinary(eqLeftTakeZero, eqEmptyBlob);
 
-        var floatHandling =
+        var eqLeftLength = BuiltinHelpers.ApplyBuiltinLength(eqA);
+        var eqRightLength = BuiltinHelpers.ApplyBuiltinLength(eqB);
+        var eqSameLengths = BuiltinHelpers.ApplyBuiltinEqualBinary(eqLeftLength, eqRightLength);
+
+        var eqLeftHead = BuiltinHelpers.ApplyBuiltinHead(eqA);
+        var eqLeftIsString = BuiltinHelpers.ApplyBuiltinEqualBinary(eqLeftHead, s_elmStringTypeTagNameLiteral);
+        var eqLeftIsDict = BuiltinHelpers.ApplyBuiltinEqualBinary(eqLeftHead, s_elmDictNotEmptyTagNameLiteral);
+        var eqLeftIsSet = BuiltinHelpers.ApplyBuiltinEqualBinary(eqLeftHead, s_elmSetTypeTagNameLiteral);
+
+        // Dict equality: dictToList both and compare with Pine_kernel.equal
+        var eqDictToListLeft = DictToListExpression(eqA);
+        var eqDictToListRight = DictToListExpression(eqB);
+        var eqDictEqual = BuiltinHelpers.ApplyBuiltinEqualBinary(eqDictToListLeft, eqDictToListRight);
+        var eqDictEqualResult =
             Expression.ConditionalInstance(
-                condition: leftIsFloat,
-                trueBranch: leftFloatBranch,
-                falseBranch: leftNotFloatBranch);
+                condition: eqDictEqual,
+                trueBranch: s_trueValue,
+                falseBranch: s_falseValue);
+
+        // Set equality: extract inner dicts and compare keys
+        // Set equality: extract inner dicts and compare keys
+        // Set_elm_builtin dictA → Pine tag: ["Set_elm_builtin", [dictA]]
+        // args = head(skip(1, set)) = [dictA]
+        // dictA = head(args)
+        var eqSetArgsA = BuiltinHelpers.ApplyBuiltinHead(BuiltinHelpers.ApplyBuiltinSkip(1, eqA));
+        var eqSetDictA = BuiltinHelpers.ApplyBuiltinHead(eqSetArgsA);
+        var eqSetArgsB = BuiltinHelpers.ApplyBuiltinHead(BuiltinHelpers.ApplyBuiltinSkip(1, eqB));
+        var eqSetDictB = BuiltinHelpers.ApplyBuiltinHead(eqSetArgsB);
+        var eqDictKeysA = DictKeysExpression(eqSetDictA);
+        var eqDictKeysB = DictKeysExpression(eqSetDictB);
+        var eqSetKeysEqual = BuiltinHelpers.ApplyBuiltinEqualBinary(eqDictKeysA, eqDictKeysB);
+        var eqSetEqualResult =
+            Expression.ConditionalInstance(
+                condition: eqSetKeysEqual,
+                trueBranch: s_trueValue,
+                falseBranch: s_falseValue);
+
+        // List equality: call listsEqualRecursive(a, b) with eqSelf as the eq function
+        // ParseAndEval(leqEncodedBody, [[leqEncodedBody, eqSelf], [a, b]])
+        var eqListsEqualCall =
+            new Expression.ParseAndEval(
+                encoded: Expression.LiteralInstance(leqEncodedBody),
+                environment: Expression.ListInstance(
+                    [
+                    Expression.ListInstance(
+                        [
+                        Expression.LiteralInstance(leqEncodedBody),
+                        eqSelf
+                        ]),
+                    Expression.ListInstance([eqA, eqB])
+                    ]));
+
+        // Build the type-specific branches
+        var eqSetOrDefaultBranch =
+            Expression.ConditionalInstance(
+                condition: eqLeftIsSet,
+                trueBranch: eqSetEqualResult,
+                falseBranch: eqListsEqualCall);
+
+        var eqDictOrSetOrDefaultBranch =
+            Expression.ConditionalInstance(
+                condition: eqLeftIsDict,
+                trueBranch: eqDictEqualResult,
+                falseBranch: eqSetOrDefaultBranch);
+
+        var eqStringOrDictOrSetOrDefaultBranch =
+            Expression.ConditionalInstance(
+                condition: eqLeftIsString,
+                trueBranch: s_falseValue,
+                falseBranch: eqDictOrSetOrDefaultBranch);
+
+        var eqSameLengthBranch =
+            Expression.ConditionalInstance(
+                condition: eqSameLengths,
+                trueBranch: eqStringOrDictOrSetOrDefaultBranch,
+                falseBranch: s_falseValue);
+
+        var eqNonFloatFallback =
+            Expression.ConditionalInstance(
+                condition: eqLeftIsBlob,
+                trueBranch: s_falseValue,
+                falseBranch: eqSameLengthBranch);
+
+        var eqLeftNotFloatBranch =
+            Expression.ConditionalInstance(
+                condition: eqRightIsFloat,
+                trueBranch: eqIntFloatEqual,
+                falseBranch: eqNonFloatFallback);
+
+        var eqFloatHandling =
+            Expression.ConditionalInstance(
+                condition: eqLeftIsFloat,
+                trueBranch: eqLeftFloatBranch,
+                falseBranch: eqLeftNotFloatBranch);
+
+        var eqBody =
+            Expression.ConditionalInstance(
+                condition: eqDirectEqual,
+                trueBranch: s_trueValue,
+                falseBranch: eqFloatHandling);
+
+        var eqEncodedBody = ExpressionEncoding.EncodeExpressionAsValue(eqBody);
+
+        // === Step 3: Build the initial call ===
+        // Create envFunctions = [eqEncodedBody] and call eqDeep(left, right)
+        var initialEnvFunctions =
+            Expression.ListInstance([Expression.LiteralInstance(eqEncodedBody)]);
+
+        var initialEnv =
+            Expression.ListInstance(
+                [
+                initialEnvFunctions,
+                Expression.ListInstance([left, right])
+                ]);
 
         return
-            Expression.ConditionalInstance(
-                condition: directEqual,
-                trueBranch: s_trueValue,
-                falseBranch: floatHandling);
+            new Expression.ParseAndEval(
+                encoded: Expression.LiteralInstance(eqEncodedBody),
+                environment: initialEnv);
     }
 
     private static Expression Internal_Neq(
@@ -2546,6 +2739,192 @@ public class CoreBasics
                 condition: BuiltinHelpers.ApplyBuiltinEqualBinary(eqResult, s_trueValue),
                 trueBranch: s_falseValue,
                 falseBranch: s_trueValue);
+    }
+
+    /// <summary>
+    /// Builds an expression that converts an Elm Dict value to a sorted list of (key, value) pairs.
+    /// This is a recursive in-order traversal of the red-black tree:
+    /// <code>
+    /// dictToList dict =
+    ///     case dict of
+    ///         RBEmpty_elm_builtin -&gt; []
+    ///         RBNode_elm_builtin _ key value left right -&gt;
+    ///             Pine_kernel.concat [ dictToList left, [ ( key, value ) ], dictToList right ]
+    /// </code>
+    /// </summary>
+    private static Expression DictToListExpression(Expression dict)
+    {
+        // Build recursive function for dict-to-list conversion.
+        // Environment structure: [envFunctions, dict]
+        // envFunctions[0] = self
+
+        var envFunctionsExpr =
+            ExpressionBuilder.BuildExpressionForPathInExpression([0], Expression.EnvironmentInstance);
+
+        var selfFunctionExpr =
+            ExpressionBuilder.BuildExpressionForPathInExpression([0, 0], Expression.EnvironmentInstance);
+
+        var dictExpr =
+            ExpressionBuilder.BuildExpressionForPathInExpression([1], Expression.EnvironmentInstance);
+
+        var zero = LiteralInt(0);
+        var emptyList = Expression.ListInstance([]);
+
+        // Check if dict is empty: length(dict) == 0
+        // RBEmpty_elm_builtin is represented as ["RBEmpty_elm_builtin"]  (length 1)
+        // RBNode_elm_builtin is represented as ["RBNode_elm_builtin", [color, key, value, left, right]] (length 2)
+        // Actually, tags are [tagName, args...] so RBEmpty has length 1 and RBNode has length 6
+        // But we can check: head(dict) == "RBNode_elm_builtin"
+        var isRBNode =
+            BuiltinHelpers.ApplyBuiltinEqualBinary(
+                BuiltinHelpers.ApplyBuiltinHead(dictExpr),
+                s_elmDictNotEmptyTagNameLiteral);
+
+        // For RBNode_elm_builtin _ key value left right:
+        // Pine tag representation: ["RBNode_elm_builtin", [color, key, value, left, right]]
+        // args = head(skip(1, dict)) = [color, key, value, left, right]
+        // head(skip(1, args)) = key
+        // head(skip(2, args)) = value
+        // head(skip(3, args)) = left
+        // head(skip(4, args)) = right
+        var args = BuiltinHelpers.ApplyBuiltinHead(BuiltinHelpers.ApplyBuiltinSkip(1, dictExpr));
+        var key = BuiltinHelpers.ApplyBuiltinHead(BuiltinHelpers.ApplyBuiltinSkip(1, args));
+        var value = BuiltinHelpers.ApplyBuiltinHead(BuiltinHelpers.ApplyBuiltinSkip(2, args));
+        var leftChild = BuiltinHelpers.ApplyBuiltinHead(BuiltinHelpers.ApplyBuiltinSkip(3, args));
+        var rightChild = BuiltinHelpers.ApplyBuiltinHead(BuiltinHelpers.ApplyBuiltinSkip(4, args));
+
+        // tuple = [key, value]
+        var tuple = Expression.ListInstance([key, value]);
+
+        // Recursive calls
+        static Expression RecursiveCall(
+            Expression selfFunc,
+            Expression envFuncs,
+            Expression arg)
+        {
+            var env =
+                Expression.ListInstance(
+                    [
+                    envFuncs,
+                    arg
+                    ]);
+
+            return
+                new Expression.ParseAndEval(
+                    encoded: selfFunc,
+                    environment: env);
+        }
+
+        var leftList = RecursiveCall(selfFunctionExpr, envFunctionsExpr, leftChild);
+        var rightList = RecursiveCall(selfFunctionExpr, envFunctionsExpr, rightChild);
+
+        // concat [ leftList, [ tuple ], rightList ]
+        var concatResult =
+            BuiltinHelpers.ApplyBuiltinConcat(
+                [
+                leftList,
+                Expression.ListInstance([tuple]),
+                rightList
+                ]);
+
+        // if isRBNode then concat else []
+        var innerBody =
+            Expression.ConditionalInstance(
+                condition: isRBNode,
+                trueBranch: concatResult,
+                falseBranch: emptyList);
+
+        var encodedBody = ExpressionEncoding.EncodeExpressionAsValue(innerBody);
+
+        // Initial invocation
+        var envFunctions = Expression.ListInstance([Expression.LiteralInstance(encodedBody)]);
+        var initialEnv = Expression.ListInstance([envFunctions, dict]);
+
+        return
+            new Expression.ParseAndEval(
+                encoded: Expression.LiteralInstance(encodedBody),
+                environment: initialEnv);
+    }
+
+    /// <summary>
+    /// Builds an expression that extracts all keys from an Elm Dict value as a sorted list.
+    /// <code>
+    /// dictKeys dict =
+    ///     case dict of
+    ///         RBEmpty_elm_builtin -&gt; []
+    ///         RBNode_elm_builtin _ key value left right -&gt;
+    ///             Pine_kernel.concat [ dictKeys left, [ key ], dictKeys right ]
+    /// </code>
+    /// </summary>
+    private static Expression DictKeysExpression(Expression dict)
+    {
+        var envFunctionsExpr =
+            ExpressionBuilder.BuildExpressionForPathInExpression([0], Expression.EnvironmentInstance);
+
+        var selfFunctionExpr =
+            ExpressionBuilder.BuildExpressionForPathInExpression([0, 0], Expression.EnvironmentInstance);
+
+        var dictExpr =
+            ExpressionBuilder.BuildExpressionForPathInExpression([1], Expression.EnvironmentInstance);
+
+        var emptyList = Expression.ListInstance([]);
+
+        var isRBNode =
+            BuiltinHelpers.ApplyBuiltinEqualBinary(
+                BuiltinHelpers.ApplyBuiltinHead(dictExpr),
+                s_elmDictNotEmptyTagNameLiteral);
+
+        // Pine tag representation: ["RBNode_elm_builtin", [color, key, value, left, right]]
+        // args = head(skip(1, dict)) = [color, key, value, left, right]
+        var args = BuiltinHelpers.ApplyBuiltinHead(BuiltinHelpers.ApplyBuiltinSkip(1, dictExpr));
+        var key = BuiltinHelpers.ApplyBuiltinHead(BuiltinHelpers.ApplyBuiltinSkip(1, args));
+        var leftChild = BuiltinHelpers.ApplyBuiltinHead(BuiltinHelpers.ApplyBuiltinSkip(3, args));
+        var rightChild = BuiltinHelpers.ApplyBuiltinHead(BuiltinHelpers.ApplyBuiltinSkip(4, args));
+
+        static Expression RecursiveCall(
+            Expression selfFunc,
+            Expression envFuncs,
+            Expression arg)
+        {
+            var env =
+                Expression.ListInstance(
+                    [
+                    envFuncs,
+                    arg
+                    ]);
+
+            return
+                new Expression.ParseAndEval(
+                    encoded: selfFunc,
+                    environment: env);
+        }
+
+        var leftKeys = RecursiveCall(selfFunctionExpr, envFunctionsExpr, leftChild);
+        var rightKeys = RecursiveCall(selfFunctionExpr, envFunctionsExpr, rightChild);
+
+        var concatResult =
+            BuiltinHelpers.ApplyBuiltinConcat(
+                [
+                leftKeys,
+                Expression.ListInstance([key]),
+                rightKeys
+                ]);
+
+        var innerBody =
+            Expression.ConditionalInstance(
+                condition: isRBNode,
+                trueBranch: concatResult,
+                falseBranch: emptyList);
+
+        var encodedBody = ExpressionEncoding.EncodeExpressionAsValue(innerBody);
+
+        var envFunctions = Expression.ListInstance([Expression.LiteralInstance(encodedBody)]);
+        var initialEnv = Expression.ListInstance([envFunctions, dict]);
+
+        return
+            new Expression.ParseAndEval(
+                encoded: Expression.LiteralInstance(encodedBody),
+                environment: initialEnv);
     }
 
     private static Expression Internal_Compare(

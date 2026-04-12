@@ -783,10 +783,8 @@ public class CoreDictFunctionTests
 
     /// <summary>
     /// Scenario 303: Four-element dicts built via insert in opposite order are equal.
-    /// Currently fails because the Elm equality check does not yet normalise the
-    /// concrete Pine representation of Dicts that differ only by insertion order.
     /// </summary>
-    [Fact(Skip = "Dict equality not yet normalised for four-element insert order")]
+    [Fact]
     public void Dict_equality_insert_four_opposite_order()
     {
         CallThunk("dictEq_insert_four_opposite_order").Should().Be(ElmValue.TrueValue);
@@ -794,10 +792,8 @@ public class CoreDictFunctionTests
 
     /// <summary>
     /// Scenario 333: Dicts nested inside a tuple are still compared by content.
-    /// Currently fails because the Elm equality check does not yet normalise the
-    /// concrete Pine representation of Dicts that differ only by insertion order.
     /// </summary>
-    [Fact(Skip = "Dict equality not yet normalised for four-element insert order")]
+    [Fact]
     public void Dict_equality_tuple_insert_four_opposite_order()
     {
         CallThunk("dictEq_tuple_insert_four_opposite_order").Should().Be(ElmValue.TrueValue);
