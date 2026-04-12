@@ -3161,7 +3161,7 @@ public static class FormatCSharpFile
             // its argument list handles line breaking, skip the dot break here.
             {
                 SyntaxNode? topInvocation = null;
-                SyntaxNode? walk = node.Parent;
+                var walk = node.Parent;
 
                 while (walk is MemberAccessExpressionSyntax)
                     walk = walk.Parent;

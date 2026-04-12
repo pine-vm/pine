@@ -55,7 +55,7 @@ public record ShadowingLocation(
     /// </summary>
     public override int GetHashCode()
     {
-        var hashCode = new System.HashCode();
+        var hashCode = new HashCode();
 
         hashCode.Add(Range);
 

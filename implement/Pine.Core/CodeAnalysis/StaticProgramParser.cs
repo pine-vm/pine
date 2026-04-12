@@ -206,7 +206,13 @@ public class StaticProgramParser
 
         var parametersExprs =
             Enumerable.Range(0, parsedFunction.ParameterCount)
-            .Select(paramIndex => StaticExpressionExtension.BuildPathToExpression([1 + paramIndex], StaticExpression<IdentifierT>.EnvironmentInstance))
+            .Select(
+                paramIndex =>
+                StaticExpressionExtension.BuildPathToExpression(
+                    [
+                    1 + paramIndex
+                    ],
+                    StaticExpression<IdentifierT>.EnvironmentInstance))
             .ToArray();
 
         return (new ParsedFunction<IdentifierT>(parametersExprs, parseBodyOk.current), parseBodyOk.dependencies);
@@ -311,12 +317,12 @@ public class StaticProgramParser
         if (expression is Expression.KernelApplication kernelApp)
         {
             var parseInputResult =
-                 ParseExpression(
-                     path,
-                     kernelApp.Input,
-                     envClass,
-                     parseConfig,
-                     parseCache);
+                ParseExpression(
+                    path,
+                    kernelApp.Input,
+                    envClass,
+                    parseConfig,
+                    parseCache);
 
             if (parseInputResult.IsErrOrNull() is { } inputErr)
             {
@@ -412,12 +418,13 @@ public class StaticProgramParser
 
         if (expression is Expression.ParseAndEval parseAndEvalExpr)
         {
-            return ParseCurriedFunctionApplication(
-                path,
-                parseAndEvalExpr,
-                envClass,
-                parseConfig,
-                parseCache);
+            return
+                ParseCurriedFunctionApplication(
+                    path,
+                    parseAndEvalExpr,
+                    envClass,
+                    parseConfig,
+                    parseCache);
         }
 
         if (expression is Expression.Environment)
@@ -523,6 +530,7 @@ public class StaticProgramParser
             {
                 // Use OriginalFunctionValue if provided, otherwise fall back to resolved value
                 var valueForParsing = identifyFunctionResult.OriginalFunctionValue ?? resolvedFunction.functionValue;
+
                 fullAppDeps =
                     fullAppDeps.Add(identifyFunctionResult.Ident, valueForParsing);
             }
@@ -572,6 +580,7 @@ public class StaticProgramParser
         {
             // Use OriginalFunctionValue if provided, otherwise fall back to resolved value
             var valueForParsing = identifyFunctionResult.OriginalFunctionValue ?? resolvedFunction.functionValue;
+
             allDependencies =
                 allDependencies.Add(identifyFunctionResult.Ident, valueForParsing);
         }
@@ -642,16 +651,18 @@ public class StaticProgramParser
                         return (nestedFunctionValue, isFullApplication: true);
                     }
 
-                    return "Could not resolve function expression at path [" +
-                           string.Join(",", pathInEnv) + "]: " + functionExpr.GetType().Name;
+                    return
+                        "Could not resolve function expression at path [" +
+                        string.Join(",", pathInEnv) + "]: " + functionExpr.GetType().Name;
                 }
 
                 return "Could not find expression at path [0, " + functionIndex + "] in environment";
             }
         }
 
-        return "ParseAndEval encoded is not a Literal or path to function: " +
-               encoded.GetType().FullName;
+        return
+            "ParseAndEval encoded is not a Literal or path to function: " +
+            encoded.GetType().FullName;
     }
 
     /// <summary>

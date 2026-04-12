@@ -1,5 +1,5 @@
-using System.Collections.Concurrent;
 using Pine.Core.CommonEncodings;
+using System.Collections.Concurrent;
 
 namespace Pine.Core.CodeAnalysis;
 

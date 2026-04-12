@@ -811,12 +811,14 @@ public class ReducePineExpression
 
         if (1 < constants.constants.Count)
         {
-            BigInteger foldedConstant =
+            var foldedConstant =
                 functionName switch
                 {
                     nameof(KernelFunction.int_add) => BigInteger.Zero,
                     nameof(KernelFunction.int_mul) => BigInteger.One,
-                    _ => throw new NotSupportedException($"Unsupported integer kernel application: {functionName}")
+
+                    _ =>
+                    throw new NotSupportedException($"Unsupported integer kernel application: {functionName}")
                 };
 
             foreach (var constant in constants.constants)
@@ -826,14 +828,16 @@ public class ReducePineExpression
                     {
                         nameof(KernelFunction.int_add) => foldedConstant + constant,
                         nameof(KernelFunction.int_mul) => foldedConstant * constant,
-                        _ => throw new NotSupportedException($"Unsupported integer kernel application: {functionName}")
+
+                        _ =>
+                        throw new NotSupportedException($"Unsupported integer kernel application: {functionName}")
                     };
             }
 
             reducedItems =
                 [
-                    Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(foldedConstant)),
-                    .. constants.variables
+                Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(foldedConstant)),
+                .. constants.variables
                 ];
 
             changed = true;

@@ -2265,7 +2265,7 @@ nextParam:;
                 funcImpl.Arguments.Count,
                 specialization);
 
-        SyntaxTypes.Expression callExpr =
+        var callExpr =
             callArgs.Count is 1
             ?
             callArgs[0].Value
@@ -2954,7 +2954,7 @@ nextParam:;
             callArgs.Add(appArgs[i]);
         }
 
-        SyntaxTypes.Expression callExpr =
+        var callExpr =
             callArgs.Count is 1
             ?
             callArgs[0].Value
@@ -3109,7 +3109,7 @@ nextParam:;
             callArgs.Add(callArgumentsAfterTagRewrite[i]);
         }
 
-        SyntaxTypes.Expression callExpr =
+        var callExpr =
             callArgs.Count is 1
             ?
             callArgs[0].Value
@@ -3726,7 +3726,7 @@ nextParam:;
             callArgs.Add(appArgs[i]);
         }
 
-        SyntaxTypes.Expression callExpr =
+        var callExpr =
             callArgs.Count is 1
             ?
             callArgs[0].Value
@@ -3806,7 +3806,7 @@ nextParam:;
     {
         var expr = exprNode.Value;
 
-        SyntaxTypes.Expression qualifiedExpr =
+        var qualifiedExpr =
             expr switch
             {
                 SyntaxTypes.Expression.FunctionOrValue funcOrValue when funcOrValue.ModuleName.Count is 0 &&

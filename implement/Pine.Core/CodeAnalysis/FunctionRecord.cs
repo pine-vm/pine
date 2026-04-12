@@ -520,7 +520,7 @@ public record FunctionRecord(
 
         // Determine parameter count from remaining items
         int parameterCount;
-        bool usesNestedArgFormat = false;
+        var usesNestedArgFormat = false;
 
         if (envList.Items.Count is 1)
         {

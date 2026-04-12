@@ -131,6 +131,7 @@ public static class PineValueClassExtensions
     private class TreeNode
     {
         public PineValue? Value { get; set; }
+
         public Dictionary<int, TreeNode>? Children { get; set; }
     }
 }

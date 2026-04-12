@@ -78,8 +78,8 @@ public static class ElmInteractiveEnvironment
         }
 
         return
-        FunctionRecord.ParseFunctionRecordTagged(funcDeclValue, parseCache)
-        .Map(parsedRecord => (funcDeclValue, parsedRecord));
+            FunctionRecord.ParseFunctionRecordTagged(funcDeclValue, parseCache)
+            .Map(parsedRecord => (funcDeclValue, parsedRecord));
     }
 
     /// <summary>
@@ -97,10 +97,11 @@ public static class ElmInteractiveEnvironment
     {
         return
             ApplyFunctionArgumentsForEvalExpr(functionRecord, arguments)
-            .AndThen(composedArgs =>
-            pineVM.EvaluateExpression(
-                composedArgs.expression,
-                composedArgs.environment));
+            .AndThen(
+                composedArgs =>
+                pineVM.EvaluateExpression(
+                    composedArgs.expression,
+                    composedArgs.environment));
     }
 
     /// <summary>
@@ -117,7 +118,8 @@ public static class ElmInteractiveEnvironment
         IReadOnlyList<PineValue> appendArguments)
     {
         ReadOnlySpan<PineValue> combinedArguments =
-            [..functionRecord.ArgumentsAlreadyCollected.Span,
+            [
+            ..functionRecord.ArgumentsAlreadyCollected.Span,
             ..appendArguments
             ];
 
@@ -201,9 +203,11 @@ public static class ElmInteractiveEnvironment
             {
                 PineValue.ListValue listValue =>
                 PineValue.List(
-                    [..listValue.Items
+                    [
+                    ..listValue.Items
                     .ToArray()
-                    .Where(envItem => !EnvItemLooksLikeInteractiveDecl(envItem))]),
+                    .Where(envItem => !EnvItemLooksLikeInteractiveDecl(envItem))
+                    ]),
 
                 _ =>
                 interactiveEnvironment
@@ -241,14 +245,15 @@ public static class ElmInteractiveEnvironment
     public static Result<string, (string moduleName, PineValue moduleValue, ElmModule moduleContent)> ParseNamedElmModule(
         PineValue moduleValue) =>
         ParseTagged(moduleValue)
-        .AndThen(tagged =>
-        {
-            var moduleName = tagged.name;
+        .AndThen(
+            tagged =>
+            {
+                var moduleName = tagged.name;
 
-            return
-                ParseElmModule(tagged.value)
-                .Map(module => (moduleName, tagged.value, module));
-        });
+                return
+                    ParseElmModule(tagged.value)
+                    .Map(module => (moduleName, tagged.value, module));
+            });
 
     /// <summary>
     /// Mirroring the encoding in 'emitModuleValue' in the Elm compiler.
@@ -275,28 +280,29 @@ public static class ElmInteractiveEnvironment
 
         return
             allDeclarations
-            .AndThen(declarations =>
-            {
-                var functionDeclarations =
-                    declarations
-                    .Where(declaration => char.IsLower(declaration.name[0]))
-                    .ToImmutableDictionary(
-                        keySelector: declaration => declaration.name,
-                        elementSelector: declaration => declaration.value);
+            .AndThen(
+                declarations =>
+                {
+                    var functionDeclarations =
+                        declarations
+                        .Where(declaration => char.IsLower(declaration.name[0]))
+                        .ToImmutableDictionary(
+                            keySelector: declaration => declaration.name,
+                            elementSelector: declaration => declaration.value);
 
-                var typeDeclarations =
-                    declarations
-                    .Where(declaration => char.IsUpper(declaration.name[0]))
-                    .ToImmutableDictionary(
-                        keySelector: declaration => declaration.name,
-                        elementSelector: declaration => declaration.value);
+                    var typeDeclarations =
+                        declarations
+                        .Where(declaration => char.IsUpper(declaration.name[0]))
+                        .ToImmutableDictionary(
+                            keySelector: declaration => declaration.name,
+                            elementSelector: declaration => declaration.value);
 
-                return
-                    (Result<string, ElmModule>)
-                    new ElmModule(
-                        FunctionDeclarations: functionDeclarations,
-                        TypeDeclarations: typeDeclarations);
-            });
+                    return
+                        (Result<string, ElmModule>)
+                        new ElmModule(
+                            FunctionDeclarations: functionDeclarations,
+                            TypeDeclarations: typeDeclarations);
+                });
     }
 
     /// <summary>

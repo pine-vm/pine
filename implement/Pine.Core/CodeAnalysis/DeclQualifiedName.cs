@@ -84,9 +84,10 @@ public record DeclQualifiedName(
         if (parts.Length is 1)
             return new DeclQualifiedName(Namespaces: [], DeclName: parts[0]);
 
-        return new DeclQualifiedName(
-            Namespaces: parts[..^1],
-            DeclName: parts[^1]);
+        return
+            new DeclQualifiedName(
+                Namespaces: parts[..^1],
+                DeclName: parts[^1]);
     }
 
     /// <summary>

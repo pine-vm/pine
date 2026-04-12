@@ -31,19 +31,19 @@ public record StaticProgramParserConfig<IdentifierT>(
         =>
         new(
             IdentifyInstanceRequired:
-                (context, value) =>
-                {
-                    throw new InvalidOperationException(
-                        $"No identifier provided for required instance in context {describeContext(context)} and value {value}.");
-                },
+            (context, value) =>
+            {
+                throw new InvalidOperationException(
+                    $"No identifier provided for required instance in context {describeContext(context)} and value {value}.");
+            },
 
             IdentifyInstanceOptional:
-                (context, value) => null,
+            (context, value) => null,
 
             IdentifyCrash:
-                (context, origin) =>
-                {
-                    throw new InvalidOperationException(
-                        $"No identifier provided for crash in context {describeContext(context)}");
-                });
+            (context, origin) =>
+            {
+                throw new InvalidOperationException(
+                    $"No identifier provided for crash in context {describeContext(context)}");
+            });
 }

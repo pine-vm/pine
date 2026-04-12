@@ -1159,7 +1159,7 @@ public static class BuiltinOperatorLowering
             return [];
         }
 
-        QualifiedNameRef qualifiedName =
+        var qualifiedName =
             functionOrValue.ModuleName.Count > 0
             ?
             QualifiedNameHelper.ToQualifiedNameRef(functionOrValue.ModuleName, functionOrValue.Name)
