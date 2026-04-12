@@ -1287,7 +1287,7 @@ public class ElmCompiler
 
     /// <summary>
     /// Runs the optimization pipeline:
-    /// Specialization → Higher-order Inlining → Lambda Lifting → Operator Lowering.
+    /// Specialization → Higher-order Inlining → Lambda Lifting → Size-based Inlining → Lambda Lifting → Operator Lowering.
     /// <para>
     /// <strong>Pipeline ordering rationale:</strong>
     /// Specialization runs first because it creates specialized function variants for known argument patterns
@@ -1297,6 +1297,14 @@ public class ElmCompiler
     /// <para>
     /// Higher-order inlining runs second, substituting function bodies at call sites where function
     /// arguments are known. Lambda lifting follows to re-lift any lambdas introduced by inlining.
+    /// </para>
+    /// <para>
+    /// Size-based inlining and plain value inlining run AFTER higher-order inlining and its lambda
+    /// lifting pass. This ordering avoids the cascading bug where size-based inlining exposed new
+    /// higher-order patterns (e.g., inlining <c>skip</c> to <c>map2 revAlways</c>) that triggered
+    /// further inlining and broke lambda variable capture. By running size-based inlining after
+    /// higher-order inlining is complete and lambdas are lifted, no cascading can occur.
+    /// See <c>docs/2026-04-10-cascading-inlining-bug.md</c> for the full investigation.
     /// </para>
     /// </summary>
     private static List<SyntaxTypes.File> ApplyOptimizationPipeline(
@@ -1322,22 +1330,39 @@ public class ElmCompiler
             .Extract(err => throw new Exception("Higher-order inlining failed: " + err));
 
         // Phase 3: Lambda lifting — re-lift any lambdas introduced by higher-order inlining.
-        var afterLambdaLifting =
+        var afterFirstLambdaLifting =
             afterHigherOrderInlining
             .Select(LambdaLifting.LiftLambdas)
             .ToList();
 
-        // Phase 4: Operator lowering — convert operators to Pine built-in calls.
+        // Phase 4: Size-based inlining and plain value inlining.
+        // Runs after higher-order inlining and lambda lifting to avoid cascading.
+        // Inlines small wrapper functions (≤10 AST nodes, no complex expressions) and
+        // plain zero-parameter declarations with simple bodies.
+        var afterSizeBasedInlining =
+            ElmSyntaxInlining.Apply(afterFirstLambdaLifting, Inlining.Config.SmallFunctionsAndPlainValues)
+            .Map(dict => ResolveModulesInSourceOrder(afterFirstLambdaLifting, dict))
+            .Extract(err => throw new Exception("Size-based inlining failed: " + err));
+
+        // Phase 5: Lambda lifting — re-lift any lambdas that size-based inlining may have introduced.
+        // Although size-based inlining targets simple bodies without complex expressions,
+        // this safety net ensures the AST is clean before operator lowering.
+        var afterSecondLambdaLifting =
+            afterSizeBasedInlining
+            .Select(LambdaLifting.LiftLambdas)
+            .ToList();
+
+        // Phase 6: Operator lowering — convert operators to Pine built-in calls.
         var afterLowering =
-            BuiltinOperatorLowering.Apply(afterLambdaLifting)
-            .Map(dict => ResolveModulesInSourceOrder(afterLambdaLifting, dict))
+            BuiltinOperatorLowering.Apply(afterSecondLambdaLifting)
+            .Map(dict => ResolveModulesInSourceOrder(afterSecondLambdaLifting, dict))
             .Extract(err => throw new Exception("Operator lowering failed: " + err));
 
         stageResults =
             new OptimizationPipelineStageResults(
                 AfterSpecialization: afterSpecialization,
                 AfterHigherOrderInlining: afterHigherOrderInlining,
-                AfterLambdaLifting: afterLambdaLifting,
+                AfterLambdaLifting: afterSecondLambdaLifting,
                 AfterLowering: afterLowering);
 
         return afterLowering;

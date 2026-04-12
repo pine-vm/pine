@@ -592,10 +592,7 @@ public static class LambdaLifting
                 funcBodyContext,
                 liftedFunctions);
 
-        // Substitute references to self and other local functions with their lifted names
-        var substitutionsWithSelf = new Dictionary<string, string>(localFunctionLiftedNames);
-
-        var substitutedBody = SubstituteVariableReferences(transformedBody, substitutionsWithSelf);
+        var substitutedBody = SubstituteVariableReferences(transformedBody, localFunctionLiftedNames);
 
         // Create the lifted function
         var liftedFuncDecl =

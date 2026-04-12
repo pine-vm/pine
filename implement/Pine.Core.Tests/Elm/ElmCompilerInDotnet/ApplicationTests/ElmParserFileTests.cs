@@ -149,9 +149,9 @@ public class ElmParserFileTests
 
         result.counts.Should().Be(
             """
-            InstructionCount: 382636
-            InvocationCount: 12044
-            BuildListCount: 109200
+            InstructionCount: 380975
+            InvocationCount: 11978
+            BuildListCount: 108305
             LoopIterationCount: 0
             """);
     }
@@ -167,9 +167,9 @@ public class ElmParserFileTests
 
         result.counts.Should().Be(
             """
-            InstructionCount: 1027431
-            InvocationCount: 35400
-            BuildListCount: 157113
+            InstructionCount: 1027220
+            InvocationCount: 35384
+            BuildListCount: 157068
             LoopIterationCount: 0
             """);
     }

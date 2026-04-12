@@ -375,6 +375,58 @@ internal static class ElmSyntaxTransformations
         return expr;
     }
 
+    /// <summary>
+    /// Returns true if the expression tree contains any structurally complex expressions
+    /// (if-then-else, case, let-in, lambda) that could produce invalid syntax
+    /// when substituted into arbitrary expression positions after inlining.
+    /// </summary>
+    internal static bool ContainsComplexExpression(SyntaxTypes.Expression expr)
+    {
+        var worklist = new Stack<SyntaxTypes.Expression>();
+        worklist.Push(expr);
+
+        while (worklist.Count > 0)
+        {
+            var current = worklist.Pop();
+
+            if (current is SyntaxTypes.Expression.IfBlock or
+                SyntaxTypes.Expression.CaseExpression or
+                SyntaxTypes.Expression.LetExpression or
+                SyntaxTypes.Expression.LambdaExpression)
+            {
+                return true;
+            }
+
+            EnqueueChildExpressions(current, worklist);
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Determines whether an expression is safe to substitute in any expression position
+    /// when inlining a plain value. Only literal-like leaf expressions and simple
+    /// constructor applications are considered safe.
+    /// </summary>
+    internal static bool IsPlainValueSafeToInline(SyntaxTypes.Expression expr) =>
+        expr switch
+        {
+            SyntaxTypes.Expression.UnitExpr => true,
+            SyntaxTypes.Expression.Literal => true,
+            SyntaxTypes.Expression.CharLiteral => true,
+            SyntaxTypes.Expression.Integer => true,
+            SyntaxTypes.Expression.Hex => true,
+            SyntaxTypes.Expression.Floatable => true,
+            SyntaxTypes.Expression.FunctionOrValue => true,
+            SyntaxTypes.Expression.ListExpr => true,
+            SyntaxTypes.Expression.TupledExpression => true,
+            SyntaxTypes.Expression.RecordExpr => true,
+            SyntaxTypes.Expression.ParenthesizedExpression => true,
+            SyntaxTypes.Expression.Negation => true,
+
+            _ =>
+            false,
+        };
 
     internal static bool BodyUnwrapsParameterAsConstructor(
         Node<SyntaxTypes.Expression> exprNode,

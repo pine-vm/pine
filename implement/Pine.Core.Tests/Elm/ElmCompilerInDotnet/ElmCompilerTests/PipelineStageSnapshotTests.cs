@@ -196,7 +196,7 @@ public class PipelineStageSnapshotTests
 
             result : Basics.Int -> Basics.Int
             result n =
-                Consumer.increment (Consumer.increment n)
+                Pine_builtin.int_add [ (Consumer.increment n), 1 ]
 
             """);
     }

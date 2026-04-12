@@ -21,14 +21,29 @@ public partial class Inlining
     public abstract record Config
     {
         /// <summary>
-        /// Inline function applications which supply functions as arguments (higher-order inlining).
+        /// Attempt inlining only for function applications which supply functions as arguments.
         /// </summary>
         public static readonly Config OnlyFunctions = new InlineOnlyFunctions();
 
         /// <summary>
-        /// Inline function applications which supply functions as arguments (higher-order inlining).
+        /// Inline small non-recursive functions AND plain values (zero-parameter declarations
+        /// with simple bodies). Runs AFTER higher-order inlining and lambda lifting to avoid
+        /// cascading: at this stage the AST is stable and size-based substitution cannot expose
+        /// new higher-order patterns. See docs/2026-04-10-cascading-inlining-bug.md.
+        /// </summary>
+        public static readonly Config SmallFunctionsAndPlainValues = new InlineSmallFunctionsAndPlainValues();
+
+        /// <summary>
+        /// Attempt inlining only for function applications which supply functions as arguments.
         /// </summary>
         internal sealed record InlineOnlyFunctions
+            : Config;
+
+        /// <summary>
+        /// Inline small non-recursive functions (≤10 AST nodes, no complex expressions)
+        /// and plain values whose bodies are safe to substitute in any expression position.
+        /// </summary>
+        internal sealed record InlineSmallFunctionsAndPlainValues
             : Config;
     }
 
@@ -69,7 +84,16 @@ public partial class Inlining
         Config Config,
         ImmutableHashSet<DeclQualifiedName> InliningStack,
         SpecializationCatalog SpecializationCatalog,
-        PipelineStage Stage);
+        PipelineStage Stage,
+        ImmutableHashSet<string> LocalNames = default!)
+    {
+        /// <summary>
+        /// Names of local variables currently in scope (from let bindings, function parameters,
+        /// and case patterns). These shadow module-level function names and must not be resolved
+        /// to module-level functions during inlining.
+        /// </summary>
+        public ImmutableHashSet<string> LocalNames { get; init; } = LocalNames ?? [];
+    }
 
 
     /// <summary>
@@ -131,7 +155,7 @@ public partial class Inlining
             new InliningContext(
                 resolution,
                 config,
-                ImmutableHashSet<DeclQualifiedName>.Empty,
+                [],
                 SpecializationCatalog: SpecializationCatalog.Empty,
                 Stage: stage);
 
@@ -146,7 +170,7 @@ public partial class Inlining
             new InliningContext(
                 resolution,
                 config,
-                ImmutableHashSet<DeclQualifiedName>.Empty,
+                [],
                 SpecializationCatalog: catalog,
                 Stage: stage);
 
@@ -235,7 +259,7 @@ public partial class Inlining
                     funcKey,
                     funcInfo.Function,
                     functions,
-                    ImmutableHashSet<DeclQualifiedName>.Empty);
+                    []);
 
             builder[funcKey] = funcInfo with { IsRecursive = isRecursive };
         }
@@ -765,7 +789,21 @@ public partial class Inlining
         InliningContext context)
     {
         var impl = func.Declaration.Value;
-        var (inlinedExpr, newDecls) = InlineExpression(impl.Expression, context);
+
+        // Function parameter names shadow module-level functions in the function body.
+        var paramNames = new HashSet<string>();
+
+        foreach (var arg in impl.Arguments)
+            ElmSyntaxTransformations.CollectPatternNamesRecursive(arg.Value, paramNames);
+
+        var bodyContext =
+            paramNames.Count > 0
+            ?
+            context with { LocalNames = context.LocalNames.Union(paramNames) }
+            :
+            context;
+
+        var (inlinedExpr, newDecls) = InlineExpression(impl.Expression, bodyContext);
 
         var inlinedImpl =
             new SyntaxTypes.FunctionImplementation(
@@ -894,6 +932,9 @@ public partial class Inlining
                     Inline(opApp.Left),
                     Inline(opApp.Right)),
 
+                SyntaxTypes.Expression.FunctionOrValue funcOrValue =>
+                TryInlinePlainValue(funcOrValue, context) ?? expr,
+
                 // Leaf expressions that don't need transformation
                 SyntaxTypes.Expression.UnitExpr or
                 SyntaxTypes.Expression.Literal or
@@ -901,7 +942,6 @@ public partial class Inlining
                 SyntaxTypes.Expression.Integer or
                 SyntaxTypes.Expression.Hex or
                 SyntaxTypes.Expression.Floatable or
-                SyntaxTypes.Expression.FunctionOrValue or
                 SyntaxTypes.Expression.PrefixOperator or
                 SyntaxTypes.Expression.RecordAccessFunction =>
                 expr,
@@ -1194,18 +1234,40 @@ public partial class Inlining
                 }
 
                 // Check if we should inline based on config
-                if (ShouldInline(funcParams, funcImpl.Expression, appArgs, context))
+                var shouldInlineHigherOrder = ShouldInline(funcParams, funcImpl.Expression, appArgs, context);
+
+                var isSmallEnough =
+                    !shouldInlineHigherOrder &&
+                    IsSmallEnoughToInline(funcImpl.Expression, funcInfo.ModuleName, context);
+
+                if (shouldInlineHigherOrder || isSmallEnough)
                 {
                     // Add this function to the inlining stack to prevent infinite recursion
                     var newContext = context with { InliningStack = context.InliningStack.Add(resolved.QualifiedName) };
 
-                    // Inline the function: substitute parameters with arguments
-                    var (inlinedResult, inlinedDecls) =
-                        InlineFunctionCall(funcInfo.ModuleName, funcImpl, appArgs, newContext);
+                    if (isSmallEnough)
+                    {
+                        // For size-based inlining, only substitute parameters without
+                        // recursive inlining to avoid cascading inlining that can break
+                        // lambda lifting (e.g., inlining `skip` exposes `map2 revAlways`
+                        // which triggers higher-order inlining and disrupts captured variables).
+                        var (inlinedResult, inlinedDecls) =
+                            InlineSmallFunctionCall(funcInfo.ModuleName, funcImpl, appArgs, newContext);
 
-                    newDecls.AddRange(inlinedDecls);
+                        newDecls.AddRange(inlinedDecls);
 
-                    return new InliningResult(inlinedResult, newDecls.ToImmutable());
+                        return new InliningResult(inlinedResult, newDecls.ToImmutable());
+                    }
+                    else
+                    {
+                        // Inline the function: substitute parameters with arguments
+                        var (inlinedResult, inlinedDecls) =
+                            InlineFunctionCall(funcInfo.ModuleName, funcImpl, appArgs, newContext);
+
+                        newDecls.AddRange(inlinedDecls);
+
+                        return new InliningResult(inlinedResult, newDecls.ToImmutable());
+                    }
                 }
             }
         }
@@ -1293,6 +1355,108 @@ public partial class Inlining
         return new InliningResult(body.Value, newDecls.ToImmutable());
     }
 
+    /// <summary>
+    /// Maximum number of expression nodes in a function body for it to be considered
+    /// "small" and eligible for unconditional inlining at call sites.
+    /// This threshold applies uniformly to both core library and application-defined functions.
+    /// </summary>
+    private const int MaxSmallFunctionBodySize = 10;
+
+    /// <summary>
+    /// Checks whether a function body is small enough to be inlined unconditionally
+    /// at every call site based on the expression node count threshold.
+    /// Only function bodies that are structurally simple (not containing if-then-else,
+    /// case, let-in, or lambda expressions) are eligible, since complex bodies can
+    /// produce invalid syntax when placed in certain expression positions.
+    /// Only functions from the same module as the call site are eligible, to avoid
+    /// cross-module reference qualification issues with specialized and lifted names.
+    /// Used only for non-recursive functions in the classic inlining path.
+    /// </summary>
+    private static bool IsSmallEnoughToInline(
+        Node<SyntaxTypes.Expression> funcBody,
+        ModuleName calleeModuleName,
+        InliningContext context)
+    {
+        // Size-based inlining is only enabled in the SmallFunctionsAndPlainValues config.
+        if (context.Config is not Config.InlineSmallFunctionsAndPlainValues)
+        {
+            return false;
+        }
+
+        // Only inline small functions from the same module as the call site.
+        // Cross-module inlining can introduce unqualified references (e.g., `blob`)
+        // that are valid in the callee module but unresolvable at the call site.
+        if (context.Resolution.CurrentModuleName is not { } currentModuleName ||
+            !calleeModuleName.SequenceEqual(currentModuleName))
+        {
+            return false;
+        }
+
+        if (ElmSyntaxTransformations.ContainsComplexExpression(funcBody.Value))
+        {
+            return false;
+        }
+
+        if (ElmSyntaxTransformations.CountExpressionNodes(funcBody.Value) > MaxSmallFunctionBodySize)
+        {
+            return false;
+        }
+
+        return true;
+    }
+
+
+    /// <summary>
+    /// Tries to inline a <see cref="SyntaxTypes.Expression.FunctionOrValue"/> reference
+    /// that resolves to a plain value declaration (zero parameters).
+    /// Plain values whose body is a literal-like expression are always inlined,
+    /// replacing the reference with the body expression.
+    /// Returns null if the reference cannot be inlined (unknown, recursive, has parameters,
+    /// or body is too complex to substitute safely in any expression position).
+    /// </summary>
+    private static SyntaxTypes.Expression? TryInlinePlainValue(
+        SyntaxTypes.Expression.FunctionOrValue funcOrValue,
+        InliningContext context)
+    {
+        // Plain value inlining is only enabled in the SmallFunctionsAndPlainValues config.
+        if (context.Config is not Config.InlineSmallFunctionsAndPlainValues)
+            return null;
+
+        if (TryResolveKnownFunctionReference(funcOrValue, context) is not { } resolved)
+            return null;
+
+        var funcInfo = resolved.FunctionInfo;
+        var funcImpl = funcInfo.Function.Declaration.Value;
+
+        // Only inline zero-parameter declarations (plain values)
+        if (funcImpl.Arguments.Count is not 0)
+            return null;
+
+        // Skip recursive values to avoid infinite expansion
+        if (funcInfo.IsRecursive)
+            return null;
+
+        // Skip if we're already in the process of inlining this value (prevents infinite recursion)
+        if (context.InliningStack.Contains(resolved.QualifiedName))
+            return null;
+
+        // Only inline values from the same module as the call site.
+        // Cross-module inlining of plain values can introduce unqualified references
+        // (e.g., `blob`) that are valid in the callee module but unresolvable at the call site.
+        if (context.Resolution.CurrentModuleName is not { } currentModuleName ||
+            !funcInfo.ModuleName.SequenceEqual(currentModuleName))
+            return null;
+
+        var body = funcImpl.Expression.Value;
+
+        // Only inline expressions that are safe to substitute in any expression position
+        // without requiring parenthesization or risking syntax errors.
+        if (!ElmSyntaxTransformations.IsPlainValueSafeToInline(body))
+            return null;
+
+        return body;
+    }
+
 
     private static bool ShouldInline(
         IReadOnlyList<Node<SyntaxTypes.Pattern>> funcParams,
@@ -1301,6 +1465,11 @@ public partial class Inlining
         InliningContext context)
     {
         if (appArgs.Count < funcParams.Count)
+        {
+            return false;
+        }
+
+        if (context.Config is not Config.InlineOnlyFunctions)
         {
             return false;
         }
@@ -1321,8 +1490,8 @@ public partial class Inlining
             }
 
             // If the parameter uses a constructor pattern (like `(Parser f)`), only inline
-            // when the supplied argument itself looks like a function-bearing computation,
-            // focusing on higher-order use cases and avoiding
+            // when the supplied argument itself looks like a function-bearing computation.
+            // This keeps Config.OnlyFunctions focused on higher-order use cases and avoids
             // inlining data-oriented constructor-pattern calls such as String.split before.
             if (ElmSyntaxTransformations.IsConstructorPattern(param) && IsFunctionBearingExpression(arg, context))
             {
@@ -1428,7 +1597,7 @@ public partial class Inlining
         InliningContext context)
     {
         // Syntax-based check: qualified reference to a known function definition.
-        // This focuses on stable top-level / cross-module references
+        // This keeps Config.OnlyFunctions focused on stable top-level / cross-module references
         // and avoids inlining based on local let-bound helpers, which can introduce lifted
         // dependencies the current compiler pipeline does not yet propagate robustly.
         if (funcOrValue.ModuleName.Count > 0 &&
@@ -1516,6 +1685,31 @@ public partial class Inlining
         SyntaxTypes.FunctionImplementation funcImpl,
         IReadOnlyList<Node<SyntaxTypes.Expression>> args,
         InliningContext context)
+    {
+        return InlineFunctionCallCore(calleeModuleName, funcImpl, args, context, recursivelyInlineBody: true);
+    }
+
+    /// <summary>
+    /// Inlines a small function by substituting parameters with arguments but WITHOUT
+    /// recursively inlining the resulting body. This prevents cascading inlining where
+    /// size-based inlining exposes new call patterns that trigger higher-order inlining,
+    /// which can disrupt lambda lifting's variable capture.
+    /// </summary>
+    private static InliningResult InlineSmallFunctionCall(
+        ModuleName calleeModuleName,
+        SyntaxTypes.FunctionImplementation funcImpl,
+        IReadOnlyList<Node<SyntaxTypes.Expression>> args,
+        InliningContext context)
+    {
+        return InlineFunctionCallCore(calleeModuleName, funcImpl, args, context, recursivelyInlineBody: false);
+    }
+
+    private static InliningResult InlineFunctionCallCore(
+        ModuleName calleeModuleName,
+        SyntaxTypes.FunctionImplementation funcImpl,
+        IReadOnlyList<Node<SyntaxTypes.Expression>> args,
+        InliningContext context,
+        bool recursivelyInlineBody)
     {
         var newDecls = ImmutableList.CreateBuilder<Node<SyntaxTypes.Declaration>>();
 
@@ -1635,8 +1829,14 @@ nextParam:;
                 calleeModuleName,
                 context);
 
-        // Recursively inline in the substituted body.
-        var inlinedBody = Inline(qualifiedLiftedHelperReferences);
+        // Recursively inline in the substituted body (unless this is a size-based inlining
+        // where we skip recursive inlining to prevent cascading that can break lambda lifting).
+        var inlinedBody =
+            recursivelyInlineBody
+            ?
+            Inline(qualifiedLiftedHelperReferences)
+            :
+            qualifiedLiftedHelperReferences;
 
         // If we have let declarations, wrap the body in a let expression
         SyntaxTypes.Expression resultExpr;
@@ -1965,7 +2165,7 @@ nextParam:;
             :
             new SyntaxTypes.Expression.Application([.. callArgs]);
 
-        return new InliningResult(callExpr, ImmutableList.Create(newDecl));
+        return new InliningResult(callExpr, [newDecl]);
     }
 
     private static void CollectDirectFieldSubstitutions(
@@ -2654,7 +2854,7 @@ nextParam:;
             :
             new SyntaxTypes.Expression.Application([.. callArgs]);
 
-        return new InliningResult(callExpr, ImmutableList.Create(newDecl));
+        return new InliningResult(callExpr, [newDecl]);
     }
 
     private static InliningResult?
@@ -2809,7 +3009,7 @@ nextParam:;
             :
             new SyntaxTypes.Expression.Application([.. callArgs]);
 
-        return new InliningResult(callExpr, ImmutableList.Create(newDecl));
+        return new InliningResult(callExpr, [newDecl]);
     }
 
     /// <summary>
@@ -3311,7 +3511,7 @@ nextParam:;
             return
                 new InliningResult(
                     new SyntaxTypes.Expression.UnitExpr(),
-                    ImmutableList<Node<SyntaxTypes.Declaration>>.Empty);
+                    []);
         }
 
         // Build the full group: start function + group members.
@@ -3337,7 +3537,7 @@ nextParam:;
                 return
                     new InliningResult(
                         new SyntaxTypes.Expression.UnitExpr(),
-                        ImmutableList<Node<SyntaxTypes.Declaration>>.Empty);
+                        []);
             }
 
             allMembers.Add((member, memberImpl, memberSpecName));
@@ -3560,7 +3760,17 @@ nextParam:;
         SyntaxTypes.Case caseItem,
         InliningContext context)
     {
-        var (inlinedExpr, newDecls) = InlineExpression(caseItem.Expression, context);
+        // Case pattern variables shadow module-level functions in the case branch body.
+        var patternNames = ElmSyntaxTransformations.CollectPatternNames(caseItem.Pattern.Value);
+
+        var branchContext =
+            patternNames.Count > 0
+            ?
+            context with { LocalNames = context.LocalNames.Union(patternNames) }
+            :
+            context;
+
+        var (inlinedExpr, newDecls) = InlineExpression(caseItem.Expression, branchContext);
 
         return
             (new SyntaxTypes.Case(
@@ -3659,7 +3869,34 @@ nextParam:;
             body = ElmSyntaxTransformations.SubstituteInExpression(body, substitutions);
         }
 
-        var (inlinedBody, bodyDecls) = InlineExpression(body, context);
+        // Collect all variable names bound by the let declarations so they shadow
+        // module-level functions of the same name in the body.
+        var letBoundNames = ImmutableHashSet.CreateBuilder<string>();
+
+        foreach (var declNode in inlinedDecls)
+        {
+            switch (declNode.Value)
+            {
+                case SyntaxTypes.Expression.LetDeclaration.LetFunction letFunc:
+                    letBoundNames.Add(letFunc.Function.Declaration.Value.Name.Value);
+                    break;
+
+                case SyntaxTypes.Expression.LetDeclaration.LetDestructuring letDestr:
+                    foreach (var name in ElmSyntaxTransformations.CollectPatternNames(letDestr.Pattern.Value))
+                        letBoundNames.Add(name);
+
+                    break;
+            }
+        }
+
+        var bodyContext =
+            letBoundNames.Count > 0
+            ?
+            context with { LocalNames = context.LocalNames.Union(letBoundNames) }
+            :
+            context;
+
+        var (inlinedBody, bodyDecls) = InlineExpression(body, bodyContext);
         newDecls.AddRange(bodyDecls);
 
         // If all declarations were propagated, eliminate the let
@@ -3804,7 +4041,20 @@ nextParam:;
 
             if (context.Resolution.FunctionsByQualifiedName.TryGetValue(qualifiedName, out var funcInfo))
                 return new ResolvedFunctionReference(qualifiedName, funcInfo);
+
+            // The reference has an explicit module qualifier that didn't resolve.
+            // Do NOT fall back to the current module — that would incorrectly resolve
+            // e.g. `Pine_kernel.take` as `List.take` when processing the List module.
+            return null;
         }
+
+        // If the unqualified name is shadowed by a local variable (from let bindings,
+        // function parameters, or case patterns), do NOT resolve it to a module-level function.
+        // This prevents bugs where inlining a function body introduces a local variable
+        // (e.g., `parse` from destructuring `(Parser parse)`) that collides with a
+        // module-level function of the same name (e.g., `Elm.Parser.parse`).
+        if (context.LocalNames.Contains(funcOrValue.Name))
+            return null;
 
         if (context.Resolution.CurrentModuleName is { } currentModuleName)
         {
@@ -3853,7 +4103,20 @@ nextParam:;
         SyntaxTypes.LambdaStruct lambda,
         InliningContext context)
     {
-        var (inlinedExpr, newDecls) = InlineExpression(lambda.Expression, context);
+        // Lambda parameter names shadow module-level functions in the lambda body.
+        var paramNames = new HashSet<string>();
+
+        foreach (var arg in lambda.Arguments)
+            ElmSyntaxTransformations.CollectPatternNamesRecursive(arg.Value, paramNames);
+
+        var bodyContext =
+            paramNames.Count > 0
+            ?
+            context with { LocalNames = context.LocalNames.Union(paramNames) }
+            :
+            context;
+
+        var (inlinedExpr, newDecls) = InlineExpression(lambda.Expression, bodyContext);
 
         return
             (new SyntaxTypes.LambdaStruct(
