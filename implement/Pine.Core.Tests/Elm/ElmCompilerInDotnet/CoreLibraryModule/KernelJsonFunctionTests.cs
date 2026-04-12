@@ -1478,7 +1478,7 @@ public class KernelJsonFunctionTests
 
         ElmCompilerTestHelper.FormatCounts(report).Should().Be(
             """
-            InstructionCount: 19_131
+            InstructionCount: 19_183
             InvocationCount: 790
             BuildListCount: 1_822
             LoopIterationCount: 0
