@@ -280,7 +280,7 @@ The dedicated specialization stage runs after the first lambda-lifting pass and 
 Typical examples are:
 
 + A higher-order function where one parameter is fixed to a concrete top-level function, inline lambda, or record-access function such as `.fieldName`.
-+ A function that destructures a single-constructor custom type, where the specialized variant can receive inner fields directly instead of receiving the wrapped outer value.
++ A function that destructures a single-constructor choice type, where the specialized variant can receive inner fields directly instead of receiving the wrapped outer value.
 + A recursive or mutually recursive function where the compiler needs a named specialized variant to preserve recursion while removing or reshaping specialized parameters.
 
 The defining properties are:
