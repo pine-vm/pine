@@ -2621,7 +2621,6 @@ public class CoreBasics
                 falseBranch: s_falseValue);
 
         // Set equality: extract inner dicts and compare keys
-        // Set equality: extract inner dicts and compare keys
         // Set_elm_builtin dictA → Pine tag: ["Set_elm_builtin", [dictA]]
         // args = head(skip(1, set)) = [dictA]
         // dictA = head(args)
