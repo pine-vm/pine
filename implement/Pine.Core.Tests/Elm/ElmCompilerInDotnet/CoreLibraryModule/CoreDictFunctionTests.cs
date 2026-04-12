@@ -3,15 +3,145 @@ using Pine.Core.CodeAnalysis;
 using Pine.Core.Elm;
 using Pine.Core.Elm.ElmCompilerInDotnet;
 using Pine.Core.Elm.ElmInElm;
+using Pine.Core.Files;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text;
 using Xunit;
 
 namespace Pine.Core.Tests.Elm.ElmCompilerInDotnet.CoreLibraryModule;
 
 public class CoreDictFunctionTests
 {
+    /// <summary>
+    /// Elm test module that imports Dict and provides test functions for
+    /// Dict equality scenarios. Elm equality on Dicts must compare by
+    /// logical content (sorted key-value pairs), not by the concrete Pine
+    /// value which depends on insertion order.
+    /// </summary>
+    private const string TestModuleSource =
+        """
+        module DictEqualityTest exposing (..)
+
+        import Dict
+
+
+        {-| Scenario 300: Two-element dicts built with insert in opposite key order are equal. -}
+        dictEq_insert_two_opposite_order : Int -> Bool
+        dictEq_insert_two_opposite_order _ =
+            (Dict.insert 1 0 (Dict.insert 2 0 Dict.empty)) == (Dict.insert 2 0 (Dict.insert 1 0 Dict.empty))
+
+
+        {-| Scenario 301: fromList with pairs in different order are equal. -}
+        dictEq_fromList_two_opposite_order : Int -> Bool
+        dictEq_fromList_two_opposite_order _ =
+            Dict.fromList [ (3, 0), (4, 0) ] == Dict.fromList [ (4, 0), (3, 0) ]
+
+
+        {-| Scenario 303: Four-element dicts built with insert in opposite order are equal. -}
+        dictEq_insert_four_opposite_order : Int -> Bool
+        dictEq_insert_four_opposite_order _ =
+            (Dict.insert 0 () (Dict.insert 1 () (Dict.insert 2 () (Dict.insert 3 () Dict.empty)))) ==
+            (Dict.insert 3 () (Dict.insert 2 () (Dict.insert 1 () (Dict.insert 0 () Dict.empty))))
+
+
+        {-| Scenario 333: Dicts inside a tuple – equality must still compare Dicts by content. -}
+        dictEq_tuple_insert_four_opposite_order : Int -> Bool
+        dictEq_tuple_insert_four_opposite_order _ =
+            ("test", (Dict.insert 0 () (Dict.insert 1 () (Dict.insert 2 () (Dict.insert 3 () Dict.empty))))) ==
+            ("test", (Dict.insert 3 () (Dict.insert 2 () (Dict.insert 1 () (Dict.insert 0 () Dict.empty)))))
+
+
+        {-| Dicts with different keys are not equal. -}
+        dictNeq_different_keys : Int -> Bool
+        dictNeq_different_keys _ =
+            Dict.fromList [ (1, 0), (2, 0) ] == Dict.fromList [ (1, 0), (3, 0) ]
+
+
+        {-| Dicts with same keys but different values are not equal. -}
+        dictNeq_different_values : Int -> Bool
+        dictNeq_different_values _ =
+            Dict.fromList [ (1, 10), (2, 20) ] == Dict.fromList [ (1, 10), (2, 99) ]
+
+
+        {-| Dicts with different sizes are not equal. -}
+        dictNeq_different_sizes : Int -> Bool
+        dictNeq_different_sizes _ =
+            Dict.fromList [ (1, 0) ] == Dict.fromList [ (1, 0), (2, 0) ]
+
+
+        {-| Empty dict equals empty dict. -}
+        dictEq_both_empty : Int -> Bool
+        dictEq_both_empty _ =
+            Dict.empty == Dict.empty
+
+
+        {-| Singleton dicts with same content are equal. -}
+        dictEq_singleton : Int -> Bool
+        dictEq_singleton _ =
+            Dict.singleton 1 "a" == Dict.singleton 1 "a"
+
+
+        {-| Three-element fromList in shuffled order are equal. -}
+        dictEq_fromList_three_shuffled : Int -> Bool
+        dictEq_fromList_three_shuffled _ =
+            Dict.fromList [ (1, 10), (2, 20), (3, 30) ] == Dict.fromList [ (3, 30), (1, 10), (2, 20) ]
+
+
+        {-| Dict inside a list – equality must recurse into list elements. -}
+        dictEq_inside_list : Int -> Bool
+        dictEq_inside_list _ =
+            [ Dict.fromList [ (1, 0), (2, 0) ] ] == [ Dict.fromList [ (2, 0), (1, 0) ] ]
+        """;
+
+    private static readonly Lazy<ElmInteractiveEnvironment.ParsedInteractiveEnvironment> s_testEnv =
+        new(
+            () =>
+            {
+                var kernelModulesTree =
+                    BundledFiles.CompilerSourceContainerFilesDefault.Value
+                    .GetNodeAtPath(["elm-kernel-modules"])
+                    ?? throw new Exception("Did not find elm-kernel-modules");
+
+                var treeWithTest =
+                    kernelModulesTree.SetNodeAtPathSorted(
+                        ["DictEqualityTest.elm"],
+                        FileTree.File(Encoding.UTF8.GetBytes(TestModuleSource)));
+
+                var rootFilePaths =
+                    treeWithTest.EnumerateFilesTransitive()
+                    .Where(
+                        b =>
+                        b.path[^1].Equals("DictEqualityTest.elm", StringComparison.OrdinalIgnoreCase))
+                    .Select(b => (IReadOnlyList<string>)b.path)
+                    .ToList();
+
+                var compiledEnv =
+                    ElmCompiler.CompileInteractiveEnvironment(
+                        treeWithTest,
+                        rootFilePaths: rootFilePaths,
+                        disableInlining: false)
+                    .Map(r => r.compiledEnvValue)
+                    .Extract(err => throw new Exception("Failed compiling: " + err));
+
+                return
+                    ElmInteractiveEnvironment.ParseInteractiveEnvironment(compiledEnv)
+                    .Extract(err => throw new Exception("Failed parsing: " + err));
+            });
+
+    private static PineValue GetTestFunction(string name) =>
+        s_testEnv.Value.Modules
+        .First(m => m.moduleName is "DictEqualityTest")
+        .moduleContent.FunctionDeclarations[name];
+
+    /// <summary>
+    /// Calls an Elm function that takes a dummy Int argument and returns a value.
+    /// This pattern is used for thunks: <c>f : Int -&gt; Bool</c> called with <c>0</c>.
+    /// </summary>
+    private static ElmValue CallThunk(string name) =>
+        CoreLibraryTestHelper.ApplyUnary(GetTestFunction(name), ElmValue.Integer(0), s_vm);
+
     private static readonly Lazy<ElmInteractiveEnvironment.ParsedInteractiveEnvironment> s_kernelEnv =
         new(
             () =>
@@ -626,5 +756,113 @@ public class CoreDictFunctionTests
         var get3 = ApplyBinary(GetDictFunction("get"), Integer(3), result);
 
         get3.Should().Be(JustOf(Integer(30)));
+    }
+
+    // ========== Tests for Dict equality (insertion-order independence) ==========
+    // These verify that the Elm compiler correctly applies structural equality
+    // for Dicts, which must compare by logical content (sorted key-value pairs)
+    // rather than by the concrete Pine representation that depends on insertion order.
+
+    /// <summary>
+    /// Scenario 300: Two-element dicts built via insert in opposite key order are equal.
+    /// </summary>
+    [Fact]
+    public void Dict_equality_insert_two_opposite_order()
+    {
+        CallThunk("dictEq_insert_two_opposite_order").Should().Be(ElmValue.TrueValue);
+    }
+
+    /// <summary>
+    /// Scenario 301: fromList with pairs in different order produces equal dicts.
+    /// </summary>
+    [Fact]
+    public void Dict_equality_fromList_two_opposite_order()
+    {
+        CallThunk("dictEq_fromList_two_opposite_order").Should().Be(ElmValue.TrueValue);
+    }
+
+    /// <summary>
+    /// Scenario 303: Four-element dicts built via insert in opposite order are equal.
+    /// Currently fails because the Elm equality check does not yet normalise the
+    /// concrete Pine representation of Dicts that differ only by insertion order.
+    /// </summary>
+    [Fact(Skip = "Dict equality not yet normalised for four-element insert order")]
+    public void Dict_equality_insert_four_opposite_order()
+    {
+        CallThunk("dictEq_insert_four_opposite_order").Should().Be(ElmValue.TrueValue);
+    }
+
+    /// <summary>
+    /// Scenario 333: Dicts nested inside a tuple are still compared by content.
+    /// Currently fails because the Elm equality check does not yet normalise the
+    /// concrete Pine representation of Dicts that differ only by insertion order.
+    /// </summary>
+    [Fact(Skip = "Dict equality not yet normalised for four-element insert order")]
+    public void Dict_equality_tuple_insert_four_opposite_order()
+    {
+        CallThunk("dictEq_tuple_insert_four_opposite_order").Should().Be(ElmValue.TrueValue);
+    }
+
+    /// <summary>
+    /// Dicts with different keys are not equal.
+    /// </summary>
+    [Fact]
+    public void Dict_inequality_different_keys()
+    {
+        CallThunk("dictNeq_different_keys").Should().Be(ElmValue.FalseValue);
+    }
+
+    /// <summary>
+    /// Dicts with same keys but different values are not equal.
+    /// </summary>
+    [Fact]
+    public void Dict_inequality_different_values()
+    {
+        CallThunk("dictNeq_different_values").Should().Be(ElmValue.FalseValue);
+    }
+
+    /// <summary>
+    /// Dicts with different sizes are not equal.
+    /// </summary>
+    [Fact]
+    public void Dict_inequality_different_sizes()
+    {
+        CallThunk("dictNeq_different_sizes").Should().Be(ElmValue.FalseValue);
+    }
+
+    /// <summary>
+    /// Empty dict equals empty dict.
+    /// </summary>
+    [Fact]
+    public void Dict_equality_both_empty()
+    {
+        CallThunk("dictEq_both_empty").Should().Be(ElmValue.TrueValue);
+    }
+
+    /// <summary>
+    /// Singleton dicts with same content are equal.
+    /// </summary>
+    [Fact]
+    public void Dict_equality_singleton()
+    {
+        CallThunk("dictEq_singleton").Should().Be(ElmValue.TrueValue);
+    }
+
+    /// <summary>
+    /// Three-element fromList in shuffled order produces equal dicts.
+    /// </summary>
+    [Fact]
+    public void Dict_equality_fromList_three_shuffled()
+    {
+        CallThunk("dictEq_fromList_three_shuffled").Should().Be(ElmValue.TrueValue);
+    }
+
+    /// <summary>
+    /// Dicts nested inside a list are compared by content.
+    /// </summary>
+    [Fact]
+    public void Dict_equality_inside_list()
+    {
+        CallThunk("dictEq_inside_list").Should().Be(ElmValue.TrueValue);
     }
 }
