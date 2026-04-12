@@ -627,6 +627,230 @@ public class BuiltinOperatorLoweringTests
                 """));
     }
 
+    [Fact]
+    public void Lowers_eq_operator_application_for_Char_arguments()
+    {
+        var loweredModule =
+            LowerOperators(
+                """
+                module Test exposing (..)
+
+
+                eqChar : Char -> Char -> Bool
+                eqChar left right =
+                    left == right
+                """);
+
+        RenderCanonicalized(loweredModule).Should().Be(
+            RenderCanonicalized(
+                """
+                module Test exposing (..)
+
+
+                eqChar : Char -> Char -> Bool
+                eqChar left right =
+                    Pine_builtin.equal
+                        [ left
+                        , right
+                        ]
+                """));
+    }
+
+    [Fact]
+    public void Lowers_eq_operator_application_for_Bool_arguments()
+    {
+        var loweredModule =
+            LowerOperators(
+                """
+                module Test exposing (..)
+
+
+                eqBool : Bool -> Bool -> Bool
+                eqBool left right =
+                    left == right
+                """);
+
+        RenderCanonicalized(loweredModule).Should().Be(
+            RenderCanonicalized(
+                """
+                module Test exposing (..)
+
+
+                eqBool : Bool -> Bool -> Bool
+                eqBool left right =
+                    Pine_builtin.equal
+                        [ left
+                        , right
+                        ]
+                """));
+    }
+
+    [Fact]
+    public void Lowers_eq_operator_application_for_tuple_of_Int()
+    {
+        var loweredModule =
+            LowerOperators(
+                """
+                module Test exposing (..)
+
+
+                eqTuple : ( Int, Int ) -> ( Int, Int ) -> Bool
+                eqTuple left right =
+                    left == right
+                """);
+
+        RenderCanonicalized(loweredModule).Should().Be(
+            RenderCanonicalized(
+                """
+                module Test exposing (..)
+
+
+                eqTuple : ( Int, Int ) -> ( Int, Int ) -> Bool
+                eqTuple left right =
+                    Pine_builtin.equal
+                        [ left
+                        , right
+                        ]
+                """));
+    }
+
+    [Fact]
+    public void Lowers_eq_operator_application_for_nested_tuple_in_tuple()
+    {
+        var loweredModule =
+            LowerOperators(
+                """
+                module Test exposing (..)
+
+
+                eqNestedTuple : ( ( Int, String ), ( Bool, Char ) ) -> ( ( Int, String ), ( Bool, Char ) ) -> Bool
+                eqNestedTuple left right =
+                    left == right
+                """);
+
+        RenderCanonicalized(loweredModule).Should().Be(
+            RenderCanonicalized(
+                """
+                module Test exposing (..)
+
+
+                eqNestedTuple : ( ( Int, String ), ( Bool, Char ) ) -> ( ( Int, String ), ( Bool, Char ) ) -> Bool
+                eqNestedTuple left right =
+                    Pine_builtin.equal
+                        [ left
+                        , right
+                        ]
+                """));
+    }
+
+    [Fact]
+    public void Lowers_eq_operator_application_for_List_of_Int()
+    {
+        var loweredModule =
+            LowerOperators(
+                """
+                module Test exposing (..)
+
+
+                eqListInt : List Int -> List Int -> Bool
+                eqListInt left right =
+                    left == right
+                """);
+
+        RenderCanonicalized(loweredModule).Should().Be(
+            RenderCanonicalized(
+                """
+                module Test exposing (..)
+
+
+                eqListInt : List.List Int -> List.List Int -> Bool
+                eqListInt left right =
+                    Pine_builtin.equal
+                        [ left
+                        , right
+                        ]
+                """));
+    }
+
+    [Fact]
+    public void Lowers_eq_operator_application_for_choice_type_with_primitive_args()
+    {
+        var loweredModule =
+            LowerOperators(
+                """
+                module Test exposing (..)
+
+
+                type Shape
+                    = Circle Int
+                    | Rectangle Int Int
+                    | Empty
+
+
+                eqShape : Shape -> Shape -> Bool
+                eqShape left right =
+                    left == right
+                """);
+
+        RenderCanonicalized(loweredModule).Should().Be(
+            RenderCanonicalized(
+                """
+                module Test exposing (..)
+
+
+                type Shape
+                    = Circle Int
+                    | Rectangle Int Int
+                    | Empty
+
+
+                eqShape : Test.Shape -> Test.Shape -> Bool
+                eqShape left right =
+                    Pine_builtin.equal
+                        [ left
+                        , right
+                        ]
+                """));
+    }
+
+    [Fact]
+    public void Does_not_lower_eq_for_unknown_type()
+    {
+        var loweredModule =
+            LowerOperators(
+                """
+                module Test exposing (..)
+
+
+                eqGeneric : a -> a -> Bool
+                eqGeneric left right =
+                    left == right
+                """);
+
+        // Should NOT be lowered because type variable 'a' could contain Dict/Set
+        var rendered = RenderCanonicalized(loweredModule);
+        rendered.Should().NotContain("Pine_builtin.equal");
+    }
+
+    [Fact]
+    public void Does_not_lower_eq_for_List_of_unknown_type()
+    {
+        var loweredModule =
+            LowerOperators(
+                """
+                module Test exposing (..)
+
+
+                eqListGeneric : List a -> List a -> Bool
+                eqListGeneric left right =
+                    left == right
+                """);
+
+        // Should NOT be lowered because list element type 'a' could contain Dict/Set
+        var rendered = RenderCanonicalized(loweredModule);
+        rendered.Should().NotContain("Pine_builtin.equal");
+    }
+
     private static SyntaxTypes.File LowerOperators(string moduleText)
     {
         var parsedModule =
