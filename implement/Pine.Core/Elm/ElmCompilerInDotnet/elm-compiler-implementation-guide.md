@@ -372,6 +372,23 @@ When type inference proves a comparison is on `Int`, the stage also lowers compa
 
 Additionally, when the stage encounters `Basics.and` / `(&&)` combining two `int_is_sorted_asc` applications that share a common middle operand, it merges them into a single call. For example, `a <= b && b <= c` becomes `Pine_builtin.int_is_sorted_asc [ a, b, c ]`. For strict comparisons (`<`), the merged form preserves all operands including the offset elements, resulting in `Pine_builtin.int_is_sorted_asc [ int_add [ a, 1 ], b, int_add [ b, 1 ], c ]`.
 
+#### Equality Lowering
+
+The stage also lowers `Basics.eq` / `(==)` to `Pine_builtin.equal` when type inference proves that the operand type supports *primitive equality* — meaning Pine structural equality is equivalent to Elm equality.
+
+In Elm, only `Dict` and `Set` values can have different Pine representations that must be treated as equal (because the concrete red-black tree structure depends on insertion order). Similarly, `Float` (and the polymorphic `number` constraint) can have different Pine representations for the same value (different numerator/denominator pairs). Any type that is guaranteed to never contain a `Dict`, `Set`, or `Float` value can therefore use `Pine_builtin.equal` directly, avoiding the overhead of the generic `Basics.eq` function.
+
+The check is recursive over composite types via a single `TypeSupportsPrimitiveEquality` method:
+
++ **Primitive types safe for `Pine_builtin.equal`:** `Int`, `String`, `Char`, `Bool`
++ **Primitive types NOT safe:** `Float`, `number` (different Pine representations for the same value)
++ **Tuple types:** safe if every element type is safe (recursive)
++ **List types:** safe if the element type is safe (recursive)
++ **Custom types (ADTs):** safe if every argument type of every constructor tag is safe (recursive), with cycle detection for recursive types
++ **Type aliases:** expanded before checking
++ **Built-in collection types:** `List.List a` is treated as a list; `Dict.Dict` and `Set.Set` are always unsafe
++ **Type variables and unknown types:** not safe (could contain anything)
+
 ### Current Implementation Deviations From This Conceptual Split
 
 The current implementation already uses separate pipeline stages in `ElmCompiler.cs`, but it still deviates from the conceptual split above in a few ways:

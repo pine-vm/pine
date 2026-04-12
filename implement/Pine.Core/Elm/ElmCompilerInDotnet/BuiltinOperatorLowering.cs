@@ -441,12 +441,14 @@ public static class BuiltinOperatorLowering
         switch (type)
         {
             case TypeInference.InferredType.IntType:
-            case TypeInference.InferredType.FloatType:
-            case TypeInference.InferredType.NumberType:
             case TypeInference.InferredType.StringType:
             case TypeInference.InferredType.CharType:
             case TypeInference.InferredType.BoolType:
                 return true;
+
+            // FloatType and NumberType are NOT safe for primitive equality:
+            // different Pine representations (numerator/denominator pairs) can represent
+            // the same float value and must be treated as equal in Elm.
 
             case TypeInference.InferredType.TupleType tupleType:
                 return tupleType.ElementTypes.All(
