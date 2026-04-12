@@ -59,6 +59,136 @@ public class CanonicalizationTests
     }
 
     [Fact]
+    public void Expands_local_function_reference_to_qualified_name()
+    {
+        var moduleText =
+            """"
+            module TestModule exposing (..)
+
+
+            alfa x =
+                beta (x * 3)
+
+
+            beta x =
+                x + 1
+            """";
+
+        var expectedModuleText =
+            """"
+            module TestModule exposing (..)
+
+
+            alfa x =
+                TestModule.beta (Basics.mul x 3)
+
+
+            beta x =
+                Basics.add x 1
+            """";
+
+        var canonicalized =
+            ElmCompilerTestHelper.CanonicalizeAndGetSingleModule(
+                elmModulesTexts: [moduleText],
+                moduleName: ["TestModule"]);
+
+        var rendered =
+            Avh4Format.FormatToString(
+                ToFullSyntaxModel.Convert(canonicalized));
+
+        rendered.Trim().Should().Be(
+            expectedModuleText.Trim());
+    }
+
+    [Fact]
+    public void Expands_local_choice_type_constructor_in_expression_to_qualified_name()
+    {
+        var moduleText =
+            """"
+            module TestModule exposing (..)
+
+
+            type Status
+                = Active
+                | Inactive
+
+
+            defaultStatus =
+                Active
+            """";
+
+        var expectedModuleText =
+            """"
+            module TestModule exposing (..)
+
+
+            type Status
+                = Active
+                | Inactive
+
+
+            defaultStatus =
+                TestModule.Active
+            """";
+
+        var canonicalized =
+            ElmCompilerTestHelper.CanonicalizeAndGetSingleModule(
+                elmModulesTexts: [moduleText],
+                moduleName: ["TestModule"]);
+
+        var rendered =
+            Avh4Format.FormatToString(
+                ToFullSyntaxModel.Convert(canonicalized));
+
+        rendered.Trim().Should().Be(
+            expectedModuleText.Trim());
+    }
+
+    [Fact]
+    public void Expands_local_record_type_alias_constructor_to_qualified_name()
+    {
+        var moduleText =
+            """"
+            module TestModule exposing (..)
+
+
+            type alias Point =
+                { x : Int
+                , y : Int
+                }
+
+
+            origin =
+                Point 0 0
+            """";
+
+        var expectedModuleText =
+            """"
+            module TestModule exposing (..)
+
+
+            type alias Point =
+                { x : Basics.Int, y : Basics.Int }
+
+
+            origin =
+                TestModule.Point 0 0
+            """";
+
+        var canonicalized =
+            ElmCompilerTestHelper.CanonicalizeAndGetSingleModule(
+                elmModulesTexts: [moduleText],
+                moduleName: ["TestModule"]);
+
+        var rendered =
+            Avh4Format.FormatToString(
+                ToFullSyntaxModel.Convert(canonicalized));
+
+        rendered.Trim().Should().Be(
+            expectedModuleText.Trim());
+    }
+
+    [Fact]
     public void Expands_reference_to_foreign_function_declaration()
     {
         var module1Text =
