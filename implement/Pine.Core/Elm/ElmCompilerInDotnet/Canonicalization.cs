@@ -22,7 +22,7 @@ public class Canonicalization
     /// <summary>
     /// Tracks module exports including type-to-constructor relationships for proper name resolution.
     /// </summary>
-    /// <param name="TypeExports">Set of exported type names (custom types and type aliases).</param>
+    /// <param name="TypeExports">Set of exported type names (choice types and type aliases).</param>
     /// <param name="ValueExports">Set of exported value names (functions and constructors).</param>
     /// <param name="TypeConstructors">Mapping from type names to their associated value constructors.</param>
     private record ModuleExports(
@@ -412,10 +412,10 @@ public class Canonicalization
 
             localDeclarationsBuilder.Add(declName);
 
-            // Also add type constructors for custom types
-            if (decl.Value is SyntaxTypes.Declaration.CustomTypeDeclaration customTypeDecl)
+            // Also add type constructors for choice types
+            if (decl.Value is SyntaxTypes.Declaration.CustomTypeDeclaration choiceTypeDecl)
             {
-                foreach (var ctor in customTypeDecl.TypeDeclaration.Constructors)
+                foreach (var ctor in choiceTypeDecl.TypeDeclaration.Constructors)
                 {
                     localDeclarationsBuilder.Add(ctor.Value.Name.Value);
                 }
@@ -583,11 +583,11 @@ public class Canonicalization
                             // If exposing constructors (..), add them
                             if (typeExpose.ExposedType.Open is not null &&
                                 allDeclarations.TryGetValue(exposedTypeName, out var typeDecl) &&
-                                typeDecl is SyntaxTypes.Declaration.CustomTypeDeclaration customTypeDecl)
+                                typeDecl is SyntaxTypes.Declaration.CustomTypeDeclaration choiceTypeDecl)
                             {
                                 var constructorsBuilder = ImmutableList.CreateBuilder<string>();
 
-                                foreach (var ctor in customTypeDecl.TypeDeclaration.Constructors)
+                                foreach (var ctor in choiceTypeDecl.TypeDeclaration.Constructors)
                                 {
                                     var ctorName = ctor.Value.Name.Value;
                                     valueExportsBuilder.Add(ctorName);

@@ -94,7 +94,7 @@ public abstract record ParameterSpecialization
         : ParameterSpecialization;
 
     /// <summary>
-    /// The parameter carries a single-choice (single-constructor) custom type tag.
+    /// The parameter carries a single-choice (single-constructor) choice type tag.
     /// Specialization unwraps the tag so the specialized function receives the
     /// inner fields directly. Function-typed fields are substituted inline;
     /// non-function fields become direct parameters.

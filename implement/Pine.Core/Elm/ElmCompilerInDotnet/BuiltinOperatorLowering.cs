@@ -41,9 +41,6 @@ public static class BuiltinOperatorLowering
     /// </summary>
     private static readonly Range s_zeroRange = new(Start: s_zeroLocation, End: s_zeroLocation);
 
-    /// <summary>
-    /// Type and scope information threaded through recursive lowering of a single declaration body.
-    /// </summary>
     private record RewriteContext(
         string CurrentModuleName,
         ImmutableDictionary<string, int> ParameterNames,
@@ -51,6 +48,7 @@ public static class BuiltinOperatorLowering
         ImmutableDictionary<string, TypeInference.InferredType> LocalBindingTypes,
         IReadOnlyDictionary<QualifiedNameRef, FunctionTypeInfo> FunctionTypes,
         IReadOnlyDictionary<QualifiedNameRef, TypeInference.InferredType> AliasTypes,
+        IReadOnlyDictionary<QualifiedNameRef, TypeInference.ChoiceTypeDefinition> ChoiceTypeDefinitions,
         ImmutableDictionary<string, TypeInference.InferredType> FunctionSignatures);
 
     /// <summary>
@@ -64,6 +62,7 @@ public static class BuiltinOperatorLowering
     {
         var functionTypes = BuildFunctionTypes(modules);
         var aliasTypes = BuildAliasTypes(modules);
+        var choiceTypeDefinitions = TypeInference.BuildChoiceTypeDefinitions(modules);
         var functionSignatures = BuildFunctionSignatures(modules);
 
         var result =
@@ -73,7 +72,7 @@ public static class BuiltinOperatorLowering
         foreach (var module in modules)
         {
             var moduleName = SyntaxTypes.Module.GetModuleName(module.ModuleDefinition.Value).Value;
-            var rewritten = RewriteModule(module, functionTypes, aliasTypes, functionSignatures);
+            var rewritten = RewriteModule(module, functionTypes, aliasTypes, choiceTypeDefinitions, functionSignatures);
             result[moduleName] = rewritten;
         }
 
@@ -84,6 +83,7 @@ public static class BuiltinOperatorLowering
         SyntaxTypes.File module,
         IReadOnlyDictionary<QualifiedNameRef, FunctionTypeInfo> functionTypes,
         IReadOnlyDictionary<QualifiedNameRef, TypeInference.InferredType> aliasTypes,
+        IReadOnlyDictionary<QualifiedNameRef, TypeInference.ChoiceTypeDefinition> choiceTypeDefinitions,
         ImmutableDictionary<string, TypeInference.InferredType> functionSignatures)
     {
         var moduleName = SyntaxTypes.Module.GetModuleName(module.ModuleDefinition.Value).Value;
@@ -98,6 +98,7 @@ public static class BuiltinOperatorLowering
                     moduleNameString,
                     functionTypes,
                     aliasTypes,
+                    choiceTypeDefinitions,
                     functionSignatures))
             .ToList();
 
@@ -109,6 +110,7 @@ public static class BuiltinOperatorLowering
         string moduleName,
         IReadOnlyDictionary<QualifiedNameRef, FunctionTypeInfo> functionTypes,
         IReadOnlyDictionary<QualifiedNameRef, TypeInference.InferredType> aliasTypes,
+        IReadOnlyDictionary<QualifiedNameRef, TypeInference.ChoiceTypeDefinition> choiceTypeDefinitions,
         ImmutableDictionary<string, TypeInference.InferredType> functionSignatures)
     {
         if (declarationNode.Value is not SyntaxTypes.Declaration.FunctionDeclaration functionDeclaration)
@@ -139,6 +141,7 @@ public static class BuiltinOperatorLowering
                 LocalBindingTypes: [],
                 FunctionTypes: functionTypes,
                 AliasTypes: aliasTypes,
+                ChoiceTypeDefinitions: choiceTypeDefinitions,
                 FunctionSignatures: functionSignatures);
 
         var expectedReturnType =
@@ -330,7 +333,7 @@ public static class BuiltinOperatorLowering
 
             if (loweredOp is LoweredOperator.Equal)
             {
-                if (ProvesPrimitiveEqualityBuiltin(leftType, rightType))
+                if (ProvesPrimitiveEqualityBuiltin(leftType, rightType, context))
                 {
                     return
                         BuildBuiltinApplication(
@@ -400,21 +403,96 @@ public static class BuiltinOperatorLowering
 
     private static bool ProvesPrimitiveEqualityBuiltin(
         TypeInference.InferredType leftType,
-        TypeInference.InferredType rightType) =>
-        (leftType is TypeInference.InferredType.IntType &&
-        rightType is TypeInference.InferredType.IntType or TypeInference.InferredType.NumberType) ||
-        (rightType is TypeInference.InferredType.IntType &&
-        leftType is TypeInference.InferredType.IntType or TypeInference.InferredType.NumberType) ||
-        (leftType is TypeInference.InferredType.FloatType &&
-        rightType is TypeInference.InferredType.FloatType or TypeInference.InferredType.NumberType) ||
-        (rightType is TypeInference.InferredType.FloatType &&
-        leftType is TypeInference.InferredType.FloatType or TypeInference.InferredType.NumberType) ||
-        (leftType is TypeInference.InferredType.StringType &&
-        rightType is TypeInference.InferredType.StringType) ||
-        (leftType is TypeInference.InferredType.CharType &&
-        rightType is TypeInference.InferredType.CharType) ||
-        (leftType is TypeInference.InferredType.BoolType &&
-        rightType is TypeInference.InferredType.BoolType);
+        TypeInference.InferredType rightType,
+        RewriteContext context) =>
+        TypeSupportsPrimitiveEquality(leftType, context, []) ||
+        TypeSupportsPrimitiveEquality(rightType, context, []);
+
+    /// <summary>
+    /// Returns <c>true</c> when the given type is guaranteed to never contain a Dict or Set,
+    /// meaning Pine structural equality is sufficient for Elm <c>==</c>.
+    /// <para>
+    /// The <paramref name="visiting"/> set prevents infinite recursion when a choice type
+    /// refers to itself (directly or indirectly).
+    /// </para>
+    /// </summary>
+    private static bool TypeSupportsPrimitiveEquality(
+        TypeInference.InferredType type,
+        RewriteContext context,
+        HashSet<QualifiedNameRef> visiting)
+    {
+        switch (type)
+        {
+            case TypeInference.InferredType.IntType:
+            case TypeInference.InferredType.StringType:
+            case TypeInference.InferredType.CharType:
+            case TypeInference.InferredType.BoolType:
+                return true;
+
+            // FloatType and NumberType are NOT safe for primitive equality:
+            // different Pine representations (numerator/denominator pairs) can represent
+            // the same float value and must be treated as equal in Elm.
+
+            case TypeInference.InferredType.TupleType tupleType:
+                return
+                    tupleType.ElementTypes.All(
+                        elementType => TypeSupportsPrimitiveEquality(elementType, context, visiting));
+
+            case TypeInference.InferredType.ListType listType:
+                return TypeSupportsPrimitiveEquality(listType.ElementType, context, visiting);
+
+            case TypeInference.InferredType.ChoiceType choiceType:
+                {
+                    var qualifiedName =
+                        QualifiedNameHelper.ToQualifiedNameRef(choiceType.ModuleName, choiceType.TypeName);
+
+                    // First expand aliases — the ChoiceType might actually be an alias for a concrete type.
+                    if (context.AliasTypes.TryGetValue(qualifiedName, out var aliasType))
+                    {
+                        return TypeSupportsPrimitiveEquality(aliasType, context, visiting);
+                    }
+
+                    // Recognize List.List as a list type: safe if its element type is safe.
+                    if (choiceType.ModuleName is ["List"] && choiceType.TypeName is "List" &&
+                        choiceType.TypeArguments.Count is 1)
+                    {
+                        return TypeSupportsPrimitiveEquality(choiceType.TypeArguments[0], context, visiting);
+                    }
+
+                    // Dict and Set can contain different Pine values that compare equal in Elm,
+                    // so they are never safe for primitive equality.
+                    if ((choiceType.ModuleName is ["Dict"] && choiceType.TypeName is "Dict") ||
+                        (choiceType.ModuleName is ["Set"] && choiceType.TypeName is "Set"))
+                    {
+                        return false;
+                    }
+
+                    // Guard against infinite recursion for recursive types.
+                    if (!visiting.Add(qualifiedName))
+                        return true;
+
+                    try
+                    {
+                        if (!context.ChoiceTypeDefinitions.TryGetValue(qualifiedName, out var definition))
+                            return false;
+
+                        return
+                            definition.Constructors.All(
+                                ctor =>
+                                ctor.ArgumentTypes.All(
+                                    argType =>
+                                    TypeSupportsPrimitiveEquality(argType, context, visiting)));
+                    }
+                    finally
+                    {
+                        visiting.Remove(qualifiedName);
+                    }
+                }
+
+            default:
+                return false;
+        }
+    }
 
     private static SyntaxTypes.Expression RewriteLetExpression(
         SyntaxTypes.Expression.LetExpression letExpression,

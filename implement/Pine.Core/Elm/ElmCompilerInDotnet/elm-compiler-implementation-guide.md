@@ -280,7 +280,7 @@ The dedicated specialization stage runs after the first lambda-lifting pass and 
 Typical examples are:
 
 + A higher-order function where one parameter is fixed to a concrete top-level function, inline lambda, or record-access function such as `.fieldName`.
-+ A function that destructures a single-constructor custom type, where the specialized variant can receive inner fields directly instead of receiving the wrapped outer value.
++ A function that destructures a single-constructor choice type, where the specialized variant can receive inner fields directly instead of receiving the wrapped outer value.
 + A recursive or mutually recursive function where the compiler needs a named specialized variant to preserve recursion while removing or reshaping specialized parameters.
 
 The defining properties are:
@@ -371,6 +371,23 @@ When type inference proves a comparison is on `Int`, the stage also lowers compa
 + `Basics.gt` / `(>)` to `Pine_builtin.int_is_sorted_asc [ Pine_builtin.int_add [ right, 1 ], left ]` — operands swapped with the same offset strategy as `<`.
 
 Additionally, when the stage encounters `Basics.and` / `(&&)` combining two `int_is_sorted_asc` applications that share a common middle operand, it merges them into a single call. For example, `a <= b && b <= c` becomes `Pine_builtin.int_is_sorted_asc [ a, b, c ]`. For strict comparisons (`<`), the merged form preserves all operands including the offset elements, resulting in `Pine_builtin.int_is_sorted_asc [ int_add [ a, 1 ], b, int_add [ b, 1 ], c ]`.
+
+#### Equality Lowering
+
+The stage also lowers `Basics.eq` / `(==)` to `Pine_builtin.equal` when type inference proves that the operand type supports *primitive equality* — meaning Pine structural equality is equivalent to Elm equality.
+
+In Elm, only `Dict` and `Set` values can have different Pine representations that must be treated as equal (because the concrete red-black tree structure depends on insertion order). Similarly, `Float` (and the polymorphic `number` constraint) can have different Pine representations for the same value (The current implementation will sometimes reduce to a plain integer if the denominator is `1`). Any type that is guaranteed to never contain a `Dict`, `Set`, or `Float` value can therefore use `Pine_builtin.equal` directly, avoiding the overhead of the generic `Basics.eq` function.
+
+The check is recursive over composite types via a single `TypeSupportsPrimitiveEquality` method:
+
++ **Primitive types safe for `Pine_builtin.equal`:** `Int`, `String`, `Char`, `Bool`
++ **Primitive types NOT safe:** `Float`, `number` (different Pine representations for the same value)
++ **Tuple types:** safe if every element type is safe (recursive)
++ **List types:** safe if the element type is safe (recursive)
++ **Choice types (Sum types):** safe if every argument type of every constructor tag is safe (recursive), with cycle detection for recursive types
++ **Type aliases:** expanded before checking
++ **Built-in collection types:** `List.List a` is treated as a list; `Dict.Dict` and `Set.Set` are always unsafe
++ **Type variables and unknown types:** not safe (could contain anything)
 
 ### Current Implementation Deviations From This Conceptual Split
 

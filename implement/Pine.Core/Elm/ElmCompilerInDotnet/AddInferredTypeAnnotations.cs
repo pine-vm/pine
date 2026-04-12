@@ -624,8 +624,8 @@ public class AddInferredTypeAnnotations
                 TypeInference.InferredType.ListType listType =>
                 CreateListTypeAnnotation(listType.ElementType),
 
-                TypeInference.InferredType.ChoiceType customType =>
-                CreateCustomTypeAnnotation(customType.ModuleName, customType.TypeName, customType.TypeArguments),
+                TypeInference.InferredType.ChoiceType choiceType =>
+                CreateChoiceTypeAnnotation(choiceType.ModuleName, choiceType.TypeName, choiceType.TypeArguments),
 
                 _ =>
                 null
@@ -755,9 +755,9 @@ public class AddInferredTypeAnnotations
     }
 
     /// <summary>
-    /// Creates a custom type annotation from module name, type name, and type arguments.
+    /// Creates a choice type annotation from module name, type name, and type arguments.
     /// </summary>
-    private static TypeAnnotation? CreateCustomTypeAnnotation(
+    private static TypeAnnotation? CreateChoiceTypeAnnotation(
         IReadOnlyList<string> moduleName,
         string typeName,
         IReadOnlyList<TypeInference.InferredType> typeArguments)

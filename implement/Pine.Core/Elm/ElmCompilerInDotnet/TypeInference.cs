@@ -564,7 +564,7 @@ public static class TypeInference
                 return new InferredType.ListType(elementType);
             }
 
-            // Handle custom types (including those with type arguments)
+            // Handle choice types (including those with type arguments)
             var typeArguments =
                 typed.TypeArguments
                 .Select(arg => TypeAnnotationToInferredType(arg.Value))
@@ -2814,5 +2814,62 @@ public static class TypeInference
         }
 
         return argTypes;
+    }
+
+    /// <summary>
+    /// Describes a single value constructor of a choice type,
+    /// storing the inferred types of its positional arguments.
+    /// </summary>
+    public record ChoiceTypeConstructor(
+        string TagName,
+        IReadOnlyList<InferredType> ArgumentTypes);
+
+    /// <summary>
+    /// Describes all value constructors of a choice type.
+    /// </summary>
+    public record ChoiceTypeDefinition(
+        IReadOnlyList<ChoiceTypeConstructor> Constructors);
+
+    /// <summary>
+    /// Builds a dictionary mapping each choice type in the given modules to its
+    /// <see cref="ChoiceTypeDefinition"/>, which lists every constructor and the
+    /// inferred types of its arguments.
+    /// </summary>
+    public static ImmutableDictionary<QualifiedNameRef, ChoiceTypeDefinition> BuildChoiceTypeDefinitions(
+        IReadOnlyList<SyntaxTypes.File> modules)
+    {
+        var result = new Dictionary<QualifiedNameRef, ChoiceTypeDefinition>();
+
+        foreach (var module in modules)
+        {
+            var moduleName = SyntaxTypes.Module.GetModuleName(module.ModuleDefinition.Value).Value;
+
+            foreach (var declaration in module.Declarations.Select(node => node.Value)
+            .OfType<SyntaxTypes.Declaration.CustomTypeDeclaration>())
+            {
+                var typeStruct = declaration.TypeDeclaration;
+
+                var constructors =
+                    typeStruct.Constructors
+                    .Select(
+                        ctorNode =>
+                        {
+                            var ctor = ctorNode.Value;
+
+                            var argTypes =
+                                ctor.Arguments
+                                .Select(argNode => TypeAnnotationToInferredType(argNode.Value))
+                                .ToList();
+
+                            return new ChoiceTypeConstructor(ctor.Name.Value, argTypes);
+                        })
+                    .ToList();
+
+                result[QualifiedNameHelper.ToQualifiedNameRef(moduleName, typeStruct.Name.Value)] =
+                    new ChoiceTypeDefinition(constructors);
+            }
+        }
+
+        return result.ToImmutableDictionary();
     }
 }

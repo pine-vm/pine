@@ -56,7 +56,7 @@ public partial class Inlining
         bool IsRecursive);
 
     /// <summary>
-    /// Information about a constructor that belongs to a single-constructor custom type.
+    /// Information about a constructor that belongs to a single-constructor choice type.
     /// Built from <see cref="SyntaxTypes.Declaration.CustomTypeDeclaration"/> during pre-processing.
     /// </summary>
     private record SingleChoiceConstructorInfo(
@@ -138,7 +138,7 @@ public partial class Inlining
         // Mark recursive functions
         var functionsWithRecursionInfo = MarkRecursiveFunctions(functionsByQualifiedName);
 
-        // Build type context: identify constructors of single-constructor custom types
+        // Build type context: identify constructors of single-constructor choice types
         var singleChoiceConstructors = BuildSingleChoiceConstructors(modules);
 
         // Build function signatures from type annotations for type-aware function detection
@@ -352,7 +352,7 @@ public partial class Inlining
     }
 
     /// <summary>
-    /// Builds a dictionary mapping each constructor of single-constructor custom types
+    /// Builds a dictionary mapping each constructor of single-constructor choice types
     /// to its <see cref="SingleChoiceConstructorInfo"/>. This replaces the former syntactic
     /// body-scanning heuristic with a definitive type-based check.
     /// </summary>
@@ -368,10 +368,10 @@ public partial class Inlining
 
             foreach (var decl in module.Declarations)
             {
-                if (decl.Value is not SyntaxTypes.Declaration.CustomTypeDeclaration customTypeDecl)
+                if (decl.Value is not SyntaxTypes.Declaration.CustomTypeDeclaration choiceTypeDecl)
                     continue;
 
-                var typeStruct = customTypeDecl.TypeDeclaration;
+                var typeStruct = choiceTypeDecl.TypeDeclaration;
 
                 // Only single-constructor types qualify
                 if (typeStruct.Constructors.Count is not 1)
