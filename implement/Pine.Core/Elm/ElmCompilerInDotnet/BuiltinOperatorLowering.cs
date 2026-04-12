@@ -42,9 +42,6 @@ public static class BuiltinOperatorLowering
     private static readonly Range s_zeroRange = new(Start: s_zeroLocation, End: s_zeroLocation);
 
     /// <summary>
-    /// Type and scope information threaded through recursive lowering of a single declaration body.
-    /// </summary>
-    /// <summary>
     /// Describes a single value constructor of a custom type,
     /// storing the inferred types of its positional arguments.
     /// </summary>
