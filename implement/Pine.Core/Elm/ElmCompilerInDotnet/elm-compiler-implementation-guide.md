@@ -406,6 +406,113 @@ A local declaration is not suitable for inlining if it contains a function appli
 
 There is no need to check for recursive references in the block declarations separately, because a self-referencing declaration has at least one reference from within its own body (the recursive call), plus any references from the let block's body expression or other declarations. Since a recursive function must also be used somewhere (otherwise it is dead code), the total reference count is at least 2, and the declaration is automatically preserved in the block.
 
+## Structural Type Model for Later Compilation Stages
+
+### Scope and Purpose
+
+The structural type model (`StructuralType`) is a type representation for use in the later compilation stages — after canonicalization and type checking have completed. It complements the existing `TypeInference.InferredType` model, which uses nominal typing (types identified by module-qualified names) as appropriate for the earlier stages.
+
+In the structural type model, types are identified entirely by their structure (shape) rather than by their declared name. For example, the Elm types `Maybe Int` and a user-defined `type Option a = Some a | None` with `Option Int` would be represented identically if they have the same tag structure — both resolve to a choice type with tags `Just`/`Some` carrying an `Int` and `Nothing`/`None` carrying nothing.
+
+The structural type model is used in compilation stages where:
+- Type names have already been validated by the Elm type checker.
+- User-facing error messages about type mismatches have already been produced.
+- What remains is structural information needed for optimization and code generation: "this value is a choice type with these tags" or "this is a record with these fields."
+
+### What the Model Represents
+
+The model supports **non-specific types as they appear in source declarations**. It is not limited to fully-monomorphized concrete types. The full set of type variants:
+
+**Primitive types:** `Int`, `Float`, `String`, `Char`, `Bool` — leaf nodes with no children.
+
+**Type variables** (`a`, `b`, etc.) — for polymorphic functions that have not yet been specialized. For example, `List.map : (a -> b) -> List a -> List b` retains its type variables in the structural model.
+
+**Constrained type variables** — Elm's built-in type classes, preserved as constrained variable variants:
+- `number` — can be `Int` or `Float`
+- `comparable` — can be `Int`, `Float`, `Char`, `String`, `List comparable`, or tuples of comparables
+- `appendable` — can be `String` or `List a`
+
+**Composite types:**
+- `FunctionType(argumentType, returnType)` — function types, curried as in Elm.
+- `ListType(elementType)` — list type with element type.
+- `TupleType(elementTypes)` — tuple type with a list of element types.
+
+**Record types:**
+- `ClosedRecord(fields)` — a record with a fixed, known set of fields. Fields are stored in a dictionary keyed by field name.
+- `OpenRecord(fields, rowVariable)` — an extensible record (`{ a | name : String }`) with known fields plus a row variable representing additional unknown fields.
+
+**Choice (union/sum) types:**
+- `ChoiceType(tags)` — identified structurally by its set of tags and their field types. Tags are stored in a dictionary keyed by tag name.
+
+**Self-reference:**
+- `Self` — represents "the enclosing type being defined," used to model recursive types without circular references. See *Recursive Types* below.
+
+### Use Cases
+
+**Equality checking:** Two types are equal if and only if their structures are equal. No need to compare module-qualified type names, handle re-exports, or trace type aliases. This is particularly valuable for specialization, where checking "is this the same type?" is a core operation.
+
+**Assignability / subsumption:** The model provides a "fits into" check (`IsAssignableTo`) that determines whether a specific type satisfies the constraints of a more general type. This is used to:
+- Select the right specialization when multiple specialized forms of a function exist.
+- Determine if a value can be used as a function argument at a given call site.
+
+Examples of assignability:
+- `Int` fits into `number` (a number-constrained variable).
+- A closed record `{ name : String, age : Int }` fits into an open record `{ a | name : String }`.
+- `List Int` fits into `List number`.
+- A choice type with a subset of tags fits into one with more tags.
+
+**Type variable substitution:** The model supports substituting type variables with concrete types. This is used when instantiating a polymorphic function for a specific call site — for example, replacing `number` with `Int` to create a specialized version of `add : number -> number -> number` as `add : Int -> Int -> Int`. The `Substitute` operation traverses the type tree, replacing variables according to a substitution dictionary and leaving everything else (including `Self` references) unchanged.
+
+### Limits
+
+The structural type model is designed for later compilation stages only. It does **not** replace the nominal `InferredType` model used in earlier stages (canonicalization, type checking). Specifically:
+
+- **No user-facing error messages.** The structural model does not carry enough provenance information to produce messages like "Expected `Maybe Int` but got `Result String Int`." Diagnostic output would need optional annotations for developer ergonomics.
+- **Tag names are significant.** Structural equality compares tag names, field names, and the full structure of field types. Two nominally distinct types with different tag names (e.g., `type Meters = Meters Float` and `type Seconds = Seconds Float`) are structurally **different** — the tag names `Meters` and `Seconds` do not match. Only types with identical tag names, field names, and field type structures are considered equal.
+- **Type variables are name-significant.** Two `TypeVariable("a")` nodes are equal, but `TypeVariable("a")` and `TypeVariable("b")` are not. Determining whether they represent "the same type" requires alpha-equivalence reasoning in the calling code.
+
+### Recursive Types
+
+Recursive types pose a fundamental challenge for a structural type model. A naive structural expansion of a recursive type leads to an infinite tree:
+
+```elm
+type Tree a
+    = Leaf
+    | Branch (Tree a) a (Tree a)
+```
+
+Expanding `Tree Int` structurally would try to inline the recursive reference infinitely. We cannot construct a finite value to represent this.
+
+**Why circular references are not an option:** In .NET, one could in principle use circular object references and implement equality checks that detect cycles. However, this approach fails in languages without mutation, where reference cycles are impossible to construct. We want a type model with straightforward value-equality semantics that could be directly represented in pure/immutable languages.
+
+**Solution: the `Self` type reference.** The model introduces a `Self` variant that means "the enclosing type being defined." This is analogous to the μ (mu) binder in type theory (recursive types via fixpoints), but simpler — only one level of self-reference is needed because mutual recursion can be reduced to direct recursion.
+
+The structural representation of `Tree Int` becomes:
+
+```
+ChoiceType({
+    "Leaf"   → [],
+    "Branch" → [Self, Int, Self]
+})
+```
+
+This is a finite tree. `Self` is a leaf node — no cycles, no mutation, no names.
+
+**Mutual recursion** is handled by inlining one type into the other, the same technique used for mutually recursive functions. For example:
+
+```elm
+type Forest a = Forest (List (Tree a))
+type Tree a   = Node a (Forest a)
+```
+
+Inlining `Forest` into `Tree` yields `Tree a = Node a (List (Tree a))`, which is directly recursive and representable with a single `Self` reference. This works for any finite set of mutually recursive types.
+
+**Nested recursive types** (a recursive type containing another recursive type as a field) work naturally because built-in types like `List` are primitives in the model — their own recursion is handled by `ListType` being a dedicated variant. The `Self` always refers to the user-defined type being constructed. User-defined recursive types that contain other user-defined recursive types are handled by inlining one into the other, reducing to a single `Self` reference.
+
+**Equality with `Self`** works naturally: two structural types are equal if their trees are equal, where `Self` at corresponding positions matches `Self`. This is standard structural tree comparison with no cycle detection needed.
+
+**Substitution preserves `Self`:** When substituting type variables in a recursive type (e.g., replacing `a` with `Int` in `List a = Cons a Self | Nil`), the `Self` node is left unchanged — it continues to refer to the enclosing type after substitution.
+
 ## Future Exploration
 
 ### Future Exploration - Monomorphizing Extensible Records
