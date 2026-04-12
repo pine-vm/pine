@@ -135,7 +135,7 @@ public class ElmParserFileTests
                 s_vm);
 
         return
-            (ElmValue.RenderAsElmExpression(value), CoreLibraryModule.CoreLibraryTestHelper.FormatCounts(report));
+            (ElmValue.RenderAsElmExpression(value), ElmCompilerTestHelper.FormatCounts(report));
     }
 
     [Fact]
@@ -149,9 +149,9 @@ public class ElmParserFileTests
 
         result.counts.Should().Be(
             """
-            InstructionCount: 380975
-            InvocationCount: 11978
-            BuildListCount: 108305
+            InstructionCount: 380_975
+            InvocationCount: 11_978
+            BuildListCount: 108_305
             LoopIterationCount: 0
             """);
     }
@@ -167,9 +167,9 @@ public class ElmParserFileTests
 
         result.counts.Should().Be(
             """
-            InstructionCount: 1027220
-            InvocationCount: 35384
-            BuildListCount: 157068
+            InstructionCount: 1_027_220
+            InvocationCount: 35_384
+            BuildListCount: 157_068
             LoopIterationCount: 0
             """);
     }

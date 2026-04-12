@@ -678,4 +678,17 @@ public class ElmCompilerTestHelper
 
         return FromFullSyntaxModel.Convert(formatted);
     }
+
+    public static string FormatCounts(EvaluationReport report) =>
+        string.Join(
+            "\n",
+            EnumerateCountLines(report));
+
+    private static IEnumerable<string> EnumerateCountLines(EvaluationReport report)
+    {
+        yield return "InstructionCount: " + CommandLineInterface.FormatIntegerForDisplay(report.InstructionCount);
+        yield return "InvocationCount: " + CommandLineInterface.FormatIntegerForDisplay(report.InvocationCount);
+        yield return "BuildListCount: " + CommandLineInterface.FormatIntegerForDisplay(report.BuildListCount);
+        yield return "LoopIterationCount: " + CommandLineInterface.FormatIntegerForDisplay(report.LoopIterationCount);
+    }
 }

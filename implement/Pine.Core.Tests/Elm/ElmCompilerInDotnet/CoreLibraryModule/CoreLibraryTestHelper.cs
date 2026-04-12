@@ -151,19 +151,6 @@ public static class CoreLibraryTestHelper
             .Extract(err => throw new System.Exception("Failed decode as Elm value: " + err));
     }
 
-    public static string FormatCounts(EvaluationReport report) =>
-        string.Join(
-            "\n",
-            EnumerateCountLines(report));
-
-    private static IEnumerable<string> EnumerateCountLines(EvaluationReport report)
-    {
-        yield return "InstructionCount: " + report.InstructionCount;
-        yield return "InvocationCount: " + report.InvocationCount;
-        yield return "BuildListCount: " + report.BuildListCount;
-        yield return "LoopIterationCount: " + report.LoopIterationCount;
-    }
-
     public static (ElmValue value, EvaluationReport report) ApplyAndProfileUnary(
         PineValue functionValue,
         ElmValue argument,
