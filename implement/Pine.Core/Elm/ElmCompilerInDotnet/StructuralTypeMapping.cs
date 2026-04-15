@@ -38,8 +38,8 @@ public static class StructuralTypeMapping
             MapToStructuralType(
                 inferredType,
                 choiceTypeDefinitions,
-                resolving: ImmutableHashSet<QualifiedNameRef>.Empty,
-                nameToIndex: new Dictionary<string, int>());
+                resolving: [],
+                nameToIndex: []);
     }
 
     private static StructuralType? MapToStructuralType(

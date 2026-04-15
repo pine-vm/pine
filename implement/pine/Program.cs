@@ -142,9 +142,11 @@ public class Program
 
         var passwordArgument = new Argument<string>("password");
 
-        var storeCommand = new Command("store", "Store a password for a site");
-        storeCommand.Add(siteArgument);
-        storeCommand.Add(passwordArgument);
+        var storeCommand = new Command("store", "Store a password for a site")
+        {
+            siteArgument,
+            passwordArgument
+        };
 
         storeCommand.SetAction((parseResult) =>
         {

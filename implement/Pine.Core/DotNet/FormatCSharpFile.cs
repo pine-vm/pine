@@ -2625,7 +2625,7 @@ public static class FormatCSharpFile
         // Use the string overload because the node overload would check the original tree
         // position, which may not reflect the formatted layout.
         var initIsMultiLine = SpansMultipleLines(fmtInit.ToFullString());
-        var withTrailing = initIsMultiLine ? new SyntaxTriviaList() : new SyntaxTriviaList(s_space);
+        var withTrailing = initIsMultiLine ? [] : new SyntaxTriviaList(s_space);
         var withKw = node.WithKeyword.WithLeadingTrivia(s_space).WithTrailingTrivia(withTrailing);
 
         return node.Update(fmtExpr, withKw, fmtInit);
