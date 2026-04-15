@@ -21,16 +21,14 @@ public class InliningTestHelper
 
     public static string RenderModuleForSnapshotTests(Stil4mElmSyntax7.File module)
     {
-        var mapped =
-            NameMapper.MapNames(Stil4mElmSyntax7.ToFullSyntaxModel.Convert(module), s_renderingNameMap);
-
-        var formatted =
-            SnapshotTestFormat.Format(mapped);
+        var flatDict =
+            SnapshotTestFormat.ModulesToFlatDeclarationDictionary([module]);
 
         var rendered =
-            Rendering.ToString(formatted);
-
-        VerifyRenderRoundTrip(rendered);
+            SnapshotTestFormat.RenderQualifiedDeclarations(
+                flatDict,
+                SnapshotTestFormat.DeclarationSortOrder.NameAsc,
+                nameMap: s_renderingNameMap);
 
         return rendered;
     }
@@ -359,13 +357,19 @@ public class InliningTestHelper
                 kvp => kvp.Value
                 .Extract(err => throw new System.Exception($"Module {string.Join(".", kvp.Key)} has errors: " + err)));
 
-        var allInlinedModules =
-            Inlining.Inline(
-                [.. allCanonicalizedModules.Values],
-                config)
+        var orderedModules =
+            allCanonicalizedModules.Values.ToList();
+
+        var flatDecls = ElmCompiler.FlattenModulesToDeclarationDictionary(orderedModules);
+
+        var inlinedDecls =
+            Inlining.Inline(flatDecls, config)
             .Extract(err => throw new System.Exception("Failed inlining: " + err));
 
-        return allInlinedModules[moduleName];
+        var inlinedModules = ElmCompiler.ReconstructModulesFromFlatDict(inlinedDecls, orderedModules);
+
+        return inlinedModules
+            .Single(m => Stil4mElmSyntax7.Module.GetModuleName(m.ModuleDefinition.Value).Value.SequenceEqual(moduleName));
     }
 
     public static Stil4mElmSyntax7.File CanonicalizeAndOptimizeAndGetSingleModule(
@@ -403,34 +407,26 @@ public class InliningTestHelper
                 canonicalizedModules[Stil4mElmSyntax7.Module.GetModuleName(module.ModuleDefinition.Value).Value])
             .ToList();
 
-        var specializedModules =
-            Core.Elm.ElmCompilerInDotnet.ElmSyntaxSpecialization.Apply(canonicalizedOrderedModules, config)
+        var flatDecls = ElmCompiler.FlattenModulesToDeclarationDictionary(canonicalizedOrderedModules);
+
+        var specializedDecls =
+            Core.Elm.ElmCompilerInDotnet.ElmSyntaxSpecialization.Apply(flatDecls, config)
             .Extract(err => throw new System.Exception("Failed specialization: " + err));
 
-        var specializedOrderedModules =
-            canonicalizedOrderedModules
-            .Select(
-                module =>
-                specializedModules[Stil4mElmSyntax7.Module.GetModuleName(module.ModuleDefinition.Value).Value])
-            .ToList();
-
-        var inlinedModules =
-            Core.Elm.ElmCompilerInDotnet.ElmSyntaxInlining.Apply(specializedOrderedModules, config)
+        var inlinedDecls =
+            Core.Elm.ElmCompilerInDotnet.ElmSyntaxInlining.Apply(specializedDecls, config)
             .Extract(err => throw new System.Exception("Failed inlining stage: " + err));
 
-        var inlinedOrderedModules =
-            specializedOrderedModules
-            .Select(
-                module =>
-                inlinedModules[Stil4mElmSyntax7.Module.GetModuleName(module.ModuleDefinition.Value).Value])
-            .Select(Core.Elm.ElmCompilerInDotnet.LambdaLifting.LiftLambdas)
-            .ToList();
+        var liftedDecls = Core.Elm.ElmCompilerInDotnet.LambdaLifting.LiftLambdas(inlinedDecls);
 
-        var loweredModules =
-            Core.Elm.ElmCompilerInDotnet.BuiltinOperatorLowering.Apply(inlinedOrderedModules)
+        var loweredDecls =
+            Core.Elm.ElmCompilerInDotnet.BuiltinOperatorLowering.Apply(liftedDecls)
             .Extract(err => throw new System.Exception("Failed builtin operator lowering: " + err));
 
-        return loweredModules[moduleName];
+        var loweredModules = ElmCompiler.ReconstructModulesFromFlatDict(loweredDecls, canonicalizedOrderedModules);
+
+        return loweredModules
+            .Single(m => Stil4mElmSyntax7.Module.GetModuleName(m.ModuleDefinition.Value).Value.SequenceEqual(moduleName));
     }
 
     public static Stil4mElmSyntax7.File CanonicalizeAndInlineAndLowerOperatorsAndGetSingleModule(
@@ -468,23 +464,19 @@ public class InliningTestHelper
                 canonicalizedModules[Stil4mElmSyntax7.Module.GetModuleName(module.ModuleDefinition.Value).Value])
             .ToList();
 
-        var inlinedModules =
-            Inlining.Inline(
-                orderedCanonicalizedModules,
-                config)
+        var flatDecls = ElmCompiler.FlattenModulesToDeclarationDictionary(orderedCanonicalizedModules);
+
+        var inlinedDecls =
+            Inlining.Inline(flatDecls, config)
             .Extract(err => throw new System.Exception("Failed inlining: " + err));
 
-        var orderedInlinedModules =
-            orderedCanonicalizedModules
-            .Select(
-                module =>
-                inlinedModules[Stil4mElmSyntax7.Module.GetModuleName(module.ModuleDefinition.Value).Value])
-            .ToList();
-
-        var loweredModules =
-            Core.Elm.ElmCompilerInDotnet.BuiltinOperatorLowering.Apply(orderedInlinedModules)
+        var loweredDecls =
+            Core.Elm.ElmCompilerInDotnet.BuiltinOperatorLowering.Apply(inlinedDecls)
             .Extract(err => throw new System.Exception("Failed builtin operator lowering: " + err));
 
-        return loweredModules[moduleName];
+        var loweredModules = ElmCompiler.ReconstructModulesFromFlatDict(loweredDecls, orderedCanonicalizedModules);
+
+        return loweredModules
+            .Single(m => Stil4mElmSyntax7.Module.GetModuleName(m.ModuleDefinition.Value).Value.SequenceEqual(moduleName));
     }
 }

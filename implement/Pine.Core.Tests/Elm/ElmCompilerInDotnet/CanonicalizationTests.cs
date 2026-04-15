@@ -1649,9 +1649,10 @@ public class CanonicalizationTests
         // Should have errors
         testModuleResult.Errors.Should().NotBeEmpty();
 
-        // At least one error should mention 'name' and 'shadow' (or similar)
-        var errorMessages = testModuleResult.Errors.Select(e => e.ReferencedName).ToList();
-        errorMessages.Should().Contain(e => e.Contains("name"));
+        // At least one error should be a NamingClash for 'name'
+        testModuleResult.Errors
+            .OfType<CanonicalizationError.NamingClash>()
+            .Should().Contain(c => c.Name == "name");
     }
 
     [Fact]
@@ -1689,11 +1690,15 @@ public class CanonicalizationTests
         // Should have at least 3 errors - one for each shadowed parameter (x, y, z)
         testModuleResult.Errors.Should().HaveCountGreaterThanOrEqualTo(3);
 
-        // Verify each shadowed variable is mentioned in an error
-        var errorMessages = testModuleResult.Errors.Select(e => e.ReferencedName).ToList();
-        errorMessages.Should().Contain(e => e.Contains("x"));
-        errorMessages.Should().Contain(e => e.Contains("y"));
-        errorMessages.Should().Contain(e => e.Contains("z"));
+        // Verify each shadowed variable is reported as a NamingClash
+        var clashNames =
+            testModuleResult.Errors
+            .OfType<CanonicalizationError.NamingClash>()
+            .Select(c => c.Name)
+            .ToList();
+        clashNames.Should().Contain("x");
+        clashNames.Should().Contain("y");
+        clashNames.Should().Contain("z");
     }
 
     [Fact]
@@ -1751,9 +1756,13 @@ public class CanonicalizationTests
         // Should have at least 3 errors - one for each shadowing case
         testModuleResult.Errors.Should().HaveCountGreaterThanOrEqualTo(3);
 
-        // All errors should mention 'helper'
-        var errorMessages = testModuleResult.Errors.Select(e => e.ReferencedName).ToList();
-        errorMessages.Should().OnlyContain(e => e.Contains("helper"));
+        // All errors should be NamingClash for 'helper'
+        var clashNames =
+            testModuleResult.Errors
+            .OfType<CanonicalizationError.NamingClash>()
+            .Select(c => c.Name)
+            .ToList();
+        clashNames.Should().OnlyContain(n => n == "helper");
     }
 
     [Fact]

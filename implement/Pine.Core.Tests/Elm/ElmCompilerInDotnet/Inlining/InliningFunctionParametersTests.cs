@@ -56,30 +56,26 @@ public class InliningFunctionParametersTests
 
         var expectedElmModuleText =
             """"
-            module App exposing (..)
-            
-            
-            type MyType
+            type App.MyType
                 = MyConstructor Int
-            
 
-            alfa : Int -> App.MyType -> Int
-            alfa factor (App.MyConstructor x) =
+
+            App.alfa : Int -> App.MyType -> Int
+            App.alfa factor (App.MyConstructor x) =
                 Pine_builtin.int_multiply
                     [ factor, x ]
 
 
-            root : Int -> Int
-            root factor =
-                alfa__specialized__1
+            App.alfa__specialized__1 factor x =
+                Pine_builtin.int_multiply
+                    [ factor, x ]
+
+
+            App.root : Int -> Int
+            App.root factor =
+                App.alfa__specialized__1
                     factor
                     5
-
-
-            alfa__specialized__1 factor x =
-                Pine_builtin.int_multiply
-                    [ factor, x ]
-
             """";
 
         var rendered =
@@ -123,32 +119,28 @@ public class InliningFunctionParametersTests
 
         var expectedElmModuleText =
             """"
-            module App exposing (..)
-            
-            
-            type MyType
+            type App.MyType
                 = MyConstructor Int
-            
-            
-            alfa : Int -> App.MyType -> Int
-            alfa factor myValue =
+
+
+            App.alfa : Int -> App.MyType -> Int
+            App.alfa factor myValue =
                 case myValue of
                     App.MyConstructor x ->
                         Pine_builtin.int_multiply
                             [ factor, x ]
 
 
-            root : Int -> Int
-            root factor =
-                alfa__specialized__1
-                    factor
-                    5
-
-
-            alfa__specialized__1 factor myValue__field__1 =
+            App.alfa__specialized__1 factor myValue__field__1 =
                 Pine_builtin.int_multiply
                     [ factor, myValue__field__1 ]
 
+
+            App.root : Int -> Int
+            App.root factor =
+                App.alfa__specialized__1
+                    factor
+                    5
             """";
 
         var rendered =
@@ -194,19 +186,16 @@ public class InliningFunctionParametersTests
 
         var expectedElmModuleText =
             """"
-            module App exposing (..)
-            
-            
-            type Inner
+            type App.Inner
                 = Inner Int
-            
-            
-            type Outer
+
+
+            type App.Outer
                 = Outer App.Inner
-            
-            
-            alfa : Int -> App.Outer -> Int
-            alfa factor myValue =
+
+
+            App.alfa : Int -> App.Outer -> Int
+            App.alfa factor myValue =
                 case myValue of
                     App.Outer innerValue ->
                         case innerValue of
@@ -215,17 +204,16 @@ public class InliningFunctionParametersTests
                                     [ factor, x ]
 
 
-            root : Int -> Int
-            root factor =
-                alfa__specialized__1
-                    factor
-                    5
-
-
-            alfa__specialized__1 factor myValue__field__1__field__1 =
+            App.alfa__specialized__1 factor myValue__field__1__field__1 =
                 Pine_builtin.int_multiply
                     [ factor, myValue__field__1__field__1 ]
 
+
+            App.root : Int -> Int
+            App.root factor =
+                App.alfa__specialized__1
+                    factor
+                    5
             """";
 
         var rendered =
@@ -275,19 +263,16 @@ public class InliningFunctionParametersTests
 
         var expectedElmModuleText =
             """"
-            module App exposing (..)
-
-
-            type alias Comments =
+            type alias App.Comments =
                 List.List String
 
 
-            type WithComments res
+            type App.WithComments res
                 = WithComments App.Comments res
 
 
-            merge : App.Comments -> App.WithComments a -> App.WithComments a
-            merge earlier withComments =
+            App.merge : App.Comments -> App.WithComments a -> App.WithComments a
+            App.merge earlier withComments =
                 case withComments of
                     App.WithComments laterComments res ->
                         App.WithComments
@@ -297,20 +282,19 @@ public class InliningFunctionParametersTests
                             res
 
 
-            root : List.List String -> List.List String -> Int -> App.WithComments Int
-            root earlier later value =
-                merge__specialized__1
-                    earlier
-                    ( later, value )
-
-
-            merge__specialized__1 earlier ( withComments__field__1, withComments__field__2 ) =
+            App.merge__specialized__1 earlier ( withComments__field__1, withComments__field__2 ) =
                 App.WithComments
                     (Pine_builtin.concat
                         [ earlier, withComments__field__1 ]
                     )
                     withComments__field__2
 
+
+            App.root : List.List String -> List.List String -> Int -> App.WithComments Int
+            App.root earlier later value =
+                App.merge__specialized__1
+                    earlier
+                    ( later, value )
             """";
 
         var rendered =
@@ -353,19 +337,16 @@ public class InliningFunctionParametersTests
 
         var expectedElmModuleText =
             """"
-            module App exposing (..)
-
-
-            type alias Comments =
+            type alias App.Comments =
                 List.List String
 
 
-            type WithComments res
+            type App.WithComments res
                 = WithComments App.Comments res
 
 
-            merge : App.Comments -> App.WithComments a -> App.WithComments a
-            merge earlier (App.WithComments laterComments res) =
+            App.merge : App.Comments -> App.WithComments a -> App.WithComments a
+            App.merge earlier (App.WithComments laterComments res) =
                 App.WithComments
                     (Pine_builtin.concat
                         [ earlier, laterComments ]
@@ -373,20 +354,19 @@ public class InliningFunctionParametersTests
                     res
 
 
-            root : List.List String -> List.List String -> Int -> App.WithComments Int
-            root earlier later value =
-                merge__specialized__1
+            App.merge__specialized__1 earlier ( laterComments, res ) =
+                App.WithComments
+                    (Pine_builtin.concat
+                        [ earlier, laterComments ]
+                    )
+                    res
+
+
+            App.root : List.List String -> List.List String -> Int -> App.WithComments Int
+            App.root earlier later value =
+                App.merge__specialized__1
                     earlier
                     ( later, value )
-
-
-            merge__specialized__1 earlier ( laterComments, res ) =
-                App.WithComments
-                    (Pine_builtin.concat
-                        [ earlier, laterComments ]
-                    )
-                    res
-
             """";
 
         var rendered =
@@ -431,15 +411,12 @@ public class InliningFunctionParametersTests
 
         var expectedElmModuleText =
             """"
-            module App exposing (..)
-
-
-            type TaggedFunc a b
+            type App.TaggedFunc a b
                 = TaggedFunc (a -> b)
 
 
-            listMapTagged : App.TaggedFunc a b -> List.List a -> List.List b
-            listMapTagged taggedFunc list =
+            App.listMapTagged : App.TaggedFunc a b -> List.List a -> List.List b
+            App.listMapTagged taggedFunc list =
                 case list of
                     [] ->
                         []
@@ -457,14 +434,7 @@ public class InliningFunctionParametersTests
                                     )
 
 
-            root : (Int -> Int) -> List.List Int -> List.List Int
-            root f list =
-                listMapTagged__specialized__1
-                    f
-                    list
-
-
-            listMapTagged__specialized__1 taggedFunc__field__1 list =
+            App.listMapTagged__specialized__1 taggedFunc__field__1 list =
                 case list of
                     [] ->
                         []
@@ -474,11 +444,17 @@ public class InliningFunctionParametersTests
                             (taggedFunc__field__1
                                 first
                             )
-                            (listMapTagged__specialized__1
+                            (App.listMapTagged__specialized__1
                                 taggedFunc__field__1
                                 rest
                             )
 
+
+            App.root : (Int -> Int) -> List.List Int -> List.List Int
+            App.root f list =
+                App.listMapTagged__specialized__1
+                    f
+                    list
             """";
 
         var rendered =

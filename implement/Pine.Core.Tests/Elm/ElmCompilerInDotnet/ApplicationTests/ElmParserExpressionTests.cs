@@ -213,9 +213,9 @@ public class ElmParserExpressionTests
 
         ElmCompilerTestHelper.FormatCounts(report).Should().Be(
             """
-            InstructionCount: 59_470
-            InvocationCount: 1_629
-            BuildListCount: 22_765
+            InstructionCount: 16_434
+            InvocationCount: 462
+            BuildListCount: 5_685
             LoopIterationCount: 0
             """);
     }
@@ -233,9 +233,9 @@ public class ElmParserExpressionTests
 
         ElmCompilerTestHelper.FormatCounts(report).Should().Be(
             """
-            InstructionCount: 100_846
-            InvocationCount: 4_989
-            BuildListCount: 21_613
+            InstructionCount: 49_018
+            InvocationCount: 2_126
+            BuildListCount: 15_037
             LoopIterationCount: 0
             """);
     }
@@ -253,9 +253,9 @@ public class ElmParserExpressionTests
 
         ElmCompilerTestHelper.FormatCounts(report).Should().Be(
             """
-            InstructionCount: 61_351
-            InvocationCount: 1_935
-            BuildListCount: 22_265
+            InstructionCount: 9_755
+            InvocationCount: 318
+            BuildListCount: 3_054
             LoopIterationCount: 0
             """);
     }
@@ -273,9 +273,9 @@ public class ElmParserExpressionTests
 
         ElmCompilerTestHelper.FormatCounts(report).Should().Be(
             """
-            InstructionCount: 51_390
-            InvocationCount: 1_127
-            BuildListCount: 22_296
+            InstructionCount: 33_104
+            InvocationCount: 492
+            BuildListCount: 13_461
             LoopIterationCount: 0
             """);
     }
@@ -296,9 +296,9 @@ public class ElmParserExpressionTests
 
         ElmCompilerTestHelper.FormatCounts(report).Should().Be(
             """
-            InstructionCount: 345_918
-            InvocationCount: 9_383
-            BuildListCount: 133_128
+            InstructionCount: 160_592
+            InvocationCount: 4_044
+            BuildListCount: 57_405
             LoopIterationCount: 0
             """);
     }
@@ -328,9 +328,9 @@ public class ElmParserExpressionTests
 
         ElmCompilerTestHelper.FormatCounts(report).Should().Be(
             """
-            InstructionCount: 3_413_998
-            InvocationCount: 91_383
-            BuildListCount: 1_264_568
+            InstructionCount: 1_515_112
+            InvocationCount: 39_860
+            BuildListCount: 519_109
             LoopIterationCount: 0
             """);
     }
@@ -352,9 +352,9 @@ public class ElmParserExpressionTests
 
         ElmCompilerTestHelper.FormatCounts(report).Should().Be(
             """
-            InstructionCount: 6_296_720
-            InvocationCount: 218_339
-            BuildListCount: 1_543_582
+            InstructionCount: 3_076_316
+            InvocationCount: 105_668
+            BuildListCount: 757_465
             LoopIterationCount: 0
             """);
     }
@@ -414,9 +414,9 @@ public class ElmParserExpressionTests
 
         ElmCompilerTestHelper.FormatCounts(report).Should().Be(
             """
-            InstructionCount: 13_893_982
-            InvocationCount: 372_663
-            BuildListCount: 5_101_208
+            InstructionCount: 6_156_064
+            InvocationCount: 163_220
+            BuildListCount: 2_090_389
             LoopIterationCount: 0
             """);
     }
@@ -500,9 +500,9 @@ public class ElmParserExpressionTests
 
         ElmCompilerTestHelper.FormatCounts(report).Should().Be(
             """
-            InstructionCount: 116_964_526
-            InvocationCount: 3_153_639
-            BuildListCount: 43_106_104
+            InstructionCount: 51_968_136
+            InvocationCount: 1_378_604
+            BuildListCount: 17_708_901
             LoopIterationCount: 0
             """);
     }

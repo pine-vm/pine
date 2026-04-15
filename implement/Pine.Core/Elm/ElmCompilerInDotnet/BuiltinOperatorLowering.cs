@@ -1,9 +1,9 @@
+using Pine.Core.CodeAnalysis;
 using Pine.Core.Elm.ElmSyntax.SyntaxModel;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
 
-using ModuleName = System.Collections.Generic.IReadOnlyList<string>;
 using SyntaxTypes = Pine.Core.Elm.ElmSyntax.Stil4mElmSyntax7;
 
 namespace Pine.Core.Elm.ElmCompilerInDotnet;
@@ -52,57 +52,41 @@ public static class BuiltinOperatorLowering
         ImmutableDictionary<string, TypeInference.InferredType> FunctionSignatures);
 
     /// <summary>
-    /// Applies builtin-operator lowering to a set of Elm modules that have already passed earlier
-    /// syntax optimization stages.
+    /// Applies builtin-operator lowering to a flat dictionary of Elm declarations
+    /// that have already passed earlier syntax optimization stages.
     /// </summary>
-    /// <param name="modules">The Elm modules to rewrite.</param>
-    /// <returns>The rewritten modules keyed by module name, or an error message.</returns>
-    public static Result<string, IReadOnlyDictionary<ModuleName, SyntaxTypes.File>> Apply(
-        IReadOnlyList<SyntaxTypes.File> modules)
+    /// <param name="declarations">The flat declaration dictionary to rewrite.</param>
+    /// <returns>The rewritten declarations, or an error message.</returns>
+    public static Result<string, ImmutableDictionary<DeclQualifiedName, SyntaxTypes.Declaration>> Apply(
+        ImmutableDictionary<DeclQualifiedName, SyntaxTypes.Declaration> declarations)
     {
-        var functionTypes = BuildFunctionTypes(modules);
-        var aliasTypes = BuildAliasTypes(modules);
-        var choiceTypeDefinitions = TypeInference.BuildChoiceTypeDefinitions(modules);
-        var functionSignatures = BuildFunctionSignatures(modules);
+        var functionTypes = BuildFunctionTypes(declarations);
+        var aliasTypes = BuildAliasTypes(declarations);
+        var choiceTypeDefinitions = TypeInference.BuildChoiceTypeDefinitions(declarations);
+        var functionSignatures = BuildFunctionSignatures(declarations);
 
-        var result =
-            new Dictionary<ModuleName, SyntaxTypes.File>(
-                EnumerableExtensions.EqualityComparer<ModuleName>());
+        var resultBuilder =
+            ImmutableDictionary.CreateBuilder<DeclQualifiedName, SyntaxTypes.Declaration>();
 
-        foreach (var module in modules)
+        foreach (var (key, decl) in declarations)
         {
-            var moduleName = SyntaxTypes.Module.GetModuleName(module.ModuleDefinition.Value).Value;
-            var rewritten = RewriteModule(module, functionTypes, aliasTypes, choiceTypeDefinitions, functionSignatures);
-            result[moduleName] = rewritten;
-        }
+            var moduleNameString = string.Join(".", key.Namespaces);
 
-        return result;
-    }
+            var declNode = new Node<SyntaxTypes.Declaration>(ElmSyntaxTransformations.s_zeroRange, decl);
 
-    private static SyntaxTypes.File RewriteModule(
-        SyntaxTypes.File module,
-        IReadOnlyDictionary<QualifiedNameRef, FunctionTypeInfo> functionTypes,
-        IReadOnlyDictionary<QualifiedNameRef, TypeInference.InferredType> aliasTypes,
-        IReadOnlyDictionary<QualifiedNameRef, TypeInference.ChoiceTypeDefinition> choiceTypeDefinitions,
-        ImmutableDictionary<string, TypeInference.InferredType> functionSignatures)
-    {
-        var moduleName = SyntaxTypes.Module.GetModuleName(module.ModuleDefinition.Value).Value;
-        var moduleNameString = string.Join(".", moduleName);
-
-        var rewrittenDeclarations =
-            module.Declarations
-            .Select(
-                declaration =>
+            var rewritten =
                 RewriteDeclaration(
-                    declaration,
+                    declNode,
                     moduleNameString,
                     functionTypes,
                     aliasTypes,
                     choiceTypeDefinitions,
-                    functionSignatures))
-            .ToList();
+                    functionSignatures);
 
-        return module with { Declarations = rewrittenDeclarations };
+            resultBuilder[key] = rewritten.Value;
+        }
+
+        return resultBuilder.ToImmutable();
     }
 
     private static Node<SyntaxTypes.Declaration> RewriteDeclaration(
@@ -1073,19 +1057,17 @@ public static class BuiltinOperatorLowering
     }
 
     private static ImmutableDictionary<QualifiedNameRef, FunctionTypeInfo> BuildFunctionTypes(
-        IReadOnlyList<SyntaxTypes.File> modules)
+        ImmutableDictionary<DeclQualifiedName, SyntaxTypes.Declaration> declarations)
     {
         var result = new Dictionary<QualifiedNameRef, FunctionTypeInfo>();
 
-        foreach (var module in modules)
+        foreach (var (key, decl) in declarations)
         {
-            var moduleName = SyntaxTypes.Module.GetModuleName(module.ModuleDefinition.Value).Value;
-
-            foreach (var declaration in module.Declarations.Select(node => node.Value).OfType<SyntaxTypes.Declaration.FunctionDeclaration>())
+            if (decl is SyntaxTypes.Declaration.FunctionDeclaration declaration)
             {
                 var functionName = declaration.Function.Declaration.Value.Name.Value;
 
-                result[QualifiedNameHelper.ToQualifiedNameRef(moduleName, functionName)] =
+                result[QualifiedNameHelper.ToQualifiedNameRef(key.Namespaces, functionName)] =
                     new FunctionTypeInfo(
                         TypeInference.GetFunctionReturnType(declaration),
                         TypeInference.GetFunctionParameterTypes(declaration));
@@ -1096,17 +1078,15 @@ public static class BuiltinOperatorLowering
     }
 
     private static ImmutableDictionary<QualifiedNameRef, TypeInference.InferredType> BuildAliasTypes(
-        IReadOnlyList<SyntaxTypes.File> modules)
+        ImmutableDictionary<DeclQualifiedName, SyntaxTypes.Declaration> declarations)
     {
         var result = new Dictionary<QualifiedNameRef, TypeInference.InferredType>();
 
-        foreach (var module in modules)
+        foreach (var (key, decl) in declarations)
         {
-            var moduleName = SyntaxTypes.Module.GetModuleName(module.ModuleDefinition.Value).Value;
-
-            foreach (var declaration in module.Declarations.Select(node => node.Value).OfType<SyntaxTypes.Declaration.AliasDeclaration>())
+            if (decl is SyntaxTypes.Declaration.AliasDeclaration declaration)
             {
-                result[QualifiedNameHelper.ToQualifiedNameRef(moduleName, declaration.TypeAlias.Name.Value)] =
+                result[QualifiedNameHelper.ToQualifiedNameRef(key.Namespaces, declaration.TypeAlias.Name.Value)] =
                     TypeInference.TypeAnnotationToInferredType(declaration.TypeAlias.TypeAnnotation.Value);
             }
         }
@@ -1115,19 +1095,15 @@ public static class BuiltinOperatorLowering
     }
 
     private static ImmutableDictionary<string, TypeInference.InferredType> BuildFunctionSignatures(
-        IReadOnlyList<SyntaxTypes.File> modules)
+        ImmutableDictionary<DeclQualifiedName, SyntaxTypes.Declaration> declarations)
     {
         var builder = ImmutableDictionary.CreateBuilder<string, TypeInference.InferredType>();
 
-        foreach (var module in modules)
+        foreach (var (key, decl) in declarations)
         {
-            var moduleName = SyntaxTypes.Module.GetModuleName(module.ModuleDefinition.Value).Value;
-            var moduleNameString = string.Join(".", moduleName);
+            var moduleNameString = string.Join(".", key.Namespaces);
 
-            foreach (var signature in TypeInference.BuildFunctionSignaturesMap(module, moduleNameString))
-            {
-                builder[signature.Key] = signature.Value;
-            }
+            TypeInference.CollectFunctionSignaturesFromDeclaration(decl, moduleNameString, builder);
         }
 
         return builder.ToImmutable();

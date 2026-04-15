@@ -1,3 +1,4 @@
+using Pine.Core.CodeAnalysis;
 using Pine.Core.Elm.ElmSyntax.SyntaxModel;
 using System;
 using System.Collections.Generic;
@@ -2124,101 +2125,114 @@ public static class TypeInference
         SyntaxTypes.File file,
         string moduleName)
     {
-        var signatures = ImmutableDictionary<string, InferredType>.Empty;
+        var builder = ImmutableDictionary.CreateBuilder<string, InferredType>();
 
         foreach (var declaration in file.Declarations)
         {
-            if (declaration.Value is SyntaxTypes.Declaration.FunctionDeclaration funcDecl)
-            {
-                var funcName = funcDecl.Function.Declaration.Value.Name.Value;
-                var qualifiedName = moduleName + "." + funcName;
-
-                if (funcDecl.Function.Signature?.Value is { } signature)
-                {
-                    var inferredType = TypeAnnotationToInferredType(signature.TypeAnnotation.Value);
-                    signatures = signatures.Add(qualifiedName, inferredType);
-                }
-            }
-            else if (declaration.Value is SyntaxTypes.Declaration.CustomTypeDeclaration choiceTypeDecl)
-            {
-                var typeName = choiceTypeDecl.TypeDeclaration.Name.Value;
-
-                // Get the type parameters (generics) for this type
-                var typeParams =
-                    choiceTypeDecl.TypeDeclaration.Generics
-                    .Select(g => g.Value)
-                    .ToList();
-
-                // Build constructor types for each value constructor
-                foreach (var constructorNode in choiceTypeDecl.TypeDeclaration.Constructors)
-                {
-                    var constructorName = constructorNode.Value.Name.Value;
-                    var qualifiedConstructorName = moduleName + "." + constructorName;
-
-                    // The constructor result type is the choice type with type variables as arguments
-                    // e.g., for `type ChoiceType a b = ...`, the result type is `ChoiceType a b`
-                    var typeArguments =
-                        typeParams
-                        .Select(p => (InferredType)new InferredType.TypeVariable(p))
-                        .ToList();
-
-                    InferredType resultType =
-                        new InferredType.ChoiceType(
-                            ModuleName: [],
-                            TypeName: typeName,
-                            TypeArguments: typeArguments);
-
-                    // Build the constructor type: arg1 -> arg2 -> ... -> ResultType
-                    var constructorType = resultType;
-
-                    // Process arguments in reverse to build the function type correctly
-                    for (var i = constructorNode.Value.Arguments.Count - 1; i >= 0; i--)
-                    {
-                        var argTypeAnnotation = constructorNode.Value.Arguments[i].Value;
-                        var argType = TypeAnnotationToInferredType(argTypeAnnotation);
-                        constructorType = new InferredType.FunctionType(argType, constructorType);
-                    }
-
-                    signatures = signatures.Add(qualifiedConstructorName, constructorType);
-                }
-            }
-            else if (declaration.Value is SyntaxTypes.Declaration.AliasDeclaration aliasDecl)
-            {
-                // Type alias record constructors - if the type alias is for a record type,
-                // it creates an implicit constructor: FieldType1 -> FieldType2 -> ... -> { field1: T1, field2: T2, ... }
-                var aliasName = aliasDecl.TypeAlias.Name.Value;
-
-                var qualifiedAliasName = moduleName + "." + aliasName;
-
-                // Check if the type annotation is a record type
-                if (aliasDecl.TypeAlias.TypeAnnotation.Value is SyntaxTypes.TypeAnnotation.Record recordType &&
-                    recordType.RecordDefinition.Fields.Count > 0)
-                {
-                    // Convert the full record type annotation to InferredType for the result type
-                    var resultType = TypeAnnotationToInferredType(aliasDecl.TypeAlias.TypeAnnotation.Value);
-
-                    // Collect all fields in order
-                    var allFields = recordType.RecordDefinition.Fields;
-
-                    // Build the constructor type: field1Type -> field2Type -> ... -> RecordType
-                    // Fields must be in declaration order
-                    var constructorType = resultType;
-
-                    // Process fields in reverse to build the function type correctly
-                    for (var i = allFields.Count - 1; i >= 0; i--)
-                    {
-                        var field = allFields[i];
-                        var fieldTypeAnnotation = field.Value.FieldType.Value;
-                        var fieldType = TypeAnnotationToInferredType(fieldTypeAnnotation);
-                        constructorType = new InferredType.FunctionType(fieldType, constructorType);
-                    }
-
-                    signatures = signatures.Add(qualifiedAliasName, constructorType);
-                }
-            }
+            CollectFunctionSignaturesFromDeclaration(declaration.Value, moduleName, builder);
         }
 
-        return signatures;
+        return builder.ToImmutable();
+    }
+
+    /// <summary>
+    /// Collects function signatures from a single declaration and adds them to the builder.
+    /// Handles function declarations (from type annotations), custom type constructors,
+    /// and record type alias constructors.
+    /// </summary>
+    public static void CollectFunctionSignaturesFromDeclaration(
+        SyntaxTypes.Declaration declaration,
+        string moduleName,
+        ImmutableDictionary<string, InferredType>.Builder builder)
+    {
+        if (declaration is SyntaxTypes.Declaration.FunctionDeclaration funcDecl)
+        {
+            var funcName = funcDecl.Function.Declaration.Value.Name.Value;
+            var qualifiedName = moduleName + "." + funcName;
+
+            if (funcDecl.Function.Signature?.Value is { } signature)
+            {
+                var inferredType = TypeAnnotationToInferredType(signature.TypeAnnotation.Value);
+                builder[qualifiedName] = inferredType;
+            }
+        }
+        else if (declaration is SyntaxTypes.Declaration.CustomTypeDeclaration choiceTypeDecl)
+        {
+            var typeName = choiceTypeDecl.TypeDeclaration.Name.Value;
+
+            // Get the type parameters (generics) for this type
+            var typeParams =
+                choiceTypeDecl.TypeDeclaration.Generics
+                .Select(g => g.Value)
+                .ToList();
+
+            // Build constructor types for each value constructor
+            foreach (var constructorNode in choiceTypeDecl.TypeDeclaration.Constructors)
+            {
+                var constructorName = constructorNode.Value.Name.Value;
+                var qualifiedConstructorName = moduleName + "." + constructorName;
+
+                // The constructor result type is the choice type with type variables as arguments
+                // e.g., for `type ChoiceType a b = ...`, the result type is `ChoiceType a b`
+                var typeArguments =
+                    typeParams
+                    .Select(p => (InferredType)new InferredType.TypeVariable(p))
+                    .ToList();
+
+                InferredType resultType =
+                    new InferredType.ChoiceType(
+                        ModuleName: [],
+                        TypeName: typeName,
+                        TypeArguments: typeArguments);
+
+                // Build the constructor type: arg1 -> arg2 -> ... -> ResultType
+                var constructorType = resultType;
+
+                // Process arguments in reverse to build the function type correctly
+                for (var i = constructorNode.Value.Arguments.Count - 1; i >= 0; i--)
+                {
+                    var argTypeAnnotation = constructorNode.Value.Arguments[i].Value;
+                    var argType = TypeAnnotationToInferredType(argTypeAnnotation);
+                    constructorType = new InferredType.FunctionType(argType, constructorType);
+                }
+
+                builder[qualifiedConstructorName] = constructorType;
+            }
+        }
+        else if (declaration is SyntaxTypes.Declaration.AliasDeclaration aliasDecl)
+        {
+            // Type alias record constructors - if the type alias is for a record type,
+            // it creates an implicit constructor: FieldType1 -> FieldType2 -> ... -> { field1: T1, field2: T2, ... }
+            var aliasName = aliasDecl.TypeAlias.Name.Value;
+
+            var qualifiedAliasName = moduleName + "." + aliasName;
+
+            // Check if the type annotation is a record type
+            if (aliasDecl.TypeAlias.TypeAnnotation.Value is SyntaxTypes.TypeAnnotation.Record recordType &&
+                recordType.RecordDefinition.Fields.Count > 0)
+            {
+                // Convert the full record type annotation to InferredType for the result type
+                var resultType = TypeAnnotationToInferredType(aliasDecl.TypeAlias.TypeAnnotation.Value);
+
+                // Collect all fields in order
+                var allFields = recordType.RecordDefinition.Fields;
+
+                // Build the constructor type: field1Type -> field2Type -> ... -> RecordType
+                // Fields must be in declaration order
+                var constructorType = resultType;
+
+                // Process fields in reverse to build the function type correctly
+                for (var i = allFields.Count - 1; i >= 0; i--)
+                {
+                    var field = allFields[i];
+                    var fieldTypeAnnotation = field.Value.FieldType.Value;
+                    var fieldType = TypeAnnotationToInferredType(fieldTypeAnnotation);
+                    constructorType = new InferredType.FunctionType(fieldType, constructorType);
+                }
+
+                builder[qualifiedAliasName] = constructorType;
+            }
+        }
     }
 
     /// <summary>
@@ -2836,38 +2850,35 @@ public static class TypeInference
     /// inferred types of its arguments.
     /// </summary>
     public static ImmutableDictionary<QualifiedNameRef, ChoiceTypeDefinition> BuildChoiceTypeDefinitions(
-        IReadOnlyList<SyntaxTypes.File> modules)
+        ImmutableDictionary<DeclQualifiedName, SyntaxTypes.Declaration> declarations)
     {
         var result = new Dictionary<QualifiedNameRef, ChoiceTypeDefinition>();
 
-        foreach (var module in modules)
+        foreach (var (key, decl) in declarations)
         {
-            var moduleName = SyntaxTypes.Module.GetModuleName(module.ModuleDefinition.Value).Value;
+            if (decl is not SyntaxTypes.Declaration.CustomTypeDeclaration declaration)
+                continue;
 
-            foreach (var declaration in module.Declarations.Select(node => node.Value)
-            .OfType<SyntaxTypes.Declaration.CustomTypeDeclaration>())
-            {
-                var typeStruct = declaration.TypeDeclaration;
+            var typeStruct = declaration.TypeDeclaration;
 
-                var constructors =
-                    typeStruct.Constructors
-                    .Select(
-                        ctorNode =>
-                        {
-                            var ctor = ctorNode.Value;
+            var constructors =
+                typeStruct.Constructors
+                .Select(
+                    ctorNode =>
+                    {
+                        var ctor = ctorNode.Value;
 
-                            var argTypes =
-                                ctor.Arguments
-                                .Select(argNode => TypeAnnotationToInferredType(argNode.Value))
-                                .ToList();
+                        var argTypes =
+                            ctor.Arguments
+                            .Select(argNode => TypeAnnotationToInferredType(argNode.Value))
+                            .ToList();
 
-                            return new ChoiceTypeConstructor(ctor.Name.Value, argTypes);
-                        })
-                    .ToList();
+                        return new ChoiceTypeConstructor(ctor.Name.Value, argTypes);
+                    })
+                .ToList();
 
-                result[QualifiedNameHelper.ToQualifiedNameRef(moduleName, typeStruct.Name.Value)] =
-                    new ChoiceTypeDefinition(constructors);
-            }
+            result[QualifiedNameHelper.ToQualifiedNameRef(key.Namespaces, typeStruct.Name.Value)] =
+                new ChoiceTypeDefinition(constructors);
         }
 
         return result.ToImmutableDictionary();

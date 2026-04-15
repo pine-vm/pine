@@ -352,7 +352,7 @@ public class StructuralTypePrintingTests
     [Fact]
     public void Print_empty_closed_record()
     {
-        var type = ST.ClosedRecord.Create(ImmutableDictionary<string, ST>.Empty);
+        var type = ST.ClosedRecord.Create([]);
 
         var printed = STPrinting.Print(type);
 
@@ -422,7 +422,7 @@ public class StructuralTypePrintingTests
     {
         var type =
             new ST.OpenRecord(
-                ImmutableDictionary<string, ST>.Empty,
+                [],
                 0);
 
         var printed = STPrinting.Print(type);

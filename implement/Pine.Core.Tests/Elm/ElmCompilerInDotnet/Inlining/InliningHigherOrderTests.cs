@@ -109,22 +109,13 @@ public class InliningHigherOrderTests
         // target the specialized version.
         var expectedAppModuleText =
             """"
-            module App exposing (..)
-
-
-            increment : Int -> Int
-            increment n =
+            App.increment : Int -> Int
+            App.increment n =
                 Pine_kernel.int_add
                     [ n, 1 ]
 
 
-            result : List.List Int -> List.List Int
-            result list =
-                listMap__specialized__1
-                    list
-
-
-            listMap__specialized__1 list =
+            App.listMap__specialized__1 list =
                 case list of
                     [] ->
                         []
@@ -134,9 +125,15 @@ public class InliningHigherOrderTests
                             (App.increment
                                 first
                             )
-                            (listMap__specialized__1
+                            (App.listMap__specialized__1
                                 rest
                             )
+
+
+            App.result : List.List Int -> List.List Int
+            App.result list =
+                App.listMap__specialized__1
+                    list
             """";
 
         var rendered =
@@ -205,46 +202,19 @@ public class InliningHigherOrderTests
         // one for 'double' (index 1, alphabetically first) and one for 'increment' (index 2).
         var expectedAppModuleText =
             """"
-            module App exposing (..)
-
-
-            increment : Int -> Int
-            increment n =
-                Pine_kernel.int_add
-                    [ n, 1 ]
-
-
-            double : Int -> Int
-            double n =
+            App.double : Int -> Int
+            App.double n =
                 Pine_kernel.int_mul
                     [ n, 2 ]
 
 
-            result : List.List Int -> List.List List.List Int
-            result list =
-                [ listMap__specialized__2
-                    list
-                , listMap__specialized__1
-                    list
-                ]
+            App.increment : Int -> Int
+            App.increment n =
+                Pine_kernel.int_add
+                    [ n, 1 ]
 
 
-            listMap__specialized__2 list =
-                case list of
-                    [] ->
-                        []
-
-                    first :: rest ->
-                        List.cons
-                            (App.increment
-                                first
-                            )
-                            (listMap__specialized__2
-                                rest
-                            )
-
-
-            listMap__specialized__1 list =
+            App.listMap__specialized__1 list =
                 case list of
                     [] ->
                         []
@@ -254,9 +224,33 @@ public class InliningHigherOrderTests
                             (App.double
                                 first
                             )
-                            (listMap__specialized__1
+                            (App.listMap__specialized__1
                                 rest
                             )
+
+
+            App.listMap__specialized__2 list =
+                case list of
+                    [] ->
+                        []
+
+                    first :: rest ->
+                        List.cons
+                            (App.increment
+                                first
+                            )
+                            (App.listMap__specialized__2
+                                rest
+                            )
+
+
+            App.result : List.List Int -> List.List List.List Int
+            App.result list =
+                [ App.listMap__specialized__2
+                    list
+                , App.listMap__specialized__1
+                    list
+                ]
             """";
 
         var rendered =
@@ -310,11 +304,8 @@ public class InliningHigherOrderTests
         // (\x -> Pine_kernel.int_add [ 5, x ]) x => Pine_kernel.int_add [ 5, x ]
         var expectedAppModuleText =
             """"
-            module App exposing (..)
-
-
-            makeAdder : Int -> Int -> Int
-            makeAdder n =
+            App.makeAdder : Int -> Int -> Int
+            App.makeAdder n =
                 \x ->
                     Pine_kernel.int_add
                         [ n
@@ -322,11 +313,10 @@ public class InliningHigherOrderTests
                         ]
 
 
-            result : Int -> Int
-            result x =
+            App.result : Int -> Int
+            App.result x =
                 Pine_kernel.int_add
                     [ 5, x ]
-
             """";
 
         var rendered =
@@ -406,28 +396,19 @@ public class InliningHigherOrderTests
         // mutually recursive pair. Both mapFirst and mapSecond are substituted.
         var expectedAppModuleText =
             """"
-            module App exposing (..)
-
-
-            increment : Int -> Int
-            increment n =
-                Pine_kernel.int_add
-                    [ n, 1 ]
-
-
-            double : Int -> Int
-            double n =
+            App.double : Int -> Int
+            App.double n =
                 Pine_kernel.int_mul
                     [ n, 2 ]
 
 
-            result : List.List Int -> List.List Int
-            result list =
-                listMap_a__specialized__1
-                    list
+            App.increment : Int -> Int
+            App.increment n =
+                Pine_kernel.int_add
+                    [ n, 1 ]
 
 
-            listMap_a__specialized__1 list =
+            App.listMap_a__specialized__1 list =
                 case list of
                     [] ->
                         []
@@ -437,12 +418,12 @@ public class InliningHigherOrderTests
                             (App.increment
                                 first
                             )
-                            (listMap_b__specialized__1
+                            (App.listMap_b__specialized__1
                                 rest
                             )
 
 
-            listMap_b__specialized__1 list =
+            App.listMap_b__specialized__1 list =
                 case list of
                     [] ->
                         []
@@ -452,9 +433,15 @@ public class InliningHigherOrderTests
                             (App.double
                                 first
                             )
-                            (listMap_a__specialized__1
+                            (App.listMap_a__specialized__1
                                 rest
                             )
+
+
+            App.result : List.List Int -> List.List Int
+            App.result list =
+                App.listMap_a__specialized__1
+                    list
             """";
 
         var rendered =
@@ -527,22 +514,13 @@ public class InliningHigherOrderTests
         // the plain listMap_increment case.
         var expectedAppModuleText =
             """"
-            module App exposing (..)
-
-
-            increment : Int -> Int
-            increment n =
+            App.increment : Int -> Int
+            App.increment n =
                 Pine_kernel.int_add
                     [ n, 1 ]
 
 
-            result : List.List Int -> List.List Int
-            result list =
-                listMapTagged__specialized__1
-                    list
-
-
-            listMapTagged__specialized__1 list =
+            App.listMapTagged__specialized__1 list =
                 case list of
                     [] ->
                         []
@@ -552,9 +530,15 @@ public class InliningHigherOrderTests
                             (App.increment
                                 first
                             )
-                            (listMapTagged__specialized__1
+                            (App.listMapTagged__specialized__1
                                 rest
                             )
+
+
+            App.result : List.List Int -> List.List Int
+            App.result list =
+                App.listMapTagged__specialized__1
+                    list
             """";
 
         var rendered =
@@ -615,28 +599,13 @@ public class InliningHigherOrderTests
 
         var expectedAppModuleText =
             """"
-            module App exposing (..)
-
-
-            increment : Int -> Int
-            increment n =
+            App.increment : Int -> Int
+            App.increment n =
                 Pine_kernel.int_add
                     [ n, 1 ]
 
 
-            ops : Helpers.Ops Int Int
-            ops =
-                { transform = App.increment
-                }
-
-
-            result : List.List Int -> List.List Int
-            result list =
-                listMapViaAccessor__specialized__1
-                    list
-
-
-            listMapViaAccessor__specialized__1 list =
+            App.listMapViaAccessor__specialized__1 list =
                 case list of
                     [] ->
                         []
@@ -646,9 +615,21 @@ public class InliningHigherOrderTests
                             (App.increment
                                 first
                             )
-                            (listMapViaAccessor__specialized__1
+                            (App.listMapViaAccessor__specialized__1
                                 rest
                             )
+
+
+            App.ops : Helpers.Ops Int Int
+            App.ops =
+                { transform = App.increment
+                }
+
+
+            App.result : List.List Int -> List.List Int
+            App.result list =
+                App.listMapViaAccessor__specialized__1
+                    list
             """";
 
         var rendered =
@@ -702,21 +683,12 @@ public class InliningHigherOrderTests
 
         var expectedAppModuleText =
             """"
-            module App exposing (..)
-
-
-            constant : Int
-            constant =
+            App.constant : Int
+            App.constant =
                 41
 
 
-            result : List.List String -> List.List Int
-            result list =
-                loopMap__specialized__1
-                    list
-
-
-            loopMap__specialized__1 list =
+            App.loopMap__specialized__1 list =
                 case list of
                     [] ->
                         []
@@ -724,9 +696,15 @@ public class InliningHigherOrderTests
                     _ :: rest ->
                         List.cons
                             App.constant
-                            (loopMap__specialized__1
+                            (App.loopMap__specialized__1
                                 rest
                             )
+
+
+            App.result : List.List String -> List.List Int
+            App.result list =
+                App.loopMap__specialized__1
+                    list
             """";
 
         var rendered =
@@ -785,29 +763,12 @@ public class InliningHigherOrderTests
 
         var expectedAppModuleText =
             """"
-            module App exposing (..)
-
-
-            constant : Int
-            constant =
+            App.constant : Int
+            App.constant =
                 41
 
 
-            parser : Helpers.Parser Int
-            parser =
-                Helpers.Parser
-                    (\() ->
-                        App.constant
-                    )
-
-
-            result : List.List String -> List.List Int
-            result list =
-                loopMap__specialized__1
-                    list
-
-
-            loopMap__specialized__1 list =
+            App.loopMap__specialized__1 list =
                 case list of
                     [] ->
                         []
@@ -815,9 +776,23 @@ public class InliningHigherOrderTests
                     _ :: rest ->
                         List.cons
                             App.constant
-                            (loopMap__specialized__1
+                            (App.loopMap__specialized__1
                                 rest
                             )
+
+
+            App.parser : Helpers.Parser Int
+            App.parser =
+                Helpers.Parser
+                    (\() ->
+                        App.constant
+                    )
+
+
+            App.result : List.List String -> List.List Int
+            App.result list =
+                App.loopMap__specialized__1
+                    list
             """";
 
         var rendered =
@@ -882,20 +857,12 @@ public class InliningHigherOrderTests
 
         var expectedAppModuleText =
             """"
-            module App exposing (..)
-
-
-            type alias Config =
+            type alias App.Config =
                 { parser : Helpers.Parser Int }
 
 
-            constant : Int
-            constant =
-                41
-
-
-            config : App.Config
-            config =
+            App.config : App.Config
+            App.config =
                 { parser =
                     Helpers.Parser
                         (\() ->
@@ -904,13 +871,12 @@ public class InliningHigherOrderTests
                 }
 
 
-            result : List.List String -> List.List Int
-            result list =
-                loopMap__specialized__1
-                    list
+            App.constant : Int
+            App.constant =
+                41
 
 
-            loopMap__specialized__1 list =
+            App.loopMap__specialized__1 list =
                 case list of
                     [] ->
                         []
@@ -918,9 +884,15 @@ public class InliningHigherOrderTests
                     _ :: rest ->
                         List.cons
                             App.constant
-                            (loopMap__specialized__1
+                            (App.loopMap__specialized__1
                                 rest
                             )
+
+
+            App.result : List.List String -> List.List Int
+            App.result list =
+                App.loopMap__specialized__1
+                    list
             """";
 
         var rendered =

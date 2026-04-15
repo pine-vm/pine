@@ -11,13 +11,55 @@ using ModuleName = System.Collections.Generic.IReadOnlyList<string>;
 namespace Pine.Core.Elm.ElmCompilerInDotnet;
 
 /// <summary>
-/// Represents an error encountered during canonicalization, such as an undefined reference.
+/// Represents an error encountered during canonicalization.
+/// Uses subtypes to distinguish between different error kinds:
+/// <list type="bullet">
+/// <item><see cref="UnresolvedReference"/>: A name could not be resolved.</item>
+/// <item><see cref="NamingClash"/>: A name shadows an existing binding.</item>
+/// <item><see cref="AmbiguousImport"/>: A name is exposed by multiple imports.</item>
+/// </list>
 /// </summary>
-/// <param name="Range">The source location where the error occurred.</param>
-/// <param name="ReferencedName">The name that was referenced but could not be resolved.</param>
-public record CanonicalizationError(
-    Range Range,
-    string ReferencedName);
+public abstract record CanonicalizationError(
+    Range Range)
+{
+    /// <summary>
+    /// A name could not be resolved to any declaration or variable in scope.
+    /// </summary>
+    /// <param name="Range">The source location where the unresolved name was referenced.</param>
+    /// <param name="Name">The name that could not be resolved.</param>
+    public record UnresolvedReference(
+        Range Range,
+        string Name)
+        : CanonicalizationError(Range);
+
+    /// <summary>
+    /// A name shadows an existing binding (parameter, let-binding, or declaration).
+    /// </summary>
+    /// <param name="Range">The source location of the shadowing (new) declaration.</param>
+    /// <param name="Name">The name that is being shadowed.</param>
+    /// <param name="ShadowedRange">
+    /// The source location of the original (shadowed) declaration, if available.
+    /// This is <c>null</c> when the shadowed declaration's range is not tracked
+    /// (e.g., when shadowing a module-level name resolved from a flat name set).
+    /// </param>
+    public record NamingClash(
+        Range Range,
+        string Name,
+        Range? ShadowedRange = null)
+        : CanonicalizationError(Range);
+
+    /// <summary>
+    /// A name is exposed by multiple imports, making it ambiguous which module to resolve from.
+    /// </summary>
+    /// <param name="Range">The source location where the ambiguous name was referenced.</param>
+    /// <param name="Name">The name that is ambiguous.</param>
+    /// <param name="ImportingModules">The module names that all expose this name.</param>
+    public record AmbiguousImport(
+        Range Range,
+        string Name,
+        IReadOnlyList<string> ImportingModules)
+        : CanonicalizationError(Range);
+}
 
 /// <summary>
 /// Describes the location of a shadowing declaration within a module.

@@ -120,37 +120,37 @@ public partial class Inlining
         ImmutableList<Node<SyntaxTypes.Declaration>> GeneratedDeclarations);
 
 
-    public static Result<string, IReadOnlyDictionary<ModuleName, SyntaxTypes.File>> Inline(
-        IReadOnlyList<SyntaxTypes.File> modules,
+    public static Result<string, ImmutableDictionary<DeclQualifiedName, SyntaxTypes.Declaration>> Inline(
+        ImmutableDictionary<DeclQualifiedName, SyntaxTypes.Declaration> declarations,
         Config config) =>
-        RewriteModules(modules, config, PipelineStage.Combined);
+        RewriteModules(declarations, config, PipelineStage.Combined);
 
-    internal static Result<string, IReadOnlyDictionary<ModuleName, SyntaxTypes.File>> RunSpecializationStage(
-        IReadOnlyList<SyntaxTypes.File> modules,
+    internal static Result<string, ImmutableDictionary<DeclQualifiedName, SyntaxTypes.Declaration>> RunSpecializationStage(
+        ImmutableDictionary<DeclQualifiedName, SyntaxTypes.Declaration> declarations,
         Config config) =>
-        RewriteModules(modules, config, PipelineStage.SpecializationOnly);
+        RewriteModules(declarations, config, PipelineStage.SpecializationOnly);
 
-    internal static Result<string, IReadOnlyDictionary<ModuleName, SyntaxTypes.File>> RunInliningStage(
-        IReadOnlyList<SyntaxTypes.File> modules,
+    internal static Result<string, ImmutableDictionary<DeclQualifiedName, SyntaxTypes.Declaration>> RunInliningStage(
+        ImmutableDictionary<DeclQualifiedName, SyntaxTypes.Declaration> declarations,
         Config config) =>
-        RewriteModules(modules, config, PipelineStage.InliningOnly);
+        RewriteModules(declarations, config, PipelineStage.InliningOnly);
 
-    private static Result<string, IReadOnlyDictionary<ModuleName, SyntaxTypes.File>> RewriteModules(
-        IReadOnlyList<SyntaxTypes.File> modules,
+    private static Result<string, ImmutableDictionary<DeclQualifiedName, SyntaxTypes.Declaration>> RewriteModules(
+        ImmutableDictionary<DeclQualifiedName, SyntaxTypes.Declaration> declarations,
         Config config,
         PipelineStage stage)
     {
-        // Build a dictionary of all function declarations across all modules
-        var functionsByQualifiedName = BuildFunctionDictionary(modules);
+        // Build a dictionary of all function declarations
+        var functionsByQualifiedName = BuildFunctionDictionary(declarations);
 
         // Mark recursive functions
         var functionsWithRecursionInfo = MarkRecursiveFunctions(functionsByQualifiedName);
 
         // Build type context: identify constructors of single-constructor choice types
-        var singleChoiceConstructors = BuildSingleChoiceConstructors(modules);
+        var singleChoiceConstructors = BuildSingleChoiceConstructors(declarations);
 
         // Build function signatures from type annotations for type-aware function detection
-        var functionSignatures = BuildFunctionSignatures(modules);
+        var functionSignatures = BuildFunctionSignatures(declarations);
 
         // --- Pass 1: Collect all specialization requests ---
         var resolution =
@@ -168,10 +168,11 @@ public partial class Inlining
                 Stage: stage);
 
         var collectedSpecializations =
-            CollectSpecializationsFromModules(modules, collectionContext);
+            CollectSpecializationsFromDeclarations(declarations, collectionContext);
 
         // --- Naming: Deduplicate and assign deterministic names ---
-        var catalog = BuildCatalogFromCollectedSpecializations(collectedSpecializations);
+        var existingDeclNames = declarations.Keys.Select(k => k.DeclName).ToHashSet();
+        var catalog = BuildCatalogFromCollectedSpecializations(collectedSpecializations, existingDeclNames);
 
         // --- Pass 2: Rewrite using the catalog ---
         var rewriteContext =
@@ -182,22 +183,35 @@ public partial class Inlining
                 SpecializationCatalog: catalog,
                 Stage: stage);
 
-        var result =
-            new Dictionary<ModuleName, SyntaxTypes.File>(
-                EnumerableExtensions.EqualityComparer<ModuleName>());
+        // Group declarations by module for per-module processing
+        var declsByModule =
+            declarations
+            .GroupBy(
+                kvp => kvp.Key.Namespaces,
+                EnumerableExtensions.EqualityComparer<IReadOnlyList<string>>());
 
-        foreach (var module in modules)
+        var resultBuilder =
+            ImmutableDictionary.CreateBuilder<DeclQualifiedName, SyntaxTypes.Declaration>();
+
+        foreach (var moduleGroup in declsByModule)
         {
-            var moduleName = SyntaxTypes.Module.GetModuleName(module.ModuleDefinition.Value).Value;
+            var moduleName = moduleGroup.Key;
 
             var moduleContext =
                 rewriteContext with { Resolution = rewriteContext.Resolution with { CurrentModuleName = moduleName } };
 
-            var inlinedModule = InlineModule(module, moduleContext);
-            result[moduleName] = inlinedModule;
+            var moduleDecls =
+                moduleGroup.ToImmutableDictionary(kvp => kvp.Key, kvp => kvp.Value);
+
+            var inlinedModuleDecls = InlineDeclarations(moduleDecls, moduleName, moduleContext);
+
+            foreach (var (key, decl) in inlinedModuleDecls)
+            {
+                resultBuilder[key] = decl;
+            }
         }
 
-        return result;
+        return resultBuilder.ToImmutable();
     }
 
     private static bool EnablesSpecialization(InliningContext context) =>
@@ -336,23 +350,16 @@ public partial class Inlining
     }
 
     private static ImmutableDictionary<DeclQualifiedName, FunctionInfo> BuildFunctionDictionary(
-        IReadOnlyList<SyntaxTypes.File> modules)
+        ImmutableDictionary<DeclQualifiedName, SyntaxTypes.Declaration> declarations)
     {
         var builder =
             ImmutableDictionary.CreateBuilder<DeclQualifiedName, FunctionInfo>();
 
-        foreach (var module in modules)
+        foreach (var (key, decl) in declarations)
         {
-            var moduleName = SyntaxTypes.Module.GetModuleName(module.ModuleDefinition.Value).Value;
-
-            foreach (var decl in module.Declarations)
+            if (decl is SyntaxTypes.Declaration.FunctionDeclaration funcDecl)
             {
-                if (decl.Value is SyntaxTypes.Declaration.FunctionDeclaration funcDecl)
-                {
-                    var funcName = funcDecl.Function.Declaration.Value.Name.Value;
-                    var key = new DeclQualifiedName(moduleName, funcName);
-                    builder[key] = new FunctionInfo(moduleName, funcDecl.Function, IsRecursive: false);
-                }
+                builder[key] = new FunctionInfo(key.Namespaces, funcDecl.Function, IsRecursive: false);
             }
         }
 
@@ -365,34 +372,29 @@ public partial class Inlining
     /// body-scanning heuristic with a definitive type-based check.
     /// </summary>
     private static ImmutableDictionary<SyntaxTypes.QualifiedNameRef, SingleChoiceConstructorInfo> BuildSingleChoiceConstructors(
-        IReadOnlyList<SyntaxTypes.File> modules)
+        ImmutableDictionary<DeclQualifiedName, SyntaxTypes.Declaration> declarations)
     {
         var builder =
             ImmutableDictionary.CreateBuilder<SyntaxTypes.QualifiedNameRef, SingleChoiceConstructorInfo>();
 
-        foreach (var module in modules)
+        foreach (var (key, decl) in declarations)
         {
-            var moduleName = SyntaxTypes.Module.GetModuleName(module.ModuleDefinition.Value).Value;
+            if (decl is not SyntaxTypes.Declaration.CustomTypeDeclaration choiceTypeDecl)
+                continue;
 
-            foreach (var decl in module.Declarations)
-            {
-                if (decl.Value is not SyntaxTypes.Declaration.CustomTypeDeclaration choiceTypeDecl)
-                    continue;
+            var typeStruct = choiceTypeDecl.TypeDeclaration;
 
-                var typeStruct = choiceTypeDecl.TypeDeclaration;
+            // Only single-constructor types qualify
+            if (typeStruct.Constructors.Count is not 1)
+                continue;
 
-                // Only single-constructor types qualify
-                if (typeStruct.Constructors.Count is not 1)
-                    continue;
+            var constructor = typeStruct.Constructors[0].Value;
+            var constructorName = new SyntaxTypes.QualifiedNameRef(key.Namespaces, constructor.Name.Value);
 
-                var constructor = typeStruct.Constructors[0].Value;
-                var constructorName = new SyntaxTypes.QualifiedNameRef(moduleName, constructor.Name.Value);
-
-                builder[constructorName] =
-                    new SingleChoiceConstructorInfo(
-                        ConstructorName: constructorName,
-                        FieldCount: constructor.Arguments.Count);
-            }
+            builder[constructorName] =
+                new SingleChoiceConstructorInfo(
+                    ConstructorName: constructorName,
+                    FieldCount: constructor.Arguments.Count);
         }
 
         return builder.ToImmutable();
@@ -404,43 +406,44 @@ public partial class Inlining
     /// function detection in <see cref="IsFunctionExpression"/>.
     /// </summary>
     private static ImmutableDictionary<string, TypeInference.InferredType> BuildFunctionSignatures(
-        IReadOnlyList<SyntaxTypes.File> modules)
+        ImmutableDictionary<DeclQualifiedName, SyntaxTypes.Declaration> declarations)
     {
         var builder =
             ImmutableDictionary.CreateBuilder<string, TypeInference.InferredType>();
 
-        foreach (var module in modules)
+        foreach (var (key, decl) in declarations)
         {
-            var moduleName = SyntaxTypes.Module.GetModuleName(module.ModuleDefinition.Value).Value;
-            var moduleNameString = string.Join(".", moduleName);
+            var moduleNameString = string.Join(".", key.Namespaces);
 
-            var moduleSignatures = TypeInference.BuildFunctionSignaturesMap(module, moduleNameString);
-
-            foreach (var kvp in moduleSignatures)
-            {
-                builder[kvp.Key] = kvp.Value;
-            }
+            TypeInference.CollectFunctionSignaturesFromDeclaration(decl, moduleNameString, builder);
         }
 
         return builder.ToImmutable();
     }
 
-    private static SyntaxTypes.File InlineModule(SyntaxTypes.File module, InliningContext context)
+    private static ImmutableDictionary<DeclQualifiedName, SyntaxTypes.Declaration> InlineDeclarations(
+        ImmutableDictionary<DeclQualifiedName, SyntaxTypes.Declaration> moduleDecls,
+        IReadOnlyList<string> moduleName,
+        InliningContext context)
     {
+        var moduleLevelNames = CollectModuleLevelDeclarationNames(moduleDecls);
+
         context =
             context with
             {
-                ModuleLevelNames = CollectModuleLevelDeclarationNames(module)
+                ModuleLevelNames = moduleLevelNames
             };
 
         var newDecls = ImmutableList.CreateBuilder<Node<SyntaxTypes.Declaration>>();
-        var inlinedDeclarations = new List<Node<SyntaxTypes.Declaration>>();
+        var inlinedDeclarations = new List<(DeclQualifiedName Key, Node<SyntaxTypes.Declaration> Decl)>();
 
-        foreach (var decl in module.Declarations)
+        foreach (var (key, decl) in moduleDecls.OrderBy(kvp => kvp.Key))
         {
-            var (inlinedDecl, decls) = InlineDeclaration(decl, context);
-            inlinedDeclarations.Add(inlinedDecl);
-            newDecls.AddRange(decls);
+            var declNode = new Node<SyntaxTypes.Declaration>(ElmSyntaxTransformations.s_zeroRange, decl);
+            var (inlinedDecl, generatedDecls) = InlineDeclaration(declNode, context);
+
+            inlinedDeclarations.Add((key, inlinedDecl));
+            newDecls.AddRange(generatedDecls);
         }
 
         // Inline the generated specialized functions to beta-reduce any
@@ -449,20 +452,37 @@ public partial class Inlining
         foreach (var newDecl in newDecls)
         {
             var (inlinedNewDecl, furtherDecls) = InlineDeclaration(newDecl, context);
-            inlinedDeclarations.Add(inlinedNewDecl);
-            inlinedDeclarations.AddRange(furtherDecls);
+
+            var newDeclName = ElmCompiler.GetDeclarationName(inlinedNewDecl.Value);
+            var newKey = new DeclQualifiedName(moduleName, newDeclName ?? "unknown");
+
+            inlinedDeclarations.Add((newKey, inlinedNewDecl));
+
+            foreach (var furtherDecl in furtherDecls)
+            {
+                var furtherDeclName = ElmCompiler.GetDeclarationName(furtherDecl.Value);
+                var furtherKey = new DeclQualifiedName(moduleName, furtherDeclName ?? "unknown");
+                inlinedDeclarations.Add((furtherKey, furtherDecl));
+            }
         }
+
+        // Build a flat dict of the inlined declarations for simplification context.
+        // Use a builder to handle duplicate keys (same specialized function generated
+        // from different call sites) — last value wins, which is safe since duplicates
+        // have identical content.
+        var inlinedDeclsDictBuilder =
+            ImmutableDictionary.CreateBuilder<DeclQualifiedName, SyntaxTypes.Declaration>();
+
+        foreach (var (key, declNode) in inlinedDeclarations)
+        {
+            inlinedDeclsDictBuilder[key] = declNode.Value;
+        }
+
+        var inlinedDeclsDict = inlinedDeclsDictBuilder.ToImmutable();
 
         var simplificationFunctions = context.Resolution.FunctionsByQualifiedName.ToBuilder();
 
-        foreach (var rewrittenFunction in MarkRecursiveFunctions(
-            BuildFunctionDictionary(
-                [
-                module with
-                {
-                    Declarations = inlinedDeclarations
-                }
-                ])))
+        foreach (var rewrittenFunction in MarkRecursiveFunctions(BuildFunctionDictionary(inlinedDeclsDict)))
         {
             simplificationFunctions[rewrittenFunction.Key] = rewrittenFunction.Value;
         }
@@ -477,52 +497,284 @@ public partial class Inlining
                 }
             };
 
-        var simplified =
-            inlinedDeclarations
-            .Select(decl => SimplifyGeneratedDeclaration(decl, simplificationContext))
+        // Recompute module-level names to include any newly generated declarations
+        // (e.g., specialized functions added during inlining). The original moduleLevelNames
+        // only covered the input declarations. Without this update, RenameDeclarationBindingsAvoidingCapture
+        // would not know to rename local bindings that clash with the new top-level names.
+        var allModuleLevelNames = CollectModuleLevelDeclarationNames(inlinedDeclsDict);
+
+        var resultBuilder =
+            ImmutableDictionary.CreateBuilder<DeclQualifiedName, SyntaxTypes.Declaration>();
+
+        foreach (var (key, declNode) in inlinedDeclarations)
+        {
+            var simplified = SimplifyGeneratedDeclaration(declNode, simplificationContext);
+
+            // Safety net: rename all local bindings in the declaration to ensure
+            // no naming clashes remain after simplification and inlining.
+            simplified = RenameDeclarationBindingsAvoidingCapture(simplified, allModuleLevelNames);
+
+            // Post-process: ensure all Application arguments are parenthesized where necessary
+            var parenthesized = ElmSyntaxTransformations.ParenthesizeDeclaration(simplified);
+
+            resultBuilder[key] = parenthesized.Value;
+        }
+
+        return resultBuilder.ToImmutable();
+    }
+
+    /// <summary>
+    /// Renames all local bindings in a function declaration to avoid any naming clashes.
+    /// This ensures that function parameters, let-bindings, case patterns, and lambda
+    /// parameters do not shadow module-level names or each other.
+    /// </summary>
+    private static Node<SyntaxTypes.Declaration> RenameDeclarationBindingsAvoidingCapture(
+        Node<SyntaxTypes.Declaration> declNode,
+        ImmutableHashSet<string> moduleLevelNames)
+    {
+        if (declNode.Value is not SyntaxTypes.Declaration.FunctionDeclaration funcDecl)
+            return declNode;
+
+        var impl = funcDecl.Function.Declaration.Value;
+
+        var freshImpl =
+            ElmSyntaxTransformations.RenameBindingsAvoidingCapture(impl, moduleLevelNames);
+
+        if (ReferenceEquals(freshImpl, impl))
+            return declNode;
+
+        var newFunc =
+            funcDecl.Function with
+            {
+                Declaration =
+                new Node<SyntaxTypes.FunctionImplementation>(
+                    funcDecl.Function.Declaration.Range,
+                    freshImpl)
+            };
+
+        return
+            new Node<SyntaxTypes.Declaration>(
+                declNode.Range,
+                new SyntaxTypes.Declaration.FunctionDeclaration(newFunc));
+    }
+
+    /// <summary>
+    /// Asserts that a declaration has no naming clashes (let-bindings or case-pattern variables
+    /// shadowing module-level names). Throws an exception with detailed diagnostics if clashes
+    /// are found, to crash early and pinpoint which declaration and stage introduced the problem.
+    /// </summary>
+    private static void AssertNoNamingClashesInDeclaration(
+        DeclQualifiedName qualifiedName,
+        SyntaxTypes.Declaration declaration,
+        ImmutableHashSet<string> moduleLevelNames,
+        string stage)
+    {
+        var (errors, shadowings) =
+            NamingErrorDetection.DetectNamingErrorsInDeclaration(declaration, moduleLevelNames);
+
+        if (errors.Count is 0 && shadowings.Count is 0)
+            return;
+
+        var clashDetails =
+            errors
+            .OfType<CanonicalizationError.NamingClash>()
+            .Select(
+                c =>
+                {
+                    var shadowInfo =
+                        c.ShadowedRange is { } sr
+                        ?
+                        $" (shadowing decl at {sr.Start.Row}:{sr.Start.Column})"
+                        :
+                        "";
+
+                    return $"{c.Name}@{c.Range.Start.Row}:{c.Range.Start.Column}{shadowInfo}";
+                })
             .ToList();
 
-        // Post-process: ensure all Application arguments are parenthesized where necessary
-        var parenthesized =
-            simplified
-            .Select(ElmSyntaxTransformations.ParenthesizeDeclaration)
+        var clashNames =
+            errors
+            .OfType<CanonicalizationError.NamingClash>()
+            .Select(c => c.Name)
+            .Distinct()
+            .OrderBy(n => n)
             .ToList();
 
-        return module with { Declarations = parenthesized };
+        var shadowNames = shadowings.Keys.OrderBy(n => n).ToList();
+
+        var details = new System.Text.StringBuilder();
+        details.Append("Naming clash in '");
+        details.Append(qualifiedName.FullName);
+        details.Append("' after ");
+        details.Append(stage);
+
+        if (clashNames.Count > 0)
+        {
+            details.Append(" — clashes: ");
+            details.Append(string.Join(", ", clashNames));
+        }
+
+        if (clashDetails.Count > 0)
+        {
+            details.Append(" — clash details: [");
+            details.Append(string.Join("; ", clashDetails));
+            details.Append(']');
+        }
+
+        if (shadowNames.Count > 0)
+        {
+            details.Append(" — shadowings: ");
+            details.Append(string.Join(", ", shadowNames));
+        }
+
+        details.Append(" — moduleLevelNames(");
+        details.Append(moduleLevelNames.Count);
+        details.Append(")");
+
+        foreach (var name in clashNames.Concat(shadowNames).Distinct())
+        {
+            details.Append(" contains '");
+            details.Append(name);
+            details.Append("': ");
+            details.Append(moduleLevelNames.Contains(name));
+        }
+
+        // Print abbreviated declaration structure for diagnosis
+        if (declaration is SyntaxTypes.Declaration.FunctionDeclaration funcDecl)
+        {
+            var funcImpl = funcDecl.Function.Declaration.Value;
+            details.Append(" — params: [");
+            details.Append(string.Join(", ", funcImpl.Arguments.Select(a => a.Value.ToString())));
+            details.Append("]");
+
+            // Find the specific let/case binding that clashes
+            var allBindingNames = new HashSet<string>();
+            CollectAllBindingNames(funcImpl.Expression.Value, allBindingNames);
+
+            var clashingBindings =
+                allBindingNames.Intersect(clashNames.Concat(shadowNames).ToHashSet()).OrderBy(n => n);
+
+            details.Append(" — body bindings that clash: [");
+            details.Append(string.Join(", ", clashingBindings));
+            details.Append("]");
+        }
+
+        throw new System.InvalidOperationException(details.ToString());
+    }
+
+    /// <summary>
+    /// Collects all binding names (let-functions, let-destructuring, case patterns, lambda params)
+    /// in an expression tree for diagnostic purposes.
+    /// </summary>
+    private static void CollectAllBindingNames(SyntaxTypes.Expression expr, HashSet<string> names)
+    {
+        switch (expr)
+        {
+            case SyntaxTypes.Expression.LetExpression letExpr:
+                foreach (var decl in letExpr.Value.Declarations)
+                {
+                    switch (decl.Value)
+                    {
+                        case SyntaxTypes.Expression.LetDeclaration.LetFunction letFunc:
+                            names.Add(letFunc.Function.Declaration.Value.Name.Value);
+
+                            foreach (var arg in letFunc.Function.Declaration.Value.Arguments)
+                                ElmSyntaxTransformations.CollectPatternNamesRecursive(arg.Value, names);
+
+                            CollectAllBindingNames(letFunc.Function.Declaration.Value.Expression.Value, names);
+                            break;
+
+                        case SyntaxTypes.Expression.LetDeclaration.LetDestructuring letDestr:
+                            ElmSyntaxTransformations.CollectPatternNamesRecursive(letDestr.Pattern.Value, names);
+                            CollectAllBindingNames(letDestr.Expression.Value, names);
+                            break;
+                    }
+                }
+
+                CollectAllBindingNames(letExpr.Value.Expression.Value, names);
+                break;
+
+            case SyntaxTypes.Expression.CaseExpression caseExpr:
+                CollectAllBindingNames(caseExpr.CaseBlock.Expression.Value, names);
+
+                foreach (var c in caseExpr.CaseBlock.Cases)
+                {
+                    ElmSyntaxTransformations.CollectPatternNamesRecursive(c.Pattern.Value, names);
+                    CollectAllBindingNames(c.Expression.Value, names);
+                }
+
+                break;
+
+            case SyntaxTypes.Expression.LambdaExpression lambda:
+                foreach (var arg in lambda.Lambda.Arguments)
+                    ElmSyntaxTransformations.CollectPatternNamesRecursive(arg.Value, names);
+
+                CollectAllBindingNames(lambda.Lambda.Expression.Value, names);
+                break;
+
+            case SyntaxTypes.Expression.Application app:
+                foreach (var a in app.Arguments)
+                    CollectAllBindingNames(a.Value, names);
+
+                break;
+
+            case SyntaxTypes.Expression.IfBlock ifBlock:
+                CollectAllBindingNames(ifBlock.Condition.Value, names);
+                CollectAllBindingNames(ifBlock.ThenBlock.Value, names);
+                CollectAllBindingNames(ifBlock.ElseBlock.Value, names);
+                break;
+
+            case SyntaxTypes.Expression.ParenthesizedExpression paren:
+                CollectAllBindingNames(paren.Expression.Value, names);
+                break;
+
+            case SyntaxTypes.Expression.OperatorApplication opApp:
+                CollectAllBindingNames(opApp.Left.Value, names);
+                CollectAllBindingNames(opApp.Right.Value, names);
+                break;
+
+            case SyntaxTypes.Expression.TupledExpression tupled:
+                foreach (var e in tupled.Elements)
+                    CollectAllBindingNames(e.Value, names);
+
+                break;
+
+            case SyntaxTypes.Expression.ListExpr list:
+                foreach (var e in list.Elements)
+                    CollectAllBindingNames(e.Value, names);
+
+                break;
+
+            case SyntaxTypes.Expression.RecordExpr record:
+                foreach (var f in record.Fields)
+                    CollectAllBindingNames(f.Value.Item2.Value, names);
+
+                break;
+
+            case SyntaxTypes.Expression.RecordAccess recordAccess:
+                CollectAllBindingNames(recordAccess.Record.Value, names);
+                break;
+
+            case SyntaxTypes.Expression.Negation negation:
+                CollectAllBindingNames(negation.Expression.Value, names);
+                break;
+        }
     }
 
     private static ImmutableHashSet<string> CollectModuleLevelDeclarationNames(
-        SyntaxTypes.File module)
+        ImmutableDictionary<DeclQualifiedName, SyntaxTypes.Declaration> declarations)
     {
         var names = ImmutableHashSet.CreateBuilder<string>();
 
-        foreach (var declaration in module.Declarations)
+        foreach (var (key, decl) in declarations)
         {
-            switch (declaration.Value)
+            names.Add(key.DeclName);
+
+            // Also add constructor names for custom types
+            if (decl is SyntaxTypes.Declaration.CustomTypeDeclaration customTypeDeclaration)
             {
-                case SyntaxTypes.Declaration.FunctionDeclaration functionDeclaration:
-                    names.Add(functionDeclaration.Function.Declaration.Value.Name.Value);
-                    break;
-
-                case SyntaxTypes.Declaration.CustomTypeDeclaration customTypeDeclaration:
-                    names.Add(customTypeDeclaration.TypeDeclaration.Name.Value);
-
-                    foreach (var constructor in customTypeDeclaration.TypeDeclaration.Constructors)
-                        names.Add(constructor.Value.Name.Value);
-
-                    break;
-
-                case SyntaxTypes.Declaration.AliasDeclaration aliasDeclaration:
-                    names.Add(aliasDeclaration.TypeAlias.Name.Value);
-                    break;
-
-                case SyntaxTypes.Declaration.InfixDeclaration infixDeclaration:
-                    names.Add(infixDeclaration.Infix.Operator.Value);
-                    break;
-
-                case SyntaxTypes.Declaration.PortDeclaration portDeclaration:
-                    names.Add(portDeclaration.Signature.Name.Value);
-                    break;
+                foreach (var constructor in customTypeDeclaration.TypeDeclaration.Constructors)
+                    names.Add(constructor.Value.Name.Value);
             }
         }
 
@@ -545,7 +797,16 @@ public partial class Inlining
 
         var impl = funcDecl.Function.Declaration.Value;
         var simplifiedExpr = SimplifyGeneratedExpressionRecursive(impl.Expression, context);
-        var newImpl = impl with { Expression = simplifiedExpr };
+
+        // After simplification (which can beta-reduce, inline let bindings, etc.),
+        // rename all local bindings to avoid shadowing module-level names
+        // AND the function's own parameter names (Elm disallows all shadowing).
+        var namesToAvoid = NamesToAvoidForFreshBindings(context);
+
+        var freshImpl =
+            ElmSyntaxTransformations.RenameBindingsAvoidingCapture(
+                impl with { Expression = simplifiedExpr },
+                namesToAvoid);
 
         var newFunc =
             funcDecl.Function with
@@ -553,7 +814,7 @@ public partial class Inlining
                 Declaration =
                 new Node<SyntaxTypes.FunctionImplementation>(
                     funcDecl.Function.Declaration.Range,
-                    newImpl)
+                    freshImpl)
             };
 
         return
@@ -1353,24 +1614,19 @@ public partial class Inlining
 
         if (namesToAvoid.Count > 0)
         {
-            lambda = ElmSyntaxTransformations.FreshenLocalBindings(lambda, namesToAvoid);
+            lambda = ElmSyntaxTransformations.RenameBindingsAvoidingCapture(lambda, namesToAvoid);
         }
 
         var newDecls = ImmutableList.CreateBuilder<Node<SyntaxTypes.Declaration>>();
-
-        Node<SyntaxTypes.Expression> Inline(Node<SyntaxTypes.Expression> e)
-        {
-            var (result, decls) = InlineExpression(e, context);
-            newDecls.AddRange(decls);
-            return result;
-        }
 
         var consumedArgs = Math.Min(lambda.Arguments.Count, args.Count);
         var consumedInlinedArgs = new List<Node<SyntaxTypes.Expression>>(consumedArgs);
 
         for (var i = 0; i < consumedArgs; i++)
         {
-            consumedInlinedArgs.Add(Inline(args[i]));
+            var (inlinedArg, argDecls) = InlineExpression(args[i], context);
+            newDecls.AddRange(argDecls);
+            consumedInlinedArgs.Add(inlinedArg);
         }
 
         var body =
@@ -1378,6 +1634,32 @@ public partial class Inlining
                 lambda.Expression,
                 lambda.Arguments,
                 consumedInlinedArgs);
+
+        // Collect any local binding names introduced by the parameter substitution
+        // (e.g., pattern destructuring like `(Parser parseA)` becomes `let (Parser parseA) = arg`).
+        // These names must be added to the context so that nested inlining knows to avoid them.
+        var introducedBindings = new HashSet<string>();
+
+        for (var i = 0; i < consumedArgs; i++)
+        {
+            ElmSyntaxTransformations.CollectPatternNamesRecursive(
+                lambda.Arguments[i].Value,
+                introducedBindings);
+        }
+
+        var bodyContext =
+            introducedBindings.Count > 0
+            ?
+            context with { LocalNames = context.LocalNames.Union(introducedBindings) }
+            :
+            context;
+
+        Node<SyntaxTypes.Expression> Inline(Node<SyntaxTypes.Expression> e)
+        {
+            var (result, decls) = InlineExpression(e, bodyContext);
+            newDecls.AddRange(decls);
+            return result;
+        }
 
         body = Inline(body);
 
@@ -1395,7 +1677,7 @@ public partial class Inlining
             if (namesToAvoid.Count > 0)
             {
                 partialApplication =
-                    ElmSyntaxTransformations.FreshenLocalBindings(
+                    ElmSyntaxTransformations.RenameBindingsAvoidingCapture(
                         partialApplication,
                         namesToAvoid);
             }
@@ -1417,7 +1699,7 @@ public partial class Inlining
             var (appResult, appDecls) =
                 InlineApplication(
                     new SyntaxTypes.Expression.Application([.. allArgs]),
-                    context);
+                    bodyContext);
 
             newDecls.AddRange(appDecls);
 
@@ -1429,7 +1711,7 @@ public partial class Inlining
             if (namesToAvoid.Count > 0)
             {
                 applicationResult =
-                    ElmSyntaxTransformations.FreshenLocalBindings(
+                    ElmSyntaxTransformations.RenameBindingsAvoidingCapture(
                         applicationResult,
                         namesToAvoid);
             }
@@ -1440,7 +1722,7 @@ public partial class Inlining
         // Exact application
         if (namesToAvoid.Count > 0)
         {
-            body = ElmSyntaxTransformations.FreshenLocalBindings(body, namesToAvoid);
+            body = ElmSyntaxTransformations.RenameBindingsAvoidingCapture(body, namesToAvoid);
         }
 
         return new InliningResult(body.Value, newDecls.ToImmutable());
@@ -1459,8 +1741,6 @@ public partial class Inlining
     /// Only function bodies that are structurally simple (not containing if-then-else,
     /// case, let-in, or lambda expressions) are eligible, since complex bodies can
     /// produce invalid syntax when placed in certain expression positions.
-    /// Only functions from the same module as the call site are eligible, to avoid
-    /// cross-module reference qualification issues with specialized and lifted names.
     /// Used only for non-recursive functions in the classic inlining path.
     /// </summary>
     private static bool IsSmallEnoughToInline(
@@ -1470,15 +1750,6 @@ public partial class Inlining
     {
         // Size-based inlining is only enabled in the SmallFunctionsAndPlainValues config.
         if (context.Config is not Config.InlineSmallFunctionsAndPlainValues)
-        {
-            return false;
-        }
-
-        // Only inline small functions from the same module as the call site.
-        // Cross-module inlining can introduce unqualified references (e.g., `blob`)
-        // that are valid in the callee module but unresolvable at the call site.
-        if (context.Resolution.CurrentModuleName is not { } currentModuleName ||
-            !calleeModuleName.SequenceEqual(currentModuleName))
         {
             return false;
         }
@@ -1529,13 +1800,6 @@ public partial class Inlining
 
         // Skip if we're already in the process of inlining this value (prevents infinite recursion)
         if (context.InliningStack.Contains(resolved.QualifiedName))
-            return null;
-
-        // Only inline values from the same module as the call site.
-        // Cross-module inlining of plain values can introduce unqualified references
-        // (e.g., `blob`) that are valid in the callee module but unresolvable at the call site.
-        if (context.Resolution.CurrentModuleName is not { } currentModuleName ||
-            !funcInfo.ModuleName.SequenceEqual(currentModuleName))
             return null;
 
         var body = funcImpl.Expression.Value;
@@ -1804,25 +2068,64 @@ public partial class Inlining
     {
         var namesToAvoid = NamesToAvoidForFreshBindings(context);
 
-        if (namesToAvoid.Count > 0)
+        // Build cross-module qualification context when the callee is from a different module.
+        // This is passed to RenameBindingsAvoidingCapture so that local-renaming and module-level
+        // qualification happen in a single pass. Combining them avoids an ordering conflict:
+        // renaming can change local bindings, so a subsequent separate qualification pass
+        // wouldn't know which names were originally local vs. module-level references.
+        var crossModuleQualification = BuildCrossModuleQualification(calleeModuleName, context);
+
+        if (namesToAvoid.Count > 0 || crossModuleQualification is not null)
         {
-            funcImpl = ElmSyntaxTransformations.FreshenLocalBindings(funcImpl, namesToAvoid);
+            funcImpl =
+                ElmSyntaxTransformations.RenameBindingsAvoidingCapture(
+                    funcImpl,
+                    namesToAvoid,
+                    crossModuleQualification);
         }
 
         var newDecls = ImmutableList.CreateBuilder<Node<SyntaxTypes.Declaration>>();
 
-        Node<SyntaxTypes.Expression> Inline(Node<SyntaxTypes.Expression> e)
-        {
-            var (result, decls) = InlineExpression(e, context);
-            newDecls.AddRange(decls);
-            return result;
-        }
-
         var funcParams = funcImpl.Arguments;
         var funcBody = funcImpl.Expression;
 
-        // First, recursively inline the arguments
-        var inlinedArgs = args.Select(Inline).ToList();
+        // First, recursively inline the arguments (using the original context,
+        // before we add the function parameter names to scope)
+        var inlinedArgs = new List<Node<SyntaxTypes.Expression>>(args.Count);
+
+        foreach (var arg in args)
+        {
+            var (inlinedArg, argDecls) = InlineExpression(arg, context);
+            newDecls.AddRange(argDecls);
+            inlinedArgs.Add(inlinedArg);
+        }
+
+        // Collect all binding names introduced by the function parameters.
+        // These must be added to the context so that nested inlining (of the body)
+        // knows to avoid reusing these names — preventing name clashes when the same
+        // callee is inlined multiple times in nested scopes.
+        var introducedParamBindings = new HashSet<string>();
+
+        foreach (var param in funcParams)
+        {
+            ElmSyntaxTransformations.CollectPatternNamesRecursive(
+                param.Value,
+                introducedParamBindings);
+        }
+
+        var bodyContext =
+            introducedParamBindings.Count > 0
+            ?
+            context with { LocalNames = context.LocalNames.Union(introducedParamBindings) }
+            :
+            context;
+
+        Node<SyntaxTypes.Expression> Inline(Node<SyntaxTypes.Expression> e)
+        {
+            var (result, decls) = InlineExpression(e, bodyContext);
+            newDecls.AddRange(decls);
+            return result;
+        }
 
         // Check if any parameter uses constructor pattern matching - if so, we need let bindings
         var letDeclarations = new List<Node<SyntaxTypes.Expression.LetDeclaration>>();
@@ -1958,7 +2261,7 @@ nextParam:;
             var (normalizedResult, normalizedDecls) =
                 InlineExpression(
                     new Node<SyntaxTypes.Expression>(ElmSyntaxTransformations.s_zeroRange, resultExpr),
-                    context);
+                    bodyContext);
 
             newDecls.AddRange(normalizedDecls);
             resultExpr = normalizedResult.Value;
@@ -1967,7 +2270,7 @@ nextParam:;
         if (namesToAvoid.Count > 0)
         {
             resultExpr =
-                ElmSyntaxTransformations.FreshenLocalBindings(
+                ElmSyntaxTransformations.RenameBindingsAvoidingCapture(
                     new Node<SyntaxTypes.Expression>(ElmSyntaxTransformations.s_zeroRange, resultExpr),
                     namesToAvoid)
                 .Value;
@@ -2195,6 +2498,8 @@ nextParam:;
         if (specializedName is null)
             return null;
 
+        var specializedModuleName = context.Resolution.CurrentModuleName ?? funcInfo.ModuleName;
+
         var rewrittenBody =
             funcInfo.IsRecursive
             ?
@@ -2202,6 +2507,7 @@ nextParam:;
                 funcImpl.Expression,
                 funcImpl.Name.Value,
                 funcInfo.ModuleName,
+                specializedModuleName,
                 specializedName,
                 specialization)
             :
@@ -2260,6 +2566,7 @@ nextParam:;
 
         var callArgs =
             BuildSingleChoiceTagSpecializedCallArguments(
+                specializedModuleName,
                 specializedName,
                 appArgs,
                 funcImpl.Arguments.Count,
@@ -2482,6 +2789,7 @@ nextParam:;
     }
 
     private static List<Node<SyntaxTypes.Expression>> BuildSingleChoiceTagSpecializedCallArguments(
+        ModuleName moduleName,
         string specializedName,
         IReadOnlyList<Node<SyntaxTypes.Expression>> appArgs,
         int originalParamCount,
@@ -2492,7 +2800,7 @@ nextParam:;
             {
                 new(
                     ElmSyntaxTransformations.s_zeroRange,
-                    new SyntaxTypes.Expression.FunctionOrValue([], specializedName))
+                    new SyntaxTypes.Expression.FunctionOrValue(moduleName, specializedName))
             };
 
         var flattenedActualArguments = GetFlattenedActualArguments(specialization);
@@ -2884,6 +3192,9 @@ nextParam:;
 
         var specializedName = bestSpecialization.SpecializedFunctionName;
 
+        // The specialized function will be placed in the current module being processed.
+        var specializedModuleName = context.Resolution.CurrentModuleName ?? funcModuleName;
+
         // Step 1: Rewrite recursive self-calls in the body to use the specialized name
         // and strip the invariant arguments.
         var rewrittenBody =
@@ -2891,6 +3202,7 @@ nextParam:;
                 funcImpl.Expression,
                 funcName,
                 funcModuleName,
+                specializedModuleName,
                 specializedName,
                 selectedHigherOrderParamIndicesSet);
 
@@ -2943,7 +3255,7 @@ nextParam:;
             {
                 new(
                     ElmSyntaxTransformations.s_zeroRange,
-                    new SyntaxTypes.Expression.FunctionOrValue([], specializedName))
+                    new SyntaxTypes.Expression.FunctionOrValue(specializedModuleName, specializedName))
             };
 
         for (var i = 0; i < appArgs.Count; i++)
@@ -2973,11 +3285,14 @@ nextParam:;
         SingleChoiceTagSpecialization singleChoiceTagSpecialization,
         InliningContext context)
     {
+        var specializedModuleName = context.Resolution.CurrentModuleName ?? funcInfo.ModuleName;
+
         var bodyAfterTagRewrite =
             RewriteRecursiveCallsForSingleChoiceTagSpecialization(
                 funcImpl.Expression,
                 funcImpl.Name.Value,
                 funcInfo.ModuleName,
+                specializedModuleName,
                 specializedName,
                 singleChoiceTagSpecialization);
 
@@ -3010,6 +3325,7 @@ nextParam:;
 
         var callArgumentsAfterTagRewrite =
             BuildSingleChoiceTagSpecializedCallArguments(
+                specializedModuleName,
                 specializedName,
                 appArgs,
                 funcImpl.Arguments.Count,
@@ -3045,7 +3361,7 @@ nextParam:;
             :
             RewriteGroupCallsInExpression(
                 bodyAfterTagRewrite,
-                [(specializedName, [], specializedName)],
+                [(funcImpl.Name.Value, funcInfo.ModuleName, specializedModuleName, specializedName)],
                 invariantHigherOrderParamIndices);
 
         var higherOrderSubstitutions = new Dictionary<string, Node<SyntaxTypes.Expression>>();
@@ -3098,7 +3414,7 @@ nextParam:;
             {
                 new(
                     ElmSyntaxTransformations.s_zeroRange,
-                    new SyntaxTypes.Expression.FunctionOrValue([], specializedName))
+                    new SyntaxTypes.Expression.FunctionOrValue(specializedModuleName, specializedName))
             };
 
         for (var i = 0; i < callArgumentsAfterTagRewrite.Count; i++)
@@ -3343,6 +3659,7 @@ nextParam:;
         Node<SyntaxTypes.Expression> exprNode,
         string originalFuncName,
         ModuleName originalFuncModuleName,
+        ModuleName specializedModuleName,
         string specializedName,
         HashSet<int> invariantParamIndices)
     {
@@ -3354,6 +3671,7 @@ nextParam:;
                     app,
                     originalFuncName,
                     originalFuncModuleName,
+                    specializedModuleName,
                     specializedName,
                     invariantParamIndices,
                     recurse));
@@ -3363,6 +3681,7 @@ nextParam:;
         SyntaxTypes.Expression.Application app,
         string originalFuncName,
         ModuleName originalFuncModuleName,
+        ModuleName specializedModuleName,
         string specializedName,
         HashSet<int> invariantParamIndices,
         Func<Node<SyntaxTypes.Expression>, Node<SyntaxTypes.Expression>> recurse)
@@ -3377,7 +3696,7 @@ nextParam:;
                 {
                     new(
                         ElmSyntaxTransformations.s_zeroRange,
-                        new SyntaxTypes.Expression.FunctionOrValue([], specializedName))
+                        new SyntaxTypes.Expression.FunctionOrValue(specializedModuleName, specializedName))
                 };
 
             for (var i = 1; i < app.Arguments.Count; i++)
@@ -3407,6 +3726,7 @@ nextParam:;
         Node<SyntaxTypes.Expression> exprNode,
         string originalFuncName,
         ModuleName originalFuncModuleName,
+        ModuleName specializedModuleName,
         string specializedName,
         SingleChoiceTagSpecialization specialization)
     {
@@ -3418,6 +3738,7 @@ nextParam:;
                     app,
                     originalFuncName,
                     originalFuncModuleName,
+                    specializedModuleName,
                     specializedName,
                     specialization,
                     recurse));
@@ -3427,6 +3748,7 @@ nextParam:;
         SyntaxTypes.Expression.Application app,
         string originalFuncName,
         ModuleName originalFuncModuleName,
+        ModuleName specializedModuleName,
         string specializedName,
         SingleChoiceTagSpecialization specialization,
         Func<Node<SyntaxTypes.Expression>, Node<SyntaxTypes.Expression>> recurse)
@@ -3440,7 +3762,7 @@ nextParam:;
                 {
                     new(
                         ElmSyntaxTransformations.s_zeroRange,
-                        new SyntaxTypes.Expression.FunctionOrValue([], specializedName))
+                        new SyntaxTypes.Expression.FunctionOrValue(specializedModuleName, specializedName))
                 };
 
             for (var i = 1; i < app.Arguments.Count; i++)
@@ -3651,9 +3973,11 @@ nextParam:;
         }
 
         // Build group mapping for call rewriting.
+        var specModuleName = context.Resolution.CurrentModuleName ?? allMembers[0].Info.ModuleName;
+
         var groupMapping =
             allMembers
-            .Select(m => (m.Impl.Name.Value, m.Info.ModuleName, m.SpecializedName))
+            .Select(m => (m.Impl.Name.Value, m.Info.ModuleName, specModuleName, m.SpecializedName))
             .ToList();
 
         // Generate specialized versions of each member as module-level declarations.
@@ -3711,11 +4035,14 @@ nextParam:;
 
         // Build the call to the start function's specialized version with remaining (non-invariant) arguments.
         var startSpecName = allMembers[0].SpecializedName;
+        var mutualRecSpecModuleName = context.Resolution.CurrentModuleName ?? allMembers[0].Info.ModuleName;
 
         var callArgs =
             new List<Node<SyntaxTypes.Expression>>
             {
-                new(ElmSyntaxTransformations.s_zeroRange, new SyntaxTypes.Expression.FunctionOrValue([], startSpecName))
+                new(
+                    ElmSyntaxTransformations.s_zeroRange,
+                    new SyntaxTypes.Expression.FunctionOrValue(mutualRecSpecModuleName, startSpecName))
             };
 
         for (var i = 0; i < appArgs.Count; i++)
@@ -3742,7 +4069,7 @@ nextParam:;
     /// </summary>
     private static Node<SyntaxTypes.Expression> RewriteGroupCallsInExpression(
         Node<SyntaxTypes.Expression> exprNode,
-        IReadOnlyList<(string OriginalName, ModuleName OriginalModule, string SpecializedName)> groupMapping,
+        IReadOnlyList<(string OriginalName, ModuleName OriginalModule, ModuleName SpecializedModule, string SpecializedName)> groupMapping,
         HashSet<int> invariantParamIndices)
     {
         return
@@ -3754,14 +4081,14 @@ nextParam:;
 
     private static SyntaxTypes.Expression RewriteGroupCallApplication(
         SyntaxTypes.Expression.Application app,
-        IReadOnlyList<(string OriginalName, ModuleName OriginalModule, string SpecializedName)> groupMapping,
+        IReadOnlyList<(string OriginalName, ModuleName OriginalModule, ModuleName SpecializedModule, string SpecializedName)> groupMapping,
         HashSet<int> invariantParamIndices,
         Func<Node<SyntaxTypes.Expression>, Node<SyntaxTypes.Expression>> recurse)
     {
         if (app.Arguments.Count > 0 &&
             app.Arguments[0].Value is SyntaxTypes.Expression.FunctionOrValue fov)
         {
-            foreach (var (origName, origModule, specName) in groupMapping)
+            foreach (var (origName, origModule, specModule, specName) in groupMapping)
             {
                 if (IsRecursiveCallReference(fov, origName, origModule))
                 {
@@ -3770,7 +4097,7 @@ nextParam:;
                         {
                             new(
                                 ElmSyntaxTransformations.s_zeroRange,
-                                new SyntaxTypes.Expression.FunctionOrValue([], specName))
+                                new SyntaxTypes.Expression.FunctionOrValue(specModule, specName))
                         };
 
                     for (var i = 1; i < app.Arguments.Count; i++)
@@ -3968,12 +4295,22 @@ nextParam:;
                 remainingDecls.Add(declNode);
         }
 
-        // Step 3: Process body with substitutions applied
+        // Step 3: Apply propagated substitutions to the body AND remaining declarations.
+        // This is necessary because a propagated binding (e.g., `(Bytes.Elm_Bytes blob) = expr`)
+        // may introduce names that are referenced by other declarations in the same let block
+        // (e.g., `blobLength = Pine_kernel.length blob`). Without substituting in remaining
+        // declarations, those references become unresolvable after the binding is removed.
         var body = letExpr.Value.Expression;
 
         if (substitutions.Count > 0)
         {
             body = ElmSyntaxTransformations.SubstituteInExpression(body, substitutions);
+
+            for (var i = 0; i < remainingDecls.Count; i++)
+            {
+                remainingDecls[i] =
+                    ElmSyntaxTransformations.SubstituteInLetDeclaration(remainingDecls[i], substitutions);
+            }
         }
 
         // Collect all variable names bound by the let declarations so they shadow
@@ -4244,6 +4581,44 @@ nextParam:;
                 fieldNode.Range,
                 (fieldName, inlinedExpr)),
             newDecls);
+    }
+
+    /// <summary>
+    /// Builds a <see cref="ElmSyntaxTransformations.CrossModuleQualification"/> context
+    /// for inlining a function body from <paramref name="calleeModuleName"/> into the
+    /// current module. Returns null when both modules are the same (no qualification needed).
+    /// </summary>
+    private static ElmSyntaxTransformations.CrossModuleQualification? BuildCrossModuleQualification(
+        ModuleName calleeModuleName,
+        InliningContext context)
+    {
+        if (context.Resolution.CurrentModuleName is { } currentModuleName &&
+            calleeModuleName.SequenceEqual(currentModuleName))
+        {
+            return null;
+        }
+
+        var calleeModuleLevelNames = new HashSet<string>();
+
+        foreach (var kvp in context.Resolution.FunctionsByQualifiedName)
+        {
+            if (kvp.Key.Namespaces.SequenceEqual(calleeModuleName))
+                calleeModuleLevelNames.Add(kvp.Key.DeclName);
+        }
+
+        // Also include single-choice constructor names from the callee module
+        foreach (var kvp in context.Resolution.SingleChoiceConstructors)
+        {
+            if (kvp.Key.ModuleName.SequenceEqual(calleeModuleName))
+                calleeModuleLevelNames.Add(kvp.Key.Name);
+        }
+
+        if (calleeModuleLevelNames.Count is 0)
+            return null;
+
+        return new ElmSyntaxTransformations.CrossModuleQualification(
+            calleeModuleName,
+            calleeModuleLevelNames);
     }
 
 }

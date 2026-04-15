@@ -15,9 +15,11 @@ namespace Pine.Core.Elm.ElmCompilerInDotnet;
 
 /// <summary>
 /// Holds the intermediate results of each stage in the Elm compilation pipeline.
-/// Each property contains the list of Elm modules (as syntax tree <see cref="SyntaxTypes.File"/> objects)
-/// produced at the corresponding pipeline stage. This enables inspection and debugging of how modules
-/// are transformed through canonicalization, specialization, inlining, and other stages.
+/// Stages before the optimization pipeline (Canonicalized, LambdaLifted) keep the per-module
+/// representation because downstream pipeline stages still operate on whole modules.
+/// Stages produced by the optimization pipeline (Specialized, Inlined) and the final result
+/// (ModulesForCompilation) use a flat declaration dictionary keyed by qualified name,
+/// removing the module container.
 /// </summary>
 /// <param name="Canonicalized">
 /// Modules after canonicalization: all names are resolved to fully-qualified forms.
@@ -26,11 +28,13 @@ namespace Pine.Core.Elm.ElmCompilerInDotnet;
 /// Modules after the initial lambda lifting pass: closures are transformed into top-level functions.
 /// </param>
 /// <param name="Specialized">
-/// Modules after specialization: specialized function variants are created for known argument patterns.
+/// Flat declaration dictionary after specialization: specialized function variants are created
+/// for known argument patterns.
 /// This is <c>null</c> when <c>disableInlining</c> is true, as the optimization pipeline is skipped.
 /// </param>
 /// <param name="Inlined">
-/// Modules after higher-order inlining: functions that receive function arguments are inlined.
+/// Flat declaration dictionary after higher-order inlining: functions that receive function
+/// arguments are inlined.
 /// This is <c>null</c> when <c>disableInlining</c> is true, as the optimization pipeline is skipped.
 /// </param>
 /// <param name="ModulesForCompilation">
@@ -41,19 +45,20 @@ namespace Pine.Core.Elm.ElmCompilerInDotnet;
 public record CompilationPipelineStageResults(
     IReadOnlyList<SyntaxTypes.File> Canonicalized,
     IReadOnlyList<SyntaxTypes.File> LambdaLifted,
-    IReadOnlyList<SyntaxTypes.File>? Specialized,
-    IReadOnlyList<SyntaxTypes.File>? Inlined,
+    ImmutableDictionary<DeclQualifiedName, SyntaxTypes.Declaration>? Specialized,
+    ImmutableDictionary<DeclQualifiedName, SyntaxTypes.Declaration>? Inlined,
     IReadOnlyList<SyntaxTypes.File> ModulesForCompilation);
 
 /// <summary>
 /// Holds the intermediate results of each stage in the optimization pipeline
 /// (specialization, inlining, lambda re-lifting, operator lowering).
+/// Each stage result is a flat declaration dictionary keyed by qualified name.
 /// </summary>
 internal record OptimizationPipelineStageResults(
-    IReadOnlyList<SyntaxTypes.File> AfterSpecialization,
-    IReadOnlyList<SyntaxTypes.File> AfterHigherOrderInlining,
-    IReadOnlyList<SyntaxTypes.File> AfterLambdaLifting,
-    IReadOnlyList<SyntaxTypes.File> AfterLowering);
+    ImmutableDictionary<DeclQualifiedName, SyntaxTypes.Declaration> AfterSpecialization,
+    ImmutableDictionary<DeclQualifiedName, SyntaxTypes.Declaration> AfterHigherOrderInlining,
+    ImmutableDictionary<DeclQualifiedName, SyntaxTypes.Declaration> AfterLambdaLifting,
+    ImmutableDictionary<DeclQualifiedName, SyntaxTypes.Declaration> AfterLowering);
 
 /// <summary>
 /// Methods for compiling Elm source code and environments into Pine values, using the standard packaging for
@@ -253,7 +258,7 @@ public class ElmCompiler
             if (errors.Count > 0)
             {
                 var moduleNameStr = string.Join(".", moduleName);
-                var errMessages = string.Join("\n", errors.Select(e => e.ReferencedName));
+                var errMessages = string.Join("\n", errors.Select(RenderCanonicalizationError));
                 moduleErrors.Add("In module " + moduleNameStr + ":\n" + errMessages);
             }
         }
@@ -273,7 +278,7 @@ public class ElmCompiler
             .Select(LambdaLifting.LiftLambdas)
             .ToList();
 
-        if (CheckForShadowings(lambdaLiftedModules, "Lambda lifting (initial)") is { } lambdaLiftShadowErr)
+        if (CheckForNamingErrors(lambdaLiftedModules, "Lambda lifting (initial)") is { } lambdaLiftShadowErr)
             return lambdaLiftShadowErr;
 
         OptimizationPipelineStageResults? optimizationResults = null;
@@ -291,10 +296,14 @@ public class ElmCompiler
             if (pipelineResult.IsErrOrNull() is { } pipelineErr)
                 return pipelineErr;
 
-            var pipelineOk = pipelineResult.Extract(err => throw new NotImplementedException());
+            optimizationResults =
+                pipelineResult.Extract(err => throw new NotImplementedException());
 
-            modulesForCompilation = pipelineOk.Modules;
-            optimizationResults = pipelineOk.StageResults;
+            // Reconstruct modules from the flat declaration dictionary for the compilation backend.
+            modulesForCompilation =
+                ReconstructModulesFromFlatDict(
+                    optimizationResults.AfterLowering,
+                    lambdaLiftedModules);
         }
 
         var allFunctions =
@@ -1300,175 +1309,360 @@ public class ElmCompiler
         return PineValue.List([StringEncoding.ValueFromString(name), pineValue]);
     }
 
-    /// <summary>
-    /// Runs the optimization pipeline:
-    /// Specialization → Higher-order Inlining → Lambda Lifting → Size-based Inlining → Lambda Lifting → Operator Lowering.
-    /// <para>
-    /// <strong>Pipeline ordering rationale:</strong>
-    /// Specialization runs first because it creates specialized function variants for known argument patterns
-    /// (e.g., <c>map2__specialized__Parser</c>). These specialized functions must exist before inlining,
-    /// so that the inliner can resolve calls to them.
-    /// </para>
-    /// <para>
-    /// Higher-order inlining runs second, substituting function bodies at call sites where function
-    /// arguments are known. Lambda lifting follows to re-lift any lambdas introduced by inlining.
-    /// </para>
-    /// <para>
-    /// Size-based inlining and plain value inlining run AFTER higher-order inlining and its lambda
-    /// lifting pass. This ordering avoids the cascading bug where size-based inlining exposed new
-    /// higher-order patterns (e.g., inlining <c>skip</c> to <c>map2 revAlways</c>) that triggered
-    /// further inlining and broke lambda variable capture. By running size-based inlining after
-    /// higher-order inlining is complete and lambdas are lifted, no cascading can occur.
-    /// See <c>docs/2026-04-10-cascading-inlining-bug.md</c> for the full investigation.
-    /// </para>
-    /// </summary>
-    private static Result<string, List<SyntaxTypes.File>> ApplyOptimizationPipeline(
+    private static Result<string, OptimizationPipelineStageResults> ApplyOptimizationPipelineWithStageResults(
         List<SyntaxTypes.File> lambdaLiftedModules)
     {
-        return
-            ApplyOptimizationPipelineWithStageResults(lambdaLiftedModules)
-            .Map(tuple => tuple.Modules);
-    }
+        // Flatten the input modules into a declaration dictionary.
+        // The pipeline operates on this flat representation throughout.
+        var currentDecls = FlattenModulesToDeclarationDictionary(lambdaLiftedModules);
 
-    private static Result<string, (List<SyntaxTypes.File> Modules, OptimizationPipelineStageResults StageResults)> ApplyOptimizationPipelineWithStageResults(
-        List<SyntaxTypes.File> lambdaLiftedModules)
-    {
         // Phase 1: Specialization — create specialized versions of functions for known argument patterns.
-        var afterSpecializationResult =
-            ElmSyntaxSpecialization.Apply(lambdaLiftedModules, Inlining.Config.OnlyFunctions)
-            .Map(dict => ResolveModulesInSourceOrder(lambdaLiftedModules, dict));
+        {
+            var result =
+                ElmSyntaxSpecialization.Apply(currentDecls, Inlining.Config.OnlyFunctions);
 
-        if (afterSpecializationResult.IsErrOrNull() is { } specErr)
-            return "Specialization failed: " + specErr;
+            if (result.IsErrOrNull() is { } specErr)
+                return "Specialization failed: " + specErr;
 
-        if (afterSpecializationResult.IsOkOrNull() is not { } afterSpecialization)
-            throw new NotImplementedException("Unexpected result type");
+            if (result.IsOkOrNull() is not { } specDict)
+                throw new NotImplementedException("Unexpected result type");
 
-        if (CheckForShadowings(afterSpecialization, "Specialization") is { } specShadowErr)
+            currentDecls = specDict;
+        }
+
+        var afterSpecialization = currentDecls;
+
+        if (CheckForNamingErrors(currentDecls, "Specialization") is { } specShadowErr)
             return specShadowErr;
 
         // Phase 2: Higher-order inlining — inline functions that receive function arguments.
-        var afterHigherOrderInliningResult =
-            ElmSyntaxInlining.Apply(afterSpecialization, Inlining.Config.OnlyFunctions)
-            .Map(dict => ResolveModulesInSourceOrder(afterSpecialization, dict));
+        {
+            var result =
+                ElmSyntaxInlining.Apply(currentDecls, Inlining.Config.OnlyFunctions);
 
-        if (afterHigherOrderInliningResult.IsErrOrNull() is { } hoInlineErr)
-            return "Higher-order inlining failed: " + hoInlineErr;
+            if (result.IsErrOrNull() is { } hoInlineErr)
+                return "Higher-order inlining failed: " + hoInlineErr;
 
-        if (afterHigherOrderInliningResult.IsOkOrNull() is not { } afterHigherOrderInlining)
-            throw new NotImplementedException("Unexpected result type");
+            if (result.IsOkOrNull() is not { } hoInlineDict)
+                throw new NotImplementedException("Unexpected result type");
 
-        if (CheckForShadowings(afterHigherOrderInlining, "Higher-order inlining") is { } hoInlineShadowErr)
+            currentDecls = hoInlineDict;
+        }
+
+        var afterHigherOrderInlining = currentDecls;
+
+        if (CheckForNamingErrors(currentDecls, "Higher-order inlining") is { } hoInlineShadowErr)
             return hoInlineShadowErr;
 
         // Phase 3: Lambda lifting — re-lift any lambdas introduced by higher-order inlining.
-        var afterFirstLambdaLifting =
-            afterHigherOrderInlining
-            .Select(LambdaLifting.LiftLambdas)
-            .ToList();
+        {
+            currentDecls = LambdaLifting.LiftLambdas(currentDecls);
+        }
 
-        if (CheckForShadowings(afterFirstLambdaLifting, "Lambda lifting (after higher-order inlining)") is { } ll1ShadowErr)
+        if (CheckForNamingErrors(currentDecls, "Lambda lifting (after higher-order inlining)") is { } ll1ShadowErr)
             return ll1ShadowErr;
 
         // Phase 4: Size-based inlining and plain value inlining.
         // Runs after higher-order inlining and lambda lifting to avoid cascading.
         // Inlines small wrapper functions (≤10 AST nodes, no complex expressions) and
         // plain zero-parameter declarations with simple bodies.
-        var afterSizeBasedInliningResult =
-            ElmSyntaxInlining.Apply(afterFirstLambdaLifting, Inlining.Config.SmallFunctionsAndPlainValues)
-            .Map(dict => ResolveModulesInSourceOrder(afterFirstLambdaLifting, dict));
+        {
+            var result =
+                ElmSyntaxInlining.Apply(currentDecls, Inlining.Config.SmallFunctionsAndPlainValues);
 
-        if (afterSizeBasedInliningResult.IsErrOrNull() is { } sizeInlineErr)
-            return "Size-based inlining failed: " + sizeInlineErr;
+            if (result.IsErrOrNull() is { } sizeInlineErr)
+                return "Size-based inlining failed: " + sizeInlineErr;
 
-        if (afterSizeBasedInliningResult.IsOkOrNull() is not { } afterSizeBasedInlining)
-            throw new NotImplementedException("Unexpected result type");
+            if (result.IsOkOrNull() is not { } sizeInlineDict)
+                throw new NotImplementedException("Unexpected result type");
 
-        if (CheckForShadowings(afterSizeBasedInlining, "Size-based inlining") is { } sizeInlineShadowErr)
+            currentDecls = sizeInlineDict;
+        }
+
+        if (CheckForNamingErrors(currentDecls, "Size-based inlining") is { } sizeInlineShadowErr)
             return sizeInlineShadowErr;
 
         // Phase 5: Lambda lifting — re-lift any lambdas that size-based inlining may have introduced.
         // Although size-based inlining targets simple bodies without complex expressions,
         // this safety net ensures the AST is clean before operator lowering.
-        var afterSecondLambdaLifting =
-            afterSizeBasedInlining
-            .Select(LambdaLifting.LiftLambdas)
-            .ToList();
+        {
+            currentDecls = LambdaLifting.LiftLambdas(currentDecls);
+        }
 
-        if (CheckForShadowings(afterSecondLambdaLifting, "Lambda lifting (after size-based inlining)") is { } ll2ShadowErr)
+        var afterLambdaLifting2 = currentDecls;
+
+        if (CheckForNamingErrors(currentDecls, "Lambda lifting (after size-based inlining)") is { } ll2ShadowErr)
             return ll2ShadowErr;
 
         // Phase 6: Operator lowering — convert operators to Pine built-in calls.
-        var afterLoweringResult =
-            BuiltinOperatorLowering.Apply(afterSecondLambdaLifting)
-            .Map(dict => ResolveModulesInSourceOrder(afterSecondLambdaLifting, dict));
+        {
+            var result = BuiltinOperatorLowering.Apply(currentDecls);
 
-        if (afterLoweringResult.IsErrOrNull() is { } lowerErr)
-            return "Operator lowering failed: " + lowerErr;
+            if (result.IsErrOrNull() is { } lowerErr)
+                return "Operator lowering failed: " + lowerErr;
 
-        if (afterLoweringResult.IsOkOrNull() is not { } afterLowering)
-            throw new NotImplementedException("Unexpected result type");
+            if (result.IsOkOrNull() is not { } lowerDict)
+                throw new NotImplementedException("Unexpected result type");
 
-        if (CheckForShadowings(afterLowering, "Operator lowering") is { } lowerShadowErr)
+            currentDecls = lowerDict;
+        }
+
+        if (CheckForNamingErrors(currentDecls, "Operator lowering") is { } lowerShadowErr)
             return lowerShadowErr;
 
-        var stageResults =
+        return
             new OptimizationPipelineStageResults(
                 AfterSpecialization: afterSpecialization,
                 AfterHigherOrderInlining: afterHigherOrderInlining,
-                AfterLambdaLifting: afterSecondLambdaLifting,
-                AfterLowering: afterLowering);
-
-        return (afterLowering, stageResults);
+                AfterLambdaLifting: afterLambdaLifting2,
+                AfterLowering: currentDecls);
     }
 
     /// <summary>
-    /// Checks all modules for shadowings by running canonicalization and inspecting the results.
-    /// Returns an error message if any shadowings are found, or null if none are found.
-    /// Shadowings in the output of a compilation stage indicate a defect in that stage
+    /// Checks for naming clashes and shadowings in a flat declaration dictionary
+    /// by running naming error detection directly on the declarations without
+    /// reconstructing module files or running full canonicalization.
+    /// Returns an error message if any problems are found, or null if the declarations are clean.
+    /// Problems in the output of a compilation stage indicate a defect in that stage
     /// (e.g., inlining introduced a naming conflict).
     /// </summary>
-    private static string? CheckForShadowings(
+    private static string? CheckForNamingErrors(
+        ImmutableDictionary<DeclQualifiedName, SyntaxTypes.Declaration> declarations,
+        string stageName)
+    {
+        var (errors, shadowings) =
+            NamingErrorDetection.DetectNamingErrorsInFlatDict(declarations);
+
+        return FormatNamingErrorProblems(errors, shadowings, stageName);
+    }
+
+    /// <summary>
+    /// Checks for naming clashes and shadowings in a list of module files
+    /// by running naming error detection directly on the declarations without
+    /// running full canonicalization.
+    /// Returns an error message if any problems are found, or null if the declarations are clean.
+    /// Problems in the output of a compilation stage indicate a defect in that stage
+    /// (e.g., lambda lifting introduced a naming conflict).
+    /// </summary>
+    private static string? CheckForNamingErrors(
         IReadOnlyList<SyntaxTypes.File> modules,
         string stageName)
     {
-        var canonResult = Canonicalization.CanonicalizeAllowingErrors(modules);
+        var flatDecls = FlattenModulesToDeclarationDictionary(modules);
 
-        if (canonResult.IsOkOrNull() is not { } canonModules)
-            return null;
-
-        var allShadowedNames = new List<string>();
-
-        foreach (var (_, (_, _, shadowings)) in canonModules)
-        {
-            foreach (var kvp in shadowings)
-            {
-                allShadowedNames.Add(kvp.Key);
-            }
-        }
-
-        if (allShadowedNames.Count is 0)
-            return null;
-
-        return
-            stageName + " produced " + allShadowedNames.Count +
-            " shadowing(s): " + string.Join(", ", allShadowedNames);
+        return CheckForNamingErrors(flatDecls, stageName);
     }
 
     /// <summary>
-    /// Given a source-ordered list of module files and a dictionary of transformed modules keyed by module name,
-    /// returns the transformed modules in the same order as the source list.
+    /// Formats naming errors and shadowings into a human-readable problem string.
+    /// Returns null if there are no problems.
     /// </summary>
-    private static List<SyntaxTypes.File> ResolveModulesInSourceOrder(
-        IReadOnlyList<SyntaxTypes.File> sourceModules,
-        IReadOnlyDictionary<IReadOnlyList<string>, SyntaxTypes.File> transformedDict)
+    private static string? FormatNamingErrorProblems(
+        IReadOnlyList<CanonicalizationError> errors,
+        ImmutableDictionary<string, ShadowingLocation> shadowings,
+        string stageName)
     {
-        return
-            [
-            .. sourceModules.Select(
-                m => transformedDict[SyntaxTypes.Module.GetModuleName(m.ModuleDefinition.Value).Value])
-            ];
+        var problems = new List<string>();
+
+        // Check for shadowings
+        if (shadowings.Count > 0)
+        {
+            var allShadowedNames = shadowings.Keys.ToList();
+
+            problems.Add(
+                stageName + " produced " + allShadowedNames.Count +
+                " shadowing(s): " + string.Join(", ", allShadowedNames));
+        }
+
+        // Check for all error types using the typed error hierarchy.
+        {
+            var allNamingClashes = new List<string>();
+
+            foreach (var error in errors)
+            {
+                switch (error)
+                {
+                    case CanonicalizationError.NamingClash clash:
+                        allNamingClashes.Add(clash.Name);
+                        break;
+                }
+            }
+
+            if (allNamingClashes.Count > 0)
+            {
+                var distinctNames = allNamingClashes.Distinct().OrderBy(n => n);
+
+                problems.Add(
+                    stageName + " produced " + allNamingClashes.Count +
+                    " naming clash(es): " + string.Join(", ", distinctNames));
+            }
+        }
+
+        if (problems.Count is 0)
+            return null;
+
+        return string.Join("\n", problems);
     }
+
+    /// <summary>
+    /// Renders a <see cref="CanonicalizationError"/> as a human-readable string.
+    /// </summary>
+    private static string RenderCanonicalizationError(CanonicalizationError error) =>
+        error switch
+        {
+            CanonicalizationError.UnresolvedReference unresolved =>
+            $"Cannot find '{unresolved.Name}'",
+
+            CanonicalizationError.NamingClash clash =>
+            clash.ShadowedRange is { } shadowedRange
+            ?
+            $"Name '{clash.Name}' at {clash.Range.Start.Row}:{clash.Range.Start.Column} is shadowing an existing declaration at {shadowedRange.Start.Row}:{shadowedRange.Start.Column}"
+            :
+            $"Name '{clash.Name}' at {clash.Range.Start.Row}:{clash.Range.Start.Column} is shadowing an existing declaration",
+
+            CanonicalizationError.AmbiguousImport ambiguous =>
+            $"Name '{ambiguous.Name}' is exposed by multiple imports: {string.Join(", ", ambiguous.ImportingModules)}",
+
+            _ =>
+            $"Unknown canonicalization error at {error.Range}"
+        };
+
+    /// <summary>
+    /// Flattens a list of modules into an immutable dictionary of declarations keyed by
+    /// their fully qualified name.
+    /// </summary>
+    internal static ImmutableDictionary<DeclQualifiedName, SyntaxTypes.Declaration>
+        FlattenModulesToDeclarationDictionary(
+        IReadOnlyList<SyntaxTypes.File> modules)
+    {
+        var builder = ImmutableDictionary.CreateBuilder<DeclQualifiedName, SyntaxTypes.Declaration>();
+
+        foreach (var module in modules)
+        {
+            var moduleName = SyntaxTypes.Module.GetModuleName(module.ModuleDefinition.Value).Value;
+
+            foreach (var declNode in module.Declarations)
+            {
+                var decl = declNode.Value;
+                var declName = GetDeclarationName(decl);
+
+                if (declName is null)
+                    continue;
+
+                var qualifiedName =
+                    new DeclQualifiedName(
+                        Namespaces: moduleName,
+                        DeclName: declName);
+
+                builder[qualifiedName] = decl;
+            }
+        }
+
+        return builder.ToImmutable();
+    }
+
+    /// <summary>
+    /// Reconstructs a list of module files from a flat declaration dictionary and the original
+    /// module shells. For each original module, the declarations list is rebuilt by replacing
+    /// function declarations with those from the flat dictionary (which may have been transformed
+    /// by optimization passes) while preserving type declarations, alias declarations, and other
+    /// non-function declarations from the original modules.
+    /// New declarations that were added by the pipeline (e.g., specializations) are appended
+    /// to their respective module.
+    /// </summary>
+    internal static List<SyntaxTypes.File> ReconstructModulesFromFlatDict(
+        ImmutableDictionary<DeclQualifiedName, SyntaxTypes.Declaration> flatDecls,
+        IReadOnlyList<SyntaxTypes.File> originalModules)
+    {
+        // Track which declarations from the flat dict we've placed into a module.
+        var placedKeys = new HashSet<DeclQualifiedName>();
+
+        var result = new List<SyntaxTypes.File>(originalModules.Count);
+
+        foreach (var originalModule in originalModules)
+        {
+            var moduleName = SyntaxTypes.Module.GetModuleName(originalModule.ModuleDefinition.Value).Value;
+
+            var newDeclarations = new List<SyntaxModelTypes.Node<SyntaxTypes.Declaration>>();
+
+            // Walk the original declarations in order, replacing function declarations
+            // from the flat dict and keeping non-function declarations as-is.
+            foreach (var declNode in originalModule.Declarations)
+            {
+                var declName = GetDeclarationName(declNode.Value);
+
+                if (declName is not null)
+                {
+                    var qualifiedName =
+                        new DeclQualifiedName(
+                            Namespaces: moduleName,
+                            DeclName: declName);
+
+                    if (flatDecls.TryGetValue(qualifiedName, out var replacementDecl))
+                    {
+                        newDeclarations.Add(declNode with { Value = replacementDecl });
+                        placedKeys.Add(qualifiedName);
+                        continue;
+                    }
+                }
+
+                // Declaration not in the flat dict (e.g., was removed or is unknown type).
+                // Keep the original.
+                newDeclarations.Add(declNode);
+            }
+
+            // Append any new declarations for this module that weren't in the original.
+            // Sort by declaration name for deterministic ordering in snapshot tests.
+            var newModuleDecls =
+                flatDecls
+                .Where(kvp => !placedKeys.Contains(kvp.Key) && kvp.Key.Namespaces.SequenceEqual(moduleName))
+                .OrderBy(kvp => kvp.Key)
+                .ToList();
+
+            foreach (var (key, decl) in newModuleDecls)
+            {
+                newDeclarations.Add(
+                    new SyntaxModelTypes.Node<SyntaxTypes.Declaration>(
+                        ElmSyntaxTransformations.s_zeroRange,
+                        decl));
+
+                placedKeys.Add(key);
+            }
+
+            result.Add(
+                originalModule with
+                {
+                    Declarations = newDeclarations
+                });
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Extracts the declaration name from a syntax declaration.
+    /// </summary>
+    internal static string? GetDeclarationName(SyntaxTypes.Declaration decl) =>
+        decl switch
+        {
+            SyntaxTypes.Declaration.FunctionDeclaration funcDecl =>
+            funcDecl.Function.Declaration.Value.Name.Value,
+
+            SyntaxTypes.Declaration.CustomTypeDeclaration typeDecl =>
+            typeDecl.TypeDeclaration.Name.Value,
+
+            SyntaxTypes.Declaration.AliasDeclaration aliasDecl =>
+            aliasDecl.TypeAlias.Name.Value,
+
+            SyntaxTypes.Declaration.PortDeclaration portDecl =>
+            portDecl.Signature.Name.Value,
+
+            SyntaxTypes.Declaration.InfixDeclaration infixDecl =>
+            infixDecl.Infix.Operator.Value,
+
+            _ =>
+            null
+        };
 
     public static PineValue Compile(
         AppCompilationUnits compilationUnits)

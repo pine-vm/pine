@@ -509,14 +509,27 @@ public sealed record SpecializationCatalog(
     /// </summary>
     public static ImmutableList<NamedSpecialization> NameSpecializations(
         DeclQualifiedName targetFunctionName,
-        IReadOnlyList<FunctionSpecialization> specializations)
+        IReadOnlyList<FunctionSpecialization> specializations,
+        IReadOnlySet<string>? existingDeclNames = null)
     {
         var result = ImmutableList.CreateBuilder<NamedSpecialization>();
+        var usedNames = existingDeclNames is not null ? new HashSet<string>(existingDeclNames) : [];
 
         for (var i = 0; i < specializations.Count; i++)
         {
-            var name = targetFunctionName.DeclName + "__specialized__" + (i + 1);
-            result.Add(new NamedSpecialization(targetFunctionName, specializations[i], name));
+            var candidateName = targetFunctionName.DeclName + "__specialized__" + (i + 1);
+
+            // Derive a unique name that avoids clashing with existing declarations.
+            var counter = i + 1;
+
+            while (usedNames.Contains(candidateName))
+            {
+                counter++;
+                candidateName = targetFunctionName.DeclName + "__specialized__" + counter;
+            }
+
+            usedNames.Add(candidateName);
+            result.Add(new NamedSpecialization(targetFunctionName, specializations[i], candidateName));
         }
 
         return result.ToImmutable();

@@ -1,3 +1,4 @@
+using Pine.Core.CodeAnalysis;
 using Pine.Core.Elm.ElmSyntax.SyntaxModel;
 using System;
 using System.Collections.Generic;
@@ -35,7 +36,7 @@ public static class LambdaLifting
         var newDeclarations = new List<Node<SyntaxTypes.Declaration>>();
 
         var nextLiftedIdentifierByFunctionName =
-            BuildNextLiftedIdentifierByFunctionName(module);
+            BuildNextLiftedIdentifierByFunctionNameFromModule(module);
 
         foreach (var declaration in module.Declarations)
         {
@@ -97,7 +98,88 @@ public static class LambdaLifting
         return module with { Declarations = newDeclarations };
     }
 
-    private static IReadOnlyDictionary<string, int> BuildNextLiftedIdentifierByFunctionName(
+    /// <summary>
+    /// Performs lambda lifting on a flat declaration dictionary.
+    /// Transforms closures into top-level functions with explicit captured parameters.
+    /// Declarations are processed in deterministic order (sorted by <see cref="DeclQualifiedName"/>).
+    /// </summary>
+    public static ImmutableDictionary<DeclQualifiedName, SyntaxTypes.Declaration> LiftLambdas(
+        ImmutableDictionary<DeclQualifiedName, SyntaxTypes.Declaration> declarations)
+    {
+        var nextLiftedIdentifierByFunctionName =
+            BuildNextLiftedIdentifierByFunctionName(declarations);
+
+        var resultBuilder =
+            ImmutableDictionary.CreateBuilder<DeclQualifiedName, SyntaxTypes.Declaration>();
+
+        // Process declarations in deterministic order for stable lifted-function naming.
+        foreach (var (key, decl) in declarations.OrderBy(kvp => kvp.Key))
+        {
+            if (decl is SyntaxTypes.Declaration.FunctionDeclaration funcDecl)
+            {
+                var functionName = funcDecl.Function.Declaration.Value.Name.Value;
+
+                var context =
+                    new LiftingContext(
+                        functionName,
+                        BoundVariables: [],
+                        LambdaCounter:
+                        nextLiftedIdentifierByFunctionName.TryGetValue(functionName, out var nextIdentifier)
+                        ?
+                        nextIdentifier - 1
+                        :
+                        0);
+
+                // Collect parameter names as bound variables
+                var paramNames = CollectPatternNames(funcDecl.Function.Declaration.Value.Arguments);
+
+                context = context.WithBoundVariables(paramNames);
+
+                // Transform the function body
+                var (transformedExpr, liftedFunctions) =
+                    TransformExpression(
+                        funcDecl.Function.Declaration.Value.Expression,
+                        context);
+
+                // Create the transformed function declaration
+                var transformedFuncImpl =
+                    funcDecl.Function.Declaration.Value with
+                    {
+                        Expression = transformedExpr
+                    };
+
+                var transformedFunc =
+                    funcDecl.Function with
+                    {
+                        Declaration = funcDecl.Function.Declaration with { Value = transformedFuncImpl }
+                    };
+
+                var transformedDecl = new SyntaxTypes.Declaration.FunctionDeclaration(transformedFunc);
+                resultBuilder[key] = transformedDecl;
+
+                // Add lifted functions keyed by their qualified name in the same module namespace.
+                foreach (var liftedFunc in liftedFunctions)
+                {
+                    var liftedDeclName = ElmCompiler.GetDeclarationName(liftedFunc.Value);
+
+                    if (liftedDeclName is not null)
+                    {
+                        var liftedKey = new DeclQualifiedName(key.Namespaces, liftedDeclName);
+                        resultBuilder[liftedKey] = liftedFunc.Value;
+                    }
+                }
+            }
+            else
+            {
+                // Keep non-function declarations as-is
+                resultBuilder[key] = decl;
+            }
+        }
+
+        return resultBuilder.ToImmutable();
+    }
+
+    private static IReadOnlyDictionary<string, int> BuildNextLiftedIdentifierByFunctionNameFromModule(
         SyntaxTypes.File module)
     {
         var nextLiftedIdentifierByFunctionName = new Dictionary<string, int>(StringComparer.Ordinal);
@@ -129,6 +211,44 @@ public static class LambdaLifting
             {
                 nextLiftedIdentifierByFunctionName[liftedIdentifier.containingFunctionName] =
                     nextIdentifier;
+            }
+        }
+
+        return nextLiftedIdentifierByFunctionName;
+    }
+
+    private static IReadOnlyDictionary<string, int> BuildNextLiftedIdentifierByFunctionName(
+        ImmutableDictionary<DeclQualifiedName, SyntaxTypes.Declaration> declarations)
+    {
+        var nextLiftedIdentifierByFunctionName = new Dictionary<string, int>(StringComparer.Ordinal);
+
+        foreach (var (_, decl) in declarations)
+        {
+            if (decl is not SyntaxTypes.Declaration.FunctionDeclaration funcDecl)
+            {
+                continue;
+            }
+
+            var functionName = funcDecl.Function.Declaration.Value.Name.Value;
+
+            if (TryParseExistingLiftedIdentifier(functionName) is not { } liftedIdentifier)
+            {
+                continue;
+            }
+
+            var nextId = liftedIdentifier.identifier + 1;
+
+            if (nextLiftedIdentifierByFunctionName.TryGetValue(
+                liftedIdentifier.containingFunctionName,
+                out var existingNextIdentifier))
+            {
+                nextLiftedIdentifierByFunctionName[liftedIdentifier.containingFunctionName] =
+                    Math.Max(existingNextIdentifier, nextId);
+            }
+            else
+            {
+                nextLiftedIdentifierByFunctionName[liftedIdentifier.containingFunctionName] =
+                    nextId;
             }
         }
 

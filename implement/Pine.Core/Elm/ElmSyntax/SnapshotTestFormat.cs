@@ -1,8 +1,11 @@
+using Pine.Core.CodeAnalysis;
 using Pine.Core.Elm.ElmSyntax.SyntaxModel;
 using System.Collections.Generic;
+using System.Collections.Immutable;
 using System.Linq;
 
 using ExpressionSyntax = Pine.Core.Elm.ElmSyntax.SyntaxModel.Expression;
+using AbstractSyntaxTypes = Pine.Core.Elm.ElmSyntax.Stil4mElmSyntax7;
 
 namespace Pine.Core.Elm.ElmSyntax;
 
@@ -344,7 +347,7 @@ public class SnapshotTestFormat
         // so this only affects the detection of whether the RECORD itself is multiline.
         if (formattedValue is ExpressionSyntax.RecordExpr recordExpr && recordExpr.Fields.Count > 0)
         {
-            var fields = Stil4mElmSyntax7.FromFullSyntaxModel.ToList(recordExpr.Fields);
+            var fields = AbstractSyntaxTypes.FromFullSyntaxModel.ToList(recordExpr.Fields);
             var lastField = fields[^1];
             // Use the last field's row + 1 for closing brace on next line
             var lastFieldRow = lastField.FieldName.Range.Start.Row;
@@ -995,5 +998,960 @@ public class SnapshotTestFormat
         }
 
         return new SeparatedSyntaxList<RecordExprField>.NonEmpty(items[0], restDefault);
+    }
+
+    /// <summary>
+    /// Renders a single declaration with a fully qualified name.
+    /// The declaration name (and signature name if present) is overridden
+    /// with the full qualified name from the dictionary entry key.
+    /// The result has no leading or trailing whitespace.
+    /// Relative row differences within the declaration are preserved,
+    /// but any absolute offset is ignored (the rendering starts at row 1).
+    /// </summary>
+    /// <param name="qualifiedName">
+    /// The fully qualified name to use for the declaration (e.g. "MyApp.declName").
+    /// </param>
+    /// <param name="declaration">
+    /// The Elm declaration syntax model to render.
+    /// </param>
+    /// <returns>
+    /// The rendered declaration text without leading or trailing whitespace.
+    /// </returns>
+    public static string RenderQualifiedDeclaration(
+        DeclQualifiedName qualifiedName,
+        Declaration declaration,
+        IReadOnlyDictionary<QualifiedNameRef, QualifiedNameRef>? nameMap = null)
+    {
+        var fullName = qualifiedName.FullName;
+
+        // Override the declaration name with the qualified name.
+        var renamed = RenameDeclaration(declaration, fullName);
+
+        // Wrap in a minimal File so we can reuse the existing formatting pipeline.
+        var dummyModuleDef =
+            new Node<Module>(
+                s_dummyRange,
+                new Module.NormalModule(
+                    ModuleTokenLocation: s_dummyLocation,
+                    ModuleData: new DefaultModuleData(
+                        ModuleName: new Node<IReadOnlyList<string>>(s_dummyRange, ["_Dummy"]),
+                        ExposingTokenLocation: s_dummyLocation,
+                        ExposingList: new Node<Exposing>(
+                            s_dummyRange,
+                            new Exposing.All(s_dummyRange)))));
+
+        var file =
+            new File(
+                ModuleDefinition: dummyModuleDef,
+                Imports: [],
+                Declarations:
+                [
+                new Node<Declaration>(
+                    new Range(
+                        Start: new Location(Row: 4, Column: 1),
+                        End: new Location(Row: 100, Column: 1)),
+                    renamed)
+                ],
+                Comments: [],
+                IncompleteDeclarations: []);
+
+        // Apply name mapping if provided.
+        if (nameMap is { Count: > 0 })
+        {
+            file = NameMapper.MapNames(file, nameMap);
+        }
+
+        // Run through SnapshotTestFormat.Format + Rendering (same pipeline as module rendering).
+        var formatted = Format(file);
+        var rendered = Rendering.ToString(formatted);
+
+        // Extract only the declaration part (skip the module header line).
+        // The module header is "module _Dummy exposing (..)\n" followed by blank lines and the declaration.
+        var lines = rendered.Split('\n');
+
+        // Find the first non-empty line after the module header
+        var declStartIndex = -1;
+
+        for (var i = 0; i < lines.Length; i++)
+        {
+            if (lines[i].StartsWith("module "))
+                continue;
+
+            if (string.IsNullOrWhiteSpace(lines[i]))
+                continue;
+
+            declStartIndex = i;
+            break;
+        }
+
+        if (declStartIndex < 0)
+            return string.Empty;
+
+        // Find the last non-empty line
+        var declEndIndex = lines.Length - 1;
+
+        while (declEndIndex >= declStartIndex && string.IsNullOrWhiteSpace(lines[declEndIndex]))
+        {
+            declEndIndex--;
+        }
+
+        // Join the declaration lines
+        return string.Join("\n", lines[declStartIndex..(declEndIndex + 1)]);
+    }
+
+    /// <summary>
+    /// Converts a list of modules (in the Stil4m abstract syntax) to a flat dictionary
+    /// of declarations keyed by their fully qualified name.
+    /// Each declaration in a module is prefixed with the module name to form the qualified key.
+    /// </summary>
+    public static IReadOnlyDictionary<DeclQualifiedName, AbstractSyntaxTypes.Declaration>
+        ModulesToFlatDeclarationDictionary(
+        IReadOnlyList<AbstractSyntaxTypes.File> modules)
+    {
+        var dict = new Dictionary<DeclQualifiedName, AbstractSyntaxTypes.Declaration>();
+
+        for (var moduleIndex = 0; moduleIndex < modules.Count; moduleIndex++)
+        {
+            var module = modules[moduleIndex];
+            var moduleName = AbstractSyntaxTypes.Module.GetModuleName(module.ModuleDefinition.Value).Value;
+
+            for (var declIndex = 0; declIndex < module.Declarations.Count; declIndex++)
+            {
+                var decl = module.Declarations[declIndex];
+                var declName = GetDeclarationName(decl.Value);
+
+                if (declName is null)
+                    continue;
+
+                var qualifiedName =
+                    new DeclQualifiedName(
+                        Namespaces: moduleName,
+                        DeclName: declName);
+
+                dict[qualifiedName] = decl.Value;
+            }
+        }
+
+        return dict;
+    }
+
+    /// <summary>
+    /// Filters a declaration dictionary to only include declarations whose qualified name
+    /// has the given module name as its namespace prefix.
+    /// </summary>
+    /// <param name="declarations">The full declaration dictionary to filter.</param>
+    /// <param name="moduleName">
+    /// The module name to filter by (e.g. ["MyApp"] or ["Some", "Nested", "Module"]).
+    /// </param>
+    /// <returns>
+    /// A dictionary containing only declarations whose namespace matches the given module name.
+    /// </returns>
+    public static IReadOnlyDictionary<DeclQualifiedName, AbstractSyntaxTypes.Declaration>
+        FilterDeclarationsByModuleName(
+        IReadOnlyDictionary<DeclQualifiedName, AbstractSyntaxTypes.Declaration> declarations,
+        IReadOnlyList<string> moduleName)
+    {
+        var result = new Dictionary<DeclQualifiedName, AbstractSyntaxTypes.Declaration>();
+
+        foreach (var (key, value) in declarations)
+        {
+            if (key.Namespaces.Count != moduleName.Count)
+                continue;
+
+            var match = true;
+
+            for (var i = 0; i < moduleName.Count; i++)
+            {
+                if (key.Namespaces[i] != moduleName[i])
+                {
+                    match = false;
+                    break;
+                }
+            }
+
+            if (match)
+            {
+                result[key] = value;
+            }
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Sort order for rendering declarations in snapshot tests.
+    /// </summary>
+    public enum DeclarationSortOrder
+    {
+        /// <summary>
+        /// Sort declarations by fully qualified name in ascending alphabetical order.
+        /// </summary>
+        NameAsc,
+
+        /// <summary>
+        /// Sort declarations by number of transitive dependencies in descending order.
+        /// Declarations with the most dependencies appear first.
+        /// Within groups with the same dependency count, declarations are sorted by name ascending.
+        /// This ensures that every declaration appears before its own dependencies in the output.
+        /// </summary>
+        DependenciesDesc,
+    }
+
+    /// <summary>
+    /// Renders all declarations in a dictionary using <see cref="RenderQualifiedDeclaration"/>,
+    /// joining them with double newlines.
+    /// This is a convenience method for rendering all declarations from a filtered dictionary.
+    /// Each declaration is first converted from the Stil4m abstract syntax to the full syntax model,
+    /// then formatted and rendered with the qualified name.
+    /// </summary>
+    public static string RenderQualifiedDeclarations(
+        IReadOnlyDictionary<DeclQualifiedName, AbstractSyntaxTypes.Declaration> declarations,
+        DeclarationSortOrder sortOrder,
+        IReadOnlyDictionary<QualifiedNameRef, QualifiedNameRef>? nameMap = null)
+    {
+        var parts = new List<string>();
+
+        var ordered =
+            sortOrder switch
+            {
+                DeclarationSortOrder.NameAsc =>
+                declarations.OrderBy(kv => kv.Key),
+
+                DeclarationSortOrder.DependenciesDesc =>
+                OrderByDependenciesDesc(declarations),
+
+                _ =>
+                throw new System.ArgumentOutOfRangeException(
+                    nameof(sortOrder),
+                    sortOrder,
+                    "Unknown sort order")
+            };
+
+        foreach (var (qualifiedName, abstractDecl) in ordered)
+        {
+            ValidateFullyQualifiedReferences(qualifiedName, abstractDecl);
+            var fullDecl = ConvertAbstractDeclaration(abstractDecl);
+            parts.Add(RenderQualifiedDeclaration(qualifiedName, fullDecl, nameMap));
+        }
+
+        // Use two blank lines between declarations (same spacing as Avh4 elm-format).
+        return string.Join("\n\n\n", parts);
+    }
+
+    private static readonly Location s_dummyLocation = new(Row: 1, Column: 1);
+
+    private static readonly Range s_dummyRange = new(Start: s_dummyLocation, End: s_dummyLocation);
+
+    /// <summary>
+    /// Extracts the declaration name from a Stil4m abstract syntax declaration.
+    /// </summary>
+    private static string? GetDeclarationName(AbstractSyntaxTypes.Declaration declaration) =>
+        declaration switch
+        {
+            AbstractSyntaxTypes.Declaration.FunctionDeclaration funcDecl =>
+            funcDecl.Function.Declaration.Value.Name.Value,
+
+            AbstractSyntaxTypes.Declaration.CustomTypeDeclaration typeDecl =>
+            typeDecl.TypeDeclaration.Name.Value,
+
+            AbstractSyntaxTypes.Declaration.AliasDeclaration aliasDecl =>
+            aliasDecl.TypeAlias.Name.Value,
+
+            AbstractSyntaxTypes.Declaration.PortDeclaration portDecl =>
+            portDecl.Signature.Name.Value,
+
+            AbstractSyntaxTypes.Declaration.InfixDeclaration infixDecl =>
+            infixDecl.Infix.Operator.Value,
+
+            _ =>
+            null
+        };
+
+    /// <summary>
+    /// Converts a Stil4m abstract syntax declaration to a full syntax model declaration.
+    /// </summary>
+    private static Declaration ConvertAbstractDeclaration(
+        AbstractSyntaxTypes.Declaration abstractDecl) =>
+        abstractDecl switch
+        {
+            AbstractSyntaxTypes.Declaration.FunctionDeclaration funcDecl =>
+            new Declaration.FunctionDeclaration(
+                AbstractSyntaxTypes.ToFullSyntaxModel.Convert(funcDecl.Function)),
+
+            AbstractSyntaxTypes.Declaration.CustomTypeDeclaration typeDecl =>
+            new Declaration.CustomTypeDeclaration(
+                AbstractSyntaxTypes.ToFullSyntaxModel.Convert(typeDecl.TypeDeclaration)),
+
+            AbstractSyntaxTypes.Declaration.AliasDeclaration aliasDecl =>
+            new Declaration.AliasDeclaration(
+                AbstractSyntaxTypes.ToFullSyntaxModel.Convert(aliasDecl.TypeAlias)),
+
+            AbstractSyntaxTypes.Declaration.PortDeclaration portDecl =>
+            new Declaration.PortDeclaration(
+                PortTokenLocation: s_dummyLocation,
+                Signature: AbstractSyntaxTypes.ToFullSyntaxModel.Convert(portDecl.Signature)),
+
+            AbstractSyntaxTypes.Declaration.InfixDeclaration infixDecl =>
+            new Declaration.InfixDeclaration(
+                AbstractSyntaxTypes.ToFullSyntaxModel.Convert(infixDecl.Infix)),
+
+            _ =>
+            throw new System.NotImplementedException(
+                "Unexpected abstract declaration type: " + abstractDecl.GetType().Name)
+        };
+
+    /// <summary>
+    /// Returns a new Declaration with the name replaced by the specified qualified name.
+    /// For function declarations, both the signature name and the implementation name are replaced.
+    /// </summary>
+    private static Declaration RenameDeclaration(Declaration declaration, string qualifiedName) =>
+        declaration switch
+        {
+            Declaration.FunctionDeclaration funcDecl =>
+            new Declaration.FunctionDeclaration(
+                Function: new FunctionStruct(
+                    Documentation: funcDecl.Function.Documentation,
+                    Signature: funcDecl.Function.Signature is { } sig
+                    ?
+                    sig with
+                    {
+                        Value =
+                        sig.Value with
+                        {
+                            Name = sig.Value.Name with { Value = qualifiedName }
+                        }
+                    }
+                    :
+                    null,
+                    Declaration: funcDecl.Function.Declaration with
+                    {
+                        Value =
+                        funcDecl.Function.Declaration.Value with
+                        {
+                            Name = funcDecl.Function.Declaration.Value.Name with { Value = qualifiedName }
+                        }
+                    })),
+
+            Declaration.CustomTypeDeclaration typeDecl =>
+            new Declaration.CustomTypeDeclaration(
+                TypeDeclaration: typeDecl.TypeDeclaration with
+                {
+                    Name = typeDecl.TypeDeclaration.Name with { Value = qualifiedName }
+                }),
+
+            Declaration.AliasDeclaration aliasDecl =>
+            new Declaration.AliasDeclaration(
+                TypeAlias: aliasDecl.TypeAlias with
+                {
+                    Name = aliasDecl.TypeAlias.Name with { Value = qualifiedName }
+                }),
+
+            Declaration.PortDeclaration portDecl =>
+            new Declaration.PortDeclaration(
+                PortTokenLocation: portDecl.PortTokenLocation,
+                Signature: portDecl.Signature with
+                {
+                    Name = portDecl.Signature.Name with { Value = qualifiedName }
+                }),
+
+            Declaration.InfixDeclaration infixDecl =>
+            new Declaration.InfixDeclaration(
+                Infix: infixDecl.Infix with
+                {
+                    Operator = infixDecl.Infix.Operator with { Value = qualifiedName }
+                }),
+
+            _ =>
+            throw new System.NotImplementedException(
+                "Unexpected declaration type for renaming: " + declaration.GetType().Name)
+        };
+
+    /// <summary>
+    /// Orders declarations by number of transitive dependencies descending, then by name ascending.
+    /// This ensures that any declaration appears before its own dependencies in the output.
+    /// </summary>
+    private static IOrderedEnumerable<KeyValuePair<DeclQualifiedName, AbstractSyntaxTypes.Declaration>>
+        OrderByDependenciesDesc(
+        IReadOnlyDictionary<DeclQualifiedName, AbstractSyntaxTypes.Declaration> declarations)
+    {
+        var transitiveCounts = DeriveTransitiveDependencyCounts(declarations);
+
+        return
+            declarations
+            .OrderByDescending(
+                kv =>
+                transitiveCounts.TryGetValue(kv.Key, out var count) ? count : 0)
+            .ThenBy(kv => kv.Key);
+    }
+
+    /// <summary>
+    /// Derives the number of transitive dependencies for each declaration in the dictionary.
+    /// First computes the set of direct dependencies for each declaration by scanning all
+    /// <see cref="QualifiedNameRef"/> references in expressions, patterns, and type annotations.
+    /// Then computes transitive closures to get the full count.
+    /// </summary>
+    public static IReadOnlyDictionary<DeclQualifiedName, int> DeriveTransitiveDependencyCounts(
+        IReadOnlyDictionary<DeclQualifiedName, AbstractSyntaxTypes.Declaration> declarations)
+    {
+        // Step 1: Build a set of all declaration names in the dictionary for filtering references.
+        var allDeclNames = new HashSet<DeclQualifiedName>(declarations.Keys);
+
+        // Step 2: Derive direct dependencies for each declaration.
+        var directDeps = new Dictionary<DeclQualifiedName, ImmutableHashSet<DeclQualifiedName>>();
+
+        foreach (var (declName, decl) in declarations)
+        {
+            var refs = CollectReferencesFromDeclaration(decl);
+
+            // Filter to only references that are in our dictionary (known declarations).
+            directDeps[declName] = refs.Intersect(allDeclNames).Remove(declName);
+        }
+
+        // Step 3: Compute transitive closure for each declaration.
+        var transitiveCounts = new Dictionary<DeclQualifiedName, int>();
+
+        foreach (var declName in declarations.Keys)
+        {
+            var transitive = new HashSet<DeclQualifiedName>();
+            var stack = new Stack<DeclQualifiedName>(directDeps[declName]);
+
+            while (stack.Count > 0)
+            {
+                var dep = stack.Pop();
+
+                if (!transitive.Add(dep))
+                    continue;
+
+                if (directDeps.TryGetValue(dep, out var depDeps))
+                {
+                    foreach (var dd in depDeps)
+                    {
+                        stack.Push(dd);
+                    }
+                }
+            }
+
+            transitiveCounts[declName] = transitive.Count;
+        }
+
+        return transitiveCounts;
+    }
+
+    /// <summary>
+    /// Collects all qualified name references from an abstract syntax declaration.
+    /// </summary>
+    private static ImmutableHashSet<DeclQualifiedName> CollectReferencesFromDeclaration(
+        AbstractSyntaxTypes.Declaration declaration)
+    {
+        switch (declaration)
+        {
+            case AbstractSyntaxTypes.Declaration.FunctionDeclaration funcDecl:
+                var funcRefs = ImmutableHashSet<DeclQualifiedName>.Empty;
+
+                if (funcDecl.Function.Signature is { } sig)
+                    funcRefs = funcRefs.Union(CollectReferencesFromTypeAnnotation(sig.Value.TypeAnnotation.Value));
+
+                funcRefs =
+                    funcRefs.Union(
+                        CollectReferencesFromExpression(funcDecl.Function.Declaration.Value.Expression.Value));
+
+                foreach (var arg in funcDecl.Function.Declaration.Value.Arguments)
+                    funcRefs = funcRefs.Union(CollectReferencesFromPattern(arg.Value));
+
+                return funcRefs;
+
+            case AbstractSyntaxTypes.Declaration.AliasDeclaration aliasDecl:
+                return CollectReferencesFromTypeAnnotation(aliasDecl.TypeAlias.TypeAnnotation.Value);
+
+            case AbstractSyntaxTypes.Declaration.CustomTypeDeclaration typeDecl:
+                var typeRefs = ImmutableHashSet<DeclQualifiedName>.Empty;
+
+                foreach (var constructor in typeDecl.TypeDeclaration.Constructors)
+                    foreach (var arg in constructor.Value.Arguments)
+                        typeRefs = typeRefs.Union(CollectReferencesFromTypeAnnotation(arg.Value));
+
+                return typeRefs;
+
+            case AbstractSyntaxTypes.Declaration.PortDeclaration portDecl:
+                return CollectReferencesFromTypeAnnotation(portDecl.Signature.TypeAnnotation.Value);
+
+            default:
+                throw new System.NotImplementedException(
+                    "Unexpected declaration type for reference collection: " + declaration.GetType().Name);
+        }
+    }
+
+    private static ImmutableHashSet<DeclQualifiedName> CollectReferencesFromExpression(
+        AbstractSyntaxTypes.Expression expression)
+    {
+        switch (expression)
+        {
+            case AbstractSyntaxTypes.Expression.FunctionOrValue fov:
+                if (fov.ModuleName is { Count: > 0 })
+                {
+                    return
+                        [
+                        new DeclQualifiedName(
+                            Namespaces: fov.ModuleName,
+                            DeclName: fov.Name)
+                        ];
+                }
+
+                return [];
+
+            case AbstractSyntaxTypes.Expression.Application app:
+                var appRefs = ImmutableHashSet<DeclQualifiedName>.Empty;
+
+                foreach (var arg in app.Arguments)
+                    appRefs = appRefs.Union(CollectReferencesFromExpression(arg.Value));
+
+                return appRefs;
+
+            case AbstractSyntaxTypes.Expression.OperatorApplication opApp:
+                return
+                    CollectReferencesFromExpression(opApp.Left.Value)
+                    .Union(CollectReferencesFromExpression(opApp.Right.Value));
+
+            case AbstractSyntaxTypes.Expression.IfBlock ifBlock:
+                return
+                    CollectReferencesFromExpression(ifBlock.Condition.Value)
+                    .Union(CollectReferencesFromExpression(ifBlock.ThenBlock.Value))
+                    .Union(CollectReferencesFromExpression(ifBlock.ElseBlock.Value));
+
+            case AbstractSyntaxTypes.Expression.Negation neg:
+                return CollectReferencesFromExpression(neg.Expression.Value);
+
+            case AbstractSyntaxTypes.Expression.ListExpr list:
+                var listRefs = ImmutableHashSet<DeclQualifiedName>.Empty;
+
+                foreach (var elem in list.Elements)
+                    listRefs = listRefs.Union(CollectReferencesFromExpression(elem.Value));
+
+                return listRefs;
+
+            case AbstractSyntaxTypes.Expression.TupledExpression tuple:
+                var tupleRefs = ImmutableHashSet<DeclQualifiedName>.Empty;
+
+                foreach (var elem in tuple.Elements)
+                    tupleRefs = tupleRefs.Union(CollectReferencesFromExpression(elem.Value));
+
+                return tupleRefs;
+
+            case AbstractSyntaxTypes.Expression.ParenthesizedExpression paren:
+                return CollectReferencesFromExpression(paren.Expression.Value);
+
+            case AbstractSyntaxTypes.Expression.LambdaExpression lambda:
+                var lambdaRefs = ImmutableHashSet<DeclQualifiedName>.Empty;
+
+                foreach (var arg in lambda.Lambda.Arguments)
+                    lambdaRefs = lambdaRefs.Union(CollectReferencesFromPattern(arg.Value));
+
+                return lambdaRefs.Union(CollectReferencesFromExpression(lambda.Lambda.Expression.Value));
+
+            case AbstractSyntaxTypes.Expression.CaseExpression caseExpr:
+                var caseRefs = CollectReferencesFromExpression(caseExpr.CaseBlock.Expression.Value);
+
+                foreach (var caseItem in caseExpr.CaseBlock.Cases)
+                {
+                    caseRefs = caseRefs.Union(CollectReferencesFromPattern(caseItem.Pattern.Value));
+                    caseRefs = caseRefs.Union(CollectReferencesFromExpression(caseItem.Expression.Value));
+                }
+
+                return caseRefs;
+
+            case AbstractSyntaxTypes.Expression.LetExpression letExpr:
+                var letRefs = ImmutableHashSet<DeclQualifiedName>.Empty;
+
+                foreach (var letDecl in letExpr.Value.Declarations)
+                {
+                    switch (letDecl.Value)
+                    {
+                        case AbstractSyntaxTypes.Expression.LetDeclaration.LetFunction letFunc:
+                            if (letFunc.Function.Signature is { } letSig)
+                            {
+                                letRefs =
+                                    letRefs.Union(
+                                        CollectReferencesFromTypeAnnotation(letSig.Value.TypeAnnotation.Value));
+                            }
+
+                            letRefs =
+                                letRefs.Union(
+                                    CollectReferencesFromExpression(letFunc.Function.Declaration.Value.Expression.Value));
+
+                            foreach (var arg in letFunc.Function.Declaration.Value.Arguments)
+                                letRefs = letRefs.Union(CollectReferencesFromPattern(arg.Value));
+
+                            break;
+
+                        case AbstractSyntaxTypes.Expression.LetDeclaration.LetDestructuring letDestr:
+                            letRefs = letRefs.Union(CollectReferencesFromPattern(letDestr.Pattern.Value));
+                            letRefs = letRefs.Union(CollectReferencesFromExpression(letDestr.Expression.Value));
+                            break;
+                    }
+                }
+
+                return letRefs.Union(CollectReferencesFromExpression(letExpr.Value.Expression.Value));
+
+            case AbstractSyntaxTypes.Expression.RecordExpr recordExpr:
+                var recRefs = ImmutableHashSet<DeclQualifiedName>.Empty;
+
+                foreach (var field in recordExpr.Fields)
+                    recRefs = recRefs.Union(CollectReferencesFromExpression(field.Value.valueExpr.Value));
+
+                return recRefs;
+
+            case AbstractSyntaxTypes.Expression.RecordAccess recordAccess:
+                return CollectReferencesFromExpression(recordAccess.Record.Value);
+
+            case AbstractSyntaxTypes.Expression.RecordUpdateExpression recordUpdate:
+                var updateRefs = ImmutableHashSet<DeclQualifiedName>.Empty;
+
+                foreach (var field in recordUpdate.Fields)
+                    updateRefs = updateRefs.Union(CollectReferencesFromExpression(field.Value.valueExpr.Value));
+
+                return updateRefs;
+
+            case AbstractSyntaxTypes.Expression.UnitExpr:
+            case AbstractSyntaxTypes.Expression.Integer:
+            case AbstractSyntaxTypes.Expression.Floatable:
+            case AbstractSyntaxTypes.Expression.CharLiteral:
+            case AbstractSyntaxTypes.Expression.Literal:
+            case AbstractSyntaxTypes.Expression.GLSLExpression:
+            case AbstractSyntaxTypes.Expression.RecordAccessFunction:
+            case AbstractSyntaxTypes.Expression.PrefixOperator:
+                return [];
+
+            default:
+                throw new System.NotImplementedException(
+                    "Unexpected expression type for reference collection: " + expression.GetType().Name);
+        }
+    }
+
+    private static ImmutableHashSet<DeclQualifiedName> CollectReferencesFromPattern(
+        AbstractSyntaxTypes.Pattern pattern)
+    {
+        switch (pattern)
+        {
+            case AbstractSyntaxTypes.Pattern.NamedPattern named:
+                var namedRefs = ImmutableHashSet<DeclQualifiedName>.Empty;
+
+                if (named.Name.ModuleName is { Count: > 0 })
+                {
+                    namedRefs =
+                        namedRefs.Add(
+                            new DeclQualifiedName(
+                                Namespaces: named.Name.ModuleName,
+                                DeclName: named.Name.Name));
+                }
+
+                foreach (var arg in named.Arguments)
+                    namedRefs = namedRefs.Union(CollectReferencesFromPattern(arg.Value));
+
+                return namedRefs;
+
+            case AbstractSyntaxTypes.Pattern.UnConsPattern unCons:
+                return
+                    CollectReferencesFromPattern(unCons.Head.Value)
+                    .Union(CollectReferencesFromPattern(unCons.Tail.Value));
+
+            case AbstractSyntaxTypes.Pattern.TuplePattern tuple:
+                var tupleRefs = ImmutableHashSet<DeclQualifiedName>.Empty;
+
+                foreach (var elem in tuple.Elements)
+                    tupleRefs = tupleRefs.Union(CollectReferencesFromPattern(elem.Value));
+
+                return tupleRefs;
+
+            case AbstractSyntaxTypes.Pattern.ListPattern list:
+                var listRefs = ImmutableHashSet<DeclQualifiedName>.Empty;
+
+                foreach (var elem in list.Elements)
+                    listRefs = listRefs.Union(CollectReferencesFromPattern(elem.Value));
+
+                return listRefs;
+
+            case AbstractSyntaxTypes.Pattern.ParenthesizedPattern paren:
+                return CollectReferencesFromPattern(paren.Pattern.Value);
+
+            case AbstractSyntaxTypes.Pattern.AsPattern asPattern:
+                return CollectReferencesFromPattern(asPattern.Pattern.Value);
+
+            case AbstractSyntaxTypes.Pattern.AllPattern:
+            case AbstractSyntaxTypes.Pattern.VarPattern:
+            case AbstractSyntaxTypes.Pattern.UnitPattern:
+            case AbstractSyntaxTypes.Pattern.CharPattern:
+            case AbstractSyntaxTypes.Pattern.StringPattern:
+            case AbstractSyntaxTypes.Pattern.IntPattern:
+            case AbstractSyntaxTypes.Pattern.HexPattern:
+            case AbstractSyntaxTypes.Pattern.FloatPattern:
+            case AbstractSyntaxTypes.Pattern.RecordPattern:
+                return [];
+
+            default:
+                throw new System.NotImplementedException(
+                    "Unexpected pattern type for reference collection: " + pattern.GetType().Name);
+        }
+    }
+
+    private static ImmutableHashSet<DeclQualifiedName> CollectReferencesFromTypeAnnotation(
+        AbstractSyntaxTypes.TypeAnnotation typeAnnotation)
+    {
+        switch (typeAnnotation)
+        {
+            case AbstractSyntaxTypes.TypeAnnotation.Typed typed:
+                var typedRefs = ImmutableHashSet<DeclQualifiedName>.Empty;
+
+                if (typed.TypeName.Value.ModuleName is { Count: > 0 })
+                {
+                    typedRefs =
+                        typedRefs.Add(
+                            new DeclQualifiedName(
+                                Namespaces: typed.TypeName.Value.ModuleName,
+                                DeclName: typed.TypeName.Value.Name));
+                }
+
+                foreach (var arg in typed.TypeArguments)
+                    typedRefs = typedRefs.Union(CollectReferencesFromTypeAnnotation(arg.Value));
+
+                return typedRefs;
+
+            case AbstractSyntaxTypes.TypeAnnotation.FunctionTypeAnnotation funcType:
+                return
+                    CollectReferencesFromTypeAnnotation(funcType.ArgumentType.Value)
+                    .Union(CollectReferencesFromTypeAnnotation(funcType.ReturnType.Value));
+
+            case AbstractSyntaxTypes.TypeAnnotation.Tupled tupled:
+                var tupledRefs = ImmutableHashSet<DeclQualifiedName>.Empty;
+
+                foreach (var elem in tupled.TypeAnnotations)
+                    tupledRefs = tupledRefs.Union(CollectReferencesFromTypeAnnotation(elem.Value));
+
+                return tupledRefs;
+
+            case AbstractSyntaxTypes.TypeAnnotation.Record record:
+                var recordRefs = ImmutableHashSet<DeclQualifiedName>.Empty;
+
+                foreach (var field in record.RecordDefinition.Fields)
+                    recordRefs = recordRefs.Union(CollectReferencesFromTypeAnnotation(field.Value.FieldType.Value));
+
+                return recordRefs;
+
+            case AbstractSyntaxTypes.TypeAnnotation.GenericRecord genericRecord:
+                var genRecRefs = ImmutableHashSet<DeclQualifiedName>.Empty;
+
+                foreach (var field in genericRecord.RecordDefinition.Value.Fields)
+                    genRecRefs = genRecRefs.Union(CollectReferencesFromTypeAnnotation(field.Value.FieldType.Value));
+
+                return genRecRefs;
+
+            default:
+                throw new System.NotImplementedException(
+                    "Unexpected type annotation type for reference collection: " + typeAnnotation.GetType().Name);
+        }
+    }
+
+    /// <summary>
+    /// Validates that all <see cref="AbstractSyntaxTypes.Expression.FunctionOrValue"/> references
+    /// in a declaration are either fully qualified (have a module name) or refer to a local binding
+    /// (parameter name, let binding, case pattern, or lambda parameter).
+    /// Throws an exception if an unqualified non-local reference is found.
+    /// </summary>
+    public static void ValidateFullyQualifiedReferences(
+        DeclQualifiedName declName,
+        AbstractSyntaxTypes.Declaration declaration)
+    {
+        if (declaration is not AbstractSyntaxTypes.Declaration.FunctionDeclaration funcDecl)
+            return;
+
+        var funcImpl = funcDecl.Function.Declaration.Value;
+
+        var localBindings = new HashSet<string>();
+
+        foreach (var arg in funcImpl.Arguments)
+            CollectPatternBindings(arg.Value, localBindings);
+
+        ValidateExpressionReferences(declName, funcImpl.Expression.Value, localBindings);
+    }
+
+    private static void CollectPatternBindings(
+        AbstractSyntaxTypes.Pattern pattern,
+        HashSet<string> bindings)
+    {
+        switch (pattern)
+        {
+            case AbstractSyntaxTypes.Pattern.VarPattern var:
+                bindings.Add(var.Name);
+                break;
+
+            case AbstractSyntaxTypes.Pattern.AsPattern asPattern:
+                bindings.Add(asPattern.Name.Value);
+                CollectPatternBindings(asPattern.Pattern.Value, bindings);
+                break;
+
+            case AbstractSyntaxTypes.Pattern.NamedPattern named:
+                foreach (var arg in named.Arguments)
+                    CollectPatternBindings(arg.Value, bindings);
+
+                break;
+
+            case AbstractSyntaxTypes.Pattern.TuplePattern tuple:
+                foreach (var elem in tuple.Elements)
+                    CollectPatternBindings(elem.Value, bindings);
+
+                break;
+
+            case AbstractSyntaxTypes.Pattern.ListPattern list:
+                foreach (var elem in list.Elements)
+                    CollectPatternBindings(elem.Value, bindings);
+
+                break;
+
+            case AbstractSyntaxTypes.Pattern.UnConsPattern unCons:
+                CollectPatternBindings(unCons.Head.Value, bindings);
+                CollectPatternBindings(unCons.Tail.Value, bindings);
+                break;
+
+            case AbstractSyntaxTypes.Pattern.ParenthesizedPattern paren:
+                CollectPatternBindings(paren.Pattern.Value, bindings);
+                break;
+
+            case AbstractSyntaxTypes.Pattern.RecordPattern record:
+                foreach (var field in record.Fields)
+                    bindings.Add(field.Value);
+
+                break;
+        }
+    }
+
+    private static void ValidateExpressionReferences(
+        DeclQualifiedName declName,
+        AbstractSyntaxTypes.Expression expression,
+        HashSet<string> localBindings)
+    {
+        switch (expression)
+        {
+            case AbstractSyntaxTypes.Expression.FunctionOrValue fov:
+                if (fov.ModuleName.Count is 0 && !localBindings.Contains(fov.Name))
+                {
+                    throw new System.InvalidOperationException(
+                        $"Declaration '{declName.FullName}' contains unqualified reference '{fov.Name}' " +
+                        $"that is not a local binding. All non-local references must be fully qualified.");
+                }
+
+                break;
+
+            case AbstractSyntaxTypes.Expression.Application app:
+                foreach (var arg in app.Arguments)
+                    ValidateExpressionReferences(declName, arg.Value, localBindings);
+
+                break;
+
+            case AbstractSyntaxTypes.Expression.OperatorApplication opApp:
+                ValidateExpressionReferences(declName, opApp.Left.Value, localBindings);
+                ValidateExpressionReferences(declName, opApp.Right.Value, localBindings);
+                break;
+
+            case AbstractSyntaxTypes.Expression.IfBlock ifBlock:
+                ValidateExpressionReferences(declName, ifBlock.Condition.Value, localBindings);
+                ValidateExpressionReferences(declName, ifBlock.ThenBlock.Value, localBindings);
+                ValidateExpressionReferences(declName, ifBlock.ElseBlock.Value, localBindings);
+                break;
+
+            case AbstractSyntaxTypes.Expression.Negation neg:
+                ValidateExpressionReferences(declName, neg.Expression.Value, localBindings);
+                break;
+
+            case AbstractSyntaxTypes.Expression.ListExpr list:
+                foreach (var elem in list.Elements)
+                    ValidateExpressionReferences(declName, elem.Value, localBindings);
+
+                break;
+
+            case AbstractSyntaxTypes.Expression.TupledExpression tuple:
+                foreach (var elem in tuple.Elements)
+                    ValidateExpressionReferences(declName, elem.Value, localBindings);
+
+                break;
+
+            case AbstractSyntaxTypes.Expression.ParenthesizedExpression paren:
+                ValidateExpressionReferences(declName, paren.Expression.Value, localBindings);
+                break;
+
+            case AbstractSyntaxTypes.Expression.LambdaExpression lambda:
+                var lambdaBindings = new HashSet<string>(localBindings);
+
+                foreach (var arg in lambda.Lambda.Arguments)
+                    CollectPatternBindings(arg.Value, lambdaBindings);
+
+                ValidateExpressionReferences(declName, lambda.Lambda.Expression.Value, lambdaBindings);
+                break;
+
+            case AbstractSyntaxTypes.Expression.CaseExpression caseExpr:
+                ValidateExpressionReferences(declName, caseExpr.CaseBlock.Expression.Value, localBindings);
+
+                foreach (var caseItem in caseExpr.CaseBlock.Cases)
+                {
+                    var caseBindings = new HashSet<string>(localBindings);
+                    CollectPatternBindings(caseItem.Pattern.Value, caseBindings);
+                    ValidateExpressionReferences(declName, caseItem.Expression.Value, caseBindings);
+                }
+
+                break;
+
+            case AbstractSyntaxTypes.Expression.LetExpression letExpr:
+                var letBindings = new HashSet<string>(localBindings);
+
+                foreach (var letDecl in letExpr.Value.Declarations)
+                {
+                    switch (letDecl.Value)
+                    {
+                        case AbstractSyntaxTypes.Expression.LetDeclaration.LetFunction letFunc:
+                            letBindings.Add(letFunc.Function.Declaration.Value.Name.Value);
+                            break;
+
+                        case AbstractSyntaxTypes.Expression.LetDeclaration.LetDestructuring letDestr:
+                            CollectPatternBindings(letDestr.Pattern.Value, letBindings);
+                            break;
+                    }
+                }
+
+                foreach (var letDecl in letExpr.Value.Declarations)
+                {
+                    switch (letDecl.Value)
+                    {
+                        case AbstractSyntaxTypes.Expression.LetDeclaration.LetFunction letFunc:
+                            var letFuncBindings = new HashSet<string>(letBindings);
+
+                            foreach (var arg in letFunc.Function.Declaration.Value.Arguments)
+                                CollectPatternBindings(arg.Value, letFuncBindings);
+
+                            ValidateExpressionReferences(declName, letFunc.Function.Declaration.Value.Expression.Value, letFuncBindings);
+                            break;
+
+                        case AbstractSyntaxTypes.Expression.LetDeclaration.LetDestructuring letDestr:
+                            ValidateExpressionReferences(declName, letDestr.Expression.Value, letBindings);
+                            break;
+                    }
+                }
+
+                ValidateExpressionReferences(declName, letExpr.Value.Expression.Value, letBindings);
+                break;
+
+            case AbstractSyntaxTypes.Expression.RecordExpr recordExpr:
+                foreach (var field in recordExpr.Fields)
+                    ValidateExpressionReferences(declName, field.Value.valueExpr.Value, localBindings);
+
+                break;
+
+            case AbstractSyntaxTypes.Expression.RecordAccess recordAccess:
+                ValidateExpressionReferences(declName, recordAccess.Record.Value, localBindings);
+                break;
+
+            case AbstractSyntaxTypes.Expression.RecordUpdateExpression recordUpdate:
+                foreach (var field in recordUpdate.Fields)
+                    ValidateExpressionReferences(declName, field.Value.valueExpr.Value, localBindings);
+
+                break;
+        }
     }
 }

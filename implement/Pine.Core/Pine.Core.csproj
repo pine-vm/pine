@@ -23,6 +23,10 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <InternalsVisibleTo Include="Pine.Core.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
     <None Include="README.md" Pack="true" PackagePath="\" />
     <None Include="./../../License.txt" Pack="true" PackagePath="\" />
     <None Include="package-icon.png" Pack="true" PackagePath="" />

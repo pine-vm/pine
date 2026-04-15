@@ -48,15 +48,12 @@ public class InliningSimpleTests
 
         var expectedElmModuleText =
             """"
-            module App exposing (..)
-
-
-            apply f x =
+            App.apply f x =
                 f
                     x
 
 
-            result =
+            App.result =
                 Pine_kernel.int_multiply
                     [ 5, 2 ]
             """";
@@ -97,17 +94,14 @@ public class InliningSimpleTests
 
         var expectedElmModuleText =
             """"
-            module App exposing (..)
-
-
-            combine f g x =
+            App.combine f g x =
                 f
                     (g
                         x
                     )
 
 
-            result =
+            App.result =
                 Pine_kernel.int_add
                     [ (Pine_kernel.int_multiply
                         [ 3, 2 ]

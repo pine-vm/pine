@@ -52,15 +52,12 @@ public class InliningPipelineTests
 
         var expectedElmModuleText =
             """"
-            module App exposing (..)
-
-
-            double y =
+            App.double y =
                 Pine_kernel.int_multiply
                     [ y, 2 ]
 
 
-            result =
+            App.result =
                 App.double
                     5
             """";
@@ -99,20 +96,17 @@ public class InliningPipelineTests
 
         var expectedElmModuleText =
             """"
-            module App exposing (..)
-
-
-            increment y =
-                Pine_kernel.int_add
-                    [ y, 1 ]
-
-
-            double z =
+            App.double z =
                 Pine_kernel.int_multiply
                     [ z, 2 ]
 
 
-            result =
+            App.increment y =
+                Pine_kernel.int_add
+                    [ y, 1 ]
+
+
+            App.result =
                 App.double
                     (App.increment
                         5
@@ -148,15 +142,12 @@ public class InliningPipelineTests
 
         var expectedElmModuleText =
             """"
-            module App exposing (..)
-
-
-            double y =
+            App.double y =
                 Pine_kernel.int_multiply
                     [ y, 2 ]
 
 
-            result =
+            App.result =
                 App.double
                     5
             """";
@@ -195,20 +186,17 @@ public class InliningPipelineTests
 
         var expectedElmModuleText =
             """"
-            module App exposing (..)
-
-
-            increment y =
-                Pine_kernel.int_add
-                    [ y, 1 ]
-
-
-            double z =
+            App.double z =
                 Pine_kernel.int_multiply
                     [ z, 2 ]
 
 
-            result =
+            App.increment y =
+                Pine_kernel.int_add
+                    [ y, 1 ]
+
+
+            App.result =
                 App.double
                     (App.increment
                         5
@@ -247,25 +235,22 @@ public class InliningPipelineTests
 
         var expectedElmModuleText =
             """"
-            module App exposing (..)
-
-
-            increment y =
-                Pine_kernel.int_add
-                    [ y, 1 ]
-
-
-            double z =
-                Pine_kernel.int_multiply
-                    [ z, 2 ]
-
-
-            composed =
+            App.composed =
                 \composeArg ->
                     App.double
                         (App.increment
                             composeArg
                         )
+
+
+            App.double z =
+                Pine_kernel.int_multiply
+                    [ z, 2 ]
+
+
+            App.increment y =
+                Pine_kernel.int_add
+                    [ y, 1 ]
             """";
 
         rendered.Trim().Should().Be(
@@ -300,25 +285,22 @@ public class InliningPipelineTests
 
         var expectedElmModuleText =
             """"
-            module App exposing (..)
-
-
-            increment y =
-                Pine_kernel.int_add
-                    [ y, 1 ]
-
-
-            double z =
-                Pine_kernel.int_multiply
-                    [ z, 2 ]
-
-
-            composed =
+            App.composed =
                 \composeArg ->
                     App.double
                         (App.increment
                             composeArg
                         )
+
+
+            App.double z =
+                Pine_kernel.int_multiply
+                    [ z, 2 ]
+
+
+            App.increment y =
+                Pine_kernel.int_add
+                    [ y, 1 ]
             """";
 
         rendered.Trim().Should().Be(

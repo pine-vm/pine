@@ -709,9 +709,9 @@ public class FunctionApplicationOverheadTests
 
         ElmCompilerTestHelper.FormatCounts(report).Should().Be(
             """
-            InstructionCount: 67
-            InvocationCount: 8
-            BuildListCount: 21
+            InstructionCount: 12
+            InvocationCount: 2
+            BuildListCount: 2
             LoopIterationCount: 0
             """);
     }

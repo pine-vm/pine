@@ -4,6 +4,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 
+using ModuleName = System.Collections.Generic.IReadOnlyList<string>;
 using SyntaxTypes = Pine.Core.Elm.ElmSyntax.Stil4mElmSyntax7;
 
 // Alias to avoid ambiguity with System.Range
@@ -1408,7 +1409,7 @@ internal static class ElmSyntaxTransformations
         }
     }
 
-    internal static string GenerateFreshLocalName(
+    internal static string GenerateUniqueLocalName(
         string baseName,
         ISet<string> usedNames)
     {
@@ -1421,9 +1422,24 @@ internal static class ElmSyntaxTransformations
         }
     }
 
-    internal static SyntaxTypes.FunctionImplementation FreshenLocalBindings(
+    internal static SyntaxTypes.FunctionImplementation RenameBindingsAvoidingCapture(
         SyntaxTypes.FunctionImplementation implementation,
         IReadOnlySet<string> namesAlreadyInScope)
+    {
+        return RenameBindingsAvoidingCapture(implementation, namesAlreadyInScope, crossModuleQualification: null);
+    }
+
+    /// <summary>
+    /// Combines local-binding renaming with cross-module reference qualification in a single pass.
+    /// When <paramref name="crossModuleQualification"/> is provided, any unqualified <c>FunctionOrValue</c>
+    /// reference that is NOT a local binding but IS a known module-level name in the callee module
+    /// gets qualified with the callee module name. Similarly, unqualified <c>NamedPattern</c> constructor
+    /// references are qualified.
+    /// </summary>
+    internal static SyntaxTypes.FunctionImplementation RenameBindingsAvoidingCapture(
+        SyntaxTypes.FunctionImplementation implementation,
+        IReadOnlySet<string> namesAlreadyInScope,
+        CrossModuleQualification? crossModuleQualification)
     {
         var namesInScope = new HashSet<string>(namesAlreadyInScope);
         var activeRenames = new Dictionary<string, string>();
@@ -1433,7 +1449,8 @@ internal static class ElmSyntaxTransformations
             .Select(
                 argument =>
                 {
-                    var (freshArgument, argumentBindings) = FreshenPatternNode(argument, namesInScope);
+                    var (freshArgument, argumentBindings) =
+                        RenamePatternBindings(argument, namesInScope, crossModuleQualification);
 
                     foreach (var binding in argumentBindings)
                         activeRenames[binding.Key] = binding.Value;
@@ -1443,10 +1460,11 @@ internal static class ElmSyntaxTransformations
             .ToList();
 
         var freshExpression =
-            FreshenExpressionNode(
+            RenameExpressionBindings(
                 implementation.Expression,
                 activeRenames,
-                namesInScope);
+                namesInScope,
+                crossModuleQualification);
 
         return
             implementation with
@@ -1456,9 +1474,17 @@ internal static class ElmSyntaxTransformations
             };
     }
 
-    internal static SyntaxTypes.LambdaStruct FreshenLocalBindings(
+    internal static SyntaxTypes.LambdaStruct RenameBindingsAvoidingCapture(
         SyntaxTypes.LambdaStruct lambda,
         IReadOnlySet<string> namesAlreadyInScope)
+    {
+        return RenameBindingsAvoidingCapture(lambda, namesAlreadyInScope, crossModuleQualification: null);
+    }
+
+    internal static SyntaxTypes.LambdaStruct RenameBindingsAvoidingCapture(
+        SyntaxTypes.LambdaStruct lambda,
+        IReadOnlySet<string> namesAlreadyInScope,
+        CrossModuleQualification? crossModuleQualification)
     {
         var namesInScope = new HashSet<string>(namesAlreadyInScope);
         var activeRenames = new Dictionary<string, string>();
@@ -1468,7 +1494,8 @@ internal static class ElmSyntaxTransformations
             .Select(
                 argument =>
                 {
-                    var (freshArgument, argumentBindings) = FreshenPatternNode(argument, namesInScope);
+                    var (freshArgument, argumentBindings) =
+                        RenamePatternBindings(argument, namesInScope, crossModuleQualification);
 
                     foreach (var binding in argumentBindings)
                         activeRenames[binding.Key] = binding.Value;
@@ -1478,31 +1505,51 @@ internal static class ElmSyntaxTransformations
             .ToList();
 
         var freshExpression =
-            FreshenExpressionNode(
+            RenameExpressionBindings(
                 lambda.Expression,
                 activeRenames,
-                namesInScope);
+                namesInScope,
+                crossModuleQualification);
 
         return new SyntaxTypes.LambdaStruct([.. freshArguments], freshExpression);
     }
 
-    internal static Node<SyntaxTypes.Expression> FreshenLocalBindings(
+    internal static Node<SyntaxTypes.Expression> RenameBindingsAvoidingCapture(
         Node<SyntaxTypes.Expression> expression,
         IReadOnlySet<string> namesAlreadyInScope)
     {
         return
-            FreshenExpressionNode(
+            RenameExpressionBindings(
                 expression,
                 new Dictionary<string, string>(),
-                new HashSet<string>(namesAlreadyInScope));
+                new HashSet<string>(namesAlreadyInScope),
+                crossModuleQualification: null);
     }
 
-    private static Node<SyntaxTypes.Expression> FreshenExpressionNode(
+    /// <summary>
+    /// Applies cross-module reference qualification to an expression, without any names to avoid.
+    /// Used for plain value inlining where there are no local names to rename, only
+    /// module-level references to qualify.
+    /// </summary>
+    internal static Node<SyntaxTypes.Expression> RenameBindingsAvoidingCapture(
+        Node<SyntaxTypes.Expression> expression,
+        CrossModuleQualification crossModuleQualification)
+    {
+        return
+            RenameExpressionBindings(
+                expression,
+                new Dictionary<string, string>(),
+                new HashSet<string>(),
+                crossModuleQualification);
+    }
+
+    private static Node<SyntaxTypes.Expression> RenameExpressionBindings(
         Node<SyntaxTypes.Expression> expressionNode,
         IReadOnlyDictionary<string, string> activeRenames,
-        IReadOnlySet<string> namesInScope)
+        IReadOnlySet<string> namesInScope,
+        CrossModuleQualification? crossModuleQualification = null)
     {
-        SyntaxTypes.Expression FreshenExpressionValue(SyntaxTypes.Expression expression)
+        SyntaxTypes.Expression RenameExpressionValue(SyntaxTypes.Expression expression)
         {
             switch (expression)
             {
@@ -1511,6 +1558,20 @@ internal static class ElmSyntaxTransformations
                      activeRenames.TryGetValue(funcOrValue.Name, out var renamedVariable):
 
                     return new SyntaxTypes.Expression.FunctionOrValue([], renamedVariable);
+
+                // Cross-module qualification: qualify unqualified references to callee module-level names.
+                // Skip names that are local variables in scope (even if not renamed).
+                case SyntaxTypes.Expression.FunctionOrValue funcOrValue
+                when crossModuleQualification is not null &&
+                     funcOrValue.ModuleName.Count is 0 &&
+                     !activeRenames.ContainsKey(funcOrValue.Name) &&
+                     !namesInScope.Contains(funcOrValue.Name) &&
+                     crossModuleQualification.CalleeModuleLevelNames.Contains(funcOrValue.Name):
+
+                    return
+                        new SyntaxTypes.Expression.FunctionOrValue(
+                            crossModuleQualification.CalleeModuleName,
+                            funcOrValue.Name);
 
                 case SyntaxTypes.Expression.LambdaExpression lambdaExpression:
                     {
@@ -1523,7 +1584,7 @@ internal static class ElmSyntaxTransformations
                                 argument =>
                                 {
                                     var (freshArgument, argumentBindings) =
-                                        FreshenPatternNode(argument, lambdaScopeNames);
+                                        RenamePatternBindings(argument, lambdaScopeNames, crossModuleQualification);
 
                                     foreach (var binding in argumentBindings)
                                         lambdaRenames[binding.Key] = binding.Value;
@@ -1533,10 +1594,11 @@ internal static class ElmSyntaxTransformations
                             .ToList();
 
                         var freshBody =
-                            FreshenExpressionNode(
+                            RenameExpressionBindings(
                                 lambdaExpression.Lambda.Expression,
                                 lambdaRenames,
-                                lambdaScopeNames);
+                                lambdaScopeNames,
+                                crossModuleQualification);
 
                         return
                             new SyntaxTypes.Expression.LambdaExpression(
@@ -1546,10 +1608,11 @@ internal static class ElmSyntaxTransformations
                 case SyntaxTypes.Expression.CaseExpression caseExpression:
                     {
                         var freshCaseExpression =
-                            FreshenExpressionNode(
+                            RenameExpressionBindings(
                                 caseExpression.CaseBlock.Expression,
                                 activeRenames,
-                                namesInScope);
+                                namesInScope,
+                                crossModuleQualification);
 
                         var freshCases =
                             caseExpression.CaseBlock.Cases
@@ -1560,16 +1623,17 @@ internal static class ElmSyntaxTransformations
                                     var branchRenames = new Dictionary<string, string>(activeRenames);
 
                                     var (freshPattern, patternBindings) =
-                                        FreshenPatternNode(caseItem.Pattern, branchScopeNames);
+                                        RenamePatternBindings(caseItem.Pattern, branchScopeNames, crossModuleQualification);
 
                                     foreach (var binding in patternBindings)
                                         branchRenames[binding.Key] = binding.Value;
 
                                     var freshBody =
-                                        FreshenExpressionNode(
+                                        RenameExpressionBindings(
                                             caseItem.Expression,
                                             branchRenames,
-                                            branchScopeNames);
+                                            branchScopeNames,
+                                            crossModuleQualification);
 
                                     return new SyntaxTypes.Case(freshPattern, freshBody);
                                 })
@@ -1587,9 +1651,9 @@ internal static class ElmSyntaxTransformations
                         var letScopeNames = new HashSet<string>(namesInScope);
                         var letVisibleRenames = new Dictionary<string, string>(activeRenames);
 
-                        var freshenedNames = new List<Node<string>?>(letExpression.Value.Declarations.Count);
+                        var renamedNames = new List<Node<string>?>(letExpression.Value.Declarations.Count);
 
-                        var freshenedPatterns =
+                        var renamedPatterns =
                             new List<Node<SyntaxTypes.Pattern>?>(letExpression.Value.Declarations.Count);
 
                         var destructuringBindings =
@@ -1606,14 +1670,14 @@ internal static class ElmSyntaxTransformations
                                         var chosenName =
                                             letScopeNames.Contains(originalName)
                                             ?
-                                            GenerateFreshLocalName(originalName, letScopeNames)
+                                            GenerateUniqueLocalName(originalName, letScopeNames)
                                             :
                                             originalName;
 
                                         letScopeNames.Add(chosenName);
                                         letVisibleRenames[originalName] = chosenName;
 
-                                        freshenedNames.Add(
+                                        renamedNames.Add(
                                             originalName == chosenName
                                             ?
                                             letFunction.Function.Declaration.Value.Name
@@ -1622,7 +1686,7 @@ internal static class ElmSyntaxTransformations
                                                 letFunction.Function.Declaration.Value.Name.Range,
                                                 chosenName));
 
-                                        freshenedPatterns.Add(null);
+                                        renamedPatterns.Add(null);
                                         destructuringBindings.Add(null);
                                         break;
                                     }
@@ -1630,22 +1694,23 @@ internal static class ElmSyntaxTransformations
                                 case SyntaxTypes.Expression.LetDeclaration.LetDestructuring letDestructuring:
                                     {
                                         var (freshPattern, patternBindings) =
-                                            FreshenPatternNode(
+                                            RenamePatternBindings(
                                                 letDestructuring.Pattern,
-                                                letScopeNames);
+                                                letScopeNames,
+                                                crossModuleQualification);
 
                                         foreach (var binding in patternBindings)
                                             letVisibleRenames[binding.Key] = binding.Value;
 
-                                        freshenedNames.Add(null);
-                                        freshenedPatterns.Add(freshPattern);
+                                        renamedNames.Add(null);
+                                        renamedPatterns.Add(freshPattern);
                                         destructuringBindings.Add(patternBindings);
                                         break;
                                     }
 
                                 default:
-                                    freshenedNames.Add(null);
-                                    freshenedPatterns.Add(null);
+                                    renamedNames.Add(null);
+                                    renamedPatterns.Add(null);
                                     destructuringBindings.Add(null);
                                     break;
                             }
@@ -1671,7 +1736,7 @@ internal static class ElmSyntaxTransformations
                                         foreach (var argument in letFunction.Function.Declaration.Value.Arguments)
                                         {
                                             var (freshArgument, argumentBindings) =
-                                                FreshenPatternNode(argument, functionScopeNames);
+                                                RenamePatternBindings(argument, functionScopeNames, crossModuleQualification);
 
                                             foreach (var binding in argumentBindings)
                                                 functionRenames[binding.Key] = binding.Value;
@@ -1680,16 +1745,17 @@ internal static class ElmSyntaxTransformations
                                         }
 
                                         var freshFunctionExpression =
-                                            FreshenExpressionNode(
+                                            RenameExpressionBindings(
                                                 letFunction.Function.Declaration.Value.Expression,
                                                 functionRenames,
-                                                functionScopeNames);
+                                                functionScopeNames,
+                                                crossModuleQualification);
 
                                         var freshImplementation =
                                             letFunction.Function.Declaration.Value with
                                             {
                                                 Name =
-                                                freshenedNames[declarationIndex] ??
+                                                renamedNames[declarationIndex] ??
                                                 letFunction.Function.Declaration.Value.Name,
                                                 Arguments = [.. functionArguments],
                                                 Expression = freshFunctionExpression
@@ -1716,10 +1782,15 @@ internal static class ElmSyntaxTransformations
                                         var destructuringScopeNames = new HashSet<string>(letScopeNames);
                                         var patternBindings = destructuringBindings[declarationIndex] ?? [];
 
+                                        // For the RHS expression, references to the pattern's own bindings
+                                        // should resolve to the *outer* scope (Elm semantics: the RHS is
+                                        // evaluated before the binding takes effect).
+                                        // However, we must NOT remove the name from destructuringScopeNames
+                                        // because inner bindings (nested lets, lambdas, etc.) inside the RHS
+                                        // still need to know the name is "in scope" to avoid introducing a
+                                        // clash with the enclosing let-block's binding.
                                         foreach (var binding in patternBindings)
                                         {
-                                            destructuringScopeNames.Remove(binding.Value);
-
                                             if (activeRenames.TryGetValue(binding.Key, out var visibleOuterName))
                                                 destructuringRenames[binding.Key] = visibleOuterName;
 
@@ -1728,16 +1799,17 @@ internal static class ElmSyntaxTransformations
                                         }
 
                                         var freshExpression =
-                                            FreshenExpressionNode(
+                                            RenameExpressionBindings(
                                                 letDestructuring.Expression,
                                                 destructuringRenames,
-                                                destructuringScopeNames);
+                                                destructuringScopeNames,
+                                                crossModuleQualification);
 
                                         freshDeclarations.Add(
                                             new Node<SyntaxTypes.Expression.LetDeclaration>(
                                                 declaration.Range,
                                                 new SyntaxTypes.Expression.LetDeclaration.LetDestructuring(
-                                                    freshenedPatterns[declarationIndex] ?? letDestructuring.Pattern,
+                                                    renamedPatterns[declarationIndex] ?? letDestructuring.Pattern,
                                                     freshExpression)));
 
                                         break;
@@ -1750,10 +1822,11 @@ internal static class ElmSyntaxTransformations
                         }
 
                         var freshBody =
-                            FreshenExpressionNode(
+                            RenameExpressionBindings(
                                 letExpression.Value.Expression,
                                 letVisibleRenames,
-                                letScopeNames);
+                                letScopeNames,
+                                crossModuleQualification);
 
                         return
                             new SyntaxTypes.Expression.LetExpression(
@@ -1766,20 +1839,22 @@ internal static class ElmSyntaxTransformations
                     return
                         MapChildExpressions(
                             expression,
-                            child => FreshenExpressionNode(child, activeRenames, namesInScope));
+                            child =>
+                            RenameExpressionBindings(child, activeRenames, namesInScope, crossModuleQualification));
             }
         }
 
-        return new Node<SyntaxTypes.Expression>(expressionNode.Range, FreshenExpressionValue(expressionNode.Value));
+        return new Node<SyntaxTypes.Expression>(expressionNode.Range, RenameExpressionValue(expressionNode.Value));
     }
 
-    private static (Node<SyntaxTypes.Pattern> Pattern, Dictionary<string, string> Bindings) FreshenPatternNode(
+    private static (Node<SyntaxTypes.Pattern> Pattern, Dictionary<string, string> Bindings) RenamePatternBindings(
         Node<SyntaxTypes.Pattern> patternNode,
-        ISet<string> namesInScope)
+        ISet<string> namesInScope,
+        CrossModuleQualification? crossModuleQualification = null)
     {
         var bindings = new Dictionary<string, string>();
 
-        SyntaxTypes.Pattern FreshenPatternValue(SyntaxTypes.Pattern pattern)
+        SyntaxTypes.Pattern RenamePatternValue(SyntaxTypes.Pattern pattern)
         {
             switch (pattern)
             {
@@ -1788,7 +1863,7 @@ internal static class ElmSyntaxTransformations
                         var chosenName =
                             namesInScope.Contains(varPattern.Name)
                             ?
-                            GenerateFreshLocalName(varPattern.Name, namesInScope)
+                            GenerateUniqueLocalName(varPattern.Name, namesInScope)
                             :
                             varPattern.Name;
 
@@ -1804,7 +1879,8 @@ internal static class ElmSyntaxTransformations
 
                         foreach (var element in tuplePattern.Elements)
                         {
-                            var (freshElement, elementBindings) = FreshenPatternNode(element, namesInScope);
+                            var (freshElement, elementBindings) =
+                                RenamePatternBindings(element, namesInScope, crossModuleQualification);
 
                             foreach (var binding in elementBindings)
                                 bindings[binding.Key] = binding.Value;
@@ -1825,7 +1901,7 @@ internal static class ElmSyntaxTransformations
                                     var chosenName =
                                         namesInScope.Contains(field.Value)
                                         ?
-                                        GenerateFreshLocalName(field.Value, namesInScope)
+                                        GenerateUniqueLocalName(field.Value, namesInScope)
                                         :
                                         field.Value;
 
@@ -1843,8 +1919,11 @@ internal static class ElmSyntaxTransformations
 
                 case SyntaxTypes.Pattern.UnConsPattern unconsPattern:
                     {
-                        var (freshHead, headBindings) = FreshenPatternNode(unconsPattern.Head, namesInScope);
-                        var (freshTail, tailBindings) = FreshenPatternNode(unconsPattern.Tail, namesInScope);
+                        var (freshHead, headBindings) =
+                            RenamePatternBindings(unconsPattern.Head, namesInScope, crossModuleQualification);
+
+                        var (freshTail, tailBindings) =
+                            RenamePatternBindings(unconsPattern.Tail, namesInScope, crossModuleQualification);
 
                         foreach (var binding in headBindings)
                             bindings[binding.Key] = binding.Value;
@@ -1861,7 +1940,8 @@ internal static class ElmSyntaxTransformations
 
                         foreach (var element in listPattern.Elements)
                         {
-                            var (freshElement, elementBindings) = FreshenPatternNode(element, namesInScope);
+                            var (freshElement, elementBindings) =
+                                RenamePatternBindings(element, namesInScope, crossModuleQualification);
 
                             foreach (var binding in elementBindings)
                                 bindings[binding.Key] = binding.Value;
@@ -1878,7 +1958,8 @@ internal static class ElmSyntaxTransformations
 
                         foreach (var argument in namedPattern.Arguments)
                         {
-                            var (freshArgument, argumentBindings) = FreshenPatternNode(argument, namesInScope);
+                            var (freshArgument, argumentBindings) =
+                                RenamePatternBindings(argument, namesInScope, crossModuleQualification);
 
                             foreach (var binding in argumentBindings)
                                 bindings[binding.Key] = binding.Value;
@@ -1886,12 +1967,26 @@ internal static class ElmSyntaxTransformations
                             freshArguments.Add(freshArgument);
                         }
 
-                        return new SyntaxTypes.Pattern.NamedPattern(namedPattern.Name, [.. freshArguments]);
+                        // Qualify unqualified constructor references from the callee module
+                        var qualifiedName = namedPattern.Name;
+
+                        if (crossModuleQualification is not null &&
+                            namedPattern.Name.ModuleName.Count is 0 &&
+                            crossModuleQualification.CalleeModuleLevelNames.Contains(namedPattern.Name.Name))
+                        {
+                            qualifiedName =
+                                new SyntaxTypes.QualifiedNameRef(
+                                    crossModuleQualification.CalleeModuleName,
+                                    namedPattern.Name.Name);
+                        }
+
+                        return new SyntaxTypes.Pattern.NamedPattern(qualifiedName, [.. freshArguments]);
                     }
 
                 case SyntaxTypes.Pattern.AsPattern asPattern:
                     {
-                        var (freshInnerPattern, innerBindings) = FreshenPatternNode(asPattern.Pattern, namesInScope);
+                        var (freshInnerPattern, innerBindings) =
+                            RenamePatternBindings(asPattern.Pattern, namesInScope, crossModuleQualification);
 
                         foreach (var binding in innerBindings)
                             bindings[binding.Key] = binding.Value;
@@ -1899,7 +1994,7 @@ internal static class ElmSyntaxTransformations
                         var chosenAlias =
                             namesInScope.Contains(asPattern.Name.Value)
                             ?
-                            GenerateFreshLocalName(asPattern.Name.Value, namesInScope)
+                            GenerateUniqueLocalName(asPattern.Name.Value, namesInScope)
                             :
                             asPattern.Name.Value;
 
@@ -1919,7 +2014,7 @@ internal static class ElmSyntaxTransformations
                 case SyntaxTypes.Pattern.ParenthesizedPattern parenthesizedPattern:
                     {
                         var (freshPattern, childBindings) =
-                            FreshenPatternNode(parenthesizedPattern.Pattern, namesInScope);
+                            RenamePatternBindings(parenthesizedPattern.Pattern, namesInScope, crossModuleQualification);
 
                         foreach (var binding in childBindings)
                             bindings[binding.Key] = binding.Value;
@@ -1933,8 +2028,159 @@ internal static class ElmSyntaxTransformations
         }
 
         return
-            (new Node<SyntaxTypes.Pattern>(patternNode.Range, FreshenPatternValue(patternNode.Value)),
+            (new Node<SyntaxTypes.Pattern>(patternNode.Range, RenamePatternValue(patternNode.Value)),
             bindings);
     }
+
+    /// <summary>
+    /// Collects all unqualified <see cref="SyntaxTypes.Expression.FunctionOrValue"/> names
+    /// in an expression that are NOT bound by any enclosing pattern (parameters, let-bindings,
+    /// lambda arguments, case branches). These are the "free variables" of the expression.
+    /// Used by cross-module inlining to determine which unqualified references in a callee
+    /// function body need qualification when inlined into a different module.
+    /// </summary>
+    internal static HashSet<string> CollectFreeVariables(
+        SyntaxTypes.Expression expression,
+        IReadOnlyCollection<string>? initialBound = null)
+    {
+        var freeVars = new HashSet<string>();
+        var boundNames = new HashSet<string>(initialBound ?? []);
+
+        CollectFreeVariablesRecursive(expression, boundNames, freeVars);
+
+        return freeVars;
+    }
+
+    /// <summary>
+    /// Overload that collects free variables from a <see cref="SyntaxTypes.FunctionImplementation"/>,
+    /// treating the function's own parameters as bound names.
+    /// </summary>
+    internal static HashSet<string> CollectFreeVariables(
+        SyntaxTypes.FunctionImplementation funcImpl)
+    {
+        var boundNames = new HashSet<string>();
+
+        foreach (var param in funcImpl.Arguments)
+            CollectPatternNamesRecursive(param.Value, boundNames);
+
+        var freeVars = new HashSet<string>();
+
+        CollectFreeVariablesRecursive(funcImpl.Expression.Value, boundNames, freeVars);
+
+        return freeVars;
+    }
+
+    private static void CollectFreeVariablesRecursive(
+        SyntaxTypes.Expression expression,
+        HashSet<string> boundNames,
+        HashSet<string> freeVars)
+    {
+        switch (expression)
+        {
+            case SyntaxTypes.Expression.FunctionOrValue funcOrValue when funcOrValue.ModuleName.Count is 0:
+                if (!boundNames.Contains(funcOrValue.Name))
+                    freeVars.Add(funcOrValue.Name);
+
+                break;
+
+            case SyntaxTypes.Expression.LambdaExpression lambdaExpr:
+                {
+                    var innerBound = new HashSet<string>(boundNames);
+
+                    foreach (var arg in lambdaExpr.Lambda.Arguments)
+                        CollectPatternNamesRecursive(arg.Value, innerBound);
+
+                    CollectFreeVariablesRecursive(lambdaExpr.Lambda.Expression.Value, innerBound, freeVars);
+                    break;
+                }
+
+            case SyntaxTypes.Expression.CaseExpression caseExpr:
+                {
+                    CollectFreeVariablesRecursive(caseExpr.CaseBlock.Expression.Value, boundNames, freeVars);
+
+                    foreach (var caseItem in caseExpr.CaseBlock.Cases)
+                    {
+                        var branchBound = new HashSet<string>(boundNames);
+                        CollectPatternNamesRecursive(caseItem.Pattern.Value, branchBound);
+                        CollectFreeVariablesRecursive(caseItem.Expression.Value, branchBound, freeVars);
+                    }
+
+                    break;
+                }
+
+            case SyntaxTypes.Expression.LetExpression letExpr:
+                {
+                    // Let bindings are mutually recursive in Elm, so all names are in scope
+                    // for all RHS expressions and the body.
+                    var letBound = new HashSet<string>(boundNames);
+
+                    foreach (var decl in letExpr.Value.Declarations)
+                    {
+                        switch (decl.Value)
+                        {
+                            case SyntaxTypes.Expression.LetDeclaration.LetFunction letFunc:
+                                letBound.Add(letFunc.Function.Declaration.Value.Name.Value);
+                                break;
+
+                            case SyntaxTypes.Expression.LetDeclaration.LetDestructuring letDestr:
+                                CollectPatternNamesRecursive(letDestr.Pattern.Value, letBound);
+                                break;
+                        }
+                    }
+
+                    // Process each declaration's RHS with the let-scoped bound names
+                    foreach (var decl in letExpr.Value.Declarations)
+                    {
+                        switch (decl.Value)
+                        {
+                            case SyntaxTypes.Expression.LetDeclaration.LetFunction letFunc:
+                                {
+                                    var funcBound = new HashSet<string>(letBound);
+
+                                    foreach (var arg in letFunc.Function.Declaration.Value.Arguments)
+                                        CollectPatternNamesRecursive(arg.Value, funcBound);
+
+                                    CollectFreeVariablesRecursive(
+                                        letFunc.Function.Declaration.Value.Expression.Value,
+                                        funcBound,
+                                        freeVars);
+
+                                    break;
+                                }
+
+                            case SyntaxTypes.Expression.LetDeclaration.LetDestructuring letDestr:
+                                CollectFreeVariablesRecursive(letDestr.Expression.Value, letBound, freeVars);
+                                break;
+                        }
+                    }
+
+                    // Process the body expression
+                    CollectFreeVariablesRecursive(letExpr.Value.Expression.Value, letBound, freeVars);
+                    break;
+                }
+
+            default:
+                {
+                    // For all other expression types, recurse into children
+                    var worklist = new Stack<SyntaxTypes.Expression>();
+                    EnqueueChildExpressions(expression, worklist);
+
+                    while (worklist.Count > 0)
+                        CollectFreeVariablesRecursive(worklist.Pop(), boundNames, freeVars);
+
+                    break;
+                }
+        }
+    }
+
+    /// <summary>
+    /// Context for qualifying unqualified references during cross-module inlining.
+    /// When a function body from the callee module is inlined into a different module,
+    /// unqualified references to module-level declarations must be qualified with
+    /// the callee module name to avoid misresolution at the call site.
+    /// </summary>
+    internal sealed record CrossModuleQualification(
+        ModuleName CalleeModuleName,
+        IReadOnlySet<string> CalleeModuleLevelNames);
 
 }

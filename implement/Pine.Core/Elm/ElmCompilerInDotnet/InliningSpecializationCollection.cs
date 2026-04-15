@@ -77,30 +77,25 @@ public partial class Inlining
     /// but instead of creating specialized declarations, it records what specializations
     /// are needed via <see cref="FunctionSpecialization"/>.
     /// </summary>
-    private static CollectedSpecializations CollectSpecializationsFromModules(
-        IReadOnlyList<SyntaxTypes.File> modules,
+    private static CollectedSpecializations CollectSpecializationsFromDeclarations(
+        ImmutableDictionary<DeclQualifiedName, SyntaxTypes.Declaration> declarations,
         InliningContext context)
     {
         var collected = s_emptyCollected;
 
-        foreach (var module in modules)
+        foreach (var (key, decl) in declarations.OrderBy(kvp => kvp.Key))
         {
-            var moduleName = SyntaxTypes.Module.GetModuleName(module.ModuleDefinition.Value).Value;
-
             var moduleContext =
-                context with { Resolution = context.Resolution with { CurrentModuleName = moduleName } };
+                context with { Resolution = context.Resolution with { CurrentModuleName = key.Namespaces } };
 
-            foreach (var decl in module.Declarations)
+            if (decl is SyntaxTypes.Declaration.FunctionDeclaration funcDecl)
             {
-                if (decl.Value is SyntaxTypes.Declaration.FunctionDeclaration funcDecl)
-                {
-                    collected =
-                        MergeCollected(
-                            collected,
-                            CollectSpecializationsFromExpression(
-                                funcDecl.Function.Declaration.Value.Expression,
-                                moduleContext));
-                }
+                collected =
+                    MergeCollected(
+                        collected,
+                        CollectSpecializationsFromExpression(
+                            funcDecl.Function.Declaration.Value.Expression,
+                            moduleContext));
             }
         }
 
@@ -547,17 +542,24 @@ public partial class Inlining
     /// (via <see cref="ImmutableHashSet{T}"/>), so no additional deduplication is needed.
     /// </summary>
     private static SpecializationCatalog BuildCatalogFromCollectedSpecializations(
-        CollectedSpecializations collected)
+        CollectedSpecializations collected,
+        IReadOnlySet<string>? existingDeclNames = null)
     {
         // Name and build catalog
         var allNamed = new List<NamedSpecialization>();
+        var usedNames = existingDeclNames is not null ? new HashSet<string>(existingDeclNames) : [];
 
         foreach (var kvp in collected)
         {
             // Sort deterministically before naming to ensure stable __specialized__N numbering
             // regardless of ImmutableHashSet iteration order.
             var sorted = kvp.Value.OrderBy(s => s.DeterministicSortKey).ToList();
-            var named = SpecializationCatalog.NameSpecializations(kvp.Key, sorted);
+            var named = SpecializationCatalog.NameSpecializations(kvp.Key, sorted, usedNames);
+
+            // Track newly assigned names to avoid clashes across different functions.
+            foreach (var n in named)
+                usedNames.Add(n.SpecializedFunctionName);
+
             allNamed.AddRange(named);
         }
 

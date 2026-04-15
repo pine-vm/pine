@@ -146,11 +146,35 @@ public class Canonicalization
 
         var errorMessages =
             errors
-            .Select(err => $"Cannot find '{err.ReferencedName}'")
+            .Select(
+                err => err switch
+                {
+                    CanonicalizationError.UnresolvedReference unresolved =>
+                    $"Cannot find '{unresolved.Name}'",
+
+                    CanonicalizationError.NamingClash clash =>
+                    clash.ShadowedRange is { } shadowedRange
+                    ?
+                    $"This `{clash.Name}` pattern is shadowing an existing `{clash.Name}` variable at {FormatRange(shadowedRange)}. Rename one of them to avoid the ambiguity."
+                    :
+                    $"This `{clash.Name}` pattern is shadowing an existing `{clash.Name}` variable. Rename one of them to avoid the ambiguity.",
+
+                    CanonicalizationError.AmbiguousImport ambiguous =>
+                    $"Name '{ambiguous.Name}' is exposed by multiple imports: {string.Join(", ", ambiguous.ImportingModules)}",
+
+                    _ =>
+                    $"Unknown error at {err.Range}"
+                })
             .ToList();
 
         return string.Join("\n", errorMessages);
     }
+
+    /// <summary>
+    /// Formats a <see cref="Range"/> as a human-readable string showing line:column.
+    /// </summary>
+    private static string FormatRange(Range range) =>
+        $"{range.Start.Row}:{range.Start.Column}-{range.End.Row}:{range.End.Column}";
 
     /// <summary>
     /// Wraps a value in a CanonicalizationResult with no errors.
@@ -1034,7 +1058,9 @@ public class Canonicalization
         SyntaxTypes.FunctionImplementation impl,
         CanonicalizationContext context)
     {
-        // Collect parameter variables while checking for shadowing against module-level declarations
+        // Collect parameter variables while checking for shadowing.
+        // In Elm, parameter names are not allowed to shadow any declaration,
+        // including module-level declarations.
         var parameterVariables = ImmutableHashSet<string>.Empty;
 
         var shadowErrors = new List<CanonicalizationError>();
@@ -1042,12 +1068,14 @@ public class Canonicalization
 
         foreach (var arg in impl.Arguments)
         {
-            // Check if any parameter shadows a module-level declaration
+            // Check against both other parameters and module-level declarations
+            var existingScope = context.ModuleLevelDeclarations.Union(parameterVariables);
+
             var (collectedVars, errors, argShadowings) =
                 CollectPatternVariablesWithShadowCheck(
                     arg.Value,
                     arg.Range,
-                    context.ModuleLevelDeclarations, // Check against module-level declarations
+                    existingScope,
                     parameterVariables,
                     context.DeclarationPath);
 
@@ -1097,7 +1125,7 @@ public class Canonicalization
         return new CanonicalizationResult<SyntaxTypes.FunctionImplementation>(functionImplementation, allErrors, allShadowings);
     }
 
-    private static ImmutableHashSet<string> CollectPatternVariables(
+    internal static ImmutableHashSet<string> CollectPatternVariables(
         SyntaxTypes.Pattern pattern,
         ImmutableHashSet<string> variables)
     {
@@ -1214,7 +1242,7 @@ public class Canonicalization
     /// <param name="collectedVariables">Variables collected so far in this pattern.</param>
     /// <param name="declarationPath">The declaration path for recording shadowings.</param>
     /// <returns>A tuple of (collected variables, shadowing errors, detected shadowings).</returns>
-    private static (ImmutableHashSet<string> Variables, IReadOnlyList<CanonicalizationError> Errors, ImmutableDictionary<string, ShadowingLocation> Shadowings)
+    internal static (ImmutableHashSet<string> Variables, IReadOnlyList<CanonicalizationError> Errors, ImmutableDictionary<string, ShadowingLocation> Shadowings)
         CollectPatternVariablesWithShadowCheck(
         SyntaxTypes.Pattern pattern,
         Range patternRange,
@@ -1241,9 +1269,9 @@ public class Canonicalization
                     if (existingVariables.Contains(varPattern.Name))
                     {
                         errors.Add(
-                            new CanonicalizationError(
+                            new CanonicalizationError.NamingClash(
                                 patternRange,
-                                $"This `{varPattern.Name}` pattern is shadowing an existing `{varPattern.Name}` variable. Rename one of them to avoid the ambiguity."));
+                                varPattern.Name));
 
                         if (!shadowings.ContainsKey(varPattern.Name))
                         {
@@ -1286,9 +1314,9 @@ public class Canonicalization
                         if (existingVariables.Contains(field.Value))
                         {
                             errors.Add(
-                                new CanonicalizationError(
+                                new CanonicalizationError.NamingClash(
                                     field.Range,
-                                    $"This `{field.Value}` pattern is shadowing an existing `{field.Value}` variable. Rename one of them to avoid the ambiguity."));
+                                    field.Value));
 
                             if (!shadowings.ContainsKey(field.Value))
                             {
@@ -1387,9 +1415,9 @@ public class Canonicalization
                     if (existingVariables.Contains(asPattern.Name.Value))
                     {
                         errors.Add(
-                            new CanonicalizationError(
+                            new CanonicalizationError.NamingClash(
                                 asPattern.Name.Range,
-                                $"This `{asPattern.Name.Value}` pattern is shadowing an existing `{asPattern.Name.Value}` variable. Rename one of them to avoid the ambiguity."));
+                                asPattern.Name.Value));
 
                         if (!shadowings.ContainsKey(asPattern.Name.Value))
                         {
@@ -1839,13 +1867,12 @@ public class Canonicalization
             // Check for import clashes - only report error when the name is actually referenced
             if (importedFrom.Count > 1)
             {
-                var moduleNames = importedFrom.Select(m => string.Join(".", m));
-                var errorMessage = $"Name '{name}' is exposed by multiple imports: {string.Join(", ", moduleNames)}";
+                var moduleNames = importedFrom.Select(m => string.Join(".", m)).ToList();
 
                 return
                     new CanonicalizationResult<ModuleName>(
                         importedFrom[0],
-                        [new CanonicalizationError(range, errorMessage)]);
+                        [new CanonicalizationError.AmbiguousImport(range, name, moduleNames)]);
             }
 
             return new CanonicalizationResult<ModuleName>(importedFrom[0], []);
@@ -1855,7 +1882,7 @@ public class Canonicalization
         return
             new CanonicalizationResult<ModuleName>(
                 currentModuleName,
-                [new CanonicalizationError(range, name)]);
+                [new CanonicalizationError.UnresolvedReference(range, name)]);
     }
 
     // Common helper to resolve qualified names, handling both aliases and unqualified names
@@ -2032,9 +2059,9 @@ public class Canonicalization
                 if (existingScope.Contains(funcName))
                 {
                     shadowErrors.Add(
-                        new CanonicalizationError(
+                        new CanonicalizationError.NamingClash(
                             funcNameRange,
-                            $"This `{funcName}` declaration is shadowing an existing `{funcName}` declaration. Rename one of them to avoid the ambiguity."));
+                            funcName));
 
                     if (!letShadowings.ContainsKey(funcName))
                     {

@@ -41,20 +41,10 @@ public class InliningRecursiveCrossModuleTests
 
         var expectedAppModuleText =
             """"            
-            module App exposing (..)
-
-
-            mapInst : List.List a -> List.List List.List a
-            mapInst xs =
-                mapHelp__specialized__1
-                    xs
-                    []
-
-
-            mapHelp__specialized__1 remaining acc =
+            App.mapHelp__specialized__1 remaining acc =
                 case remaining of
                     x :: xs ->
-                        mapHelp__specialized__1
+                        App.mapHelp__specialized__1
                             xs
                             (Pine_kernel.concat
                                 [ [ [ x, x ] ], acc ]
@@ -64,6 +54,12 @@ public class InliningRecursiveCrossModuleTests
                         Pine_kernel.reverse
                             acc
 
+
+            App.mapInst : List.List a -> List.List List.List a
+            App.mapInst xs =
+                App.mapHelp__specialized__1
+                    xs
+                    []
             """";
 
         var appModule =

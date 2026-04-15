@@ -27,18 +27,12 @@ public class BuiltinOperatorLoweringTests
                 """);
 
         RenderCanonicalized(loweredModule).Should().Be(
-            RenderCanonicalized(
-                """
-                module Test exposing (..)
-
-
-                add : Int -> Int -> Int
-                add left right =
-                    Pine_builtin.int_add
-                        [ left
-                        , right
-                        ]
-                """));
+            """
+            Test.add : Int -> Int -> Int
+            Test.add left right =
+                Pine_builtin.int_add
+                    [ left, right ]
+            """.Trim());
     }
 
     [Fact]
@@ -56,21 +50,15 @@ public class BuiltinOperatorLoweringTests
                 """);
 
         RenderCanonicalized(loweredModule).Should().Be(
-            RenderCanonicalized(
-                """
-                module Test exposing (..)
-
-
-                sub : Int -> Int -> Int
-                sub left right =
-                    Pine_builtin.int_add
-                        [ left
-                        , Pine_builtin.int_mul
-                            [ -1
-                            , right
-                            ]
-                        ]
-                """));
+            """
+            Test.sub : Int -> Int -> Int
+            Test.sub left right =
+                Pine_builtin.int_add
+                    [ left
+                    , Pine_builtin.int_mul
+                        [ -1, right ]
+                    ]
+            """.Trim());
     }
 
     [Fact]
@@ -88,18 +76,12 @@ public class BuiltinOperatorLoweringTests
                 """);
 
         RenderCanonicalized(loweredModule).Should().Be(
-            RenderCanonicalized(
-                """
-                module Test exposing (..)
-
-
-                mul : Int -> Int -> Int
-                mul left right =
-                    Pine_builtin.int_mul
-                        [ left
-                        , right
-                        ]
-                """));
+            """
+            Test.mul : Int -> Int -> Int
+            Test.mul left right =
+                Pine_builtin.int_mul
+                    [ left, right ]
+            """.Trim());
     }
 
     [Fact]
@@ -117,18 +99,12 @@ public class BuiltinOperatorLoweringTests
                 """);
 
         RenderCanonicalized(loweredModule).Should().Be(
-            RenderCanonicalized(
-                """
-                module Test exposing (..)
-
-
-                eqInt : Int -> Int -> Bool
-                eqInt left right =
-                    Pine_builtin.equal
-                        [ left
-                        , right
-                        ]
-                """));
+            """
+            Test.eqInt : Int -> Int -> Bool
+            Test.eqInt left right =
+                Pine_builtin.equal
+                    [ left, right ]
+            """.Trim());
     }
 
     [Fact]
@@ -146,18 +122,12 @@ public class BuiltinOperatorLoweringTests
                 """);
 
         RenderCanonicalized(loweredModule).Should().Be(
-            RenderCanonicalized(
-                """
-                module Test exposing (..)
-
-
-                eqString : String -> String -> Bool
-                eqString left right =
-                    Pine_builtin.equal
-                        [ left
-                        , right
-                        ]
-                """));
+            """
+            Test.eqString : String -> String -> Bool
+            Test.eqString left right =
+                Pine_builtin.equal
+                    [ left, right ]
+            """.Trim());
     }
 
     [Fact]
@@ -175,18 +145,12 @@ public class BuiltinOperatorLoweringTests
                 """);
 
         RenderCanonicalized(loweredModule).Should().Be(
-            RenderCanonicalized(
-                """
-                module Test exposing (..)
-
-
-                eqString : String -> String -> Bool
-                eqString left right =
-                    Pine_builtin.equal
-                        [ left
-                        , right
-                        ]
-                """));
+            """
+            Test.eqString : String -> String -> Bool
+            Test.eqString left right =
+                Pine_builtin.equal
+                    [ left, right ]
+            """.Trim());
     }
 
     [Fact]
@@ -225,46 +189,40 @@ public class BuiltinOperatorLoweringTests
                 """);
 
         RenderCanonicalized(loweredModule).Should().Be(
-            RenderCanonicalized(
-                """
-                module Test exposing (..)
+            """
+            Test.charOrEnd : Int -> String -> Int
+            Test.charOrEnd offset stringBytes =
+                offset
 
 
-                charOrEnd : Int -> String -> Int
-                charOrEnd offset stringBytes =
-                    offset
+            Test.isSentinel : Int -> String -> Bool
+            Test.isSentinel sOffsetBytes sSrcBytes =
+                let
+                    sOffsetBytesInt : Int
+                    sOffsetBytesInt =
+                        sOffsetBytes
 
+                    newOffset : Int
+                    newOffset =
+                        Test.charOrEnd
+                            sOffsetBytesInt
+                            sSrcBytes
+                in
+                if
+                    Pine_builtin.equal
+                        [ newOffset, -1 ]
+                then
+                    Basics.True
 
-                isSentinel : Int -> String -> Bool
-                isSentinel sOffsetBytes sSrcBytes =
-                    let
-                        sOffsetBytesInt : Int
-                        sOffsetBytesInt =
-                            sOffsetBytes
+                else if
+                    Pine_builtin.equal
+                        [ newOffset, -2 ]
+                then
+                    Basics.False
 
-                        newOffset : Int
-                        newOffset =
-                            Test.charOrEnd sOffsetBytesInt sSrcBytes
-                    in
-                    if
-                        Pine_builtin.equal
-                            [ newOffset
-                            , -1
-                            ]
-                    then
-                        Basics.True
-
-                    else if
-                        Pine_builtin.equal
-                            [ newOffset
-                            , -2
-                            ]
-                    then
-                        Basics.False
-
-                    else
-                        Basics.True
-                """));
+                else
+                    Basics.True
+            """.Trim());
     }
 
     [Fact]
@@ -292,34 +250,30 @@ public class BuiltinOperatorLoweringTests
                 """);
 
         RenderCanonicalized(loweredModule).Should().Be(
-            RenderCanonicalized(
-                """
-                module Test exposing (..)
-
-
-                mapNode : (Int -> Int -> Int -> Int -> ( Int, Int )) -> ( Int, Int )
-                mapNode nodeBuilder =
-                    nodeBuilder 11 13 17 19
-
-
-                buildBounds : ( Int, Int )
-                buildBounds =
-                    Test.mapNode
-                        (\startRow startColumn endRow endColumn ->
-                            ( Pine_builtin.int_add
-                                [ startColumn
-                                , Pine_builtin.int_mul
-                                    [ -1
-                                    , 1
-                                    ]
-                                ]
-                            , Pine_builtin.int_add
-                                [ endColumn
-                                , 1
-                                ]
-                            )
+            """
+            Test.buildBounds : ( Int, Int )
+            Test.buildBounds =
+                Test.mapNode
+                    (\startRow startColumn endRow endColumn ->
+                        ( Pine_builtin.int_add
+                            [ startColumn
+                            , Pine_builtin.int_mul
+                                [ -1, 1 ]
+                            ]
+                        , Pine_builtin.int_add
+                            [ endColumn, 1 ]
                         )
-                """));
+                    )
+
+
+            Test.mapNode : (Int -> Int -> Int -> Int -> ( Int, Int )) -> ( Int, Int )
+            Test.mapNode nodeBuilder =
+                nodeBuilder
+                    11
+                    13
+                    17
+                    19
+            """.Trim());
     }
 
     [Fact]
@@ -337,18 +291,12 @@ public class BuiltinOperatorLoweringTests
                 """);
 
         RenderCanonicalized(loweredModule).Should().Be(
-            RenderCanonicalized(
-                """
-                module Test exposing (..)
-
-
-                isLe : Int -> Int -> Bool
-                isLe left right =
-                    Pine_builtin.int_is_sorted_asc
-                        [ left
-                        , right
-                        ]
-                """));
+            """
+            Test.isLe : Int -> Int -> Bool
+            Test.isLe left right =
+                Pine_builtin.int_is_sorted_asc
+                    [ left, right ]
+            """.Trim());
     }
 
     [Fact]
@@ -366,18 +314,12 @@ public class BuiltinOperatorLoweringTests
                 """);
 
         RenderCanonicalized(loweredModule).Should().Be(
-            RenderCanonicalized(
-                """
-                module Test exposing (..)
-
-
-                isGe : Int -> Int -> Bool
-                isGe left right =
-                    Pine_builtin.int_is_sorted_asc
-                        [ right
-                        , left
-                        ]
-                """));
+            """
+            Test.isGe : Int -> Int -> Bool
+            Test.isGe left right =
+                Pine_builtin.int_is_sorted_asc
+                    [ right, left ]
+            """.Trim());
     }
 
     [Fact]
@@ -395,21 +337,15 @@ public class BuiltinOperatorLoweringTests
                 """);
 
         RenderCanonicalized(loweredModule).Should().Be(
-            RenderCanonicalized(
-                """
-                module Test exposing (..)
-
-
-                isLt : Int -> Int -> Bool
-                isLt left right =
-                    Pine_builtin.int_is_sorted_asc
-                        [ Pine_builtin.int_add
-                            [ left
-                            , 1
-                            ]
-                        , right
-                        ]
-                """));
+            """
+            Test.isLt : Int -> Int -> Bool
+            Test.isLt left right =
+                Pine_builtin.int_is_sorted_asc
+                    [ Pine_builtin.int_add
+                        [ left, 1 ]
+                    , right
+                    ]
+            """.Trim());
     }
 
     [Fact]
@@ -427,18 +363,12 @@ public class BuiltinOperatorLoweringTests
                 """);
 
         RenderCanonicalized(loweredModule).Should().Be(
-            RenderCanonicalized(
-                """
-                module Test exposing (..)
-
-
-                isLtLiteralLeft : Int -> Bool
-                isLtLiteralLeft right =
-                    Pine_builtin.int_is_sorted_asc
-                        [ 4
-                        , right
-                        ]
-                """));
+            """
+            Test.isLtLiteralLeft : Int -> Bool
+            Test.isLtLiteralLeft right =
+                Pine_builtin.int_is_sorted_asc
+                    [ 4, right ]
+            """.Trim());
     }
 
     [Fact]
@@ -456,18 +386,12 @@ public class BuiltinOperatorLoweringTests
                 """);
 
         RenderCanonicalized(loweredModule).Should().Be(
-            RenderCanonicalized(
-                """
-                module Test exposing (..)
-
-
-                isLtLiteralRight : Int -> Bool
-                isLtLiteralRight left =
-                    Pine_builtin.int_is_sorted_asc
-                        [ left
-                        , 4
-                        ]
-                """));
+            """
+            Test.isLtLiteralRight : Int -> Bool
+            Test.isLtLiteralRight left =
+                Pine_builtin.int_is_sorted_asc
+                    [ left, 4 ]
+            """.Trim());
     }
 
     [Fact]
@@ -485,21 +409,15 @@ public class BuiltinOperatorLoweringTests
                 """);
 
         RenderCanonicalized(loweredModule).Should().Be(
-            RenderCanonicalized(
-                """
-                module Test exposing (..)
-
-
-                isGt : Int -> Int -> Bool
-                isGt left right =
-                    Pine_builtin.int_is_sorted_asc
-                        [ Pine_builtin.int_add
-                            [ right
-                            , 1
-                            ]
-                        , left
-                        ]
-                """));
+            """
+            Test.isGt : Int -> Int -> Bool
+            Test.isGt left right =
+                Pine_builtin.int_is_sorted_asc
+                    [ Pine_builtin.int_add
+                        [ right, 1 ]
+                    , left
+                    ]
+            """.Trim());
     }
 
     [Fact]
@@ -517,18 +435,12 @@ public class BuiltinOperatorLoweringTests
                 """);
 
         RenderCanonicalized(loweredModule).Should().Be(
-            RenderCanonicalized(
-                """
-                module Test exposing (..)
-
-
-                isGtLiteralLeft : Int -> Bool
-                isGtLiteralLeft right =
-                    Pine_builtin.int_is_sorted_asc
-                        [ right
-                        , 4
-                        ]
-                """));
+            """
+            Test.isGtLiteralLeft : Int -> Bool
+            Test.isGtLiteralLeft right =
+                Pine_builtin.int_is_sorted_asc
+                    [ right, 4 ]
+            """.Trim());
     }
 
     [Fact]
@@ -546,18 +458,12 @@ public class BuiltinOperatorLoweringTests
                 """);
 
         RenderCanonicalized(loweredModule).Should().Be(
-            RenderCanonicalized(
-                """
-                module Test exposing (..)
-
-
-                isGtLiteralRight : Int -> Bool
-                isGtLiteralRight left =
-                    Pine_builtin.int_is_sorted_asc
-                        [ 4
-                        , left
-                        ]
-                """));
+            """
+            Test.isGtLiteralRight : Int -> Bool
+            Test.isGtLiteralRight left =
+                Pine_builtin.int_is_sorted_asc
+                    [ 4, left ]
+            """.Trim());
     }
 
     [Fact]
@@ -575,19 +481,12 @@ public class BuiltinOperatorLoweringTests
                 """);
 
         RenderCanonicalized(loweredModule).Should().Be(
-            RenderCanonicalized(
-                """
-                module Test exposing (..)
-
-
-                isChainedLe : Int -> Int -> Int -> Bool
-                isChainedLe alfa beta gamma =
-                    Pine_builtin.int_is_sorted_asc
-                        [ alfa
-                        , beta
-                        , gamma
-                        ]
-                """));
+            """
+            Test.isChainedLe : Int -> Int -> Int -> Bool
+            Test.isChainedLe alfa beta gamma =
+                Pine_builtin.int_is_sorted_asc
+                    [ alfa, beta, gamma ]
+            """.Trim());
     }
 
     [Fact]
@@ -605,26 +504,18 @@ public class BuiltinOperatorLoweringTests
                 """);
 
         RenderCanonicalized(loweredModule).Should().Be(
-            RenderCanonicalized(
-                """
-                module Test exposing (..)
-
-
-                isChainedLt : Int -> Int -> Int -> Bool
-                isChainedLt alfa beta gamma =
-                    Pine_builtin.int_is_sorted_asc
-                        [ Pine_builtin.int_add
-                            [ alfa
-                            , 1
-                            ]
-                        , beta
-                        , Pine_builtin.int_add
-                            [ beta
-                            , 1
-                            ]
-                        , gamma
-                        ]
-                """));
+            """
+            Test.isChainedLt : Int -> Int -> Int -> Bool
+            Test.isChainedLt alfa beta gamma =
+                Pine_builtin.int_is_sorted_asc
+                    [ Pine_builtin.int_add
+                        [ alfa, 1 ]
+                    , beta
+                    , Pine_builtin.int_add
+                        [ beta, 1 ]
+                    , gamma
+                    ]
+            """.Trim());
     }
 
     [Fact]
@@ -642,18 +533,12 @@ public class BuiltinOperatorLoweringTests
                 """);
 
         RenderCanonicalized(loweredModule).Should().Be(
-            RenderCanonicalized(
-                """
-                module Test exposing (..)
-
-
-                eqChar : Char -> Char -> Bool
-                eqChar left right =
-                    Pine_builtin.equal
-                        [ left
-                        , right
-                        ]
-                """));
+            """
+            Test.eqChar : Char -> Char -> Bool
+            Test.eqChar left right =
+                Pine_builtin.equal
+                    [ left, right ]
+            """.Trim());
     }
 
     [Fact]
@@ -671,18 +556,12 @@ public class BuiltinOperatorLoweringTests
                 """);
 
         RenderCanonicalized(loweredModule).Should().Be(
-            RenderCanonicalized(
-                """
-                module Test exposing (..)
-
-
-                eqBool : Bool -> Bool -> Bool
-                eqBool left right =
-                    Pine_builtin.equal
-                        [ left
-                        , right
-                        ]
-                """));
+            """
+            Test.eqBool : Bool -> Bool -> Bool
+            Test.eqBool left right =
+                Pine_builtin.equal
+                    [ left, right ]
+            """.Trim());
     }
 
     [Fact]
@@ -700,18 +579,12 @@ public class BuiltinOperatorLoweringTests
                 """);
 
         RenderCanonicalized(loweredModule).Should().Be(
-            RenderCanonicalized(
-                """
-                module Test exposing (..)
-
-
-                eqTuple : ( Int, Int ) -> ( Int, Int ) -> Bool
-                eqTuple left right =
-                    Pine_builtin.equal
-                        [ left
-                        , right
-                        ]
-                """));
+            """
+            Test.eqTuple : ( Int, Int ) -> ( Int, Int ) -> Bool
+            Test.eqTuple left right =
+                Pine_builtin.equal
+                    [ left, right ]
+            """.Trim());
     }
 
     [Fact]
@@ -729,18 +602,12 @@ public class BuiltinOperatorLoweringTests
                 """);
 
         RenderCanonicalized(loweredModule).Should().Be(
-            RenderCanonicalized(
-                """
-                module Test exposing (..)
-
-
-                eqNestedTuple : ( ( Int, String ), ( Bool, Char ) ) -> ( ( Int, String ), ( Bool, Char ) ) -> Bool
-                eqNestedTuple left right =
-                    Pine_builtin.equal
-                        [ left
-                        , right
-                        ]
-                """));
+            """
+            Test.eqNestedTuple : ( ( Int, String ), ( Bool, Char ) ) -> ( ( Int, String ), ( Bool, Char ) ) -> Bool
+            Test.eqNestedTuple left right =
+                Pine_builtin.equal
+                    [ left, right ]
+            """.Trim());
     }
 
     [Fact]
@@ -758,18 +625,12 @@ public class BuiltinOperatorLoweringTests
                 """);
 
         RenderCanonicalized(loweredModule).Should().Be(
-            RenderCanonicalized(
-                """
-                module Test exposing (..)
-
-
-                eqListInt : List.List Int -> List.List Int -> Bool
-                eqListInt left right =
-                    Pine_builtin.equal
-                        [ left
-                        , right
-                        ]
-                """));
+            """
+            Test.eqListInt : List.List Int -> List.List Int -> Bool
+            Test.eqListInt left right =
+                Pine_builtin.equal
+                    [ left, right ]
+            """.Trim());
     }
 
     [Fact]
@@ -793,24 +654,18 @@ public class BuiltinOperatorLoweringTests
                 """);
 
         RenderCanonicalized(loweredModule).Should().Be(
-            RenderCanonicalized(
-                """
-                module Test exposing (..)
+            """
+            type Test.Shape
+                = Circle Int
+                | Rectangle Int Int
+                | Empty
 
 
-                type Shape
-                    = Circle Int
-                    | Rectangle Int Int
-                    | Empty
-
-
-                eqShape : Test.Shape -> Test.Shape -> Bool
-                eqShape left right =
-                    Pine_builtin.equal
-                        [ left
-                        , right
-                        ]
-                """));
+            Test.eqShape : Test.Shape -> Test.Shape -> Bool
+            Test.eqShape left right =
+                Pine_builtin.equal
+                    [ left, right ]
+            """.Trim());
     }
 
     [Fact]
@@ -872,20 +727,19 @@ public class BuiltinOperatorLoweringTests
                 .Extract(err => throw new Exception("Module has errors: " + err)))
             .ToList();
 
-        var loweredModules =
-            BuiltinOperatorLowering.Apply(orderedCanonicalizedModules)
+        var flatDecls = ElmCompiler.FlattenModulesToDeclarationDictionary(orderedCanonicalizedModules);
+
+        var loweredDecls =
+            BuiltinOperatorLowering.Apply(flatDecls)
             .Extract(err => throw new Exception("Failed builtin operator lowering: " + err));
+
+        var loweredModules = ElmCompiler.ReconstructModulesFromFlatDict(loweredDecls, orderedCanonicalizedModules);
 
         return
             loweredModules
-            .Single(kvp => kvp.Key.SequenceEqual(["Test"]))
-            .Value;
+            .Single(m => SyntaxTypes.Module.GetModuleName(m.ModuleDefinition.Value).Value.SequenceEqual(["Test"]));
     }
 
     private static string RenderCanonicalized(SyntaxTypes.File module) =>
-        InliningTestHelper.CanonicalizeRenderedSnapshotText(
-            InliningTestHelper.RenderModuleForSnapshotTests(module).Trim());
-
-    private static string RenderCanonicalized(string moduleText) =>
-        InliningTestHelper.CanonicalizeRenderedSnapshotText(moduleText.Trim());
+        InliningTestHelper.RenderModuleForSnapshotTests(module).Trim();
 }

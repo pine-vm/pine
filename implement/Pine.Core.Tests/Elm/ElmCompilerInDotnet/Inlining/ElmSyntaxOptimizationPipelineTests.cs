@@ -74,7 +74,7 @@ public class ElmSyntaxOptimizationPipelineTests
 
         rendered.Should().Contain(
             """
-            sum left right =
+            App.sum left right =
                 Pine_builtin.int_add
             """);
     }
@@ -108,21 +108,19 @@ public class ElmSyntaxOptimizationPipelineTests
                 canonicalizedModules[SyntaxTypes.Module.GetModuleName(module.ModuleDefinition.Value).Value])
             .ToList();
 
-        var specialized =
-            ElmSyntaxSpecialization.Apply(orderedModules, config)
+        var flatDecls = ElmCompiler.FlattenModulesToDeclarationDictionary(orderedModules);
+
+        var specializedDecls =
+            ElmSyntaxSpecialization.Apply(flatDecls, config)
             .Extract(err => throw new System.Exception("Failed specialization: " + err));
 
-        var specializedOrdered =
-            orderedModules
-            .Select(
-                module =>
-                specialized[SyntaxTypes.Module.GetModuleName(module.ModuleDefinition.Value).Value])
-            .ToList();
-
-        var inlined =
-            ElmSyntaxInlining.Apply(specializedOrdered, config)
+        var inlinedDecls =
+            ElmSyntaxInlining.Apply(specializedDecls, config)
             .Extract(err => throw new System.Exception("Failed inlining stage: " + err));
 
-        return inlined[moduleName];
+        var resultModules = ElmCompiler.ReconstructModulesFromFlatDict(inlinedDecls, orderedModules);
+
+        return resultModules
+            .Single(m => SyntaxTypes.Module.GetModuleName(m.ModuleDefinition.Value).Value.SequenceEqual(moduleName));
     }
 }
