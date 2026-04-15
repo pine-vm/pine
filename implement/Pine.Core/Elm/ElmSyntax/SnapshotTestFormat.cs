@@ -61,7 +61,7 @@ public class SnapshotTestFormat
                             Signature: funcDecl.Function.Signature,
                             Declaration: FormatFunctionImplementation(funcDecl.Function.Declaration))),
 
-                    Declaration.CustomTypeDeclaration typeDecl =>
+                    Declaration.ChoiceTypeDeclaration typeDecl =>
                     typeDecl,
 
                     Declaration.AliasDeclaration aliasDecl =>
@@ -1279,7 +1279,7 @@ public class SnapshotTestFormat
                 AbstractSyntaxTypes.ToFullSyntaxModel.Convert(funcDecl.Function)),
 
             AbstractSyntaxTypes.Declaration.CustomTypeDeclaration typeDecl =>
-            new Declaration.CustomTypeDeclaration(
+            new Declaration.ChoiceTypeDeclaration(
                 AbstractSyntaxTypes.ToFullSyntaxModel.Convert(typeDecl.TypeDeclaration)),
 
             AbstractSyntaxTypes.Declaration.AliasDeclaration aliasDecl =>
@@ -1332,8 +1332,8 @@ public class SnapshotTestFormat
                         }
                     })),
 
-            Declaration.CustomTypeDeclaration typeDecl =>
-            new Declaration.CustomTypeDeclaration(
+            Declaration.ChoiceTypeDeclaration typeDecl =>
+            new Declaration.ChoiceTypeDeclaration(
                 TypeDeclaration: typeDecl.TypeDeclaration with
                 {
                     Name = typeDecl.TypeDeclaration.Name with { Value = qualifiedName }

@@ -2709,8 +2709,8 @@ public class Avh4Format
                 Declaration.AliasDeclaration aliasDecl =>
                 FormatAliasDeclaration(aliasDecl, context),
 
-                Declaration.CustomTypeDeclaration customTypeDecl =>
-                FormatCustomTypeDeclaration(customTypeDecl, context),
+                Declaration.ChoiceTypeDeclaration choiceTypeDecl =>
+                FormatChoiceTypeDeclaration(choiceTypeDecl, context),
 
                 Declaration.InfixDeclaration infixDecl =>
                 FormatInfixDeclaration(infixDecl, context),
@@ -2968,8 +2968,8 @@ public class Avh4Format
                     finalContext);
         }
 
-        private FormattingResult<Node<Declaration>> FormatCustomTypeDeclaration(
-            Declaration.CustomTypeDeclaration customTypeDecl,
+        private FormattingResult<Node<Declaration>> FormatChoiceTypeDeclaration(
+            Declaration.ChoiceTypeDeclaration choiceTypeDecl,
             FormattingContext context)
         {
             var startContext = context;
@@ -2978,7 +2978,7 @@ public class Avh4Format
             var indentedRef = context.CreateIndentedRef();
 
             // Format documentation comment if present using unified helper
-            if (customTypeDecl.TypeDeclaration.Documentation is { } docComment)
+            if (choiceTypeDecl.TypeDeclaration.Documentation is { } docComment)
             {
                 startContext = CommentPlacementHelper.PlaceDocComment(startContext, docComment);
             }
@@ -2986,13 +2986,13 @@ public class Avh4Format
             var typeTokenLoc = startContext.CurrentLocation();
             var afterType = startContext.Advance(Keywords.Type.Length).AdvanceSpaceSeparator();
 
-            var typeName = customTypeDecl.TypeDeclaration.Name.Value;
+            var typeName = choiceTypeDecl.TypeDeclaration.Name.Value;
             var afterName = afterType.Advance(typeName.Length);
 
             var currentContext = afterName;
             var formattedGenerics = new List<Node<string>>();
 
-            foreach (var generic in customTypeDecl.TypeDeclaration.Generics)
+            foreach (var generic in choiceTypeDecl.TypeDeclaration.Generics)
             {
                 currentContext = currentContext.AdvanceSpaceSeparator();
                 var genericLoc = currentContext.CurrentLocation();
@@ -3010,9 +3010,9 @@ public class Avh4Format
             var formattedConstructors = new List<(Location? PipeLocation, Node<ValueConstructor> Constructor)>();
             var constructorCtx = afterEquals;
 
-            for (var i = 0; i < customTypeDecl.TypeDeclaration.Constructors.Count; i++)
+            for (var i = 0; i < choiceTypeDecl.TypeDeclaration.Constructors.Count; i++)
             {
-                var (pipeLocation, constructor) = customTypeDecl.TypeDeclaration.Constructors[i];
+                var (pipeLocation, constructor) = choiceTypeDecl.TypeDeclaration.Constructors[i];
 
                 Location? formattedPipeLoc = null;
 
@@ -3020,8 +3020,8 @@ public class Avh4Format
                 {
                     // Check for comments between equals sign and first constructor
                     // This includes comments on the same row as = (after it but before constructor) and rows in between
-                    var equalsRow = customTypeDecl.TypeDeclaration.EqualsTokenLocation.Row;
-                    var equalsColumn = customTypeDecl.TypeDeclaration.EqualsTokenLocation.Column;
+                    var equalsRow = choiceTypeDecl.TypeDeclaration.EqualsTokenLocation.Row;
+                    var equalsColumn = choiceTypeDecl.TypeDeclaration.EqualsTokenLocation.Column;
                     var constructorOnSameRowAsEquals = constructor.Range.Start.Row == equalsRow;
 
                     // Get comments between = and constructor on the same row (not trailing comments on args)
@@ -3119,7 +3119,7 @@ public class Avh4Format
                 else
                 {
                     // Check for comments between this and previous constructor
-                    var prevConstructor = customTypeDecl.TypeDeclaration.Constructors[i - 1].Constructor;
+                    var prevConstructor = choiceTypeDecl.TypeDeclaration.Constructors[i - 1].Constructor;
 
                     var commentsBetweenConstructors =
                         commentQueries.GetBetweenRanges(prevConstructor.Range, constructor.Range).ToList();
@@ -3332,7 +3332,7 @@ public class Avh4Format
 
             var formattedTypeStruct =
                 new TypeStruct(
-                    Documentation: customTypeDecl.TypeDeclaration.Documentation,
+                    Documentation: choiceTypeDecl.TypeDeclaration.Documentation,
                     TypeTokenLocation: typeTokenLoc,
                     Name: MakeNode(afterType.CurrentLocation(), afterName.CurrentLocation(), typeName),
                     Generics: formattedGenerics,
@@ -3344,7 +3344,7 @@ public class Avh4Format
 
             return
                 FormattingResult<Node<Declaration>>.Create(
-                    MakeNode<Declaration>(range, new Declaration.CustomTypeDeclaration(formattedTypeStruct)),
+                    MakeNode<Declaration>(range, new Declaration.ChoiceTypeDeclaration(formattedTypeStruct)),
                     finalContext);
         }
 

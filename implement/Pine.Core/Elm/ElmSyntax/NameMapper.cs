@@ -73,8 +73,8 @@ public class NameMapper
                 Declaration.AliasDeclaration aliasDecl =>
                 new Declaration.AliasDeclaration(MapTypeAlias(aliasDecl.TypeAlias, mapQualifiedName)),
 
-                Declaration.CustomTypeDeclaration customTypeDecl =>
-                new Declaration.CustomTypeDeclaration(MapTypeStruct(customTypeDecl.TypeDeclaration, mapQualifiedName)),
+                Declaration.ChoiceTypeDeclaration choiceTypeDecl =>
+                new Declaration.ChoiceTypeDeclaration(MapTypeStruct(choiceTypeDecl.TypeDeclaration, mapQualifiedName)),
 
                 Declaration.PortDeclaration portDecl =>
                 new Declaration.PortDeclaration(

@@ -163,7 +163,7 @@ public static class FromFullSyntaxModel
             new Declaration.FunctionDeclaration(
                 Convert(functionDeclaration.Function)),
 
-            FullTypes.Declaration.CustomTypeDeclaration customTypeDeclaration =>
+            FullTypes.Declaration.ChoiceTypeDeclaration customTypeDeclaration =>
             new Declaration.CustomTypeDeclaration(
                 Convert(customTypeDeclaration.TypeDeclaration)),
 

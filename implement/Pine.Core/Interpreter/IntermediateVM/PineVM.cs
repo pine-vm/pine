@@ -717,10 +717,11 @@ public class PineVM : IPineVM
                         ExpressionValue: currentFrameExprValue,
                         currentFrame.Expression,
                         currentFrame.InputValues,
-                        InstructionCount: frameTotalInstructionCount,
-                        InvocationCount: frameInvocationCount,
-                        BuildListCount: frameBuildListCount,
-                        LoopIterationCount: currentFrame.LoopIterationCount,
+                        Counters: new PerformanceCounters(
+                            InstructionCount: frameTotalInstructionCount,
+                            InvocationCount: frameInvocationCount,
+                            BuildListCount: frameBuildListCount,
+                            LoopIterationCount: currentFrame.LoopIterationCount),
                         ReturnValue: frameReturnValue,
                         StackTrace: CompileStackTrace(10)));
             }
@@ -736,10 +737,11 @@ public class PineVM : IPineVM
                         ExpressionValue: rootExprValue,
                         Expression: rootExpression,
                         Input: rootStackFrameInput,
-                        InstructionCount: instructionCount,
-                        InvocationCount: invocationCount,
-                        BuildListCount: buildListCount,
-                        LoopIterationCount: loopIterationCount,
+                        Counters: new PerformanceCounters(
+                            InstructionCount: instructionCount,
+                            InvocationCount: invocationCount,
+                            BuildListCount: buildListCount,
+                            LoopIterationCount: loopIterationCount),
                         ReturnValue: frameReturnValue,
                         StackTrace: []);
             }

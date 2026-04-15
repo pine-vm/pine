@@ -1,8 +1,8 @@
 using Pine.Core.CodeAnalysis;
 using Pine.Core.Elm.ElmCompilerInDotnet;
 using Pine.Core.Elm.ElmSyntax;
-using Pine.Core.Elm.ElmSyntax.SyntaxModel;
 using Pine.Core.Elm.ElmSyntax.Stil4mElmSyntax7;
+using Pine.Core.Elm.ElmSyntax.SyntaxModel;
 using Pine.Core.Interpreter.IntermediateVM;
 using Pine.Core.Tests.Elm.ElmCompilerTests;
 using System;
@@ -41,60 +41,62 @@ public class ElmCompilerTestHelper
         {
             var withOverallReportDelegate = CreateFunctionInvocationDelegate(functionRecord);
 
-            return arguments =>
-            {
-                var (evalReport, invocationReports) = withOverallReportDelegate(arguments);
+            return
+                arguments =>
+                {
+                    var (evalReport, invocationReports) = withOverallReportDelegate(arguments);
 
-                return (evalReport.ReturnValue.Evaluate(), invocationReports);
-            };
+                    return (evalReport.ReturnValue.Evaluate(), invocationReports);
+                };
         }
 
-        return arguments =>
-        {
-            var invocationReports = new List<EvaluationReport>();
-
-            var vm = PineVMForProfiling(invocationReports.Add);
-
-            // Apply arguments one at a time by evaluating the wrapper expression
-            var currentValue = functionValue;
-
-            for (var argIndex = 0; argIndex < arguments.Count; argIndex++)
+        return
+            arguments =>
             {
-                var arg = arguments[argIndex];
+                var invocationReports = new List<EvaluationReport>();
 
-                // Parse the current value as an expression
-                var parseResult = parseCache.ParseExpression(currentValue);
+                var vm = PineVMForProfiling(invocationReports.Add);
 
-                if (parseResult.IsErrOrNull() is { } parseErr)
+                // Apply arguments one at a time by evaluating the wrapper expression
+                var currentValue = functionValue;
+
+                for (var argIndex = 0; argIndex < arguments.Count; argIndex++)
                 {
-                    throw new Exception(
-                        "Failed to parse function value as expression: " + parseErr +
-                        " (argument index: " + argIndex + ")");
+                    var arg = arguments[argIndex];
+
+                    // Parse the current value as an expression
+                    var parseResult = parseCache.ParseExpression(currentValue);
+
+                    if (parseResult.IsErrOrNull() is { } parseErr)
+                    {
+                        throw new Exception(
+                            "Failed to parse function value as expression: " + parseErr +
+                            " (argument index: " + argIndex + ")");
+                    }
+
+                    if (parseResult.IsOkOrNull() is not { } expression)
+                    {
+                        throw new Exception("Failed to extract parsed expression");
+                    }
+
+                    // Evaluate the expression with the argument as environment
+                    var evalResult = vm.EvaluateExpression(expression, arg);
+
+                    if (evalResult.IsErrOrNull() is { } evalErr)
+                    {
+                        throw new Exception("Failed to evaluate function value: " + evalErr);
+                    }
+
+                    if (evalResult.IsOkOrNull() is not { } resultValue)
+                    {
+                        throw new Exception("Failed to extract evaluation result");
+                    }
+
+                    currentValue = resultValue;
                 }
 
-                if (parseResult.IsOkOrNull() is not { } expression)
-                {
-                    throw new Exception("Failed to extract parsed expression");
-                }
-
-                // Evaluate the expression with the argument as environment
-                var evalResult = vm.EvaluateExpression(expression, arg);
-
-                if (evalResult.IsErrOrNull() is { } evalErr)
-                {
-                    throw new Exception("Failed to evaluate function value: " + evalErr);
-                }
-
-                if (evalResult.IsOkOrNull() is not { } resultValue)
-                {
-                    throw new Exception("Failed to extract evaluation result");
-                }
-
-                currentValue = resultValue;
-            }
-
-            return (currentValue, invocationReports);
-        };
+                return (currentValue, invocationReports);
+            };
     }
 
     /// <summary>
@@ -144,14 +146,17 @@ public class ElmCompilerTestHelper
     public static Func<IReadOnlyList<PineValue>, (EvaluationReport evalReport, IReadOnlyList<EvaluationReport> invocationReports)>
         CreateFunctionInvocationDelegate(FunctionRecord functionRecord)
     {
-        return arguments =>
-        {
-            var composed =
-            ElmInteractiveEnvironment.ApplyFunctionArgumentsForEvalExpr(functionRecord, appendArguments: arguments)
-            .Extract(err => throw new Exception(err));
+        return
+            arguments =>
+            {
+                var composed =
+                    ElmInteractiveEnvironment.ApplyFunctionArgumentsForEvalExpr(
+                        functionRecord,
+                        appendArguments: arguments)
+                    .Extract(err => throw new Exception(err));
 
-            return EvaluateWithProfiling(composed.expression, composed.environment);
-        };
+                return EvaluateWithProfiling(composed.expression, composed.environment);
+            };
     }
 
     public static (ElmInteractiveEnvironment.ParsedInteractiveEnvironment parsedEnv, StaticProgram<DeclQualifiedName> staticProgram, CompilationPipelineStageResults pipelineStageResults)
@@ -454,7 +459,8 @@ public class ElmCompilerTestHelper
         var functionsTexts =
             staticProgram
             .OrderBy(func => func.Key)
-            .Select(decl =>
+            .Select(
+                decl =>
                 RenderStaticFunction(
                     functionName: decl.Key.FullName,
                     parameterReferences: decl.Value.ParametersExprs,
@@ -519,8 +525,10 @@ public class ElmCompilerTestHelper
                     // If there are more elements in the path, render them as indexing
                     if (pathInEnv.Count > 2)
                     {
-                        var indexingSuffix = string.Concat(
-                            pathInEnv.Skip(2).Select(idx => "[" + idx + "]"));
+                        var indexingSuffix =
+                            string.Concat(
+                                pathInEnv.Skip(2).Select(idx => "[" + idx + "]"));
+
                         return paramName + indexingSuffix;
                     }
 
@@ -531,10 +539,12 @@ public class ElmCompilerTestHelper
             return null;
         }
 
-        StaticExpressionDisplay.FunctionApplicationRenderingNew<DeclQualifiedName> FunctionApplicationRenderer(DeclQualifiedName funcName)
+        StaticExpressionDisplay.FunctionApplicationRenderingNew<DeclQualifiedName> FunctionApplicationRenderer(
+            DeclQualifiedName funcName)
         {
             // Extract arguments from the Arguments expression (which should be a List)
-            static IReadOnlyList<StaticExpression<DeclQualifiedName>> ExtractArgs(StaticExpression<DeclQualifiedName> argsExpr)
+            static IReadOnlyList<StaticExpression<DeclQualifiedName>> ExtractArgs(
+                StaticExpression<DeclQualifiedName> argsExpr)
             {
                 if (argsExpr is StaticExpression<DeclQualifiedName>.List listExpr)
                 {
@@ -545,9 +555,10 @@ public class ElmCompilerTestHelper
                 return [argsExpr];
             }
 
-            return new StaticExpressionDisplay.FunctionApplicationRenderingNew<DeclQualifiedName>(
-                FunctionName: funcName.FullName,
-                FunctionInterface: ExtractArgs);
+            return
+                new StaticExpressionDisplay.FunctionApplicationRenderingNew<DeclQualifiedName>(
+                    FunctionName: funcName.FullName,
+                    FunctionInterface: ExtractArgs);
         }
 
         return
@@ -555,7 +566,8 @@ public class ElmCompilerTestHelper
             "\n" +
             StaticExpressionDisplay.RenderToString(
                 expression: functionBody,
-                valueRenderer: val => StaticExpressionDisplay.RenderValueAsExpression(val, StaticExpressionDisplay.DefaultBlobRenderer),
+                valueRenderer:
+                val => StaticExpressionDisplay.RenderValueAsExpression(val, StaticExpressionDisplay.DefaultBlobRenderer),
                 functionApplicationRenderer: FunctionApplicationRenderer,
                 replaceExprWithIdentifier: ReplaceExprWithIdentifier,
                 indentString: "    ",
@@ -604,27 +616,32 @@ public class ElmCompilerTestHelper
                 }
 
                 // Convert expression and arguments to abstract syntax
-                var abstractExpression = FromFullSyntaxModel.ConvertExpressionNode(
-                    funcDecl.Function.Declaration.Value.Expression);
+                var abstractExpression =
+                    FromFullSyntaxModel.ConvertExpressionNode(
+                        funcDecl.Function.Declaration.Value.Expression);
 
-                var abstractArguments = funcDecl.Function.Declaration.Value.Arguments
-                    .Select(arg => new Node<AbstractSyntaxTypes.Pattern>(
-                        arg.Range,
-                        FromFullSyntaxModel.Convert(arg.Value)))
+                var abstractArguments =
+                    funcDecl.Function.Declaration.Value.Arguments
+                    .Select(
+                        arg => new Node<AbstractSyntaxTypes.Pattern>(
+                            arg.Range,
+                            FromFullSyntaxModel.Convert(arg.Value)))
                     .ToList();
 
                 // Use TypeInference to infer the function type
-                var (returnType, parameterTypes) = TypeInference.InferFunctionDeclarationType(
-                    abstractExpression.Value,
-                    abstractArguments,
-                    moduleNameStr,
-                    functionSignatures);
+                var (returnType, parameterTypes) =
+                    TypeInference.InferFunctionDeclarationType(
+                        abstractExpression.Value,
+                        abstractArguments,
+                        moduleNameStr,
+                        functionSignatures);
 
                 // Build the full function type using TypeInference
-                return TypeInference.BuildFunctionType(
-                    abstractArguments,
-                    parameterTypes,
-                    returnType);
+                return
+                    TypeInference.BuildFunctionType(
+                        abstractArguments,
+                        parameterTypes,
+                        returnType);
             }
         }
 
@@ -660,7 +677,8 @@ public class ElmCompilerTestHelper
     {
         var parsedModules =
             elmModulesTexts
-            .Select(text =>
+            .Select(
+                text =>
                 ElmSyntaxParser.ParseModuleText(text)
                 .Extract(err => throw new Exception("Failed parsing: " + err)))
             .Select(FromFullSyntaxModel.Convert)
@@ -680,15 +698,18 @@ public class ElmCompilerTestHelper
     }
 
     public static string FormatCounts(EvaluationReport report) =>
+        FormatCounts(report.Counters);
+
+    public static string FormatCounts(PerformanceCounters counters) =>
         string.Join(
             "\n",
-            EnumerateCountLines(report));
+            EnumerateCountLines(counters));
 
-    private static IEnumerable<string> EnumerateCountLines(EvaluationReport report)
+    private static IEnumerable<string> EnumerateCountLines(PerformanceCounters counters)
     {
-        yield return "InstructionCount: " + CommandLineInterface.FormatIntegerForDisplay(report.InstructionCount);
-        yield return "InvocationCount: " + CommandLineInterface.FormatIntegerForDisplay(report.InvocationCount);
-        yield return "BuildListCount: " + CommandLineInterface.FormatIntegerForDisplay(report.BuildListCount);
-        yield return "LoopIterationCount: " + CommandLineInterface.FormatIntegerForDisplay(report.LoopIterationCount);
+        yield return "InstructionCount: " + CommandLineInterface.FormatIntegerForDisplay(counters.InstructionCount);
+        yield return "InvocationCount: " + CommandLineInterface.FormatIntegerForDisplay(counters.InvocationCount);
+        yield return "BuildListCount: " + CommandLineInterface.FormatIntegerForDisplay(counters.BuildListCount);
+        yield return "LoopIterationCount: " + CommandLineInterface.FormatIntegerForDisplay(counters.LoopIterationCount);
     }
 }

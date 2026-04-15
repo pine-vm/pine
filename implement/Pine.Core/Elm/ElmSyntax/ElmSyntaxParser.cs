@@ -1323,7 +1323,7 @@ public class ElmSyntaxParser
                             SyntaxTypes.Declaration.FunctionDeclaration functionDeclaration =>
                             functionDeclaration.Function.Documentation,
 
-                            SyntaxTypes.Declaration.CustomTypeDeclaration typeDecl =>
+                            SyntaxTypes.Declaration.ChoiceTypeDeclaration typeDecl =>
                             typeDecl.TypeDeclaration.Documentation,
 
                             SyntaxTypes.Declaration.AliasDeclaration aliasDecl =>
@@ -2256,7 +2256,7 @@ public class ElmSyntaxParser
                 return
                     new Node<SyntaxTypes.Declaration>(
                         MakeRange(rangeStart, constructors.Last().Constructor.Range.End),
-                        new SyntaxTypes.Declaration.CustomTypeDeclaration(
+                        new SyntaxTypes.Declaration.ChoiceTypeDeclaration(
                             new SyntaxTypes.TypeStruct(
                                 Documentation:
                                 docComment is null

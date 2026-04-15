@@ -1,6 +1,7 @@
 using Pine.Core.Elm;
 using Pine.Core.Interpreter.IntermediateVM;
 using System.Collections.Generic;
+using System.Linq;
 
 namespace Pine.Core.Tests.Elm.ElmCompilerInDotnet.CoreLibraryModule;
 
@@ -151,20 +152,20 @@ public static class CoreLibraryTestHelper
             .Extract(err => throw new System.Exception("Failed decode as Elm value: " + err));
     }
 
-    public static (ElmValue value, EvaluationReport report) ApplyAndProfileUnary(
+    public static (ElmValue value, PerformanceCounters report) ApplyAndProfileUnary(
         PineValue functionValue,
         ElmValue argument,
         Core.Interpreter.IntermediateVM.PineVM vm) =>
         ApplyGenericWithProfiling(functionValue, [argument], vm);
 
-    public static (ElmValue value, EvaluationReport report) ApplyAndProfileBinary(
+    public static (ElmValue value, PerformanceCounters report) ApplyAndProfileBinary(
         PineValue functionValue,
         ElmValue arg1,
         ElmValue arg2,
         Core.Interpreter.IntermediateVM.PineVM vm) =>
         ApplyGenericWithProfiling(functionValue, [arg1, arg2], vm);
 
-    public static (ElmValue value, EvaluationReport report) ApplyGenericWithProfiling(
+    public static (ElmValue value, PerformanceCounters report) ApplyGenericWithProfiling(
         PineValue functionValue,
         ElmValue[] arguments,
         Core.Interpreter.IntermediateVM.PineVM vm)
@@ -188,7 +189,7 @@ public static class CoreLibraryTestHelper
         return (elmValue, report);
     }
 
-    public static (PineValue result, EvaluationReport report) ApplyGenericPineWithProfiling(
+    public static (PineValue result, PerformanceCounters report) ApplyGenericPineWithProfiling(
         PineValue functionValue,
         IReadOnlyList<PineValue> arguments,
         Core.Interpreter.IntermediateVM.PineVM vm)
@@ -198,12 +199,7 @@ public static class CoreLibraryTestHelper
 
         var currentValue = functionValue;
 
-        long totalInstructions = 0;
-        long totalInvocations = 0;
-        long totalBuildLists = 0;
-        long totalLoopIterations = 0;
-
-        EvaluationReport lastReport = null!;
+        var reports = new List<EvaluationReport>(arguments.Count);
 
         for (var i = 0; i < arguments.Count; i++)
         {
@@ -220,22 +216,12 @@ public static class CoreLibraryTestHelper
                 .Extract(err => throw new System.Exception("Failed eval: " + err));
 
             currentValue = report.ReturnValue.Evaluate();
-            totalInstructions += report.InstructionCount;
-            totalInvocations += report.InvocationCount;
-            totalBuildLists += report.BuildListCount;
-            totalLoopIterations += report.LoopIterationCount;
 
-            lastReport = report;
+            reports.Add(report);
         }
 
         var aggregated =
-            lastReport with
-            {
-                InstructionCount = totalInstructions,
-                InvocationCount = totalInvocations,
-                BuildListCount = totalBuildLists,
-                LoopIterationCount = totalLoopIterations
-            };
+            PerformanceCounters.Aggregate(reports.Select(r => r.Counters));
 
         return (currentValue, aggregated);
     }

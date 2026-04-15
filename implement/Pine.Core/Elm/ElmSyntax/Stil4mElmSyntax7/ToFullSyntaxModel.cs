@@ -181,7 +181,7 @@ public static class ToFullSyntaxModel
                 Convert(functionDeclaration.Function)),
 
             Declaration.CustomTypeDeclaration customTypeDeclaration =>
-            new FullTypes.Declaration.CustomTypeDeclaration(
+            new FullTypes.Declaration.ChoiceTypeDeclaration(
                 Convert(customTypeDeclaration.TypeDeclaration)),
 
             Declaration.AliasDeclaration aliasDeclaration =>

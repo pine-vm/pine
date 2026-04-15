@@ -228,14 +228,14 @@ public abstract record TopLevelExpose
         string Name)
         : TopLevelExpose;
 
-    /// <summary>Exposed custom type including maybe constructors via exposed range.</summary>
+    /// <summary>Exposed choice type including maybe constructors via exposed range.</summary>
     public sealed record TypeExpose(
         ExposedType ExposedType)
         : TopLevelExpose;
 }
 
 /// <summary>
-/// Custom type exposure specification: name and optional opening range for constructors.
+/// Choice type exposure specification: name and optional opening range for constructors.
 /// </summary>
 public record ExposedType(
     string Name,
@@ -251,8 +251,8 @@ public abstract record Declaration
         FunctionStruct Function)
         : Declaration;
 
-    /// <summary>Custom type declaration.</summary>
-    public sealed record CustomTypeDeclaration(
+    /// <summary>Choice type declaration.</summary>
+    public sealed record ChoiceTypeDeclaration(
         TypeStruct TypeDeclaration)
         : Declaration;
 
@@ -336,7 +336,7 @@ public record TypeAlias(
 }
 
 /// <summary>
-/// Custom type declaration including constructors.
+/// Choice type declaration including constructors.
 /// </summary>
 public record TypeStruct(
     Node<string>? Documentation,
@@ -386,7 +386,7 @@ public record TypeStruct(
 }
 
 /// <summary>
-/// Constructor for a custom type with argument type annotations.
+/// Constructor for a choice type with argument type annotations.
 /// </summary>
 public record ValueConstructor(
     Node<string> Name,

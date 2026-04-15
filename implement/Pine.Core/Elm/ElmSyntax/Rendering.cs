@@ -707,8 +707,8 @@ public class Rendering
                 RenderAliasDeclaration(aliasDecl, context);
                 break;
 
-            case Declaration.CustomTypeDeclaration customTypeDecl:
-                RenderCustomTypeDeclaration(customTypeDecl, context);
+            case Declaration.ChoiceTypeDeclaration choiceTypeDecl:
+                RenderChoiceTypeDeclaration(choiceTypeDecl, context);
                 break;
 
             case Declaration.InfixDeclaration infixDecl:
@@ -778,27 +778,27 @@ public class Rendering
         RenderTypeAnnotation(aliasDecl.TypeAlias.TypeAnnotation, context);
     }
 
-    private static void RenderCustomTypeDeclaration(
-        Declaration.CustomTypeDeclaration customTypeDecl,
+    private static void RenderChoiceTypeDeclaration(
+        Declaration.ChoiceTypeDeclaration choiceTypeDecl,
         RenderContext context)
     {
-        context.AdvanceToLocation(customTypeDecl.TypeDeclaration.TypeTokenLocation);
+        context.AdvanceToLocation(choiceTypeDecl.TypeDeclaration.TypeTokenLocation);
         context.Append("type");
-        context.AdvanceToLocation(customTypeDecl.TypeDeclaration.Name.Range.Start);
-        context.Append(customTypeDecl.TypeDeclaration.Name.Value);
+        context.AdvanceToLocation(choiceTypeDecl.TypeDeclaration.Name.Range.Start);
+        context.Append(choiceTypeDecl.TypeDeclaration.Name.Value);
 
-        foreach (var generic in customTypeDecl.TypeDeclaration.Generics)
+        foreach (var generic in choiceTypeDecl.TypeDeclaration.Generics)
         {
             context.AdvanceToLocation(generic.Range.Start);
             context.Append(generic.Value);
         }
 
-        context.AdvanceToLocation(customTypeDecl.TypeDeclaration.EqualsTokenLocation);
+        context.AdvanceToLocation(choiceTypeDecl.TypeDeclaration.EqualsTokenLocation);
         context.Append("=");
 
-        for (var i = 0; i < customTypeDecl.TypeDeclaration.Constructors.Count; i++)
+        for (var i = 0; i < choiceTypeDecl.TypeDeclaration.Constructors.Count; i++)
         {
-            var (pipeLocation, constructor) = customTypeDecl.TypeDeclaration.Constructors[i];
+            var (pipeLocation, constructor) = choiceTypeDecl.TypeDeclaration.Constructors[i];
 
             if (pipeLocation is { } pipe)
             {
@@ -880,15 +880,15 @@ public class Rendering
                 break;
 
             case TypeAnnotation.Typed typed:
-                var typeName = typed.TypeName.Value;
+                var (moduleName, declName) = typed.TypeName.Value;
 
-                if (typeName.ModuleName.Count > 0)
+                if (moduleName.Count > 0)
                 {
-                    context.Append(string.Join(".", typeName.ModuleName) + "." + typeName.Name);
+                    context.Append(string.Join(".", moduleName) + "." + declName);
                 }
                 else
                 {
-                    context.Append(typeName.Name);
+                    context.Append(declName);
                 }
 
                 foreach (var arg in typed.TypeArguments)
