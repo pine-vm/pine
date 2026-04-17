@@ -3,3 +3,6 @@
 
 .vs/
 *.csproj.user
+
+# Per-run test log files written by Pine.Core.Tests / Pine.IntegrationTests.
+**/artifacts/test-logs/

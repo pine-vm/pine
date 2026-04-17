@@ -33,6 +33,20 @@ The command-line interface of the test framework offers many more options, like 
 dotnet  run  --  --help
 ```
 
+### Per-run test log files
+
+Every `dotnet  run` invocation of a .NET test project in this repository automatically writes the **complete terminal output** to a log file under `artifacts/test-logs/<TestProjectName>/<timestamp>_{full|filtered}.log` (relative to the working directory of the test project). The filename contains `filtered` when a `--filter*` / `--treenode-filter` / `--test-node-filter` argument was passed, and `full` otherwise. The first lines of the file record the command line that produced the log. The last line of both the terminal output and the file is:
+
+```
+Test log written to: <path>
+```
+
+Reminders for coding agents when running tests:
+
+1. **Do not pipe `dotnet  run` into `tail`, `head`, or `grep` on the first invocation.** Either let the output stream to the terminal as-is, or redirect to a file explicitly. The summary lines the agent typically needs (`total`, `failed`, `succeeded`, individual failure messages) are at the bottom of the output and will otherwise be lost.
+2. **Before re-running a `dotnet  run` that previously took more than 30 seconds, re-read the log file from `artifacts/test-logs/…`.** The file contains the entire terminal output of the earlier run, including the final summary and any failure messages. The last line of the previous run tells you the exact path. Running `grep`, `head`, `tail`, or `sed` against that file is free; re-running the test binary costs minutes of wall-clock time.
+3. The `artifacts/test-logs/` directory is git-ignored, so log files never pollute diffs.
+
 ## Formatting C# Code
 
 Before submitting a pull request, format any added or changed C# code using the command `dotnet  format`
