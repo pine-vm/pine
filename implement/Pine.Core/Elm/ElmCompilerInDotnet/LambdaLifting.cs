@@ -112,6 +112,11 @@ public static class LambdaLifting
         var resultBuilder =
             ImmutableDictionary.CreateBuilder<DeclQualifiedName, SyntaxTypes.Declaration>();
 
+        // Track which lifted function names were newly created, per module namespace.
+        var newLiftedNamesByModule =
+            new Dictionary<IReadOnlyList<string>, HashSet<string>>(
+                EnumerableExtensions.EqualityComparer<IReadOnlyList<string>>());
+
         // Process declarations in deterministic order for stable lifted-function naming.
         foreach (var (key, decl) in declarations.OrderBy(kvp => kvp.Key))
         {
@@ -166,6 +171,14 @@ public static class LambdaLifting
                     {
                         var liftedKey = new DeclQualifiedName(key.Namespaces, liftedDeclName);
                         resultBuilder[liftedKey] = liftedFunc.Value;
+
+                        if (!newLiftedNamesByModule.TryGetValue(key.Namespaces, out var moduleSet))
+                        {
+                            moduleSet = [];
+                            newLiftedNamesByModule[key.Namespaces] = moduleSet;
+                        }
+
+                        moduleSet.Add(liftedDeclName);
                     }
                 }
             }
@@ -176,7 +189,74 @@ public static class LambdaLifting
             }
         }
 
+        // Post-process: qualify unqualified references to newly-lifted functions.
+        // Lambda lifting creates local (unqualified) references to lifted functions.
+        // In the flat-dict representation these must be fully qualified with the module name.
+        if (newLiftedNamesByModule.Count > 0)
+        {
+            foreach (var (key, decl) in resultBuilder.ToArray())
+            {
+                if (decl is not SyntaxTypes.Declaration.FunctionDeclaration funcDecl)
+                    continue;
+
+                if (!newLiftedNamesByModule.TryGetValue(key.Namespaces, out var liftedNamesInModule))
+                    continue;
+
+                var impl = funcDecl.Function.Declaration.Value;
+
+                var qualifiedExpr =
+                    QualifyLiftedReferences(impl.Expression, key.Namespaces, liftedNamesInModule);
+
+                if (ReferenceEquals(qualifiedExpr, impl.Expression))
+                    continue;
+
+                var qualifiedImpl = impl with { Expression = qualifiedExpr };
+
+                var qualifiedFunc =
+                    funcDecl.Function with
+                    {
+                        Declaration =
+                        new Node<SyntaxTypes.FunctionImplementation>(
+                            funcDecl.Function.Declaration.Range,
+                            qualifiedImpl)
+                    };
+
+                resultBuilder[key] = new SyntaxTypes.Declaration.FunctionDeclaration(qualifiedFunc);
+            }
+        }
+
         return resultBuilder.ToImmutable();
+    }
+
+    /// <summary>
+    /// Qualifies unqualified references to lifted functions with their module name.
+    /// </summary>
+    private static Node<SyntaxTypes.Expression> QualifyLiftedReferences(
+        Node<SyntaxTypes.Expression> exprNode,
+        IReadOnlyList<string> moduleName,
+        IReadOnlyCollection<string> liftedNames)
+    {
+        var expr = exprNode.Value;
+
+        if (expr is SyntaxTypes.Expression.FunctionOrValue funcOrValue &&
+            funcOrValue.ModuleName.Count is 0 &&
+            liftedNames.Contains(funcOrValue.Name))
+        {
+            return
+                new Node<SyntaxTypes.Expression>(
+                    exprNode.Range,
+                    new SyntaxTypes.Expression.FunctionOrValue(moduleName, funcOrValue.Name));
+        }
+
+        var mapped =
+            ElmSyntaxTransformations.MapChildExpressions(
+                expr,
+                child => QualifyLiftedReferences(child, moduleName, liftedNames));
+
+        if (ReferenceEquals(mapped, expr))
+            return exprNode;
+
+        return new Node<SyntaxTypes.Expression>(exprNode.Range, mapped);
     }
 
     private static IReadOnlyDictionary<string, int> BuildNextLiftedIdentifierByFunctionNameFromModule(

@@ -147,7 +147,7 @@ public class InliningCrossModuleTests
             InliningTestHelper.RenderModuleForSnapshotTests(appModule);
 
         rendered.Trim().Should().Be(
-                """
+            """
             type alias App.Captured =
                 { startColumn : Int, endColumn : Int, char : Char }
 
@@ -164,30 +164,32 @@ public class InliningCrossModuleTests
             App.charLiteral =
                 (ParserFast.followedBySymbol "'"
                     (ParserFast.Parser
-                        (\() ->
-                            App.capture
-                                { start =
-                                    { row = 11
-                                    , column =
-                                        Pine_builtin.int_add
-                                            [ 22
-                                            , Pine_builtin.int_mul
-                                                [ -1, 1 ]
-                                            ]
-                                    }
-                                , end =
-                                    { row = 33
-                                    , column =
-                                        Pine_builtin.int_add
-                                            [ 44, 1 ]
-                                    }
-                                }
-                                (Elm.Parser.Tokens.identityChar
-                                    '\n'
-                                )
-                        )
+                        App.charLiteral__lifted__lambda1
                     )
                 )
+
+
+            App.charLiteral__lifted__lambda1 () =
+                App.capture
+                    { start =
+                        { row = 11
+                        , column =
+                            Pine_builtin.int_add
+                                [ 22
+                                , Pine_builtin.int_mul
+                                    [ -1, 1 ]
+                                ]
+                        }
+                    , end =
+                        { row = 33
+                        , column =
+                            Pine_builtin.int_add
+                                [ 44, 1 ]
+                        }
+                    }
+                    (Elm.Parser.Tokens.identityChar
+                        '\n'
+                    )
             """.Trim());
     }
 
@@ -405,71 +407,73 @@ public class InliningCrossModuleTests
             Elm.Parser.Tokens.typeName : ParserFast.Parser String
             Elm.Parser.Tokens.typeName =
                 ParserFast.Parser
-                    (\(ParserFast.PState sSrcBytes sOffset sIndent sRow sCol) ->
-                        let
-                            sColInt : Int
-                            sColInt =
-                                sCol
+                    Elm.Parser.Tokens.typeName__lifted__lambda1
 
-                            nextCharBytes : Int
-                            nextCharBytes =
-                                Pine_kernel.take
-                                    [ 4
-                                    , Pine_kernel.skip
-                                        [ sOffset, sSrcBytes ]
-                                    ]
-                        in
-                        if
-                            Char.isUpper
-                                nextCharBytes
-                        then
-                            let
-                                s1 : ParserFast.State
-                                s1 =
-                                    Elm.Parser.Tokens.skipWhileWithoutLinebreakHelp__specialized__1
-                                        (Pine_kernel.int_add
-                                            [ sOffset, 4 ]
-                                        )
-                                        sRow
-                                        (Pine_builtin.int_add
-                                            [ sColInt, 1 ]
-                                        )
-                                        sSrcBytes
-                                        sIndent
 
-                                (ParserFast.PState _ s1Offset _ _ _) =
-                                    s1
+            Elm.Parser.Tokens.typeName__lifted__lambda1 (ParserFast.PState sSrcBytes sOffset sIndent sRow sCol) =
+                let
+                    sColInt : Int
+                    sColInt =
+                        sCol
 
-                                nameSliceBytesLength : Int
-                                nameSliceBytesLength =
-                                    Pine_kernel.int_add
-                                        [ s1Offset
-                                        , Pine_kernel.int_mul
-                                            [ -1, sOffset ]
-                                        ]
-
-                                nameSliceBytes : Int
-                                nameSliceBytes =
-                                    Pine_kernel.take
-                                        [ nameSliceBytesLength
-                                        , Pine_kernel.skip
-                                            [ sOffset, sSrcBytes ]
-                                        ]
-                            in
-                            ParserFast.Good
-                                (ParserFast.String
-                                    nameSliceBytes
+                    nextCharBytes : Int
+                    nextCharBytes =
+                        Pine_kernel.take
+                            [ 4
+                            , Pine_kernel.skip
+                                [ sOffset, sSrcBytes ]
+                            ]
+                in
+                if
+                    Char.isUpper
+                        nextCharBytes
+                then
+                    let
+                        s1 : ParserFast.State
+                        s1 =
+                            Elm.Parser.Tokens.skipWhileWithoutLinebreakHelp__specialized__1
+                                (Pine_kernel.int_add
+                                    [ sOffset, 4 ]
                                 )
-                                s1
-
-                        else
-                            ParserFast.Bad
-                                Basics.False
-                                (ParserFast.ExpectingCharSatisfyingPredicate
-                                    sRow
-                                    sCol
+                                sRow
+                                (Pine_builtin.int_add
+                                    [ sColInt, 1 ]
                                 )
-                    )
+                                sSrcBytes
+                                sIndent
+
+                        (ParserFast.PState _ s1Offset _ _ _) =
+                            s1
+
+                        nameSliceBytesLength : Int
+                        nameSliceBytesLength =
+                            Pine_kernel.int_add
+                                [ s1Offset
+                                , Pine_kernel.int_mul
+                                    [ -1, sOffset ]
+                                ]
+
+                        nameSliceBytes : Int
+                        nameSliceBytes =
+                            Pine_kernel.take
+                                [ nameSliceBytesLength
+                                , Pine_kernel.skip
+                                    [ sOffset, sSrcBytes ]
+                                ]
+                    in
+                    ParserFast.Good
+                        (ParserFast.String
+                            nameSliceBytes
+                        )
+                        s1
+
+                else
+                    ParserFast.Bad
+                        Basics.False
+                        (ParserFast.ExpectingCharSatisfyingPredicate
+                            sRow
+                            sCol
+                        )
             """";
 
         var tokensModule =
@@ -684,33 +688,37 @@ public class InliningCrossModuleTests
                         )
                 in
                 ParserFast.Parser
-                    (\s ->
-                        case attemptFirst s of
-                            (ParserFast.Good _ _) as firstGood ->
-                                firstGood
-
-                            (ParserFast.Bad firstCommitted firstX) as firstBad ->
-                                if firstCommitted then
-                                    firstBad
-
-                                else
-                                    case attemptSecond s of
-                                        (ParserFast.Good _ _) as secondGood ->
-                                            secondGood
-
-                                        (ParserFast.Bad secondCommitted secondX) as secondBad ->
-                                            if secondCommitted then
-                                                secondBad
-
-                                            else
-                                                ParserFast.Bad
-                                                    Basics.False
-                                                    (ParserFast.ExpectingOneOf
-                                                        firstX
-                                                        secondX
-                                                        []
-                                                    )
+                    (Elm.Parser.Declarations.infixDirectionOnlyTwo_noRange__lifted__lambda1
+                        ( attemptFirst, attemptSecond )
                     )
+
+
+            Elm.Parser.Declarations.infixDirectionOnlyTwo_noRange__lifted__lambda1 ( attemptFirst, attemptSecond ) s =
+                case attemptFirst s of
+                    (ParserFast.Good _ _) as firstGood ->
+                        firstGood
+
+                    (ParserFast.Bad firstCommitted firstX) as firstBad ->
+                        if firstCommitted then
+                            firstBad
+
+                        else
+                            case attemptSecond s of
+                                (ParserFast.Good _ _) as secondGood ->
+                                    secondGood
+
+                                (ParserFast.Bad secondCommitted secondX) as secondBad ->
+                                    if secondCommitted then
+                                        secondBad
+
+                                    else
+                                        ParserFast.Bad
+                                            Basics.False
+                                            (ParserFast.ExpectingOneOf
+                                                firstX
+                                                secondX
+                                                []
+                                            )
             """";
 
         var declarationsModule =
@@ -934,33 +942,37 @@ public class InliningCrossModuleTests
                         )
                 in
                 ParserFast.Parser
-                    (\s ->
-                        case attemptFirst s of
-                            (ParserFast.Good _ _) as firstGood ->
-                                firstGood
-
-                            (ParserFast.Bad firstCommitted firstX) as firstBad ->
-                                if firstCommitted then
-                                    firstBad
-
-                                else
-                                    case attemptSecond s of
-                                        (ParserFast.Good _ _) as secondGood ->
-                                            secondGood
-
-                                        (ParserFast.Bad secondCommitted secondX) as secondBad ->
-                                            if secondCommitted then
-                                                secondBad
-
-                                            else
-                                                ParserFast.Bad
-                                                    Basics.False
-                                                    (ParserFast.ExpectingOneOf
-                                                        firstX
-                                                        secondX
-                                                        []
-                                                    )
+                    (Elm.Parser.Declarations.infixDirectionOnlyTwo__lifted__lambda1
+                        ( attemptFirst, attemptSecond )
                     )
+
+
+            Elm.Parser.Declarations.infixDirectionOnlyTwo__lifted__lambda1 ( attemptFirst, attemptSecond ) s =
+                case attemptFirst s of
+                    (ParserFast.Good _ _) as firstGood ->
+                        firstGood
+
+                    (ParserFast.Bad firstCommitted firstX) as firstBad ->
+                        if firstCommitted then
+                            firstBad
+
+                        else
+                            case attemptSecond s of
+                                (ParserFast.Good _ _) as secondGood ->
+                                    secondGood
+
+                                (ParserFast.Bad secondCommitted secondX) as secondBad ->
+                                    if secondCommitted then
+                                        secondBad
+
+                                    else
+                                        ParserFast.Bad
+                                            Basics.False
+                                            (ParserFast.ExpectingOneOf
+                                                firstX
+                                                secondX
+                                                []
+                                            )
             """";
 
         var declarationsModule =
@@ -1293,164 +1305,174 @@ public class InliningCrossModuleTests
                     "'"
                     (ParserFast.followedBySymbol "'"
                         (Elm.Parser.Expression.oneOf2MapWithStartRowColumnAndEndRowColumn__specialized__1
-                            (\startRow startColumn char endRow endColumn ->
-                                ParserWithComments.WithComments
-                                    Rope.empty
-                                    (Elm.Syntax.Node.Node
-                                        { start =
-                                            { row = startRow
-                                            , column =
-                                                Pine_builtin.int_add
-                                                    [ startColumn
-                                                    , Pine_builtin.int_mul
-                                                        [ -1, 1 ]
-                                                    ]
-                                            }
-                                        , end =
-                                            { row = endRow
-                                            , column =
-                                                Pine_builtin.int_add
-                                                    [ endColumn, 1 ]
-                                            }
-                                        }
-                                        (Elm.Parser.Expression.CharLiteral
-                                            char
-                                        )
-                                    )
-                            )
+                            Elm.Parser.Expression.charLiteralExpression__lifted__lambda1
                             (ParserFast.symbolFollowedBy
                                 "\\"
                                 (Elm.Parser.Tokens.escapedCharValueMap
                                     Basics.identity
                                 )
                             )
-                            (\startRow startColumn char endRow endColumn ->
-                                ParserWithComments.WithComments
-                                    Rope.empty
-                                    (Elm.Syntax.Node.Node
-                                        { start =
-                                            { row = startRow
-                                            , column =
-                                                Pine_builtin.int_add
-                                                    [ startColumn
-                                                    , Pine_builtin.int_mul
-                                                        [ -1, 1 ]
-                                                    ]
-                                            }
-                                        , end =
-                                            { row = endRow
-                                            , column =
-                                                Pine_builtin.int_add
-                                                    [ endColumn, 1 ]
-                                            }
-                                        }
-                                        (Elm.Parser.Expression.CharLiteral
-                                            char
-                                        )
-                                    )
-                            )
+                            Elm.Parser.Expression.charLiteralExpression__lifted__lambda2
+                        )
+                    )
+
+
+            Elm.Parser.Expression.charLiteralExpression__lifted__lambda1 startRow startColumn char endRow endColumn =
+                ParserWithComments.WithComments
+                    Rope.empty
+                    (Elm.Syntax.Node.Node
+                        { start =
+                            { row = startRow
+                            , column =
+                                Pine_builtin.int_add
+                                    [ startColumn
+                                    , Pine_builtin.int_mul
+                                        [ -1, 1 ]
+                                    ]
+                            }
+                        , end =
+                            { row = endRow
+                            , column =
+                                Pine_builtin.int_add
+                                    [ endColumn, 1 ]
+                            }
+                        }
+                        (Elm.Parser.Expression.CharLiteral
+                            char
+                        )
+                    )
+
+
+            Elm.Parser.Expression.charLiteralExpression__lifted__lambda2 startRow startColumn char endRow endColumn =
+                ParserWithComments.WithComments
+                    Rope.empty
+                    (Elm.Syntax.Node.Node
+                        { start =
+                            { row = startRow
+                            , column =
+                                Pine_builtin.int_add
+                                    [ startColumn
+                                    , Pine_builtin.int_mul
+                                        [ -1, 1 ]
+                                    ]
+                            }
+                        , end =
+                            { row = endRow
+                            , column =
+                                Pine_builtin.int_add
+                                    [ endColumn, 1 ]
+                            }
+                        }
+                        (Elm.Parser.Expression.CharLiteral
+                            char
                         )
                     )
 
 
             Elm.Parser.Expression.oneOf2MapWithStartRowColumnAndEndRowColumn__specialized__1 firstToChoice (ParserFast.Parser attemptFirst) secondToChoice =
                 ParserFast.Parser
-                    (\s ->
-                        let
-                            (ParserFast.PState _ _ _ sRow sCol) =
-                                s
-                        in
-                        case attemptFirst s of
-                            ParserFast.Good first s1 ->
-                                let
-                                    (ParserFast.PState _ _ _ s1Row s1Col) =
-                                        s1
-                                in
-                                ParserFast.Good
-                                    (firstToChoice
-                                        sRow
-                                        sCol
-                                        first
-                                        s1Row
-                                        s1Col
-                                    )
-                                    s1
+                    (Elm.Parser.Expression.oneOf2MapWithStartRowColumnAndEndRowColumn__specialized__1__lifted__lambda1
+                        ( attemptFirst, firstToChoice, secondToChoice )
+                    )
 
-                            ParserFast.Bad firstCommitted firstX ->
-                                if firstCommitted then
-                                    ParserFast.Bad
-                                        firstCommitted
-                                        firstX
+
+            Elm.Parser.Expression.oneOf2MapWithStartRowColumnAndEndRowColumn__specialized__1__lifted__lambda1 ( attemptFirst, firstToChoice, secondToChoice ) s =
+                let
+                    (ParserFast.PState _ _ _ sRow sCol) =
+                        s
+                in
+                case attemptFirst s of
+                    ParserFast.Good first s1 ->
+                        let
+                            (ParserFast.PState _ _ _ s1Row s1Col) =
+                                s1
+                        in
+                        ParserFast.Good
+                            (firstToChoice
+                                sRow
+                                sCol
+                                first
+                                s1Row
+                                s1Col
+                            )
+                            s1
+
+                    ParserFast.Bad firstCommitted firstX ->
+                        if firstCommitted then
+                            ParserFast.Bad
+                                firstCommitted
+                                firstX
+
+                        else
+                            case
+                                let
+                                    (ParserFast.PState sSrcBytes sOffsetBytes sIndent sRow_0 sCol_0) =
+                                        s
+                                in
+                                let
+                                    sOffsetBytesInt : Int
+                                    sOffsetBytesInt =
+                                        sOffsetBytes
+
+                                    newOffset : Int
+                                    newOffset =
+                                        ParserFast.charOrEnd sOffsetBytesInt sSrcBytes
+
+                                    sColInt : Int
+                                    sColInt =
+                                        sCol_0
+
+                                    sRowInt : Int
+                                    sRowInt =
+                                        sRow_0
+                                in
+                                if Pine_builtin.equal [ newOffset, (-1) ] then
+                                    ParserFast.Bad Basics.False (ParserFast.ExpectingAnyChar sRow_0 sCol_0)
+
+                                else if Pine_builtin.equal [ newOffset, (-2) ] then
+                                    ParserFast.Good '\n' (ParserFast.PState sSrcBytes (Pine_builtin.int_add [ sOffsetBytesInt, 4 ]) sIndent (Pine_builtin.int_add [ sRowInt, 1 ]) 1)
 
                                 else
-                                    case let
-                                            (ParserFast.PState sSrcBytes sOffsetBytes sIndent sRow_0 sCol_0) =
-                                                s
-                                         in
-                                         let
-                                            sOffsetBytesInt : Int
-                                            sOffsetBytesInt =
-                                                sOffsetBytes
+                                    let
+                                        foundChar : Char
+                                        foundChar =
+                                            Pine_kernel.take [ 4, Pine_kernel.skip [ sOffsetBytesInt, sSrcBytes ] ]
+                                    in
+                                    if Pine_kernel.equal [ Pine_kernel.length foundChar, 0 ] then
+                                        ParserFast.Bad Basics.False (ParserFast.ExpectingAnyChar sRowInt sCol_0)
 
-                                            newOffset : Int
-                                            newOffset =
-                                                ParserFast.charOrEnd sOffsetBytesInt sSrcBytes
+                                    else
+                                        ParserFast.Good foundChar (ParserFast.PState sSrcBytes newOffset sIndent sRowInt (Pine_builtin.int_add [ sColInt, 1 ]))
+                            of
+                                ParserFast.Good second s1 ->
+                                    let
+                                        (ParserFast.PState _ _ _ s1Row s1Col) =
+                                            s1
+                                    in
+                                    ParserFast.Good
+                                        (secondToChoice
+                                            sRow
+                                            sCol
+                                            second
+                                            s1Row
+                                            s1Col
+                                        )
+                                        s1
 
-                                            sColInt : Int
-                                            sColInt =
-                                                sCol_0
+                                ParserFast.Bad secondCommitted secondX ->
+                                    if secondCommitted then
+                                        ParserFast.Bad
+                                            secondCommitted
+                                            secondX
 
-                                            sRowInt : Int
-                                            sRowInt =
-                                                sRow_0
-                                         in
-                                         if Pine_builtin.equal [ newOffset, (-1) ] then
-                                            ParserFast.Bad Basics.False (ParserFast.ExpectingAnyChar sRow_0 sCol_0)
-
-                                         else if Pine_builtin.equal [ newOffset, (-2) ] then
-                                            ParserFast.Good '\n' (ParserFast.PState sSrcBytes (Pine_builtin.int_add [ sOffsetBytesInt, 4 ]) sIndent (Pine_builtin.int_add [ sRowInt, 1 ]) 1)
-
-                                         else
-                                            let
-                                                foundChar : Char
-                                                foundChar =
-                                                    Pine_kernel.take [ 4, Pine_kernel.skip [ sOffsetBytesInt, sSrcBytes ] ]
-                                            in
-                                            if Pine_kernel.equal [ Pine_kernel.length foundChar, 0 ] then
-                                                ParserFast.Bad Basics.False (ParserFast.ExpectingAnyChar sRowInt sCol_0)
-
-                                            else
-                                                ParserFast.Good foundChar (ParserFast.PState sSrcBytes newOffset sIndent sRowInt (Pine_builtin.int_add [ sColInt, 1 ])) of
-                                        ParserFast.Good second s1 ->
-                                            let
-                                                (ParserFast.PState _ _ _ s1Row s1Col) =
-                                                    s1
-                                            in
-                                            ParserFast.Good
-                                                (secondToChoice
-                                                    sRow
-                                                    sCol
-                                                    second
-                                                    s1Row
-                                                    s1Col
-                                                )
-                                                s1
-
-                                        ParserFast.Bad secondCommitted secondX ->
-                                            if secondCommitted then
-                                                ParserFast.Bad
-                                                    secondCommitted
-                                                    secondX
-
-                                            else
-                                                ParserFast.Bad
-                                                    Basics.False
-                                                    (ParserFast.ExpectingOneOf
-                                                        firstX
-                                                        secondX
-                                                        []
-                                                    )
-                    )
+                                    else
+                                        ParserFast.Bad
+                                            Basics.False
+                                            (ParserFast.ExpectingOneOf
+                                                firstX
+                                                secondX
+                                                []
+                                            )
             """";
 
         rendered.Trim().Should().Be(
@@ -1632,18 +1654,20 @@ public class InliningCrossModuleTests
             Elm.Parser.Expression.multiRecordAccess : ParserFast.Parser List.List Elm.Syntax.Node.Node String
             Elm.Parser.Expression.multiRecordAccess =
                 ParserFast.Parser
-                    (\s ->
-                        Elm.Parser.Expression.loopWhileSucceedsHelp__specialized__1
-                            (ParserFast.Parser
-                                (ParserFast.symbolFollowedByParser
-                                    "."
-                                    Elm.Parser.Tokens.functionNameNode
-                                )
-                            )
-                            []
-                            (::)
-                            s
+                    Elm.Parser.Expression.multiRecordAccess__lifted__lambda1
+
+
+            Elm.Parser.Expression.multiRecordAccess__lifted__lambda1 s =
+                Elm.Parser.Expression.loopWhileSucceedsHelp__specialized__1
+                    (ParserFast.Parser
+                        (ParserFast.symbolFollowedByParser
+                            "."
+                            Elm.Parser.Tokens.functionNameNode
+                        )
                     )
+                    []
+                    (::)
+                    s
             """";
 
         rendered.Trim().Should().Be(

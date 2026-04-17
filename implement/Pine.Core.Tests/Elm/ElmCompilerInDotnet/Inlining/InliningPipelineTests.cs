@@ -236,11 +236,14 @@ public class InliningPipelineTests
         var expectedElmModuleText =
             """"
             App.composed =
-                \composeArg ->
-                    App.double
-                        (App.increment
-                            composeArg
-                        )
+                App.composed__lifted__lambda1
+
+
+            App.composed__lifted__lambda1 composeArg =
+                App.double
+                    (App.increment
+                        composeArg
+                    )
 
 
             App.double z =
@@ -253,8 +256,7 @@ public class InliningPipelineTests
                     [ y, 1 ]
             """";
 
-        rendered.Trim().Should().Be(
-            expectedElmModuleText.Trim());
+        rendered.Trim().Should().Be(expectedElmModuleText.Trim());
     }
 
     [Fact]
@@ -286,11 +288,14 @@ public class InliningPipelineTests
         var expectedElmModuleText =
             """"
             App.composed =
-                \composeArg ->
-                    App.double
-                        (App.increment
-                            composeArg
-                        )
+                App.composed__lifted__lambda1
+
+
+            App.composed__lifted__lambda1 composeArg =
+                App.double
+                    (App.increment
+                        composeArg
+                    )
 
 
             App.double z =
@@ -303,7 +308,6 @@ public class InliningPipelineTests
                     [ y, 1 ]
             """";
 
-        rendered.Trim().Should().Be(
-            expectedElmModuleText.Trim());
+        rendered.Trim().Should().Be(expectedElmModuleText.Trim());
     }
 }

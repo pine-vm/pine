@@ -394,6 +394,53 @@ public class FormatCompleteTests
     }
 
     [Fact]
+    public void Case_with_let_scrutinee_puts_let_on_new_line()
+    {
+        /*
+         * When the scrutinee of a case expression is a let expression,
+         * elm-format always puts the let keyword on a new line after case.
+         * This is a regression test for a bug where the formatter kept
+         * "case let" on the same line instead of breaking it.
+         * */
+
+        var input =
+            """"
+            module Test exposing (..)
+
+
+            decl a =
+                case let b = a + 1 in b of
+                    0 ->
+                        True
+
+                    _ ->
+                        False
+            """";
+
+        var expected =
+            """"
+            module Test exposing (..)
+
+
+            decl a =
+                case
+                    let
+                        b =
+                            a + 1
+                    in
+                    b
+                of
+                    0 ->
+                        True
+
+                    _ ->
+                        False
+            """";
+
+        AssertModuleTextFormatsToExpected(input, expected);
+    }
+
+    [Fact]
     public void Adds_linebreak_between_top_level_declarations()
     {
         var input =

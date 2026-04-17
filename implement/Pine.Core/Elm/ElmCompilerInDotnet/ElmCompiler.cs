@@ -281,6 +281,9 @@ public class ElmCompiler
         if (CheckForNamingErrors(lambdaLiftedModules, "Lambda lifting (initial)") is { } lambdaLiftShadowErr)
             return lambdaLiftShadowErr;
 
+        if (CheckForSyntaxNodesDisallowedInOptimization(lambdaLiftedModules, "Lambda lifting (initial)") is { } lambdaLiftDisallowedErr)
+            return lambdaLiftDisallowedErr;
+
         OptimizationPipelineStageResults? optimizationResults = null;
 
         List<SyntaxTypes.File> modulesForCompilation;
@@ -1317,6 +1320,7 @@ public class ElmCompiler
         var currentDecls = FlattenModulesToDeclarationDictionary(lambdaLiftedModules);
 
         // Phase 1: Specialization — create specialized versions of functions for known argument patterns.
+        // Lambda lifting is combined: the transformation stage lifts any lambdas/local functions it introduces.
         {
             var result =
                 ElmSyntaxSpecialization.Apply(currentDecls, Inlining.Config.OnlyFunctions);
@@ -1335,7 +1339,11 @@ public class ElmCompiler
         if (CheckForNamingErrors(currentDecls, "Specialization") is { } specShadowErr)
             return specShadowErr;
 
+        if (CheckForSyntaxNodesDisallowedInOptimization(currentDecls, "Specialization") is { } specDisallowedErr)
+            return specDisallowedErr;
+
         // Phase 2: Higher-order inlining — inline functions that receive function arguments.
+        // Lambda lifting is combined: the transformation stage lifts any lambdas/local functions it introduces.
         {
             var result =
                 ElmSyntaxInlining.Apply(currentDecls, Inlining.Config.OnlyFunctions);
@@ -1354,18 +1362,14 @@ public class ElmCompiler
         if (CheckForNamingErrors(currentDecls, "Higher-order inlining") is { } hoInlineShadowErr)
             return hoInlineShadowErr;
 
-        // Phase 3: Lambda lifting — re-lift any lambdas introduced by higher-order inlining.
-        {
-            currentDecls = LambdaLifting.LiftLambdas(currentDecls);
-        }
+        if (CheckForSyntaxNodesDisallowedInOptimization(currentDecls, "Higher-order inlining") is { } hoInlineDisallowedErr)
+            return hoInlineDisallowedErr;
 
-        if (CheckForNamingErrors(currentDecls, "Lambda lifting (after higher-order inlining)") is { } ll1ShadowErr)
-            return ll1ShadowErr;
-
-        // Phase 4: Size-based inlining and plain value inlining.
-        // Runs after higher-order inlining and lambda lifting to avoid cascading.
+        // Phase 3: Size-based inlining and plain value inlining.
+        // Runs after higher-order inlining to avoid cascading.
         // Inlines small wrapper functions (≤10 AST nodes, no complex expressions) and
         // plain zero-parameter declarations with simple bodies.
+        // Lambda lifting is combined: the transformation stage lifts any lambdas/local functions it introduces.
         {
             var result =
                 ElmSyntaxInlining.Apply(currentDecls, Inlining.Config.SmallFunctionsAndPlainValues);
@@ -1379,22 +1383,15 @@ public class ElmCompiler
             currentDecls = sizeInlineDict;
         }
 
+        var afterLambdaLifting = currentDecls;
+
         if (CheckForNamingErrors(currentDecls, "Size-based inlining") is { } sizeInlineShadowErr)
             return sizeInlineShadowErr;
 
-        // Phase 5: Lambda lifting — re-lift any lambdas that size-based inlining may have introduced.
-        // Although size-based inlining targets simple bodies without complex expressions,
-        // this safety net ensures the AST is clean before operator lowering.
-        {
-            currentDecls = LambdaLifting.LiftLambdas(currentDecls);
-        }
+        if (CheckForSyntaxNodesDisallowedInOptimization(currentDecls, "Size-based inlining") is { } sizeInlineDisallowedErr)
+            return sizeInlineDisallowedErr;
 
-        var afterLambdaLifting2 = currentDecls;
-
-        if (CheckForNamingErrors(currentDecls, "Lambda lifting (after size-based inlining)") is { } ll2ShadowErr)
-            return ll2ShadowErr;
-
-        // Phase 6: Operator lowering — convert operators to Pine built-in calls.
+        // Phase 4: Operator lowering — convert operators to Pine built-in calls.
         {
             var result = BuiltinOperatorLowering.Apply(currentDecls);
 
@@ -1414,7 +1411,7 @@ public class ElmCompiler
             new OptimizationPipelineStageResults(
                 AfterSpecialization: afterSpecialization,
                 AfterHigherOrderInlining: afterHigherOrderInlining,
-                AfterLambdaLifting: afterLambdaLifting2,
+                AfterLambdaLifting: afterLambdaLifting,
                 AfterLowering: currentDecls);
     }
 
@@ -1451,6 +1448,85 @@ public class ElmCompiler
         var flatDecls = FlattenModulesToDeclarationDictionary(modules);
 
         return CheckForNamingErrors(flatDecls, stageName);
+    }
+
+    /// <summary>
+    /// Checks that declarations do not contain syntax nodes that are disallowed in the
+    /// optimization pipeline (e.g., lambda expressions and let-functions that should have
+    /// been lifted to top-level functions).
+    /// Returns an error message if any disallowed nodes are found, or null if clean.
+    /// </summary>
+    private static string? CheckForSyntaxNodesDisallowedInOptimization(
+        ImmutableDictionary<DeclQualifiedName, SyntaxTypes.Declaration> declarations,
+        string stageName)
+    {
+        var disallowedLocations = new List<(DeclQualifiedName DeclName, string Detail)>();
+
+        foreach (var (qualifiedName, decl) in declarations)
+        {
+            SyntaxTypes.ReportSyntaxNodes.ReportViaCallback(
+                decl,
+                reportLambda:
+                _ =>
+                disallowedLocations.Add((qualifiedName, "lambda expression")),
+                reportLetBlock:
+                _ => { },
+                reportLetFunction:
+                letFunc =>
+                {
+                    // Only flag LetFunction nodes that have parameters (actual function declarations).
+                    // Zero-parameter LetFunction nodes represent value bindings that should not be lifted.
+                    if (letFunc.Function.Declaration.Value.Arguments.Count > 0)
+                    {
+                        disallowedLocations.Add(
+                            (qualifiedName, "let-function '" + letFunc.Function.Declaration.Value.Name.Value + "'"));
+                    }
+                });
+        }
+
+        if (disallowedLocations.Count is 0)
+            return null;
+
+        var grouped =
+            disallowedLocations
+            .GroupBy(loc => loc.DeclName)
+            .OrderBy(g => g.Key)
+            .Select(
+                g =>
+                {
+                    var lambdaCount = g.Count(loc => loc.Detail is "lambda expression");
+                    var letFuncCount = g.Count(loc => loc.Detail.StartsWith("let-function", StringComparison.Ordinal));
+                    var parts = new List<string>();
+
+                    if (lambdaCount > 0)
+                        parts.Add(lambdaCount + " lambda expression(s)");
+
+                    if (letFuncCount > 0)
+                        parts.Add(letFuncCount + " let-function(s)");
+
+                    return
+                        g.Key.DeclName + " in " + string.Join(".", g.Key.Namespaces) +
+                        ": " + string.Join(", ", parts);
+                });
+
+        return
+            stageName + " produced declarations containing " +
+            disallowedLocations.Count + " disallowed node(s):\n" +
+            string.Join("\n", grouped);
+    }
+
+    /// <summary>
+    /// Checks that module declarations do not contain syntax nodes that are disallowed after
+    /// lambda lifting.
+    /// Returns an error message if any disallowed nodes are found, or null if clean.
+    /// </summary>
+    private static string? CheckForSyntaxNodesDisallowedInOptimization(
+        IReadOnlyList<SyntaxTypes.File> modules,
+        string stageName)
+    {
+        var flatDecls = FlattenModulesToDeclarationDictionary(modules);
+
+        return CheckForSyntaxNodesDisallowedInOptimization(flatDecls, stageName);
     }
 
     /// <summary>

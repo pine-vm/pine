@@ -368,8 +368,10 @@ public class InliningTestHelper
 
         var inlinedModules = ElmCompiler.ReconstructModulesFromFlatDict(inlinedDecls, orderedModules);
 
-        return inlinedModules
-            .Single(m => Stil4mElmSyntax7.Module.GetModuleName(m.ModuleDefinition.Value).Value.SequenceEqual(moduleName));
+        return
+            inlinedModules
+            .Single(
+                m => Stil4mElmSyntax7.Module.GetModuleName(m.ModuleDefinition.Value).Value.SequenceEqual(moduleName));
     }
 
     public static Stil4mElmSyntax7.File CanonicalizeAndOptimizeAndGetSingleModule(
@@ -425,8 +427,10 @@ public class InliningTestHelper
 
         var loweredModules = ElmCompiler.ReconstructModulesFromFlatDict(loweredDecls, canonicalizedOrderedModules);
 
-        return loweredModules
-            .Single(m => Stil4mElmSyntax7.Module.GetModuleName(m.ModuleDefinition.Value).Value.SequenceEqual(moduleName));
+        return
+            loweredModules
+            .Single(
+                m => Stil4mElmSyntax7.Module.GetModuleName(m.ModuleDefinition.Value).Value.SequenceEqual(moduleName));
     }
 
     public static Stil4mElmSyntax7.File CanonicalizeAndInlineAndLowerOperatorsAndGetSingleModule(
@@ -476,7 +480,9 @@ public class InliningTestHelper
 
         var loweredModules = ElmCompiler.ReconstructModulesFromFlatDict(loweredDecls, orderedCanonicalizedModules);
 
-        return loweredModules
-            .Single(m => Stil4mElmSyntax7.Module.GetModuleName(m.ModuleDefinition.Value).Value.SequenceEqual(moduleName));
+        return
+            loweredModules
+            .Single(
+                m => Stil4mElmSyntax7.Module.GetModuleName(m.ModuleDefinition.Value).Value.SequenceEqual(moduleName));
     }
 }

@@ -306,11 +306,13 @@ public class InliningHigherOrderTests
             """"
             App.makeAdder : Int -> Int -> Int
             App.makeAdder n =
-                \x ->
-                    Pine_kernel.int_add
-                        [ n
-                        , x
-                        ]
+                App.makeAdder__lifted__lambda1
+                    n
+
+
+            App.makeAdder__lifted__lambda1 n x =
+                Pine_kernel.int_add
+                    [ n, x ]
 
 
             App.result : Int -> Int
@@ -784,9 +786,11 @@ public class InliningHigherOrderTests
             App.parser : Helpers.Parser Int
             App.parser =
                 Helpers.Parser
-                    (\() ->
-                        App.constant
-                    )
+                    App.parser__lifted__lambda1
+
+
+            App.parser__lifted__lambda1 () =
+                App.constant
 
 
             App.result : List.List String -> List.List Int
@@ -865,10 +869,12 @@ public class InliningHigherOrderTests
             App.config =
                 { parser =
                     Helpers.Parser
-                        (\() ->
-                            App.constant
-                        )
+                        App.config__lifted__lambda1
                 }
+
+
+            App.config__lifted__lambda1 () =
+                App.constant
 
 
             App.constant : Int

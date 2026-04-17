@@ -98,7 +98,8 @@ public class SizeBasedInliningRegressionTests
     {
         var envWith = CompileEnvironment(disableInlining: false);
 
-        var parsedWith = ElmInteractiveEnvironment.ParseInteractiveEnvironment(envWith)
+        var parsedWith =
+            ElmInteractiveEnvironment.ParseInteractiveEnvironment(envWith)
             .Extract(err => throw new Exception("Failed parsing env: " + err));
 
         var elmParserWith = parsedWith.Modules.First(m => m.moduleName == "Elm.Parser");
@@ -106,7 +107,9 @@ public class SizeBasedInliningRegressionTests
         var parseToFileWith = elmParserWith.moduleContent.FunctionDeclarations["parseToFile"];
 
         var parseCache = new PineVMParseCache();
-        var parsedPTFWith = FunctionRecord.ParseFunctionValue(parseToFileWith, parseCache)
+
+        var parsedPTFWith =
+            FunctionRecord.ParseFunctionValue(parseToFileWith, parseCache)
             .Extract(err => throw new Exception("Failed parsing parseToFile WITH: " + err));
 
         parsedPTFWith.Should().BeOfType<ParsedFunctionValue.WithEnvFunctions>();
@@ -147,7 +150,8 @@ public class SizeBasedInliningRegressionTests
             .Select(file => (IReadOnlyList<string>)file.path)
             .ToList();
 
-        return ElmCompiler.CompileInteractiveEnvironment(
+        return
+            ElmCompiler.CompileInteractiveEnvironment(
                 treeWithTest,
                 rootFilePaths: rootFilePaths,
                 disableInlining: disableInlining)

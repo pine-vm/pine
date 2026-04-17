@@ -211,7 +211,12 @@ public partial class Inlining
             }
         }
 
-        return resultBuilder.ToImmutable();
+        // Lambda lifting: lift any lambdas or local functions introduced during
+        // inlining/specialization so that the output is free of disallowed nodes.
+        var beforeLambdaLifting = resultBuilder.ToImmutable();
+        var afterLambdaLifting = LambdaLifting.LiftLambdas(beforeLambdaLifting);
+
+        return afterLambdaLifting;
     }
 
     private static bool EnablesSpecialization(InliningContext context) =>
@@ -4616,9 +4621,10 @@ nextParam:;
         if (calleeModuleLevelNames.Count is 0)
             return null;
 
-        return new ElmSyntaxTransformations.CrossModuleQualification(
-            calleeModuleName,
-            calleeModuleLevelNames);
+        return
+            new ElmSyntaxTransformations.CrossModuleQualification(
+                calleeModuleName,
+                calleeModuleLevelNames);
     }
 
 }
