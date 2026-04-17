@@ -36,50 +36,16 @@ public static class LambdaLifting
         var newDeclarations = new List<Node<SyntaxTypes.Declaration>>();
 
         var nextLiftedIdentifierByFunctionName =
-            BuildNextLiftedIdentifierByFunctionNameFromModule(module);
+            BuildNextLiftedIdentifierByFunctionName(
+                module.Declarations.Select(d => d.Value));
 
         foreach (var declaration in module.Declarations)
         {
             if (declaration.Value is SyntaxTypes.Declaration.FunctionDeclaration funcDecl)
             {
-                var functionName = funcDecl.Function.Declaration.Value.Name.Value;
+                var (transformedDecl, liftedFunctions) =
+                    LiftLambdasInFunction(funcDecl, nextLiftedIdentifierByFunctionName);
 
-                var context =
-                    new LiftingContext(
-                        functionName,
-                        BoundVariables: [],
-                        LambdaCounter:
-                        nextLiftedIdentifierByFunctionName.TryGetValue(functionName, out var nextIdentifier)
-                        ?
-                        nextIdentifier - 1
-                        :
-                        0);
-
-                // Collect parameter names as bound variables
-                var paramNames = CollectPatternNames(funcDecl.Function.Declaration.Value.Arguments);
-
-                context = context.WithBoundVariables(paramNames);
-
-                // Transform the function body
-                var (transformedExpr, liftedFunctions) =
-                    TransformExpression(
-                        funcDecl.Function.Declaration.Value.Expression,
-                        context);
-
-                // Create the transformed function declaration
-                var transformedFuncImpl =
-                    funcDecl.Function.Declaration.Value with
-                    {
-                        Expression = transformedExpr
-                    };
-
-                var transformedFunc =
-                    funcDecl.Function with
-                    {
-                        Declaration = funcDecl.Function.Declaration with { Value = transformedFuncImpl }
-                    };
-
-                var transformedDecl = new SyntaxTypes.Declaration.FunctionDeclaration(transformedFunc);
                 newDeclarations.Add(declaration with { Value = transformedDecl });
 
                 // Add lifted functions AFTER the originating function
@@ -107,7 +73,7 @@ public static class LambdaLifting
         ImmutableDictionary<DeclQualifiedName, SyntaxTypes.Declaration> declarations)
     {
         var nextLiftedIdentifierByFunctionName =
-            BuildNextLiftedIdentifierByFunctionName(declarations);
+            BuildNextLiftedIdentifierByFunctionName(declarations.Values);
 
         var resultBuilder =
             ImmutableDictionary.CreateBuilder<DeclQualifiedName, SyntaxTypes.Declaration>();
@@ -122,44 +88,9 @@ public static class LambdaLifting
         {
             if (decl is SyntaxTypes.Declaration.FunctionDeclaration funcDecl)
             {
-                var functionName = funcDecl.Function.Declaration.Value.Name.Value;
+                var (transformedDecl, liftedFunctions) =
+                    LiftLambdasInFunction(funcDecl, nextLiftedIdentifierByFunctionName);
 
-                var context =
-                    new LiftingContext(
-                        functionName,
-                        BoundVariables: [],
-                        LambdaCounter:
-                        nextLiftedIdentifierByFunctionName.TryGetValue(functionName, out var nextIdentifier)
-                        ?
-                        nextIdentifier - 1
-                        :
-                        0);
-
-                // Collect parameter names as bound variables
-                var paramNames = CollectPatternNames(funcDecl.Function.Declaration.Value.Arguments);
-
-                context = context.WithBoundVariables(paramNames);
-
-                // Transform the function body
-                var (transformedExpr, liftedFunctions) =
-                    TransformExpression(
-                        funcDecl.Function.Declaration.Value.Expression,
-                        context);
-
-                // Create the transformed function declaration
-                var transformedFuncImpl =
-                    funcDecl.Function.Declaration.Value with
-                    {
-                        Expression = transformedExpr
-                    };
-
-                var transformedFunc =
-                    funcDecl.Function with
-                    {
-                        Declaration = funcDecl.Function.Declaration with { Value = transformedFuncImpl }
-                    };
-
-                var transformedDecl = new SyntaxTypes.Declaration.FunctionDeclaration(transformedFunc);
                 resultBuilder[key] = transformedDecl;
 
                 // Add lifted functions keyed by their qualified name in the same module namespace.
@@ -259,50 +190,63 @@ public static class LambdaLifting
         return new Node<SyntaxTypes.Expression>(exprNode.Range, mapped);
     }
 
-    private static IReadOnlyDictionary<string, int> BuildNextLiftedIdentifierByFunctionNameFromModule(
-        SyntaxTypes.File module)
+    /// <summary>
+    /// Transforms a single function declaration by lifting its lambdas.
+    /// Returns the transformed declaration and a list of newly-created lifted function declarations.
+    /// </summary>
+    private static (
+        SyntaxTypes.Declaration.FunctionDeclaration TransformedDecl,
+        IReadOnlyList<Node<SyntaxTypes.Declaration>> LiftedFunctions)
+        LiftLambdasInFunction(
+        SyntaxTypes.Declaration.FunctionDeclaration funcDecl,
+        IReadOnlyDictionary<string, int> nextLiftedIdentifierByFunctionName)
     {
-        var nextLiftedIdentifierByFunctionName = new Dictionary<string, int>(StringComparer.Ordinal);
+        var functionName = funcDecl.Function.Declaration.Value.Name.Value;
 
-        foreach (var declaration in module.Declarations)
-        {
-            if (declaration.Value is not SyntaxTypes.Declaration.FunctionDeclaration funcDecl)
+        var context =
+            new LiftingContext(
+                functionName,
+                BoundVariables: [],
+                LambdaCounter:
+                nextLiftedIdentifierByFunctionName.TryGetValue(functionName, out var nextIdentifier)
+                ?
+                nextIdentifier - 1
+                :
+                0);
+
+        // Collect parameter names as bound variables
+        var paramNames = CollectPatternNames(funcDecl.Function.Declaration.Value.Arguments);
+
+        context = context.WithBoundVariables(paramNames);
+
+        // Transform the function body
+        var (transformedExpr, liftedFunctions) =
+            TransformExpression(
+                funcDecl.Function.Declaration.Value.Expression,
+                context);
+
+        // Create the transformed function declaration
+        var transformedFuncImpl =
+            funcDecl.Function.Declaration.Value with
             {
-                continue;
-            }
+                Expression = transformedExpr
+            };
 
-            var functionName = funcDecl.Function.Declaration.Value.Name.Value;
-
-            if (TryParseExistingLiftedIdentifier(functionName) is not { } liftedIdentifier)
+        var transformedFunc =
+            funcDecl.Function with
             {
-                continue;
-            }
+                Declaration = funcDecl.Function.Declaration with { Value = transformedFuncImpl }
+            };
 
-            var nextIdentifier = liftedIdentifier.identifier + 1;
-
-            if (nextLiftedIdentifierByFunctionName.TryGetValue(
-                liftedIdentifier.containingFunctionName,
-                out var existingNextIdentifier))
-            {
-                nextLiftedIdentifierByFunctionName[liftedIdentifier.containingFunctionName] =
-                    Math.Max(existingNextIdentifier, nextIdentifier);
-            }
-            else
-            {
-                nextLiftedIdentifierByFunctionName[liftedIdentifier.containingFunctionName] =
-                    nextIdentifier;
-            }
-        }
-
-        return nextLiftedIdentifierByFunctionName;
+        return (new SyntaxTypes.Declaration.FunctionDeclaration(transformedFunc), liftedFunctions);
     }
 
     private static IReadOnlyDictionary<string, int> BuildNextLiftedIdentifierByFunctionName(
-        ImmutableDictionary<DeclQualifiedName, SyntaxTypes.Declaration> declarations)
+        IEnumerable<SyntaxTypes.Declaration> declarations)
     {
         var nextLiftedIdentifierByFunctionName = new Dictionary<string, int>(StringComparer.Ordinal);
 
-        foreach (var (_, decl) in declarations)
+        foreach (var decl in declarations)
         {
             if (decl is not SyntaxTypes.Declaration.FunctionDeclaration funcDecl)
             {
