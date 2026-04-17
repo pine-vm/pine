@@ -2,6 +2,7 @@ using AwesomeAssertions;
 using Pine.Core.CodeAnalysis;
 using Pine.Core.Elm;
 using Pine.Core.Elm.ElmCompilerInDotnet;
+using Pine.Core.Interpreter.IntermediateVM;
 using Pine.Core.Elm.ElmInElm;
 using Pine.Core.Files;
 using System;
@@ -21,7 +22,7 @@ namespace Pine.Core.Tests.Elm.ElmCompilerInDotnet.ApplicationTests;
 /// wrapper functions that exercise the parsers and return
 /// simple values. Each test asserts on the return value
 /// and on the runtime cost snapshot from
-/// <see cref="ElmCompilerTestHelper.FormatCounts"/>.
+/// <see cref="PerformanceCountersFormatting.FormatCounts"/>.
 /// </summary>
 public class ParserFastTests
 {
@@ -441,7 +442,7 @@ public class ParserFastTests
 
         value.Should().Be(Integer(12));
 
-        ElmCompilerTestHelper.FormatCounts(report).Should().Be(
+        PerformanceCountersFormatting.FormatCounts(report).Should().Be(
             """
             InstructionCount: 2
             InvocationCount: 0
@@ -461,7 +462,7 @@ public class ParserFastTests
 
         value.Should().Be(Integer(16));
 
-        ElmCompilerTestHelper.FormatCounts(report).Should().Be(
+        PerformanceCountersFormatting.FormatCounts(report).Should().Be(
             """
             InstructionCount: 2
             InvocationCount: 0
@@ -481,7 +482,7 @@ public class ParserFastTests
 
         value.Should().Be(Integer(0));
 
-        ElmCompilerTestHelper.FormatCounts(report).Should().Be(
+        PerformanceCountersFormatting.FormatCounts(report).Should().Be(
             """
             InstructionCount: 2
             InvocationCount: 0
@@ -503,7 +504,7 @@ public class ParserFastTests
 
         value.Should().Be(Integer(5));
 
-        ElmCompilerTestHelper.FormatCounts(report).Should().Be(
+        PerformanceCountersFormatting.FormatCounts(report).Should().Be(
             """
             InstructionCount: 270
             InvocationCount: 10
@@ -523,7 +524,7 @@ public class ParserFastTests
 
         value.Should().Be(Integer(5));
 
-        ElmCompilerTestHelper.FormatCounts(report).Should().Be(
+        PerformanceCountersFormatting.FormatCounts(report).Should().Be(
             """
             InstructionCount: 238
             InvocationCount: 10
@@ -543,7 +544,7 @@ public class ParserFastTests
 
         value.Should().Be(Integer(3));
 
-        ElmCompilerTestHelper.FormatCounts(report).Should().Be(
+        PerformanceCountersFormatting.FormatCounts(report).Should().Be(
             """
             InstructionCount: 258
             InvocationCount: 9
@@ -563,7 +564,7 @@ public class ParserFastTests
 
         value.Should().Be(Integer(26));
 
-        ElmCompilerTestHelper.FormatCounts(report).Should().Be(
+        PerformanceCountersFormatting.FormatCounts(report).Should().Be(
             """
             InstructionCount: 1_005
             InvocationCount: 52

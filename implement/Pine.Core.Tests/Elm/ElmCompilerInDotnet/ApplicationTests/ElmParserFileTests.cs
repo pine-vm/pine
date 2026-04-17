@@ -2,6 +2,7 @@ using AwesomeAssertions;
 using Pine.Core.CodeAnalysis;
 using Pine.Core.Elm;
 using Pine.Core.Elm.ElmCompilerInDotnet;
+using Pine.Core.Interpreter.IntermediateVM;
 using Pine.Core.Elm.ElmInElm;
 using Pine.Core.Files;
 using System;
@@ -135,7 +136,7 @@ public class ElmParserFileTests
                 s_vm);
 
         return
-            (ElmValue.RenderAsElmExpression(value), ElmCompilerTestHelper.FormatCounts(report));
+            (ElmValue.RenderAsElmExpression(value), PerformanceCountersFormatting.FormatCounts(report));
     }
 
     [Fact]

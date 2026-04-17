@@ -2,6 +2,7 @@ using AwesomeAssertions;
 using Pine.Core.CodeAnalysis;
 using Pine.Core.Elm;
 using Pine.Core.Elm.ElmCompilerInDotnet;
+using Pine.Core.Interpreter.IntermediateVM;
 using Pine.Core.Elm.ElmInElm;
 using Pine.Core.Files;
 using System;
@@ -1154,7 +1155,7 @@ public class KernelJsonFunctionTests
             OkOf(
                 new ElmValue.ElmRecord([("age", Integer(42)), ("height", Integer(180)), ("name", String("tom"))])));
 
-        ElmCompilerTestHelper.FormatCounts(report).Should().Be(
+        PerformanceCountersFormatting.FormatCounts(report).Should().Be(
             """
             InstructionCount: 8_217
             InvocationCount: 376
@@ -1176,7 +1177,7 @@ public class KernelJsonFunctionTests
 
         value.Should().Be(OkOf(String("v3-data")));
 
-        ElmCompilerTestHelper.FormatCounts(report).Should().Be(
+        PerformanceCountersFormatting.FormatCounts(report).Should().Be(
             """
             InstructionCount: 5_510
             InvocationCount: 235
@@ -1231,7 +1232,7 @@ public class KernelJsonFunctionTests
         value.Should().Be(OkOf(String("hello")));
 
         var formattedCounts =
-            ElmCompilerTestHelper.FormatCounts(report);
+            PerformanceCountersFormatting.FormatCounts(report);
 
         formattedCounts.Should().Be(
             """
@@ -1254,7 +1255,7 @@ public class KernelJsonFunctionTests
         value.Should().Be(OkOf(Integer(1)));
 
         var formattedCounts =
-            ElmCompilerTestHelper.FormatCounts(report);
+            PerformanceCountersFormatting.FormatCounts(report);
 
         formattedCounts.Should().Be(
             """
@@ -1279,7 +1280,7 @@ public class KernelJsonFunctionTests
 
         value.Should().Be(OkOf(String("tom")));
 
-        ElmCompilerTestHelper.FormatCounts(report).Should().Be(
+        PerformanceCountersFormatting.FormatCounts(report).Should().Be(
             """
             InstructionCount: 6_924
             InvocationCount: 276
@@ -1300,7 +1301,7 @@ public class KernelJsonFunctionTests
 
         value.Should().Be(OkOf(Integer(42)));
 
-        ElmCompilerTestHelper.FormatCounts(report).Should().Be(
+        PerformanceCountersFormatting.FormatCounts(report).Should().Be(
             """
             InstructionCount: 6_924
             InvocationCount: 276
@@ -1363,7 +1364,7 @@ public class KernelJsonFunctionTests
 
         value.Should().Be(JustOf(Integer(42)));
 
-        ElmCompilerTestHelper.FormatCounts(report).Should().Be(
+        PerformanceCountersFormatting.FormatCounts(report).Should().Be(
             """
             InstructionCount: 8_669
             InvocationCount: 336
@@ -1383,7 +1384,7 @@ public class KernelJsonFunctionTests
 
         value.Should().Be(Integer(2));
 
-        ElmCompilerTestHelper.FormatCounts(report).Should().Be(
+        PerformanceCountersFormatting.FormatCounts(report).Should().Be(
             """
             InstructionCount: 10_294
             InvocationCount: 400
@@ -1431,7 +1432,7 @@ public class KernelJsonFunctionTests
                     ElmList(Integer(1), Integer(2)),
                     ElmList(Integer(3), Integer(4)))));
 
-        ElmCompilerTestHelper.FormatCounts(report).Should().Be(
+        PerformanceCountersFormatting.FormatCounts(report).Should().Be(
             """
             InstructionCount: 6_330
             InvocationCount: 213
@@ -1476,7 +1477,7 @@ public class KernelJsonFunctionTests
 
         value.Should().Be(OkOf(obj));
 
-        ElmCompilerTestHelper.FormatCounts(report).Should().Be(
+        PerformanceCountersFormatting.FormatCounts(report).Should().Be(
             """
             InstructionCount: 17_907
             InvocationCount: 732

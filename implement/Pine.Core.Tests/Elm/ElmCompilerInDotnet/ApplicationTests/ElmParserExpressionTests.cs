@@ -2,6 +2,7 @@ using AwesomeAssertions;
 using Pine.Core.CodeAnalysis;
 using Pine.Core.Elm;
 using Pine.Core.Elm.ElmCompilerInDotnet;
+using Pine.Core.Interpreter.IntermediateVM;
 using Pine.Core.Elm.ElmInElm;
 using Pine.Core.Files;
 using System;
@@ -19,7 +20,7 @@ namespace Pine.Core.Tests.Elm.ElmCompilerInDotnet.ApplicationTests;
 /// standalone module, these tests compile the real elm-syntax expression parser
 /// and call it directly via <c>ParserFast.run Elm.Parser.Expression.expression</c>.
 /// Each test asserts on the parsed result and on the runtime cost snapshot from
-/// <see cref="ElmCompilerTestHelper.FormatCounts"/>.
+/// <see cref="PerformanceCountersFormatting.FormatCounts"/>.
 /// </summary>
 public class ElmParserExpressionTests
 {
@@ -211,7 +212,7 @@ public class ElmParserExpressionTests
 
         value.Should().Be(Integer(123));
 
-        ElmCompilerTestHelper.FormatCounts(report).Should().Be(
+        PerformanceCountersFormatting.FormatCounts(report).Should().Be(
             """
             InstructionCount: 16_434
             InvocationCount: 462
@@ -231,7 +232,7 @@ public class ElmParserExpressionTests
 
         value.Should().Be(ElmString("hello world"));
 
-        ElmCompilerTestHelper.FormatCounts(report).Should().Be(
+        PerformanceCountersFormatting.FormatCounts(report).Should().Be(
             """
             InstructionCount: 49_018
             InvocationCount: 2_126
@@ -251,7 +252,7 @@ public class ElmParserExpressionTests
 
         value.Should().Be(ElmString("&"));
 
-        ElmCompilerTestHelper.FormatCounts(report).Should().Be(
+        PerformanceCountersFormatting.FormatCounts(report).Should().Be(
             """
             InstructionCount: 9_755
             InvocationCount: 318
@@ -271,7 +272,7 @@ public class ElmParserExpressionTests
 
         value.Should().Be(Ok(ListExpr()));
 
-        ElmCompilerTestHelper.FormatCounts(report).Should().Be(
+        PerformanceCountersFormatting.FormatCounts(report).Should().Be(
             """
             InstructionCount: 33_104
             InvocationCount: 492
@@ -294,7 +295,7 @@ public class ElmParserExpressionTests
                 ListExpr(
                     Node(1, 2, 1, 3, IntegerExpr(1)))));
 
-        ElmCompilerTestHelper.FormatCounts(report).Should().Be(
+        PerformanceCountersFormatting.FormatCounts(report).Should().Be(
             """
             InstructionCount: 160_592
             InvocationCount: 4_044
@@ -326,7 +327,7 @@ public class ElmParserExpressionTests
                     Node(1, 18, 1, 19, IntegerExpr(9)),
                     Node(1, 20, 1, 22, IntegerExpr(10)))));
 
-        ElmCompilerTestHelper.FormatCounts(report).Should().Be(
+        PerformanceCountersFormatting.FormatCounts(report).Should().Be(
             """
             InstructionCount: 1_515_112
             InvocationCount: 39_860
@@ -350,7 +351,7 @@ public class ElmParserExpressionTests
         valueAsExpression.expressionString.Should().Be(
             """Ok (Application [ Node { end = { column = 5, row = 1 }, start = { column = 1, row = 1 } } (FunctionOrValue [] "alfa"), Node { end = { column = 8, row = 1 }, start = { column = 6, row = 1 } } (Integer 79), Node { end = { column = 22, row = 1 }, start = { column = 9, row = 1 } } (Literal "hello world"), Node { end = { column = 27, row = 1 }, start = { column = 23, row = 1 } } (FunctionOrValue [] "beta"), Node { end = { column = 32, row = 1 }, start = { column = 28, row = 1 } } (ListExpr [ Node { end = { column = 31, row = 1 }, start = { column = 29, row = 1 } } (Integer 41) ]), Node { end = { column = 56, row = 1 }, start = { column = 33, row = 1 } } (ParenthesizedExpression (Node { end = { column = 55, row = 1 }, start = { column = 34, row = 1 } } (LambdaExpression { args = [ Node { end = { column = 40, row = 1 }, start = { column = 35, row = 1 } } (VarPattern "gamma") ], expression = Node { end = { column = 55, row = 1 }, start = { column = 44, row = 1 } } (Application [ Node { end = { column = 49, row = 1 }, start = { column = 44, row = 1 } } (FunctionOrValue [] "delta"), Node { end = { column = 55, row = 1 }, start = { column = 50, row = 1 } } (FunctionOrValue [] "gamma") ]) }))) ])""");
 
-        ElmCompilerTestHelper.FormatCounts(report).Should().Be(
+        PerformanceCountersFormatting.FormatCounts(report).Should().Be(
             """
             InstructionCount: 3_076_316
             InvocationCount: 105_668
@@ -412,7 +413,7 @@ public class ElmParserExpressionTests
                     Node(1, 115, 1, 118, IntegerExpr(108)),
                     Node(1, 119, 1, 122, IntegerExpr(109)))));
 
-        ElmCompilerTestHelper.FormatCounts(report).Should().Be(
+        PerformanceCountersFormatting.FormatCounts(report).Should().Be(
             """
             InstructionCount: 6_156_064
             InvocationCount: 163_220
@@ -498,7 +499,7 @@ public class ElmParserExpressionTests
                             Node(1, 122, 1, 125, IntegerExpr(108)),
                             Node(1, 126, 1, 129, IntegerExpr(109)))))));
 
-        ElmCompilerTestHelper.FormatCounts(report).Should().Be(
+        PerformanceCountersFormatting.FormatCounts(report).Should().Be(
             """
             InstructionCount: 51_968_136
             InvocationCount: 1_378_604

@@ -320,7 +320,7 @@ public class FunctionApplicationOverheadTests
 
         value.Should().Be(ElmValue.Integer(11));
 
-        ElmCompilerTestHelper.FormatCounts(report).Should().Be(
+        PerformanceCountersFormatting.FormatCounts(report).Should().Be(
             """
             InstructionCount: 12
             InvocationCount: 2
@@ -348,7 +348,7 @@ public class FunctionApplicationOverheadTests
 
         value.Should().Be(ElmValue.Integer(7));
 
-        ElmCompilerTestHelper.FormatCounts(report).Should().Be(
+        PerformanceCountersFormatting.FormatCounts(report).Should().Be(
             """
             InstructionCount: 33
             InvocationCount: 4
@@ -374,7 +374,7 @@ public class FunctionApplicationOverheadTests
 
         value.Should().Be(ElmValue.Integer(12));
 
-        ElmCompilerTestHelper.FormatCounts(report).Should().Be(
+        PerformanceCountersFormatting.FormatCounts(report).Should().Be(
             """
             InstructionCount: 21
             InvocationCount: 3
@@ -406,7 +406,7 @@ public class FunctionApplicationOverheadTests
             ElmValue.ListInstance(
                 [ElmValue.Integer(2), ElmValue.Integer(3), ElmValue.Integer(4)]));
 
-        ElmCompilerTestHelper.FormatCounts(report).Should().Be(
+        PerformanceCountersFormatting.FormatCounts(report).Should().Be(
             """
             InstructionCount: 66
             InvocationCount: 6
@@ -487,7 +487,7 @@ public class FunctionApplicationOverheadTests
                 ElmValue.Integer(51),
                 ]));
 
-        ElmCompilerTestHelper.FormatCounts(report).Should().Be(
+        PerformanceCountersFormatting.FormatCounts(report).Should().Be(
             """
             InstructionCount: 228
             InvocationCount: 9
@@ -681,7 +681,7 @@ public class FunctionApplicationOverheadTests
 
         value.Should().Be(ElmValue.Integer(15));
 
-        ElmCompilerTestHelper.FormatCounts(report).Should().Be(
+        PerformanceCountersFormatting.FormatCounts(report).Should().Be(
             """
             InstructionCount: 12
             InvocationCount: 2
@@ -707,7 +707,7 @@ public class FunctionApplicationOverheadTests
 
         value.Should().Be(ElmValue.Integer(20));
 
-        ElmCompilerTestHelper.FormatCounts(report).Should().Be(
+        PerformanceCountersFormatting.FormatCounts(report).Should().Be(
             """
             InstructionCount: 12
             InvocationCount: 2
@@ -750,7 +750,7 @@ public class FunctionApplicationOverheadTests
             ElmValue.ListInstance(
                 [expectedIncrementedList, expectedDoubledList]));
 
-        ElmCompilerTestHelper.FormatCounts(report).Should().Be(
+        PerformanceCountersFormatting.FormatCounts(report).Should().Be(
             """
             InstructionCount: 335
             InvocationCount: 24
@@ -788,7 +788,7 @@ public class FunctionApplicationOverheadTests
             ElmValue.ListInstance(
                 [ElmValue.Integer(2), ElmValue.Integer(4), ElmValue.Integer(4)]));
 
-        ElmCompilerTestHelper.FormatCounts(report).Should().Be(
+        PerformanceCountersFormatting.FormatCounts(report).Should().Be(
             """
             InstructionCount: 71
             InvocationCount: 6
@@ -833,7 +833,7 @@ public class FunctionApplicationOverheadTests
             ElmValue.ListInstance(
                 [expectedIncDoubleList, expectedDoubleIncList]));
 
-        ElmCompilerTestHelper.FormatCounts(report).Should().Be(
+        PerformanceCountersFormatting.FormatCounts(report).Should().Be(
             """
             InstructionCount: 359
             InvocationCount: 24
@@ -866,7 +866,7 @@ public class FunctionApplicationOverheadTests
             ElmValue.ListInstance(
                 [ElmValue.Integer(2), ElmValue.Integer(3), ElmValue.Integer(4)]));
 
-        ElmCompilerTestHelper.FormatCounts(report).Should().Be(
+        PerformanceCountersFormatting.FormatCounts(report).Should().Be(
             """
             InstructionCount: 66
             InvocationCount: 6
@@ -907,7 +907,7 @@ public class FunctionApplicationOverheadTests
             ElmValue.ListInstance(
                 [expectedIncrementedList, expectedDoubledList]));
 
-        ElmCompilerTestHelper.FormatCounts(report).Should().Be(
+        PerformanceCountersFormatting.FormatCounts(report).Should().Be(
             """
             InstructionCount: 335
             InvocationCount: 24
