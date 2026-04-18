@@ -513,6 +513,20 @@ Inlining `Forest` into `Tree` yields `Tree a = Node a (List (Tree a))`, which is
 
 **Substitution preserves `Self`:** When substituting type variables in a recursive type (e.g., replacing `a` with `Int` in `List a = Cons a Self | Nil`), the `Self` node is left unchanged — it continues to refer to the enclosing type after substitution.
 
+## Infrastructure for Testing and Verification
+
+### Elm Syntax Interpreter for Verification of Lowering Transformations
+
+Some optimizations in the Elm compiler are implemented as lowering transformations. That means these stages produce new Elm syntax.
+
+Work on lowering stages in the Elm compiler turned out not to be trivial; we repeatedly observed defects introduced by these transformations. While such defects can also be detected by reviewing the generated Elm syntax, these bugs often only surfaced during execution after further compilation to Pine. To better support dynamic verification, we introduced an interpreter that runs on the Elm syntax model.
+
+The Elm syntax interpreter offers:
+
++ Computing the values resulting from running a program, consistent with the semantics of the execution path for productive use.
++ Reporting applications of named functions or constructors to support inspection of runtime traces.
++ Detecting and reporting cases of infinite recursion with stack traces showing declaration names.
+
 ## Future Exploration
 
 ### Future Exploration - Monomorphizing Extensible Records

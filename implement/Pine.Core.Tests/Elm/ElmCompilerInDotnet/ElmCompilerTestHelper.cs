@@ -19,7 +19,7 @@ namespace Pine.Core.Tests.Elm.ElmCompilerInDotnet;
 
 public class ElmCompilerTestHelper
 {
-    private static readonly FrozenSet<string> s_pineKernelModuleNames =
+    private static readonly FrozenSet<string> s_pineBuiltinModuleNamesDefault =
         FrozenSet.Create(["Pine_builtin", "Pine_kernel"]);
 
 
@@ -308,7 +308,7 @@ public class ElmCompilerTestHelper
             new ModuleCompilationContext(
                 allFunctions,
                 CompiledFunctionsCache: [],
-                PineKernelModuleNames: s_pineKernelModuleNames);
+                PineKernelModuleNames: s_pineBuiltinModuleNamesDefault);
 
         // Compute and return dependency layouts
         var (layouts, _, _) =

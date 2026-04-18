@@ -183,7 +183,8 @@ public abstract record ElmValue
     /// <param name="value">The string value.</param>
     /// <returns>An <see cref="ElmString"/> instance.</returns>
     public static ElmValue StringInstance(string value) =>
-        s_reusedStringInstances?.TryGetValue(value, out var reusedInstance) ?? false && reusedInstance is not null ?
+        s_reusedStringInstances?.TryGetValue(value, out var reusedInstance) ?? false && reusedInstance is not null
+        ?
         reusedInstance
         :
         new ElmString(value);
@@ -215,7 +216,8 @@ public abstract record ElmValue
     /// <param name="value">The Unicode code point of the character.</param>
     /// <returns>An <see cref="ElmChar"/> instance.</returns>
     public static ElmValue CharInstance(int value) =>
-        value < s_reusedCharInstances.Length && 0 <= value ?
+        value < s_reusedCharInstances.Length && 0 <= value
+        ?
         s_reusedCharInstances.Span[value]
         :
         new ElmChar(value);
@@ -676,9 +678,10 @@ public abstract record ElmValue
                 :
                 System.Numerics.BigInteger.GreatestCommonDivisor(numerator, denominator);
 
-            return new ElmFloat(
-                numerator: System.Numerics.BigInteger.Abs(numerator) / divisor * sign,
-                denominator: System.Numerics.BigInteger.Abs(denominator) / divisor);
+            return
+                new ElmFloat(
+                    numerator: System.Numerics.BigInteger.Abs(numerator) / divisor * sign,
+                    denominator: System.Numerics.BigInteger.Abs(denominator) / divisor);
         }
 
         /// <summary>
@@ -701,9 +704,10 @@ public abstract record ElmValue
 
             var numeratorAbs = new System.Numerics.BigInteger(abs * denominator);
 
-            return Normalized(
-                numerator: fromDouble < 0 ? -numeratorAbs : numeratorAbs,
-                denominator: new System.Numerics.BigInteger(denominator));
+            return
+                Normalized(
+                    numerator: fromDouble < 0 ? -numeratorAbs : numeratorAbs,
+                    denominator: new System.Numerics.BigInteger(denominator));
         }
 
         /// <inheritdoc/>
@@ -720,6 +724,116 @@ public abstract record ElmValue
     {
         /// <inheritdoc/>
         public override int ContainedNodesCount { get; } = 0;
+    }
+
+    /// <summary>
+    /// Represents a (possibly partially-applied) Elm function as a first-class runtime value.
+    /// Created when a user-defined function is supplied with fewer arguments than its declared
+    /// arity, when a bare reference to a function with at least one parameter escapes as a
+    /// value, or when a lambda expression is evaluated.
+    /// <para />
+    /// <see cref="Source"/> identifies the underlying callable: either a top-level function
+    /// declaration or an anonymous lambda. <see cref="ParameterCount"/> is the total arity
+    /// expected by that source. <see cref="ArgumentsAlreadyCollected"/> holds the arguments
+    /// supplied so far, with <c>Count</c> strictly less than <see cref="ParameterCount"/>
+    /// (saturated applications never travel as values).
+    /// <see cref="CapturedBindings"/> is a snapshot of the local-binding environment at the
+    /// moment the closure was created; it is restored when the closure is finally invoked, so
+    /// lambdas correctly close over let-bindings and enclosing function parameters.
+    /// <see cref="CapturedTopLevel"/> records the surrounding top-level declaration name so
+    /// that runtime errors raised after the closure is invoked produce coherent stack traces.
+    /// </summary>
+    public record ElmFunction(
+        ElmFunction.SourceRef Source,
+        int ParameterCount,
+        IReadOnlyList<ElmValue> ArgumentsAlreadyCollected,
+        IReadOnlyDictionary<string, ElmValue> CapturedBindings,
+        Pine.Core.CodeAnalysis.DeclQualifiedName CapturedTopLevel)
+        : ElmValue
+    {
+        /// <summary>
+        /// Identifies the body that will be evaluated once the closure is fully applied.
+        /// </summary>
+        public abstract record SourceRef
+        {
+            /// <summary>
+            /// A reference to a user-defined function declaration. <see cref="Name"/> is the
+            /// fully-qualified name used for stack-trace rendering and the infinite-recursion
+            /// detector; <see cref="Implementation"/> carries the parameter patterns and body.
+            /// </summary>
+            public sealed record Declared(
+                Pine.Core.CodeAnalysis.DeclQualifiedName Name,
+                Pine.Core.Elm.ElmSyntax.SyntaxModel.FunctionImplementation Implementation)
+                : SourceRef;
+
+            /// <summary>
+            /// An anonymous lambda expression. Stack traces and the infinite-recursion detector
+            /// use a synthetic name derived from <see cref="Pine.Core.Elm.ElmSyntax.SyntaxModel.LambdaStruct.BackslashLocation"/>.
+            /// </summary>
+            public sealed record Lambda(
+                Pine.Core.Elm.ElmSyntax.SyntaxModel.LambdaStruct LambdaStruct)
+                : SourceRef;
+        }
+
+        /// <inheritdoc/>
+        public override int ContainedNodesCount { get; } =
+            ArgumentsAlreadyCollected.Sum(arg => 1 + arg.ContainedNodesCount);
+
+        /// <inheritdoc/>
+        public virtual bool Equals(ElmFunction? other)
+        {
+            if (ReferenceEquals(this, other))
+                return true;
+
+            if (other is null)
+                return false;
+
+            if (!Source.Equals(other.Source))
+                return false;
+
+            if (ParameterCount != other.ParameterCount)
+                return false;
+
+            if (ArgumentsAlreadyCollected.Count != other.ArgumentsAlreadyCollected.Count)
+                return false;
+
+            for (var i = 0; i < ArgumentsAlreadyCollected.Count; i++)
+            {
+                if (!ArgumentsAlreadyCollected[i].Equals(other.ArgumentsAlreadyCollected[i]))
+                    return false;
+            }
+
+            if (!CapturedTopLevel.Equals(other.CapturedTopLevel))
+                return false;
+
+            if (CapturedBindings.Count != other.CapturedBindings.Count)
+                return false;
+
+            foreach (var kvp in CapturedBindings)
+            {
+                if (!other.CapturedBindings.TryGetValue(kvp.Key, out var otherValue))
+                    return false;
+
+                if (!kvp.Value.Equals(otherValue))
+                    return false;
+            }
+
+            return true;
+        }
+
+        /// <inheritdoc/>
+        public override int GetHashCode()
+        {
+            var hash = new System.HashCode();
+
+            hash.Add(Source);
+            hash.Add(ParameterCount);
+            hash.Add(ArgumentsAlreadyCollected.Count);
+            hash.Add(CapturedTopLevel);
+            hash.Add(CapturedBindings.Count);
+
+            return hash.ToHashCode();
+        }
     }
 
     /// <summary>
@@ -752,7 +866,8 @@ public abstract record ElmValue
                 ("(" + string.Join(", ", list.Items.Select(item => RenderAsElmExpression(item).expressionString)) + ")",
                 needsParens: false)
                 :
-                ("[ " + string.Join(", ", list.Items.Select(item => RenderAsElmExpression(item).expressionString)) + " ]",
+                ("[ " + string.Join(", ", list.Items.Select(item => RenderAsElmExpression(item).expressionString)) +
+                " ]",
                 needsParens: false),
 
                 ElmString stringValue =>
@@ -763,8 +878,12 @@ public abstract record ElmValue
                 ?
                 ("{}", needsParens: false)
                 :
-                ("{ " + string.Join(", ", record.Fields.Select(field =>
-                field.FieldName + " = " + RenderAsElmExpression(field.Value).expressionString)) + " }",
+                ("{ " +
+                string.Join(
+                    ", ",
+                    record.Fields.Select(
+                        field =>
+                        field.FieldName + " = " + RenderAsElmExpression(field.Value).expressionString)) + " }",
                 needsParens: false),
 
                 ElmTag tag =>
@@ -781,6 +900,9 @@ public abstract record ElmValue
 
                 ElmInternal internalValue =>
                 ("<" + internalValue.Value + ">", needsParens: false),
+
+                ElmFunction =>
+                ("<function>", needsParens: false),
 
                 _ =>
                 throw new NotImplementedException(
@@ -828,7 +950,10 @@ public abstract record ElmValue
     public static string RenderCharAsElmExpression(int charValue)
     {
         return
-            charValue is 39 ? "\\'" : // single quote must be escaped in Elm char literals
+            charValue is 39
+            ?
+            "\\'"
+            : // single quote must be escaped in Elm char literals
             CharDefaultEscaping(charValue) ??
             char.ConvertFromUtf32(charValue);
     }
@@ -878,7 +1003,9 @@ public abstract record ElmValue
                 var setItems = singleArgumentDictToList.Select(field => field.key).ToList();
 
                 return
-                    ("Set.fromList [" + string.Join(",", setItems.Select(RenderAsElmExpression).Select(ApplyNeedsParens)) + "]",
+                    ("Set.fromList [" +
+                    string.Join(",", setItems.Select(RenderAsElmExpression).Select(ApplyNeedsParens)) +
+                    "]",
                     needsParens: true);
             }
         }
@@ -906,9 +1033,15 @@ public abstract record ElmValue
 
         return
             ("Dict.fromList [" +
-            string.Join(",",
-            dictToList
-            .Select(field => "(" + RenderAsElmExpression(field.key).expressionString + "," + RenderAsElmExpression(field.value).expressionString + ")")) + "]",
+            string.Join(
+                ",",
+                dictToList
+                .Select(
+                    field =>
+                    "(" + RenderAsElmExpression(field.key).expressionString + "," +
+                    RenderAsElmExpression(field.value).expressionString +
+                    ")")) +
+            "]",
             needsParens: true);
     }
 
