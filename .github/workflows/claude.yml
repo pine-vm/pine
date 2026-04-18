@@ -1,38 +1,29 @@
-name: "Copilot Setup Steps"
+name: Claude Code
 
-# https://docs.github.com/en/enterprise-cloud@latest/copilot/customizing-copilot/customizing-the-development-environment-for-copilot-coding-agent
-
-# Allow testing of the setup steps from your repository's "Actions" tab.
-on: workflow_dispatch
+on:
+  issue_comment:
+    types: [created]
+  pull_request_review_comment:
+    types: [created]
+  issues:
+    types: [opened, assigned]
+  pull_request_review:
+    types: [submitted]
 
 jobs:
-  # The job MUST be called `copilot-setup-steps` or it will not be picked up by Copilot.
-  copilot-setup-steps:
+  claude:
+    if: |
+      (github.event_name == 'issue_comment' && contains(github.event.comment.body, '@claude')) ||
+      (github.event_name == 'pull_request_review_comment' && contains(github.event.comment.body, '@claude')) ||
+      (github.event_name == 'pull_request_review' && contains(github.event.review.body, '@claude')) ||
+      (github.event_name == 'issues' && (contains(github.event.issue.body, '@claude') || contains(github.event.issue.title, '@claude')))
     runs-on: ubuntu-latest
-
-    # Set the permissions to the lowest permissions possible needed for your steps.
-    # Copilot will be given its own token for its operations.
     permissions:
-      # If you want to clone the repository as part of your setup steps, for example to install dependencies, you'll need the `contents: read` permission. If you don't clone the repository in your setup steps, Copilot will do this for you automatically after the steps complete.
-      contents: read
-
-    env:
-      COPILOT_AGENT_FIREWALL_ALLOW_LIST_ADDITIONS: >
-        api.nuget.org,
-        globalcdn.nuget.org,
-        dist.nuget.org,
-        symbols.nuget.org,
-        www.nuget.org,
-        package.elm-lang.org,
-        crl3.digicert.com,
-        ocsp.digicert.com,
-        pine-vm.org,
-        www.microsoft.com,
-        learn.microsoft.com,
-        microsoft.github.io/language-server-protocol
-
-    # You can define any steps you want, and they will run before the agent starts.
-    # If you do not check out your code, Copilot will do this for you.
+      contents: write
+      pull-requests: write
+      issues: write
+      id-token: write
+      actions: read # Required for Claude to read CI results on PRs
     steps:
 
       - name: Avoid git mutating files on checkout
@@ -97,10 +88,42 @@ jobs:
       - name: Check elm-test-rs installation
         run: elm-test-rs --version
 
-      - name: Checkout code
+      - name: Checkout repository
         uses: actions/checkout@v6
 
       - name: Prebuild
         working-directory: ./implement/
         run: |
           dotnet  run  --project ./prebuild/prebuild.csproj  --configuration Release
+
+      - name: Run Claude Code
+        id: claude
+        uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+
+          claude_args: |
+            --model claude-opus-4-7
+            --max-turns 30
+            --system-prompt "Read all of .github/copilot-instructions.md and follow those instructions."
+
+          # Optional: Customize the trigger phrase (default: @claude)
+          # trigger_phrase: "/claude"
+
+          # Optional: Trigger when specific user is assigned to an issue
+          # assignee_trigger: "claude-bot"
+
+          # Optional: Configure Claude's behavior with CLI arguments
+          # claude_args: |
+          #   --model claude-opus-4-1-20250805
+          #   --max-turns 10
+          #   --allowedTools "Bash(npm install),Bash(npm run build),Bash(npm run test:*),Bash(npm run lint:*)"
+          #   --system-prompt "Follow our coding standards. Ensure all new code has tests. Use TypeScript for new files."
+
+          # Optional: Advanced settings configuration
+          # settings: |
+          #   {
+          #     "env": {
+          #       "NODE_ENV": "test"
+          #     }
+          #   }
