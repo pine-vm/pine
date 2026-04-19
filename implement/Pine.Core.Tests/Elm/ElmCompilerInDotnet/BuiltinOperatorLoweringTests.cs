@@ -706,6 +706,125 @@ public class BuiltinOperatorLoweringTests
         rendered.Should().NotContain("Pine_builtin.equal");
     }
 
+    // ============================================================
+    // Lowering of `&&` / `||` / `Basics.and` / `Basics.or` to
+    // short-circuiting `if-then-else` expressions.
+    //
+    // In Elm:
+    //   `a && b`  ≡  `if a then b else False`
+    //   `a || b`  ≡  `if a then True else b`
+    //
+    // Lowering them to `if-then-else` makes the short-circuiting evaluation
+    // semantics explicit at the syntax level, removes a redundant builtin
+    // dispatch, and gives downstream stages a single canonical form to
+    // optimize (e.g. constant folding when the condition reduces to a literal
+    // Bool).
+    // ============================================================
+
+    [Fact]
+    public void Lowers_bool_and_operator_to_if_then_else()
+    {
+        var loweredModule =
+            LowerOperators(
+                """
+                module Test exposing (..)
+
+
+                andBool : Bool -> Bool -> Bool
+                andBool left right =
+                    left && right
+                """);
+
+        RenderCanonicalized(loweredModule).Should().Be(
+            """
+            Test.andBool : Bool -> Bool -> Bool
+            Test.andBool left right =
+                if left then
+                    right
+
+                else
+                    Basics.False
+            """.Trim());
+    }
+
+    [Fact]
+    public void Lowers_Basics_and_application_to_if_then_else()
+    {
+        var loweredModule =
+            LowerOperators(
+                """
+                module Test exposing (..)
+
+
+                andBool : Bool -> Bool -> Bool
+                andBool left right =
+                    Basics.and left right
+                """);
+
+        RenderCanonicalized(loweredModule).Should().Be(
+            """
+            Test.andBool : Bool -> Bool -> Bool
+            Test.andBool left right =
+                if left then
+                    right
+
+                else
+                    Basics.False
+            """.Trim());
+    }
+
+    [Fact]
+    public void Lowers_bool_or_operator_to_if_then_else()
+    {
+        var loweredModule =
+            LowerOperators(
+                """
+                module Test exposing (..)
+
+
+                orBool : Bool -> Bool -> Bool
+                orBool left right =
+                    left || right
+                """);
+
+        RenderCanonicalized(loweredModule).Should().Be(
+            """
+            Test.orBool : Bool -> Bool -> Bool
+            Test.orBool left right =
+                if left then
+                    Basics.True
+
+                else
+                    right
+            """.Trim());
+    }
+
+    [Fact]
+    public void Lowers_Basics_or_application_to_if_then_else()
+    {
+        var loweredModule =
+            LowerOperators(
+                """
+                module Test exposing (..)
+
+
+                orBool : Bool -> Bool -> Bool
+                orBool left right =
+                    Basics.or left right
+                """);
+
+        RenderCanonicalized(loweredModule).Should().Be(
+            """
+            Test.orBool : Bool -> Bool -> Bool
+            Test.orBool left right =
+                if left then
+                    Basics.True
+
+                else
+                    right
+            """.Trim());
+    }
+
     private static SyntaxTypes.File LowerOperators(string moduleText)
     {
         var parsedModule =
