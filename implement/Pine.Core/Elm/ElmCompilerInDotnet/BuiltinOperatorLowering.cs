@@ -29,6 +29,7 @@ public static class BuiltinOperatorLowering
         IntLe,
         IntGe,
         BoolAnd,
+        BoolOr,
     }
 
     /// <summary>
@@ -345,6 +346,27 @@ public static class BuiltinOperatorLowering
                 {
                     return merged;
                 }
+
+                // Lower `a && b` to `if a then b else False`. This expresses the
+                // short-circuiting semantics of `&&` directly in terms of the
+                // primitive conditional expression and gives downstream stages a
+                // single canonical form to optimize (e.g., constant folding when
+                // `a` reduces to a literal Bool).
+                return
+                    BuildIfBlock(
+                        rewrittenArguments[1],
+                        rewrittenArguments[2],
+                        WrapNode(BuildBasicsBoolReference(value: false)));
+            }
+            else if (loweredOp is LoweredOperator.BoolOr)
+            {
+                // Lower `a || b` to `if a then True else b`. As with `&&`, this
+                // makes the short-circuiting semantics of `||` explicit.
+                return
+                    BuildIfBlock(
+                        rewrittenArguments[1],
+                        WrapNode(BuildBasicsBoolReference(value: true)),
+                        rewrittenArguments[2]);
             }
             else if (expectedType is TypeInference.InferredType.IntType ||
                 ProvesIntegerBuiltin(leftType, rightType))
@@ -715,6 +737,7 @@ public static class BuiltinOperatorLowering
                 "le" => LoweredOperator.IntLe,
                 "ge" => LoweredOperator.IntGe,
                 "and" => LoweredOperator.BoolAnd,
+                "or" => LoweredOperator.BoolOr,
 
                 _ =>
                 null
@@ -734,6 +757,7 @@ public static class BuiltinOperatorLowering
                 "<=" => LoweredOperator.IntLe,
                 ">=" => LoweredOperator.IntGe,
                 "&&" => LoweredOperator.BoolAnd,
+                "||" => LoweredOperator.BoolOr,
 
                 _ =>
                 null
@@ -760,6 +784,34 @@ public static class BuiltinOperatorLowering
 
         return new SyntaxTypes.Expression.Application([builtinReference, operands]);
     }
+
+    /// <summary>
+    /// Wraps an <see cref="SyntaxTypes.Expression"/> in a synthetic
+    /// <see cref="Node{T}"/> at <see cref="s_zeroRange"/> for use as a child of
+    /// generated syntax produced by lowering.
+    /// </summary>
+    private static Node<SyntaxTypes.Expression> WrapNode(SyntaxTypes.Expression expression) =>
+        new(s_zeroRange, expression);
+
+    /// <summary>
+    /// Builds a reference to <c>Basics.True</c> or <c>Basics.False</c>, used by the
+    /// <see cref="LoweredOperator.BoolAnd"/> / <see cref="LoweredOperator.BoolOr"/>
+    /// lowerings that translate <c>&amp;&amp;</c> / <c>||</c> (and the equivalent
+    /// <c>Basics.and</c> / <c>Basics.or</c> applications) into <c>if-then-else</c>
+    /// expressions.
+    /// </summary>
+    private static SyntaxTypes.Expression BuildBasicsBoolReference(bool value) =>
+        new SyntaxTypes.Expression.FunctionOrValue(["Basics"], value ? "True" : "False");
+
+    /// <summary>
+    /// Builds an <c>if-then-else</c> expression node from the supplied condition,
+    /// then-branch and else-branch expression nodes.
+    /// </summary>
+    private static SyntaxTypes.Expression BuildIfBlock(
+        Node<SyntaxTypes.Expression> condition,
+        Node<SyntaxTypes.Expression> thenBranch,
+        Node<SyntaxTypes.Expression> elseBranch) =>
+        new SyntaxTypes.Expression.IfBlock(condition, thenBranch, elseBranch);
 
     private static SyntaxTypes.Expression BuildBuiltinSubtractionApplication(
         Node<SyntaxTypes.Expression> left,
