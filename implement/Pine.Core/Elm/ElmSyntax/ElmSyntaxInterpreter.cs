@@ -443,6 +443,110 @@ public partial class ElmSyntaxInterpreter
     }
 
     /// <summary>
+    /// As <see cref="Interpret(DeclQualifiedName, IReadOnlyList{ElmValue}, IReadOnlyDictionary{DeclQualifiedName, SyntaxModel.Declaration})"/>,
+    /// but additionally returns an <see cref="ElmSyntaxInterpreterPerformanceCounters"/>
+    /// snapshot describing how much work the interpreter performed (trampoline iterations,
+    /// direct vs function-value applications, Pine_builtin invocations).
+    /// </summary>
+    /// <returns>
+    /// A tuple of the usual interpretation <see cref="Result{ErrT, OkT}"/> and the
+    /// counters snapshot. Counters are populated even when the interpretation result is
+    /// an error, reflecting the work performed up to the point of failure.
+    /// </returns>
+    public static (Result<ElmInterpretationError, ElmValue> Result, ElmSyntaxInterpreterPerformanceCounters Counters)
+        InterpretWithCounters(
+            DeclQualifiedName functionName,
+            IReadOnlyList<ElmValue> arguments,
+            IReadOnlyDictionary<DeclQualifiedName, SyntaxModel.Declaration> declarations)
+    {
+        var interpreter = new ElmSyntaxInterpreter();
+        var invocationCounter = new InvocationCounter();
+
+        var combined =
+            interpreter.CombineResolvers(
+                [
+                app => interpreter.PineBuiltinResolverCounting(app, invocationCounter),
+                app => interpreter.UserDefinedResolver(app, declarations),
+                ]);
+
+        var rootContext =
+            new ApplicationContext(
+                CurrentTopLevel: functionName,
+                LocalBindings: ImmutableDictionary<string, ElmValue>.Empty);
+
+        var application =
+            new Application(
+                FunctionName: functionName,
+                Arguments: arguments,
+                Context: rootContext);
+
+        var result =
+            RunTrampolineAsResult(
+                initialExpression: null,
+                initialEnv: rootContext,
+                initialApplication: application,
+                resolveApplication: combined,
+                infixOperators: BuildInfixOperatorMap(declarations),
+                invocationCounter: invocationCounter);
+
+        return (result, invocationCounter.ToReadOnly());
+    }
+
+    /// <summary>
+    /// As <see cref="ParseAndInterpret(string, IReadOnlyDictionary{DeclQualifiedName, SyntaxModel.Declaration})"/>,
+    /// but additionally returns an <see cref="ElmSyntaxInterpreterPerformanceCounters"/>
+    /// snapshot describing how much work the interpreter performed.
+    /// </summary>
+    /// <returns>
+    /// A tuple of the usual interpretation <see cref="Result{ErrT, OkT}"/> and the
+    /// counters snapshot. Parse failures yield zero counters because the trampoline never ran.
+    /// </returns>
+    public static (Result<ElmInterpretationError, ElmValue> Result, ElmSyntaxInterpreterPerformanceCounters Counters)
+        ParseAndInterpretWithCounters(
+            string rootExpressionText,
+            IReadOnlyDictionary<DeclQualifiedName, SyntaxModel.Declaration> declarations)
+    {
+        var parseResult = ParseRootExpression(rootExpressionText);
+
+        if (parseResult.IsErrOrNull() is { } parseErr)
+        {
+            return (new ElmInterpretationError(parseErr, []), default);
+        }
+
+        if (parseResult.IsOkOrNull() is not { } rootExpression)
+        {
+            throw new System.NotImplementedException(
+                "Unexpected parse result type: " + parseResult.GetType().FullName);
+        }
+
+        var interpreter = new ElmSyntaxInterpreter();
+        var invocationCounter = new InvocationCounter();
+
+        var combined =
+            interpreter.CombineResolvers(
+                [
+                app => interpreter.PineBuiltinResolverCounting(app, invocationCounter),
+                app => interpreter.UserDefinedResolver(app, declarations),
+                ]);
+
+        var rootContext =
+            new ApplicationContext(
+                CurrentTopLevel: new DeclQualifiedName([], ""),
+                LocalBindings: ImmutableDictionary<string, ElmValue>.Empty);
+
+        var result =
+            RunTrampolineAsResult(
+                initialExpression: rootExpression,
+                initialEnv: rootContext,
+                initialApplication: null,
+                resolveApplication: combined,
+                infixOperators: BuildInfixOperatorMap(declarations),
+                invocationCounter: invocationCounter);
+
+        return (result, invocationCounter.ToReadOnly());
+    }
+
+    /// <summary>
     /// Parses <paramref name="rootExpressionText"/> as an Elm expression by wrapping it in a
     /// synthetic module and extracting the body of the sole function declaration.
     /// </summary>
@@ -690,7 +794,8 @@ public partial class ElmSyntaxInterpreter
         ApplicationContext initialEnv,
         Application? initialApplication,
         System.Func<Application, ApplicationResolution> resolveApplication,
-        IReadOnlyDictionary<string, DeclQualifiedName>? infixOperators)
+        IReadOnlyDictionary<string, DeclQualifiedName>? infixOperators,
+        InvocationCounter? invocationCounter = null)
     {
         try
         {
@@ -700,7 +805,8 @@ public partial class ElmSyntaxInterpreter
                     initialEnv: initialEnv,
                     initialApplication: initialApplication,
                     resolveApplication: resolveApplication,
-                    infixOperators: infixOperators);
+                    infixOperators: infixOperators,
+                    invocationCounter: invocationCounter);
         }
         catch (ElmInterpretationException interpretationException)
         {
@@ -713,10 +819,11 @@ public partial class ElmSyntaxInterpreter
         ApplicationContext initialEnv,
         Application? initialApplication,
         System.Func<Application, ApplicationResolution> resolveApplication,
-        IReadOnlyDictionary<string, DeclQualifiedName>? infixOperators)
+        IReadOnlyDictionary<string, DeclQualifiedName>? infixOperators,
+        InvocationCounter? invocationCounter = null)
     {
         var kstack = new Stack<Kont>();
-        var invocationCounter = new InvocationCounter();
+        invocationCounter ??= new InvocationCounter();
 
         // Either: (currentExpr, currentEnv) is the next thing to evaluate ("Eval" mode),
         // or currentValue holds the value about to be returned to the top kont ("Return" mode).
@@ -763,6 +870,8 @@ public partial class ElmSyntaxInterpreter
 
         while (true)
         {
+            invocationCounter.InstructionLoopCount++;
+
             if (currentExpr is not null)
             {
                 // ---- Eval mode ------------------------------------------------
@@ -1649,10 +1758,48 @@ public partial class ElmSyntaxInterpreter
     /// Mutable counter threaded through <see cref="ApplyResolvedCall"/> and
     /// <see cref="ApplyFunctionOrValue"/> so all function-body entries can be counted against
     /// a single origin and the <see cref="InfiniteRecursionCheckInterval"/> check can fire.
+    /// Also accumulates the high-level performance counters surfaced via
+    /// <see cref="ElmSyntaxInterpreterPerformanceCounters"/>.
     /// </summary>
     private sealed class InvocationCounter
     {
+        /// <summary>
+        /// Number of user-defined function bodies entered. Used by the periodic
+        /// infinite-recursion check.
+        /// </summary>
         public int Count;
+
+        /// <summary>Iterations of the trampoline <c>while(true)</c> loop.</summary>
+        public long InstructionLoopCount;
+
+        /// <summary>
+        /// Number of direct (name-based) function applications dispatched through
+        /// <see cref="ApplyFunctionOrValue"/>.
+        /// </summary>
+        public long DirectFunctionApplicationCount;
+
+        /// <summary>
+        /// Number of applications of an evaluated function value (closure) dispatched through
+        /// <see cref="ApplyFunctionValue"/>.
+        /// </summary>
+        public long FunctionValueApplicationCount;
+
+        /// <summary>
+        /// Number of applications resolved by <see cref="PineBuiltinResolver(Application)"/>
+        /// (i.e. forwarded to <see cref="KernelFunction"/>).
+        /// </summary>
+        public long PineBuiltinInvocationCount;
+
+        /// <summary>
+        /// Snapshots the accumulated counters as a public, immutable
+        /// <see cref="ElmSyntaxInterpreterPerformanceCounters"/> value.
+        /// </summary>
+        public ElmSyntaxInterpreterPerformanceCounters ToReadOnly() =>
+            new(
+                InstructionLoopCount: InstructionLoopCount,
+                DirectFunctionApplicationCount: DirectFunctionApplicationCount,
+                FunctionValueApplicationCount: FunctionValueApplicationCount,
+                PineBuiltinInvocationCount: PineBuiltinInvocationCount);
     }
 
     private static ApplyCallOutcome ApplyFunctionOrValue(
@@ -1663,6 +1810,8 @@ public partial class ElmSyntaxInterpreter
         Stack<Kont> kstack,
         InvocationCounter invocationCounter)
     {
+        invocationCounter.DirectFunctionApplicationCount++;
+
         var application =
             new Application(
                 FunctionName:
@@ -1851,6 +2000,8 @@ public partial class ElmSyntaxInterpreter
         Stack<Kont> kstack,
         InvocationCounter invocationCounter)
     {
+        invocationCounter.FunctionValueApplicationCount++;
+
         if (functionValue is not ElmValue.ElmFunction closure)
         {
             if (newArguments.Count is 0)
@@ -2756,6 +2907,26 @@ public partial class ElmSyntaxInterpreter
                     "Failed decoding kernel function '" + functionName + "' result as Elm value: " + err));
 
         return new ApplicationResolution.Resolved(resultElm);
+    }
+
+    /// <summary>
+    /// As <see cref="PineBuiltinResolver(Application)"/>, but additionally increments
+    /// <see cref="InvocationCounter.PineBuiltinInvocationCount"/> on every successful
+    /// resolution. Used by the *<c>WithCounters</c> public entry points to surface the
+    /// number of <c>Pine_builtin</c> / <c>Pine_kernel</c> invocations.
+    /// </summary>
+    private ApplicationResolution? PineBuiltinResolverCounting(
+        Application application,
+        InvocationCounter invocationCounter)
+    {
+        var resolution = PineBuiltinResolver(application);
+
+        if (resolution is not null)
+        {
+            invocationCounter.PineBuiltinInvocationCount++;
+        }
+
+        return resolution;
     }
 
     /// <summary>
