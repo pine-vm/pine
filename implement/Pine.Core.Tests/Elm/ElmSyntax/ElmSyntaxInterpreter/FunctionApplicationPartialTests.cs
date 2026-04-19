@@ -2,8 +2,6 @@ using AwesomeAssertions;
 using Pine.Core.Elm;
 using Xunit;
 
-using ElmInterpreter = Pine.Core.Elm.ElmSyntax.ElmSyntaxInterpreter;
-
 namespace Pine.Core.Tests.Elm.ElmSyntax.ElmSyntaxInterpreter;
 
 /// <summary>
@@ -33,21 +31,13 @@ namespace Pine.Core.Tests.Elm.ElmSyntax.ElmSyntaxInterpreter;
 public class FunctionApplicationPartialTests
 {
     /// <summary>
-    /// Parses <paramref name="elmModuleText"/> for its top-level declarations and then evaluates
-    /// <paramref name="expression"/> against those declarations using
-    /// <see cref="ElmInterpreter.ParseAndInterpret(string, System.Collections.Generic.IReadOnlyDictionary{Pine.Core.CodeAnalysis.DeclQualifiedName, Pine.Core.Elm.ElmSyntax.SyntaxModel.Declaration})"/>.
-    /// Returns the rendered Elm-expression form of the resulting value.
+    /// Delegates to <see cref="InterpreterTestHelper.EvaluateInModuleOrCrash(string, string)"/>
+    /// and renders the resulting value back to its Elm-expression form.
     /// </summary>
-    private static string Evaluate(string elmModuleText, string expression)
-    {
-        var declarations = InterpreterTestHelper.ParseDeclarations(elmModuleText);
-
-        var result =
-            ElmInterpreter.ParseAndInterpret(expression, declarations)
-            .Extract(err => throw new System.Exception(err.ToString()));
-
-        return ElmValue.RenderAsElmExpression(result).expressionString;
-    }
+    private static string Evaluate(string elmModuleText, string expression) =>
+        ElmValue.RenderAsElmExpression(
+            InterpreterTestHelper.EvaluateInModuleOrCrash(expression, elmModuleText))
+        .expressionString;
 
     /// <summary>
     /// A two-argument function applied to one argument at one site, then to the second at a
@@ -252,7 +242,7 @@ public class FunctionApplicationPartialTests
 
     /// <summary>
     /// A bare lambda used directly at a call site. Confirms that
-    /// <see cref="Pine.Core.Elm.ElmSyntax.SyntaxModel.Expression.LambdaExpression"/> is a
+    /// <see cref="Core.Elm.ElmSyntax.SyntaxModel.Expression.LambdaExpression"/> is a
     /// callable value of its own.
     /// </summary>
     [Fact]

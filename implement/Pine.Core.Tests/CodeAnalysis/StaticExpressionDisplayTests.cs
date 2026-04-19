@@ -513,7 +513,7 @@ public class StaticExpressionDisplayTests
                         PineValueClass.Create([]))),
                 Expected = """
                 decl_a =
-                    [Blob 0x01010307, Blob 0xab010307]
+                    [ Blob 0x01010307, Blob 0xab010307 ]
                 """
             },
 

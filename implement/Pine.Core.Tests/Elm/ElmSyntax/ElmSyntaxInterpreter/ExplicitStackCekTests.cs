@@ -42,7 +42,7 @@ public class ExplicitStackCekTests
                 loop 100000 0
             """;
 
-        var declarations = InterpreterTestHelper.ParseDeclarations(elmModuleText);
+        var declarations = InterpreterTestHelper.ParseDeclarationsRemovingModuleNames(elmModuleText);
 
         var mainBody = InterpreterTestHelper.GetFunctionBody(declarations, "main");
 
@@ -82,7 +82,7 @@ public class ExplicitStackCekTests
                 Debug.todo "boom"
             """;
 
-        var declarations = InterpreterTestHelper.ParseDeclarations(elmModuleText);
+        var declarations = InterpreterTestHelper.ParseDeclarationsRemovingModuleNames(elmModuleText);
 
         // Custom resolver: Debug.todo raises an ordinary exception that the interpreter
         // must catch and rewrap with the current Elm call stack.
@@ -153,7 +153,7 @@ public class ExplicitStackCekTests
                 -"not a number"
             """;
 
-        var declarations = InterpreterTestHelper.ParseDeclarations(elmModuleText);
+        var declarations = InterpreterTestHelper.ParseDeclarationsRemovingModuleNames(elmModuleText);
 
         var mainBody = InterpreterTestHelper.GetFunctionBody(declarations, "main");
 

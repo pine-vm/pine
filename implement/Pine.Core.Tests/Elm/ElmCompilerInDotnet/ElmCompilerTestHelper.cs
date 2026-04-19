@@ -567,7 +567,10 @@ public class ElmCompilerTestHelper
             StaticExpressionDisplay.RenderToString(
                 expression: functionBody,
                 valueRenderer:
-                val => StaticExpressionDisplay.RenderValueAsExpression(val, StaticExpressionDisplay.DefaultBlobRenderer),
+                val => StaticExpressionDisplay.RenderValueAsExpression(
+                    val,
+                    blobRenderer: StaticExpressionDisplay.DefaultBlobRenderer,
+                    pineBlobRenderer: StaticExpressionDisplay.DefaultPineBlobRenderer),
                 functionApplicationRenderer: FunctionApplicationRenderer,
                 replaceExprWithIdentifier: ReplaceExprWithIdentifier,
                 indentString: "    ",

@@ -152,7 +152,7 @@ public static class ElmValueEncoding
             }
         }
 
-        return "skipped larger blob of length " + blobValue.Bytes.Length;
+        return new ElmValue.ElmPineBlob(blobValue.Bytes);
     }
 
     /// <summary>
@@ -642,6 +642,16 @@ public static class ElmValueEncoding
                     ElmValue.ElmBytesTypeTagNameAsValue,
                     PineValue.List([PineValue.Blob(elmBytes.Value)])
                     ]),
+
+                ElmValue.ElmPineBlob elmPineBlob =>
+                PineValue.Blob(elmPineBlob.Value),
+
+                // The decoder represents an empty blob as the sentinel ElmInternal("empty-blob")
+                // (see <see cref="s_emptyBlob"/>). Reverse that mapping here so kernel functions
+                // like `take`/`skip` that produce an empty blob can still feed back into other
+                // kernel calls without the encoder throwing.
+                ElmValue.ElmInternal { Value: "empty-blob" } =>
+                PineValue.EmptyBlob,
 
                 ElmValue.ElmFloat elmFloat =>
                 PineValue.List(
