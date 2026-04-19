@@ -120,10 +120,55 @@ public partial class Inlining
         ImmutableList<Node<SyntaxTypes.Declaration>> GeneratedDeclarations);
 
 
+    /// <summary>
+    /// Default maximum number of optimization rounds for
+    /// <see cref="Inline(ImmutableDictionary{DeclQualifiedName, SyntaxTypes.Declaration}, Config)"/>.
+    /// </summary>
+    public const int DefaultMaxOptimizationRounds = 3;
+
+    /// <summary>
+    /// Runs the combined specialization-and-inlining pipeline with the
+    /// <see cref="DefaultMaxOptimizationRounds"/> limit, repeating transformations
+    /// until the declaration dictionary converges (structural equality) or the limit is reached.
+    /// </summary>
     public static Result<string, ImmutableDictionary<DeclQualifiedName, SyntaxTypes.Declaration>> Inline(
         ImmutableDictionary<DeclQualifiedName, SyntaxTypes.Declaration> declarations,
         Config config) =>
-        RewriteModules(declarations, config, PipelineStage.Combined);
+        Inline(declarations, config, maxRounds: DefaultMaxOptimizationRounds);
+
+    /// <summary>
+    /// Runs the combined specialization-and-inlining pipeline up to <paramref name="maxRounds"/>
+    /// times, stopping early when the declaration dictionary no longer changes (structural equality).
+    /// </summary>
+    public static Result<string, ImmutableDictionary<DeclQualifiedName, SyntaxTypes.Declaration>> Inline(
+        ImmutableDictionary<DeclQualifiedName, SyntaxTypes.Declaration> declarations,
+        Config config,
+        int maxRounds)
+    {
+        var current = declarations;
+
+        for (var round = 0; round < maxRounds; round++)
+        {
+            var result = RewriteModules(current, config, PipelineStage.Combined);
+
+            if (result.IsErrOrNull() is { } err)
+                return err;
+
+            if (result.IsOkOrNull() is not { } next)
+                throw new NotImplementedException("Unexpected result type");
+
+            // Structural equality: if the output matches the input the pipeline has converged.
+            if (next.Count == current.Count &&
+                next.All(kvp => current.TryGetValue(kvp.Key, out var prev) && prev.Equals(kvp.Value)))
+            {
+                return next;
+            }
+
+            current = next;
+        }
+
+        return current;
+    }
 
     internal static Result<string, ImmutableDictionary<DeclQualifiedName, SyntaxTypes.Declaration>> RunSpecializationStage(
         ImmutableDictionary<DeclQualifiedName, SyntaxTypes.Declaration> declarations,
@@ -188,7 +233,7 @@ public partial class Inlining
             declarations
             .GroupBy(
                 kvp => kvp.Key.Namespaces,
-                EnumerableExtensions.EqualityComparer<IReadOnlyList<string>>());
+                EnumerableExtensions.EqualityComparer<ModuleName>());
 
         var resultBuilder =
             ImmutableDictionary.CreateBuilder<DeclQualifiedName, SyntaxTypes.Declaration>();
@@ -428,7 +473,7 @@ public partial class Inlining
 
     private static ImmutableDictionary<DeclQualifiedName, SyntaxTypes.Declaration> InlineDeclarations(
         ImmutableDictionary<DeclQualifiedName, SyntaxTypes.Declaration> moduleDecls,
-        IReadOnlyList<string> moduleName,
+        ModuleName moduleName,
         InliningContext context)
     {
         var moduleLevelNames = CollectModuleLevelDeclarationNames(moduleDecls);
@@ -664,7 +709,7 @@ public partial class Inlining
             details.Append("]");
         }
 
-        throw new System.InvalidOperationException(details.ToString());
+        throw new InvalidOperationException(details.ToString());
     }
 
     /// <summary>
@@ -3235,12 +3280,57 @@ nextParam:;
             .Where((_, i) => !selectedHigherOrderParamIndices.Contains(i))
             .ToImmutableArray();
 
+        // Step 4: Detect free variables introduced by substitution.
+        // When we substitute invariant parameters with concrete argument expressions,
+        // those expressions may reference local variables from the call site that are
+        // not in scope at the module level. We capture these as extra parameters.
+        var freeVarsInBody = ElmSyntaxTransformations.CollectFreeVariables(
+            qualifiedBody.Value,
+            remainingParams
+                .SelectMany(p => ElmSyntaxTransformations.CollectPatternNames(p.Value))
+                .ToHashSet());
+
+        // Remove names that are in scope at the module level (function names, constructors, etc.)
+        freeVarsInBody.ExceptWith(context.ModuleLevelNames);
+
+        // Also remove names from other modules' declarations that are known
+        // (these would be resolved via qualified references during compilation).
+        // Additionally remove the specialized function's own name (recursive reference).
+        freeVarsInBody.Remove(specializedName);
+
+        var capturedVariables = freeVarsInBody.OrderBy(v => v).ToList();
+
+        var finalBody = qualifiedBody;
+        var finalParams = remainingParams;
+
+        if (capturedVariables.Count > 0)
+        {
+            // Add captured variables as extra parameters at the beginning of the parameter list.
+            var capturedParams =
+                capturedVariables
+                .Select(v => new Node<SyntaxTypes.Pattern>(
+                    ElmSyntaxTransformations.s_zeroRange,
+                    new SyntaxTypes.Pattern.VarPattern(v)))
+                .ToList();
+
+            finalParams = [.. capturedParams, .. remainingParams];
+
+            // Add captured variables as extra arguments to all recursive self-calls
+            // in the body. The recursive calls were already rewritten to use the
+            // specialized name; we now insert the captured args after the function reference.
+            finalBody = AddExtraArgsToSelfCalls(
+                qualifiedBody,
+                specializedName,
+                specializedModuleName,
+                capturedVariables);
+        }
+
         // Create the specialized function as a module-level declaration.
         var specializedImpl =
             new SyntaxTypes.FunctionImplementation(
                 Name: new Node<string>(ElmSyntaxTransformations.s_zeroRange, specializedName),
-                Arguments: remainingParams,
-                Expression: qualifiedBody);
+                Arguments: finalParams,
+                Expression: finalBody);
 
         var specializedFunc =
             new SyntaxTypes.FunctionStruct(
@@ -3262,6 +3352,15 @@ nextParam:;
                     ElmSyntaxTransformations.s_zeroRange,
                     new SyntaxTypes.Expression.FunctionOrValue(specializedModuleName, specializedName))
             };
+
+        // Pass captured variables as arguments (they are in scope at the call site).
+        foreach (var capturedVar in capturedVariables)
+        {
+            callArgs.Add(
+                new Node<SyntaxTypes.Expression>(
+                    ElmSyntaxTransformations.s_zeroRange,
+                    new SyntaxTypes.Expression.FunctionOrValue([], capturedVar)));
+        }
 
         for (var i = 0; i < appArgs.Count; i++)
         {
@@ -3396,11 +3495,44 @@ nextParam:;
             .Where((_, i) => !invariantHigherOrderParamIndices.Contains(i))
             .ToImmutableArray();
 
+        // Detect free variables introduced by substitution (same logic as TrySpecializeRecursiveCall).
+        var freeVarsInBody = ElmSyntaxTransformations.CollectFreeVariables(
+            qualifiedBody.Value,
+            remainingParameters
+                .SelectMany(p => ElmSyntaxTransformations.CollectPatternNames(p.Value))
+                .ToHashSet());
+
+        freeVarsInBody.ExceptWith(context.ModuleLevelNames);
+        freeVarsInBody.Remove(specializedName);
+
+        var capturedVariables = freeVarsInBody.OrderBy(v => v).ToList();
+
+        var finalBody = qualifiedBody;
+        var finalParams = remainingParameters;
+
+        if (capturedVariables.Count > 0)
+        {
+            var capturedParams =
+                capturedVariables
+                .Select(v => new Node<SyntaxTypes.Pattern>(
+                    ElmSyntaxTransformations.s_zeroRange,
+                    new SyntaxTypes.Pattern.VarPattern(v)))
+                .ToList();
+
+            finalParams = [.. capturedParams, .. remainingParameters];
+
+            finalBody = AddExtraArgsToSelfCalls(
+                qualifiedBody,
+                specializedName,
+                specializedModuleName,
+                capturedVariables);
+        }
+
         var specializedImpl =
             new SyntaxTypes.FunctionImplementation(
                 Name: new Node<string>(ElmSyntaxTransformations.s_zeroRange, specializedName),
-                Arguments: remainingParameters,
-                Expression: qualifiedBody);
+                Arguments: finalParams,
+                Expression: finalBody);
 
         var specializedFunc =
             new SyntaxTypes.FunctionStruct(
@@ -3421,6 +3553,15 @@ nextParam:;
                     ElmSyntaxTransformations.s_zeroRange,
                     new SyntaxTypes.Expression.FunctionOrValue(specializedModuleName, specializedName))
             };
+
+        // Pass captured variables as arguments.
+        foreach (var capturedVar in capturedVariables)
+        {
+            callArgs.Add(
+                new Node<SyntaxTypes.Expression>(
+                    ElmSyntaxTransformations.s_zeroRange,
+                    new SyntaxTypes.Expression.FunctionOrValue([], capturedVar)));
+        }
 
         for (var i = 0; i < callArgumentsAfterTagRewrite.Count; i++)
         {
@@ -3725,6 +3866,59 @@ nextParam:;
         return
             new SyntaxTypes.Expression.Application(
                 [.. app.Arguments.Select(a => recurse(a))]);
+    }
+
+    /// <summary>
+    /// Post-processes a specialized function body to insert captured variable arguments
+    /// into all recursive self-calls. The captured variables are inserted right after
+    /// the function reference (before the remaining non-invariant arguments).
+    /// </summary>
+    private static Node<SyntaxTypes.Expression> AddExtraArgsToSelfCalls(
+        Node<SyntaxTypes.Expression> body,
+        string specializedFuncName,
+        ModuleName specializedModuleName,
+        ModuleName capturedVariableNames)
+    {
+        if (capturedVariableNames.Count is 0)
+            return body;
+
+        return
+            ElmSyntaxTransformations.RewriteExpressionTree(
+                body,
+                (app, recurse) =>
+                {
+                    if (app.Arguments.Count > 0 &&
+                        app.Arguments[0].Value is SyntaxTypes.Expression.FunctionOrValue fov &&
+                        fov.Name == specializedFuncName &&
+                        (fov.ModuleName.Count is 0 ||
+                         Enumerable.SequenceEqual(fov.ModuleName, specializedModuleName)))
+                    {
+                        var newArgs = new List<Node<SyntaxTypes.Expression>>
+                        {
+                            app.Arguments[0] // Keep the function reference
+                        };
+
+                        // Insert captured variable references right after the function reference
+                        foreach (var capturedVar in capturedVariableNames)
+                        {
+                            newArgs.Add(
+                                new Node<SyntaxTypes.Expression>(
+                                    ElmSyntaxTransformations.s_zeroRange,
+                                    new SyntaxTypes.Expression.FunctionOrValue([], capturedVar)));
+                        }
+
+                        // Add the remaining arguments (recurse into them)
+                        for (var i = 1; i < app.Arguments.Count; i++)
+                        {
+                            newArgs.Add(recurse(app.Arguments[i]));
+                        }
+
+                        return new SyntaxTypes.Expression.Application([.. newArgs]);
+                    }
+
+                    return new SyntaxTypes.Expression.Application(
+                        [.. app.Arguments.Select(a => recurse(a))]);
+                });
     }
 
     private static Node<SyntaxTypes.Expression> RewriteRecursiveCallsForSingleChoiceTagSpecialization(

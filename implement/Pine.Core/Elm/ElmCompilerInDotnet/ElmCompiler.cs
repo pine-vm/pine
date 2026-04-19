@@ -47,18 +47,33 @@ public record CompilationPipelineStageResults(
     IReadOnlyList<SyntaxTypes.File> LambdaLifted,
     ImmutableDictionary<DeclQualifiedName, SyntaxTypes.Declaration>? Specialized,
     ImmutableDictionary<DeclQualifiedName, SyntaxTypes.Declaration>? Inlined,
-    IReadOnlyList<SyntaxTypes.File> ModulesForCompilation);
+    IReadOnlyList<SyntaxTypes.File> ModulesForCompilation,
+    ImmutableList<OptimizationIterationStageResults>? OptimizationIterations = null);
+
+/// <summary>
+/// Holds the intermediate results of each stage within a single optimization iteration
+/// (specialization, higher-order inlining, size-based inlining).
+/// Each stage result is a flat declaration dictionary keyed by qualified name.
+/// </summary>
+public record OptimizationIterationStageResults(
+    int Round,
+    ImmutableDictionary<DeclQualifiedName, SyntaxTypes.Declaration> AfterSpecialization,
+    ImmutableDictionary<DeclQualifiedName, SyntaxTypes.Declaration> AfterHigherOrderInlining,
+    ImmutableDictionary<DeclQualifiedName, SyntaxTypes.Declaration> AfterSizeBasedInlining);
 
 /// <summary>
 /// Holds the intermediate results of each stage in the optimization pipeline
 /// (specialization, inlining, lambda re-lifting, operator lowering).
 /// Each stage result is a flat declaration dictionary keyed by qualified name.
+/// The <see cref="Iterations"/> list contains per-iteration intermediate results
+/// when the pipeline runs more than one round.
 /// </summary>
 internal record OptimizationPipelineStageResults(
     ImmutableDictionary<DeclQualifiedName, SyntaxTypes.Declaration> AfterSpecialization,
     ImmutableDictionary<DeclQualifiedName, SyntaxTypes.Declaration> AfterHigherOrderInlining,
     ImmutableDictionary<DeclQualifiedName, SyntaxTypes.Declaration> AfterLambdaLifting,
-    ImmutableDictionary<DeclQualifiedName, SyntaxTypes.Declaration> AfterLowering);
+    ImmutableDictionary<DeclQualifiedName, SyntaxTypes.Declaration> AfterLowering,
+    ImmutableList<OptimizationIterationStageResults> Iterations);
 
 /// <summary>
 /// Methods for compiling Elm source code and environments into Pine values, using the standard packaging for
@@ -511,7 +526,8 @@ public class ElmCompiler
                 LambdaLifted: lambdaLiftedModules,
                 Specialized: optimizationResults?.AfterSpecialization,
                 Inlined: optimizationResults?.AfterHigherOrderInlining,
-                ModulesForCompilation: modulesForCompilation);
+                ModulesForCompilation: modulesForCompilation,
+                OptimizationIterations: optimizationResults?.Iterations);
 
         return (compiledEnvValue, pipelineStageResults);
     }
@@ -1313,85 +1329,117 @@ public class ElmCompiler
     }
 
     private static Result<string, OptimizationPipelineStageResults> ApplyOptimizationPipelineWithStageResults(
-        List<SyntaxTypes.File> lambdaLiftedModules)
+        List<SyntaxTypes.File> lambdaLiftedModules) =>
+        ApplyOptimizationPipelineWithStageResults(lambdaLiftedModules, maxRounds: 1);
+
+    private static Result<string, OptimizationPipelineStageResults> ApplyOptimizationPipelineWithStageResults(
+        List<SyntaxTypes.File> lambdaLiftedModules,
+        int maxRounds)
     {
         // Flatten the input modules into a declaration dictionary.
         // The pipeline operates on this flat representation throughout.
         var currentDecls = FlattenModulesToDeclarationDictionary(lambdaLiftedModules);
 
-        // Phase 1: Specialization — create specialized versions of functions for known argument patterns.
-        // Lambda lifting is combined: the transformation stage lifts any lambdas/local functions it introduces.
+        ImmutableDictionary<DeclQualifiedName, SyntaxTypes.Declaration> afterSpecialization = currentDecls;
+        ImmutableDictionary<DeclQualifiedName, SyntaxTypes.Declaration> afterHigherOrderInlining = currentDecls;
+        ImmutableDictionary<DeclQualifiedName, SyntaxTypes.Declaration> afterLambdaLifting = currentDecls;
+
+        var iterationResults = ImmutableList.CreateBuilder<OptimizationIterationStageResults>();
+
+        for (var round = 0; round < maxRounds; round++)
         {
-            var result =
-                ElmSyntaxSpecialization.Apply(currentDecls, Inlining.Config.OnlyFunctions);
+            var declsBefore = currentDecls;
 
-            if (result.IsErrOrNull() is { } specErr)
-                return "Specialization failed: " + specErr;
+            // Phase 1: Specialization — create specialized versions of functions for known argument patterns.
+            // Lambda lifting is combined: the transformation stage lifts any lambdas/local functions it introduces.
+            {
+                var result =
+                    ElmSyntaxSpecialization.Apply(currentDecls, Inlining.Config.OnlyFunctions);
 
-            if (result.IsOkOrNull() is not { } specDict)
-                throw new NotImplementedException("Unexpected result type");
+                if (result.IsErrOrNull() is { } specErr)
+                    return $"Specialization (round {round}) failed: " + specErr;
 
-            currentDecls = specDict;
+                if (result.IsOkOrNull() is not { } specDict)
+                    throw new NotImplementedException("Unexpected result type");
+
+                currentDecls = specDict;
+            }
+
+            afterSpecialization = currentDecls;
+
+            if (CheckForNamingErrors(currentDecls, $"Specialization (round {round})") is { } specShadowErr)
+                return specShadowErr;
+
+            if (CheckForSyntaxNodesDisallowedInOptimization(currentDecls, $"Specialization (round {round})") is { } specDisallowedErr)
+                return specDisallowedErr;
+
+            // Phase 2: Higher-order inlining — inline functions that receive function arguments.
+            // Lambda lifting is combined: the transformation stage lifts any lambdas/local functions it introduces.
+            {
+                var result =
+                    ElmSyntaxInlining.Apply(currentDecls, Inlining.Config.OnlyFunctions);
+
+                if (result.IsErrOrNull() is { } hoInlineErr)
+                    return $"Higher-order inlining (round {round}) failed: " + hoInlineErr;
+
+                if (result.IsOkOrNull() is not { } hoInlineDict)
+                    throw new NotImplementedException("Unexpected result type");
+
+                currentDecls = hoInlineDict;
+            }
+
+            afterHigherOrderInlining = currentDecls;
+
+            if (CheckForNamingErrors(currentDecls, $"Higher-order inlining (round {round})") is { } hoInlineShadowErr)
+                return hoInlineShadowErr;
+
+            if (CheckForSyntaxNodesDisallowedInOptimization(currentDecls, $"Higher-order inlining (round {round})") is { } hoInlineDisallowedErr)
+                return hoInlineDisallowedErr;
+
+            // Phase 3: Size-based inlining and plain value inlining.
+            // Runs after higher-order inlining to avoid cascading.
+            // Inlines small wrapper functions (≤10 AST nodes, no complex expressions) and
+            // plain zero-parameter declarations with simple bodies.
+            // Lambda lifting is combined: the transformation stage lifts any lambdas/local functions it introduces.
+            {
+                var result =
+                    ElmSyntaxInlining.Apply(currentDecls, Inlining.Config.SmallFunctionsAndPlainValues);
+
+                if (result.IsErrOrNull() is { } sizeInlineErr)
+                    return $"Size-based inlining (round {round}) failed: " + sizeInlineErr;
+
+                if (result.IsOkOrNull() is not { } sizeInlineDict)
+                    throw new NotImplementedException("Unexpected result type");
+
+                currentDecls = sizeInlineDict;
+            }
+
+            afterLambdaLifting = currentDecls;
+
+            if (CheckForNamingErrors(currentDecls, $"Size-based inlining (round {round})") is { } sizeInlineShadowErr)
+                return sizeInlineShadowErr;
+
+            if (CheckForSyntaxNodesDisallowedInOptimization(currentDecls, $"Size-based inlining (round {round})") is { } sizeInlineDisallowedErr)
+                return sizeInlineDisallowedErr;
+
+            // Record this iteration's intermediate results.
+            iterationResults.Add(
+                new OptimizationIterationStageResults(
+                    Round: round,
+                    AfterSpecialization: afterSpecialization,
+                    AfterHigherOrderInlining: afterHigherOrderInlining,
+                    AfterSizeBasedInlining: afterLambdaLifting));
+
+            // Convergence check: if the output matches the input, no further rounds are needed.
+            if (currentDecls.Count == declsBefore.Count &&
+                currentDecls.All(kvp => declsBefore.TryGetValue(kvp.Key, out var prev) && prev.Equals(kvp.Value)))
+            {
+                break;
+            }
         }
-
-        var afterSpecialization = currentDecls;
-
-        if (CheckForNamingErrors(currentDecls, "Specialization") is { } specShadowErr)
-            return specShadowErr;
-
-        if (CheckForSyntaxNodesDisallowedInOptimization(currentDecls, "Specialization") is { } specDisallowedErr)
-            return specDisallowedErr;
-
-        // Phase 2: Higher-order inlining — inline functions that receive function arguments.
-        // Lambda lifting is combined: the transformation stage lifts any lambdas/local functions it introduces.
-        {
-            var result =
-                ElmSyntaxInlining.Apply(currentDecls, Inlining.Config.OnlyFunctions);
-
-            if (result.IsErrOrNull() is { } hoInlineErr)
-                return "Higher-order inlining failed: " + hoInlineErr;
-
-            if (result.IsOkOrNull() is not { } hoInlineDict)
-                throw new NotImplementedException("Unexpected result type");
-
-            currentDecls = hoInlineDict;
-        }
-
-        var afterHigherOrderInlining = currentDecls;
-
-        if (CheckForNamingErrors(currentDecls, "Higher-order inlining") is { } hoInlineShadowErr)
-            return hoInlineShadowErr;
-
-        if (CheckForSyntaxNodesDisallowedInOptimization(currentDecls, "Higher-order inlining") is { } hoInlineDisallowedErr)
-            return hoInlineDisallowedErr;
-
-        // Phase 3: Size-based inlining and plain value inlining.
-        // Runs after higher-order inlining to avoid cascading.
-        // Inlines small wrapper functions (≤10 AST nodes, no complex expressions) and
-        // plain zero-parameter declarations with simple bodies.
-        // Lambda lifting is combined: the transformation stage lifts any lambdas/local functions it introduces.
-        {
-            var result =
-                ElmSyntaxInlining.Apply(currentDecls, Inlining.Config.SmallFunctionsAndPlainValues);
-
-            if (result.IsErrOrNull() is { } sizeInlineErr)
-                return "Size-based inlining failed: " + sizeInlineErr;
-
-            if (result.IsOkOrNull() is not { } sizeInlineDict)
-                throw new NotImplementedException("Unexpected result type");
-
-            currentDecls = sizeInlineDict;
-        }
-
-        var afterLambdaLifting = currentDecls;
-
-        if (CheckForNamingErrors(currentDecls, "Size-based inlining") is { } sizeInlineShadowErr)
-            return sizeInlineShadowErr;
-
-        if (CheckForSyntaxNodesDisallowedInOptimization(currentDecls, "Size-based inlining") is { } sizeInlineDisallowedErr)
-            return sizeInlineDisallowedErr;
 
         // Phase 4: Operator lowering — convert operators to Pine built-in calls.
+        // Runs once after the convergence loop since lowering does not expose new inlining opportunities.
         {
             var result = BuiltinOperatorLowering.Apply(currentDecls);
 
@@ -1412,7 +1460,8 @@ public class ElmCompiler
                 AfterSpecialization: afterSpecialization,
                 AfterHigherOrderInlining: afterHigherOrderInlining,
                 AfterLambdaLifting: afterLambdaLifting,
-                AfterLowering: currentDecls);
+                AfterLowering: currentDecls,
+                Iterations: iterationResults.ToImmutable());
     }
 
     /// <summary>

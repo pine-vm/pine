@@ -1304,15 +1304,15 @@ public class InliningCrossModuleTests
                 ParserFast.symbolFollowedBy
                     "'"
                     (ParserFast.followedBySymbol "'"
-                        (Elm.Parser.Expression.oneOf2MapWithStartRowColumnAndEndRowColumn__specialized__1
-                            Elm.Parser.Expression.charLiteralExpression__lifted__lambda1
-                            (ParserFast.symbolFollowedBy
-                                "\\"
-                                (Elm.Parser.Tokens.escapedCharValueMap
-                                    Basics.identity
-                                )
+                        (ParserFast.Parser
+                            (Elm.Parser.Expression.oneOf2MapWithStartRowColumnAndEndRowColumn__specialized__1__lifted__lambda1
+                                ( (ParserFast.symbolFollowedByParser
+                                    "\\"
+                                    (Elm.Parser.Tokens.escapedCharValueMap
+                                        Basics.identity
+                                    )
+                                  ), Elm.Parser.Expression.charLiteralExpression__lifted__lambda1, Elm.Parser.Expression.charLiteralExpression__lifted__lambda2 )
                             )
-                            Elm.Parser.Expression.charLiteralExpression__lifted__lambda2
                         )
                     )
 
@@ -1651,6 +1651,30 @@ public class InliningCrossModuleTests
                                 s0
 
 
+            Elm.Parser.Expression.loopWhileSucceedsHelp__specialized__1__specialized__1 soFar reduce s0 =
+                case (ParserFast.symbolFollowedByParser "." Elm.Parser.Tokens.functionNameNode) s0 of
+                    ParserFast.Good elementResult s1 ->
+                        Elm.Parser.Expression.loopWhileSucceedsHelp__specialized__1__specialized__1
+                            (reduce elementResult
+                                soFar
+                            )
+                            reduce
+                            s1
+
+                    ParserFast.Bad elementCommitted x ->
+                        if elementCommitted then
+                            ParserFast.Bad
+                                Basics.True
+                                x
+
+                        else
+                            ParserFast.Good
+                                (List.reverse
+                                    soFar
+                                )
+                                s0
+
+
             Elm.Parser.Expression.multiRecordAccess : ParserFast.Parser List.List Elm.Syntax.Node.Node String
             Elm.Parser.Expression.multiRecordAccess =
                 ParserFast.Parser
@@ -1658,13 +1682,7 @@ public class InliningCrossModuleTests
 
 
             Elm.Parser.Expression.multiRecordAccess__lifted__lambda1 s =
-                Elm.Parser.Expression.loopWhileSucceedsHelp__specialized__1
-                    (ParserFast.Parser
-                        (ParserFast.symbolFollowedByParser
-                            "."
-                            Elm.Parser.Tokens.functionNameNode
-                        )
-                    )
+                Elm.Parser.Expression.loopWhileSucceedsHelp__specialized__1__specialized__1
                     []
                     (::)
                     s

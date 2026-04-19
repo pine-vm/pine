@@ -131,14 +131,7 @@ public class InliningLetBlockTests
         rendered.Trim().Should().Be(
             """"
             App.result x =
-                let
-                    double =
-                        App.result__lifted__double_1
-
-                    quadruple =
-                        App.result__lifted__quadruple_2
-                in
-                quadruple
+                App.result__lifted__quadruple_2
                     x
 
 
@@ -233,14 +226,7 @@ public class InliningLetBlockTests
         rendered.Trim().Should().Be(
             """"
             App.result x =
-                let
-                    quadruple =
-                        App.result__lifted__quadruple_1
-
-                    double =
-                        App.result__lifted__double_2
-                in
-                quadruple
+                App.result__lifted__quadruple_1
                     x
 
 
@@ -347,14 +333,7 @@ public class InliningLetBlockTests
         rendered.Trim().Should().Be(
             """"
             App.result n =
-                let
-                    isEven =
-                        App.result__lifted__isEven_1
-
-                    isOdd =
-                        App.result__lifted__isOdd_2
-                in
-                isEven
+                App.result__lifted__isEven_1
                     n
 
 
@@ -422,14 +401,7 @@ public class InliningLetBlockTests
         rendered.Trim().Should().Be(
             """"
             App.result n =
-                let
-                    isOdd =
-                        App.result__lifted__isOdd_1
-
-                    isEven =
-                        App.result__lifted__isEven_2
-                in
-                isEven
+                App.result__lifted__isEven_2
                     n
 
 
@@ -780,17 +752,7 @@ public class InliningLetBlockTests
         naturalRendered.Trim().Should().Be(
             """"
             App.result x =
-                let
-                    inc =
-                        App.result__lifted__inc_1
-
-                    dbl =
-                        App.result__lifted__dbl_2
-
-                    transform =
-                        App.result__lifted__transform_3
-                in
-                transform
+                App.result__lifted__transform_3
                     x
 
 
@@ -814,17 +776,7 @@ public class InliningLetBlockTests
         reverseRendered.Trim().Should().Be(
             """"
             App.result x =
-                let
-                    transform =
-                        App.result__lifted__transform_1
-
-                    dbl =
-                        App.result__lifted__dbl_2
-
-                    inc =
-                        App.result__lifted__inc_3
-                in
-                transform
+                App.result__lifted__transform_1
                     x
 
 
@@ -910,14 +862,7 @@ public class InliningLetBlockTests
         evenFirstRendered.Trim().Should().Be(
             """"
             App.result n =
-                let
-                    isEven =
-                        App.result__lifted__isEven_1
-
-                    isOdd =
-                        App.result__lifted__isOdd_2
-                in
-                isEven
+                App.result__lifted__isEven_1
                     n
 
 
@@ -952,14 +897,7 @@ public class InliningLetBlockTests
         oddFirstRendered.Trim().Should().Be(
             """"
             App.result n =
-                let
-                    isOdd =
-                        App.result__lifted__isOdd_1
-
-                    isEven =
-                        App.result__lifted__isEven_2
-                in
-                isEven
+                App.result__lifted__isEven_2
                     n
 
 

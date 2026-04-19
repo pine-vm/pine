@@ -573,11 +573,18 @@ public static class LambdaLifting
                         }
                         else
                         {
-                            var (transformedExpr, _) =
+                            var (transformedExpr, updatedCtx) =
                                 TransformExpressionInner(
                                     funcExpr,
                                     funcContext,
                                     liftedFunctions);
+
+                            // Propagate the lambda counter advance from inside this
+                            // let-binding's value to the outer scope so that sibling
+                            // declarations and the let body do not reuse lambda IDs
+                            // already consumed here.
+                            currentContext =
+                                currentContext with { LambdaCounter = updatedCtx.LambdaCounter };
 
                             var transformedFuncImpl =
                                 letFunc.Function.Declaration.Value with
@@ -602,11 +609,18 @@ public static class LambdaLifting
 
                 case SyntaxTypes.Expression.LetDeclaration.LetDestructuring letDestr:
                     {
-                        var (transformedExpr, _) =
+                        var (transformedExpr, updatedCtx) =
                             TransformExpressionInner(
                                 letDestr.Expression,
                                 currentContext,
                                 liftedFunctions);
+
+                        // Propagate the lambda counter advance from inside this
+                        // destructuring's value to the outer scope so that sibling
+                        // declarations and the let body do not reuse lambda IDs
+                        // already consumed here.
+                        currentContext =
+                            currentContext with { LambdaCounter = updatedCtx.LambdaCounter };
 
                         var transformedDestr =
                             new SyntaxTypes.Expression.LetDeclaration.LetDestructuring(
@@ -660,7 +674,7 @@ public static class LambdaLifting
         // Transform the lambda body
         var lambdaBodyContext = context.WithBoundVariables(lambdaParamNames);
 
-        var (transformedBody, _) = TransformExpressionInner(lambda.Expression, lambdaBodyContext, liftedFunctions);
+        var (transformedBody, bodyContextAfter) = TransformExpressionInner(lambda.Expression, lambdaBodyContext, liftedFunctions);
 
         // Substitute references to other local functions with their lifted names
         var substitutionsWithSelf = new Dictionary<string, string>(localFunctionLiftedNames);
@@ -700,7 +714,9 @@ public static class LambdaLifting
 
         var newLetFunc = new SyntaxTypes.Expression.LetDeclaration.LetFunction(newFunc);
 
-        return (declNode with { Value = newLetFunc }, context);
+        // Propagate the lambda counter advance from the lambda body so that sibling
+        // declarations and the enclosing scope do not reuse lambda IDs consumed here.
+        return (declNode with { Value = newLetFunc }, context with { LambdaCounter = bodyContextAfter.LambdaCounter });
     }
 
     private static (Node<SyntaxTypes.Expression.LetDeclaration>, LiftingContext) LiftLocalFunction(
@@ -730,7 +746,7 @@ public static class LambdaLifting
         // Transform the function body (first transform any nested lambdas/local functions)
         var funcBodyContext = context.WithBoundVariables(funcParamNames);
 
-        var (transformedBody, _) =
+        var (transformedBody, bodyContextAfter) =
             TransformExpressionInner(
                 letFunc.Function.Declaration.Value.Expression,
                 funcBodyContext,
@@ -771,7 +787,9 @@ public static class LambdaLifting
 
         var newLetFunc = new SyntaxTypes.Expression.LetDeclaration.LetFunction(newFunc);
 
-        return (declNode with { Value = newLetFunc }, context);
+        // Propagate the lambda counter advance from the function body so that sibling
+        // declarations and the enclosing scope do not reuse lambda IDs consumed here.
+        return (declNode with { Value = newLetFunc }, context with { LambdaCounter = bodyContextAfter.LambdaCounter });
     }
 
     private static Node<SyntaxTypes.Expression> SubstituteVariableReferences(

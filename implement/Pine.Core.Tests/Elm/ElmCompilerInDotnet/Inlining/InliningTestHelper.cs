@@ -412,17 +412,17 @@ public class InliningTestHelper
         var flatDecls = ElmCompiler.FlattenModulesToDeclarationDictionary(canonicalizedOrderedModules);
 
         var specializedDecls =
-            Core.Elm.ElmCompilerInDotnet.ElmSyntaxSpecialization.Apply(flatDecls, config)
+            ElmSyntaxSpecialization.Apply(flatDecls, config)
             .Extract(err => throw new System.Exception("Failed specialization: " + err));
 
         var inlinedDecls =
-            Core.Elm.ElmCompilerInDotnet.ElmSyntaxInlining.Apply(specializedDecls, config)
+            ElmSyntaxInlining.Apply(specializedDecls, config)
             .Extract(err => throw new System.Exception("Failed inlining stage: " + err));
 
-        var liftedDecls = Core.Elm.ElmCompilerInDotnet.LambdaLifting.LiftLambdas(inlinedDecls);
+        var liftedDecls = LambdaLifting.LiftLambdas(inlinedDecls);
 
         var loweredDecls =
-            Core.Elm.ElmCompilerInDotnet.BuiltinOperatorLowering.Apply(liftedDecls)
+            BuiltinOperatorLowering.Apply(liftedDecls)
             .Extract(err => throw new System.Exception("Failed builtin operator lowering: " + err));
 
         var loweredModules = ElmCompiler.ReconstructModulesFromFlatDict(loweredDecls, canonicalizedOrderedModules);
@@ -475,7 +475,7 @@ public class InliningTestHelper
             .Extract(err => throw new System.Exception("Failed inlining: " + err));
 
         var loweredDecls =
-            Core.Elm.ElmCompilerInDotnet.BuiltinOperatorLowering.Apply(inlinedDecls)
+            BuiltinOperatorLowering.Apply(inlinedDecls)
             .Extract(err => throw new System.Exception("Failed builtin operator lowering: " + err));
 
         var loweredModules = ElmCompiler.ReconstructModulesFromFlatDict(loweredDecls, orderedCanonicalizedModules);
