@@ -1221,6 +1221,14 @@ public static class TypeInference
             return unifiedType;
         }
 
+        // Prefix operator used as a standalone expression (e.g., (::), (+), (//)).
+        // These are function values: (::) : a -> List a -> List a,
+        // (+) : number -> number -> number, etc.
+        if (expression is SyntaxTypes.Expression.PrefixOperator prefixOperator)
+        {
+            return InferPrefixOperatorType(prefixOperator.Operator);
+        }
+
         // For other expressions, we cannot infer the type yet
         return s_unknownType;
     }
@@ -1334,6 +1342,44 @@ public static class TypeInference
 
             // If both are NumberType (polymorphic numeric literals), we can't determine yet
             return s_numberType;
+        }
+
+        return s_unknownType;
+    }
+
+    /// <summary>
+    /// Infers the type of a prefix operator expression used as a standalone value.
+    /// For example, (::) has type a -> List a -> List a,
+    /// and (+) has type number -> number -> number.
+    /// </summary>
+    private static InferredType InferPrefixOperatorType(string operatorSymbol)
+    {
+        // The cons operator (::) is not a Basics function — it's a built-in list constructor.
+        // Its type is: a -> List a -> List a
+        if (operatorSymbol is "::")
+        {
+            var typeVarA = new InferredType.TypeVariable("a");
+            var listOfA = new InferredType.ListType(typeVarA);
+
+            return new InferredType.FunctionType(typeVarA, new InferredType.FunctionType(listOfA, listOfA));
+        }
+
+        // For Basics operators, look up the function info to get the type signature.
+        if (CoreLibraryModule.CoreBasics.OperatorToFunctionName(operatorSymbol) is { } funcName &&
+            CoreLibraryModule.CoreBasics.GetBasicsFunctionInfo(funcName) is { } basicsFuncInfo &&
+            basicsFuncInfo.FunctionType.Count > 0)
+        {
+            // FunctionType contains [arg1Type, arg2Type, ..., returnType].
+            // Build a curried function type: arg1 -> arg2 -> ... -> returnType
+            var types = basicsFuncInfo.FunctionType;
+            var resultType = types[^1];
+
+            for (var i = types.Count - 2; i >= 0; i--)
+            {
+                resultType = new InferredType.FunctionType(types[i], resultType);
+            }
+
+            return resultType;
         }
 
         return s_unknownType;
