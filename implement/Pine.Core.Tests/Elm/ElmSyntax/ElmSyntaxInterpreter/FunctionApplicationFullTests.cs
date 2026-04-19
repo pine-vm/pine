@@ -2,8 +2,6 @@ using AwesomeAssertions;
 using Pine.Core.Elm;
 using Xunit;
 
-using ElmInterpreter = Pine.Core.Elm.ElmSyntax.ElmSyntaxInterpreter;
-
 namespace Pine.Core.Tests.Elm.ElmSyntax.ElmSyntaxInterpreter;
 
 /// <summary>
@@ -21,20 +19,10 @@ public class FunctionApplicationFullTests
 
             double x =
                 Pine_builtin.int_mul [ x, 2 ]
-
-
-            main =
-                double 21
             """;
 
-        var declarations = InterpreterTestHelper.ParseDeclarations(elmModuleText);
-
-        var mainBody = InterpreterTestHelper.GetFunctionBody(declarations, "main");
-
-        var result =
-            ElmInterpreter.Interpret(mainBody, declarations).Extract(err => throw new System.Exception(err.ToString()));
-
-        result.Should().Be(ElmValue.Integer(42));
+        InterpreterTestHelper.EvaluateInModuleOrCrash("double 21", elmModuleText)
+            .Should().Be(ElmValue.Integer(42));
     }
 
     [Fact]
@@ -47,20 +35,10 @@ public class FunctionApplicationFullTests
 
             add a b =
                 Pine_builtin.int_add [ a, b ]
-
-
-            main =
-                add 13 29
             """;
 
-        var declarations = InterpreterTestHelper.ParseDeclarations(elmModuleText);
-
-        var mainBody = InterpreterTestHelper.GetFunctionBody(declarations, "main");
-
-        var result =
-            ElmInterpreter.Interpret(mainBody, declarations).Extract(err => throw new System.Exception(err.ToString()));
-
-        result.Should().Be(ElmValue.Integer(42));
+        InterpreterTestHelper.EvaluateInModuleOrCrash("add 13 29", elmModuleText)
+            .Should().Be(ElmValue.Integer(42));
     }
 
     [Fact]
@@ -77,19 +55,9 @@ public class FunctionApplicationFullTests
 
             triple x =
                 Pine_builtin.int_mul [ x, 3 ]
-
-
-            main =
-                add (triple 4) (triple 2)
             """;
 
-        var declarations = InterpreterTestHelper.ParseDeclarations(elmModuleText);
-
-        var mainBody = InterpreterTestHelper.GetFunctionBody(declarations, "main");
-
-        var result =
-            ElmInterpreter.Interpret(mainBody, declarations).Extract(err => throw new System.Exception(err.ToString()));
-
-        result.Should().Be(ElmValue.Integer(18));
+        InterpreterTestHelper.EvaluateInModuleOrCrash("add (triple 4) (triple 2)", elmModuleText)
+            .Should().Be(ElmValue.Integer(18));
     }
 }

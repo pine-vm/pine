@@ -15,7 +15,7 @@ public class InfiniteRecursionTests
 {
     private static string InterpretAndRenderError(string elmModuleText)
     {
-        var declarations = InterpreterTestHelper.ParseDeclarations(elmModuleText);
+        var declarations = InterpreterTestHelper.ParseDeclarationsRemovingModuleNames(elmModuleText);
 
         var mainBody = InterpreterTestHelper.GetFunctionBody(declarations, "main");
 

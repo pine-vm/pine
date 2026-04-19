@@ -28,7 +28,7 @@ public class LetBlockExpressionsTests
                 answer
             """;
 
-        var declarations = InterpreterTestHelper.ParseDeclarations(elmModuleText);
+        var declarations = InterpreterTestHelper.ParseDeclarationsRemovingModuleNames(elmModuleText);
 
         var mainBody = InterpreterTestHelper.GetFunctionBody(declarations, "main");
 
@@ -57,7 +57,7 @@ public class LetBlockExpressionsTests
                 Pine_builtin.int_add [ a, b ]
             """;
 
-        var declarations = InterpreterTestHelper.ParseDeclarations(elmModuleText);
+        var declarations = InterpreterTestHelper.ParseDeclarationsRemovingModuleNames(elmModuleText);
 
         var mainBody = InterpreterTestHelper.GetFunctionBody(declarations, "main");
 
@@ -86,7 +86,7 @@ public class LetBlockExpressionsTests
                 Pine_builtin.int_add [ a, b ]
             """;
 
-        var declarations = InterpreterTestHelper.ParseDeclarations(elmModuleText);
+        var declarations = InterpreterTestHelper.ParseDeclarationsRemovingModuleNames(elmModuleText);
 
         var mainBody = InterpreterTestHelper.GetFunctionBody(declarations, "main");
 

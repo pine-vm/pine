@@ -9,10 +9,10 @@ using ElmInterpreter = Pine.Core.Elm.ElmSyntax.ElmSyntaxInterpreter;
 namespace Pine.Core.Tests.Elm.ElmSyntax.ElmSyntaxInterpreter;
 
 /// <summary>
-/// Covers every <c>Pine_builtin</c> function exposed by <see cref="Pine.Core.KernelFunction"/>.
+/// Covers every <c>Pine_builtin</c> function exposed by <see cref="KernelFunction"/>.
 ///
 /// Most tests express the call as an Elm source expression (with literal arguments) and feed it to
-/// <see cref="ElmInterpreter.ParseAndInterpret(string, System.Collections.Generic.IReadOnlyDictionary{DeclQualifiedName, Pine.Core.Elm.ElmSyntax.SyntaxModel.Declaration})"/>.
+/// <see cref="ElmInterpreter.ParseAndInterpret(string, System.Collections.Generic.IReadOnlyDictionary{DeclQualifiedName, Core.Elm.ElmSyntax.SyntaxModel.Declaration})"/>.
 /// Tests whose expected value is derived by driving <see cref="KernelFunction"/> directly keep a
 /// thin Elm wrapper so that the same <see cref="ElmValue"/> argument instances are shared between
 /// the interpreter invocation and the kernel-function comparison.
@@ -40,12 +40,15 @@ public class PineBuiltinTests
             Pine_builtin.bit_shift_right [ n, a ]
         """;
 
-    private static readonly System.Collections.Generic.IReadOnlyDictionary<DeclQualifiedName, Pine.Core.Elm.ElmSyntax.SyntaxModel.Declaration> s_declarations =
-        InterpreterTestHelper.ParseDeclarations(ElmModuleText);
+    private static readonly System.Collections.Generic.IReadOnlyDictionary<DeclQualifiedName, Core.Elm.ElmSyntax.SyntaxModel.Declaration> s_declarations =
+        InterpreterTestHelper.ParseDeclarationsRemovingModuleNames(ElmModuleText);
 
     private static ElmValue Evaluate(string expression) =>
         ElmInterpreter.ParseAndInterpret(expression, s_declarations)
         .Extract(err => throw new System.Exception(err.ToString()));
+
+    private static string EvaluateRendered(string expression) =>
+        ElmValue.RenderAsElmExpression(Evaluate(expression)).expressionString;
 
     private static ElmValue Invoke(string functionName, params ElmValue[] arguments) =>
         ElmInterpreter.Interpret(
@@ -105,8 +108,8 @@ public class PineBuiltinTests
     [Fact]
     public void Head_on_empty_list_returns_empty_list()
     {
-        Evaluate("Pine_builtin.head []")
-            .Should().Be(ElmValue.ListInstance([]));
+        EvaluateRendered("Pine_builtin.head []")
+            .Should().Be("[]");
     }
 
     // --- skip ---
@@ -114,18 +117,15 @@ public class PineBuiltinTests
     [Fact]
     public void Skip_drops_first_n_elements()
     {
-        Evaluate("Pine_builtin.skip [ 2, [ 1, 2, 3, 4, 5 ] ]")
-            .Should().Be(
-            ElmValue.ListInstance(
-                [ElmValue.Integer(3), ElmValue.Integer(4), ElmValue.Integer(5)]));
+        EvaluateRendered("Pine_builtin.skip [ 2, [ 1, 2, 3, 4, 5 ] ]")
+            .Should().Be("[ 3, 4, 5 ]");
     }
 
     [Fact]
     public void Skip_zero_returns_same_list()
     {
-        Evaluate("Pine_builtin.skip [ 0, [ 1, 2 ] ]")
-            .Should().Be(
-            ElmValue.ListInstance([ElmValue.Integer(1), ElmValue.Integer(2)]));
+        EvaluateRendered("Pine_builtin.skip [ 0, [ 1, 2 ] ]")
+            .Should().Be("[ 1, 2 ]");
     }
 
     // --- take ---
@@ -133,17 +133,15 @@ public class PineBuiltinTests
     [Fact]
     public void Take_keeps_first_n_elements()
     {
-        Evaluate("Pine_builtin.take [ 3, [ 10, 20, 30, 40 ] ]")
-            .Should().Be(
-            ElmValue.ListInstance(
-                [ElmValue.Integer(10), ElmValue.Integer(20), ElmValue.Integer(30)]));
+        EvaluateRendered("Pine_builtin.take [ 3, [ 10, 20, 30, 40 ] ]")
+            .Should().Be("[ 10, 20, 30 ]");
     }
 
     [Fact]
     public void Take_zero_returns_empty_list()
     {
-        Evaluate("Pine_builtin.take [ 0, [ 1, 2 ] ]")
-            .Should().Be(ElmValue.ListInstance([]));
+        EvaluateRendered("Pine_builtin.take [ 0, [ 1, 2 ] ]")
+            .Should().Be("[]");
     }
 
     // --- concat ---
@@ -151,23 +149,15 @@ public class PineBuiltinTests
     [Fact]
     public void Concat_joins_list_of_lists()
     {
-        Evaluate("Pine_builtin.concat [ [ 1, 2 ], [ 3 ], [ 4, 5 ] ]")
-            .Should().Be(
-            ElmValue.ListInstance(
-                [
-                ElmValue.Integer(1),
-                ElmValue.Integer(2),
-                ElmValue.Integer(3),
-                ElmValue.Integer(4),
-                ElmValue.Integer(5),
-                ]));
+        EvaluateRendered("Pine_builtin.concat [ [ 1, 2 ], [ 3 ], [ 4, 5 ] ]")
+            .Should().Be("[ 1, 2, 3, 4, 5 ]");
     }
 
     [Fact]
     public void Concat_of_empty_list_of_lists_is_empty_list()
     {
-        Evaluate("Pine_builtin.concat []")
-            .Should().Be(ElmValue.ListInstance([]));
+        EvaluateRendered("Pine_builtin.concat []")
+            .Should().Be("[]");
     }
 
     // --- reverse ---
@@ -175,22 +165,15 @@ public class PineBuiltinTests
     [Fact]
     public void Reverse_reverses_list_order()
     {
-        Evaluate("Pine_builtin.reverse [ 1, 2, 3, 4 ]")
-            .Should().Be(
-            ElmValue.ListInstance(
-                [
-                ElmValue.Integer(4),
-                ElmValue.Integer(3),
-                ElmValue.Integer(2),
-                ElmValue.Integer(1),
-                ]));
+        EvaluateRendered("Pine_builtin.reverse [ 1, 2, 3, 4 ]")
+            .Should().Be("[ 4, 3, 2, 1 ]");
     }
 
     [Fact]
     public void Reverse_on_singleton_list_returns_same_list()
     {
-        Evaluate("Pine_builtin.reverse [ 7 ]")
-            .Should().Be(ElmValue.ListInstance([ElmValue.Integer(7)]));
+        EvaluateRendered("Pine_builtin.reverse [ 7 ]")
+            .Should().Be("[ 7 ]");
     }
 
     // --- negate ---

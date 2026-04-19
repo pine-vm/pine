@@ -22,21 +22,13 @@ namespace Pine.Core.Tests.Elm.ElmSyntax.ElmSyntaxInterpreter;
 public class CaseBlockTests
 {
     /// <summary>
-    /// Parses <paramref name="elmModuleText"/> for its top-level declarations and then evaluates
-    /// <paramref name="expression"/> against those declarations using
-    /// <see cref="ElmInterpreter.ParseAndInterpret(string, System.Collections.Generic.IReadOnlyDictionary{Pine.Core.CodeAnalysis.DeclQualifiedName, Pine.Core.Elm.ElmSyntax.SyntaxModel.Declaration})"/>.
-    /// Returns the rendered Elm-expression form of the resulting value.
+    /// Delegates to <see cref="InterpreterTestHelper.EvaluateInModuleOrCrash(string, string)"/>
+    /// and renders the resulting value back to its Elm-expression form.
     /// </summary>
-    private static string Evaluate(string elmModuleText, string expression)
-    {
-        var declarations = InterpreterTestHelper.ParseDeclarations(elmModuleText);
-
-        var result =
-            ElmInterpreter.ParseAndInterpret(expression, declarations)
-            .Extract(err => throw new System.Exception(err.ToString()));
-
-        return ElmValue.RenderAsElmExpression(result).expressionString;
-    }
+    private static string Evaluate(string elmModuleText, string expression) =>
+        ElmValue.RenderAsElmExpression(
+            InterpreterTestHelper.EvaluateInModuleOrCrash(expression, elmModuleText))
+        .expressionString;
 
     [Fact]
     public void Uncons_versus_empty_list()
@@ -536,7 +528,7 @@ public class CaseBlockTests
                         x
             """;
 
-        var declarations = InterpreterTestHelper.ParseDeclarations(elmModuleText);
+        var declarations = InterpreterTestHelper.ParseDeclarationsRemovingModuleNames(elmModuleText);
 
         var result = ElmInterpreter.ParseAndInterpret("classify Nothing", declarations);
 

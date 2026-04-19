@@ -40,7 +40,8 @@ public static class StaticExpressionDisplay
             StaticExpression<IdentifierT> fnAppArguments)
         {
             return
-                [.. functionInterface.ParamsPaths
+                [
+                .. functionInterface.ParamsPaths
                 .Select(paramPath => StaticExpressionExtension.BuildReducedPathToExpression(paramPath, fnAppArguments))
                 ];
         }
@@ -88,9 +89,10 @@ public static class StaticExpressionDisplay
         {
             var rendering = functionApplicationRenderer(functionName);
 
-            return new FunctionApplicationRenderingNew<TFunctionName>(
-                FunctionName: rendering.FunctionName,
-                FunctionInterface: BuildRenderer<TFunctionName>(rendering.FunctionInterface));
+            return
+                new FunctionApplicationRenderingNew<TFunctionName>(
+                    FunctionName: rendering.FunctionName,
+                    FunctionInterface: BuildRenderer<TFunctionName>(rendering.FunctionInterface));
         }
 
         return
@@ -306,15 +308,16 @@ public static class StaticExpressionDisplay
 
                     var argumentsLines =
                         argumentsExprs
-                        .SelectMany(arg =>
-                        RenderToLines(
-                            arg,
-                            valueRenderer,
-                            functionApplicationRenderer,
-                            replaceExprWithIdentifier,
-                            indentLevel + 1,
-                            containerDelimits: false,
-                            kernelApplicationPrefix: kernelApplicationPrefix))
+                        .SelectMany(
+                            arg =>
+                            RenderToLines(
+                                arg,
+                                valueRenderer,
+                                functionApplicationRenderer,
+                                replaceExprWithIdentifier,
+                                indentLevel + 1,
+                                containerDelimits: false,
+                                kernelApplicationPrefix: kernelApplicationPrefix))
                         .ToList();
 
                     if (argumentsLines.Count is 0)
@@ -463,21 +466,43 @@ public static class StaticExpressionDisplay
     /// <summary>
     /// Render a <see cref="PineValue"/> into an Elm-like expression string.
     /// This attempts to reuse existing Elm value encodings; if the value decodes to a known Elm value
-    /// it uses <see cref="ElmValue.RenderAsElmExpression"/>. Otherwise, list values are rendered recursively
-    /// and blobs are delegated to <paramref name="blobRenderer"/>.
+    /// it uses <see cref="ElmValue.RenderAsElmExpression(ElmValue)"/>. Otherwise, list values are rendered
+    /// recursively and blobs are delegated to <paramref name="blobRenderer"/>.
+    /// <para />
+    /// <see cref="ElmValue.ElmPineBlob"/> values produced by the decoding step are rendered using
+    /// <see cref="ElmValue.DefaultPineBlobRenderer"/>. Use the overload accepting a <c>pineBlobRenderer</c>
+    /// to customise that.
     /// </summary>
     /// <param name="value">The value to render.</param>
-    /// <param name="blobRenderer">Optional renderer for blob values.</param>
+    /// <param name="blobRenderer">Renderer for raw <see cref="PineValue.BlobValue"/> instances that did not
+    /// decode to an Elm value.</param>
     /// <returns>A tuple where <c>exprText</c> is the textual representation and <c>needsParens</c> indicates if parentheses are required when embedding.</returns>
     /// <exception cref="NotImplementedException">Thrown if a Pine value type is not supported.</exception>
     public static (string exprText, bool needsParens) RenderValueAsExpression(
         PineValue value,
-        Func<PineValue.BlobValue, (string exprText, bool needsParens)> blobRenderer)
+        Func<PineValue.BlobValue, (string exprText, bool needsParens)> blobRenderer) =>
+        RenderValueAsExpression(value, blobRenderer, ElmValue.DefaultPineBlobRenderer);
+
+    /// <summary>
+    /// Variant of <see cref="RenderValueAsExpression(PineValue, Func{PineValue.BlobValue, ValueTuple{string, bool}})"/>
+    /// that also threads a <paramref name="pineBlobRenderer"/> through the underlying
+    /// <see cref="ElmValue.RenderAsElmExpression(ElmValue, Func{ReadOnlyMemory{byte}, string})"/> call so
+    /// nested <see cref="ElmValue.ElmPineBlob"/> nodes are rendered consistently.
+    /// </summary>
+    /// <param name="value">The value to render.</param>
+    /// <param name="blobRenderer">Renderer for raw <see cref="PineValue.BlobValue"/> instances that did not decode to an Elm value.</param>
+    /// <param name="pineBlobRenderer">Renderer applied to the bytes of every <see cref="ElmValue.ElmPineBlob"/> node encountered while rendering the decoded Elm value.</param>
+    public static (string exprText, bool needsParens) RenderValueAsExpression(
+        PineValue value,
+        Func<PineValue.BlobValue, (string exprText, bool needsParens)> blobRenderer,
+        Func<ReadOnlyMemory<byte>, string> pineBlobRenderer)
     {
-        return RenderValueAsExpression(
-            value,
-            listItemRenderer: item => RenderValueAsExpression(item, blobRenderer),
-            blobRenderer: blobRenderer);
+        return
+            RenderValueAsExpression(
+                value,
+                listItemRenderer: item => RenderValueAsExpression(item, blobRenderer, pineBlobRenderer),
+                blobRenderer: blobRenderer,
+                pineBlobRenderer: pineBlobRenderer);
     }
 
     /// <summary>
@@ -498,14 +523,27 @@ public static class StaticExpressionDisplay
     public static (string exprText, bool needsParens) RenderValueAsExpression(
         PineValue value,
         Func<PineValue, (string exprText, bool needsParens)> listItemRenderer,
-        Func<PineValue.BlobValue, (string exprText, bool needsParens)> blobRenderer)
+        Func<PineValue.BlobValue, (string exprText, bool needsParens)> blobRenderer) =>
+        RenderValueAsExpression(value, listItemRenderer, blobRenderer, ElmValue.DefaultPineBlobRenderer);
+
+    /// <summary>
+    /// Variant of
+    /// <see cref="RenderValueAsExpression(PineValue, Func{PineValue, ValueTuple{string, bool}}, Func{PineValue.BlobValue, ValueTuple{string, bool}})"/>
+    /// that also accepts a <paramref name="pineBlobRenderer"/> applied to every nested
+    /// <see cref="ElmValue.ElmPineBlob"/> node.
+    /// </summary>
+    public static (string exprText, bool needsParens) RenderValueAsExpression(
+        PineValue value,
+        Func<PineValue, (string exprText, bool needsParens)> listItemRenderer,
+        Func<PineValue.BlobValue, (string exprText, bool needsParens)> blobRenderer,
+        Func<ReadOnlyMemory<byte>, string> pineBlobRenderer)
     {
         if (ElmValueEncoding.PineValueAsElmValue(
             value,
             additionalReusableDecodings: null,
             reportNewDecoding: null).IsOkOrNull() is { } elmValue)
         {
-            var asExpression = ElmValue.RenderAsElmExpression(elmValue);
+            var asExpression = ElmValue.RenderAsElmExpression(elmValue, pineBlobRenderer);
 
             return (asExpression.expressionString, asExpression.needsParens);
         }
@@ -549,11 +587,23 @@ public static class StaticExpressionDisplay
     /// </summary>
     /// <param name="blobValue">The blob value instance.</param>
     /// <returns>A tuple containing the expression text and a flag indicating parentheses should be used when embedded.</returns>
-    public static (string exprText, bool needsParens) DefaultBlobRenderer(PineValue.BlobValue blobValue)
+    public static (string exprText, bool needsParens) DefaultBlobRenderer(PineValue.BlobValue blobValue) =>
+        DefaultBlobRenderer(blobValue.Bytes);
+
+    /// <summary>
+    /// Default renderer for blob bytes used both for raw <see cref="PineValue.BlobValue"/> instances and for
+    /// <see cref="ElmValue.ElmPineBlob"/> nodes when threading rendering through
+    /// <see cref="ElmValue.RenderAsElmExpression(ElmValue, Func{ReadOnlyMemory{byte}, string})"/>.
+    /// <para />
+    /// Mirrors <see cref="DefaultBlobRenderer(PineValue.BlobValue)"/>: when the bytes form a valid Elm tag
+    /// name interpreted as UTF-32 they are rendered as the tag name; otherwise they are rendered as a
+    /// lowercase hex blob like <c>Blob 0x...</c>.
+    /// </summary>
+    public static (string exprText, bool needsParens) DefaultBlobRenderer(ReadOnlyMemory<byte> bytes)
     {
-        if (3 < blobValue.Bytes.Length)
+        if (3 < bytes.Length)
         {
-            var asStringResult = StringEncoding.StringFromValue(blobValue);
+            var asStringResult = StringEncoding.StringFromBlobValue(bytes);
 
             if (asStringResult.IsOkOrNull() is { } asString && ElmValueEncoding.StringIsValidTagName(asString))
             {
@@ -563,8 +613,16 @@ public static class StaticExpressionDisplay
             }
         }
 
-        return ("Blob 0x" + Convert.ToHexStringLower(blobValue.Bytes.Span), true);
+        return ("Blob 0x" + Convert.ToHexStringLower(bytes.Span), true);
     }
+
+    /// <summary>
+    /// Default renderer for the bytes of an <see cref="ElmValue.ElmPineBlob"/> when used by the static-program
+    /// rendering helpers. Returns just the rendered text (without the <c>needsParens</c> flag) using the same
+    /// heuristics as <see cref="DefaultBlobRenderer(ReadOnlyMemory{byte})"/>.
+    /// </summary>
+    public static string DefaultPineBlobRenderer(ReadOnlyMemory<byte> bytes) =>
+        DefaultBlobRenderer(bytes).exprText;
 
     /// <summary>
     /// Render a whole <see cref="StaticProgram{TFuncId}"/> by rendering each named function in lexicographical order
@@ -623,24 +681,28 @@ public static class StaticExpressionDisplay
         {
             if (functionMetadata.TryGetValue(functionName, out var meta))
             {
-                return new FunctionApplicationRendering(
-                    FunctionName: functionName.ToString()!,
-                    FunctionInterface: meta.Interface);
+                return
+                    new FunctionApplicationRendering(
+                        FunctionName: functionName.ToString()!,
+                        FunctionInterface: meta.Interface);
             }
 
             throw new KeyNotFoundException($"Function '{functionName}' not found in function metadata.");
         }
 
         IReadOnlyList<string> namedFunctionsTexts =
-            [..staticProgram.NamedFunctions
+            [
+            ..staticProgram.NamedFunctions
             .OrderBy(kvp => kvp.Key.FullName)
-            .Select(kvp =>
-            RenderNamedFunction(
-                kvp.Key,
-                kvp.Value,
-                GetFunctionApplicationRendering,
-                substituteEnvironmentPath: substituteEnvironmentPath,
-                kernelApplicationPrefix: kernelApplicationPrefix))];
+            .Select(
+                kvp =>
+                RenderNamedFunction(
+                    kvp.Key,
+                    kvp.Value,
+                    GetFunctionApplicationRendering,
+                    substituteEnvironmentPath: substituteEnvironmentPath,
+                    kernelApplicationPrefix: kernelApplicationPrefix))
+            ];
 
         var wholeProgramText =
             string.Join(
@@ -713,7 +775,7 @@ public static class StaticExpressionDisplay
             "\n" +
             RenderToString(
                 functionBody,
-                valueRenderer: val => RenderValueAsExpression(val, DefaultBlobRenderer),
+                valueRenderer: val => RenderValueAsExpression(val, DefaultBlobRenderer, DefaultPineBlobRenderer),
                 functionApplicationRenderer: getFunctionApplicationRendering,
                 environmentPathReferenceRenderer: RenderParamRefCombined,
                 indentString: "    ",
@@ -729,15 +791,16 @@ public static class StaticExpressionDisplay
     /// <returns>A function mapping int-paths to parameter identifier strings, or <c>null</c> when the path is not a parameter.</returns>
     public static Func<IReadOnlyList<int>, string?> RenderParamRef(StaticFunctionInterface functionInterface)
     {
-        return path =>
-        {
-            if (functionInterface.ParamsPaths.Contains(path, IntPathEqualityComparer.Instance))
+        return
+            path =>
             {
-                return RenderParamRef(path);
-            }
+                if (functionInterface.ParamsPaths.Contains(path, IntPathEqualityComparer.Instance))
+                {
+                    return RenderParamRef(path);
+                }
 
-            return null;
-        };
+                return null;
+            };
     }
 
     private static string RenderParamRef(IReadOnlyList<int> path)

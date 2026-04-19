@@ -8,7 +8,7 @@ using ElmInterpreter = Pine.Core.Elm.ElmSyntax.ElmSyntaxInterpreter;
 namespace Pine.Core.Tests.Elm.ElmSyntax.ElmSyntaxInterpreter;
 
 /// <summary>
-/// Covers <see cref="ElmInterpreter.ParseAndInterpret(string, System.Collections.Generic.IReadOnlyDictionary{DeclQualifiedName, Pine.Core.Elm.ElmSyntax.SyntaxModel.Declaration})"/>:
+/// Covers <see cref="ElmInterpreter.ParseAndInterpret(string, System.Collections.Generic.IReadOnlyDictionary{DeclQualifiedName, Core.Elm.ElmSyntax.SyntaxModel.Declaration})"/>:
 /// the caller passes the root expression as a string (to be parsed and evaluated) together with
 /// a declarations dictionary resolving any referenced top-level bindings.
 /// </summary>
@@ -21,9 +21,9 @@ public class ParseAndInterpretTests
             ElmInterpreter.ParseAndInterpret(
                 "42",
                 System.Collections
-                .Immutable.ImmutableDictionary<DeclQualifiedName, Pine.Core.Elm.ElmSyntax.SyntaxModel.Declaration>.Empty);
+                .Immutable.ImmutableDictionary<DeclQualifiedName, Core.Elm.ElmSyntax.SyntaxModel.Declaration>.Empty);
 
-        result.Should().Be(Result<Pine.Core.Elm.ElmSyntax.ElmInterpretationError, ElmValue>.ok(ElmValue.Integer(42)));
+        result.Should().Be(Result<Core.Elm.ElmSyntax.ElmInterpretationError, ElmValue>.ok(ElmValue.Integer(42)));
     }
 
     [Fact]
@@ -33,16 +33,16 @@ public class ParseAndInterpretTests
             ElmInterpreter.ParseAndInterpret(
                 "Pine_builtin.int_add [ 3, 4 ]",
                 System.Collections
-                .Immutable.ImmutableDictionary<DeclQualifiedName, Pine.Core.Elm.ElmSyntax.SyntaxModel.Declaration>.Empty);
+                .Immutable.ImmutableDictionary<DeclQualifiedName, Core.Elm.ElmSyntax.SyntaxModel.Declaration>.Empty);
 
-        result.Should().Be(Result<Pine.Core.Elm.ElmSyntax.ElmInterpretationError, ElmValue>.ok(ElmValue.Integer(7)));
+        result.Should().Be(Result<Core.Elm.ElmSyntax.ElmInterpretationError, ElmValue>.ok(ElmValue.Integer(7)));
     }
 
     [Fact]
     public void ParseAndInterpret_references_declaration_from_dictionary()
     {
         var declarations =
-            InterpreterTestHelper.ParseDeclarations(
+            InterpreterTestHelper.ParseDeclarationsRemovingModuleNames(
                 """
                 module Test exposing (..)
 
@@ -53,7 +53,7 @@ public class ParseAndInterpretTests
 
         var result = ElmInterpreter.ParseAndInterpret("answer", declarations);
 
-        result.Should().Be(Result<Pine.Core.Elm.ElmSyntax.ElmInterpretationError, ElmValue>.ok(ElmValue.Integer(42)));
+        result.Should().Be(Result<Core.Elm.ElmSyntax.ElmInterpretationError, ElmValue>.ok(ElmValue.Integer(42)));
     }
 
     [Fact]
@@ -72,9 +72,9 @@ public class ParseAndInterpretTests
                 Pine_builtin.int_add [ a, b ]
                 """,
                 System.Collections
-                .Immutable.ImmutableDictionary<DeclQualifiedName, Pine.Core.Elm.ElmSyntax.SyntaxModel.Declaration>.Empty);
+                .Immutable.ImmutableDictionary<DeclQualifiedName, Core.Elm.ElmSyntax.SyntaxModel.Declaration>.Empty);
 
-        result.Should().Be(Result<Pine.Core.Elm.ElmSyntax.ElmInterpretationError, ElmValue>.ok(ElmValue.Integer(30)));
+        result.Should().Be(Result<Core.Elm.ElmSyntax.ElmInterpretationError, ElmValue>.ok(ElmValue.Integer(30)));
     }
 
     [Fact]
@@ -84,7 +84,7 @@ public class ParseAndInterpretTests
             ElmInterpreter.ParseAndInterpret(
                 "let in",
                 System.Collections
-                .Immutable.ImmutableDictionary<DeclQualifiedName, Pine.Core.Elm.ElmSyntax.SyntaxModel.Declaration>.Empty);
+                .Immutable.ImmutableDictionary<DeclQualifiedName, Core.Elm.ElmSyntax.SyntaxModel.Declaration>.Empty);
 
         result.IsErrOrNull().Should().NotBeNull();
     }

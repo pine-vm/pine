@@ -15,7 +15,7 @@ public class ParameterPatternTests
 {
     private static string Evaluate(string elmModuleText)
     {
-        var declarations = InterpreterTestHelper.ParseDeclarations(elmModuleText);
+        var declarations = InterpreterTestHelper.ParseDeclarationsRemovingModuleNames(elmModuleText);
 
         var mainBody = InterpreterTestHelper.GetFunctionBody(declarations, "main");
 

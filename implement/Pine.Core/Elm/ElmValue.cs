@@ -22,6 +22,7 @@ public abstract record ElmValue
         | ElmTag String (List ElmValue)
         | ElmRecord (List ( String, ElmValue ))
         | ElmBytes Bytes
+        | ElmPineBlob Bytes
         | ElmFloat BigInt.BigInt BigInt.BigInt
         | ElmInternal String
 
@@ -190,7 +191,66 @@ public abstract record ElmValue
         new ElmString(value);
 
     /// <summary>
-    /// Creates an <see cref="ElmTag"/> instance.
+    /// Constructs an Elm value for a tag application, returning a canonical
+    /// <see cref="ElmString"/> instead of a generic <see cref="ElmTag"/> when the
+    /// tag is the Elm String tag carrying a single blob argument that decodes to a
+    /// valid string. This makes the result of operations like <c>(++)</c> on
+    /// strings — which produce a freshly-built <c>String &lt;blob&gt;</c> tag in
+    /// the interpreter rather than passing through Pine encoding/decoding — observably
+    /// equivalent to a <see cref="ElmString"/> value that arose from a string literal.
+    /// All other tag shapes fall back to <see cref="TagInstance(string, IReadOnlyList{ElmValue})"/>.
+    /// </summary>
+    public static ElmValue TagInstanceAsValue(string tagName, IReadOnlyList<ElmValue> arguments)
+    {
+        if (tagName == ElmStringTypeTagName && arguments.Count is 1)
+        {
+            if (arguments[0] is ElmPineBlob blobArgument)
+            {
+                var stringFromBlob =
+                    Pine.Core.CommonEncodings.StringEncoding.StringFromBlobValue(blobArgument.Value);
+
+                if (stringFromBlob.IsOkOrNull() is { } decoded)
+                {
+                    return StringInstance(decoded);
+                }
+            }
+
+            // A single-character `String` tag (produced by e.g. `String.fromChar c`
+            // or by `String.fromInt n` for a one-digit `n`, where the inner
+            // `Pine_kernel.concat` collapses to a 4-byte char-blob and is then
+            // decoded as `ElmChar` rather than `ElmPineBlob`) is observably
+            // equivalent to a single-character string literal.
+            if (arguments[0] is ElmChar charArgument)
+            {
+                return StringInstance(char.ConvertFromUtf32(charArgument.Value));
+            }
+
+            // `Pine_kernel.concat` of two empty string-blobs produces
+            // `PineValue.EmptyBlob`, which the Pine→Elm decoder maps to the
+            // `ElmInternal("empty-blob")` sentinel. Treat that as the empty string
+            // so `("" ++ "")` is observably equivalent to the literal `""`.
+            if (arguments[0] is ElmInternal { Value: "empty-blob" })
+            {
+                return StringInstance("");
+            }
+
+            // `Pine_kernel.concat` of an empty list (e.g. `String.fromList []`)
+            // returns an empty list value. Treat that as the empty string so
+            // `String.fromList []` is observably equivalent to the literal `""`.
+            // TODO: Fix bug in fromList
+            // (https://github.com/pine-vm/pine/blob/eb67ecce93823ae252758e8bc94dc4c88393d83e/implement/Pine.Core/Elm/elm-in-elm/elm-kernel-modules/String.elm#L87-L89) and similar:
+            // Make these check if length is zero and return empty blob, so that it not inserts an empty list there.
+            if (arguments[0] is ElmList { Items.Count: 0 })
+            {
+                return StringInstance("");
+            }
+        }
+
+        return TagInstance(tagName, arguments);
+    }
+
+    /// <summary>
+    /// Creates an <see cref="ElmTag"/> instance with the specified tag name and arguments.
     /// This method may return a cached instance for frequently used tags.
     /// </summary>
     /// <param name="tagName">The name of the tag.</param>
@@ -625,6 +685,41 @@ public abstract record ElmValue
     }
 
     /// <summary>
+    /// Represents a raw Pine blob value that does not decode as a canonical Elm integer or Elm char.
+    /// <para />
+    /// This variant exists so that Elm-level interpreters (such as <c>ElmSyntaxInterpreter</c>) can
+    /// faithfully round-trip blob values produced by lower-level Pine kernel operations - for example,
+    /// the bit-twiddling operations exposed by <c>Bitwise.elm</c> may produce blobs whose byte layout
+    /// is not a canonical signed-integer or Unicode-scalar encoding. Wrapping them in
+    /// <see cref="ElmPineBlob"/> preserves the original bytes without losing information.
+    /// </summary>
+    public record ElmPineBlob(ReadOnlyMemory<byte> Value)
+        : ElmValue
+    {
+        /// <summary>
+        /// The number of contained nodes is always zero for raw Pine blob values.
+        /// </summary>
+        public override int ContainedNodesCount { get; } = 0;
+
+
+        /// <inheritdoc/>
+        public virtual bool Equals(ElmPineBlob? otherBlob)
+        {
+            if (otherBlob is null)
+                return false;
+
+            if (Value.Length != otherBlob.Value.Length)
+                return false;
+
+            return Value.Span.SequenceEqual(otherBlob.Value.Span);
+        }
+
+        /// <inheritdoc/>
+        public override int GetHashCode() =>
+            Value.GetHashCode();
+    }
+
+    /// <summary>
     /// The 'Float' type from Elm is stored as a rational number,
     /// expressed as the quotient or fraction ⁠of two integers, a numerator and a denominator.
     /// <see href="https://en.wikipedia.org/wiki/Rational_number" />
@@ -748,7 +843,7 @@ public abstract record ElmValue
         int ParameterCount,
         IReadOnlyList<ElmValue> ArgumentsAlreadyCollected,
         IReadOnlyDictionary<string, ElmValue> CapturedBindings,
-        Pine.Core.CodeAnalysis.DeclQualifiedName CapturedTopLevel)
+        CodeAnalysis.DeclQualifiedName CapturedTopLevel)
         : ElmValue
     {
         /// <summary>
@@ -762,16 +857,16 @@ public abstract record ElmValue
             /// detector; <see cref="Implementation"/> carries the parameter patterns and body.
             /// </summary>
             public sealed record Declared(
-                Pine.Core.CodeAnalysis.DeclQualifiedName Name,
-                Pine.Core.Elm.ElmSyntax.SyntaxModel.FunctionImplementation Implementation)
+                CodeAnalysis.DeclQualifiedName Name,
+                ElmSyntax.SyntaxModel.FunctionImplementation Implementation)
                 : SourceRef;
 
             /// <summary>
             /// An anonymous lambda expression. Stack traces and the infinite-recursion detector
-            /// use a synthetic name derived from <see cref="Pine.Core.Elm.ElmSyntax.SyntaxModel.LambdaStruct.BackslashLocation"/>.
+            /// use a synthetic name derived from <see cref="ElmSyntax.SyntaxModel.LambdaStruct.BackslashLocation"/>.
             /// </summary>
             public sealed record Lambda(
-                Pine.Core.Elm.ElmSyntax.SyntaxModel.LambdaStruct LambdaStruct)
+                ElmSyntax.SyntaxModel.LambdaStruct LambdaStruct)
                 : SourceRef;
         }
 
@@ -824,7 +919,7 @@ public abstract record ElmValue
         /// <inheritdoc/>
         public override int GetHashCode()
         {
-            var hash = new System.HashCode();
+            var hash = new HashCode();
 
             hash.Add(Source);
             hash.Add(ParameterCount);
@@ -837,15 +932,47 @@ public abstract record ElmValue
     }
 
     /// <summary>
+    /// Default renderer for <see cref="ElmPineBlob"/> values used by
+    /// <see cref="RenderAsElmExpression(ElmValue)"/>. Produces a short placeholder of the form
+    /// <c>&lt;pine_blob N bytes&gt;</c> describing only the byte count, since there is no
+    /// native Elm syntax for raw Pine blobs.
+    /// </summary>
+    /// <param name="bytes">The bytes of the Pine blob.</param>
+    /// <returns>A textual representation of the blob.</returns>
+    public static string DefaultPineBlobRenderer(ReadOnlyMemory<byte> bytes) =>
+        "<pine_blob " + bytes.Length + " bytes>";
+
+    /// <summary>
     /// Build a text which is a valid Elm expression and evaluates to the given Elm value.
     /// <para />
     /// Besides the expression string, the returned tuple also contains a boolean value indicating
     /// if the given string needs to be enclosed in parentheses when used as an argument to a function application.
     /// For example, an expression like 'Just 4' does not need parentheses by itself,
     /// but needs to be enclosed in parentheses when used as an argument to a function application like 'f (Just 4)'.
+    /// <para />
+    /// <see cref="ElmPineBlob"/> values are rendered using <see cref="DefaultPineBlobRenderer"/>. Use the
+    /// overload <see cref="RenderAsElmExpression(ElmValue, Func{ReadOnlyMemory{byte}, string})"/> to supply a
+    /// custom renderer.
     /// </summary>
     public static (string expressionString, bool needsParens) RenderAsElmExpression(
-        ElmValue elmValue)
+        ElmValue elmValue) =>
+        RenderAsElmExpression(elmValue, DefaultPineBlobRenderer);
+
+    /// <summary>
+    /// Build a text which is a valid Elm expression and evaluates to the given Elm value, using the supplied
+    /// <paramref name="pineBlobRenderer"/> to render any <see cref="ElmPineBlob"/> nodes encountered.
+    /// <para />
+    /// The same <paramref name="pineBlobRenderer"/> is threaded through nested values, so it is also applied
+    /// to <see cref="ElmPineBlob"/> nodes inside lists, tags, records and dictionaries.
+    /// <para />
+    /// Different consumers prefer different blob renderings - for example, some prefer a description with
+    /// just the byte count, while others prefer a base16 dump of the bytes - hence the parameter.
+    /// </summary>
+    /// <param name="elmValue">The value to render.</param>
+    /// <param name="pineBlobRenderer">Renderer applied to the bytes of every <see cref="ElmPineBlob"/> node.</param>
+    public static (string expressionString, bool needsParens) RenderAsElmExpression(
+        ElmValue elmValue,
+        Func<ReadOnlyMemory<byte>, string> pineBlobRenderer)
     {
         return
             elmValue switch
@@ -863,10 +990,17 @@ public abstract record ElmValue
                 :
                 ElmListItemsLookLikeTupleItems(list.Items) ?? false
                 ?
-                ("(" + string.Join(", ", list.Items.Select(item => RenderAsElmExpression(item).expressionString)) + ")",
+                ("(" +
+                string.Join(
+                    ", ",
+                    list.Items.Select(item => RenderAsElmExpression(item, pineBlobRenderer).expressionString)) +
+                ")",
                 needsParens: false)
                 :
-                ("[ " + string.Join(", ", list.Items.Select(item => RenderAsElmExpression(item).expressionString)) +
+                ("[ " +
+                string.Join(
+                    ", ",
+                    list.Items.Select(item => RenderAsElmExpression(item, pineBlobRenderer).expressionString)) +
                 " ]",
                 needsParens: false),
 
@@ -883,14 +1017,18 @@ public abstract record ElmValue
                     ", ",
                     record.Fields.Select(
                         field =>
-                        field.FieldName + " = " + RenderAsElmExpression(field.Value).expressionString)) + " }",
+                        field.FieldName + " = " + RenderAsElmExpression(field.Value, pineBlobRenderer).expressionString)) +
+                " }",
                 needsParens: false),
 
                 ElmTag tag =>
-                ElmTagAsExpression(tag.TagName, tag.Arguments),
+                ElmTagAsExpression(tag.TagName, tag.Arguments, pineBlobRenderer),
 
                 ElmBytes bytes =>
                 ("<" + bytes.Value.Length + " bytes>", needsParens: false),
+
+                ElmPineBlob blob =>
+                (pineBlobRenderer(blob.Value), needsParens: true),
 
                 ElmFloat elmFloat =>
                 (Convert.ToString(
@@ -978,15 +1116,34 @@ public abstract record ElmValue
     /// <summary>
     /// Renders an Elm tag as an Elm expression string.
     /// Handles special cases for Elm's built-in Set and Dict types to render them in a more readable format (e.g., Set.fromList [...], Dict.fromList [...]).
+    /// <para />
+    /// <see cref="ElmPineBlob"/> values nested inside the arguments are rendered using
+    /// <see cref="DefaultPineBlobRenderer"/>. Use the overload
+    /// <see cref="ElmTagAsExpression(string, IReadOnlyList{ElmValue}, Func{ReadOnlyMemory{byte}, string})"/>
+    /// to supply a custom renderer.
     /// </summary>
     /// <param name="tagName">The name of the tag.</param>
     /// <param name="arguments">The arguments of the tag.</param>
     /// <returns>A tuple containing the Elm expression string and a boolean indicating if parentheses are needed for function application.</returns>
     public static (string expressionString, bool needsParens) ElmTagAsExpression(
         string tagName,
-        IReadOnlyList<ElmValue> arguments)
+        IReadOnlyList<ElmValue> arguments) =>
+        ElmTagAsExpression(tagName, arguments, DefaultPineBlobRenderer);
+
+    /// <summary>
+    /// Renders an Elm tag as an Elm expression string, using the supplied <paramref name="pineBlobRenderer"/>
+    /// for any <see cref="ElmPineBlob"/> nodes encountered while rendering the arguments (and any
+    /// values nested inside them).
+    /// </summary>
+    /// <param name="tagName">The name of the tag.</param>
+    /// <param name="arguments">The arguments of the tag.</param>
+    /// <param name="pineBlobRenderer">Renderer applied to the bytes of every <see cref="ElmPineBlob"/> node.</param>
+    public static (string expressionString, bool needsParens) ElmTagAsExpression(
+        string tagName,
+        IReadOnlyList<ElmValue> arguments,
+        Func<ReadOnlyMemory<byte>, string> pineBlobRenderer)
     {
-        static string ApplyNeedsParens((string expressionString, bool needsParens) tuple) =>
+        string ApplyNeedsParens((string expressionString, bool needsParens) tuple) =>
             tuple.needsParens ? "(" + tuple.expressionString + ")" : tuple.expressionString;
 
         if (tagName is "Set_elm_builtin")
@@ -1004,7 +1161,9 @@ public abstract record ElmValue
 
                 return
                     ("Set.fromList [" +
-                    string.Join(",", setItems.Select(RenderAsElmExpression).Select(ApplyNeedsParens)) +
+                    string.Join(
+                        ",",
+                        setItems.Select(item => RenderAsElmExpression(item, pineBlobRenderer)).Select(ApplyNeedsParens)) +
                     "]",
                     needsParens: true);
             }
@@ -1025,7 +1184,7 @@ public abstract record ElmValue
                     (false, ""),
 
                     _ =>
-                    (true, " " + string.Join(" ", arguments.Select(RenderAsElmExpression).Select(ApplyNeedsParens)))
+                    (true, " " + string.Join(" ", arguments.Select(arg => RenderAsElmExpression(arg, pineBlobRenderer)).Select(ApplyNeedsParens)))
                 };
 
             return (tagName + argumentsString, needsParens);
@@ -1038,8 +1197,8 @@ public abstract record ElmValue
                 dictToList
                 .Select(
                     field =>
-                    "(" + RenderAsElmExpression(field.key).expressionString + "," +
-                    RenderAsElmExpression(field.value).expressionString +
+                    "(" + RenderAsElmExpression(field.key, pineBlobRenderer).expressionString + "," +
+                    RenderAsElmExpression(field.value, pineBlobRenderer).expressionString +
                     ")")) +
             "]",
             needsParens: true);
@@ -1186,6 +1345,9 @@ public abstract record ElmValue
 
         if (valueA is ElmTag && valueB is ElmTag)
             return null;
+
+        if (valueA is ElmPineBlob && valueB is ElmPineBlob)
+            return true;
 
         if (valueA is ElmInternal && valueB is ElmInternal)
             return null;
