@@ -148,10 +148,6 @@ public class InliningLetBlockTests
             """");
     }
 
-    // ──────────────────────────────────────────────────────────
-    // Reverse order: earlier declarations depend on later ones
-    // ──────────────────────────────────────────────────────────
-
     [Fact]
     public void Let_block_reverse_order_value_chain()
     {

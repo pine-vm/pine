@@ -455,9 +455,9 @@ public partial class ElmSyntaxInterpreter
     /// </returns>
     public static (Result<ElmInterpretationError, ElmValue> Result, ElmSyntaxInterpreterPerformanceCounters Counters)
         InterpretWithCounters(
-            DeclQualifiedName functionName,
-            IReadOnlyList<ElmValue> arguments,
-            IReadOnlyDictionary<DeclQualifiedName, SyntaxModel.Declaration> declarations)
+        DeclQualifiedName functionName,
+        IReadOnlyList<ElmValue> arguments,
+        IReadOnlyDictionary<DeclQualifiedName, SyntaxModel.Declaration> declarations)
     {
         var interpreter = new ElmSyntaxInterpreter();
         var invocationCounter = new InvocationCounter();
@@ -503,8 +503,8 @@ public partial class ElmSyntaxInterpreter
     /// </returns>
     public static (Result<ElmInterpretationError, ElmValue> Result, ElmSyntaxInterpreterPerformanceCounters Counters)
         ParseAndInterpretWithCounters(
-            string rootExpressionText,
-            IReadOnlyDictionary<DeclQualifiedName, SyntaxModel.Declaration> declarations)
+        string rootExpressionText,
+        IReadOnlyDictionary<DeclQualifiedName, SyntaxModel.Declaration> declarations)
     {
         var parseResult = ParseRootExpression(rootExpressionText);
 
@@ -733,11 +733,23 @@ public partial class ElmSyntaxInterpreter
         /// performs no computation on return (the returned value simply bubbles up).
         /// <see cref="Arguments"/> holds the values the function was called with — used
         /// both to render runtime-error stack traces as Elm-style function applications
-        /// and to detect infinite recursion (a repeated <c>(FunctionName, Arguments)</c>
+        /// and to detect infinite recursion (a repeated <c>(SourceIdentity, Arguments)</c>
         /// pair on the kont stack).
+        /// <para>
+        /// <see cref="SourceIdentity"/> is an opaque, reference-comparable handle on the
+        /// AST node the call originated from — a <see cref="SyntaxModel.FunctionImplementation"/>
+        /// for top-level / let-bound declarations and a <see cref="SyntaxModel.LambdaStruct"/>
+        /// for anonymous lambdas. The infinite-recursion detector compares frames by
+        /// <see cref="SourceIdentity"/> (using <see cref="object.ReferenceEquals"/>), not by
+        /// <see cref="FunctionName"/>: two anonymous lambdas constructed at the same source
+        /// position (e.g. <c>ParserFast</c> combinator chains where every lambda's synthetic
+        /// name collapses to <c>&lt;lambda@1:1&gt;</c>) are then correctly treated as
+        /// distinct frames as long as they are distinct AST nodes.
+        /// </para>
         /// </summary>
         public sealed record CallFrame(
             DeclQualifiedName FunctionName,
+            object SourceIdentity,
             IReadOnlyList<ElmValue> Arguments) : Kont;
 
         /// <summary>
@@ -1112,10 +1124,35 @@ public partial class ElmSyntaxInterpreter
                                 break;
                             }
 
-                            // Start evaluating the first let declaration's right-hand side.
+                            // Implements Elm's letrec semantics: every binding in the let
+                            // group is mutually visible, regardless of source order. Pre-build
+                            // closures for parameterised LetFunction bindings (their bodies
+                            // are not yet evaluated, so they can freely reference any sibling
+                            // through the shared mutable `extended` dictionary captured as
+                            // their environment), then evaluate non-function bindings in
+                            // dependency order.
+                            var sortedNonFunctionDecls =
+                                PrepareLetGroupAndSortNonFunctionDecls(
+                                    decls: decls,
+                                    extended: extended,
+                                    outerTopLevel: currentEnv.CurrentTopLevel,
+                                    kstack: kstack);
+
+                            if (sortedNonFunctionDecls.Count is 0)
+                            {
+                                currentEnv =
+                                    new ApplicationContext(
+                                        CurrentTopLevel: currentEnv.CurrentTopLevel,
+                                        LocalBindings: extended);
+
+                                currentExpr = letExpression.Value.Expression.Value;
+                                break;
+                            }
+
+                            // Start evaluating the first non-function let binding's RHS.
                             (currentExpr, currentEnv) =
                                 BeginNextLetDecl(
-                                    decls: decls,
+                                    decls: sortedNonFunctionDecls,
                                     nextIndex: 0,
                                     extended: extended,
                                     body: letExpression.Value.Expression,
@@ -1155,6 +1192,7 @@ public partial class ElmSyntaxInterpreter
                             // The parser includes the leading dot in FunctionName; strip it
                             // to obtain the bare field name.
                             var fieldName = recordAccessFunction.FunctionName;
+
                             if (fieldName.Length > 0 && fieldName[0] == '.')
                                 fieldName = fieldName[1..];
 
@@ -1230,6 +1268,7 @@ public partial class ElmSyntaxInterpreter
                                 new SyntaxModel.Expression.Application(
                                     Function: functionRefNode,
                                     Arguments: [operatorApplication.Left, operatorApplication.Right]);
+
                             break;
                         }
 
@@ -1254,6 +1293,7 @@ public partial class ElmSyntaxInterpreter
                                 new SyntaxModel.Expression.FunctionOrValue(
                                     ModuleName: opFunctionName.Namespaces,
                                     Name: opFunctionName.DeclName);
+
                             break;
                         }
 
@@ -1661,6 +1701,7 @@ public partial class ElmSyntaxInterpreter
 
                             var fieldName =
                                 buildRecordUpdate.Fields[buildRecordUpdate.NextIndex].FieldName.Value;
+
                             buildRecordUpdate.Accumulated[buildRecordUpdate.NextIndex] =
                                 (fieldName, value);
 
@@ -1669,8 +1710,10 @@ public partial class ElmSyntaxInterpreter
                             if (nextIndex < buildRecordUpdate.Fields.Count)
                             {
                                 kstack.Push(buildRecordUpdate with { NextIndex = nextIndex });
+
                                 currentExpr =
                                     buildRecordUpdate.Fields[nextIndex].ValueExpr.Value;
+
                                 currentEnv = buildRecordUpdate.Env;
                                 currentValue = null;
                                 break;
@@ -1713,8 +1756,10 @@ public partial class ElmSyntaxInterpreter
 
                                 newFields[i] =
                                     updates.TryGetValue(origField.FieldName, out var newValue)
-                                    ? (origField.FieldName, newValue)
-                                    : origField;
+                                    ?
+                                    (origField.FieldName, newValue)
+                                    :
+                                    origField;
                             }
 
                             currentValue = new ElmValue.ElmRecord(newFields);
@@ -1872,13 +1917,13 @@ public partial class ElmSyntaxInterpreter
                             new ApplyCallOutcome.ResolvedValue(
                                 new ElmValue.ElmFunction(
                                     Source:
-                                        new ElmValue.ElmFunction.SourceRef.Declared(
-                                            Name: application.FunctionName,
-                                            Implementation: functionImpl),
+                                    new ElmValue.ElmFunction.SourceRef.Declared(
+                                        Name: application.FunctionName,
+                                        Implementation: functionImpl),
                                     ParameterCount: expectedArity,
                                     ArgumentsAlreadyCollected: [.. application.Arguments],
                                     CapturedBindings:
-                                        ImmutableDictionary<string, ElmValue>.Empty,
+                                    ImmutableDictionary<string, ElmValue>.Empty,
                                     CapturedTopLevel: application.FunctionName));
                     }
 
@@ -1945,7 +1990,7 @@ public partial class ElmSyntaxInterpreter
 
                     // Every call — including self-recursion — pushes a fresh CallFrame onto
                     // the kont stack. This lets the infinite-recursion detector later see a
-                    // cycle as a literal repeated (FunctionName, Arguments) pair in the
+                    // cycle as a literal repeated (SourceIdentity, Arguments) pair in the
                     // stack, matching the wording of the spec. The trade-off is that purely
                     // tail-recursive Elm functions use explicit-stack memory proportional to
                     // their depth rather than O(1); for the test-only interpreter in this
@@ -1953,6 +1998,7 @@ public partial class ElmSyntaxInterpreter
                     kstack.Push(
                         new Kont.CallFrame(
                             application.FunctionName,
+                            functionImpl,
                             saturatingArgs));
 
                     invocationCounter.Count++;
@@ -2016,8 +2062,10 @@ public partial class ElmSyntaxInterpreter
 
             var nameSuffix =
                 functionRenderForError is null
-                ? ""
-                : " bound to '" + functionRenderForError + "'";
+                ?
+                ""
+                :
+                " bound to '" + functionRenderForError + "'";
 
             throw MakeRuntimeError(
                 "Cannot apply " + newArguments.Count
@@ -2081,6 +2129,7 @@ public partial class ElmSyntaxInterpreter
         IReadOnlyList<SyntaxModel.Node<SyntaxModel.Pattern>> parameterPatterns;
         SyntaxModel.Expression bodyExpression;
         DeclQualifiedName callFrameName;
+        object callFrameSourceIdentity;
 
         switch (closure.Source)
         {
@@ -2088,12 +2137,14 @@ public partial class ElmSyntaxInterpreter
                 parameterPatterns = declared.Implementation.Arguments;
                 bodyExpression = declared.Implementation.Expression.Value;
                 callFrameName = declared.Name;
+                callFrameSourceIdentity = declared.Implementation;
                 break;
 
             case ElmValue.ElmFunction.SourceRef.Lambda lambdaSource:
                 parameterPatterns = lambdaSource.LambdaStruct.Arguments;
                 bodyExpression = lambdaSource.LambdaStruct.Expression.Value;
                 callFrameName = SyntheticLambdaName(lambdaSource.LambdaStruct);
+                callFrameSourceIdentity = lambdaSource.LambdaStruct;
                 break;
 
             default:
@@ -2132,6 +2183,7 @@ public partial class ElmSyntaxInterpreter
         kstack.Push(
             new Kont.CallFrame(
                 callFrameName,
+                callFrameSourceIdentity,
                 saturatingArgs));
 
         invocationCounter.Count++;
@@ -2183,12 +2235,20 @@ public partial class ElmSyntaxInterpreter
 
     /// <summary>
     /// Walks the kont stack looking for two <see cref="Kont.CallFrame"/> entries with the same
-    /// <see cref="Kont.CallFrame.FunctionName"/> and structurally equal
-    /// <see cref="Kont.CallFrame.Arguments"/>. If such a pair is found, infinite recursion is
-    /// raised as an <see cref="ElmInterpretationException"/> whose
+    /// <see cref="Kont.CallFrame.SourceIdentity"/> (compared by reference) and structurally
+    /// equal <see cref="Kont.CallFrame.Arguments"/>. If such a pair is found, infinite
+    /// recursion is raised as an <see cref="ElmInterpretationException"/> whose
     /// <see cref="ElmInterpretationError.CallStack"/> is the stack truncated to the first
     /// cycle: the innermost (just-pushed) frame at index 0, followed by the frames between
     /// it and the older duplicate, followed by the older duplicate itself.
+    /// <para>
+    /// Comparing by reference identity of the source AST node — not by the rendered
+    /// <see cref="Kont.CallFrame.FunctionName"/> — avoids false positives when two distinct
+    /// anonymous lambdas happen to share a synthetic name (e.g. <c>ParserFast</c> combinator
+    /// chains where every lambda's <c>BackslashLocation</c> collapses to row 1, column 1
+    /// because the generated source has no line information). A genuine self-recursive
+    /// call always re-uses the same AST node and is detected as before.
+    /// </para>
     /// </summary>
     private static void CheckForInfiniteRecursion(Stack<Kont> kstack)
     {
@@ -2223,7 +2283,7 @@ public partial class ElmSyntaxInterpreter
                 continue;
             }
 
-            if (callFrame.FunctionName.Equals(topCallFrame.FunctionName)
+            if (ReferenceEquals(callFrame.SourceIdentity, topCallFrame.SourceIdentity)
                 && ArgumentListsEqual(callFrame.Arguments, topCallFrame.Arguments))
             {
                 throw new ElmInterpretationException(
@@ -2257,6 +2317,13 @@ public partial class ElmSyntaxInterpreter
     /// right-hand side. Otherwise returns the pair for the body, evaluated under the extended
     /// environment.
     /// </summary>
+    /// <remarks>
+    /// <paramref name="decls"/> is the topologically-sorted list of <b>non-function</b> let
+    /// bindings (zero-arg <c>LetFunction</c> + <c>LetDestructuring</c>) produced by
+    /// <see cref="PrepareLetGroupAndSortNonFunctionDecls"/>. Parameterised
+    /// <c>LetFunction</c> bindings have already been materialised as closures in
+    /// <paramref name="extended"/> by that helper and are not present in <paramref name="decls"/>.
+    /// </remarks>
     private static (SyntaxModel.Expression Expr, ApplicationContext Env) BeginNextLetDecl(
         IReadOnlyList<SyntaxModel.Node<SyntaxModel.Expression.LetDeclaration>> decls,
         int nextIndex,
@@ -2275,17 +2342,22 @@ public partial class ElmSyntaxInterpreter
                     {
                         var functionImpl = letFunction.Function.Declaration.Value;
 
+                        // Parameterised LetFunction bindings should have been pre-built as
+                        // closures in `extended` by PrepareLetGroupAndSortNonFunctionDecls.
+                        // Reaching this branch with a non-empty argument list indicates a
+                        // bug in the let-group setup.
                         if (functionImpl.Arguments.Count is not 0)
                         {
                             throw MakeRuntimeError(
-                                "Let bindings with parameters are not implemented yet.",
+                                "Internal interpreter error: parameterised LetFunction reached "
+                                + "non-function evaluation path.",
                                 kstack);
                         }
 
                         var innerEnv =
                             new ApplicationContext(
                                 CurrentTopLevel: outerEnv.CurrentTopLevel,
-                                LocalBindings: new Dictionary<string, ElmValue>(extended));
+                                LocalBindings: extended);
 
                         kstack.Push(
                             new Kont.LetBindFunction(
@@ -2304,7 +2376,7 @@ public partial class ElmSyntaxInterpreter
                         var innerEnv =
                             new ApplicationContext(
                                 CurrentTopLevel: outerEnv.CurrentTopLevel,
-                                LocalBindings: new Dictionary<string, ElmValue>(extended));
+                                LocalBindings: extended);
 
                         kstack.Push(
                             new Kont.LetBindDestructure(
@@ -2331,6 +2403,518 @@ public partial class ElmSyntaxInterpreter
                 LocalBindings: extended);
 
         return (body.Value, bodyEnv);
+    }
+
+    /// <summary>
+    /// Prepares a <c>let</c> binding group for evaluation under Elm's letrec semantics:
+    /// <list type="number">
+    ///   <item>
+    ///   For every parameterised <see cref="SyntaxModel.Expression.LetDeclaration.LetFunction"/>,
+    ///   immediately materialises an <see cref="ElmValue.ElmFunction"/> closure into
+    ///   <paramref name="extended"/>. The closure captures the same mutable
+    ///   <paramref name="extended"/> dictionary used by the rest of the let group; closures
+    ///   that are invoked after evaluation of the let group has completed therefore see all
+    ///   sibling bindings, supporting full mutual recursion between let-bound functions and
+    ///   forward references from any sibling into a function binding.
+    ///   </item>
+    ///   <item>
+    ///   Computes the dependency graph among the remaining non-function bindings (zero-arg
+    ///   <see cref="SyntaxModel.Expression.LetDeclaration.LetFunction"/> and every
+    ///   <see cref="SyntaxModel.Expression.LetDeclaration.LetDestructuring"/>) and returns
+    ///   them in topological order. A cycle in those non-function dependencies surfaces as
+    ///   a runtime error (<c>"Cyclic let binding"</c>) — this matches Elm's behaviour where
+    ///   only function bindings can participate in mutual recursion.
+    ///   </item>
+    /// </list>
+    /// </summary>
+    private static IReadOnlyList<SyntaxModel.Node<SyntaxModel.Expression.LetDeclaration>>
+        PrepareLetGroupAndSortNonFunctionDecls(
+        IReadOnlyList<SyntaxModel.Node<SyntaxModel.Expression.LetDeclaration>> decls,
+        Dictionary<string, ElmValue> extended,
+        DeclQualifiedName outerTopLevel,
+        Stack<Kont> kstack)
+    {
+        // Collect, per declaration, the set of names it introduces.
+        var introducedByDecl = new HashSet<string>[decls.Count];
+        var letGroupNames = new HashSet<string>();
+
+        for (var i = 0; i < decls.Count; i++)
+        {
+            var introduced = new HashSet<string>();
+
+            switch (decls[i].Value)
+            {
+                case SyntaxModel.Expression.LetDeclaration.LetFunction letFunction:
+                    introduced.Add(letFunction.Function.Declaration.Value.Name.Value);
+                    break;
+
+                case SyntaxModel.Expression.LetDeclaration.LetDestructuring letDestructuring:
+                    CollectPatternNames(letDestructuring.Pattern.Value, introduced);
+                    break;
+            }
+
+            introducedByDecl[i] = introduced;
+
+            foreach (var name in introduced)
+            {
+                letGroupNames.Add(name);
+            }
+        }
+
+        // Pre-build closures for every parameterised LetFunction. These do not participate
+        // in the dependency analysis below; their bodies are not evaluated here.
+        var nonFunctionDecls =
+            new List<SyntaxModel.Node<SyntaxModel.Expression.LetDeclaration>>(decls.Count);
+
+        var nonFunctionIntroduced = new List<HashSet<string>>(decls.Count);
+
+        for (var i = 0; i < decls.Count; i++)
+        {
+            if (decls[i].Value is SyntaxModel.Expression.LetDeclaration.LetFunction letFunction
+                && letFunction.Function.Declaration.Value.Arguments.Count is not 0)
+            {
+                var functionImpl = letFunction.Function.Declaration.Value;
+
+                var bindingName = functionImpl.Name.Value;
+
+                // Synthesise a DeclQualifiedName for the closure so over-application,
+                // stack traces, and the infinite-recursion detector all surface a useful
+                // identifier. The name is namespaced under the surrounding top-level
+                // declaration so two let-bound functions of the same simple name from
+                // different surrounding functions don't accidentally compare equal.
+                var qualifiedName =
+                    new DeclQualifiedName(
+                        Namespaces: [.. outerTopLevel.Namespaces, outerTopLevel.DeclName, "<let>"],
+                        DeclName: bindingName);
+
+                extended[bindingName] =
+                    new ElmValue.ElmFunction(
+                        Source:
+                        new ElmValue.ElmFunction.SourceRef.Declared(
+                            Name: qualifiedName,
+                            Implementation: functionImpl),
+                        ParameterCount: functionImpl.Arguments.Count,
+                        ArgumentsAlreadyCollected: [],
+                        // Capture `extended` itself (not a snapshot): future additions to the
+                        // dictionary as the let group is populated will be visible to the
+                        // closure when it is later invoked.
+                        CapturedBindings: extended,
+                        CapturedTopLevel: outerTopLevel);
+
+                continue;
+            }
+
+            nonFunctionDecls.Add(decls[i]);
+            nonFunctionIntroduced.Add(introducedByDecl[i]);
+        }
+
+        if (nonFunctionDecls.Count is 0)
+            return nonFunctionDecls;
+
+        // Build the dependency graph among non-function bindings: index i depends on
+        // index j when binding i's RHS contains a free reference to a name introduced
+        // by binding j. References to names already in `extended` (function closures
+        // and outer bindings) are not considered dependencies — those are resolvable
+        // immediately at evaluation time.
+        var nonFunctionNameToIndex = new Dictionary<string, int>();
+
+        for (var i = 0; i < nonFunctionDecls.Count; i++)
+        {
+            foreach (var name in nonFunctionIntroduced[i])
+            {
+                nonFunctionNameToIndex[name] = i;
+            }
+        }
+
+        var dependencies = new HashSet<int>[nonFunctionDecls.Count];
+
+        for (var i = 0; i < nonFunctionDecls.Count; i++)
+        {
+            var freeNames = new HashSet<string>();
+
+            SyntaxModel.Expression rhs =
+                nonFunctionDecls[i].Value switch
+                {
+                    SyntaxModel.Expression.LetDeclaration.LetFunction lf =>
+                    lf.Function.Declaration.Value.Expression.Value,
+
+                    SyntaxModel.Expression.LetDeclaration.LetDestructuring ld =>
+                    ld.Expression.Value,
+
+                    _ =>
+                    throw new System.InvalidOperationException(
+                        "Unexpected let declaration shape in non-function decl list: "
+                        + nonFunctionDecls[i].Value.GetType().FullName),
+                };
+
+            CollectFreeNames(rhs, shadowed: [], free: freeNames);
+
+            var deps = new HashSet<int>();
+
+            foreach (var name in freeNames)
+            {
+                if (nonFunctionNameToIndex.TryGetValue(name, out var depIndex)
+                    && depIndex != i)
+                {
+                    deps.Add(depIndex);
+                }
+            }
+
+            dependencies[i] = deps;
+        }
+
+        // Topological sort via DFS, with cycle detection. Tracks visit state per node.
+        const byte StateUnvisited = 0;
+        const byte StateInProgress = 1;
+        const byte StateDone = 2;
+
+        var state = new byte[nonFunctionDecls.Count];
+
+        var sorted =
+            new List<SyntaxModel.Node<SyntaxModel.Expression.LetDeclaration>>(nonFunctionDecls.Count);
+
+        // Iterative DFS to avoid blowing the .NET call stack for large let groups.
+        var dfsStack = new Stack<(int node, IEnumerator<int> deps)>();
+
+        for (var start = 0; start < nonFunctionDecls.Count; start++)
+        {
+            if (state[start] is not StateUnvisited)
+                continue;
+
+            state[start] = StateInProgress;
+            dfsStack.Push((start, dependencies[start].GetEnumerator()));
+
+            try
+            {
+                while (dfsStack.Count > 0)
+                {
+                    var (node, depsEnum) = dfsStack.Peek();
+
+                    if (depsEnum.MoveNext())
+                    {
+                        var dep = depsEnum.Current;
+
+                        if (state[dep] is StateInProgress)
+                        {
+                            // Reconstruct the cycle path by walking back through the DFS
+                            // stack from the current node down to the back-edge target,
+                            // then closing the loop. This surfaces the full cycle for
+                            // diagnostics rather than only the two adjacent nodes.
+                            var stackFrames = dfsStack.ToArray(); // top-most first
+                            var pathNames = new List<string>();
+                            var includeFromHere = false;
+
+                            for (var i = 0; i < stackFrames.Length; i++)
+                            {
+                                var frameNode = stackFrames[i].node;
+
+                                if (frameNode == dep)
+                                    includeFromHere = true;
+
+                                if (includeFromHere)
+                                {
+                                    pathNames.Add(
+                                        string.Join("/", nonFunctionIntroduced[frameNode]));
+                                }
+                            }
+
+                            // Reverse so the path reads "dep -> ... -> node -> dep".
+                            pathNames.Reverse();
+                            pathNames.Add(string.Join("/", nonFunctionIntroduced[dep]));
+
+                            throw MakeRuntimeError(
+                                "Cyclic let binding detected among non-function bindings: "
+                                + string.Join(" -> ", pathNames),
+                                kstack);
+                        }
+
+                        if (state[dep] is StateUnvisited)
+                        {
+                            state[dep] = StateInProgress;
+                            dfsStack.Push((dep, dependencies[dep].GetEnumerator()));
+                        }
+                    }
+                    else
+                    {
+                        state[node] = StateDone;
+                        sorted.Add(nonFunctionDecls[node]);
+                        dfsStack.Pop();
+                        depsEnum.Dispose();
+                    }
+                }
+            }
+            catch
+            {
+                // Dispose any enumerators still on the stack to avoid leaking IDisposable
+                // references on the abnormal-exit path (cycle detection raises here).
+                while (dfsStack.Count > 0)
+                {
+                    dfsStack.Pop().deps.Dispose();
+                }
+
+                throw;
+            }
+        }
+
+        return sorted;
+    }
+
+    /// <summary>
+    /// Collects the names introduced by an Elm pattern into <paramref name="sink"/>.
+    /// </summary>
+    private static void CollectPatternNames(
+        SyntaxModel.Pattern pattern,
+        HashSet<string> sink)
+    {
+        switch (pattern)
+        {
+            case SyntaxModel.Pattern.VarPattern varPattern:
+                sink.Add(varPattern.Name);
+                break;
+
+            case SyntaxModel.Pattern.AllPattern:
+            case SyntaxModel.Pattern.UnitPattern:
+            case SyntaxModel.Pattern.CharPattern:
+            case SyntaxModel.Pattern.StringPattern:
+            case SyntaxModel.Pattern.IntPattern:
+            case SyntaxModel.Pattern.HexPattern:
+            case SyntaxModel.Pattern.FloatPattern:
+                break;
+
+            case SyntaxModel.Pattern.ParenthesizedPattern parenthesized:
+                CollectPatternNames(parenthesized.Pattern.Value, sink);
+                break;
+
+            case SyntaxModel.Pattern.AsPattern asPattern:
+                CollectPatternNames(asPattern.Pattern.Value, sink);
+                sink.Add(asPattern.Name.Value);
+                break;
+
+            case SyntaxModel.Pattern.TuplePattern tuplePattern:
+                foreach (var element in tuplePattern.Elements.Nodes)
+                    CollectPatternNames(element.Value, sink);
+
+                break;
+
+            case SyntaxModel.Pattern.RecordPattern recordPattern:
+                foreach (var field in recordPattern.Fields.Nodes)
+                    sink.Add(field.Value);
+
+                break;
+
+            case SyntaxModel.Pattern.UnConsPattern unCons:
+                CollectPatternNames(unCons.Head.Value, sink);
+                CollectPatternNames(unCons.Tail.Value, sink);
+                break;
+
+            case SyntaxModel.Pattern.ListPattern listPattern:
+                foreach (var element in listPattern.Elements.Nodes)
+                    CollectPatternNames(element.Value, sink);
+
+                break;
+
+            case SyntaxModel.Pattern.NamedPattern namedPattern:
+                foreach (var argument in namedPattern.Arguments)
+                    CollectPatternNames(argument.Value, sink);
+
+                break;
+
+            default:
+                throw new System.NotImplementedException(
+                    "Pattern type not implemented in CollectPatternNames: "
+                    + pattern.GetType().FullName);
+        }
+    }
+
+    /// <summary>
+    /// Collects bare-name references (i.e. <see cref="SyntaxModel.Expression.FunctionOrValue"/>
+    /// nodes with empty module name) appearing free in <paramref name="expression"/> into
+    /// <paramref name="free"/>. Names introduced by lambdas, case alternatives, nested let
+    /// blocks, or function-parameter patterns shadow outer references and are tracked through
+    /// <paramref name="shadowed"/>.
+    /// </summary>
+    /// <remarks>
+    /// Used by <see cref="PrepareLetGroupAndSortNonFunctionDecls"/> to compute the
+    /// dependency graph among non-function let bindings. The intent is conservative
+    /// over-approximation: it is fine to report a name that is not actually used at
+    /// runtime as a dependency, because that just constrains the topological order
+    /// — but it must never miss a name that <em>is</em> referenced.
+    /// </remarks>
+    private static void CollectFreeNames(
+        SyntaxModel.Expression expression,
+        HashSet<string> shadowed,
+        HashSet<string> free)
+    {
+        switch (expression)
+        {
+            case SyntaxModel.Expression.UnitExpr:
+            case SyntaxModel.Expression.Literal:
+            case SyntaxModel.Expression.CharLiteral:
+            case SyntaxModel.Expression.Integer:
+            case SyntaxModel.Expression.Floatable:
+            case SyntaxModel.Expression.PrefixOperator:
+            case SyntaxModel.Expression.RecordAccessFunction:
+            case SyntaxModel.Expression.GLSLExpression:
+                break;
+
+            case SyntaxModel.Expression.Negation negation:
+                CollectFreeNames(negation.Expression.Value, shadowed, free);
+                break;
+
+            case SyntaxModel.Expression.ListExpr listExpr:
+                foreach (var element in listExpr.Elements.Nodes)
+                    CollectFreeNames(element.Value, shadowed, free);
+
+                break;
+
+            case SyntaxModel.Expression.TupledExpression tupledExpression:
+                foreach (var element in tupledExpression.Elements.Nodes)
+                    CollectFreeNames(element.Value, shadowed, free);
+
+                break;
+
+            case SyntaxModel.Expression.ParenthesizedExpression parenthesized:
+                CollectFreeNames(parenthesized.Expression.Value, shadowed, free);
+                break;
+
+            case SyntaxModel.Expression.IfBlock ifBlock:
+                CollectFreeNames(ifBlock.Condition.Value, shadowed, free);
+                CollectFreeNames(ifBlock.ThenBlock.Value, shadowed, free);
+                CollectFreeNames(ifBlock.ElseBlock.Value, shadowed, free);
+                break;
+
+            case SyntaxModel.Expression.RecordExpr recordExpr:
+                foreach (var field in recordExpr.Fields.Nodes)
+                    CollectFreeNames(field.ValueExpr.Value, shadowed, free);
+
+                break;
+
+            case SyntaxModel.Expression.FunctionOrValue functionOrValue:
+                if (functionOrValue.ModuleName.Count is 0
+                    && !shadowed.Contains(functionOrValue.Name))
+                {
+                    free.Add(functionOrValue.Name);
+                }
+
+                break;
+
+            case SyntaxModel.Expression.Application application:
+                CollectFreeNames(application.Function.Value, shadowed, free);
+
+                foreach (var argument in application.Arguments)
+                    CollectFreeNames(argument.Value, shadowed, free);
+
+                break;
+
+            case SyntaxModel.Expression.OperatorApplication operatorApplication:
+
+                // The operator itself resolves through the infix-operator map to a
+                // top-level declaration, never to a let-group binding, so it is not
+                // a candidate for the local-shadowing analysis.
+                CollectFreeNames(operatorApplication.Left.Value, shadowed, free);
+                CollectFreeNames(operatorApplication.Right.Value, shadowed, free);
+                break;
+
+            case SyntaxModel.Expression.LambdaExpression lambdaExpression:
+                {
+                    var inner = new HashSet<string>(shadowed);
+
+                    foreach (var arg in lambdaExpression.Lambda.Arguments)
+                        CollectPatternNames(arg.Value, inner);
+
+                    CollectFreeNames(lambdaExpression.Lambda.Expression.Value, inner, free);
+                    break;
+                }
+
+            case SyntaxModel.Expression.CaseExpression caseExpression:
+                {
+                    CollectFreeNames(caseExpression.CaseBlock.Expression.Value, shadowed, free);
+
+                    foreach (var caseNode in caseExpression.CaseBlock.Cases)
+                    {
+                        var inner = new HashSet<string>(shadowed);
+                        CollectPatternNames(caseNode.Pattern.Value, inner);
+                        CollectFreeNames(caseNode.Expression.Value, inner, free);
+                    }
+
+                    break;
+                }
+
+            case SyntaxModel.Expression.LetExpression letExpression:
+                {
+                    // Names introduced by the nested let block shadow the outer scope
+                    // for the purposes of free-name analysis (whether they are
+                    // function bindings or value bindings).
+                    var inner = new HashSet<string>(shadowed);
+
+                    foreach (var declNode in letExpression.Value.Declarations)
+                    {
+                        switch (declNode.Value)
+                        {
+                            case SyntaxModel.Expression.LetDeclaration.LetFunction nestedLet:
+                                inner.Add(nestedLet.Function.Declaration.Value.Name.Value);
+                                break;
+
+                            case SyntaxModel.Expression.LetDeclaration.LetDestructuring nestedDestr:
+                                CollectPatternNames(nestedDestr.Pattern.Value, inner);
+                                break;
+                        }
+                    }
+
+                    foreach (var declNode in letExpression.Value.Declarations)
+                    {
+                        switch (declNode.Value)
+                        {
+                            case SyntaxModel.Expression.LetDeclaration.LetFunction nestedLet:
+                                {
+                                    // The function's own arguments shadow further inside its body.
+                                    var bodyShadowed = new HashSet<string>(inner);
+
+                                    foreach (var arg in nestedLet.Function.Declaration.Value.Arguments)
+                                        CollectPatternNames(arg.Value, bodyShadowed);
+
+                                    CollectFreeNames(
+                                        nestedLet.Function.Declaration.Value.Expression.Value,
+                                        bodyShadowed,
+                                        free);
+
+                                    break;
+                                }
+
+                            case SyntaxModel.Expression.LetDeclaration.LetDestructuring nestedDestr:
+                                CollectFreeNames(nestedDestr.Expression.Value, inner, free);
+                                break;
+                        }
+                    }
+
+                    CollectFreeNames(letExpression.Value.Expression.Value, inner, free);
+                    break;
+                }
+
+            case SyntaxModel.Expression.RecordAccess recordAccess:
+                CollectFreeNames(recordAccess.Record.Value, shadowed, free);
+                break;
+
+            case SyntaxModel.Expression.RecordUpdateExpression recordUpdate:
+                if (!shadowed.Contains(recordUpdate.RecordName.Value))
+                    free.Add(recordUpdate.RecordName.Value);
+
+                foreach (var field in recordUpdate.Fields.Nodes)
+                    CollectFreeNames(field.ValueExpr.Value, shadowed, free);
+
+                break;
+
+            default:
+
+                // Unknown expression shape: be conservative and don't crash. Any names
+                // missed here may cause spurious "Cyclic let binding" or unresolved
+                // references — both of which are loud failure modes preferable to
+                // silent miscompilation, and would be straightforward to fix by
+                // extending this switch.
+                throw new System.NotImplementedException(
+                    "Expression type not implemented in CollectFreeNames: "
+                    + expression.GetType().FullName);
+        }
     }
 
     /// <summary>
@@ -2723,10 +3307,11 @@ public partial class ElmSyntaxInterpreter
                         return false;
                     }
 
-                    return TryMatchPattern(
-                        namedPattern.Arguments[1].Value,
-                        ElmValue.Integer(elmFloat.Denominator),
-                        bindings);
+                    return
+                        TryMatchPattern(
+                            namedPattern.Arguments[1].Value,
+                            ElmValue.Integer(elmFloat.Denominator),
+                            bindings);
                 }
 
             default:
@@ -3076,11 +3661,11 @@ public partial class ElmSyntaxInterpreter
         var body =
             new SyntaxModel.Expression.Application(
                 Function:
-                    new SyntaxModel.Node<SyntaxModel.Expression>(
-                        defaultRange,
-                        new SyntaxModel.Expression.FunctionOrValue(
-                            ModuleName: qualifiedName.Namespaces,
-                            Name: qualifiedName.DeclName)),
+                new SyntaxModel.Node<SyntaxModel.Expression>(
+                    defaultRange,
+                    new SyntaxModel.Expression.FunctionOrValue(
+                        ModuleName: qualifiedName.Namespaces,
+                        Name: qualifiedName.DeclName)),
                 Arguments: argumentRefs);
 
         var lambda =
@@ -3113,10 +3698,11 @@ public partial class ElmSyntaxInterpreter
 
         const string paramName = "__record_access_arg";
 
-        var parameterPatterns = new SyntaxModel.Node<SyntaxModel.Pattern>[]
-        {
-            new(defaultRange, new SyntaxModel.Pattern.VarPattern(paramName)),
-        };
+        var parameterPatterns =
+            new SyntaxModel.Node<SyntaxModel.Pattern>[]
+            {
+                new(defaultRange, new SyntaxModel.Pattern.VarPattern(paramName)),
+            };
 
         var recordRef =
             new SyntaxModel.Node<SyntaxModel.Expression>(
