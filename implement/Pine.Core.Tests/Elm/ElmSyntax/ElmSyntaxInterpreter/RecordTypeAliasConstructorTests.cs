@@ -11,7 +11,9 @@ namespace Pine.Core.Tests.Elm.ElmSyntax.ElmSyntaxInterpreter;
 /// <see cref="ElmInterpreter.ParseAndInterpret(string, System.Collections.Generic.IReadOnlyDictionary{Core.CodeAnalysis.DeclQualifiedName, Core.Elm.ElmSyntax.SyntaxModel.Declaration})"/>.
 /// Elm semantics: parameter order corresponds to field order in the alias declaration; the
 /// resulting record's fields are sorted alphabetically.
-/// Only full application is exercised here; partial application is covered in
+/// Both full application and partial application (in batches of one or two arguments,
+/// for constructor arities up to three) are exercised here; partial application of
+/// arbitrary user-defined functions is additionally covered in
 /// <see cref="FunctionApplicationPartialTests"/>.
 /// </summary>
 public class RecordTypeAliasConstructorTests
@@ -68,6 +70,117 @@ public class RecordTypeAliasConstructorTests
             """;
 
         InterpreterTestHelper.EvaluateInModuleOrCrashRendered("Rec 1 2 3", elmModuleText)
+            .Should().Be("{ a = 2, m = 3, z = 1 }");
+    }
+
+    [Fact]
+    public void Record_constructor_two_fields_partial_then_remaining_argument()
+    {
+        // Point's constructor takes two arguments. The first call site supplies one
+        // argument, producing a function value; the remaining argument is supplied at a
+        // later call site.
+        var elmModuleText =
+            """
+            module Test exposing (..)
+
+
+            type alias Point =
+                { x : Int, y : Int }
+            """;
+
+        InterpreterTestHelper.EvaluateInModuleOrCrashRendered(
+            """
+            let
+                partial =
+                    Point 10
+            in
+            partial 20
+            """,
+            elmModuleText)
+            .Should().Be("{ x = 10, y = 20 }");
+    }
+
+    [Fact]
+    public void Record_constructor_three_fields_partial_one_then_batch_of_two()
+    {
+        // Rec's constructor takes three arguments (in declaration-field order: z, a, m).
+        // First call site supplies one argument; the resulting closure is then applied
+        // to the remaining two arguments as a single batch at a later call site.
+        var elmModuleText =
+            """
+            module Test exposing (..)
+
+
+            type alias Rec =
+                { z : Int, a : Int, m : Int }
+            """;
+
+        InterpreterTestHelper.EvaluateInModuleOrCrashRendered(
+            """
+            let
+                partial =
+                    Rec 1
+            in
+            partial 2 3
+            """,
+            elmModuleText)
+            .Should().Be("{ a = 2, m = 3, z = 1 }");
+    }
+
+    [Fact]
+    public void Record_constructor_three_fields_partial_batch_of_two_then_one()
+    {
+        // Rec's constructor takes three arguments. First call site supplies two arguments
+        // as a single batch, producing a one-argument closure; the remaining argument is
+        // supplied at a later call site.
+        var elmModuleText =
+            """
+            module Test exposing (..)
+
+
+            type alias Rec =
+                { z : Int, a : Int, m : Int }
+            """;
+
+        InterpreterTestHelper.EvaluateInModuleOrCrashRendered(
+            """
+            let
+                partial =
+                    Rec 1 2
+            in
+            partial 3
+            """,
+            elmModuleText)
+            .Should().Be("{ a = 2, m = 3, z = 1 }");
+    }
+
+    [Fact]
+    public void Record_constructor_three_fields_partial_one_at_a_time()
+    {
+        // Rec's constructor takes three arguments. Each argument is supplied at its own
+        // call site, passing through three nested let-bindings.
+        var elmModuleText =
+            """
+            module Test exposing (..)
+
+
+            type alias Rec =
+                { z : Int, a : Int, m : Int }
+            """;
+
+        InterpreterTestHelper.EvaluateInModuleOrCrashRendered(
+            """
+            let
+                f1 =
+                    Rec 1
+            in
+            let
+                f2 =
+                    f1 2
+            in
+            f2 3
+            """,
+            elmModuleText)
             .Should().Be("{ a = 2, m = 3, z = 1 }");
     }
 }
