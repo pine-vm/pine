@@ -109,7 +109,8 @@ public class ElmCompiler
     public static Result<string, (PineValue compiledEnvValue, CompilationPipelineStageResults pipelineStageResults)> CompileInteractiveEnvironment(
         FileTree appCodeTree,
         IReadOnlyList<IReadOnlyList<string>> rootFilePaths,
-        bool disableInlining)
+        bool disableInlining,
+        int maxOptimizationRounds = 1)
     {
         var elmModuleFiles =
             appCodeTree.EnumerateFilesTransitive()
@@ -309,7 +310,7 @@ public class ElmCompiler
         }
         else
         {
-            var pipelineResult = ApplyOptimizationPipelineWithStageResults(lambdaLiftedModules);
+            var pipelineResult = ApplyOptimizationPipelineWithStageResults(lambdaLiftedModules, maxRounds: maxOptimizationRounds);
 
             if (pipelineResult.IsErrOrNull() is { } pipelineErr)
                 return pipelineErr;
@@ -1327,10 +1328,6 @@ public class ElmCompiler
 
         return PineValue.List([StringEncoding.ValueFromString(name), pineValue]);
     }
-
-    private static Result<string, OptimizationPipelineStageResults> ApplyOptimizationPipelineWithStageResults(
-        List<SyntaxTypes.File> lambdaLiftedModules) =>
-        ApplyOptimizationPipelineWithStageResults(lambdaLiftedModules, maxRounds: 1);
 
     private static Result<string, OptimizationPipelineStageResults> ApplyOptimizationPipelineWithStageResults(
         List<SyntaxTypes.File> lambdaLiftedModules,
