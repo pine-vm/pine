@@ -375,7 +375,7 @@ public class ElmCompilerTestHelper
                 expression,
                 environment,
                 config: config)
-            .Extract(err => throw new Exception(err));
+            .Extract(err => throw new Exception(err.ToString()));
 
         return (evalResult, invocationReports);
     }

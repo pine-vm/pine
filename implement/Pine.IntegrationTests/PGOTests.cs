@@ -279,6 +279,7 @@ public class PGOTests
                     composedArgs.expression,
                     composedArgs.environment,
                     new Core.Interpreter.IntermediateVM.PineVM.EvaluationConfig(InvocationCountLimit: 1234, LoopIterationCountLimit: null, StackDepthLimit: null))
+                .MapError(err => err.ToString())
                 .Map(evalReport =>
                 {
                     evalReport.ReturnValue.Should().Be(scenario.expected);
@@ -882,6 +883,7 @@ public class PGOTests
                     composedArgs.expression,
                     composedArgs.environment,
                     new Core.Interpreter.IntermediateVM.PineVM.EvaluationConfig(InvocationCountLimit: 1234, LoopIterationCountLimit: null, StackDepthLimit: null))
+                .MapError(err => err.ToString())
                 .Map(evalReport =>
                 {
                     evalReport.ReturnValue.Should().Be(
@@ -1287,6 +1289,7 @@ public class PGOTests
                     composedArgs.expression,
                     composedArgs.environment,
                     new Core.Interpreter.IntermediateVM.PineVM.EvaluationConfig(InvocationCountLimit: 12345, LoopIterationCountLimit: null, StackDepthLimit: null))
+                .MapError(err => err.ToString())
                 .Map(evalReport =>
                 {
                     evalReport.ReturnValue.Should().Be(
@@ -1658,6 +1661,7 @@ public class PGOTests
                     composedArgs.expression,
                     composedArgs.environment,
                     new Core.Interpreter.IntermediateVM.PineVM.EvaluationConfig(InvocationCountLimit: 12345, LoopIterationCountLimit: null, StackDepthLimit: null))
+                .MapError(err => err.ToString())
                 .Map(evalReport =>
                 {
                     if (scenarioExpected is not null)

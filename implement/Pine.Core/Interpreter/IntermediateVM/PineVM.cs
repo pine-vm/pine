@@ -163,7 +163,7 @@ public class PineVM : IPineVM
 
         if (evalReportResult.IsErrOrNull() is { } err)
         {
-            return err;
+            return err.Message;
         }
 
         if (evalReportResult.IsOkOrNull() is not { } evalReport)
@@ -323,7 +323,7 @@ public class PineVM : IPineVM
     /// <summary>
     /// Evaluates an expression using the intermediate VM stack-frame machinery.
     /// </summary>
-    public Result<string, EvaluationReport> EvaluateExpressionOnCustomStack(
+    public Result<EvaluationError, EvaluationReport> EvaluateExpressionOnCustomStack(
         Expression rootExpression,
         PineValue rootEnvironment,
         EvaluationConfig config)
@@ -338,7 +338,20 @@ public class PineVM : IPineVM
         long lastCacheEntryInstructionCount = 0;
         long lastCacheEntryParseAndEvalCount = 0;
 
-        string? IncrementInvocationCountAndEnforceLimits()
+        PerformanceCounters CurrentCounters() =>
+            new(
+                InstructionCount: instructionCount,
+                InvocationCount: invocationCount,
+                BuildListCount: buildListCount,
+                LoopIterationCount: loopIterationCount);
+
+        EvaluationError BuildEvaluationError(string message) =>
+            new(
+                Message: message,
+                StackTrace: CompileStackTrace(100),
+                Counters: CurrentCounters());
+
+        EvaluationError? IncrementInvocationCountAndEnforceLimits()
         {
             ++invocationCount;
 
@@ -350,18 +363,19 @@ public class PineVM : IPineVM
                     .ToArray();
 
                 return
-                    "Invocation count limit exceeded: " +
-                    CommandLineInterface.FormatIntegerForDisplay(limit) +
-                    "\nLast stack frames expressions:\n" +
-                    string.Join(
-                        "\n",
-                        stackTraceHashes.Select(hash => Convert.ToHexStringLower(hash.Span)[..8]));
+                    BuildEvaluationError(
+                        "Invocation count limit exceeded: " +
+                        CommandLineInterface.FormatIntegerForDisplay(limit) +
+                        "\nLast stack frames expressions:\n" +
+                        string.Join(
+                            "\n",
+                            stackTraceHashes.Select(hash => Convert.ToHexStringLower(hash.Span)[..8])));
             }
 
             return null;
         }
 
-        string? IncrementLoopIterationCountAndEnforceLimits(StackFrame frame)
+        EvaluationError? IncrementLoopIterationCountAndEnforceLimits(StackFrame frame)
         {
             loopIterationCount++;
             frame.LoopIterationCount++;
@@ -374,12 +388,13 @@ public class PineVM : IPineVM
                     .ToArray();
 
                 return
-                    "Loop iteration count limit exceeded: " +
-                    CommandLineInterface.FormatIntegerForDisplay(limit) +
-                    "\nLast stack frames expressions:\n" +
-                    string.Join(
-                        "\n",
-                        stackTraceHashes.Select(hash => Convert.ToHexStringLower(hash.Span)[..8]));
+                    BuildEvaluationError(
+                        "Loop iteration count limit exceeded: " +
+                        CommandLineInterface.FormatIntegerForDisplay(limit) +
+                        "\nLast stack frames expressions:\n" +
+                        string.Join(
+                            "\n",
+                            stackTraceHashes.Select(hash => Convert.ToHexStringLower(hash.Span)[..8])));
             }
 
             return null;
@@ -397,7 +412,7 @@ public class PineVM : IPineVM
 
         var stack = new Stack<StackFrame>();
 
-        string? InvokePrecompiledOrBuildStackFrame(
+        EvaluationError? InvokePrecompiledOrBuildStackFrame(
             PineValue? expressionValue,
             Expression expression,
             PineValueInProcess environmentValue,
@@ -427,11 +442,16 @@ public class PineVM : IPineVM
                             if (contParseResult.IsErrOrNull() is { } contParseErr)
                             {
                                 return
-                                    "Failed to parse expression from value: " + contParseErr +
-                                    " - expressionValue is " +
-                                    (expressionValue is null ? "null" : DescribeValueForErrorMessage(expressionValue)) +
-                                    " - environmentValue is " +
-                                    DescribeValueForErrorMessage(environmentValue.Evaluate());
+                                    BuildEvaluationError(
+                                        "Failed to parse expression from value: " + contParseErr +
+                                        " - expressionValue is " +
+                                        (expressionValue is null
+                                        ?
+                                        "null"
+                                        :
+                                        DescribeValueForErrorMessage(expressionValue)) +
+                                        " - environmentValue is " +
+                                        DescribeValueForErrorMessage(environmentValue.Evaluate()));
                             }
 
                             if (contParseResult.IsOkOrNull() is not { } contParseOk)
@@ -585,7 +605,7 @@ public class PineVM : IPineVM
             }
         }
 
-        string? BuildAndPushStackFrame(
+        EvaluationError? BuildAndPushStackFrame(
             PineValue? expressionValue,
             Expression expression,
             StackFrameInstructions instructions,
@@ -617,7 +637,7 @@ public class PineVM : IPineVM
             return PushStackFrame(newFrame, replaceCurrentFrame: replaceCurrentFrame);
         }
 
-        string? PushStackFrame(
+        EvaluationError? PushStackFrame(
             StackFrame newFrame,
             bool replaceCurrentFrame)
         {
@@ -640,12 +660,13 @@ public class PineVM : IPineVM
                     .ToArray();
 
                 return
-                    "Stack depth limit exceeded: " +
-                    CommandLineInterface.FormatIntegerForDisplay(stackDepthLimit) +
-                    "\nLast stack frames expressions:\n" +
-                    string.Join(
-                        "\n",
-                        stackTraceHashes.Select(hash => Convert.ToHexStringLower(hash.Span)[..8]));
+                    BuildEvaluationError(
+                        "Stack depth limit exceeded: " +
+                        CommandLineInterface.FormatIntegerForDisplay(stackDepthLimit) +
+                        "\nLast stack frames expressions:\n" +
+                        string.Join(
+                            "\n",
+                            stackTraceHashes.Select(hash => Convert.ToHexStringLower(hash.Span)[..8])));
             }
 
             if (_reportEnteredStackFrame is { } reportEnteredStackFrame &&
@@ -837,7 +858,8 @@ public class PineVM : IPineVM
                 if (currentFrame.Instructions.Instructions.Count <= currentFrame.InstructionPointer)
                 {
                     return
-                        "Instruction pointer out of bounds. Missing explicit return instruction.";
+                        BuildEvaluationError(
+                            "Instruction pointer out of bounds. Missing explicit return instruction.");
                 }
 
                 var currentInstruction =
@@ -1714,10 +1736,11 @@ public class PineVM : IPineVM
                             if (parseResult.IsErrOrNull() is { } parseErr)
                             {
                                 return
-                                    "Failed to parse expression from value: " + parseErr +
-                                    " - expressionValue is " + DescribeValueForErrorMessage(expressionValue) +
-                                    " - environmentValue is " +
-                                    DescribeValueForErrorMessage(environmentValue.Evaluate());
+                                    BuildEvaluationError(
+                                        "Failed to parse expression from value: " + parseErr +
+                                        " - expressionValue is " + DescribeValueForErrorMessage(expressionValue) +
+                                        " - environmentValue is " +
+                                        DescribeValueForErrorMessage(environmentValue.Evaluate()));
                             }
 
                             if (parseResult.IsOkOrNull() is not { } parseOk)

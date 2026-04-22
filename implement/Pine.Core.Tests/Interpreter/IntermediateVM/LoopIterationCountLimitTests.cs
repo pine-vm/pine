@@ -52,7 +52,7 @@ public class LoopIterationCountLimitTests
         var error =
             evaluationResult
             .Unpack(
-                fromErr: err => err,
+                fromErr: err => err.Message,
                 fromOk: _ => (string?)null);
 
         error.Should().NotBeNull(
@@ -97,7 +97,7 @@ public class LoopIterationCountLimitTests
         var error =
             evaluationResult
             .Unpack(
-                fromErr: err => err,
+                fromErr: err => err.Message,
                 fromOk: _ => (string?)null);
 
         error.Should().NotBeNull();
@@ -107,7 +107,7 @@ public class LoopIterationCountLimitTests
         error!.Should().Contain(loopIterationCountLimit.ToString());
     }
 
-    private static Result<string, EvaluationReport>
+    private static Result<EvaluationError, EvaluationReport>
         EvaluateWithInjectedCompilation(
         Expression targetExpression,
         PineValue rootEnvironment,
