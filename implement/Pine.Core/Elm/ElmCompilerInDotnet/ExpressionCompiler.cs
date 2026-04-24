@@ -138,7 +138,7 @@ public class ExpressionCompiler
             // Check if it's a parameter reference
             if (context.TryGetParameterIndex(expr.Name, out var paramIndex))
             {
-                return BuiltinHelpers.BuildPathToParameter(paramIndex);
+                return BuiltinHelpers.BuildPathToParameter(paramIndex, context.EnvParametersOffset);
             }
         }
 
@@ -213,8 +213,58 @@ public class ExpressionCompiler
 
             if (context.GetFunctionIndexInLayout(qualifiedFunctionName) is { } functionIndex)
             {
-                // This is a reference to a top-level function - emit a function value
+                // Same-SCC reference: build the function value via the
+                // env-relative encoded body and env-functions list.
                 return CompileFunctionReference(qualifiedFunctionName, functionIndex, context);
+            }
+
+            // §7.6b: cross-SCC reference. The callee is not in the caller's
+            // (members-only) layout but it has already been compiled (SCCs
+            // are processed in dependency order).
+            //
+            // For functions with paramCount > 0 the callee's WrapperValue
+            // *is* the function value, and inlining it as a literal is the
+            // direct counterpart of the same-SCC `CompileFunctionReference`
+            // path. For zero-parameter declarations the callee's wrapper
+            // value is an *encoded ParseAndEval that, when evaluated, yields
+            // the value*; the consumer expects the value itself, not the
+            // wrapper, so we evaluate the wrapper here by emitting the same
+            // literal-based ParseAndEval that `CompileFunctionReference`
+            // emits for paramCount <= 0.
+            if (context.ModuleCompilationContext.TryGetCompiledFunctionInfo(
+                qualifiedFunctionName,
+                out var crossSccCalleeInfo)
+                && crossSccCalleeInfo is not null)
+            {
+                if (crossSccCalleeInfo.ParameterCount <= 0)
+                {
+                    // §7.7: For WithoutEnvFunctions callees the body expects
+                    // an empty environment (no env-functions slot). For
+                    // WithEnvFunctions callees the body expects
+                    // [envFunctionsList].
+                    Expression crossSccCallEnvironment;
+
+                    if (crossSccCalleeInfo.EnvFunctions.Count is 0)
+                    {
+                        crossSccCallEnvironment = Expression.ListInstance([]);
+                    }
+                    else
+                    {
+                        var crossSccEnvFuncsLiteral =
+                            Expression.LiteralInstance(
+                                PineValue.List([.. crossSccCalleeInfo.EnvFunctions]));
+
+                        crossSccCallEnvironment =
+                            Expression.ListInstance([crossSccEnvFuncsLiteral]);
+                    }
+
+                    return
+                        (Result<CompilationError, Expression>)new Expression.ParseAndEval(
+                            encoded: Expression.LiteralInstance(crossSccCalleeInfo.EncodedBody),
+                            environment: crossSccCallEnvironment);
+                }
+
+                return Expression.LiteralInstance(crossSccCalleeInfo.CompiledValue);
             }
         }
 
@@ -421,7 +471,7 @@ public class ExpressionCompiler
                 if (context.TryGetParameterIndex(funcRef.Name, out var paramIndex))
                 {
                     // Apply arguments to the function value from parameter using generic application
-                    var funcExpr = BuiltinHelpers.BuildPathToParameter(paramIndex);
+                    var funcExpr = BuiltinHelpers.BuildPathToParameter(paramIndex, context.EnvParametersOffset);
 
                     return CompileGenericFunctionApplication(funcExpr, compiledArguments);
                 }
@@ -472,7 +522,21 @@ public class ExpressionCompiler
                 :
                 context.CurrentModuleName + "." + funcRef.Name;
 
-            if (context.GetFunctionIndexInLayout(qualifiedFunctionName) is not { } functionIndex)
+            // Resolve callee in the compiled-functions cache. After §7.6b the
+            // caller's layout contains only its SCC members, so a cross-SCC
+            // callee will not appear in the layout but will be in the cache
+            // (because SCCs are compiled in dependency order).
+            int? functionIndexOpt = context.GetFunctionIndexInLayout(qualifiedFunctionName);
+            CompiledFunctionInfo? cachedCalleeInfo = null;
+
+            if (functionIndexOpt is null)
+            {
+                context.ModuleCompilationContext.TryGetCompiledFunctionInfo(
+                    qualifiedFunctionName,
+                    out cachedCalleeInfo);
+            }
+
+            if (functionIndexOpt is null && cachedCalleeInfo is null)
             {
                 // Handle references to natively-implemented Basics functions
                 // that are partially applied or not in the dependency layout
@@ -534,46 +598,101 @@ public class ExpressionCompiler
             if (argCount >= paramCount && paramCount > 0)
             {
                 // Full or over-application: use optimized [envFuncs, arg0, arg1, ...] flat structure
-                // for the first paramCount arguments
-                var functionRef =
-                    ExpressionBuilder.BuildExpressionForPathInExpression(
-                        [0, functionIndex],
-                        Expression.EnvironmentInstance);
-
-                // Build the environment for the called function
+                // for the first paramCount arguments.
+                //
+                // §7.6b: pick env-relative or literal-based references based on
+                // whether the callee is same-SCC (in caller's members-only layout)
+                // or cross-SCC (only in the compiled-functions cache).
+                Expression functionRef;
                 Expression callEnvFunctions;
 
-                // Check if we have pre-computed dependency layout for the called function
-                if (context.ModuleCompilationContext.TryGetDependencyLayout(qualifiedFunctionName) is { } calledFuncLayout &&
-                    calledFuncLayout.Count > 0)
+                if (functionIndexOpt is { } functionIndex)
                 {
-                    var envFunctionExpressions = new List<Expression>();
+                    // Same-SCC callee — read the encoded body and the env-functions
+                    // entries from the caller's runtime env at index 0.
+                    functionRef =
+                        ExpressionBuilder.BuildExpressionForPathInExpression(
+                            [0, functionIndex],
+                            Expression.EnvironmentInstance);
 
-                    foreach (var depName in calledFuncLayout)
+                    // Build the environment for the called function.
+                    if (context.ModuleCompilationContext.TryGetDependencyLayout(qualifiedFunctionName) is { } calledFuncLayout &&
+                        calledFuncLayout.Count > 0)
                     {
-                        if (context.GetFunctionIndexInLayout(depName) is { } depIndex)
-                        {
-                            var depRef =
-                                ExpressionBuilder.BuildExpressionForPathInExpression(
-                                    [0, depIndex],
-                                    Expression.EnvironmentInstance);
+                        var envFunctionExpressions = new List<Expression>();
 
-                            envFunctionExpressions.Add(depRef);
-                        }
-                        else
+                        foreach (var depName in calledFuncLayout)
                         {
-                            return new CompilationError.FunctionNotInDependencyLayout(depName);
+                            if (context.GetFunctionIndexInLayout(depName) is { } depIndex)
+                            {
+                                var depRef =
+                                    ExpressionBuilder.BuildExpressionForPathInExpression(
+                                        [0, depIndex],
+                                        Expression.EnvironmentInstance);
+
+                                envFunctionExpressions.Add(depRef);
+                            }
+                            else
+                            {
+                                // §7.6b: should be unreachable for same-SCC callees,
+                                // since their layout is identical to the caller's
+                                // (both are the SCC member list). Kept as a defensive
+                                // check for compiler bugs.
+                                return new CompilationError.FunctionNotInDependencyLayout(depName);
+                            }
                         }
+
+                        callEnvFunctions = Expression.ListInstance(envFunctionExpressions);
                     }
-
-                    callEnvFunctions = Expression.ListInstance(envFunctionExpressions);
+                    else
+                    {
+                        callEnvFunctions =
+                            ExpressionBuilder.BuildExpressionForPathInExpression(
+                                [0],
+                                Expression.EnvironmentInstance);
+                    }
                 }
                 else
                 {
+                    // §7.6b/§7.7: cross-SCC callee — inline the cached encoded
+                    // body and env-functions list as literals. No reads from
+                    // the caller's env at index 0.
+                    //
+                    // §7.7: when the callee uses the WithoutEnvFunctions
+                    // wrapper shape (signalled by an empty EnvFunctions list)
+                    // its body expects the runtime environment to be a flat
+                    // list of arguments [arg0, ..., argN-1] — *no*
+                    // env-functions slot at index 0. We omit the
+                    // callEnvFunctions slot entirely in that case.
+                    var cachedInfo = cachedCalleeInfo!;
+
+                    functionRef = Expression.LiteralInstance(cachedInfo.EncodedBody);
+
+                    if (cachedInfo.EnvFunctions.Count is 0)
+                    {
+                        // WithoutEnvFunctions callee: build env as flat args list.
+                        var fullApplicationArgsWithoutEnv = compiledArguments.Take(paramCount).ToList();
+
+                        var callEnvironmentWithoutEnv =
+                            Expression.ListInstance(fullApplicationArgsWithoutEnv);
+
+                        Expression fullApplicationResultWithoutEnv =
+                            new Expression.ParseAndEval(
+                                encoded: functionRef,
+                                environment: callEnvironmentWithoutEnv);
+
+                        if (argCount > paramCount)
+                        {
+                            var remainingArgs = compiledArguments.Skip(paramCount).ToList();
+                            return CompileGenericFunctionApplication(fullApplicationResultWithoutEnv, remainingArgs);
+                        }
+
+                        return fullApplicationResultWithoutEnv;
+                    }
+
                     callEnvFunctions =
-                        ExpressionBuilder.BuildExpressionForPathInExpression(
-                            [0],
-                            Expression.EnvironmentInstance);
+                        Expression.LiteralInstance(
+                            PineValue.List([.. cachedInfo.EnvFunctions]));
                 }
 
                 // Use only the first paramCount arguments for the optimized full application
@@ -759,7 +878,7 @@ public class ExpressionCompiler
         // Check if it's a parameter reference
         else if (context.TryGetParameterIndex(recordName, out var paramIndex))
         {
-            recordExpr = BuiltinHelpers.BuildPathToParameter(paramIndex);
+            recordExpr = BuiltinHelpers.BuildPathToParameter(paramIndex, context.EnvParametersOffset);
             // Try to get the type from parameter types
             if (context.ParameterTypes.TryGetValue(recordName, out var paramType) &&
                 paramType is TypeInference.InferredType.RecordType paramRecordType)

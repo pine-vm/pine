@@ -110,12 +110,24 @@ public abstract record ParsedFunctionValue
 /// <param name="ParameterCount">Total number of parameters expected.</param>
 /// <param name="EnvFunctions">Captured function values used by the closure.</param>
 /// <param name="ArgumentsAlreadyCollected">Arguments already supplied (for partial application scenarios).</param>
+/// <param name="UsesEnvFunctionsLayout">
+/// True iff the inner function's body expects the runtime environment to be laid out as
+/// <c>[envFunctions, arg0, arg1, ...]</c> (the layout produced by
+/// <see cref="FunctionValueBuilder.EmitFunctionValueWithEnvFunctions"/> and the canonical
+/// <c>EncodedExpression</c> layout per §2.1 property 4 of
+/// <c>explore/internal-analysis/2026-04-22-analysis-inline-non-recursive-callees.md</c>).
+/// False iff the body expects the environment laid out as <c>[arg0, arg1, ...]</c> directly,
+/// i.e. the <see cref="FunctionValueBuilder.EmitFunctionValueWithoutEnvFunctions"/> layout
+/// where parameter <c>k</c> lives at <c>env[k]</c> rather than <c>env[1+k]</c>. Defaults
+/// to <c>true</c> to preserve the historical behaviour of all existing call sites.
+/// </param>
 public record FunctionRecord(
     Expression InnerFunction,
     int ParameterCount,
     ReadOnlyMemory<PineValue> EnvFunctions,
     ReadOnlyMemory<PineValue> ArgumentsAlreadyCollected,
-    bool UsesNestedArgFormat = false)
+    bool UsesNestedArgFormat = false,
+    bool UsesEnvFunctionsLayout = true)
 {
     /*
      * TODO: Rename to 'FunctionValueParser' for symmetry with 'FunctionValueBuilder'?
@@ -147,13 +159,42 @@ public record FunctionRecord(
             // Check for nested wrapper form (ParseAndEval expression for 0/1 params)
             if (taggedFunctionDeclaration.name is "ParseAndEval")
             {
-                return ParseNestedWrapperForm(pineValue, parseCache);
+                var nestedResult = ParseNestedWrapperForm(pineValue, parseCache);
+
+                if (nestedResult.IsOkOrNull() is { } nestedRecord)
+                {
+                    return nestedRecord;
+                }
+
+                // Fall back to ParseFunctionValue for WithoutEnvFunctions wrappers
+                // emitted by FunctionValueBuilder.EmitFunctionValueWithoutEnvFunctions
+                // (see Finding F-1 in
+                // explore/internal-analysis/2026-04-22-analysis-inline-non-recursive-callees.md).
+                if (TryFunctionRecordFromParsedFunctionValue(pineValue, parseCache) is { } fromParsed)
+                {
+                    return fromParsed;
+                }
+
+                return nestedResult;
             }
 
             // Check for multi-parameter nested wrapper form (List expression that builds encoding dynamically)
             if (taggedFunctionDeclaration.name is "List")
             {
-                return ParseMultiParamNestedWrapperForm(pineValue, parseCache);
+                var multiResult = ParseMultiParamNestedWrapperForm(pineValue, parseCache);
+
+                if (multiResult.IsOkOrNull() is { } multiRecord)
+                {
+                    return multiRecord;
+                }
+
+                // Same fallback as above for ≥ 2 parameter WithoutEnvFunctions wrappers.
+                if (TryFunctionRecordFromParsedFunctionValue(pineValue, parseCache) is { } fromParsed)
+                {
+                    return fromParsed;
+                }
+
+                return multiResult;
             }
         }
 
@@ -162,7 +203,22 @@ public record FunctionRecord(
          * This handles both:
          * - Blob values (integers, etc.) which fail ParseTagged with "Expected list"
          * - List values with unrecognized tags
-         * */
+         *
+         * §7.7: zero-parameter non-recursive declarations are emitted with the
+         * WithoutEnvFunctions wrapper, whose value is just
+         * <c>EncodeExpressionAsValue(innerExpression)</c>. ParseTagged sees
+         * such a value with the inner expression's encoding tag (for example
+         * "Literal" or "KernelApplication") rather than "Function" /
+         * "ParseAndEval" / "List", so it falls through to here. Wrapping the
+         * pineValue in another <c>Literal</c> would double-encode the body
+         * and yield the encoded Expression instead of its evaluation result,
+         * so we first try to parse it as a WithoutEnvFunctions wrapper.
+         */
+
+        if (TryFunctionRecordFromParsedFunctionValue(pineValue, parseCache) is { } fromParsedFallback)
+        {
+            return fromParsedFallback;
+        }
 
         return
             new FunctionRecord(
@@ -170,6 +226,51 @@ public record FunctionRecord(
                 ParameterCount: 0,
                 EnvFunctions: ReadOnlyMemory<PineValue>.Empty,
                 ArgumentsAlreadyCollected: ReadOnlyMemory<PineValue>.Empty);
+    }
+
+    /// <summary>
+    /// Bridges <see cref="ParseFunctionValue"/> (which correctly handles both the
+    /// <see cref="ParsedFunctionValue.WithEnvFunctions"/> and
+    /// <see cref="ParsedFunctionValue.WithoutEnvFunctions"/> wrapper shapes via separate
+    /// code paths) to the legacy <see cref="FunctionRecord"/> representation used by
+    /// <see cref="StaticProgramParser.ParseProgram"/>. Returns <c>null</c> on parse
+    /// failure to let callers fall through to other handling.
+    /// </summary>
+    /// <remarks>
+    /// Per Finding F-1 (recorded in
+    /// <c>explore/internal-analysis/2026-04-22-analysis-inline-non-recursive-callees.md</c>),
+    /// the original <see cref="ParseNestedWrapperForm"/> /
+    /// <see cref="ParseMultiParamNestedWrapperForm"/> paths assume the WithEnvFunctions
+    /// environment shape and reject WithoutEnvFunctions wrappers used as root
+    /// declarations. This bridge picks up those rejected cases.
+    /// </remarks>
+    private static FunctionRecord? TryFunctionRecordFromParsedFunctionValue(
+        PineValue pineValue,
+        PineVMParseCache parseCache)
+    {
+        if (ParseFunctionValue(pineValue, parseCache).IsOkOrNull() is not { } parsed)
+        {
+            return null;
+        }
+
+        // Only the WithoutEnvFunctions case is a true fallback gain over the existing
+        // ParseNestedWrapperForm / ParseMultiParamNestedWrapperForm paths, which already
+        // handle WithEnvFunctions wrappers (and intermediate partially-applied wrappers).
+        // Returning a record for WithEnvFunctions here would short-circuit the existing
+        // partial-application handling and produce subtly wrong FunctionRecords (e.g. an
+        // intermediate wrapper level mis-identified as a complete multi-arg function).
+        if (parsed is not ParsedFunctionValue.WithoutEnvFunctions withoutEnv)
+        {
+            return null;
+        }
+
+        return
+            new FunctionRecord(
+                InnerFunction: withoutEnv.InnerFunction,
+                ParameterCount: withoutEnv.ParameterCount,
+                EnvFunctions: ReadOnlyMemory<PineValue>.Empty,
+                ArgumentsAlreadyCollected: ReadOnlyMemory<PineValue>.Empty,
+                UsesEnvFunctionsLayout: false);
     }
 
     /// <summary>

@@ -310,7 +310,8 @@ public class ElmCompiler
         }
         else
         {
-            var pipelineResult = ApplyOptimizationPipelineWithStageResults(lambdaLiftedModules, maxRounds: maxOptimizationRounds);
+            var pipelineResult =
+                ApplyOptimizationPipelineWithStageResults(lambdaLiftedModules, maxRounds: maxOptimizationRounds);
 
             if (pipelineResult.IsErrOrNull() is { } pipelineErr)
                 return pipelineErr;
@@ -626,9 +627,33 @@ public class ElmCompiler
                 .Order(StringComparer.Ordinal)
                 .ToImmutableList();
 
-            // Create SCC with members and additional dependencies
-            // The complete layout is: Members ++ AdditionalDependencies
-            var sccRecord = new FunctionScc(sortedSccMembers, sortedOtherDeps);
+            // Determine recursion: a multi-member SCC is always recursive
+            // (mutual recursion). A single-member SCC is recursive iff its
+            // member directly references itself.
+            //
+            // §7.7: non-recursive single-member SCCs use the
+            // WithoutEnvFunctions wrapper shape and an empty runtime layout.
+            bool isRecursive;
+
+            if (sortedSccMembers.Count > 1)
+            {
+                isRecursive = true;
+            }
+            else
+            {
+                var soleMember = sortedSccMembers[0];
+
+                isRecursive =
+                    directDependencies.TryGetValue(soleMember, out var soleMemberDeps)
+                    && soleMemberDeps.Contains(soleMember);
+            }
+
+            // Create SCC with members and additional dependencies.
+            // §7.6b: the runtime layout is members-only (see FunctionScc.GetLayout).
+            // AdditionalDependencies is retained on the record for compilation
+            // ordering only (Tarjan already gives us topological order, but we
+            // keep the data for diagnostics and for the audit history).
+            var sccRecord = new FunctionScc(sortedSccMembers, sortedOtherDeps, isRecursive);
 
             var sharedLayout = sccRecord.GetLayout();
 
@@ -843,6 +868,15 @@ public class ElmCompiler
         var sharedLayout = scc.GetLayout();
         var sccMembers = scc.Members;
 
+        // §7.7: non-recursive single-member SCCs use the WithoutEnvFunctions
+        // wrapper shape and an empty runtime env-functions list. Their bodies
+        // expect parameters at env[i] (no env-functions slot at index 0).
+        // Recursive SCCs (mutual or self) keep the historical
+        // WithEnvFunctions layout: parameters at env[1+i], env[0] holds the
+        // SCC-members env-functions list.
+        var usesEnvFunctionsLayout = scc.IsRecursive;
+        var envParametersOffset = usesEnvFunctionsLayout ? 1 : 0;
+
         // Pre-compute index lookup for efficient access
         var layoutIndexMap = new Dictionary<string, int>();
 
@@ -882,7 +916,7 @@ public class ElmCompiler
                 }
                 else
                 {
-                    var paramExpr = BuiltinHelpers.BuildPathToParameter(i);
+                    var paramExpr = BuiltinHelpers.BuildPathToParameter(i, envParametersOffset);
                     var analysis = PatternCompiler.AnalyzePattern(argPattern, paramExpr);
 
                     foreach (var kvp in analysis.Bindings)
@@ -911,7 +945,8 @@ public class ElmCompiler
                     LocalBindingTypes: null,
                     DependencyLayout: sharedLayout,
                     ModuleCompilationContext: context,
-                    FunctionTypes: context.FunctionTypes);
+                    FunctionTypes: context.FunctionTypes,
+                    UsesEnvFunctionsLayout: usesEnvFunctionsLayout);
 
             // Compile the body
             var compileBodyResult = ExpressionCompiler.Compile(functionBody, expressionContext);
@@ -938,8 +973,16 @@ public class ElmCompiler
                 kvp => kvp.Key,
                 kvp => ExpressionEncoding.EncodeExpressionAsValue(kvp.Value.body));
 
-        // Phase 2: Build the envFunctionsList
-        // Since SCCs are compiled in dependency order, all dependencies are already compiled.
+        // Phase 2: Build the envFunctionsList for SCC members.
+        // §7.6b: for recursive SCCs sharedLayout is the member list, so
+        // envFunctionsList contains the encoded bodies of the members in the
+        // same order. Cross-SCC dependencies are fetched at the *call sites*
+        // via Literal(callee.EncodedBody) and Literal(List(callee.EnvFunctions)),
+        // not threaded through current_env[0] of every transitive caller.
+        // §7.7: for non-recursive single-member SCCs sharedLayout is empty, so
+        // envFunctionsList is empty too — the wrapper is built in the
+        // WithoutEnvFunctions shape and the call-site emits a flat
+        // [arg0, ..., argN-1] environment with no env-functions slot.
         var envFunctionsList =
             sharedLayout
             .Select(
@@ -950,15 +993,13 @@ public class ElmCompiler
                         return encodedBodyDep;
                     }
 
-                    // Dependencies are already compiled - retrieve encoded body from cache
-                    if (context.TryGetCompiledFunctionInfo(declName, out var depInfo) && depInfo is not null)
-                    {
-                        return depInfo.EncodedBody;
-                    }
-
+                    // Defensive: every entry of sharedLayout is an SCC member,
+                    // and we just compiled all members above. If we ever reach
+                    // this branch the layout/SCC bookkeeping is out of sync.
                     throw new InvalidOperationException(
-                        $"Dependency {declName} not found in cache when compiling SCC {string.Join(", ", scc.Members)}. " +
-                        "SCCs should be compiled in dependency order.");
+                        $"SCC member {declName} missing encoded body when compiling SCC " +
+                        $"{string.Join(", ", scc.Members)}. " +
+                        "All SCC members should be compiled in Phase 1 before reaching Phase 2.");
                 })
             .ToList();
 
@@ -968,14 +1009,32 @@ public class ElmCompiler
             if (!compiledBodies.TryGetValue(memberName, out var bodyInfo))
                 continue;
 
+            // §7.7: non-recursive single-member SCCs (usesEnvFunctionsLayout
+            // == false) use the WithoutEnvFunctions wrapper. Recursive SCCs
+            // keep the WithEnvFunctions wrapper with the members-only
+            // envFunctionsList baked in.
             var wrapper =
+                usesEnvFunctionsLayout
+                ?
                 FunctionValueBuilder.EmitFunctionValueWithEnvFunctions(
                     bodyInfo.body,
                     bodyInfo.paramCount,
-                    envFunctionsList);
+                    envFunctionsList)
+                :
+                FunctionValueBuilder.EmitFunctionValueWithoutEnvFunctions(
+                    bodyInfo.body,
+                    bodyInfo.paramCount);
 
             var encodedBody = encodedBodies[memberName];
-            context = context.WithCompiledFunction(memberName, wrapper, encodedBody, sharedLayout);
+
+            context =
+                context.WithCompiledFunction(
+                    memberName,
+                    wrapper,
+                    encodedBody,
+                    sharedLayout,
+                    parameterCount: bodyInfo.paramCount,
+                    envFunctions: envFunctionsList);
         }
 
         return context;

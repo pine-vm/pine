@@ -1157,9 +1157,9 @@ public class KernelJsonFunctionTests
 
         PerformanceCountersFormatting.FormatCounts(report).Should().Be(
             """
-            InstructionCount: 8_217
-            InvocationCount: 376
-            BuildListCount: 915
+            InstructionCount: 10_689
+            InvocationCount: 368
+            BuildListCount: 953
             LoopIterationCount: 0
             """);
     }
@@ -1179,9 +1179,9 @@ public class KernelJsonFunctionTests
 
         PerformanceCountersFormatting.FormatCounts(report).Should().Be(
             """
-            InstructionCount: 5_510
-            InvocationCount: 235
-            BuildListCount: 593
+            InstructionCount: 7_415
+            InvocationCount: 248
+            BuildListCount: 656
             LoopIterationCount: 0
             """);
     }
@@ -1236,9 +1236,9 @@ public class KernelJsonFunctionTests
 
         formattedCounts.Should().Be(
             """
-            InstructionCount: 11_841
-            InvocationCount: 517
-            BuildListCount: 1_245
+            InstructionCount: 15_001
+            InvocationCount: 567
+            BuildListCount: 1_425
             LoopIterationCount: 0
             """);
     }
@@ -1259,9 +1259,9 @@ public class KernelJsonFunctionTests
 
         formattedCounts.Should().Be(
             """
-            InstructionCount: 22_978
-            InvocationCount: 974
-            BuildListCount: 2_364
+            InstructionCount: 43_994
+            InvocationCount: 1_542
+            BuildListCount: 4_004
             LoopIterationCount: 0
             """);
     }
@@ -1282,9 +1282,9 @@ public class KernelJsonFunctionTests
 
         PerformanceCountersFormatting.FormatCounts(report).Should().Be(
             """
-            InstructionCount: 6_924
-            InvocationCount: 276
-            BuildListCount: 699
+            InstructionCount: 15_268
+            InvocationCount: 454
+            BuildListCount: 1_235
             LoopIterationCount: 0
             """);
     }
@@ -1303,9 +1303,9 @@ public class KernelJsonFunctionTests
 
         PerformanceCountersFormatting.FormatCounts(report).Should().Be(
             """
-            InstructionCount: 6_924
-            InvocationCount: 276
-            BuildListCount: 699
+            InstructionCount: 15_268
+            InvocationCount: 454
+            BuildListCount: 1_235
             LoopIterationCount: 0
             """);
     }
@@ -1366,9 +1366,9 @@ public class KernelJsonFunctionTests
 
         PerformanceCountersFormatting.FormatCounts(report).Should().Be(
             """
-            InstructionCount: 8_669
-            InvocationCount: 336
-            BuildListCount: 807
+            InstructionCount: 17_519
+            InvocationCount: 460
+            BuildListCount: 1_154
             LoopIterationCount: 0
             """);
     }
@@ -1386,9 +1386,9 @@ public class KernelJsonFunctionTests
 
         PerformanceCountersFormatting.FormatCounts(report).Should().Be(
             """
-            InstructionCount: 10_294
-            InvocationCount: 400
-            BuildListCount: 965
+            InstructionCount: 13_699
+            InvocationCount: 358
+            BuildListCount: 906
             LoopIterationCount: 0
             """);
     }
@@ -1434,9 +1434,9 @@ public class KernelJsonFunctionTests
 
         PerformanceCountersFormatting.FormatCounts(report).Should().Be(
             """
-            InstructionCount: 6_330
-            InvocationCount: 213
-            BuildListCount: 556
+            InstructionCount: 4_835
+            InvocationCount: 74
+            BuildListCount: 262
             LoopIterationCount: 0
             """);
     }
@@ -1479,9 +1479,9 @@ public class KernelJsonFunctionTests
 
         PerformanceCountersFormatting.FormatCounts(report).Should().Be(
             """
-            InstructionCount: 17_907
-            InvocationCount: 732
-            BuildListCount: 1_657
+            InstructionCount: 16_726
+            InvocationCount: 528
+            BuildListCount: 1_290
             LoopIterationCount: 0
             """);
     }

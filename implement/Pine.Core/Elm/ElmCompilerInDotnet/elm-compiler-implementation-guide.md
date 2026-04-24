@@ -116,27 +116,109 @@ would not satisfy this convention.
 
 The following are general rules we use to compose the list of functions in the eval environment introduced above.
 
+> **Post-§7.7 status (analysis-doc 2026-04-22).** The runtime
+> env-functions list is now restricted to the **SCC members only**.
+> Cross-SCC dependencies are no longer threaded through
+> `current_env[0]`; instead they are inlined at the call site as a
+> `Literal(callee.EncodedExpression)` (Form A) or
+> `Literal(callee.WrapperValue)` (Form B) sourced from the
+> caller-side `CompiledFunctionInfo` cache. See the subsection
+> *"Storing Compiled Functions and Two Call-Site Forms (Form A and
+> Form B)"* below for the details.
+
 #### What to Include in the Environment Functions List
 
-+ All functions in a group of mutually recursive functions must be included.
-+ Other functions might be included as well. (The alternative to retrieving it from the environment is to contain the function directly in the expression representing the function application, as a literal)
++ All functions in a group of mutually recursive functions (the SCC members) must be included.
++ For non-recursive single-member SCCs the env-functions list is **empty** and the wrapper is emitted in the `WithoutEnvFunctions` shape — there is no `env[0]` env-functions slot at runtime, parameters live at `env[i]` directly.
 
 #### How to Order Entries in the Environment Functions List
 
 + All functions in a group of mutually recursive functions ([strongly connected component](https://en.wikipedia.org/wiki/Strongly_connected_component)) use the same order. This makes it easier to model invocations in the recursive set, since we can forward the entire list rather than individual items.
-+ Recursive functions are placed at the beginning of the list.
++ The order is the SCC members in stable sorted order (typically alphabetical by qualified name) so that emission is deterministic across compilations.
 
 ### Function Values And Generic Function Application
 
 The Elm programming language supports first-class functions and partial application. When a function whose declaration we know (it is not a parameter in the current context) escapes the current context, the Elm compiler emits a representation of this function as a value that can then be freely passed around to other parts of the program and applied sometime later.
 
-A function value encodes a function in a way that enables the incremental addition of further arguments. For each argument, the applying side uses a `ParseAndEval` expression.
+A function value encodes a function in a way that enables the incremental addition of further arguments. For each argument, the applying side uses a `ParseAndEval` expression — this is exactly the **Form B** mechanism described in the *"Storing Compiled Functions and Two Call-Site Forms"* subsection below; the same mechanism is used both for a function value of unknown origin and for a known callee that is not saturated at its call site.
 
-This function value contains not only an encoding of the function body, but also a list of the encoded function bodies the wrapped function depends on, including transitive dependencies.
+This function value contains not only an encoding of the function body, but also a list of the encoded function bodies the wrapped function depends on. For recursive SCC members the list contains the SCC members; for non-recursive functions the list is empty (the wrapper is emitted in the `WithoutEnvFunctions` shape) and any cross-SCC callee referenced from the body is inlined at its own call site as a literal — so the dependency does not need to be carried around as an env-functions entry.
 
 For function applications where the function is a value of unknown origin, the compiler emits an expression that adds the given arguments using a form that allows for generic partial application. It emits this partial application as `ParseAndEvalExpression`, where the `Environment` contains the argument value. (If the Elm application expression contains multiple arguments, the compiler nests this pattern recursively)
 
 When emitting a function value, the compiler creates a corresponding wrapper matching the number of parameters. On application of the last argument, the wrapper uses an environment structure as described in the 'Full Function Applications' section.
+
+### Storing Compiled Functions and Two Call-Site Forms (Form A and Form B)
+
+This subsection describes the design that the emitter and all consumers
+of compiled Pine values are migrating toward. The full rationale, the
+incremental migration plan, and the per-step status notes live in
+[`explore/internal-analysis/2026-04-22-analysis-inline-non-recursive-callees.md`](../../../../explore/internal-analysis/2026-04-22-analysis-inline-non-recursive-callees.md).
+
+**Four properties stored per emitted function.** For every top-level
+function the compiler records:
+
+1. **`WrapperValue`** — the partial-application wrapper as a `PineValue`,
+   produced by either `FunctionValueBuilder.EmitFunctionValueWithEnvFunctions`
+   (recursive SCC members) or `FunctionValueBuilder.EmitFunctionValueWithoutEnvFunctions`
+   (non-recursive members). This is the value that escapes when the
+   function is used as a first-class value.
+2. **`ParameterCount`** — the function's declared arity.
+3. **`EnvFunctions`** — the list of captured env-function values used
+   by the closure. Empty for non-recursive functions emitted with the
+   `WithoutEnvFunctions` shape; otherwise the SCC member list in stable
+   sorted order.
+4. **`EncodedExpression`** — the function body encoded as a `PineValue`
+   in the env-functions-at-index-0 layout (i.e. `env[0]` holds the
+   captured env-functions list and `env[1..N]` hold arguments
+   `arg0..arg{n-1}`). This is the artifact callers parse-and-eval at
+   saturated call sites (Form A).
+
+**Two functionally equivalent call-site forms.** At every call site the
+emitter chooses one of:
+
+- **Form A — saturated, compact.** Used when the number of supplied
+  arguments equals `callee.ParameterCount`. A single `ParseAndEval`
+  whose `encoded` is `Literal(callee.EncodedExpression)` and whose
+  `environment` is `List [ Literal(List(callee.EnvFunctions)), arg0, …, arg{n-1} ]`.
+  For non-recursive callees the literal env-functions list is empty.
+- **Form B — generic, per-argument chain.** Used otherwise (partial
+  application, or where the arity is not statically known). A nested
+  `ParseAndEval` chain whose innermost `encoded` is
+  `Literal(callee.WrapperValue)` and where each level supplies one
+  argument as the `environment`.
+
+**Rationale.**
+
+- Form A keeps the saturated common case down to a single
+  `ParseAndEval`, reducing both expression-node count and runtime work.
+- Form B preserves a uniform partial-application pathway and lets call
+  sites pass a callee whose arity is not statically pinned.
+- Storing all four properties — instead of just the wrapper value —
+  removes the per-call-site cost of re-deriving the encoded body from
+  the wrapper.
+
+**Canonicalization requirement.** All consumers of compiled Pine —
+most importantly the static-program parser used by snapshot tests —
+must recognize **both forms** and canonicalize them to the **same
+name** for any saturated application of the same callee. Without this,
+a downstream comparison would diff Form A and Form B occurrences of
+the same logical call. The canonicalization currently lives in
+`StaticProgramParser.ParseCurriedFunctionApplication`; Form A is
+detected via the optional `IdentifyEncodedBodyOptional` callback on
+`StaticProgramParserConfig<T>`, which maps an encoded-body value back
+to the originating callee identifier.
+
+**Wrapper layout discriminant.** Because the two emitter shapes use
+different runtime environment layouts — `[envFunctions, arg0, …]` for
+`WithEnvFunctions` and `[arg0, …]` for `WithoutEnvFunctions` —
+`FunctionRecord` carries a `bool UsesEnvFunctionsLayout` discriminant.
+Downstream consumers that build env-value classes
+(`NamesFromCompiledEnv.BuildApplicationFromFunctionRecord`), parse
+parameter references (`StaticProgramParser.ParseExpression` and
+helpers via `envParametersOffset`), or construct runtime environments
+(`ElmInteractiveEnvironment.ApplyFunctionArgumentsForEvalExpr`) all
+branch on this flag.
 
 ## Closures
 

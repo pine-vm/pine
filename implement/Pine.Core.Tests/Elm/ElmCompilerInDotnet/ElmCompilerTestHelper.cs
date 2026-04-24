@@ -512,12 +512,17 @@ public class ElmCompilerTestHelper
                 expr,
                 StaticExpression<DeclQualifiedName>.EnvironmentInstance) is { } pathInEnv)
             {
-                // Path format is [envListIndex, paramIndex, ...nestedAccess]
-                // Environment structure is [[closures], [arguments]]
-                // So envListIndex=1 means arguments list, paramIndex is the parameter number,
-                // and nestedAccess are indices into nested structures (tuples, choice type payloads).
-                // For example: env[1][0][0] = arguments[0][0] = first element of first parameter's tuple
-                if (pathInEnv.Count >= 2 && pathInEnv[0] is 1)
+                // Legacy WithEnvFunctions layout: env = [envFunctions, arg0, arg1, ...]
+                // so paths starting with envListIndex=1 reach into arg0 (a tuple/choice value),
+                // and pathInEnv[1] is the displayed parameter index for legacy snapshot
+                // compatibility (where each tuple-element access is shown as a flat
+                // `param_1_<paramIdx>[suffix]`).
+                //
+                // §7.7 WithoutEnvFunctions layout: env = [arg0, arg1, ...] so paths into
+                // arg0 start with envListIndex=0. To preserve the same rendered text as
+                // the legacy snapshots, we recognize both prefixes and use pathInEnv[1]
+                // as the displayed parameter index in either case.
+                if (pathInEnv.Count >= 2 && (pathInEnv[0] is 1 || pathInEnv[0] is 0))
                 {
                     var paramIndex = pathInEnv[1];
                     var paramName = "param_1_" + paramIndex;

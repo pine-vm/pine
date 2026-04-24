@@ -29,11 +29,29 @@ internal static class QualifiedNameHelper
 
 /// <summary>
 /// Information about a compiled function including its dependency layout.
+/// <para>
+/// Carries the four properties described in §2.1 of
+/// <c>explore/internal-analysis/2026-04-22-analysis-inline-non-recursive-callees.md</c>:
+/// <list type="bullet">
+///   <item><see cref="CompiledValue"/> — the wrapper value (Form-B representation),</item>
+///   <item><see cref="EncodedBody"/> — the encoded body (Form-A representation),</item>
+///   <item><see cref="ParameterCount"/> — the function's declared arity,</item>
+///   <item><see cref="EnvFunctions"/> — the env-functions list captured by the wrapper.</item>
+/// </list>
+/// </para>
+/// <para>
+/// As of §7.6a (analysis-doc snapshot 2026-04-23), <see cref="EnvFunctions"/> mirrors
+/// the entire <see cref="DependencyLayout"/> (members ++ additional dependencies) so
+/// the existing call-site emitter (which reads cross-SCC callees from <c>env[0][k]</c>
+/// of the caller's layout) keeps working unchanged. The migration to a members-only
+/// env-functions list and the corresponding emitter switch land jointly in §7.7.
+/// </para>
 /// </summary>
 /// <param name="CompiledValue">The compiled Pine value for the function (the wrapper).</param>
 /// <param name="EncodedBody">
 /// The encoded inner expression (body) of the function.
-/// This is used when building the env functions list for dependent functions.
+/// This is used when building the env functions list for dependent functions
+/// and is the artifact a saturated Form-A call site evaluates.
 /// </param>
 /// <param name="DependencyLayout">
 /// The list of qualified function names this function depends on (in order).
@@ -41,10 +59,24 @@ internal static class QualifiedNameHelper
 /// For standalone functions, this is [self, dependencies...].
 /// This ordering is used to build the runtime environment when calling the function.
 /// </param>
+/// <param name="ParameterCount">
+/// The function's declared arity (number of formal parameters). Used by the
+/// call-site emitter to pick between the saturated (Form A) and curried (Form B)
+/// emission shapes.
+/// </param>
+/// <param name="EnvFunctions">
+/// The env-functions list baked into <see cref="CompiledValue"/>. While §7.6a is in
+/// effect this equals <c>DependencyLayout</c> mapped through the per-member encoded
+/// bodies (i.e. members ++ additional dependencies). §7.7 will narrow this to the
+/// SCC member list for recursive members and to the empty list for non-recursive
+/// members emitted with the <c>WithoutEnvFunctions</c> wrapper shape.
+/// </param>
 public record CompiledFunctionInfo(
     PineValue CompiledValue,
     PineValue EncodedBody,
-    IReadOnlyList<string> DependencyLayout);
+    IReadOnlyList<string> DependencyLayout,
+    int ParameterCount,
+    IReadOnlyList<PineValue> EnvFunctions);
 
 /// <summary>
 /// Aggregates the type information known for a function.
@@ -57,9 +89,19 @@ public record FunctionTypeInfo(
 /// Represents a Strongly Connected Component (SCC) of functions.
 /// All functions in an SCC share the same dependency layout as per the spec:
 /// "All functions in a group of mutually recursive functions use the same order."
-/// 
-/// The complete layout is: Members ++ AdditionalDependencies
-/// 
+///
+/// <para>
+/// As of §7.6b (analysis-doc 2026-04-23) the runtime env-functions list — and
+/// therefore the per-member <see cref="GetLayout"/> — contains only the SCC
+/// members. Cross-SCC dependencies are still tracked in
+/// <see cref="AdditionalDependencies"/> so the compiler can order SCC compilation
+/// (dependencies first), but they are no longer threaded through
+/// <c>current_env[0]</c>: every cross-SCC callee is now reached at its call site
+/// via a <c>Literal(callee.EncodedBody)</c> reference plus a
+/// <c>Literal(List(callee.EnvFunctions))</c> env-functions literal sourced from
+/// the cached <see cref="CompiledFunctionInfo"/>.
+/// </para>
+///
 /// Note: Even single-function self-recursive functions form an SCC with one member.
 /// Non-recursive standalone functions also form trivial single-member SCCs for consistency.
 /// </summary>
@@ -67,22 +109,41 @@ public record FunctionTypeInfo(
 /// The qualified names of all functions in this SCC. Must have at least one member.
 /// </param>
 /// <param name="AdditionalDependencies">
-/// Dependencies outside the SCC.
+/// Cross-SCC dependencies (already compiled by the time this SCC is processed).
+/// Used only for compilation ordering; not part of the runtime env-functions list.
+/// </param>
+/// <param name="IsRecursive">
+/// True when this SCC contains real recursion: either it has more than one member
+/// (mutual recursion among members), or its single member directly references
+/// itself in its body. False only for single-member SCCs whose lone member does
+/// not refer to itself; per §7.7 of the analysis doc those callees are emitted
+/// with the <c>WithoutEnvFunctions</c> wrapper shape and an empty runtime
+/// env-functions list, since they have no need for an env-functions slot.
 /// </param>
 public record FunctionScc(
     ImmutableList<string> Members,
-    ImmutableList<string> AdditionalDependencies)
+    ImmutableList<string> AdditionalDependencies,
+    bool IsRecursive)
 {
     /// <summary>
-    /// Gets the complete dependency layout for this SCC.
-    /// Layout is: [members_sorted..., additional_dependencies_sorted...]
+    /// Gets the runtime dependency layout for this SCC.
+    /// <para>
+    /// For recursive SCCs (mutual recursion or self-recursion) the layout is
+    /// the SCC members in alphabetical order — every member can reach every
+    /// other through <c>current_env[0][k]</c>.
+    /// </para>
+    /// <para>
+    /// For non-recursive single-member SCCs (§7.7) the layout is empty: the
+    /// member's body has no use for an env-functions slot, so the wrapper is
+    /// emitted in the <c>WithoutEnvFunctions</c> shape and the runtime
+    /// environment is just the flat list of arguments.
+    /// </para>
+    /// <para>
+    /// <see cref="AdditionalDependencies"/> are deliberately excluded — see
+    /// the type-level remarks for the §7.6b rationale.
+    /// </para>
     /// </summary>
-    public IReadOnlyList<string> GetLayout() =>
-        AdditionalDependencies.Count is 0
-        ?
-        Members
-        :
-        Members.AddRange(AdditionalDependencies);
+    public IReadOnlyList<string> GetLayout() => IsRecursive ? Members : [];
 }
 
 /// <summary>
@@ -112,8 +173,16 @@ public record ModuleCompilationContext(
         string name,
         PineValue value,
         PineValue encodedBody,
-        IReadOnlyList<string> dependencyLayout) =>
-        WithCompiledFunction(QualifiedNameHelper.FromQualifiedNameString(name), value, encodedBody, dependencyLayout);
+        IReadOnlyList<string> dependencyLayout,
+        int parameterCount,
+        IReadOnlyList<PineValue> envFunctions) =>
+        WithCompiledFunction(
+            QualifiedNameHelper.FromQualifiedNameString(name),
+            value,
+            encodedBody,
+            dependencyLayout,
+            parameterCount,
+            envFunctions);
 
     /// <summary>
     /// Creates a new context with the specified function added to the cache.
@@ -122,11 +191,20 @@ public record ModuleCompilationContext(
         SyntaxModelTypes.QualifiedNameRef name,
         PineValue value,
         PineValue encodedBody,
-        IReadOnlyList<string> dependencyLayout) =>
+        IReadOnlyList<string> dependencyLayout,
+        int parameterCount,
+        IReadOnlyList<PineValue> envFunctions) =>
         this with
         {
             CompiledFunctionsCache =
-            CompiledFunctionsCache.SetItem(name, new CompiledFunctionInfo(value, encodedBody, dependencyLayout))
+            CompiledFunctionsCache.SetItem(
+                name,
+                new CompiledFunctionInfo(
+                    CompiledValue: value,
+                    EncodedBody: encodedBody,
+                    DependencyLayout: dependencyLayout,
+                    ParameterCount: parameterCount,
+                    EnvFunctions: envFunctions))
         };
 
     /// <summary>
@@ -320,8 +398,23 @@ public record ExpressionCompilationContext(
     IReadOnlyDictionary<string, TypeInference.InferredType>? LocalBindingTypes,
     IReadOnlyList<string> DependencyLayout,
     ModuleCompilationContext ModuleCompilationContext,
-    IReadOnlyDictionary<SyntaxModelTypes.QualifiedNameRef, FunctionTypeInfo>? FunctionTypes = null)
+    IReadOnlyDictionary<SyntaxModelTypes.QualifiedNameRef, FunctionTypeInfo>? FunctionTypes = null,
+    bool UsesEnvFunctionsLayout = true)
 {
+    /// <summary>
+    /// The offset added to a parameter index when building the path expression
+    /// that reads the parameter from the runtime environment.
+    /// <list type="bullet">
+    ///   <item><c>1</c> when <see cref="UsesEnvFunctionsLayout"/> is true (the
+    ///     historical / WithEnvFunctions layout: env is
+    ///     <c>[envFunctions, arg0, arg1, ...]</c>).</item>
+    ///   <item><c>0</c> when <see cref="UsesEnvFunctionsLayout"/> is false (the
+    ///     §7.7 WithoutEnvFunctions layout for non-recursive single-member
+    ///     SCCs: env is <c>[arg0, arg1, ...]</c>).</item>
+    /// </list>
+    /// </summary>
+    public int EnvParametersOffset => UsesEnvFunctionsLayout ? 1 : 0;
+
     /// <summary>
     /// Creates a new context with additional local bindings.
     /// </summary>

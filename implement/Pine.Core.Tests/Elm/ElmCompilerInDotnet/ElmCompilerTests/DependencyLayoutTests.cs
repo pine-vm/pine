@@ -9,9 +9,15 @@ namespace Pine.Core.Tests.Elm.ElmCompilerInDotnet.ElmCompilerTests;
 /// The compiler uses a two-pass approach:
 /// 1. First pass: Collect all dependencies for each function
 /// 2. Second pass: Emit functions with their dependency layouts
-/// 
-/// Each function's layout contains [self, sorted_dependencies...] where dependencies are sorted alphabetically.
-/// Self is always at index 0 for snapshot test name rendering.
+///
+/// <para>
+/// As of §7.6b the layout contains only SCC members (cross-SCC dependencies
+/// are literal-inlined at call sites). As of §7.7 the layout is the empty
+/// list for non-recursive single-member SCCs (those callees are emitted in
+/// the WithoutEnvFunctions wrapper shape and need no env-functions slot).
+/// Recursive SCCs (mutual recursion or self-recursion) keep the SCC member
+/// list as their layout.
+/// </para>
 /// </summary>
 public class DependencyLayoutTests
 {
@@ -32,8 +38,9 @@ public class DependencyLayoutTests
         var layouts = ElmCompilerTestHelper.ComputeDependencyLayoutsFromModule(elmModuleText);
 
         layouts.Should().ContainKey("Test.identity");
-        // Self is always at index 0, no other dependencies
-        layouts["Test.identity"].Should().Equal(["Test.identity"]);
+        // §7.7: non-recursive single-member SCC → empty layout
+        // (WithoutEnvFunctions wrapper, no env-functions slot).
+        layouts["Test.identity"].Should().BeEmpty();
     }
 
     /// <summary>
@@ -126,11 +133,12 @@ public class DependencyLayoutTests
         layouts.Should().ContainKey("Test.double");
         layouts.Should().ContainKey("Test.quadruple");
 
-        // double has no user function dependencies, only self
-        layouts["Test.double"].Should().Equal(["Test.double"]);
+        // §7.6b/§7.7: non-recursive single-member SCCs have empty layouts.
+        layouts["Test.double"].Should().BeEmpty();
 
-        // quadruple depends on double: [self, double]
-        layouts["Test.quadruple"].Should().Equal(["Test.quadruple", "Test.double"]);
+        // quadruple is also a non-recursive single-member SCC (its only call is
+        // to a cross-SCC dep `double`, inlined as a literal at the call site).
+        layouts["Test.quadruple"].Should().BeEmpty();
     }
 
     /// <summary>
@@ -154,8 +162,8 @@ public class DependencyLayoutTests
         var layouts = ElmCompilerTestHelper.ComputeDependencyLayoutsFromModule(elmModuleText);
 
         layouts.Should().ContainKey("Test.addAndMultiply");
-        // Only uses Pine_kernel functions, no user function dependencies, only self
-        layouts["Test.addAndMultiply"].Should().Equal(["Test.addAndMultiply"]);
+        // §7.7: non-recursive single-member SCC → empty layout.
+        layouts["Test.addAndMultiply"].Should().BeEmpty();
     }
 
     /// <summary>
@@ -180,10 +188,10 @@ public class DependencyLayoutTests
 
         layouts.Should().ContainKey("Test.returnTrue");
         layouts.Should().ContainKey("Test.returnFalse");
-        // True and False are choice type constructors (boolean), not function dependencies, only self
-        layouts["Test.returnTrue"].Should().Equal(["Test.returnTrue"]);
+        // §7.7: both are non-recursive single-member SCCs → empty layouts.
+        layouts["Test.returnTrue"].Should().BeEmpty();
 
-        layouts["Test.returnFalse"].Should().Equal(["Test.returnFalse"]);
+        layouts["Test.returnFalse"].Should().BeEmpty();
     }
 
     /// <summary>
@@ -208,8 +216,8 @@ public class DependencyLayoutTests
 
         layouts.Should().ContainKey("Test.caller");
 
-        // Layout: [self, alpha, middle, zebra] - dependencies sorted alphabetically
-        layouts["Test.caller"].Should().Equal(["Test.caller", "Test.alpha", "Test.middle", "Test.zebra"]);
+        // §7.7: caller is a non-recursive single-member SCC → empty layout.
+        layouts["Test.caller"].Should().BeEmpty();
     }
 
     /// <summary>
@@ -230,17 +238,15 @@ public class DependencyLayoutTests
 
         var layouts = ElmCompilerTestHelper.ComputeDependencyLayoutsFromModule(elmModuleText);
 
-        // funcA has no dependencies, only self
-        layouts["Test.funcA"].Should().Equal(["Test.funcA"]);
+        // §7.7: every function above is a non-recursive single-member SCC →
+        // empty layouts. Cross-SCC deps are inlined as literals at call sites.
+        layouts["Test.funcA"].Should().BeEmpty();
 
-        // funcB depends on funcA: [self, funcA]
-        layouts["Test.funcB"].Should().Equal(["Test.funcB", "Test.funcA"]);
+        layouts["Test.funcB"].Should().BeEmpty();
 
-        // funcC depends on funcA and funcB, sorted alphabetically: [self, funcA, funcB]
-        layouts["Test.funcC"].Should().Equal(["Test.funcC", "Test.funcA", "Test.funcB"]);
+        layouts["Test.funcC"].Should().BeEmpty();
 
-        // funcD depends on funcA, funcB, funcC, sorted alphabetically: [self, funcA, funcB, funcC]
-        layouts["Test.funcD"].Should().Equal(["Test.funcD", "Test.funcA", "Test.funcB", "Test.funcC"]);
+        layouts["Test.funcD"].Should().BeEmpty();
     }
 
     /// <summary>
@@ -266,8 +272,8 @@ public class DependencyLayoutTests
 
         layouts.Should().ContainKey("Test.caller");
 
-        // caller depends on getRecord because it calls getRecord inside the record access
-        layouts["Test.caller"].Should().Equal(["Test.caller", "Test.getRecord"]);
+        // §7.7: caller is a non-recursive single-member SCC → empty layout.
+        layouts["Test.caller"].Should().BeEmpty();
     }
 
     /// <summary>
@@ -294,20 +300,18 @@ public class DependencyLayoutTests
         layouts.Should().ContainKey("Test.caller");
 
         // After lambda lifting, the lambda becomes a top-level function that references helper.
-        // The lifted function should depend on helper, and caller should depend on the lifted function.
-        // Verify that helper appears somewhere in the transitive dependency chain.
-        // The caller's layout should include the lifted function (which depends on helper).
-        var callerLayout = layouts["Test.caller"];
-        callerLayout.Should().Contain("Test.caller");
+        // §7.7: every function in this program (caller, helper, the lifted lambda) is a
+        // non-recursive single-member SCC → empty layouts.
+        layouts["Test.caller"].Should().BeEmpty();
 
-        // Find the lifted lambda function (it should contain "__lifted__" in its name)
-        var liftedFuncName = callerLayout.FirstOrDefault(n => n.Contains("__lifted__"));
-        liftedFuncName.Should().NotBeNull("caller should depend on a lifted lambda function");
+        var liftedFuncName =
+            layouts.Keys.FirstOrDefault(n => n.Contains("__lifted__"));
+        liftedFuncName.Should().NotBeNull("a lifted lambda function should be present in the program");
 
-        // The lifted function should have helper in its layout
         if (liftedFuncName is not null)
         {
-            layouts[liftedFuncName].Should().Contain("Test.helper");
+            // §7.7: lifted function is also a non-recursive single-member SCC → empty layout.
+            layouts[liftedFuncName].Should().BeEmpty();
         }
     }
 }

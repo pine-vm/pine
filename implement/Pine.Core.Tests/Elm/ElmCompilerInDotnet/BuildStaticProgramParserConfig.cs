@@ -60,7 +60,10 @@ public class BuildStaticProgramParserConfig
                 if (FunctionRecord.ParseFunctionRecordTagged(kvp.Value, parseCache).IsOkOrNull() is { } functionRecord)
                 {
                     var (extractedValue, _, _) =
-                        NamesFromCompiledEnv.BuildApplicationFromFunctionRecord(functionRecord, arguments: [], parseCache);
+                        NamesFromCompiledEnv.BuildApplicationFromFunctionRecord(
+                            functionRecord,
+                            arguments: [],
+                            parseCache);
 
                     namedValue = extractedValue;
                 }
@@ -99,6 +102,30 @@ public class BuildStaticProgramParserConfig
         IReadOnlyDictionary<PineValue, (IdentifierT ident, PineValue originalValue)> declNamesWithOriginals,
         PineVMParseCache parseCache)
     {
+        // Also build a lookup from each callee's EncodedExpression (property 4 in
+        // §2.1 of analysis-inline-non-recursive-callees.md) to the same identifier,
+        // so the parser can recognize Form A call sites (single ParseAndEval whose
+        // Encoded is Literal(EncodedExpression)). For non-recursive callees the
+        // EncodedExpression is the encoded inner-function body, distinct from the
+        // wrapper value used at Form B call sites. This dictionary is allowed to
+        // contain entries where the encoded body equals the original lookup value
+        // (e.g. zero-parameter declarations encoded as bare values) — in that case
+        // the Form A and Form B paths happen to coincide.
+        Dictionary<PineValue, (IdentifierT ident, PineValue originalValue, bool calleeUsesEnvFunctionsLayout)> encodedBodyLookup =
+            [];
+
+        foreach (var (lookupValue, entry) in declNamesWithOriginals)
+        {
+            if (FunctionRecord.ParseFunctionRecordTagged(entry.originalValue, parseCache).IsOkOrNull() is { } functionRecord)
+            {
+                var (encodedExpr, _, _) =
+                    NamesFromCompiledEnv.BuildApplicationFromFunctionRecord(functionRecord, arguments: [], parseCache);
+
+                encodedBodyLookup[encodedExpr] =
+                    (entry.ident, entry.originalValue, functionRecord.UsesEnvFunctionsLayout);
+            }
+        }
+
         return
             new StaticProgramParserConfig<IdentifierT>(
                 IdentifyInstanceRequired:
@@ -106,10 +133,11 @@ public class BuildStaticProgramParserConfig
                 {
                     if (declNamesWithOriginals.TryGetValue(pineValue, out var entry))
                     {
-                        return new StaticProgramParser.IdentifyResponse<IdentifierT>(
-                            Ident: entry.ident,
-                            ContinueParse: true,
-                            OriginalFunctionValue: entry.originalValue);
+                        return
+                            new StaticProgramParser.IdentifyResponse<IdentifierT>(
+                                Ident: entry.ident,
+                                ContinueParse: true,
+                                OriginalFunctionValue: entry.originalValue);
                     }
 
                     throw new System.InvalidOperationException(
@@ -120,15 +148,31 @@ public class BuildStaticProgramParserConfig
                 {
                     if (declNamesWithOriginals.TryGetValue(pineValue, out var entry))
                     {
-                        return new StaticProgramParser.IdentifyResponse<IdentifierT>(
-                            Ident: entry.ident,
-                            ContinueParse: true,
-                            OriginalFunctionValue: entry.originalValue);
+                        return
+                            new StaticProgramParser.IdentifyResponse<IdentifierT>(
+                                Ident: entry.ident,
+                                ContinueParse: true,
+                                OriginalFunctionValue: entry.originalValue);
                     }
 
                     return null;
                 },
                 IdentifyCrash:
-                (_, _) => throw new System.NotImplementedException());
+                (_, _) => throw new System.NotImplementedException(),
+                IdentifyEncodedBodyOptional:
+                (_, pineValue) =>
+                {
+                    if (encodedBodyLookup.TryGetValue(pineValue, out var entry))
+                    {
+                        return
+                            new StaticProgramParser.IdentifyResponse<IdentifierT>(
+                                Ident: entry.ident,
+                                ContinueParse: true,
+                                OriginalFunctionValue: entry.originalValue,
+                                CalleeUsesEnvFunctionsLayout: entry.calleeUsesEnvFunctionsLayout);
+                    }
+
+                    return null;
+                });
     }
 }

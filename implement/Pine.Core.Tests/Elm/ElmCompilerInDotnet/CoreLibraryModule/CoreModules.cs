@@ -65,10 +65,23 @@ public static class CoreModules
             return previousConfig.IdentifyInstanceOptional(stack, pineValue);
         }
 
+        StaticProgramParser.IdentifyResponse<IdentifierT>? IdentifyEncodedBody(
+            IEnumerable<IdentifierT> stack,
+            PineValue pineValue)
+        {
+            if (IdentifyOverride(stack, pineValue) is { } overriden)
+            {
+                return overriden;
+            }
+
+            return previousConfig.IdentifyEncodedBodyOptional?.Invoke(stack, pineValue);
+        }
+
         return
             new StaticProgramParserConfig<IdentifierT>(
                 IdentifyInstanceRequired: IdentifyRequired,
                 IdentifyInstanceOptional: IdentifyOptional,
-                IdentifyCrash: previousConfig.IdentifyCrash);
+                IdentifyCrash: previousConfig.IdentifyCrash,
+                IdentifyEncodedBodyOptional: IdentifyEncodedBody);
     }
 }

@@ -134,7 +134,14 @@ public static class ElmInteractiveEnvironment
 
         PineValue combinedEnvironment;
 
-        if (functionRecord.UsesNestedArgFormat)
+        if (!functionRecord.UsesEnvFunctionsLayout)
+        {
+            // WithoutEnvFunctions layout per Finding F-1 in
+            // explore/internal-analysis/2026-04-22-analysis-inline-non-recursive-callees.md:
+            // the body expects env = [arg0, arg1, ...] directly (no env-functions slot).
+            combinedEnvironment = PineValue.List(combinedArguments.ToArray());
+        }
+        else if (functionRecord.UsesNestedArgFormat)
         {
             // Old nested format: [envFuncs, [arg0, arg1, ...]]
             combinedEnvironment =

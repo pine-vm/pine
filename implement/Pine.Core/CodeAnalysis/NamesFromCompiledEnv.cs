@@ -120,22 +120,38 @@ public record NamesFromCompiledEnv
         IReadOnlyList<PineValue> arguments,
         PineVMParseCache parseCache)
     {
-        var outerEnvClass =
-            PineValueClass.Create(
-                [
-                 ..functionRecord.EnvFunctions.ToArray()
-                     .Select((envFuncValue, index) =>
-                     new KeyValuePair<IReadOnlyList<int>, PineValue>(
-                         [0, index],
-                         envFuncValue)),
+        // Per Finding F-1 in
+        // explore/internal-analysis/2026-04-22-analysis-inline-non-recursive-callees.md:
+        // when the function record originates from a WithoutEnvFunctions wrapper the body
+        // expects env = [arg0, arg1, ...] (no env-functions slot at index 0). Branch on
+        // FunctionRecord.UsesEnvFunctionsLayout to construct the right env-value class.
+        var argumentsBaseIndex = functionRecord.UsesEnvFunctionsLayout ? 1 : 0;
 
-                 ..arguments.Select((argValue, argIndex) =>
-                     new KeyValuePair<IReadOnlyList<int>, PineValue>(
-                         [1 + argIndex],
-                         argValue)),
-                 ]);
+        var envClassEntries = new List<KeyValuePair<IReadOnlyList<int>, PineValue>>();
 
-        if (functionRecord.InnerFunction is Expression.ParseAndEval innerParseAndEval)
+        if (functionRecord.UsesEnvFunctionsLayout)
+        {
+            for (var index = 0; index < functionRecord.EnvFunctions.Length; index++)
+            {
+                envClassEntries.Add(
+                    new KeyValuePair<IReadOnlyList<int>, PineValue>(
+                        [0, index],
+                        functionRecord.EnvFunctions.Span[index]));
+            }
+        }
+
+        for (var argIndex = 0; argIndex < arguments.Count; argIndex++)
+        {
+            envClassEntries.Add(
+                new KeyValuePair<IReadOnlyList<int>, PineValue>(
+                    [argumentsBaseIndex + argIndex],
+                    arguments[argIndex]));
+        }
+
+        var outerEnvClass = PineValueClass.Create(envClassEntries);
+
+        if (functionRecord.UsesEnvFunctionsLayout &&
+            functionRecord.InnerFunction is Expression.ParseAndEval innerParseAndEval)
         {
             // Which env function is the entry pointing to?
 
