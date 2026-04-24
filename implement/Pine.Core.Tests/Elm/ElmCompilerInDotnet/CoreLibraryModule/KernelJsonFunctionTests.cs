@@ -1157,7 +1157,7 @@ public class KernelJsonFunctionTests
 
         PerformanceCountersFormatting.FormatCounts(report).Should().Be(
             """
-            InstructionCount: 10_689
+            InstructionCount: 10_695
             InvocationCount: 368
             BuildListCount: 953
             LoopIterationCount: 0
@@ -1179,7 +1179,7 @@ public class KernelJsonFunctionTests
 
         PerformanceCountersFormatting.FormatCounts(report).Should().Be(
             """
-            InstructionCount: 7_415
+            InstructionCount: 7_418
             InvocationCount: 248
             BuildListCount: 656
             LoopIterationCount: 0
@@ -1236,7 +1236,7 @@ public class KernelJsonFunctionTests
 
         formattedCounts.Should().Be(
             """
-            InstructionCount: 15_001
+            InstructionCount: 15_011
             InvocationCount: 567
             BuildListCount: 1_425
             LoopIterationCount: 0
@@ -1259,7 +1259,7 @@ public class KernelJsonFunctionTests
 
         formattedCounts.Should().Be(
             """
-            InstructionCount: 43_994
+            InstructionCount: 44_010
             InvocationCount: 1_542
             BuildListCount: 4_004
             LoopIterationCount: 0
@@ -1282,7 +1282,7 @@ public class KernelJsonFunctionTests
 
         PerformanceCountersFormatting.FormatCounts(report).Should().Be(
             """
-            InstructionCount: 15_268
+            InstructionCount: 15_270
             InvocationCount: 454
             BuildListCount: 1_235
             LoopIterationCount: 0
@@ -1303,7 +1303,7 @@ public class KernelJsonFunctionTests
 
         PerformanceCountersFormatting.FormatCounts(report).Should().Be(
             """
-            InstructionCount: 15_268
+            InstructionCount: 15_270
             InvocationCount: 454
             BuildListCount: 1_235
             LoopIterationCount: 0
@@ -1386,7 +1386,7 @@ public class KernelJsonFunctionTests
 
         PerformanceCountersFormatting.FormatCounts(report).Should().Be(
             """
-            InstructionCount: 13_699
+            InstructionCount: 13_700
             InvocationCount: 358
             BuildListCount: 906
             LoopIterationCount: 0

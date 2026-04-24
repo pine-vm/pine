@@ -111,7 +111,7 @@ public class BuildStaticProgramParserConfig
         // contain entries where the encoded body equals the original lookup value
         // (e.g. zero-parameter declarations encoded as bare values) — in that case
         // the Form A and Form B paths happen to coincide.
-        Dictionary<PineValue, (IdentifierT ident, PineValue originalValue, bool calleeUsesEnvFunctionsLayout)> encodedBodyLookup =
+        Dictionary<PineValue, (IdentifierT ident, PineValue originalValue)> encodedBodyLookup =
             [];
 
         foreach (var (lookupValue, entry) in declNamesWithOriginals)
@@ -122,7 +122,7 @@ public class BuildStaticProgramParserConfig
                     NamesFromCompiledEnv.BuildApplicationFromFunctionRecord(functionRecord, arguments: [], parseCache);
 
                 encodedBodyLookup[encodedExpr] =
-                    (entry.ident, entry.originalValue, functionRecord.UsesEnvFunctionsLayout);
+                    (entry.ident, entry.originalValue);
             }
         }
 
@@ -168,8 +168,7 @@ public class BuildStaticProgramParserConfig
                             new StaticProgramParser.IdentifyResponse<IdentifierT>(
                                 Ident: entry.ident,
                                 ContinueParse: true,
-                                OriginalFunctionValue: entry.originalValue,
-                                CalleeUsesEnvFunctionsLayout: entry.calleeUsesEnvFunctionsLayout);
+                                OriginalFunctionValue: entry.originalValue);
                     }
 
                     return null;

@@ -112,14 +112,11 @@ public class SizeBasedInliningRegressionTests
             FunctionRecord.ParseFunctionValue(parseToFileWith, parseCache)
             .Extract(err => throw new Exception("Failed parsing parseToFile WITH: " + err));
 
-        // §7.7: parseToFile is non-recursive (a top-level parser entry point
-        // that delegates to other parsers but does not call itself), so it is
-        // now emitted in the WithoutEnvFunctions wrapper shape rather than
-        // the historical WithEnvFunctions shape. Either shape is a valid
-        // outcome of a successful compilation; we accept both.
-        parsedPTFWith.Should().Match(
-            v => v is ParsedFunctionValue.WithEnvFunctions
-                || v is ParsedFunctionValue.WithoutEnvFunctions);
+        // parseToFile is non-recursive (a top-level parser entry point that
+        // delegates to other parsers but does not call itself). After Approach
+        // A1 (always emit WithEnvFunctions), it is wrapped uniformly in the
+        // WithEnvFunctions shape regardless of recursion.
+        parsedPTFWith.Should().BeOfType<ParsedFunctionValue.WithEnvFunctions>();
     }
 
     private static PineValue CompileEnvironment(bool disableInlining)

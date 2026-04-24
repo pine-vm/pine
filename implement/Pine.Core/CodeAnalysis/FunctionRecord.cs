@@ -5,11 +5,8 @@ using System.Collections.Generic;
 namespace Pine.Core.CodeAnalysis;
 
 /// <summary>
-/// Represents a parsed function value, distinguishing between the two emission formats:
-/// <list type="bullet">
-/// <item><see cref="WithEnvFunctions"/>: Function values emitted by <see cref="FunctionValueBuilder.EmitFunctionValueWithEnvFunctions"/></item>
-/// <item><see cref="WithoutEnvFunctions"/>: Function values emitted by <see cref="FunctionValueBuilder.EmitFunctionValueWithoutEnvFunctions"/></item>
-/// </list>
+/// Represents a parsed function value emitted by <see cref="FunctionValueBuilder.EmitFunctionValueWithEnvFunctions"/>.
+/// The inner expression receives environment as [envFunctions, arg0, arg1, ...].
 /// This type helps callers understand how the argument expressions are composed in the inner function.
 /// </summary>
 public abstract record ParsedFunctionValue
@@ -83,24 +80,6 @@ public abstract record ParsedFunctionValue
             return hash;
         }
     }
-
-    /// <summary>
-    /// Represents a function value emitted by <see cref="FunctionValueBuilder.EmitFunctionValueWithoutEnvFunctions"/>.
-    /// The inner expression receives environment directly as the list of arguments [arg0, arg1, ...].
-    /// </summary>
-    /// <param name="InnerFunction">The inner function expression body.</param>
-    /// <param name="ParameterCount">Total number of parameters expected by the function.</param>
-    public sealed record WithoutEnvFunctions(
-        Expression InnerFunction,
-        int ParameterCount)
-        : ParsedFunctionValue
-    {
-        /// <inheritdoc/>
-        public override Expression InnerFunction { get; } = InnerFunction;
-
-        /// <inheritdoc/>
-        public override int ParameterCount { get; } = ParameterCount;
-    }
 }
 
 /// <summary>
@@ -110,24 +89,12 @@ public abstract record ParsedFunctionValue
 /// <param name="ParameterCount">Total number of parameters expected.</param>
 /// <param name="EnvFunctions">Captured function values used by the closure.</param>
 /// <param name="ArgumentsAlreadyCollected">Arguments already supplied (for partial application scenarios).</param>
-/// <param name="UsesEnvFunctionsLayout">
-/// True iff the inner function's body expects the runtime environment to be laid out as
-/// <c>[envFunctions, arg0, arg1, ...]</c> (the layout produced by
-/// <see cref="FunctionValueBuilder.EmitFunctionValueWithEnvFunctions"/> and the canonical
-/// <c>EncodedExpression</c> layout per §2.1 property 4 of
-/// <c>explore/internal-analysis/2026-04-22-analysis-inline-non-recursive-callees.md</c>).
-/// False iff the body expects the environment laid out as <c>[arg0, arg1, ...]</c> directly,
-/// i.e. the <see cref="FunctionValueBuilder.EmitFunctionValueWithoutEnvFunctions"/> layout
-/// where parameter <c>k</c> lives at <c>env[k]</c> rather than <c>env[1+k]</c>. Defaults
-/// to <c>true</c> to preserve the historical behaviour of all existing call sites.
-/// </param>
 public record FunctionRecord(
     Expression InnerFunction,
     int ParameterCount,
     ReadOnlyMemory<PineValue> EnvFunctions,
     ReadOnlyMemory<PineValue> ArgumentsAlreadyCollected,
-    bool UsesNestedArgFormat = false,
-    bool UsesEnvFunctionsLayout = true)
+    bool UsesNestedArgFormat = false)
 {
     /*
      * TODO: Rename to 'FunctionValueParser' for symmetry with 'FunctionValueBuilder'?
@@ -166,15 +133,6 @@ public record FunctionRecord(
                     return nestedRecord;
                 }
 
-                // Fall back to ParseFunctionValue for WithoutEnvFunctions wrappers
-                // emitted by FunctionValueBuilder.EmitFunctionValueWithoutEnvFunctions
-                // (see Finding F-1 in
-                // explore/internal-analysis/2026-04-22-analysis-inline-non-recursive-callees.md).
-                if (TryFunctionRecordFromParsedFunctionValue(pineValue, parseCache) is { } fromParsed)
-                {
-                    return fromParsed;
-                }
-
                 return nestedResult;
             }
 
@@ -188,12 +146,6 @@ public record FunctionRecord(
                     return multiRecord;
                 }
 
-                // Same fallback as above for ≥ 2 parameter WithoutEnvFunctions wrappers.
-                if (TryFunctionRecordFromParsedFunctionValue(pineValue, parseCache) is { } fromParsed)
-                {
-                    return fromParsed;
-                }
-
                 return multiResult;
             }
         }
@@ -203,22 +155,7 @@ public record FunctionRecord(
          * This handles both:
          * - Blob values (integers, etc.) which fail ParseTagged with "Expected list"
          * - List values with unrecognized tags
-         *
-         * §7.7: zero-parameter non-recursive declarations are emitted with the
-         * WithoutEnvFunctions wrapper, whose value is just
-         * <c>EncodeExpressionAsValue(innerExpression)</c>. ParseTagged sees
-         * such a value with the inner expression's encoding tag (for example
-         * "Literal" or "KernelApplication") rather than "Function" /
-         * "ParseAndEval" / "List", so it falls through to here. Wrapping the
-         * pineValue in another <c>Literal</c> would double-encode the body
-         * and yield the encoded Expression instead of its evaluation result,
-         * so we first try to parse it as a WithoutEnvFunctions wrapper.
          */
-
-        if (TryFunctionRecordFromParsedFunctionValue(pineValue, parseCache) is { } fromParsedFallback)
-        {
-            return fromParsedFallback;
-        }
 
         return
             new FunctionRecord(
@@ -229,57 +166,8 @@ public record FunctionRecord(
     }
 
     /// <summary>
-    /// Bridges <see cref="ParseFunctionValue"/> (which correctly handles both the
-    /// <see cref="ParsedFunctionValue.WithEnvFunctions"/> and
-    /// <see cref="ParsedFunctionValue.WithoutEnvFunctions"/> wrapper shapes via separate
-    /// code paths) to the legacy <see cref="FunctionRecord"/> representation used by
-    /// <see cref="StaticProgramParser.ParseProgram"/>. Returns <c>null</c> on parse
-    /// failure to let callers fall through to other handling.
-    /// </summary>
-    /// <remarks>
-    /// Per Finding F-1 (recorded in
-    /// <c>explore/internal-analysis/2026-04-22-analysis-inline-non-recursive-callees.md</c>),
-    /// the original <see cref="ParseNestedWrapperForm"/> /
-    /// <see cref="ParseMultiParamNestedWrapperForm"/> paths assume the WithEnvFunctions
-    /// environment shape and reject WithoutEnvFunctions wrappers used as root
-    /// declarations. This bridge picks up those rejected cases.
-    /// </remarks>
-    private static FunctionRecord? TryFunctionRecordFromParsedFunctionValue(
-        PineValue pineValue,
-        PineVMParseCache parseCache)
-    {
-        if (ParseFunctionValue(pineValue, parseCache).IsOkOrNull() is not { } parsed)
-        {
-            return null;
-        }
-
-        // Only the WithoutEnvFunctions case is a true fallback gain over the existing
-        // ParseNestedWrapperForm / ParseMultiParamNestedWrapperForm paths, which already
-        // handle WithEnvFunctions wrappers (and intermediate partially-applied wrappers).
-        // Returning a record for WithEnvFunctions here would short-circuit the existing
-        // partial-application handling and produce subtly wrong FunctionRecords (e.g. an
-        // intermediate wrapper level mis-identified as a complete multi-arg function).
-        if (parsed is not ParsedFunctionValue.WithoutEnvFunctions withoutEnv)
-        {
-            return null;
-        }
-
-        return
-            new FunctionRecord(
-                InnerFunction: withoutEnv.InnerFunction,
-                ParameterCount: withoutEnv.ParameterCount,
-                EnvFunctions: ReadOnlyMemory<PineValue>.Empty,
-                ArgumentsAlreadyCollected: ReadOnlyMemory<PineValue>.Empty,
-                UsesEnvFunctionsLayout: false);
-    }
-
-    /// <summary>
     /// Parses a function value from a <see cref="PineValue"/>, returning a <see cref="ParsedFunctionValue"/>
-    /// that distinguishes between the two emission formats:
-    /// <list type="bullet">
-    /// <item><see cref="ParsedFunctionValue.WithEnvFunctions"/>: Values from <see cref="FunctionValueBuilder.EmitFunctionValueWithEnvFunctions"/></item>
-    /// <item><see cref="ParsedFunctionValue.WithoutEnvFunctions"/>: Values from <see cref="FunctionValueBuilder.EmitFunctionValueWithoutEnvFunctions"/></item>
-    /// </list>
+    /// for the <see cref="FunctionValueBuilder.EmitFunctionValueWithEnvFunctions"/> format.
     /// This method helps callers understand how the argument expressions are composed in the inner function.
     /// </summary>
     /// <param name="pineValue">Encoded value representing a function.</param>
@@ -313,17 +201,12 @@ public record FunctionRecord(
             return ParseFunctionValueFromListExpression(pineValue, parseCache);
         }
 
-        // For zero-parameter WithoutEnvFunctions: the expression is the inner function directly,
-        // without a ParseAndEval wrapper.
-        return
-            new ParsedFunctionValue.WithoutEnvFunctions(
-                InnerFunction: expr,
-                ParameterCount: 0);
+        return "Unsupported function value format (not ParseAndEval or List)";
     }
 
     /// <summary>
     /// Parses a function value from a ParseAndEval expression.
-    /// This handles 0 and 1 parameter functions for WithEnvFunctions and 1 parameter for WithoutEnvFunctions formats.
+    /// This handles 0 and 1 parameter functions in the WithEnvFunctions wrapper shape.
     /// </summary>
     private static Result<string, ParsedFunctionValue> ParseFunctionValueFromParseAndEval(
         Expression.ParseAndEval parseAndEval,
@@ -347,15 +230,12 @@ public record FunctionRecord(
             return "Failed to extract inner expression";
         }
 
-        // Distinguish between WithEnvFunctions and WithoutEnvFunctions formats
-        // WithEnvFunctions: Environment structure is [envFuncs, arg0, arg1, ...] - a flat list
+        // WithEnvFunctions format: environment is a flat list [envFuncs, arg0, arg1, ...]
         //   - 0 params: [envFuncs] (1 element)
         //   - 1 param:  [envFuncs, Environment] (2 elements)
-        // WithoutEnvFunctions: Environment structure is [env] (1 param)
 
         if (parseAndEval.Environment is Expression.List envList)
         {
-            // Check if this is WithEnvFunctions format
             // For 0 params: [envFuncs] - 1 item where first can be parsed as env functions
             if (envList.Items.Count is 1)
             {
@@ -370,14 +250,7 @@ public record FunctionRecord(
                             EnvFunctions: envFunctions);
                 }
 
-                // Check if this is WithoutEnvFunctions format: [env] for 1 param
-                if (envList.Items[0] is Expression.Environment)
-                {
-                    return
-                        new ParsedFunctionValue.WithoutEnvFunctions(
-                            InnerFunction: innerExpression,
-                            ParameterCount: 1);
-                }
+                return "Expected env functions list in single-element environment";
             }
 
             // For 1 param: [envFuncs, Environment] - 2 items
@@ -407,9 +280,8 @@ public record FunctionRecord(
         PineValue encodedWrapper,
         PineVMParseCache parseCache)
     {
-        // Both WithEnvFunctions and WithoutEnvFunctions multi-parameter functions use
-        // the same outer structure (List expressions building ParseAndEval encodings).
-        // The difference is in the innermost expression's environment structure.
+        // Multi-parameter functions use a nested wrapper structure of List
+        // expressions building ParseAndEval encodings.
 
         var traverseResult = TraverseMultiParamWrapperForParsedFunctionValue(encodedWrapper, parseCache);
 
@@ -492,16 +364,12 @@ public record FunctionRecord(
                 // Determine format from environment structure
                 // WithEnvFunctions: environment is concat([envFuncs], argsExpr)
                 //   where the first item of the concat input is a list containing env functions
-                // WithoutEnvFunctions: environment is just the argsExpr (concat of captured and last arg)
 
                 if (parseAndEval.Environment is Expression.KernelApplication kernelApp &&
                     kernelApp.Function is nameof(KernelFunction.concat))
                 {
-                    // Both WithEnvFunctions and WithoutEnvFunctions use concat at the innermost level
                     // WithEnvFunctions: concat([[envFuncs], fullArgs]) where fullArgs = concat(captured, [lastArg])
                     //   -> input is List with 2 items: first is List([envFuncsExpr]), second is fullArgs
-                    // WithoutEnvFunctions: concat(captured, [lastArg])
-                    //   -> input is List with 2 items: first is captured, second is [lastArg]
 
                     if (kernelApp.Input is Expression.List concatInput && concatInput.Items.Count is 2)
                     {
@@ -522,11 +390,7 @@ public record FunctionRecord(
                             }
                         }
 
-                        // Otherwise it's WithoutEnvFunctions format
-                        return
-                            new ParsedFunctionValue.WithoutEnvFunctions(
-                                InnerFunction: innerExpression,
-                                ParameterCount: levels);
+                        return "Expected env functions list in concat input";
                     }
                 }
 

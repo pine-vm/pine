@@ -631,8 +631,9 @@ public class ElmCompiler
             // (mutual recursion). A single-member SCC is recursive iff its
             // member directly references itself.
             //
-            // §7.7: non-recursive single-member SCCs use the
-            // WithoutEnvFunctions wrapper shape and an empty runtime layout.
+            // Non-recursive single-member SCCs still use the uniform
+            // WithEnvFunctions wrapper shape (Approach A1), but the runtime
+            // env-functions list is empty (per §7.6b).
             bool isRecursive;
 
             if (sortedSccMembers.Count > 1)
@@ -868,14 +869,10 @@ public class ElmCompiler
         var sharedLayout = scc.GetLayout();
         var sccMembers = scc.Members;
 
-        // §7.7: non-recursive single-member SCCs use the WithoutEnvFunctions
-        // wrapper shape and an empty runtime env-functions list. Their bodies
-        // expect parameters at env[i] (no env-functions slot at index 0).
-        // Recursive SCCs (mutual or self) keep the historical
-        // WithEnvFunctions layout: parameters at env[1+i], env[0] holds the
-        // SCC-members env-functions list.
-        var usesEnvFunctionsLayout = scc.IsRecursive;
-        var envParametersOffset = usesEnvFunctionsLayout ? 1 : 0;
+        // Phase 1 of Approach A1: always use WithEnvFunctions layout.
+        // All functions — recursive and non-recursive — have parameters at
+        // env[1+i], with env[0] holding the SCC-members env-functions list
+        // (empty for non-recursive single-member SCCs per §7.6b).
 
         // Pre-compute index lookup for efficient access
         var layoutIndexMap = new Dictionary<string, int>();
@@ -916,7 +913,7 @@ public class ElmCompiler
                 }
                 else
                 {
-                    var paramExpr = BuiltinHelpers.BuildPathToParameter(i, envParametersOffset);
+                    var paramExpr = BuiltinHelpers.BuildPathToParameter(i);
                     var analysis = PatternCompiler.AnalyzePattern(argPattern, paramExpr);
 
                     foreach (var kvp in analysis.Bindings)
@@ -945,8 +942,7 @@ public class ElmCompiler
                     LocalBindingTypes: null,
                     DependencyLayout: sharedLayout,
                     ModuleCompilationContext: context,
-                    FunctionTypes: context.FunctionTypes,
-                    UsesEnvFunctionsLayout: usesEnvFunctionsLayout);
+                    FunctionTypes: context.FunctionTypes);
 
             // Compile the body
             var compileBodyResult = ExpressionCompiler.Compile(functionBody, expressionContext);
@@ -979,10 +975,10 @@ public class ElmCompiler
         // same order. Cross-SCC dependencies are fetched at the *call sites*
         // via Literal(callee.EncodedBody) and Literal(List(callee.EnvFunctions)),
         // not threaded through current_env[0] of every transitive caller.
-        // §7.7: for non-recursive single-member SCCs sharedLayout is empty, so
-        // envFunctionsList is empty too — the wrapper is built in the
-        // WithoutEnvFunctions shape and the call-site emits a flat
-        // [arg0, ..., argN-1] environment with no env-functions slot.
+        // For non-recursive single-member SCCs sharedLayout is empty, so
+        // envFunctionsList is empty too — but the wrapper still uses the
+        // uniform WithEnvFunctions shape with env[0] holding the empty list
+        // (Approach A1).
         var envFunctionsList =
             sharedLayout
             .Select(
@@ -1009,21 +1005,14 @@ public class ElmCompiler
             if (!compiledBodies.TryGetValue(memberName, out var bodyInfo))
                 continue;
 
-            // §7.7: non-recursive single-member SCCs (usesEnvFunctionsLayout
-            // == false) use the WithoutEnvFunctions wrapper. Recursive SCCs
-            // keep the WithEnvFunctions wrapper with the members-only
-            // envFunctionsList baked in.
+            // Phase 1 of Approach A1: always emit WithEnvFunctions wrapper.
+            // For non-recursive single-member SCCs, envFunctionsList is empty
+            // (per §7.6b), so this produces a wrapper with env[0] = List([]).
             var wrapper =
-                usesEnvFunctionsLayout
-                ?
                 FunctionValueBuilder.EmitFunctionValueWithEnvFunctions(
                     bodyInfo.body,
                     bodyInfo.paramCount,
-                    envFunctionsList)
-                :
-                FunctionValueBuilder.EmitFunctionValueWithoutEnvFunctions(
-                    bodyInfo.body,
-                    bodyInfo.paramCount);
+                    envFunctionsList);
 
             var encodedBody = encodedBodies[memberName];
 

@@ -138,7 +138,7 @@ public class ExpressionCompiler
             // Check if it's a parameter reference
             if (context.TryGetParameterIndex(expr.Name, out var paramIndex))
             {
-                return BuiltinHelpers.BuildPathToParameter(paramIndex, context.EnvParametersOffset);
+                return BuiltinHelpers.BuildPathToParameter(paramIndex);
             }
         }
 
@@ -238,25 +238,15 @@ public class ExpressionCompiler
             {
                 if (crossSccCalleeInfo.ParameterCount <= 0)
                 {
-                    // §7.7: For WithoutEnvFunctions callees the body expects
-                    // an empty environment (no env-functions slot). For
-                    // WithEnvFunctions callees the body expects
-                    // [envFunctionsList].
-                    Expression crossSccCallEnvironment;
+                    // Phase 1 of Approach A1: all callees use WithEnvFunctions
+                    // layout. The body always expects [envFunctionsList], which
+                    // may be empty for non-recursive single-member SCCs.
+                    var crossSccEnvFuncsLiteral =
+                        Expression.LiteralInstance(
+                            PineValue.List([.. crossSccCalleeInfo.EnvFunctions]));
 
-                    if (crossSccCalleeInfo.EnvFunctions.Count is 0)
-                    {
-                        crossSccCallEnvironment = Expression.ListInstance([]);
-                    }
-                    else
-                    {
-                        var crossSccEnvFuncsLiteral =
-                            Expression.LiteralInstance(
-                                PineValue.List([.. crossSccCalleeInfo.EnvFunctions]));
-
-                        crossSccCallEnvironment =
-                            Expression.ListInstance([crossSccEnvFuncsLiteral]);
-                    }
+                    var crossSccCallEnvironment =
+                        Expression.ListInstance([crossSccEnvFuncsLiteral]);
 
                     return
                         (Result<CompilationError, Expression>)new Expression.ParseAndEval(
@@ -471,7 +461,7 @@ public class ExpressionCompiler
                 if (context.TryGetParameterIndex(funcRef.Name, out var paramIndex))
                 {
                     // Apply arguments to the function value from parameter using generic application
-                    var funcExpr = BuiltinHelpers.BuildPathToParameter(paramIndex, context.EnvParametersOffset);
+                    var funcExpr = BuiltinHelpers.BuildPathToParameter(paramIndex);
 
                     return CompileGenericFunctionApplication(funcExpr, compiledArguments);
                 }
@@ -654,41 +644,17 @@ public class ExpressionCompiler
                 }
                 else
                 {
-                    // §7.6b/§7.7: cross-SCC callee — inline the cached encoded
+                    // §7.6b: cross-SCC callee — inline the cached encoded
                     // body and env-functions list as literals. No reads from
                     // the caller's env at index 0.
                     //
-                    // §7.7: when the callee uses the WithoutEnvFunctions
-                    // wrapper shape (signalled by an empty EnvFunctions list)
-                    // its body expects the runtime environment to be a flat
-                    // list of arguments [arg0, ..., argN-1] — *no*
-                    // env-functions slot at index 0. We omit the
-                    // callEnvFunctions slot entirely in that case.
+                    // Phase 1 of Approach A1: all callees use WithEnvFunctions
+                    // layout. Always emit [envFunctionsList, arg0, ..., argN-1]
+                    // as the call environment (the env-functions list may be
+                    // empty for non-recursive single-member SCCs).
                     var cachedInfo = cachedCalleeInfo!;
 
                     functionRef = Expression.LiteralInstance(cachedInfo.EncodedBody);
-
-                    if (cachedInfo.EnvFunctions.Count is 0)
-                    {
-                        // WithoutEnvFunctions callee: build env as flat args list.
-                        var fullApplicationArgsWithoutEnv = compiledArguments.Take(paramCount).ToList();
-
-                        var callEnvironmentWithoutEnv =
-                            Expression.ListInstance(fullApplicationArgsWithoutEnv);
-
-                        Expression fullApplicationResultWithoutEnv =
-                            new Expression.ParseAndEval(
-                                encoded: functionRef,
-                                environment: callEnvironmentWithoutEnv);
-
-                        if (argCount > paramCount)
-                        {
-                            var remainingArgs = compiledArguments.Skip(paramCount).ToList();
-                            return CompileGenericFunctionApplication(fullApplicationResultWithoutEnv, remainingArgs);
-                        }
-
-                        return fullApplicationResultWithoutEnv;
-                    }
 
                     callEnvFunctions =
                         Expression.LiteralInstance(
@@ -878,7 +844,7 @@ public class ExpressionCompiler
         // Check if it's a parameter reference
         else if (context.TryGetParameterIndex(recordName, out var paramIndex))
         {
-            recordExpr = BuiltinHelpers.BuildPathToParameter(paramIndex, context.EnvParametersOffset);
+            recordExpr = BuiltinHelpers.BuildPathToParameter(paramIndex);
             // Try to get the type from parameter types
             if (context.ParameterTypes.TryGetValue(recordName, out var paramType) &&
                 paramType is TypeInference.InferredType.RecordType paramRecordType)
@@ -1107,11 +1073,8 @@ public class ExpressionCompiler
         var fieldName = expr.FunctionName;
 
         // Build a 1-argument function: \record -> record.fieldName
-        // The parameter is at env[0]
-        var recordParam =
-            ExpressionBuilder.BuildExpressionForPathInExpression(
-                [0],
-                Expression.EnvironmentInstance);
+        // env = [envFunctions, record], so the parameter is at env[1]
+        var recordParam = BuiltinHelpers.BuildPathToParameter(0);
 
         // Build the record field lookup body using the runtime function
         var callEnv =
@@ -1127,9 +1090,10 @@ public class ExpressionCompiler
                 environment: callEnv);
 
         var functionValue =
-            FunctionValueBuilder.EmitFunctionValueWithoutEnvFunctions(
+            FunctionValueBuilder.EmitFunctionValueWithEnvFunctions(
                 body,
-                parameterCount: 1);
+                parameterCount: 1,
+                envFunctions: []);
 
         return Expression.LiteralInstance(functionValue);
     }
@@ -1248,15 +1212,9 @@ public class ExpressionCompiler
     /// </summary>
     private static PineValue BuildConsFunction()
     {
-        var headExpr =
-            ExpressionBuilder.BuildExpressionForPathInExpression(
-                [0],
-                Expression.EnvironmentInstance);
+        var headExpr = BuiltinHelpers.BuildPathToParameter(0);
 
-        var tailExpr =
-            ExpressionBuilder.BuildExpressionForPathInExpression(
-                [1],
-                Expression.EnvironmentInstance);
+        var tailExpr = BuiltinHelpers.BuildPathToParameter(1);
 
         // head :: tail  ==>  concat([[head], tail])
         var singletonList = Expression.ListInstance([headExpr]);
@@ -1266,9 +1224,10 @@ public class ExpressionCompiler
                 [singletonList, tailExpr]);
 
         return
-            FunctionValueBuilder.EmitFunctionValueWithoutEnvFunctions(
+            FunctionValueBuilder.EmitFunctionValueWithEnvFunctions(
                 body,
-                parameterCount: 2);
+                parameterCount: 2,
+                envFunctions: []);
     }
 
     private static Result<CompilationError, Expression> CompileNegation(
@@ -1937,15 +1896,12 @@ public class ExpressionCompiler
         int argCount)
     {
         // Build the inner expression that constructs the choice type value
-        // The inner expression expects environment as [arg0, arg1, ..., argN]
+        // env = [envFunctions, arg0, arg1, ..., argN-1]
         var argExpressions = new Expression[argCount];
 
         for (var i = 0; i < argCount; i++)
         {
-            argExpressions[i] =
-                ExpressionBuilder.BuildExpressionForPathInExpression(
-                    [i],
-                    Expression.EnvironmentInstance);
+            argExpressions[i] = BuiltinHelpers.BuildPathToParameter(i);
         }
 
         var tagNameExpr = Expression.LiteralInstance(StringEncoding.ValueFromString(tagName));
@@ -1960,9 +1916,10 @@ public class ExpressionCompiler
 
         // Build the function value that wraps this expression
         var functionValue =
-            FunctionValueBuilder.EmitFunctionValueWithoutEnvFunctions(
+            FunctionValueBuilder.EmitFunctionValueWithEnvFunctions(
                 choiceTypeValueExpr,
-                argCount);
+                argCount,
+                envFunctions: []);
 
         return Expression.LiteralInstance(functionValue);
     }
@@ -2020,10 +1977,7 @@ public class ExpressionCompiler
 
         for (var i = 0; i < argCount; i++)
         {
-            argExpressions[i] =
-                ExpressionBuilder.BuildExpressionForPathInExpression(
-                    [i],
-                    Expression.EnvironmentInstance);
+            argExpressions[i] = BuiltinHelpers.BuildPathToParameter(i);
         }
 
         // Build the record value expression
@@ -2031,9 +1985,10 @@ public class ExpressionCompiler
 
         // Build the function value that wraps this expression
         var functionValue =
-            FunctionValueBuilder.EmitFunctionValueWithoutEnvFunctions(
+            FunctionValueBuilder.EmitFunctionValueWithEnvFunctions(
                 recordValueExpr,
-                argCount);
+                argCount,
+                envFunctions: []);
 
         return Expression.LiteralInstance(functionValue);
     }

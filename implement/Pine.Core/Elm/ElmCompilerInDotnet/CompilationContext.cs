@@ -65,11 +65,11 @@ internal static class QualifiedNameHelper
 /// emission shapes.
 /// </param>
 /// <param name="EnvFunctions">
-/// The env-functions list baked into <see cref="CompiledValue"/>. While §7.6a is in
-/// effect this equals <c>DependencyLayout</c> mapped through the per-member encoded
-/// bodies (i.e. members ++ additional dependencies). §7.7 will narrow this to the
-/// SCC member list for recursive members and to the empty list for non-recursive
-/// members emitted with the <c>WithoutEnvFunctions</c> wrapper shape.
+/// The env-functions list baked into <see cref="CompiledValue"/>. Per §7.6b this
+/// equals the SCC member list for recursive members and is the empty list for
+/// non-recursive single-member SCCs. Approach A1 (always emit WithEnvFunctions)
+/// keeps the wrapper shape uniform: env[0] always holds the env-functions list,
+/// even when that list is empty.
 /// </param>
 public record CompiledFunctionInfo(
     PineValue CompiledValue,
@@ -116,9 +116,9 @@ public record FunctionTypeInfo(
 /// True when this SCC contains real recursion: either it has more than one member
 /// (mutual recursion among members), or its single member directly references
 /// itself in its body. False only for single-member SCCs whose lone member does
-/// not refer to itself; per §7.7 of the analysis doc those callees are emitted
-/// with the <c>WithoutEnvFunctions</c> wrapper shape and an empty runtime
-/// env-functions list, since they have no need for an env-functions slot.
+/// not refer to itself; per §7.6b such callees have an empty runtime env-functions
+/// list (no need for an env-functions slot), though Approach A1 keeps the wrapper
+/// shape uniform — env[0] still holds the (empty) env-functions list.
 /// </param>
 public record FunctionScc(
     ImmutableList<string> Members,
@@ -133,10 +133,10 @@ public record FunctionScc(
     /// other through <c>current_env[0][k]</c>.
     /// </para>
     /// <para>
-    /// For non-recursive single-member SCCs (§7.7) the layout is empty: the
-    /// member's body has no use for an env-functions slot, so the wrapper is
-    /// emitted in the <c>WithoutEnvFunctions</c> shape and the runtime
-    /// environment is just the flat list of arguments.
+    /// For non-recursive single-member SCCs (§7.6b) the layout is empty: the
+    /// member's body has no use for an env-functions slot. Approach A1 still
+    /// emits the uniform WithEnvFunctions wrapper, with env[0] holding the
+    /// empty env-functions list.
     /// </para>
     /// <para>
     /// <see cref="AdditionalDependencies"/> are deliberately excluded — see
@@ -398,22 +398,8 @@ public record ExpressionCompilationContext(
     IReadOnlyDictionary<string, TypeInference.InferredType>? LocalBindingTypes,
     IReadOnlyList<string> DependencyLayout,
     ModuleCompilationContext ModuleCompilationContext,
-    IReadOnlyDictionary<SyntaxModelTypes.QualifiedNameRef, FunctionTypeInfo>? FunctionTypes = null,
-    bool UsesEnvFunctionsLayout = true)
+    IReadOnlyDictionary<SyntaxModelTypes.QualifiedNameRef, FunctionTypeInfo>? FunctionTypes = null)
 {
-    /// <summary>
-    /// The offset added to a parameter index when building the path expression
-    /// that reads the parameter from the runtime environment.
-    /// <list type="bullet">
-    ///   <item><c>1</c> when <see cref="UsesEnvFunctionsLayout"/> is true (the
-    ///     historical / WithEnvFunctions layout: env is
-    ///     <c>[envFunctions, arg0, arg1, ...]</c>).</item>
-    ///   <item><c>0</c> when <see cref="UsesEnvFunctionsLayout"/> is false (the
-    ///     §7.7 WithoutEnvFunctions layout for non-recursive single-member
-    ///     SCCs: env is <c>[arg0, arg1, ...]</c>).</item>
-    /// </list>
-    /// </summary>
-    public int EnvParametersOffset => UsesEnvFunctionsLayout ? 1 : 0;
 
     /// <summary>
     /// Creates a new context with additional local bindings.

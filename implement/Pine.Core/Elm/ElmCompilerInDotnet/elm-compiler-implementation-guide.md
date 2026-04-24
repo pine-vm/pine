@@ -116,20 +116,25 @@ would not satisfy this convention.
 
 The following are general rules we use to compose the list of functions in the eval environment introduced above.
 
-> **Post-§7.7 status (analysis-doc 2026-04-22).** The runtime
-> env-functions list is now restricted to the **SCC members only**.
+> **Post-§7.6b / Approach A1 status (analysis-doc 2026-04-24).** The
+> runtime env-functions list is restricted to the **SCC members only**.
 > Cross-SCC dependencies are no longer threaded through
 > `current_env[0]`; instead they are inlined at the call site as a
 > `Literal(callee.EncodedExpression)` (Form A) or
 > `Literal(callee.WrapperValue)` (Form B) sourced from the
-> caller-side `CompiledFunctionInfo` cache. See the subsection
+> caller-side `CompiledFunctionInfo` cache. Approach A1 (committed
+> 2026-04-24) further specifies that **every** function — recursive or
+> not — is wrapped in the uniform `WithEnvFunctions` shape; non-recursive
+> single-member SCCs simply have an **empty** env-functions list at
+> `env[0]`. The `WithoutEnvFunctions` specialisation that briefly
+> existed under §7.7 has been removed. See the subsection
 > *"Storing Compiled Functions and Two Call-Site Forms (Form A and
 > Form B)"* below for the details.
 
 #### What to Include in the Environment Functions List
 
 + All functions in a group of mutually recursive functions (the SCC members) must be included.
-+ For non-recursive single-member SCCs the env-functions list is **empty** and the wrapper is emitted in the `WithoutEnvFunctions` shape — there is no `env[0]` env-functions slot at runtime, parameters live at `env[i]` directly.
++ For non-recursive single-member SCCs the env-functions list is **empty**, but the wrapper still uses the uniform `WithEnvFunctions` shape with `env[0]` holding the empty env-functions list. Parameters live at `env[1+i]` regardless of whether the env-functions list is empty.
 
 #### How to Order Entries in the Environment Functions List
 
@@ -142,7 +147,7 @@ The Elm programming language supports first-class functions and partial applicat
 
 A function value encodes a function in a way that enables the incremental addition of further arguments. For each argument, the applying side uses a `ParseAndEval` expression — this is exactly the **Form B** mechanism described in the *"Storing Compiled Functions and Two Call-Site Forms"* subsection below; the same mechanism is used both for a function value of unknown origin and for a known callee that is not saturated at its call site.
 
-This function value contains not only an encoding of the function body, but also a list of the encoded function bodies the wrapped function depends on. For recursive SCC members the list contains the SCC members; for non-recursive functions the list is empty (the wrapper is emitted in the `WithoutEnvFunctions` shape) and any cross-SCC callee referenced from the body is inlined at its own call site as a literal — so the dependency does not need to be carried around as an env-functions entry.
+This function value contains not only an encoding of the function body, but also a list of the encoded function bodies the wrapped function depends on. For recursive SCC members the list contains the SCC members; for non-recursive functions the list is empty (any cross-SCC callee referenced from the body is inlined at its own call site as a literal — so the dependency does not need to be carried around as an env-functions entry). The wrapper shape is uniform in either case (Approach A1): `env[0]` always holds the env-functions list, even when that list is empty.
 
 For function applications where the function is a value of unknown origin, the compiler emits an expression that adds the given arguments using a form that allows for generic partial application. It emits this partial application as `ParseAndEvalExpression`, where the `Environment` contains the argument value. (If the Elm application expression contains multiple arguments, the compiler nests this pattern recursively)
 
@@ -159,15 +164,14 @@ incremental migration plan, and the per-step status notes live in
 function the compiler records:
 
 1. **`WrapperValue`** — the partial-application wrapper as a `PineValue`,
-   produced by either `FunctionValueBuilder.EmitFunctionValueWithEnvFunctions`
-   (recursive SCC members) or `FunctionValueBuilder.EmitFunctionValueWithoutEnvFunctions`
-   (non-recursive members). This is the value that escapes when the
-   function is used as a first-class value.
+   produced by `FunctionValueBuilder.EmitFunctionValueWithEnvFunctions`
+   for every function (recursive or not — Approach A1). This is the
+   value that escapes when the function is used as a first-class value.
 2. **`ParameterCount`** — the function's declared arity.
 3. **`EnvFunctions`** — the list of captured env-function values used
-   by the closure. Empty for non-recursive functions emitted with the
-   `WithoutEnvFunctions` shape; otherwise the SCC member list in stable
-   sorted order.
+   by the closure. Empty for non-recursive single-member SCCs;
+   otherwise the SCC member list in stable sorted order. The wrapper
+   always reserves `env[0]` for this list, even when empty.
 4. **`EncodedExpression`** — the function body encoded as a `PineValue`
    in the env-functions-at-index-0 layout (i.e. `env[0]` holds the
    captured env-functions list and `env[1..N]` hold arguments
@@ -209,16 +213,17 @@ detected via the optional `IdentifyEncodedBodyOptional` callback on
 `StaticProgramParserConfig<T>`, which maps an encoded-body value back
 to the originating callee identifier.
 
-**Wrapper layout discriminant.** Because the two emitter shapes use
-different runtime environment layouts — `[envFunctions, arg0, …]` for
-`WithEnvFunctions` and `[arg0, …]` for `WithoutEnvFunctions` —
-`FunctionRecord` carries a `bool UsesEnvFunctionsLayout` discriminant.
-Downstream consumers that build env-value classes
-(`NamesFromCompiledEnv.BuildApplicationFromFunctionRecord`), parse
-parameter references (`StaticProgramParser.ParseExpression` and
-helpers via `envParametersOffset`), or construct runtime environments
-(`ElmInteractiveEnvironment.ApplyFunctionArgumentsForEvalExpr`) all
-branch on this flag.
+**Uniform wrapper layout (Approach A1).** Every emitted wrapper uses
+the same runtime environment shape: `env = [envFunctions, arg0, ...,
+arg{n-1}]`. Parameters always live at `env[1 + paramIndex]`. The
+env-functions list is empty for non-recursive single-member SCCs, but
+the slot at `env[0]` is still present. This uniform layout lets every
+consumer — `NamesFromCompiledEnv.BuildApplicationFromFunctionRecord`,
+`StaticProgramParser.ParseExpression`, and
+`ElmInteractiveEnvironment.ApplyFunctionArgumentsForEvalExpr` —
+operate without a layout discriminant. (The earlier two-shape design
+is summarised in
+[`explore/internal-analysis/2026-04-24-analysis-simplify-function-record-layout-flags.md`](../../../../explore/internal-analysis/2026-04-24-analysis-simplify-function-record-layout-flags.md).)
 
 ## Closures
 

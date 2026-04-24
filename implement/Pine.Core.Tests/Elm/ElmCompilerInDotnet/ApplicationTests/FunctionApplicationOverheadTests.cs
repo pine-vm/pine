@@ -322,7 +322,7 @@ public class FunctionApplicationOverheadTests
 
         PerformanceCountersFormatting.FormatCounts(report).Should().Be(
             """
-            InstructionCount: 10
+            InstructionCount: 11
             InvocationCount: 2
             BuildListCount: 1
             LoopIterationCount: 0
@@ -350,7 +350,7 @@ public class FunctionApplicationOverheadTests
 
         PerformanceCountersFormatting.FormatCounts(report).Should().Be(
             """
-            InstructionCount: 30
+            InstructionCount: 32
             InvocationCount: 4
             BuildListCount: 8
             LoopIterationCount: 0
@@ -376,7 +376,7 @@ public class FunctionApplicationOverheadTests
 
         PerformanceCountersFormatting.FormatCounts(report).Should().Be(
             """
-            InstructionCount: 16
+            InstructionCount: 18
             InvocationCount: 3
             BuildListCount: 2
             LoopIterationCount: 0
@@ -408,7 +408,7 @@ public class FunctionApplicationOverheadTests
 
         PerformanceCountersFormatting.FormatCounts(report).Should().Be(
             """
-            InstructionCount: 62
+            InstructionCount: 63
             InvocationCount: 6
             BuildListCount: 8
             LoopIterationCount: 0
@@ -489,7 +489,7 @@ public class FunctionApplicationOverheadTests
 
         PerformanceCountersFormatting.FormatCounts(report).Should().Be(
             """
-            InstructionCount: 224
+            InstructionCount: 225
             InvocationCount: 9
             BuildListCount: 14
             LoopIterationCount: 0
@@ -526,7 +526,7 @@ public class FunctionApplicationOverheadTests
         frame0.Should().Be(
             """
             0: Push_Literal (List [20] (20))
-            1: Push_Literal (List [2] (831))
+            1: Push_Literal (List [2] (847))
             2: Parse_And_Eval_Binary
             3: Return
             """);
@@ -539,11 +539,12 @@ public class FunctionApplicationOverheadTests
 
         frame1.Should().Be(
             """
-            0: Local_Get (0)
-            1: Build_List (1)
-            2: Push_Literal (List [2] (818))
-            3: Parse_And_Eval_Binary
-            4: Return
+            0: Push_Literal (List [0] (0))
+            1: Local_Get (0)
+            2: Build_List (2)
+            3: Push_Literal (List [2] (830))
+            4: Parse_And_Eval_Binary
+            5: Return
             """);
 
         var frame2 =
@@ -679,7 +680,7 @@ public class FunctionApplicationOverheadTests
 
         PerformanceCountersFormatting.FormatCounts(report).Should().Be(
             """
-            InstructionCount: 10
+            InstructionCount: 11
             InvocationCount: 2
             BuildListCount: 1
             LoopIterationCount: 0
@@ -705,7 +706,7 @@ public class FunctionApplicationOverheadTests
 
         PerformanceCountersFormatting.FormatCounts(report).Should().Be(
             """
-            InstructionCount: 10
+            InstructionCount: 11
             InvocationCount: 2
             BuildListCount: 1
             LoopIterationCount: 0
@@ -748,7 +749,7 @@ public class FunctionApplicationOverheadTests
 
         PerformanceCountersFormatting.FormatCounts(report).Should().Be(
             """
-            InstructionCount: 329
+            InstructionCount: 330
             InvocationCount: 24
             BuildListCount: 44
             LoopIterationCount: 0
@@ -786,7 +787,7 @@ public class FunctionApplicationOverheadTests
 
         PerformanceCountersFormatting.FormatCounts(report).Should().Be(
             """
-            InstructionCount: 65
+            InstructionCount: 66
             InvocationCount: 6
             BuildListCount: 8
             LoopIterationCount: 0
@@ -831,7 +832,7 @@ public class FunctionApplicationOverheadTests
 
         PerformanceCountersFormatting.FormatCounts(report).Should().Be(
             """
-            InstructionCount: 349
+            InstructionCount: 350
             InvocationCount: 24
             BuildListCount: 44
             LoopIterationCount: 0
@@ -864,7 +865,7 @@ public class FunctionApplicationOverheadTests
 
         PerformanceCountersFormatting.FormatCounts(report).Should().Be(
             """
-            InstructionCount: 62
+            InstructionCount: 63
             InvocationCount: 6
             BuildListCount: 8
             LoopIterationCount: 0
@@ -905,7 +906,7 @@ public class FunctionApplicationOverheadTests
 
         PerformanceCountersFormatting.FormatCounts(report).Should().Be(
             """
-            InstructionCount: 329
+            InstructionCount: 330
             InvocationCount: 24
             BuildListCount: 44
             LoopIterationCount: 0

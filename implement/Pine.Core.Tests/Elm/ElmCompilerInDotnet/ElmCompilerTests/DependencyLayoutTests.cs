@@ -12,9 +12,10 @@ namespace Pine.Core.Tests.Elm.ElmCompilerInDotnet.ElmCompilerTests;
 ///
 /// <para>
 /// As of §7.6b the layout contains only SCC members (cross-SCC dependencies
-/// are literal-inlined at call sites). As of §7.7 the layout is the empty
-/// list for non-recursive single-member SCCs (those callees are emitted in
-/// the WithoutEnvFunctions wrapper shape and need no env-functions slot).
+/// are literal-inlined at call sites). For non-recursive single-member SCCs
+/// the layout is the empty list (those callees have no env-functions slot
+/// to populate), though Approach A1 still emits them in the uniform
+/// WithEnvFunctions wrapper shape with env[0] holding the empty list.
 /// Recursive SCCs (mutual recursion or self-recursion) keep the SCC member
 /// list as their layout.
 /// </para>
@@ -38,8 +39,8 @@ public class DependencyLayoutTests
         var layouts = ElmCompilerTestHelper.ComputeDependencyLayoutsFromModule(elmModuleText);
 
         layouts.Should().ContainKey("Test.identity");
-        // §7.7: non-recursive single-member SCC → empty layout
-        // (WithoutEnvFunctions wrapper, no env-functions slot).
+        // §7.6b: non-recursive single-member SCC → empty env-functions layout
+        // (still wrapped in the uniform WithEnvFunctions shape per Approach A1).
         layouts["Test.identity"].Should().BeEmpty();
     }
 

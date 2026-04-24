@@ -237,6 +237,26 @@ the per-step status notes at the head of each subsection in §7.
     and the renderer fix above transparently covered 8
     tuple-destructure / choice-type tests. Final state:
     **2920 succeeded, 0 failed, 2 skipped** in `Pine.Core.Tests`.
+- [x] **§7.7 reverted in favour of uniform layout (2026-04-24, Approach A1).**
+  After landing, the dual-shape design proved to add net complexity:
+  every consumer (`FunctionRecord`, `StaticProgramParser`,
+  `NamesFromCompiledEnv`, `ElmInteractiveEnvironment`,
+  `ExpressionCompilationContext`, `BuiltinHelpers`,
+  `BuildStaticProgramParserConfig`) had to branch on the
+  `UsesEnvFunctionsLayout` discriminant. A follow-up analysis
+  ([`2026-04-24-analysis-simplify-function-record-layout-flags.md`](2026-04-24-analysis-simplify-function-record-layout-flags.md))
+  enumerated three approaches and recommended **Approach A1: always
+  emit `WithEnvFunctions`**. Implemented in PR
+  `copilot/simplify-implementation` (commits Phase 1 / 2a / 2b / 2c):
+  the `WithoutEnvFunctions` emitter and `ParsedFunctionValue`
+  variant are removed, the `UsesEnvFunctionsLayout` discriminant is
+  removed from `FunctionRecord` / `ExpressionCompilationContext` /
+  `IdentifyResponse`, and `BuildPathToParameter` collapses to a
+  single-arg form. Non-recursive single-member SCCs still get an
+  empty env-functions list (§7.6b's contribution stands), but the
+  wrapper shape itself is now uniform — `env[0]` always holds the
+  env-functions list, even when empty, and parameters always live at
+  `env[1+i]`.
 - [ ] 7.4 (baseline metrics) — not started; low priority.
 - [ ] **7.8 — Zero-Parameter Eager-Evaluation Heuristic. Investigation
   done (2026-04-24); implementation deferred.** Findings from this

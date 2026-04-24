@@ -517,12 +517,7 @@ public class ElmCompilerTestHelper
                 // and pathInEnv[1] is the displayed parameter index for legacy snapshot
                 // compatibility (where each tuple-element access is shown as a flat
                 // `param_1_<paramIdx>[suffix]`).
-                //
-                // §7.7 WithoutEnvFunctions layout: env = [arg0, arg1, ...] so paths into
-                // arg0 start with envListIndex=0. To preserve the same rendered text as
-                // the legacy snapshots, we recognize both prefixes and use pathInEnv[1]
-                // as the displayed parameter index in either case.
-                if (pathInEnv.Count >= 2 && (pathInEnv[0] is 1 || pathInEnv[0] is 0))
+                if (pathInEnv.Count >= 2 && pathInEnv[0] is 1)
                 {
                     var paramIndex = pathInEnv[1];
                     var paramName = "param_1_" + paramIndex;

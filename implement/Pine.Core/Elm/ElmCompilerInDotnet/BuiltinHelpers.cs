@@ -12,31 +12,13 @@ public static class BuiltinHelpers
     /// <summary>
     /// Builds an expression that accesses a parameter at the given index.
     /// <para>
-    /// In the historical (<c>WithEnvFunctions</c>) layout the runtime
-    /// environment is <c>[envFunctions, arg0, arg1, ...]</c> so parameters
-    /// live at path <c>[1 + parameterIndex]</c>.
-    /// </para>
-    /// <para>
-    /// In the §7.7 <c>WithoutEnvFunctions</c> layout (used for non-recursive
-    /// single-member SCCs) the runtime environment is
-    /// <c>[arg0, arg1, ...]</c>, so parameters live at path
-    /// <c>[parameterIndex]</c>. Use the
-    /// <see cref="BuildPathToParameter(int, int)"/> overload and pass
-    /// <c>envParametersOffset = 0</c> in that case.
+    /// The runtime environment is uniformly <c>[envFunctions, arg0, arg1, ...]</c>,
+    /// so parameters live at path <c>[1 + parameterIndex]</c>.
     /// </para>
     /// </summary>
     public static Expression BuildPathToParameter(int parameterIndex) =>
-        BuildPathToParameter(parameterIndex, envParametersOffset: 1);
-
-    /// <summary>
-    /// Builds an expression that accesses a parameter at the given index, with
-    /// an explicit env-parameters offset. See
-    /// <see cref="BuildPathToParameter(int)"/> for the per-layout meaning of
-    /// <paramref name="envParametersOffset"/>.
-    /// </summary>
-    public static Expression BuildPathToParameter(int parameterIndex, int envParametersOffset) =>
         ExpressionBuilder.BuildExpressionForPathInExpression(
-            [envParametersOffset + parameterIndex],
+            [1 + parameterIndex],
             Expression.EnvironmentInstance);
 
     /// <summary>

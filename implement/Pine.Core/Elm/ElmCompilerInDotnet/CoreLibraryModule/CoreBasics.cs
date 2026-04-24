@@ -1918,28 +1918,18 @@ public class CoreBasics
     /// </summary>
     public static PineValue Clamp_FunctionValue()
     {
-        // For WithoutEnvFunctions variant with 3 arguments: [low, high, n]
-        var low =
-            ExpressionBuilder.BuildExpressionForPathInExpression(
-                [0],
-                Expression.EnvironmentInstance);
-
-        var high =
-            ExpressionBuilder.BuildExpressionForPathInExpression(
-                [1],
-                Expression.EnvironmentInstance);
-
-        var n =
-            ExpressionBuilder.BuildExpressionForPathInExpression(
-                [2],
-                Expression.EnvironmentInstance);
+        // env = [envFunctions, low, high, n]
+        var low = BuiltinHelpers.BuildPathToParameter(0);
+        var high = BuiltinHelpers.BuildPathToParameter(1);
+        var n = BuiltinHelpers.BuildPathToParameter(2);
 
         var asExpr = Generic_Clamp(low, high, n);
 
         return
-            FunctionValueBuilder.EmitFunctionValueWithoutEnvFunctions(
+            FunctionValueBuilder.EmitFunctionValueWithEnvFunctions(
                 asExpr,
-                parameterCount: 3);
+                parameterCount: 3,
+                envFunctions: []);
     }
 
     private static Expression Internal_Generic_Add(
@@ -2217,24 +2207,18 @@ public class CoreBasics
     private static PineValue BinaryFunctionValue(
         System.Func<Expression, Expression, Expression> buildFunctionBody)
     {
-        // For WithoutEnvFunctions variant, env is directly the args list: [arg0, arg1]
-        var leftExpr =
-            ExpressionBuilder.BuildExpressionForPathInExpression(
-                [0],
-                Expression.EnvironmentInstance);
-
-        var rightExpr =
-            ExpressionBuilder.BuildExpressionForPathInExpression(
-                [1],
-                Expression.EnvironmentInstance);
+        // env = [envFunctions, arg0, arg1]
+        var leftExpr = BuiltinHelpers.BuildPathToParameter(0);
+        var rightExpr = BuiltinHelpers.BuildPathToParameter(1);
 
         var asExpr =
             buildFunctionBody(leftExpr, rightExpr);
 
         var wrappedExpr =
-            FunctionValueBuilder.EmitFunctionValueWithoutEnvFunctions(
+            FunctionValueBuilder.EmitFunctionValueWithEnvFunctions(
                 asExpr,
-                parameterCount: 2);
+                parameterCount: 2,
+                envFunctions: []);
 
         return wrappedExpr;
     }
@@ -2242,20 +2226,17 @@ public class CoreBasics
     private static PineValue UnaryFunctionValue(
         System.Func<Expression, Expression> buildFunctionBody)
     {
-        // For WithoutEnvFunctions variant with single argument
-        // The argument is wrapped in a list [arg], so extract it with head(env)
-        var argExpr =
-            ExpressionBuilder.BuildExpressionForPathInExpression(
-                [0],
-                Expression.EnvironmentInstance);
+        // env = [envFunctions, arg0]
+        var argExpr = BuiltinHelpers.BuildPathToParameter(0);
 
         var asExpr =
             buildFunctionBody(argExpr);
 
         var wrappedExpr =
-            FunctionValueBuilder.EmitFunctionValueWithoutEnvFunctions(
+            FunctionValueBuilder.EmitFunctionValueWithEnvFunctions(
                 asExpr,
-                parameterCount: 1);
+                parameterCount: 1,
+                envFunctions: []);
 
         return wrappedExpr;
     }

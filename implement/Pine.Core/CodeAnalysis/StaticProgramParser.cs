@@ -57,20 +57,10 @@ public class StaticProgramParser
     /// but the full function declaration with parameter wrappers is needed for proper parsing.
     /// If null, the identified value itself is used for parsing.
     /// </param>
-    /// <param name="CalleeUsesEnvFunctionsLayout">
-    /// When the identified value is a callee, whether the callee's wrapper
-    /// uses the WithEnvFunctions layout (<c>true</c>, the historical layout
-    /// where the call environment is <c>[envFunctions, arg0, ..., arg{n-1}]</c>)
-    /// or the §7.7 WithoutEnvFunctions layout (<c>false</c>, where the call
-    /// environment is the flat argument list <c>[arg0, ..., arg{n-1}]</c>).
-    /// Used by Form A call-site parsing to determine whether the first
-    /// environment item is the env-functions slot or the first argument.
-    /// </param>
     public record IdentifyResponse<IdentifierT>(
         IdentifierT Ident,
         bool ContinueParse,
-        PineValue? OriginalFunctionValue = null,
-        bool CalleeUsesEnvFunctionsLayout = true);
+        PineValue? OriginalFunctionValue = null);
 
     /// <summary>
     /// Represents a parsed function extracted from a Pine value.
@@ -190,19 +180,13 @@ public class StaticProgramParser
         var (_, innerExpr, envClass) =
             NamesFromCompiledEnv.BuildApplicationFromFunctionRecord(parsedFunction, arguments: [], parseCache);
 
-        // Per Finding F-1: when the function record originates from a WithoutEnvFunctions
-        // wrapper, parameter k lives at env[k] (no env-functions slot at env[0]). Thread
-        // the resulting offset through the body parser and parameter-expression construction.
-        var envParametersOffset = parsedFunction.UsesEnvFunctionsLayout ? 1 : 0;
-
         var parseBodyExprResult =
             ParseExpression(
                 path,
                 innerExpr,
                 envClass,
                 parseConfig,
-                parseCache,
-                envParametersOffset);
+                parseCache);
 
         if (parseBodyExprResult.IsErrOrNull() is { } exprErr)
         {
@@ -226,7 +210,7 @@ public class StaticProgramParser
                 paramIndex =>
                 StaticExpressionExtension.BuildPathToExpression(
                     [
-                    envParametersOffset + paramIndex
+                    1 + paramIndex
                     ],
                     StaticExpression<IdentifierT>.EnvironmentInstance))
             .ToArray();
@@ -240,8 +224,7 @@ public class StaticProgramParser
         Expression expression,
         PineValueClass envClass,
         StaticProgramParserConfig<IdentifierT> parseConfig,
-        PineVMParseCache parseCache,
-        int envParametersOffset = 1)
+        PineVMParseCache parseCache)
         where IdentifierT : notnull
     {
         if (expression is Expression.Literal literal)
@@ -268,14 +251,12 @@ public class StaticProgramParser
 
         if (CodeAnalysis.TryParseExprAsPathInEnv(expression) is { } pathInEnv)
         {
-            // envParametersOffset is 1 for the WithEnvFunctions layout (env[0] = env-functions list,
-            // arguments start at env[1]) and 0 for the WithoutEnvFunctions layout (env[k] = arg k)
-            // per Finding F-1 in
-            // explore/internal-analysis/2026-04-22-analysis-inline-non-recursive-callees.md.
-            if (pathInEnv.Count is 1 && pathInEnv[0] >= envParametersOffset)
+            // The runtime environment is uniformly [envFunctions, arg0, arg1, ...]
+            // so arguments start at env[1].
+            if (pathInEnv.Count is 1 && pathInEnv[0] >= 1)
             {
-                // Flat parameter reference: env[envParametersOffset + paramIndex]
-                var parameterIndex = pathInEnv[0] - envParametersOffset;
+                // Flat parameter reference: env[1 + paramIndex]
+                var parameterIndex = pathInEnv[0] - 1;
 
                 var parameterExpr =
                     StaticExpression<IdentifierT>.ParameterReference(parameterIndex);
@@ -283,7 +264,7 @@ public class StaticProgramParser
                 return (parameterExpr, ImmutableDictionary<IdentifierT, PineValue>.Empty);
             }
 
-            if (pathInEnv.Count > 1 && pathInEnv[0] >= envParametersOffset)
+            if (pathInEnv.Count > 1 && pathInEnv[0] >= 1)
             {
                 // For tuple patterns, nested tuple patterns, or choice type deconstruction patterns
                 // like env[1][0] or env[2][1][0], build a full path expression from environment
@@ -311,8 +292,7 @@ public class StaticProgramParser
                         itemExpr,
                         envClass,
                         parseConfig,
-                        parseCache,
-                        envParametersOffset);
+                        parseCache);
 
                 if (parseItemResult.IsErrOrNull() is { } itemErr)
                 {
@@ -344,8 +324,7 @@ public class StaticProgramParser
                     kernelApp.Input,
                     envClass,
                     parseConfig,
-                    parseCache,
-                    envParametersOffset);
+                    parseCache);
 
             if (parseInputResult.IsErrOrNull() is { } inputErr)
             {
@@ -374,8 +353,7 @@ public class StaticProgramParser
                     conditionalExpr.Condition,
                     envClass,
                     parseConfig,
-                    parseCache,
-                    envParametersOffset);
+                    parseCache);
 
             if (parseConditionResult.IsErrOrNull() is { } conditionErr)
             {
@@ -394,8 +372,7 @@ public class StaticProgramParser
                     conditionalExpr.TrueBranch,
                     envClass,
                     parseConfig,
-                    parseCache,
-                    envParametersOffset);
+                    parseCache);
 
             if (parseTrueBranchResult.IsErrOrNull() is { } trueBranchErr)
             {
@@ -414,8 +391,7 @@ public class StaticProgramParser
                     conditionalExpr.FalseBranch,
                     envClass,
                     parseConfig,
-                    parseCache,
-                    envParametersOffset);
+                    parseCache);
 
             if (parseFalseBranchResult.IsErrOrNull() is { } falseBranchErr)
             {
@@ -450,8 +426,7 @@ public class StaticProgramParser
                     parseAndEvalExpr,
                     envClass,
                     parseConfig,
-                    parseCache,
-                    envParametersOffset);
+                    parseCache);
         }
 
         if (expression is Expression.Environment)
@@ -491,23 +466,19 @@ public class StaticProgramParser
         Expression.ParseAndEval parseAndEvalExpr,
         PineValueClass envClass,
         StaticProgramParserConfig<IdentifierT> parseConfig,
-        PineVMParseCache parseCache,
-        int envParametersOffset = 1)
+        PineVMParseCache parseCache)
         where IdentifierT : notnull
     {
         // Form A detection: single (non-chained) ParseAndEval whose Encoded is a
         // Literal recognized as a known callee's EncodedExpression. Per §2.2 the
-        // environment is List[Literal(envFuncs), arg0, ..., arg{n-1}] for a
-        // WithEnvFunctions callee, or List[arg0, ..., arg{n-1}] for a §7.7
-        // WithoutEnvFunctions callee. The identify callback tells us which.
+        // environment is uniformly List[Literal(envFuncs), arg0, ..., arg{n-1}].
         if (parseConfig.IdentifyEncodedBodyOptional is { } identifyEncodedBody &&
             parseAndEvalExpr.Encoded is Expression.Literal outerEncodedLit &&
             identifyEncodedBody(path, outerEncodedLit.Value) is { } formAIdentify &&
             parseAndEvalExpr.Environment is Expression.List formAEnvList &&
-            formAEnvList.Items.Count >= (formAIdentify.CalleeUsesEnvFunctionsLayout ? 1 : 0))
+            formAEnvList.Items.Count >= 1)
         {
-            var formACalleeArgsOffset = formAIdentify.CalleeUsesEnvFunctionsLayout ? 1 : 0;
-            var formAArgsCount = formAEnvList.Items.Count - formACalleeArgsOffset;
+            var formAArgsCount = formAEnvList.Items.Count - 1;
             var formAParsedArgs = new StaticExpression<IdentifierT>[formAArgsCount];
             var formADependencies = ImmutableDictionary<IdentifierT, PineValue>.Empty;
 
@@ -516,11 +487,10 @@ public class StaticProgramParser
                 var parseFormAArgResult =
                     ParseExpression(
                         path,
-                        formAEnvList.Items[formACalleeArgsOffset + i],
+                        formAEnvList.Items[1 + i],
                         envClass,
                         parseConfig,
-                        parseCache,
-                        envParametersOffset);
+                        parseCache);
 
                 if (parseFormAArgResult.IsErrOrNull() is { } formAArgErr)
                 {
@@ -604,8 +574,7 @@ public class StaticProgramParser
                     currentExpr.Environment,
                     envClass,
                     parseConfig,
-                    parseCache,
-                    envParametersOffset);
+                    parseCache);
 
             if (parseArgsResult.IsErrOrNull() is { } argsErr)
             {
@@ -653,8 +622,7 @@ public class StaticProgramParser
                     collectedArgs[i],
                     envClass,
                     parseConfig,
-                    parseCache,
-                    envParametersOffset);
+                    parseCache);
 
             if (parseArgumentResult.IsErrOrNull() is { } argErr)
             {
@@ -804,10 +772,7 @@ public class StaticProgramParser
     /// (per §2.1 / §2.2 of
     /// <c>explore/internal-analysis/2026-04-22-analysis-inline-non-recursive-callees.md</c>).
     /// Argument items therefore live at indices <c>1..N</c>; the env-functions list at
-    /// index 0 is intentionally skipped here. The <paramref name="envParametersOffset"/>
-    /// parameter is forwarded into the per-argument <see cref="ParseExpression"/> calls so
-    /// that a saturated <c>WithoutEnvFunctions</c> root parsing nested through this helper
-    /// still recognises parameter references at the right env depth.
+    /// index 0 is intentionally skipped here.
     /// </remarks>
     private static Result<string, (StaticExpression<IdentifierT>[] parsedArgs, ImmutableDictionary<IdentifierT, PineValue> dependencies)>
         ParseFullApplicationArguments<IdentifierT>(
@@ -815,8 +780,7 @@ public class StaticProgramParser
         Expression environment,
         PineValueClass envClass,
         StaticProgramParserConfig<IdentifierT> parseConfig,
-        PineVMParseCache parseCache,
-        int envParametersOffset = 1)
+        PineVMParseCache parseCache)
         where IdentifierT : notnull
     {
         // Environment is flat: [envFunctions, arg0, arg1, ...]
@@ -839,8 +803,7 @@ public class StaticProgramParser
                     envList.Items[1 + i],
                     envClass,
                     parseConfig,
-                    parseCache,
-                    envParametersOffset);
+                    parseCache);
 
             if (parseArgResult.IsErrOrNull() is { } argErr)
             {
