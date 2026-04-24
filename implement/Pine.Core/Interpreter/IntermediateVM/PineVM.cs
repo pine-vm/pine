@@ -321,6 +321,23 @@ public class PineVM : IPineVM
         int? StackDepthLimit);
 
     /// <summary>
+    /// Number of main-loop iterations between two successive infinite-cycle detection
+    /// checks performed by <see cref="EvaluateExpressionOnCustomStack"/>.
+    /// <para />
+    /// The cycle detection compares the current execution state against snapshots
+    /// captured at previous checks; the cost of each check is non-trivial, so the VM
+    /// does not perform it on every loop/jump/invocation. Instead it amortises the
+    /// cost by running the check only after this many iterations have elapsed.
+    /// In addition to the periodic checks, a cycle check is also performed whenever
+    /// the VM is about to return one of the configured limit errors
+    /// (<see cref="EvaluationConfig.InvocationCountLimit"/>,
+    /// <see cref="EvaluationConfig.LoopIterationCountLimit"/>,
+    /// <see cref="EvaluationConfig.StackDepthLimit"/>) so that an infinite cycle is
+    /// reported as such even when execution would otherwise hit a configured limit.
+    /// </summary>
+    public const int InfiniteCycleCheckIterationInterval = 40_000;
+
+    /// <summary>
     /// Evaluates an expression using the intermediate VM stack-frame machinery.
     /// </summary>
     public Result<EvaluationError, EvaluationReport> EvaluateExpressionOnCustomStack(
@@ -357,6 +374,11 @@ public class PineVM : IPineVM
 
             if (config.InvocationCountLimit is { } limit && invocationCount > limit)
             {
+                if (CheckForInfiniteCycle() is { } cycleErr)
+                {
+                    return cycleErr;
+                }
+
                 var stackTraceHashes =
                     CompileStackTrace(100)
                     .Select(expr => s_mutableCacheValueHash.GetHash(EncodeExpressionAsValue(expr)))
@@ -382,6 +404,11 @@ public class PineVM : IPineVM
 
             if (config.LoopIterationCountLimit is { } limit && loopIterationCount > limit)
             {
+                if (CheckForInfiniteCycle() is { } cycleErr)
+                {
+                    return cycleErr;
+                }
+
                 var stackTraceHashes =
                     CompileStackTrace(100)
                     .Select(expr => s_mutableCacheValueHash.GetHash(EncodeExpressionAsValue(expr)))
@@ -400,6 +427,13 @@ public class PineVM : IPineVM
             return null;
         }
 
+        // -----------------------------------------------------------------
+        // Infinite cycle detection state and helpers are declared further
+        // below, after `var stack` is initialised, so they can capture the
+        // stack reference. They are intentionally referenced here from
+        // limit-enforcement helpers via forward-reference of local functions.
+        // -----------------------------------------------------------------
+
         var rootInstructions =
             GetExpressionEntry(rootExpression)
             .Compilation
@@ -411,6 +445,509 @@ public class PineVM : IPineVM
                 parameters: rootInstructions.Parameters);
 
         var stack = new Stack<StackFrame>();
+
+        // -----------------------------------------------------------------
+        // Infinite cycle detection.
+        //
+        // The VM detects three shapes of infinite cycles:
+        //
+        //   (a) Tail-call infinite recursion. Whenever a frame is REPLACED
+        //       (tail-call optimisation) we append (Expression, InputValues)
+        //       to a tail-call history. A periodic pattern in this history
+        //       (period 1..maxPeriod, repeated >= minCycleRepetitions times)
+        //       indicates the program is iterating in place forever. The
+        //       history is cleared on any non-replacement push or any pop,
+        //       because either of those events ends the current tail-call
+        //       chain — a non-replacement push starts a new sub-evaluation
+        //       that must return, and a pop unwinds to a parent that has
+        //       its own tail-call context.
+        //
+        //   (b) Non-tail-call infinite recursion. The live call stack is
+        //       scanned from the top; if the topmost N * minCycleRepetitions
+        //       frames form a periodic pattern of period N (each frame's
+        //       (Expression, InputValues) matches the corresponding frame
+        //       N positions deeper), the program is recursing without ever
+        //       returning. This catches direct, indirect and mutual
+        //       recursion shapes that grow the stack.
+        //
+        //   (c) In-frame infinite loop. The full execution-state snapshot
+        //       (instruction pointer, evaluation stack contents, locals
+        //       contents) of the topmost frame is compared against snapshots
+        //       captured at recent periodic checks; an exact match while
+        //       the loop-iteration counter has advanced indicates the frame
+        //       is stuck in a backward-jump cycle.
+        //
+        // Detection is amortised: it runs only every
+        // InfiniteCycleCheckIterationInterval main-loop iterations, and
+        // additionally once whenever the VM is about to return one of the
+        // configured limit errors so that an infinite cycle is reported as
+        // such even when execution would otherwise hit a configured limit.
+        //
+        // The cycle-detection thresholds are deliberately conservative
+        // (require many repetitions before firing) so that legitimate
+        // iteration patterns are not flagged.
+        // -----------------------------------------------------------------
+
+        const int tailCallHistoryCapacity = 1024;
+        const int cycleMaxPeriod = 128;
+        const int minCycleRepetitions = 8;
+
+        var tailCallHistory =
+            new List<(Expression Expression, StackFrameInput Input)>(tailCallHistoryCapacity);
+
+        long iterationsSinceCycleCheck = 0;
+
+        // Ring buffer of recent in-frame snapshots taken at successive periodic checks.
+        // Holding multiple recent snapshots is required because the periodic check
+        // interval need not be a multiple of the in-frame cycle period: with a single
+        // snapshot we would only ever detect cycles whose period divides the check
+        // interval. With a buffer we detect any cycle whose period in VM instructions
+        // is at most `inFrameSnapshotBufferCapacity * InfiniteCycleCheckIterationInterval`
+        // (because the residues of `k * InfiniteCycleCheckIterationInterval` modulo
+        // the cycle period eventually repeat).
+        const int inFrameSnapshotBufferCapacity = 64;
+
+        var recentInFrameSnapshots = new List<InFrameSnapshot>(inFrameSnapshotBufferCapacity);
+
+        void RecordTailCallInHistory(Expression expression, StackFrameInput input)
+        {
+            if (tailCallHistory.Count >= tailCallHistoryCapacity)
+            {
+                // Drop the oldest quarter to make room while keeping recent context.
+                tailCallHistory.RemoveRange(0, tailCallHistoryCapacity / 4);
+            }
+
+            tailCallHistory.Add((expression, input));
+        }
+
+        static InFrameSnapshot CaptureInFrameSnapshot(StackFrame frame, long instructionCountAtCapture)
+        {
+            var stackValues = new PineValue[frame.StackPointer];
+
+            for (var i = 0; i < frame.StackPointer; i++)
+            {
+                var slot = frame.StackValues.Span[i];
+
+                stackValues[i] = slot is null ? PineValue.EmptyList : slot.Evaluate();
+            }
+
+            var localsValues = new PineValue[frame.LocalsValues.Length];
+
+            for (var i = 0; i < frame.LocalsValues.Length; i++)
+            {
+                var slot = frame.LocalsValues.Span[i];
+
+                localsValues[i] = slot is null ? PineValue.EmptyList : slot.Evaluate();
+            }
+
+            return
+                new InFrameSnapshot(
+                    Frame: frame,
+                    InstructionPointer: frame.InstructionPointer,
+                    StackPointer: frame.StackPointer,
+                    InstructionCount: instructionCountAtCapture,
+                    LoopIterationCount: frame.LoopIterationCount,
+                    StackValues: stackValues,
+                    LocalsValues: localsValues);
+        }
+
+        static bool InFrameSnapshotsEqual(InFrameSnapshot a, InFrameSnapshot b)
+        {
+            if (!ReferenceEquals(a.Frame, b.Frame))
+                return false;
+
+            if (a.InstructionPointer != b.InstructionPointer)
+                return false;
+
+            if (a.StackPointer != b.StackPointer)
+                return false;
+
+            if (a.StackValues.Length != b.StackValues.Length)
+                return false;
+
+            if (a.LocalsValues.Length != b.LocalsValues.Length)
+                return false;
+
+            for (var i = 0; i < a.StackValues.Length; i++)
+            {
+                if (!a.StackValues[i].Equals(b.StackValues[i]))
+                    return false;
+            }
+
+            for (var i = 0; i < a.LocalsValues.Length; i++)
+            {
+                if (!a.LocalsValues[i].Equals(b.LocalsValues[i]))
+                    return false;
+            }
+
+            return true;
+        }
+
+        // Snapshot of one live stack frame's identity for cycle scanning over
+        // the live call stack. Captured per-check so we can compare frames by
+        // their (Expression, InputValues) tuple without retaining references
+        // to the live frames themselves.
+        static (Expression Expression, StackFrameInput Input)[] SnapshotStackForScan(
+            Stack<StackFrame> liveStack)
+        {
+            var n = liveStack.Count;
+            var result = new (Expression, StackFrameInput)[n];
+
+            var i = 0;
+
+            foreach (var frame in liveStack)
+            {
+                // Stepwise-specialization frames have null InputValues; treat
+                // them as opaque "wall" markers by using a sentinel Input the
+                // pattern matching will treat as never-matching.
+                if (frame.InputValues is null)
+                {
+                    // Use a fresh empty StackFrameInput so reference and
+                    // structural equality both fail against any normal frame.
+                    result[i] =
+                        (frame.Expression,
+                        StackFrameInput.FromArguments(StaticFunctionInterface.ZeroParameters, []));
+                }
+                else
+                {
+                    result[i] = (frame.Expression, frame.InputValues);
+                }
+
+                i++;
+            }
+
+            return result;
+        }
+
+        EvaluationError? CheckForInfiniteCycle()
+        {
+            // Reset the per-iteration counter regardless of outcome.
+            iterationsSinceCycleCheck = 0;
+
+            // (a) Tail-call infinite recursion: pattern in the tail-call history.
+            {
+                var hist = tailCallHistory;
+                var n = hist.Count;
+
+                if (n >= minCycleRepetitions)
+                {
+                    var maxPeriod = Math.Min(cycleMaxPeriod, n / minCycleRepetitions);
+
+                    for (var p = 1; p <= maxPeriod; p++)
+                    {
+                        if (!HistoryHasPeriodicCycleAtTail(hist, p, minCycleRepetitions))
+                        {
+                            continue;
+                        }
+
+                        var cycleEntries = new (Expression Expression, StackFrameInput Input)[p];
+
+                        for (var i = 0; i < p; i++)
+                        {
+                            cycleEntries[i] = hist[n - p + i];
+                        }
+
+                        return BuildTailCallCycleError(cycleEntries);
+                    }
+                }
+            }
+
+            // (b) Non-tail-call infinite recursion: pattern in the live stack.
+            if (stack.Count >= minCycleRepetitions)
+            {
+                var snapshot = SnapshotStackForScan(stack);
+                var n = snapshot.Length;
+                var maxPeriod = Math.Min(cycleMaxPeriod, n / minCycleRepetitions);
+
+                for (var p = 1; p <= maxPeriod; p++)
+                {
+                    var ok = true;
+
+                    // The first p entries of `snapshot` are the topmost p frames.
+                    // Compare each subsequent block of p frames against the topmost block.
+                    for (var rep = 1; rep < minCycleRepetitions; rep++)
+                    {
+                        for (var i = 0; i < p; i++)
+                        {
+                            var top = snapshot[i];
+                            var deeper = snapshot[i + rep * p];
+
+                            if (!ReferenceEquals(top.Expression, deeper.Expression) &&
+                                !top.Expression.Equals(deeper.Expression))
+                            {
+                                ok = false;
+                                break;
+                            }
+
+                            if (!top.Input.Equals(deeper.Input))
+                            {
+                                ok = false;
+                                break;
+                            }
+                        }
+
+                        if (!ok)
+                            break;
+                    }
+
+                    if (ok)
+                    {
+                        var cycleEntries = new (Expression Expression, StackFrameInput Input)[p];
+
+                        // Pattern (innermost-first) is the topmost p frames.
+                        for (var i = 0; i < p; i++)
+                        {
+                            cycleEntries[i] = snapshot[i];
+                        }
+
+                        // Truncate the live stack so the trace looks like the
+                        // cycle was detected at the second occurrence (i.e. as
+                        // if the check ran on every iteration). Keep prefix +
+                        // exactly two cycle iterations on the stack.
+                        TruncateStackForStackCycle(p);
+
+                        return BuildStackRecursionCycleError(cycleEntries);
+                    }
+                }
+            }
+
+            // (c) In-frame loop: look for a previous snapshot of the topmost
+            // frame whose full execution state is equal to the current snapshot,
+            // while the frame has performed at least one backward jump in
+            // the meantime. We compare against multiple recent snapshots
+            // because the periodic check interval need not be a multiple
+            // of the in-frame cycle period. Skip when the topmost frame is
+            // a stepwise-specialization frame: it has no instruction pointer
+            // of its own and cannot host an in-frame loop.
+            if (stack.Count > 0 && stack.Peek().Specialization is null)
+            {
+                var top = stack.Peek();
+                var current = CaptureInFrameSnapshot(top, instructionCount);
+
+                // Drop entries that no longer refer to the current top frame
+                // (the top frame changed since they were captured).
+                while (recentInFrameSnapshots.Count > 0 &&
+                    !ReferenceEquals(recentInFrameSnapshots[0].Frame, top))
+                {
+                    recentInFrameSnapshots.RemoveAt(0);
+                }
+
+                for (var i = 0; i < recentInFrameSnapshots.Count; i++)
+                {
+                    var prev = recentInFrameSnapshots[i];
+
+                    if (InFrameSnapshotsEqual(prev, current) &&
+                        top.LoopIterationCount > prev.LoopIterationCount)
+                    {
+                        var iterationsBetween = instructionCount - prev.InstructionCount;
+                        var loopIterationsBetween = top.LoopIterationCount - prev.LoopIterationCount;
+
+                        return
+                            BuildInFrameLoopCycleError(
+                                topFrame: top,
+                                iterationsBetween: iterationsBetween,
+                                loopIterationsBetween: loopIterationsBetween);
+                    }
+                }
+
+                if (recentInFrameSnapshots.Count >= inFrameSnapshotBufferCapacity)
+                {
+                    // Drop the oldest snapshot to make room.
+                    recentInFrameSnapshots.RemoveAt(0);
+                }
+
+                recentInFrameSnapshots.Add(current);
+            }
+            else
+            {
+                recentInFrameSnapshots.Clear();
+            }
+
+            return null;
+        }
+
+        static bool HistoryHasPeriodicCycleAtTail(
+            List<(Expression Expression, StackFrameInput Input)> hist,
+            int p,
+            int minRepetitions)
+        {
+            var n = hist.Count;
+
+            if (n < p * minRepetitions)
+                return false;
+
+            for (var rep = 1; rep < minRepetitions; rep++)
+            {
+                for (var i = 0; i < p; i++)
+                {
+                    var e0 = hist[n - 1 - i];
+                    var er = hist[n - 1 - i - rep * p];
+
+                    if (!ReferenceEquals(e0.Expression, er.Expression) &&
+                        !e0.Expression.Equals(er.Expression))
+                    {
+                        return false;
+                    }
+
+                    if (!e0.Input.Equals(er.Input))
+                    {
+                        return false;
+                    }
+                }
+            }
+
+            return true;
+        }
+
+        void TruncateStackForStackCycle(int cyclePeriod)
+        {
+            // Keep prefix + exactly `2 * cyclePeriod` topmost frames matching
+            // the cycle. We have already verified (in the caller) that the
+            // topmost `minCycleRepetitions * cyclePeriod` frames match. Pop
+            // until the live stack contains only the prefix plus 2 cycle
+            // iterations of the cycle (i.e. drop the extra repetitions).
+            var keepFromTop = stack.Count - (minCycleRepetitions - 2) * cyclePeriod;
+
+            while (stack.Count > keepFromTop)
+            {
+                stack.Pop();
+            }
+        }
+
+        EvaluationError BuildTailCallCycleError(
+            (Expression Expression, StackFrameInput Input)[] cycleEntries)
+        {
+            return
+                BuildInvocationCycleErrorCore(
+                    cycleEntries,
+                    kindLabel: "infinite recursion",
+                    cycleNote: " (tail-call cycle)");
+        }
+
+        EvaluationError BuildStackRecursionCycleError(
+            (Expression Expression, StackFrameInput Input)[] cycleEntries)
+        {
+            return
+                BuildInvocationCycleErrorCore(
+                    cycleEntries,
+                    kindLabel: "infinite recursion",
+                    cycleNote: " (stack-growing cycle)");
+        }
+
+        EvaluationError BuildInvocationCycleErrorCore(
+            (Expression Expression, StackFrameInput Input)[] cycleEntries,
+            string kindLabel,
+            string cycleNote)
+        {
+            var stackTrace = CompileStackTrace(100);
+
+            // Include the topmost (currently executing) frame at the head of the
+            // stack trace so the trace ends exactly where the cycle entered. This
+            // matters in particular for tail-call cycles, where the topmost frame
+            // is repeatedly replaced rather than pushed and the conventional
+            // CompileStackTrace (which skips the topmost frame) would yield an
+            // empty trace.
+            Expression[] traceWithTop;
+
+            if (stack.Count > 0)
+            {
+                var top = stack.Peek();
+
+                traceWithTop = new Expression[stackTrace.Count + 1];
+                traceWithTop[0] = top.Expression;
+
+                for (var i = 0; i < stackTrace.Count; i++)
+                {
+                    traceWithTop[i + 1] = stackTrace[i];
+                }
+            }
+            else
+            {
+                traceWithTop = stackTrace.ToArray();
+            }
+
+            var cycleHashes = new string[cycleEntries.Length];
+
+            for (var i = 0; i < cycleEntries.Length; i++)
+            {
+                var hash =
+                    s_mutableCacheValueHash.GetHash(
+                        EncodeExpressionAsValue(cycleEntries[i].Expression));
+
+                cycleHashes[i] = Convert.ToHexStringLower(hash.Span)[..8];
+            }
+
+            var message =
+                "Detected " + kindLabel + ". " +
+                "Cycle length: " + cycleEntries.Length + " invocation" +
+                (cycleEntries.Length is 1 ? "" : "s") + cycleNote + ".\n" +
+                "Cycle expressions (one entry per invocation in the cycle):\n" +
+                string.Join(
+                    "\n",
+                    cycleHashes.Select((h, i) => "  [" + i + "] " + h)) +
+                "\nStack trace ending where the cycle entered (innermost first, " +
+                traceWithTop.Length + " frame" + (traceWithTop.Length is 1 ? "" : "s") + "):\n" +
+                string.Join(
+                    "\n",
+                    traceWithTop.Select(
+                        expr =>
+                        {
+                            var hash = s_mutableCacheValueHash.GetHash(EncodeExpressionAsValue(expr));
+                            return "  " + Convert.ToHexStringLower(hash.Span)[..8];
+                        }));
+
+            return
+                new EvaluationError(
+                    Message: message,
+                    StackTrace: traceWithTop,
+                    Counters: CurrentCounters());
+        }
+
+        EvaluationError BuildInFrameLoopCycleError(
+            StackFrame topFrame,
+            long iterationsBetween,
+            long loopIterationsBetween)
+        {
+            var stackTrace = CompileStackTrace(100);
+
+            // Include the looping frame itself at the head of the trace so the trace
+            // ends exactly where the cycle entered.
+            var traceWithTop = new Expression[stackTrace.Count + 1];
+            traceWithTop[0] = topFrame.Expression;
+
+            for (var i = 0; i < stackTrace.Count; i++)
+            {
+                traceWithTop[i + 1] = stackTrace[i];
+            }
+
+            var topHash =
+                s_mutableCacheValueHash.GetHash(EncodeExpressionAsValue(topFrame.Expression));
+
+            var message =
+                "Detected infinite loop. " +
+                "Cycle length: " + loopIterationsBetween + " loop iteration" +
+                (loopIterationsBetween is 1 ? "" : "s") +
+                " (" + iterationsBetween + " VM instruction" +
+                (iterationsBetween is 1 ? "" : "s") + ") within a single stack frame.\n" +
+                "Looping frame expression: " + Convert.ToHexStringLower(topHash.Span)[..8] +
+                " (instruction pointer " + topFrame.InstructionPointer + ").\n" +
+                "Stack trace ending where the cycle entered (innermost first, " +
+                traceWithTop.Length + " frame" + (traceWithTop.Length is 1 ? "" : "s") + "):\n" +
+                string.Join(
+                    "\n",
+                    traceWithTop.Select(
+                        expr =>
+                        {
+                            var hash = s_mutableCacheValueHash.GetHash(EncodeExpressionAsValue(expr));
+                            return "  " + Convert.ToHexStringLower(hash.Span)[..8];
+                        }));
+
+            return
+                new EvaluationError(
+                    Message: message,
+                    StackTrace: traceWithTop,
+                    Counters: CurrentCounters());
+        }
 
         EvaluationError? InvokePrecompiledOrBuildStackFrame(
             PineValue? expressionValue,
@@ -641,6 +1178,29 @@ public class PineVM : IPineVM
             StackFrame newFrame,
             bool replaceCurrentFrame)
         {
+            // Cycle-detection bookkeeping: the tail-call replacement history
+            // captures only those invocations that REPLACE the current frame
+            // (tail-call optimisation). Such replacements indicate the program
+            // is conceptually iterating "in place" without growing the stack;
+            // a cycle in this history corresponds to a true tail-call infinite
+            // recursion. Any non-replacement push starts a new sub-evaluation
+            // that will eventually return, so it does not extend any existing
+            // tail-call chain — we clear the history in that case.
+            // Stepwise-specialization frames have null InputValues/Instructions
+            // and are treated as opaque; we leave the history untouched for them
+            // to avoid both NREs and clearing useful context.
+            if (newFrame.Specialization is null && newFrame.InputValues is not null)
+            {
+                if (replaceCurrentFrame)
+                {
+                    RecordTailCallInHistory(newFrame.Expression, newFrame.InputValues);
+                }
+                else if (stack.Count > 0)
+                {
+                    tailCallHistory.Clear();
+                }
+            }
+
             if (replaceCurrentFrame)
             {
                 stack.Pop();
@@ -654,6 +1214,11 @@ public class PineVM : IPineVM
 
             if (config.StackDepthLimit is { } stackDepthLimit && stack.Count > stackDepthLimit)
             {
+                if (CheckForInfiniteCycle() is { } cycleErr)
+                {
+                    return cycleErr;
+                }
+
                 var stackTraceHashes =
                     CompileStackTrace(100)
                     .Select(expr => s_mutableCacheValueHash.GetHash(EncodeExpressionAsValue(expr)))
@@ -749,6 +1314,12 @@ public class PineVM : IPineVM
 
             stack.Pop();
 
+            // Clear the tail-call history: returning from a frame ends any
+            // tail-call chain that may have been accumulated. The chain only
+            // makes sense within a single contiguous run of replacements at one
+            // logical depth.
+            tailCallHistory.Clear();
+
             if (stack.Count is 0)
             {
                 var rootExprValue = EncodeExpressionAsValue(rootExpression);
@@ -816,6 +1387,18 @@ public class PineVM : IPineVM
             ++instructionCount;
 
             ++currentFrame.InstructionCount;
+
+            // Amortised infinite-cycle detection: run the (relatively expensive)
+            // check only once every InfiniteCycleCheckIterationInterval iterations.
+            ++iterationsSinceCycleCheck;
+
+            if (iterationsSinceCycleCheck >= InfiniteCycleCheckIterationInterval)
+            {
+                if (CheckForInfiniteCycle() is { } cycleErr)
+                {
+                    return cycleErr;
+                }
+            }
 
             try
             {
