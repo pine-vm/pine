@@ -507,4 +507,89 @@ public class ElmParserExpressionTests
             LoopIterationCount: 0
             """);
     }
+
+    /// <summary>
+    /// Parses the bare expression <c>"1 + 2"</c> via the real
+    /// <c>Elm.Parser.Expression.expression</c>. This is the narrowest
+    /// reproduction of the open compile-to-PineVM defect tracked in
+    /// <c>ElmSyntaxInterpreter-language-service-gaps.md</c>: it fails
+    /// with the same
+    /// <c>Failed to parse expression from value: Unexpected number of
+    /// items in list: Not 2 but 0 — expressionValue is string ''</c>
+    /// symptom observed through <c>addWorkspaceFile</c> and through the
+    /// file-level reproductions in
+    /// <see cref="ElmParserFileTests.File_matches_language_service_scenario_ModuleA"/>
+    /// and
+    /// <see cref="ElmParserFileTests.File_matches_language_service_scenario_ModuleB"/>,
+    /// but without needing an entire module header around it.
+    /// <para>
+    /// The passing sibling tests
+    /// <see cref="Expression_int_literal"/>,
+    /// <see cref="Expression_application_with_various_argument_kinds"/>,
+    /// and the list-expression cases prove that the expression
+    /// parser's literal, application, lambda, and list code paths all
+    /// compile to IR correctly. What this test adds is the
+    /// precedence-climbing path — specifically <c>precedence6Add</c> in
+    /// <c>elm-syntax/src/Elm/Parser/Expression.elm</c> and the
+    /// surrounding combinators — which the previous passing tests
+    /// never reach because their inputs contain no infix operator.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void Expression_int_plus_int()
+    {
+        var (value, _) =
+            CoreLibraryModule.CoreLibraryTestHelper.ApplyAndProfileUnary(
+                GetTestFunction("parseExpression"),
+                ElmString("1 + 2"),
+                s_vm);
+
+        ElmValue.RenderAsElmExpression(value).expressionString
+            .Should().Be(
+                """Ok (OperatorApplication "+" Left (Node { end = { column = 2, row = 1 }, start = { column = 1, row = 1 } } (Integer 1)) (Node { end = { column = 6, row = 1 }, start = { column = 5, row = 1 } } (Integer 2)))""");
+    }
+
+    /// <summary>
+    /// Companion to <see cref="Expression_int_plus_int"/>: probes whether
+    /// the compile-to-PineVM defect also reproduces on the <c>|&gt;</c>
+    /// operator (another <c>infixLeft</c>). If this fails identically to
+    /// <see cref="Expression_int_plus_int"/> the defect is not specific
+    /// to <c>precedence6Add</c> or to <c>Basics.add</c>, and the shared
+    /// <c>infixLeft</c> / precedence-climbing machinery is the suspect;
+    /// if it passes, something distinguishes <c>+</c> from <c>|&gt;</c>.
+    /// </summary>
+    [Fact]
+    public void Expression_value_pipeRight_value()
+    {
+        var (value, _) =
+            CoreLibraryModule.CoreLibraryTestHelper.ApplyAndProfileUnary(
+                GetTestFunction("parseExpression"),
+                ElmString("a |> b"),
+                s_vm);
+
+        ElmValue.RenderAsElmExpression(value).expressionString
+            .Should().Be(
+                """Ok (OperatorApplication "|>" Left (Node { end = { column = 2, row = 1 }, start = { column = 1, row = 1 } } (FunctionOrValue [] "a")) (Node { end = { column = 7, row = 1 }, start = { column = 6, row = 1 } } (FunctionOrValue [] "b")))""");
+    }
+
+    /// <summary>
+    /// Companion probe: <c>==</c> is <c>infixNonAssociative 4 "=="</c>,
+    /// a sibling of <c>infixLeft</c> sharing the same
+    /// <c>extendedSubExpressionOptimisticLayout</c> machinery. Used to
+    /// discriminate between <c>infixLeft</c>-only defects and
+    /// defects in the shared precedence-climbing code path.
+    /// </summary>
+    [Fact]
+    public void Expression_value_eq_value()
+    {
+        var (value, _) =
+            CoreLibraryModule.CoreLibraryTestHelper.ApplyAndProfileUnary(
+                GetTestFunction("parseExpression"),
+                ElmString("a == b"),
+                s_vm);
+
+        ElmValue.RenderAsElmExpression(value).expressionString
+            .Should().Be(
+                """Ok (OperatorApplication "==" Non (Node { end = { column = 2, row = 1 }, start = { column = 1, row = 1 } } (FunctionOrValue [] "a")) (Node { end = { column = 7, row = 1 }, start = { column = 6, row = 1 } } (FunctionOrValue [] "b")))""");
+    }
 }

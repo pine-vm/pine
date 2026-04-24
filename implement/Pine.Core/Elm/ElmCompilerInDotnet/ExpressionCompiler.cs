@@ -1070,7 +1070,17 @@ public class ExpressionCompiler
     private static Result<CompilationError, Expression> CompileRecordAccessFunction(
         SyntaxTypes.Expression.RecordAccessFunction expr)
     {
-        var fieldName = expr.FunctionName;
+        // The parser stores RecordAccessFunction.FunctionName including the
+        // leading dot (e.g. ".fieldName") to mirror the upstream elm-syntax
+        // representation. The runtime field-lookup function in
+        // RecordRuntime.PineFunctionForRecordAccessAsValue compares against
+        // the stored field name, which does NOT include the dot, so we
+        // strip it here. Without this, the lookup never matches and falls
+        // through to the "field not found" branch, producing
+        // PineValue.EmptyList — which then crashes the surrounding
+        // ParseAndEval with an "expressionValue is string ''" / empty-list
+        // diagnostic when the result is invoked or used as a function.
+        var fieldName = expr.FunctionName.TrimStart('.');
 
         // Build a 1-argument function: \record -> record.fieldName
         // env = [envFunctions, record], so the parameter is at env[1]

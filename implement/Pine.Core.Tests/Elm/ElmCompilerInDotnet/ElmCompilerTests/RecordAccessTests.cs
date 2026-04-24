@@ -447,4 +447,75 @@ public class RecordAccessTests
             resultElm.Should().Be(new ElmValue.ElmInteger(5));
         }
     }
+
+    /// <summary>
+    /// Tests that the postfix dot-syntax (<c>record.field</c>) correctly
+    /// reads a closure-typed field out of a record and that the resulting
+    /// closure can then be invoked with an argument. Companion to
+    /// <c>RecordAccessFunctionTests.Prefix_accessor_on_inline_record_with_closure_field_invoked_with_arg</c>:
+    /// the prefix and postfix access forms compile through different code
+    /// paths in <c>ExpressionCompiler</c> (the prefix accessor goes through
+    /// <c>CompileRecordAccessFunction</c>, the postfix syntax goes through
+    /// <c>CompileRecordAccess</c>), and the prefix-accessor variant of this
+    /// shape currently triggers an open compile-to-PineVM defect — see
+    /// <c>expression-infix-emission-defect-analysis.md</c>. This test pins
+    /// down that the postfix form is unaffected.
+    /// </summary>
+    [Fact]
+    public void Record_access_on_record_with_closure_field_via_postfix_dot()
+    {
+        var elmModuleText =
+            """"
+            module Test exposing (..)
+
+
+            type alias R =
+                { f : Int -> Int }
+
+
+            r : R
+            r =
+                { f = \y -> y + 1 }
+
+
+            use : Int -> Int
+            use x =
+                r.f x
+
+            """";
+
+        var parseCache = new PineVMParseCache();
+
+        var (parsedEnv, _) =
+            ElmCompilerTestHelper.CompileElmModules(
+                [elmModuleText],
+                disableInlining: true);
+
+        var testModule =
+            parsedEnv.Modules.FirstOrDefault(c => c.moduleName is "Test");
+
+        var declValue =
+            testModule.moduleContent.FunctionDeclarations
+            .FirstOrDefault(decl => decl.Key is "use");
+
+        var declParsed =
+            FunctionRecord.ParseFunctionRecordTagged(declValue.Value, parseCache)
+            .Extract(err => throw new Exception("Failed parsing " + nameof(declValue) + ": " + err));
+
+        var invokeFunction = ElmCompilerTestHelper.CreateFunctionInvocationDelegate(declParsed);
+
+        {
+            var arg = ElmValueEncoding.ElmValueAsPineValue(new ElmValue.ElmInteger(5));
+
+            var (applyRunResult, _) = invokeFunction([arg]);
+
+            var resultValue = applyRunResult.ReturnValue.Evaluate();
+
+            var resultElm =
+                ElmValueEncoding.PineValueAsElmValue(resultValue, null, null)
+                .Extract(err => throw new Exception("Failed decoding result: " + err));
+
+            resultElm.Should().Be(new ElmValue.ElmInteger(6));
+        }
+    }
 }
