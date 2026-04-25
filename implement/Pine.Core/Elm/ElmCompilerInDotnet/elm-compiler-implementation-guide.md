@@ -614,6 +614,14 @@ The Elm syntax interpreter offers:
 + Reporting applications of named functions or constructors to support inspection of runtime traces.
 + Detecting and reporting cases of infinite recursion with stack traces showing declaration names.
 
+#### Using the Interpreter to Diagnose Optimizer Defects
+
+The Elm syntax interpreter is particularly useful for diagnosing defects introduced by the optimization pipeline. When the PineVM detects an error (such as infinite recursion), it can only report opaque expression hashes (e.g., `3e207948`) because Pine expressions carry no source-level names. In contrast, the syntax interpreter raises `ElmInterpretationError` with a named Elm call stack including rendered argument values.
+
+For example, when a specialization bug corrupted `loopUntilHelp__specialized__2` by passing a function closure where a `PState` record was expected, the PineVM reported only "Detected infinite recursion. Cycle length: 1 invocation. Cycle expressions: [0] 3e207948." The syntax interpreter pinpointed the defect as `Cannot bind named pattern 'PState' to value of type ElmValue+ElmFunction` with a call stack showing the exact function (`Elm.Parser.Tokens.loopUntilHelp__specialized__2`) and the offending arguments (`True (Parser <fn>) <fn> "hello world" <fn> <fn>`).
+
+The per-sub-stage snapshots in `CompilationPipelineStageResults.OptimizationIterations` enable bisection: interpret each sub-stage (`AfterSpecialization`, `AfterHigherOrderInlining`, `AfterSizeBasedInlining`) to identify which transform introduced the defect. This technique was used to fix the bug documented in `explore/internal-analysis/2026-04-25-max-optimization-rounds-2-string-literal-infinite-recursion.md`; see also `OptimizationRoundTwoInfiniteRecursionRegressionTests` in the test suite for a worked example.
+
 ## Future Exploration
 
 ### Future Exploration - Monomorphizing Extensible Records

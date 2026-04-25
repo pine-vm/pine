@@ -3465,7 +3465,10 @@ nextParam:;
             :
             RewriteGroupCallsInExpression(
                 bodyAfterTagRewrite,
-                [(funcImpl.Name.Value, funcInfo.ModuleName, specializedModuleName, specializedName)],
+                // NOTE: After RewriteRecursiveCallsForSingleChoiceTagSpecialization, the recursive
+                // calls in the body already use specializedName (not the original function name).
+                // So we must look for calls to specializedName, not funcImpl.Name.Value.
+                [(specializedName, specializedModuleName, specializedModuleName, specializedName)],
                 invariantHigherOrderParamIndices);
 
         var higherOrderSubstitutions = new Dictionary<string, Node<SyntaxTypes.Expression>>();
