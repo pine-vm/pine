@@ -35,6 +35,8 @@ public static class LambdaLifting
     {
         var newDeclarations = new List<Node<SyntaxTypes.Declaration>>();
 
+        var liftedFunctionNames = new HashSet<string>(StringComparer.Ordinal);
+
         var nextLiftedIdentifierByFunctionName =
             BuildNextLiftedIdentifierByFunctionName(
                 module.Declarations.Select(d => d.Value));
@@ -52,6 +54,12 @@ public static class LambdaLifting
                 foreach (var liftedFunc in liftedFunctions)
                 {
                     newDeclarations.Add(liftedFunc);
+
+                    if (liftedFunc.Value is SyntaxTypes.Declaration.FunctionDeclaration liftedFuncDecl)
+                    {
+                        liftedFunctionNames.Add(
+                            liftedFuncDecl.Function.Declaration.Value.Name.Value);
+                    }
                 }
             }
             else
@@ -61,7 +69,11 @@ public static class LambdaLifting
             }
         }
 
-        return module with { Declarations = newDeclarations };
+        var newFile = module with { Declarations = newDeclarations };
+
+        LambdaLiftingValidator.Validate(newFile, liftedFunctionNames);
+
+        return newFile;
     }
 
     /// <summary>
@@ -156,7 +168,31 @@ public static class LambdaLifting
             }
         }
 
-        return resultBuilder.ToImmutable();
+        var result = resultBuilder.ToImmutable();
+
+        // Validate each module's post-lifting slice against the lambda-lifting
+        // invariants, restricting the check to the lifter-created top-level
+        // functions in that module (so that user-defined top-level functions
+        // are not subject to the invariant).
+        foreach (var (moduleName, liftedNamesInModule) in newLiftedNamesByModule)
+        {
+            if (liftedNamesInModule.Count is 0)
+            {
+                continue;
+            }
+
+            var moduleNameComparer =
+                EnumerableExtensions.EqualityComparer<IReadOnlyList<string>>();
+
+            var moduleDeclarations =
+                result
+                .Where(kvp => moduleNameComparer.Equals(kvp.Key.Namespaces, moduleName))
+                .Select(kvp => kvp.Value);
+
+            LambdaLiftingValidator.Validate(moduleDeclarations, liftedNamesInModule);
+        }
+
+        return result;
     }
 
     /// <summary>
