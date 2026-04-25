@@ -155,17 +155,11 @@ public sealed record ElmInterpretationError(
 /// at the public interpreter boundary and surfaced to callers as
 /// <see cref="Result{ErrT, OkT}.Err"/> carrying an <see cref="ElmInterpretationError"/>.
 /// </summary>
-internal sealed class ElmInterpretationException : System.Exception
+internal sealed class ElmInterpretationException(
+    ElmInterpretationError error,
+    System.Exception? innerException = null) : System.Exception(error.ToString(), innerException)
 {
-    public ElmInterpretationError Error { get; }
-
-    public ElmInterpretationException(
-        ElmInterpretationError error,
-        System.Exception? innerException = null)
-        : base(error.ToString(), innerException)
-    {
-        Error = error;
-    }
+    public ElmInterpretationError Error { get; } = error;
 }
 
 /// <summary>
