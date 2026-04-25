@@ -46,7 +46,7 @@ public class ModuleImportTests
 
         var value = result.Extract(err => throw new System.Exception(err.ToString()));
 
-        return Pine.Core.Elm.ElmValue.RenderAsElmExpression(value).expressionString;
+        return Core.Elm.ElmValue.RenderAsElmExpression(value).expressionString;
     }
 
     // ============================================================

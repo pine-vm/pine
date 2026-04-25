@@ -528,6 +528,83 @@ public static class LambdaLifting
             }
         }
 
+        // Precompute which sibling lifted-functions have ZERO external
+        // captures (i.e. their free variables are all either function
+        // parameters or other sibling lifted-functions in this same set).
+        //
+        // A sibling reference may be "substituted" — replaced with the
+        // bare lifted-function name — only if that sibling has zero
+        // external captures, so that the substituted call site does not
+        // need to supply the missing captured arguments. Sibling
+        // references that themselves capture external bindings must
+        // instead be CAPTURED (i.e. flow through the let binding which
+        // holds the partial application <c>lifted__sibling capturedArgs</c>),
+        // otherwise the surrounding lifted function would call the
+        // sibling with the wrong first argument and silently corrupt the
+        // result.
+        //
+        // This is computed as a GREATEST fixed point so that mutually
+        // recursive sibling functions (which reference each other but
+        // have no other external captures) are all classified as
+        // substitutable together.
+        var siblingsWithoutExternalCaptures =
+            new HashSet<string>(localFunctionLiftedNames.Keys, StringComparer.Ordinal);
+
+        bool anyRemoved;
+
+        do
+        {
+            anyRemoved = false;
+
+            foreach (var decl in letBlock.Declarations)
+            {
+                if (decl.Value is not SyntaxTypes.Expression.LetDeclaration.LetFunction letFuncCheck)
+                {
+                    continue;
+                }
+
+                var siblingName = letFuncCheck.Function.Declaration.Value.Name.Value;
+
+                if (!siblingsWithoutExternalCaptures.Contains(siblingName))
+                {
+                    continue;
+                }
+
+                Node<SyntaxTypes.Expression> bodyExpr;
+                IReadOnlyList<string> paramNames;
+
+                var args = letFuncCheck.Function.Declaration.Value.Arguments;
+                var bodyExprValue = letFuncCheck.Function.Declaration.Value.Expression;
+
+                if (args.Count is 0 &&
+                    bodyExprValue.Value is SyntaxTypes.Expression.LambdaExpression innerLambdaCheck)
+                {
+                    bodyExpr = innerLambdaCheck.Lambda.Expression;
+                    paramNames = CollectPatternNames(innerLambdaCheck.Lambda.Arguments);
+                }
+                else
+                {
+                    bodyExpr = bodyExprValue;
+                    paramNames = CollectPatternNames(args);
+                }
+
+                var hasExternalCapture =
+                    FindFreeVariables(bodyExpr, [.. paramNames])
+                    .Any(
+                        v =>
+                        currentContext.BoundVariables.Contains(v) &&
+                        v != siblingName &&
+                        !siblingsWithoutExternalCaptures.Contains(v));
+
+                if (hasExternalCapture)
+                {
+                    siblingsWithoutExternalCaptures.Remove(siblingName);
+                    anyRemoved = true;
+                }
+            }
+        }
+        while (anyRemoved);
+
         // Second pass: transform each declaration
         foreach (var decl in letBlock.Declarations)
         {
@@ -551,7 +628,8 @@ public static class LambdaLifting
                                     innerLambda,
                                     currentContext,
                                     liftedFunctions,
-                                    localFunctionLiftedNames);
+                                    localFunctionLiftedNames,
+                                    siblingsWithoutExternalCaptures);
 
                             newDeclarations.Add(transformedLetDecl);
                             currentContext = updatedContext;
@@ -566,7 +644,8 @@ public static class LambdaLifting
                                     letFunc,
                                     currentContext,
                                     liftedFunctions,
-                                    localFunctionLiftedNames);
+                                    localFunctionLiftedNames,
+                                    siblingsWithoutExternalCaptures);
 
                             newDeclarations.Add(transformedLetDecl);
                             currentContext = updatedContext;
@@ -652,7 +731,8 @@ public static class LambdaLifting
         SyntaxTypes.Expression.LambdaExpression lambdaExpr,
         LiftingContext context,
         List<Node<SyntaxTypes.Declaration>> liftedFunctions,
-        IReadOnlyDictionary<string, string> localFunctionLiftedNames)
+        IReadOnlyDictionary<string, string> localFunctionLiftedNames,
+        IReadOnlySet<string> siblingsWithoutExternalCaptures)
     {
         var lambda = lambdaExpr.Lambda;
         var bindingName = letFunc.Function.Declaration.Value.Name.Value;
@@ -660,11 +740,25 @@ public static class LambdaLifting
         // Get lambda parameter names
         var lambdaParamNames = CollectPatternNames(lambda.Arguments);
 
-        // Find free variables in the lambda body, excluding other local functions that will be lifted
+        // Find free variables in the lambda body. We exclude the function's
+        // own name (self-recursive references are handled via the
+        // self-substitution below) and any sibling let-bound functions that
+        // have been classified as having no external captures
+        // (<paramref name="siblingsWithoutExternalCaptures"/>): for those
+        // siblings the substituted call site can directly invoke the bare
+        // lifted name without supplying any extra captured arguments.
+        // Sibling references that do have external captures must NOT be
+        // excluded — they must instead flow through the let binding which
+        // holds the partial application <c>lifted__sibling capturedArgs</c>,
+        // otherwise the surrounding lifted function would call the sibling
+        // with the wrong first argument and silently corrupt the result.
         var freeVariables =
             FindFreeVariables(lambda.Expression, [.. lambdaParamNames])
             .Where(
-                v => context.BoundVariables.Contains(v) && v != bindingName && !localFunctionLiftedNames.ContainsKey(v))
+                v =>
+                context.BoundVariables.Contains(v) &&
+                v != bindingName &&
+                !siblingsWithoutExternalCaptures.Contains(v))
             .OrderBy(v => v)
             .ToList();
 
@@ -674,12 +768,34 @@ public static class LambdaLifting
         // Transform the lambda body
         var lambdaBodyContext = context.WithBoundVariables(lambdaParamNames);
 
-        var (transformedBody, bodyContextAfter) = TransformExpressionInner(lambda.Expression, lambdaBodyContext, liftedFunctions);
+        var (transformedBody, bodyContextAfter) =
+            TransformExpressionInner(lambda.Expression, lambdaBodyContext, liftedFunctions);
 
-        // Substitute references to other local functions with their lifted names
-        var substitutionsWithSelf = new Dictionary<string, string>(localFunctionLiftedNames);
+        // Substitute self and the substitutable siblings (those with no
+        // external captures) with their lifted names. Siblings that have
+        // external captures are intentionally NOT in this map; they remain
+        // as references and resolve to the let binding which holds the
+        // sibling's partial application.
+        var substitutions =
+            new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                [bindingName] = liftedFunctionName,
+            };
 
-        var substitutedBody = SubstituteVariableReferences(transformedBody, substitutionsWithSelf);
+        foreach (var (siblingName, siblingLifted) in localFunctionLiftedNames)
+        {
+            if (siblingName == bindingName)
+            {
+                continue;
+            }
+
+            if (siblingsWithoutExternalCaptures.Contains(siblingName))
+            {
+                substitutions[siblingName] = siblingLifted;
+            }
+        }
+
+        var substitutedBody = SubstituteVariableReferences(transformedBody, substitutions);
 
         // Create the lifted function
         var liftedFuncDecl =
@@ -724,7 +840,8 @@ public static class LambdaLifting
         SyntaxTypes.Expression.LetDeclaration.LetFunction letFunc,
         LiftingContext context,
         List<Node<SyntaxTypes.Declaration>> liftedFunctions,
-        IReadOnlyDictionary<string, string> localFunctionLiftedNames)
+        IReadOnlyDictionary<string, string> localFunctionLiftedNames,
+        IReadOnlySet<string> siblingsWithoutExternalCaptures)
     {
         var bindingName = letFunc.Function.Declaration.Value.Name.Value;
         var funcParams = letFunc.Function.Declaration.Value.Arguments;
@@ -732,11 +849,27 @@ public static class LambdaLifting
         // Get function parameter names
         var funcParamNames = CollectPatternNames(funcParams);
 
-        // Find free variables in the function body, excluding other local functions that will be lifted
+        // Find free variables in the function body. We exclude the
+        // function's own name (self-recursive references are handled via the
+        // self-substitution below) and any sibling let-bound functions that
+        // have been classified as having no external captures
+        // (<paramref name="siblingsWithoutExternalCaptures"/>): for those
+        // siblings the substituted call site can directly invoke the bare
+        // lifted name without supplying any extra captured arguments.
+        // Sibling references that do have external captures must NOT be
+        // excluded — they must instead flow through the let binding which
+        // holds the partial application <c>lifted__sibling capturedArgs</c>,
+        // otherwise the surrounding lifted function would call the sibling
+        // with the wrong first argument and silently corrupt the result
+        // (the call site would supply the original argument as the
+        // sibling's first captured parameter).
         var freeVariables =
             FindFreeVariables(letFunc.Function.Declaration.Value.Expression, [.. funcParamNames])
             .Where(
-                v => context.BoundVariables.Contains(v) && v != bindingName && !localFunctionLiftedNames.ContainsKey(v))
+                v =>
+                context.BoundVariables.Contains(v) &&
+                v != bindingName &&
+                !siblingsWithoutExternalCaptures.Contains(v))
             .OrderBy(v => v)
             .ToList();
 
@@ -752,7 +885,31 @@ public static class LambdaLifting
                 funcBodyContext,
                 liftedFunctions);
 
-        var substitutedBody = SubstituteVariableReferences(transformedBody, localFunctionLiftedNames);
+        // Substitute self and the substitutable siblings (those with no
+        // external captures) with their lifted names. Siblings that have
+        // external captures are intentionally NOT in this map; they remain
+        // as references and resolve to the let binding which holds the
+        // sibling's partial application.
+        var substitutions =
+            new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                [bindingName] = liftedFunctionName,
+            };
+
+        foreach (var (siblingName, siblingLifted) in localFunctionLiftedNames)
+        {
+            if (siblingName == bindingName)
+            {
+                continue;
+            }
+
+            if (siblingsWithoutExternalCaptures.Contains(siblingName))
+            {
+                substitutions[siblingName] = siblingLifted;
+            }
+        }
+
+        var substitutedBody = SubstituteVariableReferences(transformedBody, substitutions);
 
         // Create the lifted function
         var liftedFuncDecl =

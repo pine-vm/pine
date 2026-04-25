@@ -207,7 +207,7 @@ public abstract record ElmValue
             if (arguments[0] is ElmPineBlob blobArgument)
             {
                 var stringFromBlob =
-                    Pine.Core.CommonEncodings.StringEncoding.StringFromBlobValue(blobArgument.Value);
+                    StringEncoding.StringFromBlobValue(blobArgument.Value);
 
                 if (stringFromBlob.IsOkOrNull() is { } decoded)
                 {
