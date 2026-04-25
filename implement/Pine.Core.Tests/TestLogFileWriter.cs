@@ -429,7 +429,11 @@ internal static class TestLogFileWriter
             };
     }
 
-    private static void PumpWindowsPipe(IntPtr readHandle, IntPtr terminalHandle, FileStream logFile, object logFileLock)
+    private static void PumpWindowsPipe(
+        IntPtr readHandle,
+        IntPtr terminalHandle,
+        FileStream logFile,
+        object logFileLock)
     {
         var buffer = new byte[4096];
 
@@ -611,17 +615,11 @@ internal static class TestLogFileWriter
         return "\"" + arg.Replace("\"", "\\\"") + "\"";
     }
 
-    private sealed class TeeTextWriter : TextWriter
+    private sealed class TeeTextWriter(TextWriter first, TextWriter second) : TextWriter
     {
-        private readonly TextWriter _first;
+        private readonly TextWriter _first = first;
 
-        private readonly TextWriter _second;
-
-        public TeeTextWriter(TextWriter first, TextWriter second)
-        {
-            _first = first;
-            _second = second;
-        }
+        private readonly TextWriter _second = second;
 
         public override Encoding Encoding => _first.Encoding;
 
