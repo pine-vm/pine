@@ -42,11 +42,11 @@
 
   <ItemGroup>
     <PackageReference Include="GitCore" Version="0.2.4" />
-    <PackageReference Include="Microsoft.Extensions.FileProviders.Embedded" Version="10.0.5" />
+    <PackageReference Include="Microsoft.Extensions.FileProviders.Embedded" Version="10.0.7" />
     <PackageReference Include="ReadLine" Version="2.0.1" />
-    <PackageReference Include="SharpCompress" Version="0.47.3" />
+    <PackageReference Include="SharpCompress" Version="0.47.4" />
     <PackageReference Include="StreamJsonRpc" Version="2.24.84" />
-    <PackageReference Include="System.CommandLine" Version="2.0.5" />
+    <PackageReference Include="System.CommandLine" Version="2.0.7" />
     <PackageReference Include="TupleAsJsonArray" Version="1.0.2" />
   </ItemGroup>
 
