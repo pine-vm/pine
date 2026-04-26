@@ -1332,6 +1332,12 @@ public static class FormatCSharpFile
             var orig = stmts[i];
             var fmt = (StatementSyntax)FormatNode(orig, ctx);
 
+            // Labeled statements are placed flush left (column 0), matching the
+            // editorconfig setting csharp_indent_labels = flush_left and the
+            // behavior of dotnet format. All other statements use the block's
+            // indent level.
+            var stmtIndent = orig is LabeledStatementSyntax ? 0 : ctx.IndentLevel;
+
             // Preserve trailing comments
             var trailingComments = StripWhitespace(fmt.GetTrailingTrivia());
 
@@ -1372,19 +1378,19 @@ public static class FormatCSharpFile
                     var existingBreaks = CountLineBreaks(leading);
 
                     if (existingBreaks < 1)
-                        fmt = fmt.WithLeadingTrivia(EnsureLeadingBreaks(leading, 1, ctx.IndentLevel));
+                        fmt = fmt.WithLeadingTrivia(EnsureLeadingBreaks(leading, 1, stmtIndent));
 
                     else
-                        fmt = fmt.WithLeadingTrivia(RebuildLeading(leading, ctx.IndentLevel));
+                        fmt = fmt.WithLeadingTrivia(RebuildLeading(leading, stmtIndent));
                 }
                 else
                 {
-                    fmt = fmt.WithLeadingTrivia(RebuildLeading(fmt.GetLeadingTrivia(), ctx.IndentLevel));
+                    fmt = fmt.WithLeadingTrivia(RebuildLeading(fmt.GetLeadingTrivia(), stmtIndent));
                 }
             }
             else
             {
-                fmt = fmt.WithLeadingTrivia(RebuildLeading(fmt.GetLeadingTrivia(), ctx.IndentLevel));
+                fmt = fmt.WithLeadingTrivia(RebuildLeading(fmt.GetLeadingTrivia(), stmtIndent));
             }
 
             result.Add(fmt);

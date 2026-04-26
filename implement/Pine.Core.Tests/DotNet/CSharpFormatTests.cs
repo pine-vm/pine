@@ -5976,4 +5976,31 @@ public class CSharpFormatTests
 
         AssertFormattedSyntax(input, expected, scriptMode: true);
     }
+
+    [Fact]
+    public void Preserves_labeled_statement_flush_left()
+    {
+        // Regression test: csharp_indent_labels = flush_left in .editorconfig
+        // means goto-labels must remain at column 0, matching dotnet format.
+        // Previously the formatter re-indented labeled statements to the
+        // enclosing block's indent level.
+        var input =
+            """"
+            class C
+            {
+                void M()
+                {
+                    for (int i = 0; i < 10; i++)
+                    {
+                        if (i is 5)
+                            goto nextParam;
+                    }
+
+            nextParam:;
+                }
+            }
+            """";
+
+        AssertFormattedSyntax(input, input, scriptMode: false);
+    }
 }
