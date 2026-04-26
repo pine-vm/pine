@@ -141,6 +141,38 @@ The following are general rules we use to compose the list of functions in the e
 + All functions in a group of mutually recursive functions ([strongly connected component](https://en.wikipedia.org/wiki/Strongly_connected_component)) use the same order. This makes it easier to model invocations in the recursive set, since we can forward the entire list rather than individual items.
 + The order is the SCC members in stable sorted order (typically alphabetical by qualified name) so that emission is deterministic across compilations.
 
+#### Forwarding the Env-Functions List on Same-SCC Calls
+
+Because every member of an SCC shares the **same** env-functions list — the SCC
+member list in stable sorted order, identical for all members — a same-SCC call
+site does **not** need to rebuild the env-functions list element by element.
+The caller's `current_env[0]` is exactly the value the callee expects to see
+at `env[0]`. Saturated same-SCC call sites therefore forward
+`current_env[0]` as a single value (one path-read), instead of emitting one
+path-read per SCC member followed by a `Build_List`.
+
+For example, for an SCC `{f, g}` of two mutually recursive single-argument
+functions, a call from `f` to `g` emits the call environment as
+
+```txt
+[ current_env[0]
+, arg0
+]
+```
+
+rather than the previous shape
+
+```txt
+[ [ current_env[0][0], current_env[0][1] ]
+, arg0
+]
+```
+
+This applies only to **same-SCC** callees. Cross-SCC callees still inline the
+callee's env-functions list as a literal value at the call site (see Form A
+under *"Storing Compiled Functions and Two Call-Site Forms"*); their
+env-functions list is generally a different list from the caller's.
+
 ### Function Values And Generic Function Application
 
 The Elm programming language supports first-class functions and partial application. When a function whose declaration we know (it is not a parameter in the current context) escapes the current context, the Elm compiler emits a representation of this function as a value that can then be freely passed around to other parts of the program and applied sometime later.

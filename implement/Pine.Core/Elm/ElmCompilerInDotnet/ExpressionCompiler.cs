@@ -596,49 +596,25 @@ public class ExpressionCompiler
 
                 if (functionIndexOpt is { } functionIndex)
                 {
-                    // Same-SCC callee — read the encoded body and the env-functions
-                    // entries from the caller's runtime env at index 0.
+                    // Same-SCC callee — read the encoded body from the caller's
+                    // runtime env at [0, functionIndex], and forward the entire
+                    // env-functions list (env[0]) as a whole.
+                    //
+                    // All members of an SCC share the same env-functions list
+                    // layout (the SCC member list, in stable order). The caller
+                    // is itself an SCC member, so its env[0] is exactly the
+                    // env-functions list the callee expects. Forwarding env[0]
+                    // as a single value avoids materialising a fresh list with
+                    // one Build_List + N path-reads per call.
                     functionRef =
                         ExpressionBuilder.BuildExpressionForPathInExpression(
                             [0, functionIndex],
                             Expression.EnvironmentInstance);
 
-                    // Build the environment for the called function.
-                    if (context.ModuleCompilationContext.TryGetDependencyLayout(qualifiedFunctionName) is { } calledFuncLayout &&
-                        calledFuncLayout.Count > 0)
-                    {
-                        var envFunctionExpressions = new List<Expression>();
-
-                        foreach (var depName in calledFuncLayout)
-                        {
-                            if (context.GetFunctionIndexInLayout(depName) is { } depIndex)
-                            {
-                                var depRef =
-                                    ExpressionBuilder.BuildExpressionForPathInExpression(
-                                        [0, depIndex],
-                                        Expression.EnvironmentInstance);
-
-                                envFunctionExpressions.Add(depRef);
-                            }
-                            else
-                            {
-                                // §7.6b: should be unreachable for same-SCC callees,
-                                // since their layout is identical to the caller's
-                                // (both are the SCC member list). Kept as a defensive
-                                // check for compiler bugs.
-                                return new CompilationError.FunctionNotInDependencyLayout(depName);
-                            }
-                        }
-
-                        callEnvFunctions = Expression.ListInstance(envFunctionExpressions);
-                    }
-                    else
-                    {
-                        callEnvFunctions =
-                            ExpressionBuilder.BuildExpressionForPathInExpression(
-                                [0],
-                                Expression.EnvironmentInstance);
-                    }
+                    callEnvFunctions =
+                        ExpressionBuilder.BuildExpressionForPathInExpression(
+                            [0],
+                            Expression.EnvironmentInstance);
                 }
                 else
                 {

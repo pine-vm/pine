@@ -410,7 +410,7 @@ public class FunctionApplicationOverheadTests
             """
             InstructionCount: 63
             InvocationCount: 6
-            BuildListCount: 8
+            BuildListCount: 5
             LoopIterationCount: 0
             """);
     }
@@ -491,7 +491,7 @@ public class FunctionApplicationOverheadTests
             """
             InstructionCount: 225
             InvocationCount: 9
-            BuildListCount: 14
+            BuildListCount: 8
             LoopIterationCount: 0
             """);
 
@@ -526,7 +526,7 @@ public class FunctionApplicationOverheadTests
         frame0.Should().Be(
             """
             0: Push_Literal (List [20] (20))
-            1: Push_Literal (List [2] (847))
+            1: Push_Literal (List [2] (831))
             2: Parse_And_Eval_Binary
             3: Return
             """);
@@ -542,7 +542,7 @@ public class FunctionApplicationOverheadTests
             0: Push_Literal (List [0] (0))
             1: Local_Get (0)
             2: Build_List (2)
-            3: Push_Literal (List [2] (830))
+            3: Push_Literal (List [2] (814))
             4: Parse_And_Eval_Binary
             5: Return
             """);
@@ -555,10 +555,10 @@ public class FunctionApplicationOverheadTests
 
         frame2.Should().Be(
             """
-            0: Push_Literal (List [1] (399))
+            0: Push_Literal (List [1] (391))
             1: Local_Get (0)
             2: Build_List (2)
-            3: Push_Literal (List [2] (398))
+            3: Push_Literal (List [2] (390))
             4: Parse_And_Eval_Binary
             5: Return
             """);
@@ -571,7 +571,7 @@ public class FunctionApplicationOverheadTests
 
         frame3.Should().Be(
             """
-             0: Local_Get (0)
+             0: Local_Get (1)
              1: Skip_Const (1)
              2: Local_Set (2)
              3: Skip_Const (1)
@@ -586,26 +586,26 @@ public class FunctionApplicationOverheadTests
             12: Jump_If_Equal_Const (Blob [1] (0x04) , 3)
             13: Push_Literal (Blob [1] (0x02))
             14: Jump_Const (4)
-            15: Local_Get (0)
+            15: Local_Get (1)
             16: Length_Equal_Const (0)
             17: Equal_Binary_Const (Blob [1] (0x02))
             18: Jump_If_Equal_Const (Blob [1] (0x04) , 3)
             19: Push_Literal (List [0] (0))
             20: Return
-            21: Local_Get (0)
+            21: Local_Get (1)
             22: Head_Generic
-            23: Local_Get (0)
+            23: Local_Get (1)
             24: Skip_Head_Const (1)
             25: Int_Add_Binary
             26: Local_Get (2)
             27: Skip_Head_Const (1)
             28: Int_Add_Binary
-            29: Local_Get (1)
-            30: Build_List (1)
-            31: Local_Get (3)
-            32: Skip_Const (1)
-            33: Build_List (2)
-            34: Local_Get (1)
+            29: Local_Get (0)
+            30: Local_Get (3)
+            31: Skip_Const (1)
+            32: Build_List (2)
+            33: Local_Get (0)
+            34: Head_Generic
             35: Parse_And_Eval_Binary
             36: Prepend_List_Items (1)
             37: Return
@@ -619,7 +619,7 @@ public class FunctionApplicationOverheadTests
 
         frame4.Should().Be(
             """
-             0: Local_Get (0)
+             0: Local_Get (1)
              1: Skip_Const (1)
              2: Local_Set (2)
              3: Skip_Const (1)
@@ -634,26 +634,26 @@ public class FunctionApplicationOverheadTests
             12: Jump_If_Equal_Const (Blob [1] (0x04) , 3)
             13: Push_Literal (Blob [1] (0x02))
             14: Jump_Const (4)
-            15: Local_Get (0)
+            15: Local_Get (1)
             16: Length_Equal_Const (0)
             17: Equal_Binary_Const (Blob [1] (0x02))
             18: Jump_If_Equal_Const (Blob [1] (0x04) , 3)
             19: Push_Literal (List [0] (0))
             20: Return
-            21: Local_Get (0)
+            21: Local_Get (1)
             22: Head_Generic
-            23: Local_Get (0)
+            23: Local_Get (1)
             24: Skip_Head_Const (1)
             25: Int_Add_Binary
             26: Local_Get (2)
             27: Skip_Head_Const (1)
             28: Int_Add_Binary
-            29: Local_Get (1)
-            30: Build_List (1)
-            31: Local_Get (3)
-            32: Skip_Const (1)
-            33: Build_List (2)
-            34: Local_Get (1)
+            29: Local_Get (0)
+            30: Local_Get (3)
+            31: Skip_Const (1)
+            32: Build_List (2)
+            33: Local_Get (0)
+            34: Head_Generic
             35: Parse_And_Eval_Binary
             36: Prepend_List_Items (1)
             37: Return
@@ -751,7 +751,7 @@ public class FunctionApplicationOverheadTests
             """
             InstructionCount: 330
             InvocationCount: 24
-            BuildListCount: 44
+            BuildListCount: 24
             LoopIterationCount: 0
             """);
     }
@@ -787,9 +787,9 @@ public class FunctionApplicationOverheadTests
 
         PerformanceCountersFormatting.FormatCounts(report).Should().Be(
             """
-            InstructionCount: 66
+            InstructionCount: 63
             InvocationCount: 6
-            BuildListCount: 8
+            BuildListCount: 5
             LoopIterationCount: 0
             """);
     }
@@ -832,9 +832,9 @@ public class FunctionApplicationOverheadTests
 
         PerformanceCountersFormatting.FormatCounts(report).Should().Be(
             """
-            InstructionCount: 350
+            InstructionCount: 330
             InvocationCount: 24
-            BuildListCount: 44
+            BuildListCount: 24
             LoopIterationCount: 0
             """);
     }
@@ -867,7 +867,7 @@ public class FunctionApplicationOverheadTests
             """
             InstructionCount: 63
             InvocationCount: 6
-            BuildListCount: 8
+            BuildListCount: 5
             LoopIterationCount: 0
             """);
     }
@@ -908,7 +908,7 @@ public class FunctionApplicationOverheadTests
             """
             InstructionCount: 330
             InvocationCount: 24
-            BuildListCount: 44
+            BuildListCount: 24
             LoopIterationCount: 0
             """);
     }
