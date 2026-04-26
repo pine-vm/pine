@@ -287,9 +287,9 @@ public class ElmParserExpressionTests
 
         PerformanceCountersFormatting.FormatCounts(report).Should().Be(
             """
-            InstructionCount: 9_373
-            InvocationCount: 288
-            BuildListCount: 1_743
+            InstructionCount: 9_321
+            InvocationCount: 280
+            BuildListCount: 1_687
             LoopIterationCount: 0
             """);
     }
@@ -307,9 +307,9 @@ public class ElmParserExpressionTests
 
         PerformanceCountersFormatting.FormatCounts(report).Should().Be(
             """
-            InstructionCount: 27_637
+            InstructionCount: 27_617
             InvocationCount: 1_440
-            BuildListCount: 4_191
+            BuildListCount: 4_175
             LoopIterationCount: 0
             """);
     }
@@ -323,9 +323,9 @@ public class ElmParserExpressionTests
 
         PerformanceCountersFormatting.FormatCounts(report.VmCounters).Should().Be(
             """
-            InstructionCount: 6_782
+            InstructionCount: 6_762
             InvocationCount: 256
-            BuildListCount: 1_424
+            BuildListCount: 1_408
             LoopIterationCount: 0
             """);
 
@@ -339,8 +339,8 @@ public class ElmParserExpressionTests
         ElmSyntaxInterpreterPerformanceCountersFormatting.FormatCounts(report.InterpreterCounters)
             .Should().Be(
                 """
-                InstructionLoopCount: 2_186
-                DirectFunctionApplicationCount: 339
+                InstructionLoopCount: 2_177
+                DirectFunctionApplicationCount: 337
                 FunctionValueApplicationCount: 50
                 PineBuiltinInvocationCount: 116
                 """);
@@ -359,9 +359,9 @@ public class ElmParserExpressionTests
 
         PerformanceCountersFormatting.FormatCounts(report).Should().Be(
             """
-            InstructionCount: 11_123
+            InstructionCount: 11_103
             InvocationCount: 310
-            BuildListCount: 3_375
+            BuildListCount: 3_359
             LoopIterationCount: 0
             """);
     }
@@ -378,9 +378,9 @@ public class ElmParserExpressionTests
 
         PerformanceCountersFormatting.FormatCounts(report.VmCounters).Should().Be(
             """
-            InstructionCount: 84_259
-            InvocationCount: 2_494
-            BuildListCount: 16_807
+            InstructionCount: 83_823
+            InvocationCount: 2_430
+            BuildListCount: 16_343
             LoopIterationCount: 0
             """);
 
@@ -391,10 +391,10 @@ public class ElmParserExpressionTests
         ElmSyntaxInterpreterPerformanceCountersFormatting.FormatCounts(report.InterpreterCounters)
             .Should().Be(
                 """
-                InstructionLoopCount: 4_315
-                DirectFunctionApplicationCount: 718
+                InstructionLoopCount: 4_256
+                DirectFunctionApplicationCount: 708
                 FunctionValueApplicationCount: 106
-                PineBuiltinInvocationCount: 169
+                PineBuiltinInvocationCount: 166
                 """);
     }
 
@@ -426,19 +426,19 @@ public class ElmParserExpressionTests
 
         PerformanceCountersFormatting.FormatCounts(report.VmCounters).Should().Be(
             """
-            InstructionCount: 94_094
-            InvocationCount: 2_627
-            BuildListCount: 21_524
+            InstructionCount: 93_658
+            InvocationCount: 2_563
+            BuildListCount: 21_060
             LoopIterationCount: 0
             """);
 
         ElmSyntaxInterpreterPerformanceCountersFormatting.FormatCounts(report.InterpreterCounters)
             .Should().Be(
                 """
-                InstructionLoopCount: 4_216
-                DirectFunctionApplicationCount: 695
+                InstructionLoopCount: 4_157
+                DirectFunctionApplicationCount: 685
                 FunctionValueApplicationCount: 103
-                PineBuiltinInvocationCount: 169
+                PineBuiltinInvocationCount: 166
                 """);
     }
 
@@ -467,9 +467,9 @@ public class ElmParserExpressionTests
 
         PerformanceCountersFormatting.FormatCounts(report).Should().Be(
             """
-            InstructionCount: 858_419
-            InvocationCount: 25_614
-            BuildListCount: 158_471
+            InstructionCount: 854_303
+            InvocationCount: 24_910
+            BuildListCount: 153_911
             LoopIterationCount: 0
             """);
     }
@@ -491,9 +491,9 @@ public class ElmParserExpressionTests
 
         PerformanceCountersFormatting.FormatCounts(report).Should().Be(
             """
-            InstructionCount: 2_041_350
-            InvocationCount: 77_768
-            BuildListCount: 199_403
+            InstructionCount: 2_040_542
+            InvocationCount: 77_731
+            BuildListCount: 198_690
             LoopIterationCount: 0
             """);
     }
@@ -553,9 +553,9 @@ public class ElmParserExpressionTests
 
         PerformanceCountersFormatting.FormatCounts(report).Should().Be(
             """
-            InstructionCount: 3_518_795
-            InvocationCount: 106_494
-            BuildListCount: 645_191
+            InstructionCount: 3_502_439
+            InvocationCount: 103_630
+            BuildListCount: 626_951
             LoopIterationCount: 0
             """);
     }
@@ -639,9 +639,9 @@ public class ElmParserExpressionTests
 
         PerformanceCountersFormatting.FormatCounts(report).Should().Be(
             """
-            InstructionCount: 29_545_859
-            InvocationCount: 894_406
-            BuildListCount: 5_447_823
+            InstructionCount: 29_406_015
+            InvocationCount: 870_470
+            BuildListCount: 5_292_863
             LoopIterationCount: 0
             """);
     }

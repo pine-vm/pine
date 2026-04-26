@@ -10,6 +10,34 @@ using SyntaxTypes = Pine.Core.Elm.ElmSyntax.Stil4mElmSyntax7;
 namespace Pine.Core.Elm.ElmCompilerInDotnet;
 
 /// <summary>
+/// Constraint on a type variable, mirroring Elm's built-in constrained type variables.
+/// </summary>
+public enum TypeVariableConstraint
+{
+    /// <summary>No constraint (free type variable). Unifies with any type.</summary>
+    None = 0,
+
+    /// <summary>The Elm <c>number</c> constraint: unifies with <c>Int</c> or <c>Float</c>.</summary>
+    Number = 1,
+
+    /// <summary>
+    /// The Elm <c>comparable</c> constraint: unifies with <c>Int</c>, <c>Float</c>, <c>Char</c>,
+    /// <c>String</c>, lists of comparable, and tuples of comparable.
+    /// </summary>
+    Comparable = 2,
+
+    /// <summary>
+    /// The Elm <c>appendable</c> constraint: unifies with <c>String</c> and <c>List a</c>.
+    /// </summary>
+    Appendable = 3,
+
+    /// <summary>
+    /// The Elm <c>compappend</c> constraint: unifies with <c>String</c> and <c>List comparable</c>.
+    /// </summary>
+    CompAppend = 4,
+}
+
+/// <summary>
 /// Type inference for Elm expressions.
 /// This module determines the types of expressions to enable proper code generation.
 /// </summary>
@@ -75,9 +103,118 @@ public static class TypeInference
         public sealed record TupleType(IReadOnlyList<InferredType> ElementTypes)
             : InferredType;
 
-        /// <summary>Record type with field names and their types (sorted alphabetically by field name).</summary>
+        /// <summary>
+        /// Closed record type with field names and their types (sorted alphabetically by field name).
+        /// "Closed" means the full set of field names is known: any record value of this type
+        /// has exactly these fields, no more.
+        /// </summary>
         public sealed record RecordType(IReadOnlyList<(string FieldName, InferredType FieldType)> Fields)
-            : InferredType;
+            : InferredType
+        {
+            /// <inheritdoc/>
+            public bool Equals(RecordType? other)
+            {
+                if (ReferenceEquals(this, other))
+                    return true;
+
+                if (other is null)
+                    return false;
+
+                if (Fields.Count != other.Fields.Count)
+                    return false;
+
+                for (var i = 0; i < Fields.Count; i++)
+                {
+                    if (Fields[i].FieldName != other.Fields[i].FieldName)
+                        return false;
+
+                    if (!Equals(Fields[i].FieldType, other.Fields[i].FieldType))
+                        return false;
+                }
+
+                return true;
+            }
+
+            /// <inheritdoc/>
+            public override int GetHashCode()
+            {
+                var hash = new HashCode();
+
+                hash.Add(typeof(RecordType));
+
+                foreach (var (name, type) in Fields)
+                {
+                    hash.Add(name);
+                    hash.Add(type);
+                }
+
+                return hash.ToHashCode();
+            }
+        }
+
+        /// <summary>
+        /// Open / extensible record type, written in Elm as <c>{ r | f : T, g : U }</c>.
+        /// <see cref="ExtensionVariable"/> stands in for "any further fields the record may also have"
+        /// (the row variable). <see cref="KnownFields"/> are the fields the record is known to have,
+        /// sorted alphabetically by field name.
+        ///
+        /// Open records arise in two situations:
+        /// <list type="bullet">
+        /// <item>From a record extension annotation in source, e.g. <c>{ r | name : String } -&gt; String</c>.</item>
+        /// <item>From inferring constraints on a value used through record access (<c>x.foo</c>) or
+        /// record update (<c>{ x | foo = ... }</c>), where we learn that <c>x</c> must have field <c>foo</c>
+        /// but the full record shape is not yet known.</item>
+        /// </list>
+        /// </summary>
+        public sealed record OpenRecordType(
+            string ExtensionVariable,
+            IReadOnlyList<(string FieldName, InferredType FieldType)> KnownFields)
+            : InferredType
+        {
+            /// <inheritdoc/>
+            public bool Equals(OpenRecordType? other)
+            {
+                if (ReferenceEquals(this, other))
+                    return true;
+
+                if (other is null)
+                    return false;
+
+                if (ExtensionVariable != other.ExtensionVariable)
+                    return false;
+
+                if (KnownFields.Count != other.KnownFields.Count)
+                    return false;
+
+                for (var i = 0; i < KnownFields.Count; i++)
+                {
+                    if (KnownFields[i].FieldName != other.KnownFields[i].FieldName)
+                        return false;
+
+                    if (!Equals(KnownFields[i].FieldType, other.KnownFields[i].FieldType))
+                        return false;
+                }
+
+                return true;
+            }
+
+            /// <inheritdoc/>
+            public override int GetHashCode()
+            {
+                var hash = new HashCode();
+
+                hash.Add(typeof(OpenRecordType));
+                hash.Add(ExtensionVariable);
+
+                foreach (var (name, type) in KnownFields)
+                {
+                    hash.Add(name);
+                    hash.Add(type);
+                }
+
+                return hash.ToHashCode();
+            }
+        }
 
         /// <summary>Function type with argument type and return type.</summary>
         public sealed record FunctionType(InferredType ArgumentType, InferredType ReturnType)
@@ -91,8 +228,14 @@ public static class TypeInference
         public sealed record ChoiceType(IReadOnlyList<string> ModuleName, string TypeName, IReadOnlyList<InferredType> TypeArguments)
             : InferredType;
 
-        /// <summary>Type variable (e.g., 'a', 'b' in generic type definitions).</summary>
-        public sealed record TypeVariable(string Name)
+        /// <summary>
+        /// Type variable (e.g. <c>a</c>, <c>b</c> in generic type definitions, or constrained
+        /// variables like Elm's <c>number</c>, <c>comparable</c>, <c>appendable</c>, <c>compappend</c>).
+        /// The <see cref="Constraint"/> selects which family of concrete types the variable can
+        /// unify with. <see cref="TypeVariableConstraint.None"/> means the variable can unify with
+        /// any type (a free type variable).
+        /// </summary>
+        public sealed record TypeVariable(string Name, TypeVariableConstraint Constraint = TypeVariableConstraint.None)
             : InferredType;
 
         /// <summary>Unknown or unresolved type.</summary>
@@ -157,10 +300,21 @@ public static class TypeInference
     private static readonly InferredType.UnknownType s_unknownType = new();
 
     /// <summary>
-    /// Unifies two inferred types, returning the more specific type when possible.
-    /// For example, Int and number unify to Int (Int is more specific than number).
+    /// Shared <c>appendable</c>-constrained type variable used as the operand/result type for
+    /// the <c>++</c> operator. Unifying a parameter with this variable records the
+    /// "must be appendable" constraint on the parameter; later unification with a concrete
+    /// <c>String</c> or <c>List a</c> specializes it.
     /// </summary>
-    private static InferredType UnifyTypes(InferredType type1, InferredType type2)
+    private static readonly InferredType.TypeVariable s_appendableTypeVar =
+        new("appendable", TypeVariableConstraint.Appendable);
+
+    /// <summary>
+    /// Tries to unify two inferred types, returning the more specific type when possible.
+    /// Returns an Ok result on success, or an Err describing the conflict on failure.
+    /// For example, <c>Int</c> and <c>number</c> unify to <c>Int</c> (Int is more specific than number);
+    /// <c>Int</c> and <c>Float</c>, or two closed records with different field sets, fail to unify.
+    /// </summary>
+    public static Result<string, InferredType> TryUnify(InferredType type1, InferredType type2)
     {
         // If types are equal, return either
         if (type1.Equals(type2))
@@ -173,108 +327,472 @@ public static class TypeInference
         if (type2 is InferredType.UnknownType)
             return type1;
 
-        // Number is the polymorphic numeric type - more specific numeric types take precedence
-        // Int is more specific than number
-        if (type1 is InferredType.NumberType && type2 is InferredType.IntType)
-            return type2;
+        // Type variables (free or constrained) - delegate to dedicated handler
+        if (type1 is InferredType.TypeVariable tv1)
+        {
+            return TryUnifyTypeVariable(tv1, type2);
+        }
 
-        if (type1 is InferredType.IntType && type2 is InferredType.NumberType)
-            return type1;
+        if (type2 is InferredType.TypeVariable tv2)
+        {
+            return TryUnifyTypeVariable(tv2, type1);
+        }
 
-        // Float is more specific than number
-        if (type1 is InferredType.NumberType && type2 is InferredType.FloatType)
-            return type2;
+        // NumberType is the polymorphic numeric type - more specific numeric types take precedence
+        if (type1 is InferredType.NumberType)
+        {
+            if (type2 is InferredType.IntType or InferredType.FloatType or InferredType.NumberType)
+                return type2;
 
-        if (type1 is InferredType.FloatType && type2 is InferredType.NumberType)
-            return type1;
+            return $"Cannot unify number with {DescribeType(type2)}.";
+        }
 
-        // If one is Int and other is Float, they don't unify (this is a type error in Elm)
-        // Return the first one (arbitrary choice since this shouldn't happen in valid Elm code)
+        if (type2 is InferredType.NumberType)
+        {
+            if (type1 is InferredType.IntType or InferredType.FloatType)
+                return type1;
+
+            return $"Cannot unify {DescribeType(type1)} with number.";
+        }
+
+        // Int and Float don't unify
         if ((type1 is InferredType.IntType && type2 is InferredType.FloatType) ||
             (type1 is InferredType.FloatType && type2 is InferredType.IntType))
-            return type1;
+        {
+            return $"Cannot unify {DescribeType(type1)} with {DescribeType(type2)}.";
+        }
 
         // For list types, unify element types
         if (type1 is InferredType.ListType list1 && type2 is InferredType.ListType list2)
         {
-            var unifiedElement = UnifyTypes(list1.ElementType, list2.ElementType);
-            return new InferredType.ListType(unifiedElement);
+            return TryUnify(list1.ElementType, list2.ElementType) switch
+            {
+                Result<string, InferredType>.Ok ok => (InferredType)new InferredType.ListType(ok.Value),
+                Result<string, InferredType>.Err err => $"In list element type: {err.Value}",
+
+                _ =>
+                "Unexpected unification result.",
+            };
         }
 
         // For tuple types, unify element types
-        if (type1 is InferredType.TupleType tuple1 && type2 is InferredType.TupleType tuple2 &&
-            tuple1.ElementTypes.Count == tuple2.ElementTypes.Count)
+        if (type1 is InferredType.TupleType tuple1 && type2 is InferredType.TupleType tuple2)
         {
-            var unifiedElements = new List<InferredType>();
+            if (tuple1.ElementTypes.Count != tuple2.ElementTypes.Count)
+            {
+                return $"Cannot unify tuple of arity {tuple1.ElementTypes.Count} with tuple of arity {tuple2.ElementTypes.Count}.";
+            }
+
+            var unifiedElements = new List<InferredType>(tuple1.ElementTypes.Count);
 
             for (var i = 0; i < tuple1.ElementTypes.Count; i++)
             {
-                unifiedElements.Add(UnifyTypes(tuple1.ElementTypes[i], tuple2.ElementTypes[i]));
+                var elemResult = TryUnify(tuple1.ElementTypes[i], tuple2.ElementTypes[i]);
+
+                if (elemResult is Result<string, InferredType>.Err elemErr)
+                    return $"In tuple element {i}: {elemErr.Value}";
+
+                if (elemResult is Result<string, InferredType>.Ok elemOk)
+                    unifiedElements.Add(elemOk.Value);
             }
 
-            return new InferredType.TupleType(unifiedElements);
+            return (InferredType)new InferredType.TupleType(unifiedElements);
         }
 
         // For function types, unify argument and return types
         if (type1 is InferredType.FunctionType func1 && type2 is InferredType.FunctionType func2)
         {
-            var unifiedArg = UnifyTypes(func1.ArgumentType, func2.ArgumentType);
-            var unifiedRet = UnifyTypes(func1.ReturnType, func2.ReturnType);
-            return new InferredType.FunctionType(unifiedArg, unifiedRet);
+            var argResult = TryUnify(func1.ArgumentType, func2.ArgumentType);
+
+            if (argResult is Result<string, InferredType>.Err argErr)
+                return $"In function argument: {argErr.Value}";
+
+            var retResult = TryUnify(func1.ReturnType, func2.ReturnType);
+
+            if (retResult is Result<string, InferredType>.Err retErr)
+                return $"In function return: {retErr.Value}";
+
+            var argOk = ((Result<string, InferredType>.Ok)argResult).Value;
+            var retOk = ((Result<string, InferredType>.Ok)retResult).Value;
+
+            return (InferredType)new InferredType.FunctionType(argOk, retOk);
         }
 
-        // For record types with same fields, unify field types (comparing by name, not position)
-        if (type1 is InferredType.RecordType record1 && type2 is InferredType.RecordType record2 &&
-            record1.Fields.Count == record2.Fields.Count)
+        // Record types - four cases (closed/closed, open/closed, closed/open, open/open)
+        if (type1 is InferredType.RecordType closed1)
         {
-            // Create a lookup for record2 fields by name
-            var record2FieldsByName = record2.Fields.ToDictionary(f => f.FieldName, f => f.FieldType);
+            if (type2 is InferredType.RecordType closed2)
+                return TryUnifyClosedRecords(closed1, closed2);
 
-            // Check if all fields from record1 exist in record2 and unify their types
-            var unifiedFields = new List<(string FieldName, InferredType FieldType)>();
-
-            foreach (var field1 in record1.Fields)
-            {
-                if (!record2FieldsByName.TryGetValue(field1.FieldName, out var field2Type))
-                {
-                    // Field name not found in record2 - records have different structure
-                    // Return type1 as fallback since we can't unify incompatible record types
-                    return type1;
-                }
-
-                unifiedFields.Add((field1.FieldName, UnifyTypes(field1.FieldType, field2Type)));
-            }
-
-            return new InferredType.RecordType(unifiedFields);
+            if (type2 is InferredType.OpenRecordType open2a)
+                return TryUnifyOpenWithClosed(open2a, closed1);
         }
 
-        // Type variables can unify with any type - return the concrete type
-        if (type1 is InferredType.TypeVariable)
-            return type2;
+        if (type1 is InferredType.OpenRecordType open1)
+        {
+            if (type2 is InferredType.RecordType closed2b)
+                return TryUnifyOpenWithClosed(open1, closed2b);
 
-        if (type2 is InferredType.TypeVariable)
-            return type1;
+            if (type2 is InferredType.OpenRecordType open2b)
+                return TryUnifyOpenRecords(open1, open2b);
+        }
 
         // For choice types with the same name, unify type arguments
-        if (type1 is InferredType.ChoiceType choice1 && type2 is InferredType.ChoiceType choice2 &&
-            choice1.TypeName == choice2.TypeName &&
-            choice1.ModuleName.SequenceEqual(choice2.ModuleName) &&
-            choice1.TypeArguments.Count == choice2.TypeArguments.Count)
+        if (type1 is InferredType.ChoiceType choice1 && type2 is InferredType.ChoiceType choice2)
         {
-            var unifiedArgs = new List<InferredType>();
+            if (choice1.TypeName != choice2.TypeName ||
+                !choice1.ModuleName.SequenceEqual(choice2.ModuleName))
+            {
+                return $"Cannot unify {DescribeType(type1)} with {DescribeType(type2)}.";
+            }
+
+            if (choice1.TypeArguments.Count != choice2.TypeArguments.Count)
+            {
+                return $"Choice type {choice1.TypeName} arity mismatch: {choice1.TypeArguments.Count} vs {choice2.TypeArguments.Count}.";
+            }
+
+            var unifiedArgs = new List<InferredType>(choice1.TypeArguments.Count);
 
             for (var i = 0; i < choice1.TypeArguments.Count; i++)
             {
-                unifiedArgs.Add(UnifyTypes(choice1.TypeArguments[i], choice2.TypeArguments[i]));
+                var argResult = TryUnify(choice1.TypeArguments[i], choice2.TypeArguments[i]);
+
+                if (argResult is Result<string, InferredType>.Err argErr)
+                    return $"In type argument {i} of {choice1.TypeName}: {argErr.Value}";
+
+                if (argResult is Result<string, InferredType>.Ok argOk)
+                    unifiedArgs.Add(argOk.Value);
             }
 
-            return new InferredType.ChoiceType(choice1.ModuleName, choice1.TypeName, unifiedArgs);
+            return (InferredType)new InferredType.ChoiceType(choice1.ModuleName, choice1.TypeName, unifiedArgs);
         }
 
-        // Types don't unify - return the first one as a fallback
-        // (in a full type system, this would typically be a type error)
-        return type1;
+        return $"Cannot unify {DescribeType(type1)} with {DescribeType(type2)}.";
     }
+
+    /// <summary>
+    /// Backward-compatible silent unification: returns the unified type on success,
+    /// or <paramref name="type1"/> as a fallback when unification fails. New code should
+    /// prefer <see cref="TryUnify"/> so that type conflicts can be reported instead of
+    /// silently swallowed.
+    /// </summary>
+    private static InferredType UnifyTypes(InferredType type1, InferredType type2) =>
+        TryUnify(type1, type2) is Result<string, InferredType>.Ok ok
+        ?
+        ok.Value
+        :
+        type1;
+
+    private static Result<string, InferredType> TryUnifyTypeVariable(
+        InferredType.TypeVariable tv,
+        InferredType other)
+    {
+        // Two type variables: combine constraints, choose a representative name.
+        if (other is InferredType.TypeVariable otherVar)
+        {
+            var combinedConstraint = CombineConstraints(tv.Constraint, otherVar.Constraint);
+
+            if (combinedConstraint is null)
+            {
+                return $"Cannot unify type variable '{tv.Name}' (constraint {ConstraintName(tv.Constraint)}) with type variable '{otherVar.Name}' (constraint {ConstraintName(otherVar.Constraint)}).";
+            }
+
+            // If the variables already have the same name and constraint, return as-is.
+            if (tv.Name == otherVar.Name && tv.Constraint == otherVar.Constraint)
+                return (InferredType)tv;
+
+            // Prefer the side that already carries the (now combined) constraint, otherwise the first.
+            var name =
+                otherVar.Constraint == combinedConstraint && tv.Constraint != combinedConstraint
+                ?
+                otherVar.Name
+                :
+                tv.Name;
+
+            return (InferredType)new InferredType.TypeVariable(name, combinedConstraint.Value);
+        }
+
+        // Concrete type on the other side: must satisfy the variable's constraint.
+        if (!ConstraintAcceptsType(tv.Constraint, other))
+        {
+            return $"Type {DescribeType(other)} does not satisfy constraint '{ConstraintName(tv.Constraint)}'.";
+        }
+
+        // For Number constraint against another Number-constrained value, prefer Number type-token.
+        return other;
+    }
+
+    /// <summary>
+    /// Combines two type-variable constraints, returning <c>null</c> if they are incompatible.
+    /// </summary>
+    /// <remarks>
+    /// The lattice is: <c>None</c> &lt; {<c>Number</c>, <c>Comparable</c>, <c>Appendable</c>} &lt; <c>CompAppend</c>,
+    /// with the caveat that <c>Number</c> is incompatible with <c>Appendable</c> and with <c>CompAppend</c>
+    /// (no Elm type satisfies both). <c>Comparable</c> ∩ <c>Appendable</c> = <c>CompAppend</c>.
+    /// </remarks>
+    private static TypeVariableConstraint? CombineConstraints(
+        TypeVariableConstraint a,
+        TypeVariableConstraint b)
+    {
+        if (a == b)
+            return a;
+
+        if (a == TypeVariableConstraint.None)
+            return b;
+
+        if (b == TypeVariableConstraint.None)
+            return a;
+
+        // Number is incompatible with Appendable / CompAppend (Int and Float are not appendable).
+        if ((a == TypeVariableConstraint.Number &&
+            (b == TypeVariableConstraint.Appendable || b == TypeVariableConstraint.CompAppend)) ||
+            (b == TypeVariableConstraint.Number &&
+            (a == TypeVariableConstraint.Appendable || a == TypeVariableConstraint.CompAppend)))
+        {
+            return null;
+        }
+
+        // Number ∧ Comparable → Number (Int and Float are both comparable).
+        if ((a == TypeVariableConstraint.Number && b == TypeVariableConstraint.Comparable) ||
+            (b == TypeVariableConstraint.Number && a == TypeVariableConstraint.Comparable))
+        {
+            return TypeVariableConstraint.Number;
+        }
+
+        // CompAppend ∧ Comparable → CompAppend; CompAppend ∧ Appendable → CompAppend.
+        if ((a == TypeVariableConstraint.CompAppend &&
+            (b == TypeVariableConstraint.Comparable || b == TypeVariableConstraint.Appendable)) ||
+            (b == TypeVariableConstraint.CompAppend &&
+            (a == TypeVariableConstraint.Comparable || a == TypeVariableConstraint.Appendable)))
+        {
+            return TypeVariableConstraint.CompAppend;
+        }
+
+        // Comparable ∧ Appendable → CompAppend.
+        if ((a == TypeVariableConstraint.Comparable && b == TypeVariableConstraint.Appendable) ||
+            (a == TypeVariableConstraint.Appendable && b == TypeVariableConstraint.Comparable))
+        {
+            return TypeVariableConstraint.CompAppend;
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Returns whether the given concrete type satisfies the given constraint.
+    /// Free type variables (<c>None</c> constraint) accept any type.
+    /// </summary>
+    private static bool ConstraintAcceptsType(TypeVariableConstraint constraint, InferredType type)
+    {
+        switch (constraint)
+        {
+            case TypeVariableConstraint.None:
+                return true;
+
+            case TypeVariableConstraint.Number:
+                return type is InferredType.IntType or InferredType.FloatType or InferredType.NumberType;
+
+            case TypeVariableConstraint.Comparable:
+                if (type is InferredType.IntType or InferredType.FloatType or InferredType.NumberType
+                    or InferredType.CharType or InferredType.StringType)
+                    return true;
+
+                if (type is InferredType.ListType cmpList)
+                    return ConstraintAcceptsType(TypeVariableConstraint.Comparable, cmpList.ElementType);
+
+                if (type is InferredType.TupleType cmpTup)
+                    return cmpTup.ElementTypes.All(e => ConstraintAcceptsType(TypeVariableConstraint.Comparable, e));
+
+                return false;
+
+            case TypeVariableConstraint.Appendable:
+                return type is InferredType.StringType or InferredType.ListType;
+
+            case TypeVariableConstraint.CompAppend:
+                if (type is InferredType.StringType)
+                    return true;
+
+                if (type is InferredType.ListType caList)
+                    return ConstraintAcceptsType(TypeVariableConstraint.Comparable, caList.ElementType);
+
+                return false;
+
+            default:
+                return false;
+        }
+    }
+
+    private static string ConstraintName(TypeVariableConstraint c) =>
+        c switch
+        {
+            TypeVariableConstraint.Number => "number",
+            TypeVariableConstraint.Comparable => "comparable",
+            TypeVariableConstraint.Appendable => "appendable",
+            TypeVariableConstraint.CompAppend => "compappend",
+
+            _ =>
+            "any",
+        };
+
+    private static Result<string, InferredType> TryUnifyClosedRecords(
+        InferredType.RecordType r1,
+        InferredType.RecordType r2)
+    {
+        if (r1.Fields.Count != r2.Fields.Count)
+        {
+            return $"Cannot unify closed record with fields {{{string.Join(", ", r1.Fields.Select(f => f.FieldName))}}} and closed record with fields {{{string.Join(", ", r2.Fields.Select(f => f.FieldName))}}}: different field sets.";
+        }
+
+        var r2ByName = r2.Fields.ToDictionary(f => f.FieldName, f => f.FieldType);
+        var unifiedFields = new List<(string FieldName, InferredType FieldType)>(r1.Fields.Count);
+
+        foreach (var (name, type) in r1.Fields)
+        {
+            if (!r2ByName.TryGetValue(name, out var otherType))
+            {
+                return $"Cannot unify closed records: field '{name}' is missing in the other record.";
+            }
+
+            var fieldResult = TryUnify(type, otherType);
+
+            if (fieldResult is Result<string, InferredType>.Err fieldErr)
+                return $"In record field '{name}': {fieldErr.Value}";
+
+            if (fieldResult is Result<string, InferredType>.Ok fieldOk)
+                unifiedFields.Add((name, fieldOk.Value));
+        }
+
+        unifiedFields.Sort((a, b) => string.CompareOrdinal(a.FieldName, b.FieldName));
+
+        return (InferredType)new InferredType.RecordType(unifiedFields);
+    }
+
+    private static Result<string, InferredType> TryUnifyOpenWithClosed(
+        InferredType.OpenRecordType open,
+        InferredType.RecordType closed)
+    {
+        var closedByName = closed.Fields.ToDictionary(f => f.FieldName, f => f.FieldType);
+        var openByName = open.KnownFields.ToDictionary(f => f.FieldName, f => f.FieldType);
+
+        // Every known field of the open record must exist in the closed record (with unifying type).
+        foreach (var (name, openType) in open.KnownFields)
+        {
+            if (!closedByName.TryGetValue(name, out var closedType))
+            {
+                return $"Cannot unify open record requiring field '{name}' with closed record that lacks it.";
+            }
+
+            var fieldResult = TryUnify(openType, closedType);
+
+            if (fieldResult is Result<string, InferredType>.Err fieldErr)
+                return $"In record field '{name}': {fieldErr.Value}";
+        }
+
+        // Result is the closed record (with unified field types where they overlapped).
+        var unifiedFields = new List<(string FieldName, InferredType FieldType)>(closed.Fields.Count);
+
+        foreach (var (name, type) in closed.Fields)
+        {
+            if (openByName.TryGetValue(name, out var openType))
+            {
+                var fieldResult = TryUnify(openType, type);
+
+                if (fieldResult is Result<string, InferredType>.Ok fieldOk)
+                    unifiedFields.Add((name, fieldOk.Value));
+
+                else
+                    unifiedFields.Add((name, type));
+            }
+            else
+            {
+                unifiedFields.Add((name, type));
+            }
+        }
+
+        unifiedFields.Sort((a, b) => string.CompareOrdinal(a.FieldName, b.FieldName));
+
+        return (InferredType)new InferredType.RecordType(unifiedFields);
+    }
+
+    private static Result<string, InferredType> TryUnifyOpenRecords(
+        InferredType.OpenRecordType a,
+        InferredType.OpenRecordType b)
+    {
+        var merged = new Dictionary<string, InferredType>();
+
+        foreach (var (name, type) in a.KnownFields)
+        {
+            merged[name] = type;
+        }
+
+        foreach (var (name, type) in b.KnownFields)
+        {
+            if (merged.TryGetValue(name, out var existing))
+            {
+                var fieldResult = TryUnify(existing, type);
+
+                if (fieldResult is Result<string, InferredType>.Err fieldErr)
+                    return $"In record field '{name}': {fieldErr.Value}";
+
+                if (fieldResult is Result<string, InferredType>.Ok fieldOk)
+                    merged[name] = fieldOk.Value;
+            }
+            else
+            {
+                merged[name] = type;
+            }
+        }
+
+        // If both open records share an extension variable, keep it; otherwise pick the first.
+        var extVar = a.ExtensionVariable == b.ExtensionVariable ? a.ExtensionVariable : a.ExtensionVariable;
+
+        var fields =
+            merged
+            .Select(kvp => (kvp.Key, kvp.Value))
+            .OrderBy(t => t.Key, StringComparer.Ordinal)
+            .ToList();
+
+        return (InferredType)new InferredType.OpenRecordType(extVar, fields);
+    }
+
+    /// <summary>
+    /// Returns a short, human-readable description of an inferred type, primarily for use in
+    /// unification error messages.
+    /// </summary>
+    private static string DescribeType(InferredType type) =>
+        type switch
+        {
+            InferredType.IntType => "Int",
+            InferredType.FloatType => "Float",
+            InferredType.StringType => "String",
+            InferredType.CharType => "Char",
+            InferredType.BoolType => "Bool",
+            InferredType.NumberType => "number",
+            InferredType.ListType lt => "List " + DescribeType(lt.ElementType),
+            InferredType.TupleType tt => "(" + string.Join(", ", tt.ElementTypes.Select(DescribeType)) + ")",
+
+            InferredType.RecordType rt =>
+            "{ " + string.Join(", ", rt.Fields.Select(f => f.FieldName + " : " + DescribeType(f.FieldType))) + " }",
+
+            InferredType.OpenRecordType ort =>
+            "{ " + ort.ExtensionVariable + " | " +
+            string.Join(", ", ort.KnownFields.Select(f => f.FieldName + " : " + DescribeType(f.FieldType))) +
+            " }",
+
+            InferredType.FunctionType ft => DescribeType(ft.ArgumentType) + " -> " + DescribeType(ft.ReturnType),
+
+            InferredType.ChoiceType ct =>
+            (ct.ModuleName.Count > 0 ? string.Join(".", ct.ModuleName) + "." : "") + ct.TypeName +
+            (ct.TypeArguments.Count > 0 ? " " + string.Join(" ", ct.TypeArguments.Select(DescribeType)) : ""),
+
+            InferredType.TypeVariable tv =>
+            tv.Constraint == TypeVariableConstraint.None ? tv.Name : ConstraintName(tv.Constraint),
+
+            InferredType.UnknownType => "?",
+
+            _ =>
+            type.ToString() ?? "?",
+        };
 
     /// <summary>
     /// Collects substitutions for type variables by matching an expected type against an actual type.
@@ -374,9 +892,100 @@ public static class TypeInference
                 recordType.Fields
                 .Select(f => (f.FieldName, ApplyTypeSubstitutions(f.FieldType, substitutions))).ToList()),
 
+            InferredType.OpenRecordType openRecord =>
+            ApplyTypeSubstitutionsToOpenRecord(openRecord, substitutions),
+
             _ =>
             type
         };
+    }
+
+    /// <summary>
+    /// Substitutes inside an open record. Substituting on the extension variable itself is
+    /// supported in two cases:
+    /// <list type="bullet">
+    /// <item>If the extension is replaced by a closed record, this open record collapses to a
+    /// closed record carrying the union of the open's known fields and the substitute's fields
+    /// (with overlapping field types unified).</item>
+    /// <item>If the extension is replaced by another open record, the two are merged.</item>
+    /// </list>
+    /// Any unification conflict during this collapse is silently ignored (the open record's
+    /// own field type wins), matching the behavior of the legacy <c>UnifyTypes</c>.
+    /// </summary>
+    private static InferredType ApplyTypeSubstitutionsToOpenRecord(
+        InferredType.OpenRecordType openRecord,
+        IReadOnlyDictionary<string, InferredType> substitutions)
+    {
+        var substitutedFields =
+            openRecord.KnownFields
+            .Select(f => (f.FieldName, ApplyTypeSubstitutions(f.FieldType, substitutions)))
+            .ToList();
+
+        if (!substitutions.TryGetValue(openRecord.ExtensionVariable, out var extSubst))
+        {
+            return new InferredType.OpenRecordType(openRecord.ExtensionVariable, substitutedFields);
+        }
+
+        // Substituting the row variable closes (or extends) the record.
+        if (extSubst is InferredType.RecordType closedSubst)
+        {
+            var merged = new Dictionary<string, InferredType>();
+
+            foreach (var (name, type) in closedSubst.Fields)
+                merged[name] = type;
+
+            foreach (var (name, type) in substitutedFields)
+            {
+                if (merged.TryGetValue(name, out var existing))
+                {
+                    merged[name] = UnifyTypes(existing, type);
+                }
+                else
+                {
+                    merged[name] = type;
+                }
+            }
+
+            var fields =
+                merged
+                .Select(kvp => (kvp.Key, kvp.Value))
+                .OrderBy(t => t.Key, StringComparer.Ordinal)
+                .ToList();
+
+            return new InferredType.RecordType(fields);
+        }
+
+        if (extSubst is InferredType.OpenRecordType openSubst)
+        {
+            var merged = new Dictionary<string, InferredType>();
+
+            foreach (var (name, type) in openSubst.KnownFields)
+                merged[name] = type;
+
+            foreach (var (name, type) in substitutedFields)
+            {
+                if (merged.TryGetValue(name, out var existing))
+                {
+                    merged[name] = UnifyTypes(existing, type);
+                }
+                else
+                {
+                    merged[name] = type;
+                }
+            }
+
+            var fields =
+                merged
+                .Select(kvp => (kvp.Key, kvp.Value))
+                .OrderBy(t => t.Key, StringComparer.Ordinal)
+                .ToList();
+
+            return new InferredType.OpenRecordType(openSubst.ExtensionVariable, fields);
+        }
+
+        // Substituting the row variable with anything else (e.g. a non-record) is meaningless
+        // for record extension; keep the open record as-is.
+        return new InferredType.OpenRecordType(openRecord.ExtensionVariable, substitutedFields);
     }
 
     /// <summary>
@@ -464,6 +1073,20 @@ public static class TypeInference
     }
 
     /// <summary>
+    /// Builds a constraint for the "other operand" of a <c>++</c> when one operand is a list literal.
+    /// Returns <c>List a</c> with a free element type variable so that unification will succeed
+    /// against any concrete list type carried by the other operand.
+    /// </summary>
+    private static InferredType BuildListTypeConstraintFromListExpr(SyntaxTypes.Expression.ListExpr listExpr)
+    {
+        // We don't reach into the elements here; the goal is only to record the
+        // "operand must be a list" constraint. Unifying ListType(unknown) with a more
+        // specific ListType(T) yields ListType(T), which is what we want.
+        _ = listExpr;
+        return new InferredType.ListType(s_unknownType);
+    }
+
+    /// <summary>
     /// Describes type constraints for an infix operator.
     /// </summary>
     private record OperatorTypeConstraints(
@@ -494,6 +1117,12 @@ public static class TypeInference
             // Logical operators force Bool on everything
             ["&&"] = new(ResultType: s_boolType, LeftOperandType: s_boolType, RightOperandType: s_boolType),
             ["||"] = new(ResultType: s_boolType, LeftOperandType: s_boolType, RightOperandType: s_boolType),
+
+            // String / list concatenation: both operands must be appendable (String or List a),
+            // and the result is the same appendable. Result type is left null so operand-driven
+            // specialization in InferOperatorApplicationType can pick String or List a from a
+            // concrete operand.
+            ["++"] = new(LeftOperandType: s_appendableTypeVar, RightOperandType: s_appendableTypeVar),
         };
 
     /// <summary>
@@ -1229,8 +1858,120 @@ public static class TypeInference
             return InferPrefixOperatorType(prefixOperator.Operator);
         }
 
+        // Record field access: r.field
+        // If we know the record type, look up the field; otherwise return unknown.
+        // (Constraint propagation back to the record's parameter is done in
+        // ScanExpressionForParameterTypes via an OpenRecordType.)
+        if (expression is SyntaxTypes.Expression.RecordAccess recordAccess)
+        {
+            var recordType =
+                InferExpressionType(
+                    recordAccess.Record.Value,
+                    parameterNames,
+                    parameterTypes,
+                    localBindingTypes,
+                    currentModuleName,
+                    functionTypes);
+
+            return
+                LookupFieldTypeInRecord(recordType, recordAccess.FieldName.Value)
+                ?? s_unknownType;
+        }
+
+        // Record-access function: .field
+        // Has type: { r | field : a } -> a, modeled here as a function from an open
+        // record (with a fresh free element type) to that element type.
+        if (expression is SyntaxTypes.Expression.RecordAccessFunction recordAccessFunction)
+        {
+            var fieldName = recordAccessFunction.FunctionName.TrimStart('.');
+            var fieldType = new InferredType.TypeVariable("a");
+
+            var openRecord =
+                new InferredType.OpenRecordType(
+                    "r",
+                    [(fieldName, fieldType)]);
+
+            return new InferredType.FunctionType(openRecord, fieldType);
+        }
+
+        // Record update: { r | f1 = e1, f2 = e2, ... }
+        // The result type is the same as the type of `r`. If `r`'s type is known
+        // (from parameterTypes / localBindingTypes), return that. Otherwise build
+        // an OpenRecordType from the listed fields, inferring each field's type
+        // from the corresponding value expression.
+        if (expression is SyntaxTypes.Expression.RecordUpdateExpression recordUpdate)
+        {
+            var recordName = recordUpdate.RecordName.Value;
+
+            if (parameterTypes.TryGetValue(recordName, out var existingParamType))
+            {
+                return existingParamType;
+            }
+
+            if (localBindingTypes is not null &&
+                localBindingTypes.TryGetValue(recordName, out var existingLocalType))
+            {
+                return existingLocalType;
+            }
+
+            // Build an open record from the updated fields, inferring the field
+            // types from the value expressions.
+            var knownFields =
+                new List<(string FieldName, InferredType FieldType)>(recordUpdate.Fields.Count);
+
+            foreach (var fieldNode in recordUpdate.Fields)
+            {
+                var (fieldName, valueExpr) = fieldNode.Value;
+
+                var inferredFieldType =
+                    InferExpressionType(
+                        valueExpr.Value,
+                        parameterNames,
+                        parameterTypes,
+                        localBindingTypes,
+                        currentModuleName,
+                        functionTypes);
+
+                knownFields.Add((fieldName.Value, inferredFieldType));
+            }
+
+            return new InferredType.OpenRecordType("ρ", knownFields);
+        }
+
         // For other expressions, we cannot infer the type yet
         return s_unknownType;
+    }
+
+    /// <summary>
+    /// Looks up a field's type in either a closed or open record. Returns null if the
+    /// record's structure does not declare the field, in which case the caller should
+    /// fall back to <see cref="s_unknownType"/>.
+    /// </summary>
+    private static InferredType? LookupFieldTypeInRecord(InferredType recordType, string fieldName)
+    {
+        if (recordType is InferredType.RecordType closedRecord)
+        {
+            foreach (var (name, type) in closedRecord.Fields)
+            {
+                if (name == fieldName)
+                    return type;
+            }
+
+            return null;
+        }
+
+        if (recordType is InferredType.OpenRecordType openRecord)
+        {
+            foreach (var (name, type) in openRecord.KnownFields)
+            {
+                if (name == fieldName)
+                    return type;
+            }
+
+            return null;
+        }
+
+        return null;
     }
 
     /// <summary>
@@ -1342,6 +2083,29 @@ public static class TypeInference
 
             // If both are NumberType (polymorphic numeric literals), we can't determine yet
             return s_numberType;
+        }
+
+        // String / list concatenation: result is whichever concrete appendable an operand reveals.
+        if (operatorApp.Operator is "++")
+        {
+            if (leftType is InferredType.StringType || rightType is InferredType.StringType)
+            {
+                return s_stringType;
+            }
+
+            if (leftType is InferredType.ListType leftList)
+            {
+                return leftList;
+            }
+
+            if (rightType is InferredType.ListType rightList)
+            {
+                return rightList;
+            }
+
+            // Neither operand revealed a concrete appendable yet; surface the appendable
+            // constraint so downstream code can keep specializing.
+            return s_appendableTypeVar;
         }
 
         return s_unknownType;
@@ -2668,6 +3432,56 @@ public static class TypeInference
                     }
                 }
 
+                // For ++, if one operand is a concrete String or List literal, propagate
+                // that concrete type to the other operand. This specializes appendable
+                // parameters to String / List a once enough information is available.
+                if (opApp.Operator is "++")
+                {
+                    if (opApp.Left.Value is SyntaxTypes.Expression.Literal)
+                    {
+                        parameterTypes =
+                            ExtractTypeConstraintFromExpression(
+                                opApp.Right.Value,
+                                s_stringType,
+                                parameterNames,
+                                parameterTypes,
+                                localBindingDefinitions);
+                    }
+
+                    if (opApp.Right.Value is SyntaxTypes.Expression.Literal)
+                    {
+                        parameterTypes =
+                            ExtractTypeConstraintFromExpression(
+                                opApp.Left.Value,
+                                s_stringType,
+                                parameterNames,
+                                parameterTypes,
+                                localBindingDefinitions);
+                    }
+
+                    if (opApp.Left.Value is SyntaxTypes.Expression.ListExpr leftList)
+                    {
+                        parameterTypes =
+                            ExtractTypeConstraintFromExpression(
+                                opApp.Right.Value,
+                                BuildListTypeConstraintFromListExpr(leftList),
+                                parameterNames,
+                                parameterTypes,
+                                localBindingDefinitions);
+                    }
+
+                    if (opApp.Right.Value is SyntaxTypes.Expression.ListExpr rightList)
+                    {
+                        parameterTypes =
+                            ExtractTypeConstraintFromExpression(
+                                opApp.Left.Value,
+                                BuildListTypeConstraintFromListExpr(rightList),
+                                parameterNames,
+                                parameterTypes,
+                                localBindingDefinitions);
+                    }
+                }
+
                 parameterTypes =
                     ScanExpressionForParameterTypes(
                         opApp.Left.Value,
@@ -2742,6 +3556,98 @@ public static class TypeInference
                     parameterTypes =
                         ScanExpressionForParameterTypes(
                             field.Value.valueExpr.Value,
+                            parameterNames,
+                            functionSignatures,
+                            parameterTypes,
+                            localBindingDefinitions);
+                }
+
+                break;
+
+            case SyntaxTypes.Expression.RecordAccess recordAccess:
+
+                // r.fieldName: if r is a parameter, constrain it to an open record
+                // requiring at least 'fieldName'. Multiple accesses on the same parameter
+                // accumulate fields via unification.
+                if (recordAccess.Record.Value is SyntaxTypes.Expression.FunctionOrValue accessedVar &&
+                    accessedVar.ModuleName.Count is 0 &&
+                    parameterNames.ContainsKey(accessedVar.Name))
+                {
+                    var fieldName = recordAccess.FieldName.Value;
+
+                    var openRecord =
+                        new InferredType.OpenRecordType(
+                            "ρ",
+                            [(fieldName, new InferredType.TypeVariable("a_" + fieldName))]);
+
+                    if (parameterTypes.TryGetValue(accessedVar.Name, out var existingType))
+                    {
+                        parameterTypes =
+                            parameterTypes.SetItem(accessedVar.Name, UnifyTypes(existingType, openRecord));
+                    }
+                    else
+                    {
+                        parameterTypes = parameterTypes.Add(accessedVar.Name, openRecord);
+                    }
+                }
+
+                // Recurse into the record sub-expression so accesses on nested expressions
+                // (e.g. (foo bar).x) are still scanned.
+                parameterTypes =
+                    ScanExpressionForParameterTypes(
+                        recordAccess.Record.Value,
+                        parameterNames,
+                        functionSignatures,
+                        parameterTypes,
+                        localBindingDefinitions);
+
+                break;
+
+            case SyntaxTypes.Expression.RecordUpdateExpression recordUpdate:
+
+                // { r | f1 = e1, f2 = e2, ... }: if r is a parameter, constrain it
+                // to an open record requiring at least each updated field, with the
+                // field's type taken from the (recursively inferred) value expression.
+                // Multiple updates on the same parameter accumulate fields via unification.
+                if (parameterNames.ContainsKey(recordUpdate.RecordName.Value))
+                {
+                    var updatedFields =
+                        new List<(string FieldName, InferredType FieldType)>(recordUpdate.Fields.Count);
+
+                    foreach (var fieldNode in recordUpdate.Fields)
+                    {
+                        var (fName, vExpr) = fieldNode.Value;
+
+                        var inferredFieldType =
+                            InferExpressionType(vExpr.Value, parameterNames, parameterTypes);
+
+                        updatedFields.Add((fName.Value, inferredFieldType));
+                    }
+
+                    var updateOpenRecord =
+                        new InferredType.OpenRecordType("ρ", updatedFields);
+
+                    if (parameterTypes.TryGetValue(recordUpdate.RecordName.Value, out var existing))
+                    {
+                        parameterTypes =
+                            parameterTypes.SetItem(
+                                recordUpdate.RecordName.Value,
+                                UnifyTypes(existing, updateOpenRecord));
+                    }
+                    else
+                    {
+                        parameterTypes =
+                            parameterTypes.Add(recordUpdate.RecordName.Value, updateOpenRecord);
+                    }
+                }
+
+                // Recurse into each field's value expression so any nested usages
+                // (more accesses, ++, applications, ...) are still scanned.
+                foreach (var fieldNode in recordUpdate.Fields)
+                {
+                    parameterTypes =
+                        ScanExpressionForParameterTypes(
+                            fieldNode.Value.valueExpr.Value,
                             parameterNames,
                             functionSignatures,
                             parameterTypes,
@@ -2832,6 +3738,28 @@ public static class TypeInference
 
                 // For arithmetic operators that preserve numeric type, propagate constraints to operands
                 if (nestedOpApp.Operator is "+" or "-" or "*" or "/" or "//" or "%" or "^")
+                {
+                    parameterTypes =
+                        ExtractTypeConstraintFromExpression(
+                            nestedOpApp.Left.Value,
+                            targetType,
+                            parameterNames,
+                            parameterTypes,
+                            localBindingDefinitions);
+
+                    parameterTypes =
+                        ExtractTypeConstraintFromExpression(
+                            nestedOpApp.Right.Value,
+                            targetType,
+                            parameterNames,
+                            parameterTypes,
+                            localBindingDefinitions);
+                }
+
+                // ++ preserves the appendable type: if the result is constrained to a
+                // particular appendable type (e.g. String, or List a, or appendable),
+                // both operands carry the same constraint.
+                if (nestedOpApp.Operator is "++")
                 {
                     parameterTypes =
                         ExtractTypeConstraintFromExpression(
