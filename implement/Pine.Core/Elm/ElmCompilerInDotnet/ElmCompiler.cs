@@ -889,7 +889,7 @@ public class ElmCompiler
 
         foreach (var memberName in sccMembers)
         {
-            if (!context.TryGetFunctionInfo(memberName, out var funcInfo))
+            if (context.TryGetFunctionInfo(memberName) is not { } funcInfo)
                 continue;
 
             var declaration = funcInfo.declaration;
@@ -1215,7 +1215,7 @@ public class ElmCompiler
                         }
 
                         // Only add if it's a known function (not a local variable)
-                        if (context.TryGetFunctionInfo(qualifiedName, out _))
+                        if (context.TryGetFunctionInfo(qualifiedName) is not null)
                         {
                             dependencies.Add(qualifiedName);
                         }

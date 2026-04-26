@@ -247,16 +247,15 @@ public record ModuleCompilationContext(
     /// <summary>
     /// Gets compiled function info including dependency layout from the cache.
     /// </summary>
-    public bool TryGetCompiledFunctionInfo(string qualifiedName, out CompiledFunctionInfo? info) =>
-        TryGetCompiledFunctionInfo(QualifiedNameHelper.FromQualifiedNameString(qualifiedName), out info);
+    public CompiledFunctionInfo? TryGetCompiledFunctionInfo(string qualifiedName) =>
+        TryGetCompiledFunctionInfo(QualifiedNameHelper.FromQualifiedNameString(qualifiedName));
 
     /// <summary>
     /// Gets compiled function info including dependency layout from the cache.
     /// </summary>
-    public bool TryGetCompiledFunctionInfo(
-        SyntaxModelTypes.QualifiedNameRef qualifiedName,
-        out CompiledFunctionInfo? info) =>
-        CompiledFunctionsCache.TryGetValue(qualifiedName, out info);
+    public CompiledFunctionInfo? TryGetCompiledFunctionInfo(
+        SyntaxModelTypes.QualifiedNameRef qualifiedName) =>
+        CompiledFunctionsCache.TryGetValue(qualifiedName, out var info) ? info : null;
 
     /// <summary>
     /// Gets the pre-computed dependency layout for a function.
@@ -282,26 +281,22 @@ public record ModuleCompilationContext(
     /// <summary>
     /// Gets function info from the all functions dictionary.
     /// </summary>
-    public bool TryGetFunctionInfo(
-        string qualifiedName,
-        out (string moduleName, string functionName, SyntaxTypes.Declaration.FunctionDeclaration declaration) info) =>
-        TryGetFunctionInfo(QualifiedNameHelper.FromQualifiedNameString(qualifiedName), out info);
+    public (string moduleName, string functionName, SyntaxTypes.Declaration.FunctionDeclaration declaration)? TryGetFunctionInfo(
+        string qualifiedName) =>
+        TryGetFunctionInfo(QualifiedNameHelper.FromQualifiedNameString(qualifiedName));
 
     /// <summary>
     /// Gets function info from the all functions dictionary.
     /// </summary>
-    public bool TryGetFunctionInfo(
-        SyntaxModelTypes.QualifiedNameRef qualifiedName,
-        out (string moduleName, string functionName, SyntaxTypes.Declaration.FunctionDeclaration declaration) info)
+    public (string moduleName, string functionName, SyntaxTypes.Declaration.FunctionDeclaration declaration)? TryGetFunctionInfo(
+        SyntaxModelTypes.QualifiedNameRef qualifiedName)
     {
         if (AllFunctions.TryGetValue(qualifiedName, out var result))
         {
-            info = result;
-            return true;
+            return result;
         }
 
-        info = default;
-        return false;
+        return null;
     }
 
     /// <summary>

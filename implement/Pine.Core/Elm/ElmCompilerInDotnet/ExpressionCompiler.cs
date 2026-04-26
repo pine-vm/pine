@@ -232,9 +232,7 @@ public class ExpressionCompiler
             // literal-based ParseAndEval that `CompileFunctionReference`
             // emits for paramCount <= 0.
             if (context.ModuleCompilationContext.TryGetCompiledFunctionInfo(
-                qualifiedFunctionName,
-                out var crossSccCalleeInfo)
-                && crossSccCalleeInfo is not null)
+                qualifiedFunctionName) is { } crossSccCalleeInfo)
             {
                 if (crossSccCalleeInfo.ParameterCount <= 0)
                 {
@@ -521,9 +519,9 @@ public class ExpressionCompiler
 
             if (functionIndexOpt is null)
             {
-                context.ModuleCompilationContext.TryGetCompiledFunctionInfo(
-                    qualifiedFunctionName,
-                    out cachedCalleeInfo);
+                cachedCalleeInfo =
+                    context.ModuleCompilationContext.TryGetCompiledFunctionInfo(
+                        qualifiedFunctionName);
             }
 
             if (functionIndexOpt is null && cachedCalleeInfo is null)
@@ -575,7 +573,7 @@ public class ExpressionCompiler
             }
 
             // Get function info to determine parameter count
-            if (!context.ModuleCompilationContext.TryGetFunctionInfo(qualifiedFunctionName, out var funcInfo))
+            if (context.ModuleCompilationContext.TryGetFunctionInfo(qualifiedFunctionName) is not { } funcInfo)
             {
                 // Function exists in dependency layout but info is not available
                 // This shouldn't happen if the function is properly registered
@@ -1754,7 +1752,7 @@ public class ExpressionCompiler
         ExpressionCompilationContext context)
     {
         // Get the function's info to determine parameter count
-        if (!context.ModuleCompilationContext.TryGetFunctionInfo(qualifiedFunctionName, out var funcInfo))
+        if (context.ModuleCompilationContext.TryGetFunctionInfo(qualifiedFunctionName) is not { } funcInfo)
         {
             return new CompilationError.UnresolvedReference(qualifiedFunctionName, context.CurrentModuleName);
         }
