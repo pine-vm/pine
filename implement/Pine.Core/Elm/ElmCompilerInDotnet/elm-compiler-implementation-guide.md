@@ -654,6 +654,17 @@ For example, when a specialization bug corrupted `loopUntilHelp__specialized__2`
 
 The per-sub-stage snapshots in `CompilationPipelineStageResults.OptimizationIterations` enable bisection: interpret each sub-stage (`AfterSpecialization`, `AfterHigherOrderInlining`, `AfterSizeBasedInlining`) to identify which transform introduced the defect. This technique was used to fix the bug documented in `explore/internal-analysis/2026-04-25-max-optimization-rounds-2-string-literal-infinite-recursion.md`; see also `OptimizationRoundTwoInfiniteRecursionRegressionTests` in the test suite for a worked example.
 
+#### Using the Interpreter to Investigate Runtime Overheads
+
+Beyond verifying the *correctness* of lowering transformations, the Elm syntax interpreter is a useful tool for investigating *runtime cost* introduced (or left in place) by the optimization pipeline. The intermediate VM is the sole authority on production cost — its `InstructionCount`, `InvocationCount`, and `BuildListCount` performance counters drive the productive metrics — but those numbers describe the post-lowering bytecode and tell us little about *which Elm-source-level constructs* contributed how much.
+
+The Elm syntax interpreter complements this by reporting metrics keyed at Elm-source granularity:
+
++ `ElmSyntaxInterpreterPerformanceCounters` exposes counts of trampoline iterations, direct (named) function applications, function-value (closure) applications, and Pine builtin invocations.
++ `IInvocationLogger` (and its `RecordingInvocationLogger` implementation) lets callers append a per-application entry — qualified function name and rendered arguments — to a log they can later search or render. The newer `ParseAndInterpretWithCounters` overload accepts a delegate for the same purpose; the existing `InvocationCounter` constructs from this delegate to forward control flow.
+
+The `CompareInterpreterWithIntermediateVM` test framework wires these two paths together: it compiles a set of Elm modules once, then for each root expression both invokes the compiled function on the intermediate VM (the same `ApplyAndProfileUnary`-style call path used by `ElmParserExpressionTests.Expression_char_literal`) and re-evaluates the expression through the syntax interpreter against `CompilationPipelineStageResults.ModulesForCompilation`. It asserts the two paths agree on the resulting `ElmValue` (compared via `RenderAsElmExpression(...).expressionString`) and returns both metric snapshots plus the application log. Because the same `maxOptimizationRounds` setting feeds both paths, the framework can be used to bisect *which* of the optimization rounds increased a particular VM-side counter and *which Elm-source declarations* are still being dispatched at runtime under that setting — exactly the data needed to find the next high-leverage optimization opportunity.
+
 ## Future Exploration
 
 ### Future Exploration - Monomorphizing Extensible Records

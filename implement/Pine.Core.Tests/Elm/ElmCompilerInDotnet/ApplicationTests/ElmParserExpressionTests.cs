@@ -3,6 +3,7 @@ using Pine.Core.CodeAnalysis;
 using Pine.Core.Elm;
 using Pine.Core.Elm.ElmCompilerInDotnet;
 using Pine.Core.Elm.ElmInElm;
+using Pine.Core.Elm.ElmSyntax;
 using Pine.Core.Files;
 using Pine.Core.Interpreter.IntermediateVM;
 using System;
@@ -174,6 +175,78 @@ public class ElmParserExpressionTests
     private static readonly Core.Interpreter.IntermediateVM.PineVM s_vm =
         ElmCompilerTestHelper.PineVMForProfiling(_ => { });
 
+    /// <summary>
+    /// Shared <see cref="CompareInterpreterWithIntermediateVM"/> instance built from the same
+    /// source corpus used by the rest of this class. Wraps the existing VM-only test pattern
+    /// in the framework that additionally evaluates each root expression through the
+    /// <see cref="ElmSyntaxInterpreter"/>, so tests can assert both the VM-side
+    /// <see cref="PerformanceCounters"/> and the interpreter-side
+    /// <see cref="ElmSyntaxInterpreterPerformanceCounters"/> snapshot from a single
+    /// <c>Eval(...)</c> call.
+    /// </summary>
+    private static readonly Lazy<CompareInterpreterWithIntermediateVM> s_compareFramework =
+        new(() => BuildCompareFramework(maxOptimizationRounds: 1));
+
+    /// <summary>
+    /// As <see cref="s_compareFramework"/>, but built with <c>maxOptimizationRounds = 2</c>.
+    /// Used to demonstrate that the additional optimization round produces VM bytecode that
+    /// is more expensive at runtime for some scenarios — the snapshot assertions on tests
+    /// using this instance are expected to differ from their single-round counterparts.
+    /// </summary>
+    private static readonly Lazy<CompareInterpreterWithIntermediateVM> s_compareFrameworkRounds2 =
+        new(() => BuildCompareFramework(maxOptimizationRounds: 2));
+
+    private static CompareInterpreterWithIntermediateVM BuildCompareFramework(int maxOptimizationRounds)
+    {
+        var bundledTree =
+            BundledFiles.CompilerSourceContainerFilesDefault.Value;
+
+        var kernelModulesTree =
+            bundledTree
+            .GetNodeAtPath(["elm-kernel-modules"])
+            ?? throw new Exception("Did not find elm-kernel-modules");
+
+        var elmSyntaxSrcTree =
+            bundledTree
+            .GetNodeAtPath(["elm-syntax", "src"])
+            ?? throw new Exception("Did not find elm-syntax/src");
+
+        var mergedTree = kernelModulesTree;
+
+        foreach (var (path, file) in elmSyntaxSrcTree.EnumerateFilesTransitive())
+        {
+            mergedTree = mergedTree.SetNodeAtPathSorted(path, FileTree.File(file));
+        }
+
+        var treeWithTest =
+            mergedTree.SetNodeAtPathSorted(
+                ["ElmParserExpressionTestModule.elm"],
+                FileTree.File(Encoding.UTF8.GetBytes(TestModuleText)));
+
+        var rootFilePaths =
+            treeWithTest.EnumerateFilesTransitive()
+            .Where(
+                b =>
+                b.path[^1].Equals("ElmParserExpressionTestModule.elm", StringComparison.OrdinalIgnoreCase))
+            .Select(b => (IReadOnlyList<string>)b.path)
+            .ToList();
+
+        return
+            CompareInterpreterWithIntermediateVM.Prepare(
+                appCodeTree: treeWithTest,
+                rootFilePaths: rootFilePaths,
+                entryPoints:
+                [
+                new DeclQualifiedName(
+                    ["ElmParserExpressionTestModule"],
+                    "parseCharLiteral"),
+                new DeclQualifiedName(
+                    ["ElmParserExpressionTestModule"],
+                    "parseExpression"),
+                ],
+                maxOptimizationRounds: maxOptimizationRounds);
+    }
+
     private static ElmValue Integer(long i) =>
         ElmValue.Integer(i);
 
@@ -244,21 +317,33 @@ public class ElmParserExpressionTests
     [Fact]
     public void Expression_char_literal()
     {
-        var (value, report) =
-            CoreLibraryModule.CoreLibraryTestHelper.ApplyAndProfileUnary(
-                GetTestFunction("parseCharLiteral"),
-                ElmString("'&'"),
-                s_vm);
+        var report = s_compareFramework.Value.Eval("""parseCharLiteral "'&'" """);
 
-        value.Should().Be(ElmString("&"));
+        report.Value.Should().Be(ElmString("&"));
 
-        PerformanceCountersFormatting.FormatCounts(report).Should().Be(
+        PerformanceCountersFormatting.FormatCounts(report.VmCounters).Should().Be(
             """
             InstructionCount: 6_782
             InvocationCount: 256
             BuildListCount: 1_424
             LoopIterationCount: 0
             """);
+
+        // Snapshot of the Elm syntax interpreter's metrics for the same root expression.
+        // The interpreter's counts (especially DirectFunctionApplicationCount) are far higher
+        // than the VM's InvocationCount because the interpreter dispatches every named
+        // reference, whereas the VM has already inlined and lowered most of those into
+        // direct bytecode. The gap is itself a useful signal: it identifies how much work
+        // the Elm-source level still entails before optimization, which can guide further
+        // optimization opportunities.
+        ElmSyntaxInterpreterPerformanceCountersFormatting.FormatCounts(report.InterpreterCounters)
+            .Should().Be(
+                """
+                InstructionLoopCount: 2_186
+                DirectFunctionApplicationCount: 339
+                FunctionValueApplicationCount: 50
+                PineBuiltinInvocationCount: 116
+                """);
     }
 
     [Fact]
@@ -284,24 +369,77 @@ public class ElmParserExpressionTests
     [Fact]
     public void Expression_list_one_item()
     {
-        var (value, report) =
-            CoreLibraryModule.CoreLibraryTestHelper.ApplyAndProfileUnary(
-                GetTestFunction("parseExpression"),
-                ElmString("[1]"),
-                s_vm);
+        var report = s_compareFramework.Value.Eval("""parseExpression "[1]" """);
 
-        value.Should().Be(
+        report.Value.Should().Be(
             Ok(
                 ListExpr(
                     Node(1, 2, 1, 3, IntegerExpr(1)))));
 
-        PerformanceCountersFormatting.FormatCounts(report).Should().Be(
+        PerformanceCountersFormatting.FormatCounts(report.VmCounters).Should().Be(
             """
             InstructionCount: 84_259
             InvocationCount: 2_494
             BuildListCount: 16_807
             LoopIterationCount: 0
             """);
+
+        // Snapshot of the Elm syntax interpreter's metrics for the same root expression.
+        // See the comment on Expression_char_literal: the interpreter's counts capture work
+        // done at the Elm-source level and are useful as a baseline against which to read the
+        // VM's optimized cost.
+        ElmSyntaxInterpreterPerformanceCountersFormatting.FormatCounts(report.InterpreterCounters)
+            .Should().Be(
+                """
+                InstructionLoopCount: 4_315
+                DirectFunctionApplicationCount: 718
+                FunctionValueApplicationCount: 106
+                PineBuiltinInvocationCount: 169
+                """);
+    }
+
+    /// <summary>
+    /// Variant of <see cref="Expression_list_one_item"/> that uses
+    /// <c>maxOptimizationRounds = 2</c>. Captured as a separate test so the per-round VM
+    /// performance counters and interpreter counters are visible side-by-side at test-review
+    /// time.
+    /// <para>
+    /// Comparing the two snapshots demonstrates the phenomenon the
+    /// <see cref="CompareInterpreterWithIntermediateVM"/> framework was built to investigate:
+    /// the second optimization round produces VM bytecode that is *more* expensive at runtime
+    /// for this scenario (~12% more <c>InstructionCount</c>, ~28% more <c>BuildListCount</c>)
+    /// while the interpreter-side counts barely move (the source-level work being done is
+    /// almost identical). This is a candidate worth investigating for further optimization
+    /// improvements; the framework also makes the matching application traces available for
+    /// follow-up analysis.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void Expression_list_one_item_max_rounds_2()
+    {
+        var report = s_compareFrameworkRounds2.Value.Eval("""parseExpression "[1]" """);
+
+        report.Value.Should().Be(
+            Ok(
+                ListExpr(
+                    Node(1, 2, 1, 3, IntegerExpr(1)))));
+
+        PerformanceCountersFormatting.FormatCounts(report.VmCounters).Should().Be(
+            """
+            InstructionCount: 94_094
+            InvocationCount: 2_627
+            BuildListCount: 21_524
+            LoopIterationCount: 0
+            """);
+
+        ElmSyntaxInterpreterPerformanceCountersFormatting.FormatCounts(report.InterpreterCounters)
+            .Should().Be(
+                """
+                InstructionLoopCount: 4_216
+                DirectFunctionApplicationCount: 695
+                FunctionValueApplicationCount: 103
+                PineBuiltinInvocationCount: 169
+                """);
     }
 
     [Fact]

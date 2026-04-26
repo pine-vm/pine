@@ -95,11 +95,9 @@ public class ExplicitStackCekTests
                 throw new System.InvalidOperationException("Debug.todo was called");
             }
 
-            var interpreter = new ElmInterpreter();
-
             return
-                interpreter.PineBuiltinResolver(application)
-                ?? interpreter.UserDefinedResolver(application, declarations)
+                ElmInterpreter.PineBuiltinResolver(application)
+                ?? ElmInterpreter.UserDefinedResolver(application, declarations)
                 ?? throw new System.InvalidOperationException(
                     "No resolver matched: " + application.FunctionName.FullName);
         }
