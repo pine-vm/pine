@@ -101,77 +101,42 @@ public class BuildStaticProgramParserConfig
     private static StaticProgramParserConfig<IdentifierT> FromDictionaryWithOriginals<IdentifierT>(
         IReadOnlyDictionary<PineValue, (IdentifierT ident, PineValue originalValue)> declNamesWithOriginals,
         PineVMParseCache parseCache)
+        where IdentifierT : notnull
     {
-        // Also build a lookup from each callee's EncodedExpression (property 4 in
-        // §2.1 of analysis-inline-non-recursive-callees.md) to the same identifier,
-        // so the parser can recognize Form A call sites (single ParseAndEval whose
-        // Encoded is Literal(EncodedExpression)). For non-recursive callees the
-        // EncodedExpression is the encoded inner-function body, distinct from the
-        // wrapper value used at Form B call sites. This dictionary is allowed to
-        // contain entries where the encoded body equals the original lookup value
-        // (e.g. zero-parameter declarations encoded as bare values) — in that case
-        // the Form A and Form B paths happen to coincide.
-        Dictionary<PineValue, (IdentifierT ident, PineValue originalValue)> encodedBodyLookup =
-            [];
+        // One descriptor per dictionary entry: the entry's `lookupValue` is the value
+        // by which the callee is named at frontend-emitted call sites (the literal
+        // head of a Form B chain or a bare reference), and `originalValue` is the
+        // wrapper used for Form A / Form C derivation. They differ for non-recursive
+        // callees whose lookup value is the extracted inner value but whose wrapper
+        // is needed to compute the encoded body / consolidated-form templates.
+        var descriptors = new List<CalleeDescriptor<IdentifierT>>(declNamesWithOriginals.Count);
 
         foreach (var (lookupValue, entry) in declNamesWithOriginals)
         {
-            if (FunctionRecord.ParseFunctionRecordTagged(entry.originalValue, parseCache).IsOkOrNull() is { } functionRecord)
-            {
-                var (encodedExpr, _, _) =
-                    NamesFromCompiledEnv.BuildApplicationFromFunctionRecord(functionRecord, arguments: [], parseCache);
-
-                encodedBodyLookup[encodedExpr] =
-                    (entry.ident, entry.originalValue);
-            }
+            descriptors.Add(
+                new CalleeDescriptor<IdentifierT>(
+                    Identifier: entry.ident,
+                    NamedValue: lookupValue,
+                    ContinueParse: true,
+                    WrapperValue: entry.originalValue));
         }
 
-        return
+        // Base config: required-throws / optional-null / crash-throws. The augmenting
+        // helper installs the recognition facts derived from `descriptors`.
+        var baseConfig =
             new StaticProgramParserConfig<IdentifierT>(
                 IdentifyInstanceRequired:
                 (_, pineValue) =>
-                {
-                    if (declNamesWithOriginals.TryGetValue(pineValue, out var entry))
-                    {
-                        return
-                            new StaticProgramParser.IdentifyResponse<IdentifierT>(
-                                Ident: entry.ident,
-                                ContinueParse: true,
-                                OriginalFunctionValue: entry.originalValue);
-                    }
-
                     throw new System.InvalidOperationException(
-                        $"Could not identify required instance for Pine value: {pineValue}");
-                },
+                        $"Could not identify required instance for Pine value: {pineValue}"),
                 IdentifyInstanceOptional:
-                (_, pineValue) =>
-                {
-                    if (declNamesWithOriginals.TryGetValue(pineValue, out var entry))
-                    {
-                        return
-                            new StaticProgramParser.IdentifyResponse<IdentifierT>(
-                                Ident: entry.ident,
-                                ContinueParse: true,
-                                OriginalFunctionValue: entry.originalValue);
-                    }
-
-                    return null;
-                },
+                (_, _) => null,
                 IdentifyCrash:
                 (_, _) => throw new System.NotImplementedException(),
                 IdentifyEncodedBodyOptional:
-                (_, pineValue) =>
-                {
-                    if (encodedBodyLookup.TryGetValue(pineValue, out var entry))
-                    {
-                        return
-                            new StaticProgramParser.IdentifyResponse<IdentifierT>(
-                                Ident: entry.ident,
-                                ContinueParse: true,
-                                OriginalFunctionValue: entry.originalValue);
-                    }
+                (_, _) => null,
+                ConsolidatedFormTemplates: null);
 
-                    return null;
-                });
+        return CalleeRecognition.Augment(baseConfig, descriptors, parseCache);
     }
 }

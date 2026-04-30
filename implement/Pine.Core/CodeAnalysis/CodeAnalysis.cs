@@ -1625,6 +1625,353 @@ public class CodeAnalysis
     }
 
     /// <summary>
+    /// Builds the generic incremental form of a function application as emitted by the
+    /// frontend compilers (for example the Elm compiler in
+    /// <c>Pine.Core.Elm.ElmCompilerInDotnet.ExpressionCompiler</c>).
+    /// <para>
+    /// The result is a chain of nested <see cref="Expression.ParseAndEval"/> expressions,
+    /// one per supplied argument, applying arguments to <paramref name="functionExpr"/>
+    /// from left to right. With zero arguments the input <paramref name="functionExpr"/>
+    /// is returned unchanged.
+    /// </para>
+    /// <para>
+    /// This is the inverse of
+    /// <see cref="ParseGenericFunctionApplication(Expression)"/>.
+    /// </para>
+    /// </summary>
+    /// <param name="functionExpr">The expression representing the function value.</param>
+    /// <param name="arguments">The arguments to apply, in application order.</param>
+    /// <returns>
+    /// The chain of nested <see cref="Expression.ParseAndEval"/> wrappers, or
+    /// <paramref name="functionExpr"/> itself when <paramref name="arguments"/> is empty.
+    /// </returns>
+    public static Expression BuildGenericFunctionApplication(
+        Expression functionExpr,
+        IReadOnlyList<Expression> arguments)
+    {
+        var result = functionExpr;
+
+        for (var i = 0; i < arguments.Count; ++i)
+        {
+            result =
+                new Expression.ParseAndEval(
+                    encoded: result,
+                    environment: arguments[i]);
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Inverse of <see cref="BuildGenericFunctionApplication(Expression, IReadOnlyList{Expression})"/>.
+    /// <para>
+    /// Recognizes a chain of nested <see cref="Expression.ParseAndEval"/> expressions
+    /// of the form
+    /// <c>ParseAndEval(... ParseAndEval(ParseAndEval(F, a0), a1) ..., a_{n-1})</c>
+    /// and returns the function expression <c>F</c> together with the list of
+    /// arguments <c>[a0, a1, ..., a_{n-1}]</c> in application order.
+    /// </para>
+    /// <para>
+    /// Returns <c>null</c> when <paramref name="expression"/> is not a
+    /// <see cref="Expression.ParseAndEval"/> (i.e. when no arguments would be
+    /// recovered). For any <see cref="Expression.ParseAndEval"/> the result has
+    /// at least one argument.
+    /// </para>
+    /// </summary>
+    /// <param name="expression">The expression to interpret as a generic application chain.</param>
+    /// <returns>
+    /// A pair of the recovered function expression and the recovered argument list,
+    /// or <c>null</c> when the input is not a <see cref="Expression.ParseAndEval"/>.
+    /// </returns>
+    public static (Expression functionExpr, IReadOnlyList<Expression> arguments)?
+        ParseGenericFunctionApplication(Expression expression)
+    {
+        if (expression is not Expression.ParseAndEval)
+        {
+            return null;
+        }
+
+        var argumentsReversed = new List<Expression>();
+
+        var current = expression;
+
+        while (current is Expression.ParseAndEval parseAndEval)
+        {
+            argumentsReversed.Add(parseAndEval.Environment);
+
+            current = parseAndEval.Encoded;
+        }
+
+        argumentsReversed.Reverse();
+
+        return (current, argumentsReversed);
+    }
+
+    /// <summary>
+    /// A precomputed template for recognizing the consolidated form produced by the
+    /// generic-application chain consolidation optimization in
+    /// <see cref="ReducePineExpression.TryConsolidateGenericFunctionApplicationChain(Expression.ParseAndEval, PineVMParseCache)"/>.
+    /// <para>
+    /// When the optimization is applied to
+    /// <c>BuildGenericFunctionApplication(Literal(<paramref name="FunctionValue"/>), [arg0, ..., arg{<paramref name="DepthK"/>-1}])</c>
+    /// the result is a single <see cref="Expression.ParseAndEval"/> whose
+    /// <see cref="Expression.ParseAndEval.Encoded"/> is <see cref="Expression.Literal"/>
+    /// of <paramref name="EncodedLiteral"/> and whose
+    /// <see cref="Expression.ParseAndEval.Environment"/> is structurally
+    /// equivalent to <paramref name="EnvTemplate"/> with each placeholder
+    /// (entries in <paramref name="Placeholders"/>) replaced by the corresponding actual
+    /// argument expression.
+    /// </para>
+    /// </summary>
+    /// <param name="FunctionValue">The function value the chain was applied to.</param>
+    /// <param name="DepthK">The number of arguments the chain applied to the function.</param>
+    /// <param name="EncodedLiteral">
+    /// The constant <see cref="PineValue"/> appearing as the literal head of the consolidated
+    /// <see cref="Expression.ParseAndEval"/>.
+    /// </param>
+    /// <param name="EnvTemplate">
+    /// The environment expression produced by the optimization, with the K placeholder
+    /// expressions appearing in the positions of the K applied arguments.
+    /// </param>
+    /// <param name="Placeholders">
+    /// The K placeholder expressions used when computing this template; each appears at
+    /// least once in <paramref name="EnvTemplate"/>.
+    /// </param>
+    public record ConsolidatedFormTemplate(
+        PineValue FunctionValue,
+        int DepthK,
+        PineValue EncodedLiteral,
+        Expression EnvTemplate,
+        IReadOnlyList<Expression> Placeholders);
+
+    /// <summary>
+    /// Forward-computes the <see cref="ConsolidatedFormTemplate"/> for
+    /// <paramref name="functionValue"/> at depth <paramref name="depthK"/>.
+    /// <para>
+    /// This runs the consolidation optimization on a synthetic chain whose K arguments are
+    /// distinct sentinel placeholder expressions. The shape of the resulting consolidated
+    /// form (specifically the literal <c>Encoded</c> value and the structure of the
+    /// <c>Environment</c> expression) does not depend on the contents of the actual
+    /// arguments — only on <paramref name="functionValue"/> and <paramref name="depthK"/>.
+    /// </para>
+    /// <para>
+    /// Returns <c>null</c> when the optimization does not produce a single
+    /// <see cref="Expression.ParseAndEval"/> with literal <see cref="Expression.ParseAndEval.Encoded"/>
+    /// (for example when <paramref name="depthK"/> is below the optimization's threshold of 2,
+    /// or when <paramref name="functionValue"/> is not parsable as an expression).
+    /// </para>
+    /// </summary>
+    public static ConsolidatedFormTemplate?
+        TryComputeConsolidatedFormTemplate(
+        PineValue functionValue,
+        int depthK,
+        PineVMParseCache parseCache)
+    {
+        if (depthK < 2)
+        {
+            return null;
+        }
+
+        var placeholders = new Expression[depthK];
+
+        for (var i = 0; i < depthK; ++i)
+        {
+            // Use a unique kernel-application sentinel that does not occur in real expressions
+            // and is opaque to the optimization's constant-folding (the kernel function name is
+            // unrecognized so no folding fires on it).
+            placeholders[i] =
+                Expression.KernelApplicationInstance(
+                    function: "__consolidated_form_template_placeholder_" + i + "__",
+                    input: Expression.EnvironmentInstance);
+        }
+
+        var chain =
+            BuildGenericFunctionApplication(
+                Expression.LiteralInstance(functionValue),
+                placeholders);
+
+        if (chain is not Expression.ParseAndEval chainPaE)
+        {
+            return null;
+        }
+
+        var consolidated =
+            ReducePineExpression.TryConsolidateGenericFunctionApplicationChain(
+                chainPaE,
+                parseCache);
+
+        if (consolidated is not Expression.ParseAndEval consolidatedPaE)
+        {
+            return null;
+        }
+
+        if (consolidatedPaE.Encoded is not Expression.Literal encodedLit)
+        {
+            return null;
+        }
+
+        return
+            new ConsolidatedFormTemplate(
+                FunctionValue: functionValue,
+                DepthK: depthK,
+                EncodedLiteral: encodedLit.Value,
+                EnvTemplate: consolidatedPaE.Environment,
+                Placeholders: placeholders);
+    }
+
+    /// <summary>
+    /// Attempts to match <paramref name="actual"/> against <paramref name="template"/>,
+    /// treating each entry of <paramref name="placeholders"/> as a wildcard that binds to
+    /// the corresponding subexpression of <paramref name="actual"/>.
+    /// <para>
+    /// Returns an array of bound expressions (parallel to <paramref name="placeholders"/>) on
+    /// success, or <c>null</c> when the structures differ. When the same placeholder appears
+    /// at multiple positions in <paramref name="template"/> the corresponding subexpressions
+    /// of <paramref name="actual"/> are required to be structurally equal.
+    /// </para>
+    /// </summary>
+    public static IReadOnlyList<Expression>? TryMatchExpressionTemplate(
+        Expression template,
+        Expression actual,
+        IReadOnlyList<Expression> placeholders)
+    {
+        var bindings = new Expression?[placeholders.Count];
+
+        if (!TryMatchExpressionTemplateInternal(template, actual, placeholders, bindings))
+        {
+            return null;
+        }
+
+        for (var i = 0; i < bindings.Length; ++i)
+        {
+            if (bindings[i] is null)
+            {
+                // Placeholder did not appear in the template — this is unexpected for the
+                // optimization's output (every applied argument must show up in env), but to
+                // remain conservative we report a mismatch in that case.
+                return null;
+            }
+        }
+
+        return bindings!;
+    }
+
+    private static bool TryMatchExpressionTemplateInternal(
+        Expression template,
+        Expression actual,
+        IReadOnlyList<Expression> placeholders,
+        Expression?[] bindings)
+    {
+        // Placeholder check: bind or verify equality with prior binding.
+        for (var i = 0; i < placeholders.Count; ++i)
+        {
+            if (ReferenceEquals(template, placeholders[i]))
+            {
+                if (bindings[i] is { } existing)
+                {
+                    return existing.Equals(actual);
+                }
+
+                bindings[i] = actual;
+                return true;
+            }
+        }
+
+        // Otherwise match by structural shape.
+        switch (template)
+        {
+            case Expression.Literal litT
+                when actual is Expression.Literal litA:
+                return litT.Value.Equals(litA.Value);
+
+            case Expression.Environment
+                when actual is Expression.Environment:
+                return true;
+
+            case Expression.List listT
+                when actual is Expression.List listA:
+                if (listT.Items.Count != listA.Items.Count)
+                {
+                    return false;
+                }
+
+                for (var i = 0; i < listT.Items.Count; ++i)
+                {
+                    if (!TryMatchExpressionTemplateInternal(
+                            listT.Items[i],
+                            listA.Items[i],
+                            placeholders,
+                            bindings))
+                    {
+                        return false;
+                    }
+                }
+
+                return true;
+
+            // Handle the constant-folding the reducer applies after consolidation:
+            // an Expression.List whose every element is an Expression.Literal collapses
+            // to a single Expression.Literal of the corresponding ListValue. Templates are
+            // computed with non-literal placeholder arguments, so the fold never fires
+            // when synthesizing the template, but it can fire at real call sites whenever
+            // the actual arguments are literals. Treat the literal of a list value as
+            // structurally equivalent to a List of literals when matching against a List
+            // template, so such call sites still recognize the consolidated form.
+            case Expression.List listT2
+                when actual is Expression.Literal litA2 &&
+                    litA2.Value is PineValue.ListValue listValueA &&
+                    listT2.Items.Count == listValueA.Items.Length:
+
+                for (var i = 0; i < listT2.Items.Count; ++i)
+                {
+                    var actualItem = Expression.LiteralInstance(listValueA.Items.Span[i]);
+
+                    if (!TryMatchExpressionTemplateInternal(
+                            listT2.Items[i],
+                            actualItem,
+                            placeholders,
+                            bindings))
+                    {
+                        return false;
+                    }
+                }
+
+                return true;
+
+            case Expression.KernelApplication kT
+                when actual is Expression.KernelApplication kA:
+                if (kT.Function != kA.Function)
+                {
+                    return false;
+                }
+
+                return TryMatchExpressionTemplateInternal(kT.Input, kA.Input, placeholders, bindings);
+
+            case Expression.ParseAndEval peT
+                when actual is Expression.ParseAndEval peA:
+                return
+                    TryMatchExpressionTemplateInternal(peT.Encoded, peA.Encoded, placeholders, bindings) &&
+                    TryMatchExpressionTemplateInternal(peT.Environment, peA.Environment, placeholders, bindings);
+
+            case Expression.Conditional cT
+                when actual is Expression.Conditional cA:
+                return
+                    TryMatchExpressionTemplateInternal(cT.Condition, cA.Condition, placeholders, bindings) &&
+                    TryMatchExpressionTemplateInternal(cT.TrueBranch, cA.TrueBranch, placeholders, bindings) &&
+                    TryMatchExpressionTemplateInternal(cT.FalseBranch, cA.FalseBranch, placeholders, bindings);
+
+            case Expression.StringTag tT
+                when actual is Expression.StringTag tA:
+                return
+                    tT.Tag == tA.Tag &&
+                    TryMatchExpressionTemplateInternal(tT.Tagged, tA.Tagged, placeholders, bindings);
+
+            default:
+                return false;
+        }
+    }
+
+    /// <summary>
     /// Computes the minimal environment class that still satisfies all parse-and-eval dependencies of <paramref name="expression"/>.
     /// </summary>
     /// <param name="expression">Root expression of the static program.</param>

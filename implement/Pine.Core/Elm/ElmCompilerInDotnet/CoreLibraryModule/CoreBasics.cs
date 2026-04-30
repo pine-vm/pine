@@ -593,6 +593,33 @@ public class CoreBasics
     }
 
     /// <summary>
+    /// All <see cref="CoreBasics"/> declaration names for which
+    /// <see cref="GetFunctionValue(string)"/> returns a non-null function value.
+    /// <para>
+    /// This is the source of truth used by the static program parser configuration
+    /// to enumerate the built-in callees that need to be recognized at call sites
+    /// (Form A / Form B / Form C / bare reference). Note that <c>toFloat</c> shares
+    /// its function value with <c>identity</c> and is therefore omitted to keep the
+    /// inverse mapping unique; see also the corresponding note in
+    /// <see cref="IdentifyFunctionValue(PineValue)"/>.
+    /// </para>
+    /// </summary>
+    public static IReadOnlyList<string> KnownDeclarationNames { get; } =
+        [
+            "add", "sub", "mul",
+            "idiv", "modBy", "remainderBy",
+            "eq", "neq", "compare",
+            "lt", "gt", "le", "ge",
+            "not", "negate",
+            "abs", "clamp",
+            "min", "max",
+            "identity",
+            "always",
+            "append",
+            "apL", "apR",
+        ];
+
+    /// <summary>
     /// Gets a compiled expression for a prefix operator (e.g., "(+)", "(-)").
     /// This returns the function value as a literal expression, ready for application.
     /// </summary>

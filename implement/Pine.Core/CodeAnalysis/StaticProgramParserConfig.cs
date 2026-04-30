@@ -27,11 +27,24 @@ namespace Pine.Core.CodeAnalysis;
 /// that a Form B call to the same callee would produce.
 /// Defaults to a function that always returns <c>null</c> (Form A unsupported).
 /// </param>
+/// <param name="ConsolidatedFormTemplates">
+/// Optional list of templates recognizing the consolidated form produced by the
+/// generic-application chain consolidation optimization in
+/// <see cref="ReducePineExpression.TryConsolidateGenericFunctionApplicationChain(Expression.ParseAndEval, PineVMParseCache)"/>.
+/// Each template carries the literal value that appears as the <c>Encoded</c> head of the
+/// consolidated <c>ParseAndEval</c>, the symbolic environment expression with placeholders
+/// for the K applied arguments, and the identifier (and optional original function value
+/// for nested parsing) to assign at the matching call site. When non-null and a template
+/// matches, the parser canonicalizes the consolidated call site to a saturated
+/// <c>FunctionApplication</c> with the recovered argument list.
+/// Defaults to <c>null</c> (consolidated form unsupported).
+/// </param>
 public record StaticProgramParserConfig<IdentifierT>(
     Func<IEnumerable<IdentifierT>, PineValue, StaticProgramParser.IdentifyResponse<IdentifierT>> IdentifyInstanceRequired,
     Func<IEnumerable<IdentifierT>, PineValue, StaticProgramParser.IdentifyResponse<IdentifierT>?> IdentifyInstanceOptional,
     Func<IEnumerable<IdentifierT>, StaticProgramParser.CrashOrigin, IdentifierT> IdentifyCrash,
-    Func<IEnumerable<IdentifierT>, PineValue, StaticProgramParser.IdentifyResponse<IdentifierT>?>? IdentifyEncodedBodyOptional = null)
+    Func<IEnumerable<IdentifierT>, PineValue, StaticProgramParser.IdentifyResponse<IdentifierT>?>? IdentifyEncodedBodyOptional = null,
+    IReadOnlyList<StaticProgramParser.ConsolidatedFormTemplateEntry<IdentifierT>>? ConsolidatedFormTemplates = null)
 {
     public static StaticProgramParserConfig<IdentifierT> OptionalNullRequiredThrow()
         =>
@@ -60,5 +73,7 @@ public record StaticProgramParserConfig<IdentifierT>(
             },
 
             IdentifyEncodedBodyOptional:
-            (context, value) => null);
+            (context, value) => null,
+
+            ConsolidatedFormTemplates: null);
 }

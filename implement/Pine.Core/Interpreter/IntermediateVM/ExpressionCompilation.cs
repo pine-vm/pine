@@ -81,7 +81,10 @@ public record ExpressionCompilation(
         bool disableReduction,
         bool enableTailRecursionOptimization,
         Func<Expression, PineValueClass?, bool> skipInlining,
-        IDictionary<Expression, Expression>? reducedExpressionCache = null)
+        IDictionary<Expression, Expression>? reducedExpressionCache = null,
+        int pathMaxLowExclusive = DefaultPathMaxLowExclusive,
+        int pathMaxHighInclusive = DefaultPathMaxHighInclusive,
+        bool disableGenericApplicationChainConsolidation = false)
     {
         var genericParameters =
             StaticFunctionInterface.FromExpression(rootExpression);
@@ -97,7 +100,10 @@ public record ExpressionCompilation(
                     disableReduction: disableReduction,
                     skipInlining: skipInlining,
                     enableTailRecursionOptimization: enableTailRecursionOptimization,
-                    reducedExpressionCache: reducedExpressionCache),
+                    reducedExpressionCache: reducedExpressionCache,
+                    pathMaxLowExclusive: pathMaxLowExclusive,
+                    pathMaxHighInclusive: pathMaxHighInclusive,
+                    disableGenericApplicationChainConsolidation: disableGenericApplicationChainConsolidation),
                 TrackEnvConstraint: null);
 
         var specialized =
@@ -121,7 +127,10 @@ public record ExpressionCompilation(
                         disableReduction: disableReduction,
                         enableTailRecursionOptimization: enableTailRecursionOptimization,
                         skipInlining: skipInlining,
-                        reducedExpressionCache: reducedExpressionCache),
+                        reducedExpressionCache: reducedExpressionCache,
+                        pathMaxLowExclusive: pathMaxLowExclusive,
+                        pathMaxHighInclusive: pathMaxHighInclusive,
+                        disableGenericApplicationChainConsolidation: disableGenericApplicationChainConsolidation),
                     TrackEnvConstraint: specialization)))
             .ToImmutableArray();
 
@@ -167,7 +176,10 @@ public record ExpressionCompilation(
         bool disableReduction,
         bool enableTailRecursionOptimization,
         Func<Expression, PineValueClass?, bool> skipInlining,
-        IDictionary<Expression, Expression>? reducedExpressionCache = null)
+        IDictionary<Expression, Expression>? reducedExpressionCache = null,
+        int pathMaxLowExclusive = DefaultPathMaxLowExclusive,
+        int pathMaxHighInclusive = DefaultPathMaxHighInclusive,
+        bool disableGenericApplicationChainConsolidation = false)
     {
         var inlinedStaticInvocations =
             disableReduction || enableTailRecursionOptimization
@@ -182,7 +194,10 @@ public record ExpressionCompilation(
                 parseCache,
                 disableRecurseAfterInline: false,
                 skipInlining: e => skipInlining(e, null),
-                reducedExpressionCache: reducedExpressionCache);
+                reducedExpressionCache: reducedExpressionCache,
+                pathMaxLowExclusive: pathMaxLowExclusive,
+                pathMaxHighInclusive: pathMaxHighInclusive,
+                disableGenericApplicationChainConsolidation: disableGenericApplicationChainConsolidation);
 
         var expressionWithEnvConstraint =
             envConstraintId is null || enableTailRecursionOptimization
@@ -212,7 +227,10 @@ public record ExpressionCompilation(
                 rootExprForms: [rootExpression],
                 disableRecurseAfterInline: false,
                 skipInlining: skipInlining,
-                reducedExpressionCache: reducedExpressionCache);
+                reducedExpressionCache: reducedExpressionCache,
+                pathMaxLowExclusive: pathMaxLowExclusive,
+                pathMaxHighInclusive: pathMaxHighInclusive,
+                disableGenericApplicationChainConsolidation: disableGenericApplicationChainConsolidation);
 
         var allInstructionsBeforeReturn =
             InstructionsFromExpression(
@@ -268,6 +286,42 @@ public record ExpressionCompilation(
     }
 
 
+    /*
+     * Path-max gating thresholds.
+     *
+     * The gate rejects an inlining when the body's per-branch path-max metric
+     * (counting only PEs that future inlining would expand) is in the open-low /
+     * closed-high window (pathMaxLowExclusive, pathMaxHighInclusive].
+     * Setting LOW >= HIGH effectively disables the gate.
+     *
+     * Thresholds are forwarded as parameters from the entry points
+     * (<see cref="CompileExpression"/>, <see cref="InstructionsFromExpressionTransitive"/>,
+     * <see cref="InlineStaticInvocationsAndReduceRecursive"/>, and
+     * <see cref="ReduceExpressionAndInlineRecursive(Expression, ImmutableHashSet{Expression}, PineValueClass?, int, int, PineVMParseCache, bool, Func{Expression, PineValueClass?, bool}, IDictionary{Expression, Expression}?, int, int)"/>),
+     * defaulting to the values committed in the preceding tuning step (see
+     * the latest 5 in
+     * explore/internal-analysis/2026-04-27-expression-char-literal-consolidation-regression.md).
+     *
+     * The default lower bound was raised from 5 to 6 after a parameter sweep
+     * showed strict improvements on several Expression_* tests (e.g.
+     * Expression_list_one_item_max_rounds_2 5099→3700, Expression_char_literal
+     * 1822→1576, Expression_int_literal 1921→1675, Expression_string_literal
+     * 3083→2835, Expression_empty_list 2551→2225) with no SkipWhile regression.
+     * The trade-off is a ~3 % cost on the largest list-shape tests
+     * (Expression_flat_list_forty_items, Expression_nested_list_four_by_ten,
+     * Expression_application_with_various_argument_kinds).
+     */
+
+    /// <summary>
+    /// Default lower bound (exclusive) for the path-max gating window.
+    /// </summary>
+    public const int DefaultPathMaxLowExclusive = 6;
+
+    /// <summary>
+    /// Default upper bound (inclusive) for the path-max gating window.
+    /// </summary>
+    public const int DefaultPathMaxHighInclusive = 30;
+
     public static Expression InlineStaticInvocationsAndReduceRecursive(
         Expression currentExpression,
         ImmutableStack<Expression> inlinedParents,
@@ -276,13 +330,17 @@ public record ExpressionCompilation(
         PineVMParseCache parseCache,
         bool disableRecurseAfterInline,
         Func<Expression, bool> skipInlining,
-        IDictionary<Expression, Expression>? reducedExpressionCache = null)
+        IDictionary<Expression, Expression>? reducedExpressionCache = null,
+        int pathMaxLowExclusive = DefaultPathMaxLowExclusive,
+        int pathMaxHighInclusive = DefaultPathMaxHighInclusive,
+        bool disableGenericApplicationChainConsolidation = false)
     {
         var expressionReduced =
             ReducePineExpression.ReduceExpressionBottomUp(
                 currentExpression,
                 parseCache,
-                reducedExpressionCache: reducedExpressionCache);
+                reducedExpressionCache: reducedExpressionCache,
+                disableGenericApplicationChainConsolidation: disableGenericApplicationChainConsolidation);
 
         if (maxDepth <= 0)
         {
@@ -350,7 +408,125 @@ public record ExpressionCompilation(
                 ReducePineExpression.ReduceExpressionBottomUp(
                     inlinedExpr,
                     parseCache,
-                    reducedExpressionCache: reducedExpressionCache);
+                    reducedExpressionCache: reducedExpressionCache,
+                    disableGenericApplicationChainConsolidation: disableGenericApplicationChainConsolidation);
+
+            /*
+             * Per-branch (max-of-paths) cost gate: a Conditional contributes the cost of
+             * its condition plus the max of its two branches, not the sum. The metric
+             * counts only PEs that future inlining would actually expand, so recursive
+             * self-calls (which the inliner's recursion check would refuse) and other
+             * statically-unresolvable PEs are excluded. This focuses the gate on
+             * inlining-driven code growth rather than fixed runtime cost. Static IR size
+             * is gated separately by the entry-level maxSubexpressionCount cap above.
+             */
+            bool IsExpansionCandidateForFirstInliner(Expression.ParseAndEval pe)
+            {
+                if (pe.Encoded.ReferencesEnvironment)
+                {
+                    return false;
+                }
+
+                if (ReducePineExpression.TryEvaluateExpressionIndependent(
+                    pe.Encoded, parseCache).IsOkOrNull() is not { } peValue)
+                {
+                    return false;
+                }
+
+                if (parseCache.ParseExpression(peValue).IsOkOrNull() is not { } peParsed)
+                {
+                    return false;
+                }
+
+                if (skipInlining(peParsed))
+                {
+                    return false;
+                }
+
+                /*
+                 * Recursive self-calls and calls to ancestors-being-inlined are NOT
+                 * excluded from the path-max metric. While the inliner's own recursion
+                 * check refuses to expand them further, leaving them as residual
+                 * <see cref="Expression.ParseAndEval"/> nodes still incurs a dynamic
+                 * invocation per traversal of the worst path. Rejecting bodies whose
+                 * worst path contains too many such residual calls is what keeps tests
+                 * like <c>Int_div_1_000_000_by_257</c> within their invocation-count
+                 * budget: <c>idivHelper</c> has two self-recursive call sites along its
+                 * worst path, and admitting a fully-inlined copy of its body into
+                 * <c>idiv</c> would multiply the dynamic invocation count at every
+                 * call site reachable from the outer program.
+                 */
+
+                return true;
+            }
+
+            /*
+             * Per-branch (max-of-paths) cost gate, with a "moderate-path-max" rejection
+             * window. The metric counts only PEs that future inlining would actually
+             * expand (recursive self-calls and other statically-unresolvable PEs are
+             * excluded). A Conditional contributes its condition-path cost plus the max
+             * of its two branch-path costs, not the sum.
+             *
+             * Empirical observation (from instrumented runs of the affected tests):
+             *   - "Bad" inlinings (cause runaway expansion later) tend to have moderate
+             *     path-max (6-9) on bodies that get inlined into many call sites; each
+             *     copy carries its PE-along-path forward, ballooning total expansion
+             *     cost.
+             *   - "Good" inlinings of helpful tail-recursive helpers often have very
+             *     high path-max (e.g. 38) coming from a large curried recursive call
+             *     chain that won't actually expand further (the recursion is excluded
+             *     from the metric, but unconsolidated chains can still inflate the
+             *     count). These are typically inlined only once or twice, so the
+             *     per-callsite cost is recovered.
+             *
+             * So the gate uses an upper bound on the rejection window: only path-max
+             * values in the moderate band [6 .. 30] are rejected. Values above 30 are
+             * admitted on the assumption that they are deep recursive helpers rather
+             * than runaway-expansion candidates. Static IR size is gated separately by
+             * the entry-level maxSubexpressionCount cap above.
+             */
+            /*
+             * Per-branch (max-of-paths) cost gate, with a "moderate-path-max" rejection
+             * window applied only to the substituted-and-reduced body BEFORE the
+             * recursive inline-and-reduce step. The metric counts only PEs that future
+             * inlining would actually expand (recursive self-calls and other
+             * statically-unresolvable PEs are excluded). A Conditional contributes its
+             * condition-path cost plus the max of its two branch-path costs, not the
+             * sum.
+             *
+             * Empirical observation (from instrumented runs of the affected tests):
+             *   - "Bad" inlinings (cause runaway expansion later) tend to have moderate
+             *     path-max (6-9) on small bodies that get inlined into many call sites;
+             *     each copy carries its PE-along-path forward, ballooning total
+             *     expansion cost.
+             *   - "Good" inlinings of helpful tail-recursive helpers often have very
+             *     high path-max (e.g. 38) coming from a large curried recursive call
+             *     chain that won't actually expand further (the recursion is excluded
+             *     from the metric, but unconsolidated chains can still inflate the
+             *     count). These are typically inlined only once or twice, so the
+             *     per-callsite cost is recovered.
+             *
+             * The gate uses an upper bound on the rejection window: only path-max
+             * values in the moderate band [6 .. 30] are rejected. Values above 30 are
+             * admitted on the assumption that they are deep recursive helpers rather
+             * than runaway-expansion candidates.
+             *
+             * Only the pre-recurse check is enforced. The post-recurse check fires for
+             * SkipWhile-like recursive helpers whose body's path-max grows transiently
+             * during recursive inlining (e.g. to 13) but ultimately settles into a
+             * tail-recursive shape that is strictly better than not inlining at all.
+             * The pre-recurse gate is sufficient to catch the runaway-expansion shapes
+             * we want to reject; further code-size growth at the recursive step is
+             * already bounded by the static `SubexpressionCount` cap.
+             */
+            {
+                var pmPre = ComputeParseAndEvalPathMax(inlinedExprReduced, IsExpansionCandidateForFirstInliner);
+
+                if (pathMaxLowExclusive < pmPre && pmPre <= pathMaxHighInclusive)
+                {
+                    return null;
+                }
+            }
 
             var inlinedFinal =
                 InlineStaticInvocationsAndReduceRecursive(
@@ -361,7 +537,10 @@ public record ExpressionCompilation(
                     parseCache: parseCache,
                     skipInlining: skipInlining,
                     disableRecurseAfterInline: disableRecurseAfterInline,
-                    reducedExpressionCache: reducedExpressionCache);
+                    reducedExpressionCache: reducedExpressionCache,
+                    pathMaxLowExclusive: pathMaxLowExclusive,
+                    pathMaxHighInclusive: pathMaxHighInclusive,
+                    disableGenericApplicationChainConsolidation: disableGenericApplicationChainConsolidation);
 
             return inlinedFinal;
         }
@@ -436,9 +615,79 @@ public record ExpressionCompilation(
             ReducePineExpression.ReduceExpressionBottomUp(
                 expressionInlined,
                 parseCache,
-                reducedExpressionCache: reducedExpressionCache);
+                reducedExpressionCache: reducedExpressionCache,
+                disableGenericApplicationChainConsolidation: disableGenericApplicationChainConsolidation);
 
         return expressionInlinedReduced;
+    }
+
+    /// <summary>
+    /// Computes, for an expression, the per-path maximum number of
+    /// <see cref="Expression.ParseAndEval"/> nodes that <em>would be expanded by future
+    /// inlining</em> along any single dynamic evaluation path. A
+    /// <see cref="Expression.Conditional"/> contributes
+    /// <c>condition_path + max(true_path, false_path)</c> rather than the
+    /// sum of all branches, reflecting that exactly one of <c>TrueBranch</c>/<c>FalseBranch</c>
+    /// executes per evaluation. A <see cref="Expression.ParseAndEval"/> contributes 1
+    /// only when the supplied <paramref name="isExpansionCandidate"/> predicate returns
+    /// true for it; otherwise it contributes 0.
+    /// <para>
+    /// This is the cost model used by the inliner's per-step cost gate. Including only
+    /// expansion-candidate PEs aligns the metric with the question the gate is trying to
+    /// answer ("will inlining this body cause further inlining to expand the worst-case
+    /// path beyond a safe limit?"), and avoids penalising bodies whose deep PE chains are
+    /// fixed runtime cost the inliner cannot influence — most importantly, recursive
+    /// self-calls and other environment-dispatched calls. Static IR size is gated
+    /// separately by the <c>SubexpressionCount</c> threshold.
+    /// </para>
+    /// </summary>
+    internal static int ComputeParseAndEvalPathMax(
+        Expression expression,
+        Func<Expression.ParseAndEval, bool> isExpansionCandidate)
+    {
+        switch (expression)
+        {
+            case Expression.Conditional conditional:
+                {
+                    var condP = ComputeParseAndEvalPathMax(conditional.Condition, isExpansionCandidate);
+                    var trueP = ComputeParseAndEvalPathMax(conditional.TrueBranch, isExpansionCandidate);
+                    var falseP = ComputeParseAndEvalPathMax(conditional.FalseBranch, isExpansionCandidate);
+
+                    return condP + System.Math.Max(trueP, falseP);
+                }
+
+            case Expression.ParseAndEval parseAndEval:
+                {
+                    var encP = ComputeParseAndEvalPathMax(parseAndEval.Encoded, isExpansionCandidate);
+                    var envP = ComputeParseAndEvalPathMax(parseAndEval.Environment, isExpansionCandidate);
+
+                    var selfContribution =
+                        isExpansionCandidate(parseAndEval) ? 1 : 0;
+
+                    return selfContribution + encP + envP;
+                }
+
+            case Expression.List list:
+                {
+                    var sumP = 0;
+
+                    for (var i = 0; i < list.Items.Count; i++)
+                    {
+                        sumP += ComputeParseAndEvalPathMax(list.Items[i], isExpansionCandidate);
+                    }
+
+                    return sumP;
+                }
+
+            case Expression.KernelApplication kernelApp:
+                return ComputeParseAndEvalPathMax(kernelApp.Input, isExpansionCandidate);
+
+            case Expression.StringTag stringTag:
+                return ComputeParseAndEvalPathMax(stringTag.Tagged, isExpansionCandidate);
+
+            default:
+                return 0;
+        }
     }
 
     public static Expression ReduceExpressionAndInlineRecursive(
@@ -450,7 +699,10 @@ public record ExpressionCompilation(
         PineVMParseCache parseCache,
         bool disableRecurseAfterInline,
         Func<Expression, PineValueClass?, bool> skipInlining,
-        IDictionary<Expression, Expression>? reducedExpressionCache = null) =>
+        IDictionary<Expression, Expression>? reducedExpressionCache = null,
+        int pathMaxLowExclusive = DefaultPathMaxLowExclusive,
+        int pathMaxHighInclusive = DefaultPathMaxHighInclusive,
+        bool disableGenericApplicationChainConsolidation = false) =>
         ReduceExpressionAndInlineRecursive(
             currentExpression: rootExpression,
             inlinedParents: [],
@@ -461,7 +713,10 @@ public record ExpressionCompilation(
             parseCache: parseCache,
             disableRecurseAfterInline: disableRecurseAfterInline,
             skipInlining: skipInlining,
-            reducedExpressionCache: reducedExpressionCache);
+            reducedExpressionCache: reducedExpressionCache,
+            pathMaxLowExclusive: pathMaxLowExclusive,
+            pathMaxHighInclusive: pathMaxHighInclusive,
+            disableGenericApplicationChainConsolidation: disableGenericApplicationChainConsolidation);
 
     public static Expression ReduceExpressionAndInlineRecursive(
         Expression currentExpression,
@@ -473,7 +728,10 @@ public record ExpressionCompilation(
         PineVMParseCache parseCache,
         bool disableRecurseAfterInline,
         Func<Expression, PineValueClass?, bool> skipInlining,
-        IDictionary<Expression, Expression>? reducedExpressionCache = null)
+        IDictionary<Expression, Expression>? reducedExpressionCache = null,
+        int pathMaxLowExclusive = DefaultPathMaxLowExclusive,
+        int pathMaxHighInclusive = DefaultPathMaxHighInclusive,
+        bool disableGenericApplicationChainConsolidation = false)
     {
         var expressionSubstituted =
             envConstraintId is null
@@ -488,7 +746,8 @@ public record ExpressionCompilation(
             ReducePineExpression.ReduceExpressionBottomUp(
                 expressionSubstituted,
                 parseCache,
-                reducedExpressionCache: reducedExpressionCache);
+                reducedExpressionCache: reducedExpressionCache,
+                disableGenericApplicationChainConsolidation: disableGenericApplicationChainConsolidation);
 
         if (maxDepth <= 0)
         {
@@ -578,7 +837,44 @@ public record ExpressionCompilation(
                     ReducePineExpression.ReduceExpressionBottomUp(
                         inlinedExprSubstituted,
                         parseCache,
-                        reducedExpressionCache: reducedExpressionCache);
+                        reducedExpressionCache: reducedExpressionCache,
+                        disableGenericApplicationChainConsolidation: disableGenericApplicationChainConsolidation);
+
+                bool IsExpansionCandidateForSecondInliner(Expression.ParseAndEval pe)
+                {
+                    if (pe.Encoded.ReferencesEnvironment)
+                    {
+                        return false;
+                    }
+
+                    if (ReducePineExpression.TryEvaluateExpressionIndependent(
+                        pe.Encoded, parseCache).IsOkOrNull() is not { } peValue)
+                    {
+                        return false;
+                    }
+
+                    if (parseCache.ParseExpression(peValue).IsOkOrNull() is not { } peParsed)
+                    {
+                        return false;
+                    }
+
+                    if (skipInlining(peParsed, envConstraintId))
+                    {
+                        return false;
+                    }
+
+                    /*
+                     * Recursive self-calls and calls to ancestors-being-inlined are NOT
+                     * excluded from the path-max metric. See the corresponding comment on
+                     * <see cref="IsExpansionCandidateForFirstInliner"/> for the rationale
+                     * (residual <see cref="Expression.ParseAndEval"/> nodes still cost a
+                     * dynamic invocation per traversal, and rejecting bodies with too many
+                     * of them along the worst path keeps tests like
+                     * <c>Int_div_1_000_000_by_257</c> within their invocation-count budget).
+                     */
+
+                    return true;
+                }
 
                 {
                     if (500 < inlinedExprReduced.SubexpressionCount)
@@ -586,34 +882,14 @@ public record ExpressionCompilation(
                         return null;
                     }
 
-                    var conditionsCount = 0;
-                    var invocationsCount = 0;
+                    var pathInvocations =
+                        ComputeParseAndEvalPathMax(
+                            inlinedExprReduced,
+                            IsExpansionCandidateForSecondInliner);
 
-                    foreach (var subexpr in Expression.EnumerateSelfAndDescendants(inlinedExprReduced))
+                    if (pathMaxLowExclusive < pathInvocations && pathInvocations <= pathMaxHighInclusive)
                     {
-                        if (subexpr is Expression.Conditional)
-                        {
-                            ++conditionsCount;
-
-                            if (5 < conditionsCount)
-                            {
-                                return null;
-                            }
-
-                            continue;
-                        }
-
-                        if (subexpr is Expression.ParseAndEval)
-                        {
-                            ++invocationsCount;
-
-                            if (5 < invocationsCount)
-                            {
-                                return null;
-                            }
-
-                            continue;
-                        }
+                        return null;
                     }
                 }
 
@@ -629,42 +905,15 @@ public record ExpressionCompilation(
                         parseCache: parseCache,
                         skipInlining: skipInlining,
                         disableRecurseAfterInline: disableRecurseAfterInline,
-                        reducedExpressionCache: reducedExpressionCache);
+                        reducedExpressionCache: reducedExpressionCache,
+                        pathMaxLowExclusive: pathMaxLowExclusive,
+                        pathMaxHighInclusive: pathMaxHighInclusive,
+                        disableGenericApplicationChainConsolidation: disableGenericApplicationChainConsolidation);
 
                 {
                     if (500 < inlinedFinal.SubexpressionCount)
                     {
                         return null;
-                    }
-
-                    var conditionsCount = 0;
-                    var invocationsCount = 0;
-
-                    foreach (var subexpr in Expression.EnumerateSelfAndDescendants(inlinedFinal))
-                    {
-                        if (subexpr is Expression.Conditional)
-                        {
-                            ++conditionsCount;
-
-                            if (5 < conditionsCount)
-                            {
-                                return null;
-                            }
-
-                            continue;
-                        }
-
-                        if (subexpr is Expression.ParseAndEval)
-                        {
-                            ++invocationsCount;
-
-                            if (5 < invocationsCount)
-                            {
-                                return null;
-                            }
-
-                            continue;
-                        }
                     }
                 }
 
@@ -754,7 +1003,8 @@ public record ExpressionCompilation(
             ReducePineExpression.ReduceExpressionBottomUp(
                 expressionInlined,
                 parseCache,
-                reducedExpressionCache: reducedExpressionCache);
+                reducedExpressionCache: reducedExpressionCache,
+                disableGenericApplicationChainConsolidation: disableGenericApplicationChainConsolidation);
 
         return expressionInlinedReduced;
     }

@@ -1226,7 +1226,8 @@ public class ReducePineExpression
     public static Expression ReduceExpressionBottomUp(
         Expression expression,
         PineVMParseCache parseCache,
-        IDictionary<Expression, Expression>? reducedExpressionCache = null)
+        IDictionary<Expression, Expression>? reducedExpressionCache = null,
+        bool disableGenericApplicationChainConsolidation = false)
     {
         if (reducedExpressionCache is not null &&
             reducedExpressionCache.TryGetValue(expression, out var cachedReducedExpression))
@@ -1244,31 +1245,36 @@ public class ReducePineExpression
                 ReduceListExpressionBottomUp(
                     listExpr,
                     parseCache,
-                    reducedExpressionCache),
+                    reducedExpressionCache,
+                    disableGenericApplicationChainConsolidation),
 
                 Expression.KernelApplication kernelApp =>
                 ReduceKernelApplicationBottomUp(
                     kernelApp,
                     parseCache,
-                    reducedExpressionCache),
+                    reducedExpressionCache,
+                    disableGenericApplicationChainConsolidation),
 
                 Expression.ParseAndEval parseAndEval =>
                 ReduceParseAndEvalBottomUp(
                     parseAndEval,
                     parseCache,
-                    reducedExpressionCache),
+                    reducedExpressionCache,
+                    disableGenericApplicationChainConsolidation),
 
                 Expression.Conditional conditional =>
                 ReduceConditionalBottomUp(
                     conditional,
                     parseCache,
-                    reducedExpressionCache),
+                    reducedExpressionCache,
+                    disableGenericApplicationChainConsolidation),
 
                 Expression.StringTag stringTag =>
                 ReduceStringTagBottomUp(
                     stringTag,
                     parseCache,
-                    reducedExpressionCache),
+                    reducedExpressionCache,
+                    disableGenericApplicationChainConsolidation),
 
                 // These are direct references to the environment or stack.
                 // No further children to reduce.
@@ -1308,7 +1314,8 @@ public class ReducePineExpression
     public static Expression ReduceListExpressionBottomUp(
         Expression.List listExpr,
         PineVMParseCache parseCache,
-        IDictionary<Expression, Expression>? reducedExpressionCache)
+        IDictionary<Expression, Expression>? reducedExpressionCache,
+        bool disableGenericApplicationChainConsolidation = false)
     {
         var items = listExpr.Items;
         var changed = false;
@@ -1320,7 +1327,8 @@ public class ReducePineExpression
                 ReduceExpressionBottomUp(
                     items[i],
                     parseCache,
-                    reducedExpressionCache);
+                    reducedExpressionCache,
+                    disableGenericApplicationChainConsolidation);
 
             newItems[i] = reducedChild;
 
@@ -1346,13 +1354,15 @@ public class ReducePineExpression
     public static Expression ReduceKernelApplicationBottomUp(
         Expression.KernelApplication kernelApp,
         PineVMParseCache parseCache,
-        IDictionary<Expression, Expression>? reducedExpressionCache)
+        IDictionary<Expression, Expression>? reducedExpressionCache,
+        bool disableGenericApplicationChainConsolidation = false)
     {
         var reducedArg =
             ReduceExpressionBottomUp(
                 kernelApp.Input,
                 parseCache,
-                reducedExpressionCache);
+                reducedExpressionCache,
+                disableGenericApplicationChainConsolidation);
 
         if (kernelApp.Function is nameof(KernelFunction.int_mul) &&
             reducedArg is Expression.List operandList)
@@ -1443,28 +1453,324 @@ public class ReducePineExpression
     public static Expression ReduceParseAndEvalBottomUp(
         Expression.ParseAndEval parseAndEval,
         PineVMParseCache parseCache,
-        IDictionary<Expression, Expression>? reducedExpressionCache)
+        IDictionary<Expression, Expression>? reducedExpressionCache,
+        bool disableGenericApplicationChainConsolidation = false)
     {
         var reducedEncoded =
             ReduceExpressionBottomUp(
                 parseAndEval.Encoded,
                 parseCache,
-                reducedExpressionCache);
+                reducedExpressionCache,
+                disableGenericApplicationChainConsolidation);
 
         var reducedEnv =
             ReduceExpressionBottomUp(
                 parseAndEval.Environment,
                 parseCache,
-                reducedExpressionCache);
+                reducedExpressionCache,
+                disableGenericApplicationChainConsolidation);
 
-        if (reducedEncoded == parseAndEval.Encoded &&
-            reducedEnv == parseAndEval.Environment)
+        var reduced =
+            (reducedEncoded == parseAndEval.Encoded && reducedEnv == parseAndEval.Environment)
+            ?
+            parseAndEval
+            :
+            new Expression.ParseAndEval(encoded: reducedEncoded, environment: reducedEnv);
+
+        // Try to consolidate a chain of nested ParseAndEval expressions emitted by frontend
+        // compilers as the generic form of a function application. This collapses the chain into
+        // a single ParseAndEval when the innermost function expression is a literal and there
+        // is more than one argument applied generically.
+        if (TryConsolidateGenericFunctionApplicationChain(
+                reduced,
+                parseCache,
+                disableGenericApplicationChainConsolidation) is { } consolidated)
         {
-            return parseAndEval;
+            // The consolidation symbolically inlines the structural-encoding wrapper that
+            // FunctionValueBuilder emits, which can leave behind kernel applications
+            // (concat/head/skip) over partly-literal lists that are statically reducible.
+            // Run a bottom-up reduction pass on the result so those simplifications happen
+            // before downstream codegen sees the expression.
+            var reducedConsolidated =
+                ReduceExpressionBottomUp(
+                    consolidated,
+                    parseCache,
+                    reducedExpressionCache,
+                    disableGenericApplicationChainConsolidation);
+
+            return reducedConsolidated;
         }
 
-        return new Expression.ParseAndEval(encoded: reducedEncoded, environment: reducedEnv);
+        return reduced;
     }
+
+    /// <summary>
+    /// Attempts to collapse a chain of nested <see cref="Expression.ParseAndEval"/> expressions
+    /// produced by the generic form of function application
+    /// (<see cref="CodeAnalysis.BuildGenericFunctionApplication(Expression, IReadOnlyList{Expression})"/>)
+    /// into a single, equivalent expression.
+    /// <para>
+    /// Triggers only when the recovered argument list contains more than one argument and
+    /// the recovered function expression is an <see cref="Expression.Literal"/> whose value
+    /// parses successfully as a Pine expression. The transformation symbolically simulates
+    /// each application step using the structural encoding emitted by
+    /// <c>FunctionValueBuilder</c>: it inlines the literal-encoded function body for the
+    /// first argument and then "decodes" the resulting construction expression for each
+    /// subsequent argument, producing a single equivalent expression that no longer requires
+    /// one <see cref="Expression.ParseAndEval"/> per argument.
+    /// </para>
+    /// </summary>
+    /// <param name="parseAndEval">The outermost <see cref="Expression.ParseAndEval"/> of the chain.</param>
+    /// <param name="parseCache">Cache used when parsing encoded expressions.</param>
+    /// <param name="disableGenericApplicationChainConsolidation">When <c>true</c>,
+    /// the method returns <c>null</c> regardless of the chain shape. Intended exclusively for
+    /// diagnostic / inspection scenarios where the caller wants to observe the
+    /// pre-consolidation behavior side-by-side with the optimized one.</param>
+    /// <returns>The collapsed expression, or <c>null</c> when no consolidation applies.</returns>
+    public static Expression? TryConsolidateGenericFunctionApplicationChain(
+        Expression.ParseAndEval parseAndEval,
+        PineVMParseCache parseCache,
+        bool disableGenericApplicationChainConsolidation = false)
+    {
+        if (disableGenericApplicationChainConsolidation)
+        {
+            return null;
+        }
+
+        if (CodeAnalysis.ParseGenericFunctionApplication(parseAndEval) is not { } chain)
+        {
+            return null;
+        }
+
+        var (functionExpr, arguments) = chain;
+
+        if (arguments.Count <= 1)
+        {
+            return null;
+        }
+
+        if (functionExpr is not Expression.Literal functionLiteral)
+        {
+            return null;
+        }
+
+        if (parseCache.ParseExpression(functionLiteral.Value).IsOkOrNull() is not { } functionBody)
+        {
+            return null;
+        }
+
+        // First step: ParseAndEval(Literal(L), arguments[0]) ≡ functionBody[Environment := arguments[0]].
+        var currentExpr = SubstituteEnvironmentNode(functionBody, arguments[0]);
+
+        // For each subsequent argument, treat currentExpr as a "construction" expression that
+        // builds an encoded Pine expression at runtime, and decode the application of that
+        // argument into a single equivalent Pine expression.
+        for (var i = 1; i < arguments.Count; ++i)
+        {
+            if (TryDecodeApplicationOfConstructedEncoding(currentExpr, arguments[i], parseCache) is not { } decoded)
+            {
+                return null;
+            }
+
+            currentExpr = decoded;
+        }
+
+        return currentExpr;
+    }
+
+    /// <summary>
+    /// Symbolically computes an expression equivalent to
+    /// <c>ParseAndEval(<paramref name="construction"/>, <paramref name="envArg"/>)</c>,
+    /// assuming <paramref name="construction"/> uses the same structural encoding scheme as
+    /// <see cref="ExpressionEncoding.EncodeExpressionAsValue(Expression)"/>.
+    /// Returns <c>null</c> when the construction does not match a recognized encoded shape.
+    /// </summary>
+    private static Expression? TryDecodeApplicationOfConstructedEncoding(
+        Expression construction,
+        Expression envArg,
+        PineVMParseCache parseCache)
+    {
+        // If the construction is itself a ParseAndEval whose Encoded part is a literal,
+        // first inline that step (parse the literal as an expression, substitute Environment
+        // with the inner ParseAndEval's Environment) and then continue the decoding.
+        if (construction is Expression.ParseAndEval innerPe &&
+            innerPe.Encoded is Expression.Literal innerEncodedLiteral)
+        {
+            if (parseCache.ParseExpression(innerEncodedLiteral.Value).IsOkOrNull() is { } innerFunctionBody)
+            {
+                var inlined = SubstituteEnvironmentNode(innerFunctionBody, innerPe.Environment);
+
+                return TryDecodeApplicationOfConstructedEncoding(inlined, envArg, parseCache);
+            }
+
+            return null;
+        }
+
+        // If the construction itself is a literal, parse it as an expression and substitute
+        // Environment with envArg.
+        if (construction is Expression.Literal constructionLiteral)
+        {
+            if (parseCache.ParseExpression(constructionLiteral.Value).IsOkOrNull() is { } parsedInner)
+            {
+                return SubstituteEnvironmentNode(parsedInner, envArg);
+            }
+
+            return null;
+        }
+
+        // Otherwise, the construction must be a ListExpr matching the structural encoding shape.
+        if (construction is not Expression.List constructionList)
+        {
+            return null;
+        }
+
+        if (constructionList.Items.Count is not 2)
+        {
+            return null;
+        }
+
+        if (constructionList.Items[0] is not Expression.Literal tagLiteral)
+        {
+            return null;
+        }
+
+        if (StringEncoding.StringFromValue(tagLiteral.Value).IsOkOrNull() is not { } tag)
+        {
+            return null;
+        }
+
+        if (constructionList.Items[1] is not Expression.List tagArguments)
+        {
+            return null;
+        }
+
+        switch (tag)
+        {
+            case "Literal":
+                {
+                    // Encoding of Expression.Literal: ListExpr([Lit("Literal"), ListExpr([X])]).
+                    // ParseAndEval(this, envArg) evaluates the parsed Literal expression with
+                    // env = envArg; Literal expressions ignore their environment, so the result
+                    // is the literal value, which is what X evaluates to in the outer env.
+                    if (tagArguments.Items.Count is not 1)
+                    {
+                        return null;
+                    }
+
+                    return tagArguments.Items[0];
+                }
+
+            case "Environment":
+                {
+                    // Encoding of Expression.Environment: ListExpr([Lit("Environment"), ListExpr([])]).
+                    // ParseAndEval(this, envArg) evaluates the parsed Environment expression
+                    // with env = envArg, producing envArg.
+                    if (tagArguments.Items.Count is not 0)
+                    {
+                        return null;
+                    }
+
+                    return envArg;
+                }
+
+            case "List":
+                {
+                    // Encoding of Expression.List: ListExpr([Lit("List"), ListExpr([ListExpr([item_enc...])])]).
+                    if (tagArguments.Items.Count is not 1)
+                    {
+                        return null;
+                    }
+
+                    if (tagArguments.Items[0] is not Expression.List innerItemsList)
+                    {
+                        return null;
+                    }
+
+                    var decodedItems = new Expression[innerItemsList.Items.Count];
+
+                    for (var i = 0; i < innerItemsList.Items.Count; ++i)
+                    {
+                        if (TryDecodeApplicationOfConstructedEncoding(
+                                innerItemsList.Items[i],
+                                envArg,
+                                parseCache) is not { } decodedItem)
+                        {
+                            return null;
+                        }
+
+                        decodedItems[i] = decodedItem;
+                    }
+
+                    return Expression.ListInstance(decodedItems);
+                }
+
+            case "ParseAndEval":
+                {
+                    // Encoding of Expression.ParseAndEval:
+                    // ListExpr([Lit("ParseAndEval"), ListExpr([encInner, envInner])]).
+                    if (tagArguments.Items.Count is not 2)
+                    {
+                        return null;
+                    }
+
+                    if (TryDecodeApplicationOfConstructedEncoding(
+                            tagArguments.Items[0],
+                            envArg,
+                            parseCache) is not { } decodedEncoded)
+                    {
+                        return null;
+                    }
+
+                    if (TryDecodeApplicationOfConstructedEncoding(
+                            tagArguments.Items[1],
+                            envArg,
+                            parseCache) is not { } decodedEnv)
+                    {
+                        return null;
+                    }
+
+                    return new Expression.ParseAndEval(decodedEncoded, decodedEnv);
+                }
+
+            case "KernelApplication":
+                {
+                    // Encoding of Expression.KernelApplication:
+                    // ListExpr([Lit("KernelApplication"), ListExpr([Lit(funcName_str), input_enc])]).
+                    if (tagArguments.Items.Count is not 2)
+                    {
+                        return null;
+                    }
+
+                    if (tagArguments.Items[0] is not Expression.Literal funcNameLiteral)
+                    {
+                        return null;
+                    }
+
+                    if (StringEncoding.StringFromValue(funcNameLiteral.Value).IsOkOrNull() is not { } functionName)
+                    {
+                        return null;
+                    }
+
+                    if (TryDecodeApplicationOfConstructedEncoding(
+                            tagArguments.Items[1],
+                            envArg,
+                            parseCache) is not { } decodedInput)
+                    {
+                        return null;
+                    }
+
+                    return Expression.KernelApplicationInstance(functionName, decodedInput);
+                }
+
+            default:
+                return null;
+        }
+    }
+
+    private static Expression SubstituteEnvironmentNode(Expression expression, Expression replacement) =>
+        TransformPineExpressionWithOptionalReplacement(
+            findReplacement: e => e is Expression.Environment ? replacement : null,
+            expression: expression).expr;
 
     /// <summary>
     /// Reduces a conditional expression bottom-up by reducing its components and then attempting a local reduction.
@@ -1475,25 +1781,29 @@ public class ReducePineExpression
     public static Expression ReduceConditionalBottomUp(
         Expression.Conditional conditional,
         PineVMParseCache parseCache,
-        IDictionary<Expression, Expression>? reducedExpressionCache)
+        IDictionary<Expression, Expression>? reducedExpressionCache,
+        bool disableGenericApplicationChainConsolidation = false)
     {
         var reducedCondition =
             ReduceExpressionBottomUp(
                 conditional.Condition,
                 parseCache,
-                reducedExpressionCache);
+                reducedExpressionCache,
+                disableGenericApplicationChainConsolidation);
 
         var reducedTrue =
             ReduceExpressionBottomUp(
                 conditional.TrueBranch,
                 parseCache,
-                reducedExpressionCache);
+                reducedExpressionCache,
+                disableGenericApplicationChainConsolidation);
 
         var reducedFalse =
             ReduceExpressionBottomUp(
                 conditional.FalseBranch,
                 parseCache,
-                reducedExpressionCache);
+                reducedExpressionCache,
+                disableGenericApplicationChainConsolidation);
 
         if (reducedCondition == conditional.Condition &&
             reducedTrue == conditional.TrueBranch &&
@@ -1518,13 +1828,15 @@ public class ReducePineExpression
     public static Expression ReduceStringTagBottomUp(
         Expression.StringTag stringTag,
         PineVMParseCache parseCache,
-        IDictionary<Expression, Expression>? reducedExpressionCache)
+        IDictionary<Expression, Expression>? reducedExpressionCache,
+        bool disableGenericApplicationChainConsolidation = false)
     {
         var reducedTagged =
             ReduceExpressionBottomUp(
                 stringTag.Tagged,
                 parseCache,
-                reducedExpressionCache);
+                reducedExpressionCache,
+                disableGenericApplicationChainConsolidation);
 
         if (reducedTagged == stringTag.Tagged)
             return stringTag;

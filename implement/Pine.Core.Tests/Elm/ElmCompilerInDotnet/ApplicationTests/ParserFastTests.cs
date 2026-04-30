@@ -506,9 +506,9 @@ public class ParserFastTests
 
         PerformanceCountersFormatting.FormatCounts(report).Should().Be(
             """
-            InstructionCount: 270
-            InvocationCount: 10
-            BuildListCount: 9
+            InstructionCount: 208
+            InvocationCount: 9
+            BuildListCount: 6
             LoopIterationCount: 0
             """);
     }
@@ -526,9 +526,9 @@ public class ParserFastTests
 
         PerformanceCountersFormatting.FormatCounts(report).Should().Be(
             """
-            InstructionCount: 238
-            InvocationCount: 10
-            BuildListCount: 9
+            InstructionCount: 184
+            InvocationCount: 9
+            BuildListCount: 6
             LoopIterationCount: 0
             """);
     }
@@ -566,9 +566,9 @@ public class ParserFastTests
 
         PerformanceCountersFormatting.FormatCounts(report).Should().Be(
             """
-            InstructionCount: 1_005
-            InvocationCount: 52
-            BuildListCount: 30
+            InstructionCount: 943
+            InvocationCount: 51
+            BuildListCount: 27
             LoopIterationCount: 0
             """);
     }

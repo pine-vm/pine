@@ -36,6 +36,12 @@ public class PineVM : IPineVM
 
     private readonly bool _enableTailRecursionOptimization;
 
+    private readonly int _pathMaxLowExclusive;
+
+    private readonly int _pathMaxHighInclusive;
+
+    private readonly bool _disableGenericApplicationChainConsolidation;
+
     public readonly PineVMParseCache ParseCache;
 
     private readonly Dictionary<Expression, PineValue> _encodeExpressionCache = [];
@@ -71,7 +77,10 @@ public class PineVM : IPineVM
         IFileStore? cacheFileStore,
         ReportExecutedStackInstruction? reportExecutedStackInstruction = null,
         ReportEnteredStackFrame? reportEnteredStackFrame = null,
-        IReadOnlyDictionary<Expression, ExpressionCompilation>? expressionCompilationOverrides = null)
+        IReadOnlyDictionary<Expression, ExpressionCompilation>? expressionCompilationOverrides = null,
+        int pathMaxLowExclusive = ExpressionCompilation.DefaultPathMaxLowExclusive,
+        int pathMaxHighInclusive = ExpressionCompilation.DefaultPathMaxHighInclusive,
+        bool disableGenericApplicationChainConsolidation = false)
     {
         return
             new PineVM(
@@ -91,7 +100,10 @@ public class PineVM : IPineVM
                 cacheFileStore: cacheFileStore,
                 reportExecutedStackInstruction: reportExecutedStackInstruction,
                 reportEnteredStackFrame: reportEnteredStackFrame,
-                expressionCompilationOverrides: expressionCompilationOverrides);
+                expressionCompilationOverrides: expressionCompilationOverrides,
+                pathMaxLowExclusive: pathMaxLowExclusive,
+                pathMaxHighInclusive: pathMaxHighInclusive,
+                disableGenericApplicationChainConsolidation: disableGenericApplicationChainConsolidation);
 
     }
 
@@ -112,7 +124,10 @@ public class PineVM : IPineVM
         IFileStore? cacheFileStore,
         ReportExecutedStackInstruction? reportExecutedStackInstruction,
         ReportEnteredStackFrame? reportEnteredStackFrame,
-        IReadOnlyDictionary<Expression, ExpressionCompilation>? expressionCompilationOverrides)
+        IReadOnlyDictionary<Expression, ExpressionCompilation>? expressionCompilationOverrides,
+        int pathMaxLowExclusive = ExpressionCompilation.DefaultPathMaxLowExclusive,
+        int pathMaxHighInclusive = ExpressionCompilation.DefaultPathMaxHighInclusive,
+        bool disableGenericApplicationChainConsolidation = false)
     {
         EvalCache = evalCache;
 
@@ -146,6 +161,12 @@ public class PineVM : IPineVM
         _optimizationParametersSerial = optimizationParametersSerial;
 
         _expressionCompilationOverrides = expressionCompilationOverrides;
+
+        _pathMaxLowExclusive = pathMaxLowExclusive;
+
+        _pathMaxHighInclusive = pathMaxHighInclusive;
+
+        _disableGenericApplicationChainConsolidation = disableGenericApplicationChainConsolidation;
     }
 
     /// <inheritdoc/>
@@ -273,7 +294,10 @@ public class PineVM : IPineVM
                 disableReduction: _disableReductionInCompilation,
                 skipInlining: SkipInlining,
                 enableTailRecursionOptimization: _enableTailRecursionOptimization,
-                reducedExpressionCache: _reducedExpressionDict);
+                reducedExpressionCache: _reducedExpressionDict,
+                pathMaxLowExclusive: _pathMaxLowExclusive,
+                pathMaxHighInclusive: _pathMaxHighInclusive,
+                disableGenericApplicationChainConsolidation: _disableGenericApplicationChainConsolidation);
 
         OptimizationParametersSerial.ExpressionConfig? optimizationConfig = null;
 

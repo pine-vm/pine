@@ -9,79 +9,36 @@ public static class CoreModules
 {
     /// <summary>
     /// Builds a static program parser configuration that recognizes default core modules.
+    /// <para>
+    /// Delegates the per-callee derivation of recognition facts (Form A / Form B /
+    /// Form C / bare reference) to <see cref="CalleeRecognition.Augment{IdentifierT}(StaticProgramParserConfig{IdentifierT}, IReadOnlyCollection{CalleeDescriptor{IdentifierT}}, PineVMParseCache)"/>.
+    /// Mirrors the names recognized by <see cref="CoreBasics.IdentifyFunctionValue(PineValue)"/>
+    /// and resolvable through <see cref="CoreBasics.GetFunctionValue(string)"/> via
+    /// the registry <see cref="CoreBasics.KnownDeclarationNames"/>.
+    /// </para>
     /// </summary>
     public static StaticProgramParserConfig<IdentifierT> AddCoreModules<IdentifierT>(
         this StaticProgramParserConfig<IdentifierT> previousConfig,
         Func<string, IdentifierT> fromCoreModuleBasics,
         PineVMParseCache parseCache)
+        where IdentifierT : notnull
     {
-        StaticProgramParser.IdentifyResponse<IdentifierT>? IdentifyOverride(
-            IEnumerable<IdentifierT> stack,
-            PineValue pineValue)
+        var descriptors = new List<CalleeDescriptor<IdentifierT>>();
+
+        foreach (var declName in CoreBasics.KnownDeclarationNames)
         {
-            // First try to identify as a known function value (e.g., Basics.add, Basics.sub)
-            if (CoreBasics.IdentifyFunctionValue(pineValue) is { } functionName)
+            if (CoreBasics.GetFunctionValue(declName) is not { } functionValue)
             {
-                var identifier = fromCoreModuleBasics(functionName);
-
-                return new StaticProgramParser.IdentifyResponse<IdentifierT>(identifier, ContinueParse: false);
+                continue;
             }
 
-            // Also try parsing as expression for backwards compatibility with application patterns
-            if (parseCache.ParseExpression(pineValue).IsOkOrNull() is { } expr)
-            {
-                if (CoreBasics.Identify(expr) is { } basicsName)
-                {
-                    var identifier = fromCoreModuleBasics(basicsName.declName);
-
-                    return new StaticProgramParser.IdentifyResponse<IdentifierT>(identifier, ContinueParse: false);
-                }
-            }
-
-            return null;
+            descriptors.Add(
+                new CalleeDescriptor<IdentifierT>(
+                    Identifier: fromCoreModuleBasics(declName),
+                    NamedValue: functionValue,
+                    ContinueParse: false));
         }
 
-        StaticProgramParser.IdentifyResponse<IdentifierT> IdentifyRequired(
-            IEnumerable<IdentifierT> stack,
-            PineValue pineValue)
-        {
-            if (IdentifyOverride(stack, pineValue) is { } overriden)
-            {
-                return overriden;
-            }
-
-            return previousConfig.IdentifyInstanceRequired(stack, pineValue);
-        }
-
-        StaticProgramParser.IdentifyResponse<IdentifierT>? IdentifyOptional(
-            IEnumerable<IdentifierT> stack,
-            PineValue pineValue)
-        {
-            if (IdentifyOverride(stack, pineValue) is { } overriden)
-            {
-                return overriden;
-            }
-
-            return previousConfig.IdentifyInstanceOptional(stack, pineValue);
-        }
-
-        StaticProgramParser.IdentifyResponse<IdentifierT>? IdentifyEncodedBody(
-            IEnumerable<IdentifierT> stack,
-            PineValue pineValue)
-        {
-            if (IdentifyOverride(stack, pineValue) is { } overriden)
-            {
-                return overriden;
-            }
-
-            return previousConfig.IdentifyEncodedBodyOptional?.Invoke(stack, pineValue);
-        }
-
-        return
-            new StaticProgramParserConfig<IdentifierT>(
-                IdentifyInstanceRequired: IdentifyRequired,
-                IdentifyInstanceOptional: IdentifyOptional,
-                IdentifyCrash: previousConfig.IdentifyCrash,
-                IdentifyEncodedBodyOptional: IdentifyEncodedBody);
+        return CalleeRecognition.Augment(previousConfig, descriptors, parseCache);
     }
 }

@@ -434,9 +434,9 @@ public class ElmLanguageServiceTests
 
         PerformanceCountersFormatting.FormatCounts(aggregateCounters).Should().Be(
             """
-            InstructionCount: 30_079_817
-            InvocationCount: 1_082_138
-            BuildListCount: 6_789_731
+            InstructionCount: 1_107_334
+            InvocationCount: 43_582
+            BuildListCount: 307_695
             LoopIterationCount: 0
             """);
     }

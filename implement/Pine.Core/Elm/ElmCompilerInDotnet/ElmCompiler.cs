@@ -110,7 +110,8 @@ public class ElmCompiler
         FileTree appCodeTree,
         IReadOnlyList<IReadOnlyList<string>> rootFilePaths,
         bool disableInlining,
-        int maxOptimizationRounds = 1)
+        int maxOptimizationRounds = 1,
+        bool disableGenericApplicationChainConsolidation = false)
     {
         var elmModuleFiles =
             appCodeTree.EnumerateFilesTransitive()
@@ -479,7 +480,7 @@ public class ElmCompiler
             if (!allLayoutDepsCompiled)
                 continue;
 
-            var compileSccResult = CompileSCC(scc, compilationContext);
+            var compileSccResult = CompileSCC(scc, compilationContext, disableGenericApplicationChainConsolidation);
 
             if (compileSccResult.IsErrOrNull() is { } compileSccErr)
             {
@@ -864,7 +865,8 @@ public class ElmCompiler
     /// </summary>
     private static Result<CompilationError, ModuleCompilationContext> CompileSCC(
         FunctionScc scc,
-        ModuleCompilationContext context)
+        ModuleCompilationContext context,
+        bool disableGenericApplicationChainConsolidation = false)
     {
         var sharedLayout = scc.GetLayout();
         var sccMembers = scc.Members;
@@ -958,7 +960,11 @@ public class ElmCompiler
                     "Unexpected result type: " + compileBodyResult.GetType());
             }
 
-            compiledBody = ReducePineExpression.ReduceExpressionBottomUp(compiledBody, parseCache);
+            compiledBody =
+                ReducePineExpression.ReduceExpressionBottomUp(
+                    compiledBody,
+                    parseCache,
+                    disableGenericApplicationChainConsolidation: disableGenericApplicationChainConsolidation);
 
             compiledBodies[memberName] = (compiledBody, paramCount);
         }

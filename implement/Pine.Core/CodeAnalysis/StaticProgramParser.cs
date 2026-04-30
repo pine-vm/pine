@@ -63,6 +63,25 @@ public class StaticProgramParser
         PineValue? OriginalFunctionValue = null);
 
     /// <summary>
+    /// Entry in <see cref="StaticProgramParserConfig{IdentifierT}.ConsolidatedFormTemplates"/>:
+    /// pairs a precomputed <see cref="CodeAnalysis.ConsolidatedFormTemplate"/> with the
+    /// <see cref="IdentifyResponse{IdentifierT}"/> the parser should produce when the
+    /// template matches a call site.
+    /// </summary>
+    /// <param name="Template">
+    /// Template precomputed via
+    /// <see cref="CodeAnalysis.TryComputeConsolidatedFormTemplate(PineValue, int, PineVMParseCache)"/>
+    /// for a known callee at a specific application depth.
+    /// </param>
+    /// <param name="Identify">
+    /// Identifier (and optional original function value for nested parsing) the parser should
+    /// assign at a matching call site.
+    /// </param>
+    public record ConsolidatedFormTemplateEntry<IdentifierT>(
+        CodeAnalysis.ConsolidatedFormTemplate Template,
+        IdentifyResponse<IdentifierT> Identify);
+
+    /// <summary>
     /// Represents a parsed function extracted from a Pine value.
     /// Contains the parameter expressions and the function body expression.
     /// </summary>
@@ -521,6 +540,88 @@ public class StaticProgramParser
             }
 
             return (formANode, formADependencies);
+        }
+
+        // Form C detection: the consolidated form produced by the generic-application chain
+        // consolidation optimization in ReducePineExpression. The call site is a single
+        // ParseAndEval whose Encoded is a Literal value matching one of the precomputed
+        // ConsolidatedFormTemplates, and whose Environment matches the template's symbolic
+        // environment when each placeholder is bound to the corresponding actual argument.
+        if (parseConfig.ConsolidatedFormTemplates is { } consolidatedTemplates &&
+            consolidatedTemplates.Count > 0 &&
+            parseAndEvalExpr.Encoded is Expression.Literal consolidatedEncodedLit)
+        {
+            for (var templateIdx = 0; templateIdx < consolidatedTemplates.Count; ++templateIdx)
+            {
+                var entry = consolidatedTemplates[templateIdx];
+
+                if (!entry.Template.EncodedLiteral.Equals(consolidatedEncodedLit.Value))
+                {
+                    continue;
+                }
+
+                var bindings =
+                    CodeAnalysis.TryMatchExpressionTemplate(
+                        template: entry.Template.EnvTemplate,
+                        actual: parseAndEvalExpr.Environment,
+                        placeholders: entry.Template.Placeholders);
+
+                if (bindings is null)
+                {
+                    continue;
+                }
+
+                var consolidatedParsedArgs = new StaticExpression<IdentifierT>[bindings.Count];
+                var consolidatedDependencies = ImmutableDictionary<IdentifierT, PineValue>.Empty;
+
+                var anyArgFailed = false;
+
+                for (var i = 0; i < bindings.Count; ++i)
+                {
+                    var parseConsolidatedArgResult =
+                        ParseExpression(
+                            path,
+                            bindings[i],
+                            envClass,
+                            parseConfig,
+                            parseCache);
+
+                    if (parseConsolidatedArgResult.IsErrOrNull() is not null)
+                    {
+                        anyArgFailed = true;
+                        break;
+                    }
+
+                    if (parseConsolidatedArgResult.IsOkOrNullable() is not { } consolidatedArgOk)
+                    {
+                        throw new NotImplementedException(
+                            "Unexpected parse result type: " + parseConsolidatedArgResult.GetType().FullName);
+                    }
+
+                    consolidatedParsedArgs[i] = consolidatedArgOk.current;
+                    consolidatedDependencies = consolidatedDependencies.AddRange(consolidatedArgOk.dependencies);
+                }
+
+                if (anyArgFailed)
+                {
+                    continue;
+                }
+
+                var consolidatedNode =
+                    StaticExpression<IdentifierT>.FunctionApplicationInstance(
+                        functionName: entry.Identify.Ident,
+                        arguments: StaticExpression<IdentifierT>.ListInstance(consolidatedParsedArgs));
+
+                if (entry.Identify.ContinueParse)
+                {
+                    var valueForParsing = entry.Identify.OriginalFunctionValue ?? entry.Template.FunctionValue;
+
+                    consolidatedDependencies =
+                        consolidatedDependencies.SetItem(entry.Identify.Ident, valueForParsing);
+                }
+
+                return (consolidatedNode, consolidatedDependencies);
+            }
         }
 
         // Collect arguments by traversing nested ParseAndEval from outermost to innermost.
