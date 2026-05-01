@@ -991,6 +991,28 @@ public class ElmCompiler
 
             var localBindings = new Dictionary<string, Expression>();
 
+            // Walk the function's signature (if any) to assemble each
+            // parameter's inferred type by index, so record-pattern
+            // parameters can be compiled with the correct field-name
+            // layout for name-based field access.
+            var parameterTypesByIndex = new TypeInference.InferredType?[arguments.Count];
+
+            {
+                if (declaration.Function.Signature?.Value is { } sig)
+                {
+                    var currentType = sig.TypeAnnotation.Value;
+
+                    for (var pi = 0; pi < arguments.Count
+                        && currentType is SyntaxTypes.TypeAnnotation.FunctionTypeAnnotation funcType; pi++)
+                    {
+                        parameterTypesByIndex[pi] =
+                            TypeInference.TypeAnnotationToInferredType(funcType.ArgumentType.Value);
+
+                        currentType = funcType.ReturnType.Value;
+                    }
+                }
+            }
+
             for (var i = 0; i < arguments.Count; i++)
             {
                 var argPattern = arguments[i].Value;
@@ -1002,7 +1024,17 @@ public class ElmCompiler
                 else
                 {
                     var paramExpr = BuiltinHelpers.BuildPathToParameter(i);
-                    var analysis = PatternCompiler.AnalyzePattern(argPattern, paramExpr);
+
+                    var analysis =
+                        PatternCompiler.AnalyzePattern(
+                            argPattern,
+                            paramExpr,
+                            recordFieldNames:
+                            parameterTypesByIndex[i] is { } argType
+                            ?
+                            PatternCompiler.SortedRecordFieldNamesFromInferredType(argType)
+                            :
+                            null);
 
                     foreach (var kvp in analysis.Bindings)
                     {

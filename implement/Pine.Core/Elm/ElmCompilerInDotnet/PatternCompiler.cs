@@ -91,7 +91,11 @@ public class PatternCompiler
             var caseItem = caseBlock.Cases[i];
             var pattern = caseItem.Pattern.Value;
 
-            var patternBindings = ExtractPatternBindings(pattern, scrutinee);
+            var patternBindings =
+                ExtractPatternBindings(
+                    pattern,
+                    scrutinee,
+                    recordFieldNames: SortedRecordFieldNamesFromInferredType(scrutineeType));
 
             // Extract binding types from the pattern
             var patternBindingTypes =
@@ -158,14 +162,27 @@ public class PatternCompiler
     /// <summary>
     /// Analyzes a pattern and returns both variable bindings and the condition tree.
     /// </summary>
+    /// <param name="pattern">The pattern being analyzed.</param>
+    /// <param name="scrutinee">An expression for the value being matched.</param>
+    /// <param name="recordFieldNames">
+    /// Optional alphabetically-sorted full list of field names of the
+    /// scrutinee's record type, used by record-pattern destructure to
+    /// look up each named field by its true position in the record
+    /// rather than by the pattern's local loop position. When the
+    /// caller has type-checker access this should always be supplied
+    /// for record-pattern destructures, otherwise the destructure is
+    /// only correct when the pattern lists every field of the record.
+    /// </param>
     public static PatternAnalysis AnalyzePattern(
         SyntaxTypes.Pattern pattern,
-        Expression scrutinee) =>
-        AnalyzePatternRecursive(pattern, scrutinee);
+        Expression scrutinee,
+        IReadOnlyList<string>? recordFieldNames = null) =>
+        AnalyzePatternRecursive(pattern, scrutinee, recordFieldNames);
 
     private static PatternAnalysis AnalyzePatternRecursive(
         SyntaxTypes.Pattern pattern,
-        Expression scrutinee)
+        Expression scrutinee,
+        IReadOnlyList<string>? recordFieldNames = null)
     {
         return pattern switch
         {
@@ -175,7 +192,7 @@ public class PatternCompiler
             PatternAnalysis.WithBinding(varPattern.Name, scrutinee),
 
             SyntaxTypes.Pattern.ParenthesizedPattern parenthesized =>
-            AnalyzePatternRecursive(parenthesized.Pattern.Value, scrutinee),
+            AnalyzePatternRecursive(parenthesized.Pattern.Value, scrutinee, recordFieldNames),
 
             SyntaxTypes.Pattern.IntPattern intPattern =>
             PatternAnalysis.WithCondition(
@@ -198,7 +215,7 @@ public class PatternCompiler
                     Expression.LiteralInstance(ElmValueEncoding.StringAsPineValue(stringPattern.Value)))),
 
             SyntaxTypes.Pattern.AsPattern asPattern =>
-            AnalyzeAsPattern(asPattern, scrutinee),
+            AnalyzeAsPattern(asPattern, scrutinee, recordFieldNames),
 
             SyntaxTypes.Pattern.ListPattern listPattern =>
             AnalyzeListPattern(listPattern, scrutinee),
@@ -213,7 +230,7 @@ public class PatternCompiler
             AnalyzeNamedPattern(namedPattern, scrutinee),
 
             SyntaxTypes.Pattern.RecordPattern recordPattern =>
-            AnalyzeRecordPattern(recordPattern, scrutinee),
+            AnalyzeRecordPattern(recordPattern, scrutinee, recordFieldNames),
 
             SyntaxTypes.Pattern.UnitPattern =>
             PatternAnalysis.WithCondition(new PatternCondition.LengthEquals(0)),
@@ -435,25 +452,88 @@ public class PatternCompiler
         return new PatternAnalysis(allBindings, finalCondition);
     }
 
+    /// <summary>
+    /// Builds the bindings for a record-pattern match against
+    /// <paramref name="scrutinee"/>. When <paramref name="recordFieldNames"/>
+    /// is provided (the alphabetically-sorted field name list of the
+    /// scrutinee's full record type, as known to the type checker),
+    /// each pattern field is bound by looking up its position in that
+    /// list. Otherwise we fall back to the historical positional
+    /// approach: index slot <c>i</c> of the record for the i-th
+    /// alphabetically-sorted pattern name. The fallback is only correct
+    /// when the pattern names all of the record's fields; this is the
+    /// case for every record-pattern in the in-tree code outside the
+    /// LanguageService, but breaks for the
+    /// <c>let { hoverItems } = hoverItemsFromParsedModule ...</c> shape
+    /// the LS migration introduced. Always prefer the type-driven path
+    /// at the call site.
+    /// </summary>
     private static PatternAnalysis AnalyzeRecordPattern(
         SyntaxTypes.Pattern.RecordPattern recordPattern,
-        Expression scrutinee)
+        Expression scrutinee,
+        IReadOnlyList<string>? recordFieldNames)
     {
         var fieldsListExpr = GetListElementExpression(GetListElementExpression(scrutinee, 1), 0);
 
-        var patternFieldNames =
-            recordPattern.Fields
-            .Select(f => f.Value)
-            .OrderBy(name => name, StringComparer.Ordinal)
-            .ToList();
-
         var bindings = ImmutableDictionary<string, Expression>.Empty;
 
-        for (var i = 0; i < patternFieldNames.Count; i++)
+        if (recordFieldNames is not null)
         {
-            var fieldName = patternFieldNames[i];
-            var fieldEntryExpr = GetListElementExpression(fieldsListExpr, i);
-            var fieldValueExpr = GetListElementExpression(fieldEntryExpr, 1);
+            // Type-driven path: the caller knows the scrutinee's full
+            // record-field layout, so we compute each pattern field's
+            // position in the record directly. Records are stored with
+            // their fields sorted alphabetically, so the index of the
+            // pattern field's name in `recordFieldNames` is the slot to
+            // read in the record's fields list.
+            var fieldNameToIndex =
+                recordFieldNames
+                .Select((name, idx) => (name, idx))
+                .ToDictionary(x => x.name, x => x.idx);
+
+            foreach (var fieldNode in recordPattern.Fields)
+            {
+                var fieldName = fieldNode.Value;
+
+                if (!fieldNameToIndex.TryGetValue(fieldName, out var indexInRecord))
+                {
+                    // Pattern names a field absent from the inferred
+                    // record type — should not happen for well-typed
+                    // programs, but be defensive: fall back to position.
+                    indexInRecord = bindings.Count;
+                }
+
+                var fieldEntryExpr = GetListElementExpression(fieldsListExpr, indexInRecord);
+                var fieldValueExpr = GetListElementExpression(fieldEntryExpr, 1);
+                bindings = bindings.Add(fieldName, fieldValueExpr);
+            }
+
+            return new PatternAnalysis(bindings, new PatternCondition.Always());
+        }
+
+        // Fallback path: we don't know the scrutinee's full layout
+        // statically. Look each pattern field up by name at runtime,
+        // using the same helper the dot-access fallback uses. This is
+        // O(n) over the record's fields (the static path above is
+        // O(1)), but is correct in every case — including open record
+        // types, records destructured before the type checker has full
+        // type info, and strict-subset patterns whose surrounding
+        // declaration has no type annotation.
+        foreach (var fieldNode in recordPattern.Fields)
+        {
+            var fieldName = fieldNode.Value;
+
+            var lookupEnv =
+                Expression.ListInstance(
+                    [
+                    scrutinee,
+                    Expression.LiteralInstance(StringEncoding.ValueFromString(fieldName))
+                    ]);
+
+            var fieldValueExpr =
+                new Expression.ParseAndEval(
+                    encoded: Expression.LiteralInstance(RecordRuntime.PineFunctionForRecordAccessAsValue),
+                    environment: lookupEnv);
+
             bindings = bindings.Add(fieldName, fieldValueExpr);
         }
 
@@ -462,10 +542,11 @@ public class PatternCompiler
 
     private static PatternAnalysis AnalyzeAsPattern(
         SyntaxTypes.Pattern.AsPattern asPattern,
-        Expression scrutinee)
+        Expression scrutinee,
+        IReadOnlyList<string>? recordFieldNames)
     {
         // First, analyze the inner pattern
-        var innerAnalysis = AnalyzePatternRecursive(asPattern.Pattern.Value, scrutinee);
+        var innerAnalysis = AnalyzePatternRecursive(asPattern.Pattern.Value, scrutinee, recordFieldNames);
 
         // Add the "as" binding - this binds the entire scrutinee to the alias name
         var bindings = innerAnalysis.Bindings.Add(asPattern.Name.Value, scrutinee);
@@ -542,13 +623,41 @@ public class PatternCompiler
     }
 
     /// <summary>
+    /// If <paramref name="inferredType"/> is a closed record type,
+    /// returns its field names sorted alphabetically (the order in
+    /// which Elm records' fields are stored in the Pine encoding).
+    /// Otherwise returns <c>null</c>, signalling to the pattern
+    /// compiler that the record's full layout is not known.
+    /// </summary>
+    public static IReadOnlyList<string>? SortedRecordFieldNamesFromInferredType(
+        TypeInference.InferredType inferredType) =>
+        inferredType is TypeInference.InferredType.RecordType recordType
+        ?
+        [
+        .. recordType.Fields
+        .Select(f => f.FieldName)
+        .OrderBy(name => name, StringComparer.Ordinal)
+        ]
+        :
+        null;
+
+    /// <summary>
     /// Extract variable bindings from a pattern and return expressions to access their values.
     /// </summary>
+    /// <param name="pattern">The pattern to extract bindings for.</param>
+    /// <param name="scrutinee">An expression for the value being matched.</param>
+    /// <param name="recordFieldNames">
+    /// Optional alphabetically-sorted full list of field names of the
+    /// scrutinee's record type, used by record-pattern destructure to
+    /// look up each named field by its true position in the record.
+    /// See <see cref="AnalyzePattern"/> for details.
+    /// </param>
     public static IReadOnlyDictionary<string, Expression> ExtractPatternBindings(
         SyntaxTypes.Pattern pattern,
-        Expression scrutinee)
+        Expression scrutinee,
+        IReadOnlyList<string>? recordFieldNames = null)
     {
-        var analysis = AnalyzePattern(pattern, scrutinee);
+        var analysis = AnalyzePattern(pattern, scrutinee, recordFieldNames);
         return analysis.Bindings;
     }
 

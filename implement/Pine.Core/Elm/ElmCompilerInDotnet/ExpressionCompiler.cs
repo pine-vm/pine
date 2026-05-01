@@ -1420,7 +1420,9 @@ public class ExpressionCompiler
                     var patternBindings =
                         PatternCompiler.ExtractPatternBindings(
                             letDestructuring.Pattern.Value,
-                            destructuredResult.IsOkOrNull()!);
+                            destructuredResult.IsOkOrNull()!,
+                            recordFieldNames:
+                            PatternCompiler.SortedRecordFieldNamesFromInferredType(destructuredExprType));
 
                     foreach (var kvp in patternBindings)
                     {
