@@ -109,12 +109,20 @@ public class ElmCompiler
     public static Result<string, (PineValue compiledEnvValue, CompilationPipelineStageResults pipelineStageResults)> CompileInteractiveEnvironment(
         FileTree appCodeTree,
         IReadOnlyList<IReadOnlyList<string>> rootFilePaths,
-        bool disableInlining,
+        bool disableInlining = false,
         int maxOptimizationRounds = 1,
-        bool disableGenericApplicationChainConsolidation = false)
+        bool disableGenericApplicationChainConsolidation = false,
+        IReadOnlyList<DeclQualifiedName>? rootDeclarationsAsPlainValues = null)
     {
+        // Centralize the hardcoded elm/core kernel module addition here so consumers of
+        // ElmCompilerInDotnet pass only app/package sources and do not duplicate this merge.
+        var appCodeTreeWithKernelModules =
+            FileTree.MergeFiles(
+                left: appCodeTree,
+                right: ElmInElm.BundledFiles.ElmKernelModulesDefault.Value);
+
         var elmModuleFiles =
-            appCodeTree.EnumerateFilesTransitive()
+            appCodeTreeWithKernelModules.EnumerateFilesTransitive()
             .Where(file => file.path.Last().EndsWith(".elm", StringComparison.OrdinalIgnoreCase))
             .ToImmutableArray();
 
@@ -495,6 +503,84 @@ public class ElmCompiler
             }
 
             compilationContext = compileSccOk;
+        }
+
+        // Optional: replace selected zero-parameter root declarations with their plain
+        // evaluated values, so the module value embeds the result directly instead of a
+        // function-record wrapper. This lets consumers (e.g. CommandLineAppConfig.runRoot)
+        // read a record value straight from the declaration without spinning up a VM.
+        if (rootDeclarationsAsPlainValues is { Count: > 0 } rootDeclsAsPlainValues)
+        {
+            var plainValueParseCache = new PineVMParseCache();
+
+            var plainValueInterpreter =
+                new Interpreter.DirectInterpreter(plainValueParseCache, evalCache: null);
+
+            foreach (var rootDecl in rootDeclsAsPlainValues)
+            {
+                var qualifiedNameStr = rootDecl.FullName;
+
+                var compiledInfo = compilationContext.TryGetCompiledFunctionInfo(qualifiedNameStr);
+
+                if (compiledInfo is null)
+                {
+                    return
+                        "Root declaration '" + qualifiedNameStr +
+                        "' requested as plain value was not compiled.";
+                }
+
+                if (compiledInfo.ParameterCount is not 0)
+                {
+                    return
+                        "Root declaration '" + qualifiedNameStr +
+                        "' has " + compiledInfo.ParameterCount +
+                        " parameters; only zero-parameter declarations can be emitted as plain values.";
+                }
+
+                var wrapperValue = compiledInfo.CompiledValue;
+
+                var parseWrapperResult = plainValueParseCache.ParseExpression(wrapperValue);
+
+                if (parseWrapperResult.IsErrOrNull() is { } parseWrapperErr)
+                {
+                    return
+                        "Failed parsing wrapper expression for root declaration '" +
+                        qualifiedNameStr + "': " + parseWrapperErr;
+                }
+
+                if (parseWrapperResult.IsOkOrNull() is not { } wrapperExpression)
+                {
+                    throw new NotImplementedException(
+                        "Unexpected result type: " + parseWrapperResult.GetType());
+                }
+
+                var evalResult =
+                    plainValueInterpreter.EvaluateExpression(
+                        wrapperExpression,
+                        PineValue.EmptyList);
+
+                if (evalResult.IsErrOrNull() is { } evalErr)
+                {
+                    return
+                        "Failed evaluating root declaration '" + qualifiedNameStr +
+                        "' as plain value: " + evalErr;
+                }
+
+                if (evalResult.IsOkOrNull() is not { } plainValue)
+                {
+                    throw new NotImplementedException(
+                        "Unexpected result type: " + evalResult.GetType());
+                }
+
+                compilationContext =
+                    compilationContext.WithCompiledFunction(
+                        qualifiedNameStr,
+                        plainValue,
+                        compiledInfo.EncodedBody,
+                        compiledInfo.DependencyLayout,
+                        parameterCount: compiledInfo.ParameterCount,
+                        envFunctions: compiledInfo.EnvFunctions);
+            }
         }
 
         // Third pass: Build module values from compiled functions

@@ -677,23 +677,23 @@ public class ModuleImportTests
 
     private static readonly string s_basicsSource =
         System.Text.Encoding.UTF8.GetString(
-            ((Files.FileTree.FileNode)BundledFiles.CompilerSourceContainerFilesDefault.Value
-                .GetNodeAtPath(["elm-kernel-modules", "Basics.elm"])!).Bytes.Span);
+            ((Files.FileTree.FileNode)BundledFiles.ElmKernelModulesDefault.Value
+                .GetNodeAtPath(["Basics.elm"])!).Bytes.Span);
 
     private static readonly string s_listSource =
         System.Text.Encoding.UTF8.GetString(
-            ((Files.FileTree.FileNode)BundledFiles.CompilerSourceContainerFilesDefault.Value
-                .GetNodeAtPath(["elm-kernel-modules", "List.elm"])!).Bytes.Span);
+            ((Files.FileTree.FileNode)BundledFiles.ElmKernelModulesDefault.Value
+                .GetNodeAtPath(["List.elm"])!).Bytes.Span);
 
     private static readonly string s_maybeSource =
         System.Text.Encoding.UTF8.GetString(
-            ((Files.FileTree.FileNode)BundledFiles.CompilerSourceContainerFilesDefault.Value
-                .GetNodeAtPath(["elm-kernel-modules", "Maybe.elm"])!).Bytes.Span);
+            ((Files.FileTree.FileNode)BundledFiles.ElmKernelModulesDefault.Value
+                .GetNodeAtPath(["Maybe.elm"])!).Bytes.Span);
 
     private static readonly string s_resultSource =
         System.Text.Encoding.UTF8.GetString(
-            ((Files.FileTree.FileNode)BundledFiles.CompilerSourceContainerFilesDefault.Value
-                .GetNodeAtPath(["elm-kernel-modules", "Result.elm"])!).Bytes.Span);
+            ((Files.FileTree.FileNode)BundledFiles.ElmKernelModulesDefault.Value
+                .GetNodeAtPath(["Result.elm"])!).Bytes.Span);
 
     [Fact]
     public void Implicit_import_brings_True_into_root_scope()

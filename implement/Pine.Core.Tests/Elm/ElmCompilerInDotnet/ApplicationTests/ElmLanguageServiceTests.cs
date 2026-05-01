@@ -102,9 +102,7 @@ public class ElmLanguageServiceTests
             BundledFiles.CompilerSourceContainerFilesDefault.Value;
 
         var kernelModulesTree =
-            bundledTree
-            .GetNodeAtPath(["elm-kernel-modules"])
-            ?? throw new Exception("Did not find elm-kernel-modules");
+            BundledFiles.ElmKernelModulesDefault.Value;
 
         var elmSyntaxSrcTree =
             bundledTree
@@ -517,7 +515,7 @@ public class ElmLanguageServiceTests
 
                 var modules = new List<string>();
 
-                AppendModuleTextsAtPath(bundledTree, ["elm-kernel-modules"], modules);
+                AppendModuleTextsAtPath(BundledFiles.ElmKernelModulesDefault.Value, [], modules);
                 AppendModuleTextsAtPath(bundledTree, ["elm-syntax", "src"], modules);
                 AppendModuleTextsAtPath(bundledTree, ["src"], modules);
                 AppendModuleTextsAtPath(bundledTree, ["other-library-modules"], modules, optional: true);

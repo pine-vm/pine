@@ -520,8 +520,7 @@ public sealed class CompareInterpreterWithIntermediateVM
         // dependency as bundled).
         var kernelNode =
             appCodeTree.GetNodeAtPath(["elm-kernel-modules"])
-            ?? BundledFiles.CompilerSourceContainerFilesDefault.Value
-            .GetNodeAtPath(["elm-kernel-modules"]);
+            ?? BundledFiles.ElmKernelModulesDefault.Value;
 
         if (kernelNode is not { } kernelNodeNonNull)
             yield break;

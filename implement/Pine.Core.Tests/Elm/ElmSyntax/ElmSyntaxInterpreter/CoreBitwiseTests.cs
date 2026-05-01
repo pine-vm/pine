@@ -28,8 +28,8 @@ public class CoreBitwiseTests
         LoadBitwiseDeclarations()
     {
         var bitwiseNode =
-            BundledFiles.CompilerSourceContainerFilesDefault.Value
-            .GetNodeAtPath(["elm-kernel-modules", "Bitwise.elm"])
+            BundledFiles.ElmKernelModulesDefault.Value
+            .GetNodeAtPath(["Bitwise.elm"])
             ?? throw new Exception("Did not find elm-kernel-modules/Bitwise.elm in bundled files.");
 
         if (bitwiseNode is not Files.FileTree.FileNode bitwiseFile)

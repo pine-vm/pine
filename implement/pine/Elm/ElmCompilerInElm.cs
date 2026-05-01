@@ -22,8 +22,7 @@ public class ElmCompilerInElm
 
     static public readonly Lazy<FileTree> ElmCoreAndKernelModuleFilesDefault =
         new(() =>
-        Core.Elm.ElmInElm.BundledFiles.CompilerSourceContainerFilesDefault.Value.GetNodeAtPath(["elm-kernel-modules"])
-        ?? throw new Exception("Did not find node elm-kernel-modules"));
+        Core.Elm.ElmInElm.BundledFiles.ElmKernelModulesDefault.Value);
 
     static public readonly Lazy<IReadOnlyDictionary<IReadOnlyList<string>, string>> ElmCoreAndKernelModulesByName =
         new(() =>

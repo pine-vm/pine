@@ -705,9 +705,7 @@ public class KernelParserFunctionTests
             () =>
             {
                 var kernelModulesTree =
-                    BundledFiles.CompilerSourceContainerFilesDefault.Value
-                    .GetNodeAtPath(["elm-kernel-modules"])
-                    ?? throw new Exception("Did not find elm-kernel-modules");
+                    BundledFiles.ElmKernelModulesDefault.Value;
 
                 // Add our test module to the kernel modules tree
                 var treeWithTest =

@@ -125,9 +125,7 @@ public class SizeBasedInliningRegressionTests
             BundledFiles.CompilerSourceContainerFilesDefault.Value;
 
         var kernelModulesTree =
-            bundledTree
-            .GetNodeAtPath(["elm-kernel-modules"])
-            ?? throw new Exception("Did not find elm-kernel-modules");
+            BundledFiles.ElmKernelModulesDefault.Value;
 
         var elmSyntaxSrcTree =
             bundledTree

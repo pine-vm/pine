@@ -27,7 +27,7 @@ public class SimpleValueDeclarationTests
         var wholeProgramText =
             ElmCompilerTestHelper.ParseAndRenderStaticProgram(
                 parsedEnv,
-                includeDeclaration: _ => true,
+                includeDeclaration: name => name.Namespaces.Count > 0 && name.Namespaces[0] is "Test",
                 parseCache: parseCache);
 
         wholeProgramText.Trim().Should().Be(
@@ -61,7 +61,7 @@ public class SimpleValueDeclarationTests
         var wholeProgramText =
             ElmCompilerTestHelper.ParseAndRenderStaticProgram(
                 parsedEnv,
-                includeDeclaration: _ => true,
+                includeDeclaration: name => name.Namespaces.Count > 0 && name.Namespaces[0] is "Test",
                 parseCache: parseCache);
 
         wholeProgramText.Trim().Should().Be(
@@ -96,7 +96,7 @@ public class SimpleValueDeclarationTests
         var wholeProgramText =
             ElmCompilerTestHelper.ParseAndRenderStaticProgram(
                 parsedEnv,
-                includeDeclaration: _ => true,
+                includeDeclaration: name => name.Namespaces.Count > 0 && name.Namespaces[0] is "Test",
                 parseCache: parseCache);
 
         wholeProgramText.Trim().Should().Be(
@@ -131,7 +131,7 @@ public class SimpleValueDeclarationTests
         var wholeProgramText =
             ElmCompilerTestHelper.ParseAndRenderStaticProgram(
                 parsedEnv,
-                includeDeclaration: _ => true,
+                includeDeclaration: name => name.Namespaces.Count > 0 && name.Namespaces[0] is "Test",
                 parseCache: parseCache);
 
         wholeProgramText.Trim().Should().Be(

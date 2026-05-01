@@ -87,8 +87,8 @@ public class ElmSyntaxInterpreterPerformanceCountersTests
         LoadKernelModuleDeclarations(string fileName)
     {
         var moduleNode =
-            BundledFiles.CompilerSourceContainerFilesDefault.Value
-                .GetNodeAtPath(["elm-kernel-modules", fileName])
+            BundledFiles.ElmKernelModulesDefault.Value
+                .GetNodeAtPath([fileName])
             ?? throw new Exception("Did not find elm-kernel-modules/" + fileName + " in bundled files.");
 
         if (moduleNode is not Files.FileTree.FileNode moduleFile)

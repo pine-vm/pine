@@ -37,7 +37,9 @@ public class FlatDeclarationSnapshotTests
                 pipelineStageResults.Canonicalized);
 
         var rendered =
-            SnapshotTestFormat.RenderQualifiedDeclarations(flatDict, SnapshotTestFormat.DeclarationSortOrder.NameAsc);
+            SnapshotTestFormat.RenderQualifiedDeclarations(
+                SnapshotTestFormat.FilterDeclarationsByModuleName(flatDict, ["MyApp"]),
+                SnapshotTestFormat.DeclarationSortOrder.NameAsc);
 
         rendered.Should().Be(
             """
@@ -71,7 +73,9 @@ public class FlatDeclarationSnapshotTests
                 pipelineStageResults.Canonicalized);
 
         var rendered =
-            SnapshotTestFormat.RenderQualifiedDeclarations(flatDict, SnapshotTestFormat.DeclarationSortOrder.NameAsc);
+            SnapshotTestFormat.RenderQualifiedDeclarations(
+                SnapshotTestFormat.FilterDeclarationsByModuleName(flatDict, ["Helpers"]),
+                SnapshotTestFormat.DeclarationSortOrder.NameAsc);
 
         rendered.Should().Be(
             """
@@ -202,7 +206,9 @@ public class FlatDeclarationSnapshotTests
                 pipelineStageResults.Canonicalized);
 
         var rendered =
-            SnapshotTestFormat.RenderQualifiedDeclarations(flatDict, SnapshotTestFormat.DeclarationSortOrder.NameAsc);
+            SnapshotTestFormat.RenderQualifiedDeclarations(
+                SnapshotTestFormat.FilterDeclarationsByModuleName(flatDict, ["MyModule"]),
+                SnapshotTestFormat.DeclarationSortOrder.NameAsc);
 
         rendered.Should().Be(
             """

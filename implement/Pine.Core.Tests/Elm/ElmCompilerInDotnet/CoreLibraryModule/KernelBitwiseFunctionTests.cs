@@ -17,9 +17,7 @@ public class KernelBitwiseFunctionTests
             () =>
             {
                 var kernelModulesTree =
-                    BundledFiles.CompilerSourceContainerFilesDefault.Value
-                    .GetNodeAtPath(["elm-kernel-modules"])
-                    ?? throw new Exception("Did not find elm-kernel-modules");
+                    BundledFiles.ElmKernelModulesDefault.Value;
 
                 var rootFilePaths =
                     kernelModulesTree.EnumerateFilesTransitive()

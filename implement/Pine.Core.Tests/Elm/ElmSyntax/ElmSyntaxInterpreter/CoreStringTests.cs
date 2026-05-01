@@ -54,8 +54,8 @@ public class CoreStringTests
     private static string LoadKernelModuleSource(string fileName)
     {
         var node =
-            BundledFiles.CompilerSourceContainerFilesDefault.Value
-            .GetNodeAtPath(["elm-kernel-modules", fileName])
+            BundledFiles.ElmKernelModulesDefault.Value
+            .GetNodeAtPath([fileName])
             ?? throw new Exception("Did not find elm-kernel-modules/" + fileName + " in bundled files.");
 
         if (node is not Files.FileTree.FileNode fileNode)

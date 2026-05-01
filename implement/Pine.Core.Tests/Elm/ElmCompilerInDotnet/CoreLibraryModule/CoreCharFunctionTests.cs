@@ -17,9 +17,7 @@ public class CoreCharFunctionTests
             () =>
             {
                 var kernelModulesTree =
-                    BundledFiles.CompilerSourceContainerFilesDefault.Value
-                    .GetNodeAtPath(["elm-kernel-modules"])
-                    ?? throw new Exception("Did not find elm-kernel-modules");
+                    BundledFiles.ElmKernelModulesDefault.Value;
 
                 // Only Char.elm is the root; its transitive dependencies will be resolved automatically.
                 var rootFilePaths =
