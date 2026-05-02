@@ -1,4 +1,3 @@
-using Interface = Pine.Elm.LanguageServiceInterface;
 using Pine.Core;
 using Pine.Core.CodeAnalysis;
 using Pine.Core.CommonEncodings;
@@ -8,6 +7,8 @@ using Pine.Core.PineVM;
 using System.Collections.Generic;
 using System.Linq;
 
+using Interface = Pine.Elm.LanguageServiceInterface;
+
 namespace Pine.Elm;
 
 public class LanguageServiceState(
@@ -15,47 +16,86 @@ public class LanguageServiceState(
     PineValue initState,
     IPineVM pineVM)
 {
+    private static readonly PineVMParseCache s_parseCache = new();
+
     private PineValue _state = initState;
 
     public static Result<string, LanguageServiceState> InitLanguageServiceState(
         IPineVM pineVM)
     {
-        var compilerSourceFiles =
-            ElmCompilerInElm.CompilerSourceFilesDefault.Value;
+        var sourceTree =
+            LanguageServiceCompilation.BuildLanguageServiceSourceTree();
 
-        var combinedSourceFiles =
-            ElmCompilerInElm.ElmCompilerFileTreeFromBundledFileTree(compilerSourceFiles);
+        var cache =
+            LanguageServiceCompilation.DefaultPersistentCache(ElmTime.Program.AppVersionId);
 
-        var elmCompilerFromBundleValue =
-            BundledElmEnvironments.BundledElmEnvironmentFromFileTree(combinedSourceFiles);
+        var compileResult =
+            LanguageServiceCompilation.CompileLanguageServiceEnv(
+                sourceTree,
+                cache: cache,
+                logDelegate: null);
 
-        if (elmCompilerFromBundleValue is null)
         {
-            return "Failed loading Elm compiler from bundle";
+            if (compileResult.IsErrOrNull() is { } err)
+            {
+                return err;
+            }
         }
 
-        var parseElmCompilerResult =
-            ElmCompilerInElm.ElmCompilerFromEnvValue(elmCompilerFromBundleValue);
+        if (compileResult.IsOkOrNull() is not { } compiledEnv)
+        {
+            throw new System.NotImplementedException(
+                "Unexpected result type: " + compileResult.GetType());
+        }
+
+        var parseInitStateResult =
+            ElmInteractiveEnvironment.ParseFunctionFromElmModule(
+                interactiveEnvironment: compiledEnv,
+                moduleName: "LanguageService",
+                declarationName: "initLanguageServiceState",
+                s_parseCache);
 
         {
-            if (parseElmCompilerResult.IsErrOrNull() is { } err)
+            if (parseInitStateResult.IsErrOrNull() is { } err)
             {
                 return
-                    "Failed parsing Elm compiler from bundled value: " +
+                    "Failed parsing initLanguageServiceState from compiled language service environment: " +
                     err;
             }
         }
 
-        if (parseElmCompilerResult.IsOkOrNull() is not { } elmCompiler)
+        if (parseInitStateResult.IsOkOrNullable() is not { } parseInitOk)
         {
             throw new System.NotImplementedException(
-                "Unexpected result type: " + parseElmCompilerResult.GetType());
+                "Unexpected result type: " + parseInitStateResult.GetType());
         }
 
-        if (elmCompiler.LanguageServiceInterface is not { } languageServiceInterface)
+        var parseHandleRequestResult =
+            ElmInteractiveEnvironment.ParseFunctionFromElmModule(
+                interactiveEnvironment: compiledEnv,
+                moduleName: "LanguageService",
+                declarationName: "handleRequestInCurrentWorkspace",
+                s_parseCache);
+
         {
-            return "Language service interface not available in bundled Elm compiler";
+            if (parseHandleRequestResult.IsErrOrNull() is { } err)
+            {
+                return
+                    "Failed parsing handleRequestInCurrentWorkspace from compiled language service environment: " +
+                    err;
+            }
         }
+
+        if (parseHandleRequestResult.IsOkOrNullable() is not { } parseHandleRequestOk)
+        {
+            throw new System.NotImplementedException(
+                "Unexpected result type: " + parseHandleRequestResult.GetType());
+        }
+
+        var languageServiceInterface =
+            new ElmCompilerInElm.LanguageServiceInterfaceStruct(
+                parseInitOk.functionRecord,
+                parseHandleRequestOk.functionRecord);
 
         var elmCoreModulesSourceList =
             PineValue.EmptyList;
@@ -79,18 +119,11 @@ public class LanguageServiceState(
                 "Unexpected init result type: " + initResult.GetType());
         }
 
-
-        var initElmValue =
-            ElmValueEncoding.PineValueAsElmValue(initOk, null, null)
-            .Extract(err => throw new System.Exception("Failed to parse init result: " + err));
-
-        var initExpr =
-            initElmValue.ToString();
-
-        return new LanguageServiceState(
-            languageServiceInterface,
-            initOk,
-            pineVM);
+        return
+            new LanguageServiceState(
+                languageServiceInterface,
+                initOk,
+                pineVM);
     }
 
     public static Result<string, LanguageServiceState> InitLanguageServiceState()
@@ -175,10 +208,14 @@ public class LanguageServiceState(
             HandleRequest(
                 new Interface.Request.AddElmPackageVersionRequest(
                     packageVersionId,
-                    [.. filesContentsAsText.Select(e =>
-                    (e.Key,
-                    new Interface.FileTreeBlobNode(
-                        AsBase64: System.Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(e.Value)), AsText: e.Value)))]));
+                    [
+                    .. filesContentsAsText.Select(
+                        e =>
+                        (e.Key,
+                        new Interface.FileTreeBlobNode(
+                            AsBase64: System.Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(e.Value)),
+                            AsText: e.Value)))
+                    ]));
 
         if (genericRequestResult.IsErrOrNull() is { } err)
         {
@@ -229,7 +266,7 @@ public class LanguageServiceState(
 
     public Result<string, IReadOnlyList<MonacoEditor.MonacoCompletionItem>>
         ProvideCompletionItems(
-            Interface.ProvideCompletionItemsRequestStruct provideCompletionItemsRequest)
+        Interface.ProvideCompletionItemsRequestStruct provideCompletionItemsRequest)
     {
         var genericRequestResult =
             HandleRequest(
@@ -252,8 +289,9 @@ public class LanguageServiceState(
                 "Unexpected request result type: " + requestOk.GetType());
         }
 
-        return Result<string, IReadOnlyList<MonacoEditor.MonacoCompletionItem>>.ok(
-            provideCompletionItemsResponse.CompletionItems);
+        return
+            Result<string, IReadOnlyList<MonacoEditor.MonacoCompletionItem>>.ok(
+                provideCompletionItemsResponse.CompletionItems);
     }
 
     public Result<string, Interface.Response> HandleRequest(
@@ -269,8 +307,8 @@ public class LanguageServiceState(
                     pineVM,
                     languageServiceInterface.HandleRequestInCurrentWorkspace,
                     [
-                        requestEncoded,
-                        _state,
+                    requestEncoded,
+                    _state,
                     ]);
 
             {
@@ -362,11 +400,11 @@ public class LanguageServiceState(
                         [
                         ("asBase64", ElmValue.StringInstance(blob.AsBase64)),
                         ("asText",
-                            blob.AsText is null
-                            ?
-                            ElmValue.TagInstance("Nothing", [])
-                            :
-                            ElmValue.TagInstance("Just", [ElmValue.StringInstance(blob.AsText)]))
+                        blob.AsText is null
+                        ?
+                        ElmValue.TagInstance("Nothing", [])
+                        :
+                        ElmValue.TagInstance("Just", [ElmValue.StringInstance(blob.AsText)]))
                         ])));
     }
 
@@ -376,34 +414,38 @@ public class LanguageServiceState(
     {
         if (node is Interface.FileTreeNode<BlobT>.BlobNode blobNode)
         {
-            return PineValue.List(
-                [
+            return
+                PineValue.List(
+                    [
                     StringEncoding.ValueFromString("BlobNode"),
                     PineValue.List(
                         [
-                            encodeBlob(blobNode.Blob)
+                        encodeBlob(blobNode.Blob)
                         ])
-                ]);
+                    ]);
         }
 
         if (node is Interface.FileTreeNode<BlobT>.TreeNode treeNode)
         {
-            return PineValue.List(
-                [
+            return
+                PineValue.List(
+                    [
                     StringEncoding.ValueFromString("TreeNode"),
                     PineValue.List(
                         [
-                            PineValue.List(
-                                [..treeNode.Children
-                                .Select(e =>
-                                    PineValue.List(
-                                        [
-                                            ElmValueEncoding.StringAsPineValue(e.name),
-                                            EncodeFileTreeNodeAsPineValue(e.node, encodeBlob)
-                                        ]))
-                                ])
+                        PineValue.List(
+                            [
+                            ..treeNode.Children
+                            .Select(
+                                e =>
+                                PineValue.List(
+                                    [
+                                    ElmValueEncoding.StringAsPineValue(e.name),
+                                    EncodeFileTreeNodeAsPineValue(e.node, encodeBlob)
+                                    ]))
+                            ])
                         ])
-                ]);
+                    ]);
         }
 
         throw new System.NotImplementedException(
@@ -437,9 +479,11 @@ public class LanguageServiceState(
         {
             return
                 new Interface.FileTreeNode<Interface.FileTreeBlobNode>.TreeNode(
-                    [..treeNode.Items.Select(e =>
-                        (e.name, Workspace(e.component))
-                    )]);
+                    [
+                    ..treeNode.Items.Select(
+                        e =>
+                        (e.name, Workspace(e.component)))
+                    ]);
         }
 
         throw new System.NotImplementedException(
