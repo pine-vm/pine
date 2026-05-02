@@ -1421,8 +1421,11 @@ public class ExpressionCompiler
                         PatternCompiler.ExtractPatternBindings(
                             letDestructuring.Pattern.Value,
                             destructuredResult.IsOkOrNull()!,
-                            recordFieldNames:
-                            PatternCompiler.SortedRecordFieldNamesFromInferredType(destructuredExprType));
+                            scrutineeType: destructuredExprType,
+                            recordTypeAliasFields:
+                            context.ModuleCompilationContext.RecordTypeAliasConstructors,
+                            choiceTagArgumentTypes:
+                            context.ModuleCompilationContext.ChoiceTagArgumentTypes);
 
                     foreach (var kvp in patternBindings)
                     {

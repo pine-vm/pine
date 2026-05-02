@@ -1029,12 +1029,9 @@ public class ElmCompiler
                         PatternCompiler.AnalyzePattern(
                             argPattern,
                             paramExpr,
-                            recordFieldNames:
-                            parameterTypesByIndex[i] is { } argType
-                            ?
-                            PatternCompiler.SortedRecordFieldNamesFromInferredType(argType)
-                            :
-                            null);
+                            scrutineeType: parameterTypesByIndex[i],
+                            recordTypeAliasFields: context.RecordTypeAliasConstructors,
+                            choiceTagArgumentTypes: context.ChoiceTagArgumentTypes);
 
                     foreach (var kvp in analysis.Bindings)
                     {
