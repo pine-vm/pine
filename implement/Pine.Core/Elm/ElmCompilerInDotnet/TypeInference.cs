@@ -3304,6 +3304,59 @@ public static class TypeInference
                     }
                     else if (decl.Value is SyntaxTypes.Expression.LetDeclaration.LetDestructuring letDestr)
                     {
+                        // `let { f1, f2, ... } = r in ...`: when `r` is a parameter
+                        // and the LHS pattern is a record pattern, constrain `r` to
+                        // an open record requiring at least the listed fields.
+                        // Multiple destructurings of the same parameter accumulate
+                        // their fields via unification, mirroring the behaviour of
+                        // multiple `r.field` accesses on the same parameter.
+                        if (letDestr.Pattern.Value is SyntaxTypes.Pattern.RecordPattern recordPattern &&
+                            letDestr.Expression.Value is SyntaxTypes.Expression.FunctionOrValue scrutineeRef &&
+                            scrutineeRef.ModuleName.Count is 0 &&
+                            parameterNames.ContainsKey(scrutineeRef.Name))
+                        {
+                            var patternFields =
+                                new List<(string FieldName, InferredType FieldType)>(recordPattern.Fields.Count);
+
+                            foreach (var fieldNameNode in recordPattern.Fields)
+                            {
+                                patternFields.Add(
+                                    (fieldNameNode.Value,
+                                    new InferredType.TypeVariable("a_" + fieldNameNode.Value)));
+                            }
+
+                            var patternOpenRecord =
+                                new InferredType.OpenRecordType("ρ", patternFields);
+
+                            if (parameterTypes.TryGetValue(scrutineeRef.Name, out var existingType))
+                            {
+                                parameterTypes =
+                                    parameterTypes.SetItem(
+                                        scrutineeRef.Name,
+                                        UnifyTypes(existingType, patternOpenRecord));
+                            }
+                            else
+                            {
+                                parameterTypes = parameterTypes.Add(scrutineeRef.Name, patternOpenRecord);
+                            }
+
+                            // Register each destructured field name as a local binding
+                            // whose definition is a synthetic `r.fieldName` record-access
+                            // expression. This lets later usages of the bound name
+                            // propagate type constraints back to the parameter's
+                            // open-record field via ExtractTypeConstraintFromExpression.
+                            foreach (var fieldNameNode in recordPattern.Fields)
+                            {
+                                var syntheticRecordAccess =
+                                    new SyntaxTypes.Expression.RecordAccess(
+                                        letDestr.Expression,
+                                        fieldNameNode);
+
+                                extendedLocalBindings =
+                                    extendedLocalBindings.SetItem(fieldNameNode.Value, syntheticRecordAccess);
+                            }
+                        }
+
                         parameterTypes =
                             ScanExpressionForParameterTypes(
                                 letDestr.Expression.Value,
@@ -3733,6 +3786,36 @@ public static class TypeInference
                         parameterNames,
                         parameterTypes,
                         localBindingDefinitions);
+
+            case SyntaxTypes.Expression.RecordAccess recordAccess:
+
+                // r.fieldName known to have type targetType: if r is a parameter,
+                // constrain it to an open record where the accessed field has
+                // exactly that type. Multiple constraints accumulate via unification
+                // of the open-record types.
+                if (recordAccess.Record.Value is SyntaxTypes.Expression.FunctionOrValue accessedRef &&
+                    accessedRef.ModuleName.Count is 0 &&
+                    parameterNames.ContainsKey(accessedRef.Name))
+                {
+                    var fieldOpenRecord =
+                        new InferredType.OpenRecordType(
+                            "ρ",
+                            [(recordAccess.FieldName.Value, targetType)]);
+
+                    if (parameterTypes.TryGetValue(accessedRef.Name, out var existingAccessedType))
+                    {
+                        parameterTypes =
+                            parameterTypes.SetItem(
+                                accessedRef.Name,
+                                UnifyTypes(existingAccessedType, fieldOpenRecord));
+                    }
+                    else
+                    {
+                        parameterTypes = parameterTypes.Add(accessedRef.Name, fieldOpenRecord);
+                    }
+                }
+
+                return parameterTypes;
 
             case SyntaxTypes.Expression.OperatorApplication nestedOpApp:
 
