@@ -25,6 +25,10 @@ public class PineVM : IPineVM
 
     private readonly ReportEnteredStackFrame? _reportEnteredStackFrame;
 
+    private readonly ReportTailLoopIteration? _reportTailLoopIteration;
+
+    private readonly ReportExpressionCompiled? _reportExpressionCompiled;
+
     private readonly IReadOnlyDictionary<Expression, IReadOnlyList<PineValueClass>>? _compilationEnvClasses;
 
     private readonly bool _disableReductionInCompilation;
@@ -80,7 +84,9 @@ public class PineVM : IPineVM
         IReadOnlyDictionary<Expression, ExpressionCompilation>? expressionCompilationOverrides = null,
         int pathMaxLowExclusive = ExpressionCompilation.DefaultPathMaxLowExclusive,
         int pathMaxHighInclusive = ExpressionCompilation.DefaultPathMaxHighInclusive,
-        bool disableGenericApplicationChainConsolidation = false)
+        bool disableGenericApplicationChainConsolidation = false,
+        ReportTailLoopIteration? reportTailLoopIteration = null,
+        ReportExpressionCompiled? reportExpressionCompiled = null)
     {
         return
             new PineVM(
@@ -103,7 +109,9 @@ public class PineVM : IPineVM
                 expressionCompilationOverrides: expressionCompilationOverrides,
                 pathMaxLowExclusive: pathMaxLowExclusive,
                 pathMaxHighInclusive: pathMaxHighInclusive,
-                disableGenericApplicationChainConsolidation: disableGenericApplicationChainConsolidation);
+                disableGenericApplicationChainConsolidation: disableGenericApplicationChainConsolidation,
+                reportTailLoopIteration: reportTailLoopIteration,
+                reportExpressionCompiled: reportExpressionCompiled);
 
     }
 
@@ -127,7 +135,9 @@ public class PineVM : IPineVM
         IReadOnlyDictionary<Expression, ExpressionCompilation>? expressionCompilationOverrides,
         int pathMaxLowExclusive = ExpressionCompilation.DefaultPathMaxLowExclusive,
         int pathMaxHighInclusive = ExpressionCompilation.DefaultPathMaxHighInclusive,
-        bool disableGenericApplicationChainConsolidation = false)
+        bool disableGenericApplicationChainConsolidation = false,
+        ReportTailLoopIteration? reportTailLoopIteration = null,
+        ReportExpressionCompiled? reportExpressionCompiled = null)
     {
         EvalCache = evalCache;
 
@@ -138,6 +148,10 @@ public class PineVM : IPineVM
         _reportExecutedStackInstruction = reportExecutedStackInstruction;
 
         _reportEnteredStackFrame = reportEnteredStackFrame;
+
+        _reportTailLoopIteration = reportTailLoopIteration;
+
+        _reportExpressionCompiled = reportExpressionCompiled;
 
         _compilationEnvClasses = compilationEnvClasses;
 
@@ -247,6 +261,17 @@ public class PineVM : IPineVM
         var compilation = ExpressionEntryLessCache(rootExpression);
 
         _expressionCompilationDict[rootExpression] = compilation;
+
+        if (_reportExpressionCompiled is { } reportExpressionCompiled)
+        {
+            var compiledNotification =
+                new ExpressionCompiled(
+                    Expression: rootExpression,
+                    ExpressionHashBase16: compilation.ExpressionHashBase16,
+                    Compilation: compilation.Compilation);
+
+            reportExpressionCompiled(in compiledNotification);
+        }
 
         return compilation;
     }
@@ -378,6 +403,7 @@ public class PineVM : IPineVM
         long stackFrameReplaceCount = 0;
         long lastCacheEntryInstructionCount = 0;
         long lastCacheEntryParseAndEvalCount = 0;
+        long tailLoopIterationCount = 0;
 
         PerformanceCounters CurrentCounters() =>
             new(
@@ -425,6 +451,8 @@ public class PineVM : IPineVM
         {
             loopIterationCount++;
             frame.LoopIterationCount++;
+
+            FireTailLoopIteration(TailLoopIterationKind.BackwardJump, frame.Expression, frame.InputValues);
 
             if (config.LoopIterationCountLimit is { } limit && loopIterationCount > limit)
             {
@@ -641,6 +669,29 @@ public class PineVM : IPineVM
             }
 
             return result;
+        }
+
+        void FireTailLoopIteration(
+            TailLoopIterationKind kind,
+            Expression frameExpression,
+            StackFrameInput frameInput)
+        {
+            if (_reportTailLoopIteration is not { } reportTailLoopIteration)
+            {
+                return;
+            }
+
+            var iteration =
+                new TailLoopIteration(
+                    IterationIndex: tailLoopIterationCount,
+                    StackFrameDepth: stack.Count,
+                    Kind: kind,
+                    FrameExpression: frameExpression,
+                    FrameInput: frameInput);
+
+            tailLoopIterationCount++;
+
+            reportTailLoopIteration(in iteration);
         }
 
         EvaluationError? CheckForInfiniteCycle()
@@ -1235,6 +1286,16 @@ public class PineVM : IPineVM
             stack.Push(newFrame);
 
             ++stackFrameCount;
+
+            if (replaceCurrentFrame &&
+                newFrame.Specialization is null &&
+                newFrame.InputValues is not null)
+            {
+                FireTailLoopIteration(
+                    TailLoopIterationKind.TailCallReplace,
+                    newFrame.Expression,
+                    newFrame.InputValues);
+            }
 
             if (config.StackDepthLimit is { } stackDepthLimit && stack.Count > stackDepthLimit)
             {
