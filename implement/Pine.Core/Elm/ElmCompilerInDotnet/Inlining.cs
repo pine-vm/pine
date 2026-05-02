@@ -18,12 +18,33 @@ public partial class Inlining
 {
 
 
-    public abstract record Config
+    /// <summary>
+    /// Configuration for the inlining pass, modelled as a product type with three
+    /// independent properties:
+    /// <list type="bullet">
+    ///   <item><description><see cref="IncludeHigherOrder"/> — enable higher-order specialization
+    ///     (inline applications that supply functions as arguments).</description></item>
+    ///   <item><description><see cref="IncludePlainValues"/> — enable plain-value inlining
+    ///     (substitute references to zero-parameter declarations whose body is safe to inline).</description></item>
+    ///   <item><description><see cref="SmallFunctions"/> — when non-<see langword="null"/>, enable
+    ///     size-based inlining of small non-recursive functions, parameterised by the thresholds
+    ///     in <see cref="SmallFunctionsConfig"/>. <see langword="null"/> disables small-function inlining.</description></item>
+    /// </list>
+    /// The named static instances <see cref="OnlyFunctions"/>, <see cref="SmallFunctionsAndPlainValues"/>
+    /// and <see cref="SpecializationAndSmallFunctions"/> map the previous
+    /// closed-hierarchy variants onto this product type so call sites and tests
+    /// can remain unchanged.
+    /// </summary>
+    public sealed record Config(
+        bool IncludeHigherOrder,
+        bool IncludePlainValues,
+        SmallFunctionsConfig? SmallFunctions)
     {
         /// <summary>
         /// Attempt inlining only for function applications which supply functions as arguments.
         /// </summary>
-        public static readonly Config OnlyFunctions = new InlineOnlyFunctions();
+        public static readonly Config OnlyFunctions =
+            new(IncludeHigherOrder: true, IncludePlainValues: false, SmallFunctions: null);
 
         /// <summary>
         /// Inline small non-recursive functions AND plain values (zero-parameter declarations
@@ -31,20 +52,40 @@ public partial class Inlining
         /// cascading: at this stage the AST is stable and size-based substitution cannot expose
         /// new higher-order patterns. See docs/2026-04-10-cascading-inlining-bug.md.
         /// </summary>
-        public static readonly Config SmallFunctionsAndPlainValues = new InlineSmallFunctionsAndPlainValues();
+        public static readonly Config SmallFunctionsAndPlainValues =
+            new(IncludeHigherOrder: false, IncludePlainValues: true, SmallFunctions: SmallFunctionsConfig.Default);
 
         /// <summary>
-        /// Attempt inlining only for function applications which supply functions as arguments.
+        /// Combined config: perform higher-order specialization AND size-based inlining of
+        /// small non-recursive functions / plain values in a single pass. This is useful
+        /// when the AST is processed in one shot (e.g. inside a single optimization phase)
+        /// and ensures that small predicate-like functions passed as arguments to recursive
+        /// higher-order functions get both eliminated as higher-order parameters
+        /// (via specialization) and inlined into the resulting first-order body.
         /// </summary>
-        internal sealed record InlineOnlyFunctions
-            : Config;
+        public static readonly Config SpecializationAndSmallFunctions =
+            new(IncludeHigherOrder: true, IncludePlainValues: true, SmallFunctions: SmallFunctionsConfig.Default);
+    }
 
+    /// <summary>
+    /// Thresholds and per-call-site policy for size-based inlining of small non-recursive functions.
+    /// A function body is eligible for unconditional inlining only if its expression-node count
+    /// is less than or equal to <see cref="MaxBodyNodeCount"/> AND it satisfies the additional
+    /// hardcoded restrictions enforced inside the small-function inlining check (see
+    /// <see cref="Inlining"/> for details).
+    /// </summary>
+    /// <param name="MaxBodyNodeCount">
+    /// Maximum number of expression nodes in a function body for it to be considered "small" and
+    /// eligible for unconditional inlining at every call site.
+    /// </param>
+    public sealed record SmallFunctionsConfig(int MaxBodyNodeCount)
+    {
         /// <summary>
-        /// Inline small non-recursive functions (≤10 AST nodes, no complex expressions)
-        /// and plain values whose bodies are safe to substitute in any expression position.
+        /// Default thresholds used by <see cref="Config.SmallFunctionsAndPlainValues"/> and
+        /// <see cref="Config.SpecializationAndSmallFunctions"/>. Mirrors the previous file-scoped
+        /// <c>MaxSmallFunctionBodySize</c> constant.
         /// </summary>
-        internal sealed record InlineSmallFunctionsAndPlainValues
-            : Config;
+        public static readonly SmallFunctionsConfig Default = new(MaxBodyNodeCount: 10);
     }
 
     /// <summary>
@@ -1798,8 +1839,9 @@ public partial class Inlining
         ModuleName calleeModuleName,
         InliningContext context)
     {
-        // Size-based inlining is only enabled in the SmallFunctionsAndPlainValues config.
-        if (context.Config is not Config.InlineSmallFunctionsAndPlainValues)
+        // Size-based small-function inlining is enabled only when the config carries a
+        // non-null SmallFunctions threshold record.
+        if (context.Config.SmallFunctions is not { } smallConfig)
         {
             return false;
         }
@@ -1809,7 +1851,7 @@ public partial class Inlining
             return false;
         }
 
-        if (ElmSyntaxTransformations.CountExpressionNodes(funcBody.Value) > MaxSmallFunctionBodySize)
+        if (ElmSyntaxTransformations.CountExpressionNodes(funcBody.Value) > smallConfig.MaxBodyNodeCount)
         {
             return false;
         }
@@ -1830,8 +1872,8 @@ public partial class Inlining
         SyntaxTypes.Expression.FunctionOrValue funcOrValue,
         InliningContext context)
     {
-        // Plain value inlining is only enabled in the SmallFunctionsAndPlainValues config.
-        if (context.Config is not Config.InlineSmallFunctionsAndPlainValues)
+        // Plain value inlining is enabled only when the config opts in.
+        if (!context.Config.IncludePlainValues)
             return null;
 
         if (TryResolveKnownFunctionReference(funcOrValue, context) is not { } resolved)
@@ -1874,7 +1916,7 @@ public partial class Inlining
             return false;
         }
 
-        if (context.Config is not Config.InlineOnlyFunctions)
+        if (!context.Config.IncludeHigherOrder)
         {
             return false;
         }
@@ -3284,9 +3326,10 @@ nextParam:;
         // When we substitute invariant parameters with concrete argument expressions,
         // those expressions may reference local variables from the call site that are
         // not in scope at the module level. We capture these as extra parameters.
-        var freeVarsInBody = ElmSyntaxTransformations.CollectFreeVariables(
-            qualifiedBody.Value,
-            remainingParams
+        var freeVarsInBody =
+            ElmSyntaxTransformations.CollectFreeVariables(
+                qualifiedBody.Value,
+                remainingParams
                 .SelectMany(p => ElmSyntaxTransformations.CollectPatternNames(p.Value))
                 .ToHashSet());
 
@@ -3308,9 +3351,10 @@ nextParam:;
             // Add captured variables as extra parameters at the beginning of the parameter list.
             var capturedParams =
                 capturedVariables
-                .Select(v => new Node<SyntaxTypes.Pattern>(
-                    ElmSyntaxTransformations.s_zeroRange,
-                    new SyntaxTypes.Pattern.VarPattern(v)))
+                .Select(
+                    v => new Node<SyntaxTypes.Pattern>(
+                        ElmSyntaxTransformations.s_zeroRange,
+                        new SyntaxTypes.Pattern.VarPattern(v)))
                 .ToList();
 
             finalParams = [.. capturedParams, .. remainingParams];
@@ -3318,11 +3362,12 @@ nextParam:;
             // Add captured variables as extra arguments to all recursive self-calls
             // in the body. The recursive calls were already rewritten to use the
             // specialized name; we now insert the captured args after the function reference.
-            finalBody = AddExtraArgsToSelfCalls(
-                qualifiedBody,
-                specializedName,
-                specializedModuleName,
-                capturedVariables);
+            finalBody =
+                AddExtraArgsToSelfCalls(
+                    qualifiedBody,
+                    specializedName,
+                    specializedModuleName,
+                    capturedVariables);
         }
 
         // Create the specialized function as a module-level declaration.
@@ -3499,9 +3544,10 @@ nextParam:;
             .ToImmutableArray();
 
         // Detect free variables introduced by substitution (same logic as TrySpecializeRecursiveCall).
-        var freeVarsInBody = ElmSyntaxTransformations.CollectFreeVariables(
-            qualifiedBody.Value,
-            remainingParameters
+        var freeVarsInBody =
+            ElmSyntaxTransformations.CollectFreeVariables(
+                qualifiedBody.Value,
+                remainingParameters
                 .SelectMany(p => ElmSyntaxTransformations.CollectPatternNames(p.Value))
                 .ToHashSet());
 
@@ -3517,18 +3563,20 @@ nextParam:;
         {
             var capturedParams =
                 capturedVariables
-                .Select(v => new Node<SyntaxTypes.Pattern>(
-                    ElmSyntaxTransformations.s_zeroRange,
-                    new SyntaxTypes.Pattern.VarPattern(v)))
+                .Select(
+                    v => new Node<SyntaxTypes.Pattern>(
+                        ElmSyntaxTransformations.s_zeroRange,
+                        new SyntaxTypes.Pattern.VarPattern(v)))
                 .ToList();
 
             finalParams = [.. capturedParams, .. remainingParameters];
 
-            finalBody = AddExtraArgsToSelfCalls(
-                qualifiedBody,
-                specializedName,
-                specializedModuleName,
-                capturedVariables);
+            finalBody =
+                AddExtraArgsToSelfCalls(
+                    qualifiedBody,
+                    specializedName,
+                    specializedModuleName,
+                    capturedVariables);
         }
 
         var specializedImpl =
@@ -3894,12 +3942,13 @@ nextParam:;
                         app.Arguments[0].Value is SyntaxTypes.Expression.FunctionOrValue fov &&
                         fov.Name == specializedFuncName &&
                         (fov.ModuleName.Count is 0 ||
-                         Enumerable.SequenceEqual(fov.ModuleName, specializedModuleName)))
+                        Enumerable.SequenceEqual(fov.ModuleName, specializedModuleName)))
                     {
-                        var newArgs = new List<Node<SyntaxTypes.Expression>>
-                        {
-                            app.Arguments[0] // Keep the function reference
-                        };
+                        var newArgs =
+                            new List<Node<SyntaxTypes.Expression>>
+                            {
+                                app.Arguments[0] // Keep the function reference
+                            };
 
                         // Insert captured variable references right after the function reference
                         foreach (var capturedVar in capturedVariableNames)
@@ -3919,8 +3968,9 @@ nextParam:;
                         return new SyntaxTypes.Expression.Application([.. newArgs]);
                     }
 
-                    return new SyntaxTypes.Expression.Application(
-                        [.. app.Arguments.Select(a => recurse(a))]);
+                    return
+                        new SyntaxTypes.Expression.Application(
+                            [.. app.Arguments.Select(a => recurse(a))]);
                 });
     }
 
