@@ -1820,18 +1820,15 @@ public partial class Inlining
     }
 
     /// <summary>
-    /// Maximum number of expression nodes in a function body for it to be considered
-    /// "small" and eligible for unconditional inlining at call sites.
-    /// This threshold applies uniformly to both core library and application-defined functions.
-    /// </summary>
-    private const int MaxSmallFunctionBodySize = 10;
-
-    /// <summary>
     /// Checks whether a function body is small enough to be inlined unconditionally
-    /// at every call site based on the expression node count threshold.
-    /// Only function bodies that are structurally simple (not containing if-then-else,
-    /// case, let-in, or lambda expressions) are eligible, since complex bodies can
-    /// produce invalid syntax when placed in certain expression positions.
+    /// at every call site based on the thresholds in <see cref="Config.SmallFunctions"/>.
+    /// A relaxed restriction excludes function bodies that invoke another function whose
+    /// recursion status we cannot rule out: only kernel/builtin calls, constructor
+    /// applications, calls into natively-implemented modules (e.g. <c>Basics</c>), and
+    /// calls that resolve to a known non-recursive (and non-mutually-recursive) top-level
+    /// function are allowed in the body. This still implicitly excludes (mutually)
+    /// recursive callees because their <see cref="FunctionInfo.IsRecursive"/> flag is set
+    /// during pre-processing.
     /// Used only for non-recursive functions in the classic inlining path.
     /// </summary>
     private static bool IsSmallEnoughToInline(
@@ -1846,7 +1843,13 @@ public partial class Inlining
             return false;
         }
 
-        if (ElmSyntaxTransformations.ContainsComplexExpression(funcBody.Value))
+        // Relaxed restriction (will be replaced once we model an inlining-cost policy
+        // in SmallFunctionsConfig): do not inline a function whose body invokes another
+        // function whose recursion status we cannot prove safe. Calls to primitive
+        // Pine_kernel / Pine_builtin operators, calls into natively-implemented modules,
+        // constructor applications, and calls whose head resolves to a known non-recursive
+        // (and non-mutually-recursive) top-level function are allowed.
+        if (BodyContainsCallToPotentiallyRecursiveFunction(funcBody.Value, context))
         {
             return false;
         }
@@ -1857,6 +1860,85 @@ public partial class Inlining
         }
 
         return true;
+    }
+
+    /// <summary>
+    /// Returns <see langword="true"/> if the expression tree contains an
+    /// <see cref="SyntaxTypes.Expression.Application"/> whose head invokes a function
+    /// whose recursion status we cannot rule out. Constructor applications (head is a
+    /// <see cref="SyntaxTypes.Expression.FunctionOrValue"/> whose name starts with an
+    /// uppercase letter), primitive operator applications (head module is
+    /// <c>Pine_kernel</c> or <c>Pine_builtin</c>), references into natively-implemented
+    /// modules (e.g. <c>Basics</c>), and calls whose head resolves to a known
+    /// non-recursive (and non-mutually-recursive) top-level function do not count,
+    /// since they are structural, kernel, native-implementation, or definitely-terminating
+    /// operations.
+    /// </summary>
+    private static bool BodyContainsCallToPotentiallyRecursiveFunction(
+        SyntaxTypes.Expression expr,
+        InliningContext context)
+    {
+        var worklist = new Stack<SyntaxTypes.Expression>();
+        worklist.Push(expr);
+
+        while (worklist.Count > 0)
+        {
+            var current = worklist.Pop();
+
+            if (current is SyntaxTypes.Expression.Application app && app.Arguments.Count > 0)
+            {
+                var head = app.Arguments[0].Value;
+
+                if (!IsSafeApplicationHead(head, context))
+                {
+                    return true;
+                }
+            }
+
+            ElmSyntaxTransformations.EnqueueChildExpressions(current, worklist);
+        }
+
+        return false;
+    }
+
+    private static bool IsSafeApplicationHead(
+        SyntaxTypes.Expression head,
+        InliningContext context)
+    {
+        if (head is not SyntaxTypes.Expression.FunctionOrValue funcOrValue)
+        {
+            return false;
+        }
+
+        // Constructor reference (capitalized name) — structural, not a function call.
+        if (funcOrValue.Name.Length > 0 && char.IsUpper(funcOrValue.Name[0]))
+        {
+            return true;
+        }
+
+        // Primitive kernel / builtin operator, or natively-implemented module
+        // (currently just "Basics", mirroring the
+        // s_nativelyImplementedModuleNames set in ElmCompiler) — not a user-defined
+        // Elm function call whose body could recursively expand during inlining.
+        if (funcOrValue.ModuleName.Count is 1 &&
+            funcOrValue.ModuleName[0] is "Pine_kernel" or "Pine_builtin" or "Basics")
+        {
+            return true;
+        }
+
+        // Relaxed case: the head resolves to a top-level function that is known to be
+        // neither directly nor mutually recursive. Inlining a body that calls such a
+        // function cannot trigger unbounded code-size expansion, so we allow it.
+        // Correctness relies on FunctionInfo.IsRecursive being populated by
+        // MarkRecursiveFunctions for every function in the inlining dictionary; an
+        // incorrectly false IsRecursive could lead to unbounded inlining expansion.
+        if (TryResolveKnownFunctionReference(funcOrValue, context) is { } resolved &&
+            !resolved.FunctionInfo.IsRecursive)
+        {
+            return true;
+        }
+
+        return false;
     }
 
 
