@@ -182,7 +182,7 @@ internal static class LanguageServiceCompilation
         }
 
         var compileResult =
-            global::Pine.Core.Elm.ElmCompilerInDotnet.ElmCompiler.CompileInteractiveEnvironment(
+            Core.Elm.ElmCompilerInDotnet.ElmCompiler.CompileInteractiveEnvironment(
                 appCodeTree: sourceTree,
                 rootFilePaths: rootFilePaths,
                 disableInlining: true,

@@ -28,10 +28,10 @@ namespace Pine.Core.Tests.Elm.ElmSyntax.ElmSyntaxInterpreter;
 /// </summary>
 public class CoreBasicsTests
 {
-    private static readonly Lazy<IReadOnlyDictionary<DeclQualifiedName, Pine.Core.Elm.ElmSyntax.SyntaxModel.Declaration>> s_declarations =
+    private static readonly Lazy<IReadOnlyDictionary<DeclQualifiedName, Core.Elm.ElmSyntax.SyntaxModel.Declaration>> s_declarations =
         new(LoadBasicsDeclarations);
 
-    private static IReadOnlyDictionary<DeclQualifiedName, Pine.Core.Elm.ElmSyntax.SyntaxModel.Declaration>
+    private static IReadOnlyDictionary<DeclQualifiedName, Core.Elm.ElmSyntax.SyntaxModel.Declaration>
         LoadBasicsDeclarations()
     {
         // Merge Basics.elm and Dict.elm into a single empty-namespace declarations
@@ -39,7 +39,7 @@ public class CoreBasicsTests
         // alongside so that tests for `eq` on Dict values can construct Dicts via
         // `empty`, `insert`, `fromList`, etc. The two modules' declaration names do
         // not collide.
-        var merged = new Dictionary<DeclQualifiedName, Pine.Core.Elm.ElmSyntax.SyntaxModel.Declaration>();
+        var merged = new Dictionary<DeclQualifiedName, Core.Elm.ElmSyntax.SyntaxModel.Declaration>();
 
         foreach (var (key, value) in LoadKernelModuleDeclarations("Basics.elm"))
         {
@@ -54,7 +54,7 @@ public class CoreBasicsTests
         return merged;
     }
 
-    private static IReadOnlyDictionary<DeclQualifiedName, Pine.Core.Elm.ElmSyntax.SyntaxModel.Declaration>
+    private static IReadOnlyDictionary<DeclQualifiedName, Core.Elm.ElmSyntax.SyntaxModel.Declaration>
         LoadKernelModuleDeclarations(string fileName)
     {
         var moduleNode =

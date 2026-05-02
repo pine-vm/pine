@@ -215,7 +215,7 @@ public class TypeInferenceLetBlockTests
     /// compiler must emit a static field-access (<c>Pine_builtin.head</c>
     /// / <c>Pine_builtin.skip</c>) rather than the runtime-lookup
     /// fallback that walks every (name,value) pair via
-    /// <see cref="Pine.Core.Elm.ElmCompilerInDotnet.RecordRuntime.PineFunctionForRecordAccessAsValue"/>.
+    /// <see cref="Core.Elm.ElmCompilerInDotnet.RecordRuntime.PineFunctionForRecordAccessAsValue"/>.
     /// </summary>
     [Fact]
     public void Let_destructure_named_field_of_record_returned_by_multi_arg_call_uses_static_field_access()

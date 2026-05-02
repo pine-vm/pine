@@ -273,7 +273,7 @@ public class TypeInferenceRecordTests
 
         var listLit =
             new SyntaxTypes.Expression.ListExpr(
-                [Node<SyntaxTypes.Expression>(IntLit(1))]);
+                [Node(IntLit(1))]);
 
         var u4 =
             new SyntaxTypes.Expression.RecordUpdateExpression(
@@ -554,7 +554,7 @@ public class TypeInferenceRecordTests
         // { stack | items = stack.items ++ [newItem] }
         var newList =
             new SyntaxTypes.Expression.ListExpr(
-                [Node<SyntaxTypes.Expression>(Param("newItem"))]);
+                [Node(Param("newItem"))]);
 
         var newItems =
             OpApp("++", Access(Param("stack"), "items"), newList);

@@ -19,7 +19,7 @@ namespace Pine.Core.Tests.Elm.ElmSyntax.ElmSyntaxInterpreter;
 /// <see cref="ElmInterpreter.ParseAndInterpret(string, IReadOnlyList{string})"/>
 /// overload, which wraps the test expression in a synthetic root module with no
 /// explicit imports (only the implicit imports from
-/// <see cref="Pine.Core.Elm.ElmCompilerInDotnet.ImplicitImportConfig.Default"/> are in
+/// <see cref="Core.Elm.ElmCompilerInDotnet.ImplicitImportConfig.Default"/> are in
 /// scope) and runs the Elm compiler's canonicalization pass before the interpreter
 /// dispatches the call. References into the kernel modules under test are therefore
 /// always written with their fully-qualified canonical names (e.g. <c>String.toList</c>,

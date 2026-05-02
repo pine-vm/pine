@@ -11,7 +11,7 @@ namespace Pine.Core.Tests.Elm.ElmSyntax.ElmSyntaxInterpreter;
 /// <see cref="ElmInterpreter.ParseAndInterpret(string, System.Collections.Generic.IReadOnlyList{string})"/>,
 /// which wraps the supplied root expression in a dedicated synthetic module
 /// (with no explicit <c>import</c> statements) and reuses the Elm compiler's
-/// <see cref="Pine.Core.Elm.ElmCompilerInDotnet.Canonicalization"/> pass to qualify
+/// <see cref="Core.Elm.ElmCompilerInDotnet.Canonicalization"/> pass to qualify
 /// references in every module — including the synthetic root module — before
 /// dispatching the interpreter.
 ///

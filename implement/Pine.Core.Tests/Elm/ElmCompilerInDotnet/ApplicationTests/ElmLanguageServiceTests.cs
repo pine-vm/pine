@@ -636,7 +636,7 @@ public class ElmLanguageServiceTests
     /// </summary>
     private static string EncodeAsElmStringLiteral(string value)
     {
-        var sb = new System.Text.StringBuilder(value.Length + 2);
+        var sb = new StringBuilder(value.Length + 2);
         sb.Append('"');
 
         foreach (var ch in value)
@@ -751,7 +751,7 @@ public class ElmLanguageServiceTests
 
     /// <summary>
     /// Removes the performance-counter suffix that
-    /// <see cref="Pine.Core.Interpreter.IntermediateVM.EvaluationError.ToString"/>
+    /// <see cref="EvaluationError.ToString"/>
     /// appends to its <c>Message</c> (i.e. everything starting from the first
     /// occurrence of <c>" - stack frames: "</c>). When an evaluation error is
     /// stringified through that <c>ToString</c> the resulting text mixes a

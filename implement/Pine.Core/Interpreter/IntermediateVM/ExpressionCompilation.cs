@@ -653,7 +653,7 @@ public record ExpressionCompilation(
                     var trueP = ComputeParseAndEvalPathMax(conditional.TrueBranch, isExpansionCandidate);
                     var falseP = ComputeParseAndEvalPathMax(conditional.FalseBranch, isExpansionCandidate);
 
-                    return condP + System.Math.Max(trueP, falseP);
+                    return condP + Math.Max(trueP, falseP);
                 }
 
             case Expression.ParseAndEval parseAndEval:
