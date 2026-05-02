@@ -8,6 +8,8 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 
+using DeclQualifiedName = Pine.Core.CodeAnalysis.DeclQualifiedName;
+
 using ElmInteractiveEnvironment = Pine.Core.CodeAnalysis.ElmInteractiveEnvironment;
 
 using FunctionRecord = Pine.Core.CodeAnalysis.FunctionRecord;
@@ -152,28 +154,37 @@ public record CommandLineAppConfig(
         FileTree sourceFiles,
         IReadOnlyList<string> moduleName)
     {
-        using var interactiveSession =
-            new ElmTime.ElmInteractive.InteractiveSessionPine(
-                Core.Elm.ElmInElm.BundledFiles.CompilerSourceContainerFilesDefault.Value,
+        var moduleNameFlattened = string.Join(".", moduleName);
+
+        var rootFilePaths =
+            sourceFiles.EnumerateFilesTransitive()
+            .Where(
+                file => file.path.Count > 0 &&
+                    file.path[^1].EndsWith(".elm", StringComparison.OrdinalIgnoreCase))
+            .Select(file => (IReadOnlyList<string>)file.path)
+            .ToList();
+
+        var runRootQualifiedName =
+            new DeclQualifiedName(Namespaces: moduleName, DeclName: "runRoot");
+
+        var (compiledModulesValue, _) =
+            Core.Elm.ElmCompilerInDotnet.ElmCompiler.CompileInteractiveEnvironment(
                 appCodeTree: sourceFiles,
-                // TODO: Migrate lowering implementation for portability.
-                overrideSkipLowering: true,
-                // TODO: Forward entry point.
-                entryPointsFilePaths: null,
-                caching: true,
-                autoPGO: null);
+                rootFilePaths: rootFilePaths,
+                rootDeclarationsAsPlainValues: [runRootQualifiedName])
+            .Extract(
+                err => throw new Exception(
+                    "Failed compiling Elm modules for module " + moduleNameFlattened + ": " + err));
 
-        var compiledModulesValue =
-            interactiveSession.CurrentEnvironmentValue();
-
-        var (declValue, functionRecord) =
+        var (declValue, _) =
             ElmInteractiveEnvironment.ParseFunctionFromElmModule(
                 compiledModulesValue,
-                moduleName: string.Join(".", moduleName),
+                moduleName: moduleNameFlattened,
                 declarationName: "runRoot",
                 s_parseCache)
-            .Extract(err => throw new Exception(
-                "Failed parsing runRoot declaration from module " + string.Join(".", moduleName) + ": " + err));
+            .Extract(
+                err => throw new Exception(
+                    "Failed parsing runRoot declaration from module " + moduleNameFlattened + ": " + err));
 
         return ConfigFromDeclarationValue(declValue);
     }
@@ -218,9 +229,10 @@ public record CommandLineAppConfig(
                 s_parseCache)
             .Extract(err => throw new Exception("Failed parsing subscriptions function: " + err));
 
-        return new CommandLineAppConfig(
-            InitFromEnvironment: initFunctionRecord,
-            SubscriptionsFromState: subscriptionsFunctionRecord);
+        return
+            new CommandLineAppConfig(
+                InitFromEnvironment: initFunctionRecord,
+                SubscriptionsFromState: subscriptionsFunctionRecord);
     }
 
     public static (PineValue, CommandLineAppEventResponse) Init(
@@ -235,10 +247,13 @@ public record CommandLineAppConfig(
                 ElmValue.StringInstance(environment.CommandLine)),
                 ("environmentVariables",
                 ElmValue.ListInstance(
-                    [..environment.EnvironmentVariables
-                    .Select(kv => ElmValue.TupleInstance(
-                        ElmValue.StringInstance(kv.Key),
-                        ElmValue.StringInstance(kv.Value)))]))
+                    [
+                    ..environment.EnvironmentVariables
+                    .Select(
+                        kv => ElmValue.TupleInstance(
+                            ElmValue.StringInstance(kv.Key),
+                            ElmValue.StringInstance(kv.Value)))
+                    ]))
                 ]);
 
         var initRecordValue =
