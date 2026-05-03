@@ -592,6 +592,45 @@ public sealed class CompareInterpreterWithIntermediateVM
         string.Join("\n", entries.Select(RenderApplicationLogEntry));
 
     /// <summary>
+    /// Returns true for <see cref="ApplicationLogEntry.Direct"/> entries whose dispatch
+    /// target is a built-in resolved by <see cref="ElmSyntaxInterpreter"/> against the
+    /// <c>Pine_kernel</c> or <c>Pine_builtin</c> module namespaces. These are leaf
+    /// operations (kernel primitives, integer arithmetic, etc.) that occur once per
+    /// arithmetic step or list operation and tend to dominate any per-line trace, even
+    /// though they reveal nothing about which user-level functions are dispatched. Most
+    /// snapshot tests that care about the user-level call graph want to drop them.
+    /// <para>
+    /// <see cref="ApplicationLogEntry.FunctionValue"/> entries are never matched, because
+    /// closure applications never resolve to a Pine_builtin / Pine_kernel — the runtime
+    /// short-circuits those at the direct-dispatch path before a function value would be
+    /// constructed.
+    /// </para>
+    /// </summary>
+    public static bool IsPineBuiltinInvocation(ApplicationLogEntry entry) =>
+        entry is ApplicationLogEntry.Direct direct
+        && direct.Application.FunctionName.Namespaces.Count is 1
+        && direct.Application.FunctionName.Namespaces[0] is "Pine_kernel" or "Pine_builtin";
+
+    /// <summary>
+    /// Returns a copy of <paramref name="entries"/> with every <see cref="ApplicationLogEntry"/>
+    /// matching <see cref="IsPineBuiltinInvocation(ApplicationLogEntry)"/> removed. The
+    /// returned list preserves the original source order of the surviving entries.
+    /// <para>
+    /// This is the standard filter to apply before snapshotting an invocation log when the
+    /// goal is to inspect which user-level (or compiler-generated, e.g.
+    /// <c>__lifted__lambda*</c>, <c>__specialized__*</c>) functions are dispatched. Use it
+    /// in combination with <see cref="RenderApplicationLog(IReadOnlyList{ApplicationLogEntry})"/>:
+    /// <code>
+    /// var rendered = CompareInterpreterWithIntermediateVM.RenderApplicationLog(
+    ///     CompareInterpreterWithIntermediateVM.WithoutPineBuiltinInvocations(report.ApplicationLog));
+    /// </code>
+    /// </para>
+    /// </summary>
+    public static IReadOnlyList<ApplicationLogEntry> WithoutPineBuiltinInvocations(
+        IReadOnlyList<ApplicationLogEntry> entries) =>
+        [.. entries.Where(e => !IsPineBuiltinInvocation(e))];
+
+    /// <summary>
     /// Renders a single <see cref="ApplicationLogEntry"/> using the same conventions as
     /// <see cref="RenderApplicationLog"/>.
     /// </summary>
