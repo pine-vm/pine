@@ -367,7 +367,7 @@ public static class TypeInference
         {
             return TryUnify(list1.ElementType, list2.ElementType) switch
             {
-                Result<string, InferredType>.Ok ok => (InferredType)new InferredType.ListType(ok.Value),
+                Result<string, InferredType>.Ok ok => new InferredType.ListType(ok.Value),
                 Result<string, InferredType>.Err err => $"In list element type: {err.Value}",
 
                 _ =>
@@ -396,7 +396,7 @@ public static class TypeInference
                     unifiedElements.Add(elemOk.Value);
             }
 
-            return (InferredType)new InferredType.TupleType(unifiedElements);
+            return new InferredType.TupleType(unifiedElements);
         }
 
         // For function types, unify argument and return types
@@ -415,7 +415,7 @@ public static class TypeInference
             var argOk = ((Result<string, InferredType>.Ok)argResult).Value;
             var retOk = ((Result<string, InferredType>.Ok)retResult).Value;
 
-            return (InferredType)new InferredType.FunctionType(argOk, retOk);
+            return new InferredType.FunctionType(argOk, retOk);
         }
 
         // Record types - four cases (closed/closed, open/closed, closed/open, open/open)
@@ -464,7 +464,7 @@ public static class TypeInference
                     unifiedArgs.Add(argOk.Value);
             }
 
-            return (InferredType)new InferredType.ChoiceType(choice1.ModuleName, choice1.TypeName, unifiedArgs);
+            return new InferredType.ChoiceType(choice1.ModuleName, choice1.TypeName, unifiedArgs);
         }
 
         return $"Cannot unify {DescribeType(type1)} with {DescribeType(type2)}.";
@@ -499,7 +499,7 @@ public static class TypeInference
 
             // If the variables already have the same name and constraint, return as-is.
             if (tv.Name == otherVar.Name && tv.Constraint == otherVar.Constraint)
-                return (InferredType)tv;
+                return tv;
 
             // Prefer the side that already carries the (now combined) constraint, otherwise the first.
             var name =
@@ -509,7 +509,7 @@ public static class TypeInference
                 :
                 tv.Name;
 
-            return (InferredType)new InferredType.TypeVariable(name, combinedConstraint.Value);
+            return new InferredType.TypeVariable(name, combinedConstraint.Value);
         }
 
         // Concrete type on the other side: must satisfy the variable's constraint.
@@ -664,7 +664,7 @@ public static class TypeInference
 
         unifiedFields.Sort((a, b) => string.CompareOrdinal(a.FieldName, b.FieldName));
 
-        return (InferredType)new InferredType.RecordType(unifiedFields);
+        return new InferredType.RecordType(unifiedFields);
     }
 
     private static Result<string, InferredType> TryUnifyOpenWithClosed(
@@ -711,7 +711,7 @@ public static class TypeInference
 
         unifiedFields.Sort((a, b) => string.CompareOrdinal(a.FieldName, b.FieldName));
 
-        return (InferredType)new InferredType.RecordType(unifiedFields);
+        return new InferredType.RecordType(unifiedFields);
     }
 
     private static Result<string, InferredType> TryUnifyOpenRecords(
@@ -752,7 +752,7 @@ public static class TypeInference
             .OrderBy(t => t.Key, StringComparer.Ordinal)
             .ToList();
 
-        return (InferredType)new InferredType.OpenRecordType(extVar, fields);
+        return new InferredType.OpenRecordType(extVar, fields);
     }
 
     /// <summary>

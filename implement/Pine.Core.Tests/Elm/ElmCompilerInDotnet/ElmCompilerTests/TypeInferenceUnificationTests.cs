@@ -493,8 +493,8 @@ public class TypeInferenceUnificationTests
 
         var merged = (TypeInference.InferredType.OpenRecordType)value;
         merged.KnownFields.Should().HaveCount(2);
-        merged.KnownFields.Should().Contain(("x", (TypeInference.InferredType)TypeInference.InferredType.Int()));
-        merged.KnownFields.Should().Contain(("y", (TypeInference.InferredType)TypeInference.InferredType.String()));
+        merged.KnownFields.Should().Contain(("x", TypeInference.InferredType.Int()));
+        merged.KnownFields.Should().Contain(("y", TypeInference.InferredType.String()));
     }
 
     [Fact]
@@ -518,7 +518,7 @@ public class TypeInferenceUnificationTests
         var merged =
             (TypeInference.InferredType.OpenRecordType)((Result<string, TypeInference.InferredType>.Ok)result).Value;
 
-        merged.KnownFields.Should().Contain(("x", (TypeInference.InferredType)TypeInference.InferredType.Int()));
+        merged.KnownFields.Should().Contain(("x", TypeInference.InferredType.Int()));
     }
 
     [Fact]

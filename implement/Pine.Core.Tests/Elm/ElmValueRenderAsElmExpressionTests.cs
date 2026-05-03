@@ -109,7 +109,7 @@ public class ElmValueRenderAsElmExpressionTests
 
         var tag = ElmValue.TagInstance("Inner", [innerList]);
 
-        var record = new ElmValue.ElmRecord([("nested", (ElmValue)tag)]);
+        var record = new ElmValue.ElmRecord([("nested", tag)]);
 
         var capturedLengths = new System.Collections.Generic.List<int>();
 
