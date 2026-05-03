@@ -330,8 +330,30 @@ internal static class ElmSyntaxTransformations
             SyntaxTypes.Expression.OperatorApplication => true,
             SyntaxTypes.Expression.Negation => true,
 
+            // All other expression variants do not need extra parentheses when used
+            // as an Application argument: literals, leaves and already-delimited forms.
+            SyntaxTypes.Expression.UnitExpr or
+            SyntaxTypes.Expression.Literal or
+            SyntaxTypes.Expression.CharLiteral or
+            SyntaxTypes.Expression.Integer or
+            SyntaxTypes.Expression.Hex or
+            SyntaxTypes.Expression.Floatable or
+            SyntaxTypes.Expression.ListExpr or
+            SyntaxTypes.Expression.FunctionOrValue or
+            SyntaxTypes.Expression.PrefixOperator or
+            SyntaxTypes.Expression.ParenthesizedExpression or
+            SyntaxTypes.Expression.TupledExpression or
+            SyntaxTypes.Expression.RecordExpr or
+            SyntaxTypes.Expression.RecordAccess or
+            SyntaxTypes.Expression.RecordAccessFunction or
+            SyntaxTypes.Expression.RecordUpdateExpression or
+            SyntaxTypes.Expression.GLSLExpression =>
+            false,
+
             _ =>
-            false
+            throw new NotImplementedException(
+                "NeedsParenthesesInApplicationArgument does not handle expression variant: " +
+                argument.GetType().Name)
         };
 
     /// <summary>
@@ -425,8 +447,26 @@ internal static class ElmSyntaxTransformations
             SyntaxTypes.Expression.ParenthesizedExpression => true,
             SyntaxTypes.Expression.Negation => true,
 
-            _ =>
+            // All other expression variants are not considered safe for plain-value inlining
+            // because they may have side-effects-like semantics (function application),
+            // introduce control flow, or carry binding/scoping concerns that the caller
+            // does not analyze here.
+            SyntaxTypes.Expression.IfBlock or
+            SyntaxTypes.Expression.PrefixOperator or
+            SyntaxTypes.Expression.Application or
+            SyntaxTypes.Expression.OperatorApplication or
+            SyntaxTypes.Expression.LambdaExpression or
+            SyntaxTypes.Expression.CaseExpression or
+            SyntaxTypes.Expression.LetExpression or
+            SyntaxTypes.Expression.RecordAccess or
+            SyntaxTypes.Expression.RecordAccessFunction or
+            SyntaxTypes.Expression.RecordUpdateExpression or
+            SyntaxTypes.Expression.GLSLExpression =>
             false,
+
+            _ =>
+            throw new NotImplementedException(
+                "IsPlainValueSafeToInline does not handle expression variant: " + expr.GetType().Name),
         };
 
     internal static bool BodyUnwrapsParameterAsConstructor(
@@ -458,6 +498,37 @@ internal static class ElmSyntaxTransformations
                         return true;
 
                     break;
+
+                // All other expression variants do not themselves witness a constructor
+                // unwrap of <paramref name="parameterName"/> at this node; recursion into
+                // their children is handled below by EnqueueChildExpressions.
+                case SyntaxTypes.Expression.UnitExpr:
+                case SyntaxTypes.Expression.Literal:
+                case SyntaxTypes.Expression.CharLiteral:
+                case SyntaxTypes.Expression.Integer:
+                case SyntaxTypes.Expression.Hex:
+                case SyntaxTypes.Expression.Floatable:
+                case SyntaxTypes.Expression.Negation:
+                case SyntaxTypes.Expression.ListExpr:
+                case SyntaxTypes.Expression.FunctionOrValue:
+                case SyntaxTypes.Expression.IfBlock:
+                case SyntaxTypes.Expression.PrefixOperator:
+                case SyntaxTypes.Expression.ParenthesizedExpression:
+                case SyntaxTypes.Expression.Application:
+                case SyntaxTypes.Expression.OperatorApplication:
+                case SyntaxTypes.Expression.TupledExpression:
+                case SyntaxTypes.Expression.LambdaExpression:
+                case SyntaxTypes.Expression.RecordExpr:
+                case SyntaxTypes.Expression.RecordAccess:
+                case SyntaxTypes.Expression.RecordAccessFunction:
+                case SyntaxTypes.Expression.RecordUpdateExpression:
+                case SyntaxTypes.Expression.GLSLExpression:
+                    break;
+
+                default:
+                    throw new NotImplementedException(
+                        "BodyUnwrapsParameterAsConstructor does not handle expression variant: " +
+                        expr.GetType().Name);
             }
 
             EnqueueChildExpressions(expr, worklist);
@@ -544,8 +615,38 @@ internal static class ElmSyntaxTransformations
                         new SyntaxTypes.QualifiedNameRef(constructorRef.ModuleName, constructorRef.Name),
                         [.. app.Arguments.Skip(1)]);
 
-            default:
+            // Application that does not match the constructor-shape guard above (e.g. the
+            // function position is not a bare FunctionOrValue) is not a constructor
+            // application.
+            case SyntaxTypes.Expression.Application:
+            // Other expression variants are simply not constructor applications.
+            case SyntaxTypes.Expression.UnitExpr:
+            case SyntaxTypes.Expression.Literal:
+            case SyntaxTypes.Expression.CharLiteral:
+            case SyntaxTypes.Expression.Integer:
+            case SyntaxTypes.Expression.Hex:
+            case SyntaxTypes.Expression.Floatable:
+            case SyntaxTypes.Expression.Negation:
+            case SyntaxTypes.Expression.ListExpr:
+            case SyntaxTypes.Expression.IfBlock:
+            case SyntaxTypes.Expression.PrefixOperator:
+            // ParenthesizedExpression is unwrapped above and never reaches the switch.
+            case SyntaxTypes.Expression.OperatorApplication:
+            case SyntaxTypes.Expression.TupledExpression:
+            case SyntaxTypes.Expression.LambdaExpression:
+            case SyntaxTypes.Expression.CaseExpression:
+            case SyntaxTypes.Expression.LetExpression:
+            case SyntaxTypes.Expression.RecordExpr:
+            case SyntaxTypes.Expression.RecordAccess:
+            case SyntaxTypes.Expression.RecordAccessFunction:
+            case SyntaxTypes.Expression.RecordUpdateExpression:
+            case SyntaxTypes.Expression.GLSLExpression:
                 return null;
+
+            default:
+                throw new NotImplementedException(
+                    "TryDeconstructConstructorApplication does not handle expression variant: " +
+                    expr.GetType().Name);
         }
     }
 
@@ -710,6 +811,11 @@ internal static class ElmSyntaxTransformations
                                 }
 
                                 break;
+
+                            default:
+                                throw new NotImplementedException(
+                                    "CountUnshadowedLocalVariableReferences does not handle let declaration variant: " +
+                                    declaration.Value.GetType().Name);
                         }
                     }
 
@@ -748,7 +854,18 @@ internal static class ElmSyntaxTransformations
                         CountUnshadowedLocalVariableReferences(field.Value.valueExpr.Value, variableName, shadowed));
 
             case SyntaxTypes.Expression.RecordUpdateExpression recordUpdate:
+
+                // The RecordName references a local variable; count it as one use
+                // when it matches the queried name and is not shadowed.
+                var recordNameContribution =
+                    !shadowed && recordUpdate.RecordName.Value == variableName
+                    ?
+                    1
+                    :
+                    0;
+
                 return
+                    recordNameContribution +
                     recordUpdate.Fields.Sum(
                         field =>
                         CountUnshadowedLocalVariableReferences(field.Value.valueExpr.Value, variableName, shadowed));
@@ -764,8 +881,22 @@ internal static class ElmSyntaxTransformations
                     CountUnshadowedLocalVariableReferences(opApp.Left.Value, variableName, shadowed) +
                     CountUnshadowedLocalVariableReferences(opApp.Right.Value, variableName, shadowed);
 
-            default:
+            // Leaf expression variants (no nested expressions and no local variable references):
+            // each contributes zero references regardless of the queried variable name.
+            case SyntaxTypes.Expression.UnitExpr:
+            case SyntaxTypes.Expression.Literal:
+            case SyntaxTypes.Expression.CharLiteral:
+            case SyntaxTypes.Expression.Integer:
+            case SyntaxTypes.Expression.Hex:
+            case SyntaxTypes.Expression.Floatable:
+            case SyntaxTypes.Expression.PrefixOperator:
+            case SyntaxTypes.Expression.RecordAccessFunction:
+            case SyntaxTypes.Expression.GLSLExpression:
                 return 0;
+
+            default:
+                throw new NotImplementedException(
+                    "CountUnshadowedLocalVariableReferences does not handle expression variant: " + expr.GetType().Name);
         }
     }
 
@@ -817,6 +948,11 @@ internal static class ElmSyntaxTransformations
                         case SyntaxTypes.Expression.LetDeclaration.LetDestructuring ld:
                             worklist.Push(ld.Expression.Value);
                             break;
+
+                        default:
+                            throw new NotImplementedException(
+                                "EnqueueChildExpressions does not handle let declaration variant: " +
+                                decl.Value.GetType().Name);
                     }
                 }
 
@@ -863,6 +999,23 @@ internal static class ElmSyntaxTransformations
                 worklist.Push(opApp.Left.Value);
                 worklist.Push(opApp.Right.Value);
                 break;
+
+            // Leaf expression variants: no child expressions to enqueue.
+            case SyntaxTypes.Expression.UnitExpr:
+            case SyntaxTypes.Expression.Literal:
+            case SyntaxTypes.Expression.CharLiteral:
+            case SyntaxTypes.Expression.Integer:
+            case SyntaxTypes.Expression.Hex:
+            case SyntaxTypes.Expression.Floatable:
+            case SyntaxTypes.Expression.FunctionOrValue:
+            case SyntaxTypes.Expression.PrefixOperator:
+            case SyntaxTypes.Expression.RecordAccessFunction:
+            case SyntaxTypes.Expression.GLSLExpression:
+                break;
+
+            default:
+                throw new NotImplementedException(
+                    "EnqueueChildExpressions does not handle expression variant: " + expr.GetType().Name);
         }
     }
 
@@ -913,7 +1066,6 @@ internal static class ElmSyntaxTransformations
                                 d.Value switch
                                 {
                                     SyntaxTypes.Expression.LetDeclaration.LetFunction letFunc =>
-                                    (SyntaxTypes.Expression.LetDeclaration)
                                     new SyntaxTypes.Expression.LetDeclaration.LetFunction(
                                         letFunc.Function with
                                         {
@@ -993,8 +1145,24 @@ internal static class ElmSyntaxTransformations
                 mapChild(opApp.Left),
                 mapChild(opApp.Right)),
 
+            // Leaf expression variants have no child expressions to map; return them
+            // unchanged. They are listed explicitly so that the throwing default below
+            // never fires for valid expression values.
+            SyntaxTypes.Expression.UnitExpr or
+            SyntaxTypes.Expression.Literal or
+            SyntaxTypes.Expression.CharLiteral or
+            SyntaxTypes.Expression.Integer or
+            SyntaxTypes.Expression.Hex or
+            SyntaxTypes.Expression.Floatable or
+            SyntaxTypes.Expression.FunctionOrValue or
+            SyntaxTypes.Expression.PrefixOperator or
+            SyntaxTypes.Expression.RecordAccessFunction or
+            SyntaxTypes.Expression.GLSLExpression =>
+            expr,
+
             _ =>
-            expr
+            throw new NotImplementedException(
+                "MapChildExpressions does not handle expression variant: " + expr.GetType().Name)
         };
     }
 
@@ -1040,8 +1208,36 @@ internal static class ElmSyntaxTransformations
                 SyntaxTypes.Expression.Application app =>
                 rewriteApplication(app, Recurse),
 
+                // All other expression variants are rebuilt structurally with their
+                // children rewritten. Each variant is enumerated explicitly so the
+                // throwing default never fires for valid expression values.
+                SyntaxTypes.Expression.UnitExpr or
+                SyntaxTypes.Expression.Literal or
+                SyntaxTypes.Expression.CharLiteral or
+                SyntaxTypes.Expression.Integer or
+                SyntaxTypes.Expression.Hex or
+                SyntaxTypes.Expression.Floatable or
+                SyntaxTypes.Expression.Negation or
+                SyntaxTypes.Expression.ListExpr or
+                SyntaxTypes.Expression.FunctionOrValue or
+                SyntaxTypes.Expression.IfBlock or
+                SyntaxTypes.Expression.PrefixOperator or
+                SyntaxTypes.Expression.ParenthesizedExpression or
+                SyntaxTypes.Expression.OperatorApplication or
+                SyntaxTypes.Expression.TupledExpression or
+                SyntaxTypes.Expression.LambdaExpression or
+                SyntaxTypes.Expression.CaseExpression or
+                SyntaxTypes.Expression.LetExpression or
+                SyntaxTypes.Expression.RecordExpr or
+                SyntaxTypes.Expression.RecordAccess or
+                SyntaxTypes.Expression.RecordAccessFunction or
+                SyntaxTypes.Expression.RecordUpdateExpression or
+                SyntaxTypes.Expression.GLSLExpression =>
+                MapChildExpressions(expr, Recurse),
+
                 _ =>
-                MapChildExpressions(expr, Recurse)
+                throw new NotImplementedException(
+                    "RewriteExpressionTree does not handle expression variant: " + expr.GetType().Name)
             };
 
         return new Node<SyntaxTypes.Expression>(exprNode.Range, rewrittenExpr);
@@ -1073,11 +1269,143 @@ internal static class ElmSyntaxTransformations
                 new SyntaxTypes.Expression.LambdaExpression(
                     SubstituteInLambdaStruct(lambda.Lambda, substitutions)),
 
+                SyntaxTypes.Expression.RecordUpdateExpression recordUpdate =>
+                SubstituteInRecordUpdateExpression(recordUpdate, substitutions),
+
+                // FunctionOrValue references that don't match the substitution guard above
+                // (qualified, or unqualified but not in the substitutions map) pass through
+                // unchanged. The bare-FunctionOrValue rewrite is captured by the guarded
+                // case at the top; this case catches the remaining FunctionOrValue values
+                // so the throwing default below never fires.
+                SyntaxTypes.Expression.FunctionOrValue =>
+                expr,
+
+                // All other expression variants delegate to MapChildExpressions for
+                // structural recursion. They are enumerated explicitly so that the
+                // throwing default below never fires for valid expression values.
+                SyntaxTypes.Expression.UnitExpr or
+                SyntaxTypes.Expression.Literal or
+                SyntaxTypes.Expression.CharLiteral or
+                SyntaxTypes.Expression.Integer or
+                SyntaxTypes.Expression.Hex or
+                SyntaxTypes.Expression.Floatable or
+                SyntaxTypes.Expression.Negation or
+                SyntaxTypes.Expression.ListExpr or
+                SyntaxTypes.Expression.IfBlock or
+                SyntaxTypes.Expression.PrefixOperator or
+                SyntaxTypes.Expression.ParenthesizedExpression or
+                SyntaxTypes.Expression.Application or
+                SyntaxTypes.Expression.OperatorApplication or
+                SyntaxTypes.Expression.TupledExpression or
+                SyntaxTypes.Expression.RecordExpr or
+                SyntaxTypes.Expression.RecordAccess or
+                SyntaxTypes.Expression.RecordAccessFunction or
+                SyntaxTypes.Expression.GLSLExpression =>
+                MapChildExpressions(expr, child => SubstituteInExpression(child, substitutions)),
+
                 _ =>
-                MapChildExpressions(expr, child => SubstituteInExpression(child, substitutions))
+                throw new NotImplementedException(
+                    "SubstituteInExpression does not handle expression variant: " + expr.GetType().Name)
             };
 
         return new Node<SyntaxTypes.Expression>(exprNode.Range, substitutedExpr);
+    }
+
+    /// <summary>
+    /// Substitutes inside a record-update expression <c>{ recordName | f = v, ... }</c>.
+    /// The <c>recordName</c> is a local-variable reference (not a child expression), so the
+    /// generic <see cref="MapChildExpressions"/> traversal silently skips it. This dedicated
+    /// helper substitutes the field value expressions and then handles the <c>recordName</c>
+    /// reference itself:
+    /// <list type="bullet">
+    /// <item>If no substitution applies, the <c>recordName</c> is preserved.</item>
+    /// <item>If the substitution value is a bare local variable reference (a
+    /// <see cref="SyntaxTypes.Expression.FunctionOrValue"/> with empty <c>ModuleName</c>),
+    /// the <c>recordName</c> is renamed in place to that variable name.</item>
+    /// <item>For any other (non-trivial) substitution value, the record-update is wrapped in a
+    /// <c>let</c> that binds a fresh local to the substitution value, then references that
+    /// fresh local in the <c>recordName</c> position. This preserves Elm's surface
+    /// requirement that the head of a record update is a variable identifier while still
+    /// passing through an arbitrary expression.</item>
+    /// </list>
+    /// Without this special case, substituting a parameter named after a record being
+    /// updated would silently drop the substitution at the record-update site, producing
+    /// an unbound reference at compile time.
+    /// </summary>
+    internal static SyntaxTypes.Expression SubstituteInRecordUpdateExpression(
+        SyntaxTypes.Expression.RecordUpdateExpression recordUpdate,
+        IReadOnlyDictionary<string, Node<SyntaxTypes.Expression>> substitutions)
+    {
+        var substitutedFields =
+            recordUpdate.Fields
+            .Select(
+                f =>
+                new Node<(Node<string> fieldName, Node<SyntaxTypes.Expression> valueExpr)>(
+                    f.Range,
+                    (f.Value.fieldName, SubstituteInExpression(f.Value.valueExpr, substitutions))))
+            .ToList();
+
+        if (!substitutions.TryGetValue(recordUpdate.RecordName.Value, out var replacement))
+        {
+            return
+                new SyntaxTypes.Expression.RecordUpdateExpression(
+                    recordUpdate.RecordName,
+                    [.. substitutedFields]);
+        }
+
+        if (replacement.Value is SyntaxTypes.Expression.FunctionOrValue funcOrValue &&
+            funcOrValue.ModuleName.Count is 0)
+        {
+            // Simple-rename case: the substitution value is itself a local variable
+            // reference, so we can keep using record-update syntax with the new name.
+            return
+                new SyntaxTypes.Expression.RecordUpdateExpression(
+                    new Node<string>(recordUpdate.RecordName.Range, funcOrValue.Name),
+                    [.. substitutedFields]);
+        }
+
+        // General case: the substitution value is an arbitrary expression. Bind it to a
+        // fresh local via a let-destructuring and reference that fresh local in the
+        // record-update head position. The fresh name must avoid colliding with any free
+        // variable of the substitution value or of the substituted field value expressions
+        // (otherwise the let-binding would shadow a name that the inner expressions read).
+        var avoidNames = new HashSet<string>();
+
+        foreach (var name in CollectFreeVariables(replacement.Value))
+            avoidNames.Add(name);
+
+        foreach (var field in substitutedFields)
+        {
+            foreach (var name in CollectFreeVariables(field.Value.valueExpr.Value))
+                avoidNames.Add(name);
+        }
+
+        var freshName =
+            GenerateUniqueLocalName(
+                "recordUpdateRecord_" + recordUpdate.RecordName.Value,
+                avoidNames);
+
+        var letDestructuring =
+            new Node<SyntaxTypes.Expression.LetDeclaration>(
+                s_zeroRange,
+                new SyntaxTypes.Expression.LetDeclaration.LetDestructuring(
+                    Pattern:
+                    new Node<SyntaxTypes.Pattern>(
+                        s_zeroRange,
+                        new SyntaxTypes.Pattern.VarPattern(freshName)),
+                    Expression: replacement));
+
+        var rebuiltRecordUpdate =
+            new SyntaxTypes.Expression.RecordUpdateExpression(
+                new Node<string>(recordUpdate.RecordName.Range, freshName),
+                [.. substitutedFields]);
+
+        return
+            new SyntaxTypes.Expression.LetExpression(
+                new SyntaxTypes.Expression.LetBlock(
+                    Declarations: [letDestructuring],
+                    Expression:
+                    new Node<SyntaxTypes.Expression>(s_zeroRange, rebuiltRecordUpdate)));
     }
 
     internal static Node<SyntaxTypes.Expression>? TrySubstituteSingleChoiceTagCase(
@@ -1835,12 +2163,77 @@ internal static class ElmSyntaxTransformations
                                     freshBody));
                     }
 
-                default:
+                case SyntaxTypes.Expression.RecordUpdateExpression recordUpdate:
+                    {
+                        // RecordName references a local variable. If a rename applies to
+                        // it, swap the reference to the renamed name; otherwise leave the
+                        // RecordName unchanged. (Cross-module qualification does not apply
+                        // because record-update heads must be local variables.)
+                        // Field value expressions are recursed into normally.
+                        var renamedRecordName =
+                            activeRenames.TryGetValue(recordUpdate.RecordName.Value, out var renamedName)
+                            ?
+                            new Node<string>(recordUpdate.RecordName.Range, renamedName)
+                            :
+                            recordUpdate.RecordName;
+
+                        var renamedFields =
+                            recordUpdate.Fields
+                            .Select(
+                                field =>
+                                new Node<(Node<string>, Node<SyntaxTypes.Expression>)>(
+                                    field.Range,
+                                    (field.Value.fieldName,
+                                    RenameExpressionBindings(
+                                        field.Value.valueExpr,
+                                        activeRenames,
+                                        namesInScope,
+                                        crossModuleQualification))))
+                            .ToList();
+
+                        return
+                            new SyntaxTypes.Expression.RecordUpdateExpression(
+                                renamedRecordName,
+                                [.. renamedFields]);
+                    }
+
+                // FunctionOrValue references that don't match the rename / cross-module
+                // qualification guards above pass through unchanged. Listing the variant
+                // explicitly keeps the throwing default below from firing.
+                case SyntaxTypes.Expression.FunctionOrValue:
+                    return expression;
+
+                // All other expression variants delegate to MapChildExpressions for
+                // structural recursion. Each variant is enumerated explicitly so that the
+                // throwing default below never fires for valid expression values.
+                case SyntaxTypes.Expression.UnitExpr:
+                case SyntaxTypes.Expression.Literal:
+                case SyntaxTypes.Expression.CharLiteral:
+                case SyntaxTypes.Expression.Integer:
+                case SyntaxTypes.Expression.Hex:
+                case SyntaxTypes.Expression.Floatable:
+                case SyntaxTypes.Expression.Negation:
+                case SyntaxTypes.Expression.ListExpr:
+                case SyntaxTypes.Expression.IfBlock:
+                case SyntaxTypes.Expression.PrefixOperator:
+                case SyntaxTypes.Expression.ParenthesizedExpression:
+                case SyntaxTypes.Expression.Application:
+                case SyntaxTypes.Expression.OperatorApplication:
+                case SyntaxTypes.Expression.TupledExpression:
+                case SyntaxTypes.Expression.RecordExpr:
+                case SyntaxTypes.Expression.RecordAccess:
+                case SyntaxTypes.Expression.RecordAccessFunction:
+                case SyntaxTypes.Expression.GLSLExpression:
                     return
                         MapChildExpressions(
                             expression,
                             child =>
                             RenameExpressionBindings(child, activeRenames, namesInScope, crossModuleQualification));
+
+                default:
+                    throw new NotImplementedException(
+                        "RenameExpressionBindings does not handle expression variant: " +
+                        expression.GetType().Name);
             }
         }
 
@@ -2159,9 +2552,49 @@ internal static class ElmSyntaxTransformations
                     break;
                 }
 
-            default:
+            case SyntaxTypes.Expression.RecordUpdateExpression recordUpdate:
                 {
-                    // For all other expression types, recurse into children
+                    // The RecordName references a local variable; treat it as a free use
+                    // exactly like a bare FunctionOrValue reference would be.
+                    if (!boundNames.Contains(recordUpdate.RecordName.Value))
+                        freeVars.Add(recordUpdate.RecordName.Value);
+
+                    foreach (var field in recordUpdate.Fields)
+                        CollectFreeVariablesRecursive(field.Value.valueExpr.Value, boundNames, freeVars);
+
+                    break;
+                }
+
+            // Qualified FunctionOrValue references (those that don't match the bare-local
+            // guard at the top) refer to module-level names and contribute no free local
+            // variables. Listing the variant explicitly keeps the throwing default below
+            // from firing.
+            case SyntaxTypes.Expression.FunctionOrValue:
+                break;
+
+            // All other expression variants have no special binding semantics here:
+            // recurse into their direct children via EnqueueChildExpressions. Each variant
+            // is enumerated explicitly so the throwing default below never fires for valid
+            // expression values.
+            case SyntaxTypes.Expression.UnitExpr:
+            case SyntaxTypes.Expression.Literal:
+            case SyntaxTypes.Expression.CharLiteral:
+            case SyntaxTypes.Expression.Integer:
+            case SyntaxTypes.Expression.Hex:
+            case SyntaxTypes.Expression.Floatable:
+            case SyntaxTypes.Expression.Negation:
+            case SyntaxTypes.Expression.ListExpr:
+            case SyntaxTypes.Expression.IfBlock:
+            case SyntaxTypes.Expression.PrefixOperator:
+            case SyntaxTypes.Expression.ParenthesizedExpression:
+            case SyntaxTypes.Expression.Application:
+            case SyntaxTypes.Expression.OperatorApplication:
+            case SyntaxTypes.Expression.TupledExpression:
+            case SyntaxTypes.Expression.RecordExpr:
+            case SyntaxTypes.Expression.RecordAccess:
+            case SyntaxTypes.Expression.RecordAccessFunction:
+            case SyntaxTypes.Expression.GLSLExpression:
+                {
                     var worklist = new Stack<SyntaxTypes.Expression>();
                     EnqueueChildExpressions(expression, worklist);
 
@@ -2170,6 +2603,11 @@ internal static class ElmSyntaxTransformations
 
                     break;
                 }
+
+            default:
+                throw new NotImplementedException(
+                    "CollectFreeVariablesRecursive does not handle expression variant: " +
+                    expression.GetType().Name);
         }
     }
 
