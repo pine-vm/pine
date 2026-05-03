@@ -117,9 +117,12 @@ public class PipelineStageSnapshotTests
 
             Consumer.result : Basics.Int -> Basics.Int
             Consumer.result n =
-                Provider.applyTwice
-                    Consumer.increment
-                    n
+                Basics.add
+                    (Basics.add
+                        n
+                        1
+                    )
+                    1
             """);
 
         // --- Assert inlined stage ---
@@ -153,10 +156,12 @@ public class PipelineStageSnapshotTests
 
             Consumer.result : Basics.Int -> Basics.Int
             Consumer.result n =
-                Consumer.increment
-                    (Consumer.increment
+                Basics.add
+                    (Basics.add
                         n
+                        1
                     )
+                    1
             """);
 
         // --- Assert ModulesForCompilation (final stage after operator lowering) ---
@@ -192,8 +197,8 @@ public class PipelineStageSnapshotTests
             Consumer.result : Basics.Int -> Basics.Int
             Consumer.result n =
                 Pine_builtin.int_add
-                    [ (Consumer.increment
-                        n
+                    [ (Pine_builtin.int_add
+                        [ n, 1 ]
                       ), 1 ]
             """);
     }
@@ -307,8 +312,9 @@ public class PipelineStageSnapshotTests
             """
             ModuleB.combined : Basics.Int -> Basics.Int
             ModuleB.combined x =
-                ModuleA.helper
+                Basics.add
                     x
+                    1
             """);
 
         // --- Assert inlined stage ---
@@ -331,8 +337,9 @@ public class PipelineStageSnapshotTests
             """
             ModuleB.combined : Basics.Int -> Basics.Int
             ModuleB.combined x =
-                ModuleA.helper
+                Basics.add
                     x
+                    1
             """);
 
         // --- Assert final stage (after operator lowering) ---

@@ -107,7 +107,8 @@ public class ElmCompilerTestHelper
     public static (ElmInteractiveEnvironment.ParsedInteractiveEnvironment parsedEnv, CompilationPipelineStageResults pipelineStageResults)
         CompileElmModules(
         IReadOnlyList<string> elmModulesTexts,
-        bool disableInlining)
+        bool disableInlining,
+        int? maxOptimizationRounds = null)
     {
         var testCase =
             TestCase.DefaultAppWithoutPackages(elmModulesTexts);
@@ -121,6 +122,15 @@ public class ElmCompilerTestHelper
             .ToList();
 
         var (compiledEnv, pipelineStageResults) =
+            maxOptimizationRounds is { } rounds
+            ?
+            ElmCompiler.CompileInteractiveEnvironment(
+                appCodeTree,
+                rootFilePaths: rootFilePaths,
+                disableInlining: disableInlining,
+                maxOptimizationRounds: rounds)
+            .Extract(err => throw new Exception(err))
+            :
             ElmCompiler.CompileInteractiveEnvironment(
                 appCodeTree,
                 rootFilePaths: rootFilePaths,

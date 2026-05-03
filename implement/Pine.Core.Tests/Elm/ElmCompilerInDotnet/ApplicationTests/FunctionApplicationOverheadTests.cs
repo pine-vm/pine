@@ -376,9 +376,9 @@ public class FunctionApplicationOverheadTests
 
         PerformanceCountersFormatting.FormatCounts(report).Should().Be(
             """
-            InstructionCount: 18
-            InvocationCount: 3
-            BuildListCount: 2
+            InstructionCount: 11
+            InvocationCount: 2
+            BuildListCount: 1
             LoopIterationCount: 0
             """);
     }
@@ -706,9 +706,9 @@ public class FunctionApplicationOverheadTests
 
         PerformanceCountersFormatting.FormatCounts(report).Should().Be(
             """
-            InstructionCount: 41
-            InvocationCount: 8
-            BuildListCount: 5
+            InstructionCount: 11
+            InvocationCount: 2
+            BuildListCount: 1
             LoopIterationCount: 0
             """);
     }

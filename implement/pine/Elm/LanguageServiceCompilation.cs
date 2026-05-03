@@ -185,8 +185,7 @@ internal static class LanguageServiceCompilation
             Core.Elm.ElmCompilerInDotnet.ElmCompiler.CompileInteractiveEnvironment(
                 appCodeTree: sourceTree,
                 rootFilePaths: rootFilePaths,
-                disableInlining: true,
-                maxOptimizationRounds: 1);
+                disableInlining: true);
 
         if (compileResult.IsErrOrNull() is { } compileErr)
         {

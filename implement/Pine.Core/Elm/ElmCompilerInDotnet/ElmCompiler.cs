@@ -106,11 +106,67 @@ public class ElmCompiler
             "Basics",
             ]);
 
+    /// <summary>
+    /// Default value for the <c>maxOptimizationRounds</c> parameter of
+    /// <see cref="CompileInteractiveEnvironment(FileTree, IReadOnlyList{IReadOnlyList{string}}, bool, int, bool, IReadOnlyList{DeclQualifiedName})"/>.
+    /// Controls how many rounds of the optimization pipeline
+    /// (specialization → higher-order inlining → size-based inlining) are run before
+    /// operator lowering. The pipeline also stops early once a round produces no
+    /// further changes.
+    /// </summary>
+    public const int MaxOptimizationRoundsDefault = 3;
+
+    /// <summary>
+    /// Compiles an interactive Elm environment from the given source tree.
+    /// <para>
+    /// Parses every <c>.elm</c> file reachable from <paramref name="rootFilePaths"/>,
+    /// canonicalizes and lambda-lifts the result, optionally runs the optimization
+    /// pipeline (specialization, higher-order inlining, size-based inlining,
+    /// operator lowering) and emits the compiled <see cref="PineValue"/> environment
+    /// alongside <see cref="CompilationPipelineStageResults"/> capturing the
+    /// intermediate stage outputs for inspection and debugging.
+    /// </para>
+    /// </summary>
+    /// <param name="appCodeTree">
+    /// Source tree containing the application's Elm files. The bundled
+    /// elm-core kernel modules are merged in automatically, so callers should
+    /// only supply application/package sources.
+    /// </param>
+    /// <param name="rootFilePaths">
+    /// Entry-point file paths used as roots of the compilation closure. Only
+    /// modules transitively reachable from these are compiled.
+    /// </param>
+    /// <param name="disableInlining">
+    /// When <c>true</c>, the optimization pipeline (specialization, inlining,
+    /// operator lowering) is skipped entirely. The compiled environment is
+    /// produced directly from the lambda-lifted output. The corresponding
+    /// fields on <see cref="CompilationPipelineStageResults"/>
+    /// (<see cref="CompilationPipelineStageResults.Specialized"/>,
+    /// <see cref="CompilationPipelineStageResults.Inlined"/>) are <c>null</c>.
+    /// </param>
+    /// <param name="maxOptimizationRounds">
+    /// Maximum number of optimization-pipeline iterations to run.
+    /// Defaults to <see cref="MaxOptimizationRoundsDefault"/>. The pipeline
+    /// also stops early once a round produces no further changes. Ignored
+    /// when <paramref name="disableInlining"/> is <c>true</c>.
+    /// </param>
+    /// <param name="disableGenericApplicationChainConsolidation">
+    /// When <c>true</c>, suppresses the bytecode-emission optimization that
+    /// consolidates chains of generic function applications into a single
+    /// dispatched call. Used by tests that want to observe the un-consolidated
+    /// shape of emitted code.
+    /// </param>
+    /// <param name="rootDeclarationsAsPlainValues">
+    /// Optional set of qualified names for top-level declarations that should
+    /// be emitted as plain (already-evaluated) values rather than
+    /// function-record wrappers. When <c>null</c>, no declarations are
+    /// treated specially.
+    /// </param>
     public static Result<string, (PineValue compiledEnvValue, CompilationPipelineStageResults pipelineStageResults)> CompileInteractiveEnvironment(
         FileTree appCodeTree,
         IReadOnlyList<IReadOnlyList<string>> rootFilePaths,
         bool disableInlining = false,
-        int maxOptimizationRounds = 1,
+        int maxOptimizationRounds = MaxOptimizationRoundsDefault,
         bool disableGenericApplicationChainConsolidation = false,
         IReadOnlyList<DeclQualifiedName>? rootDeclarationsAsPlainValues = null)
     {
@@ -1955,6 +2011,12 @@ public class ElmCompiler
             null
         };
 
+    /// <summary>
+    /// Compiles an <see cref="AppCompilationUnits"/> bundle into a Pine value.
+    /// </summary>
+    /// <remarks>
+    /// Not yet implemented.
+    /// </remarks>
     public static PineValue Compile(
         AppCompilationUnits compilationUnits)
     {

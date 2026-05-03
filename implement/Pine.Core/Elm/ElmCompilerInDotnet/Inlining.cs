@@ -1569,8 +1569,10 @@ public partial class Inlining
             }
         }
 
-        // Check if this is a call to a known function
-        if (funcExpr is SyntaxTypes.Expression.FunctionOrValue funcOrValue)
+        // Check if this is a call to a known function. Unwrap any parenthesization
+        // around the head: lambda lifting can introduce parenthesized references such as
+        // `(myFunc) arg` that would otherwise prevent us from resolving the callee.
+        if (ElmSyntaxTransformations.UnwrapParenthesized(funcExpr) is SyntaxTypes.Expression.FunctionOrValue funcOrValue)
         {
             if (TryResolveKnownFunctionReference(funcOrValue, context) is { } resolved)
             {
