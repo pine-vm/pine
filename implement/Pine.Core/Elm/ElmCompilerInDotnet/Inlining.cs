@@ -85,7 +85,7 @@ public partial class Inlining
         /// <see cref="Config.SpecializationAndSmallFunctions"/>. Mirrors the previous file-scoped
         /// <c>MaxSmallFunctionBodySize</c> constant.
         /// </summary>
-        public static readonly SmallFunctionsConfig Default = new(MaxBodyNodeCount: 10);
+        public static readonly SmallFunctionsConfig Default = new(MaxBodyNodeCount: 24);
     }
 
     /// <summary>
@@ -1613,6 +1613,33 @@ public partial class Inlining
                         }
                     }
 
+                    // Wrapper-with-captured-function partial-application specialization.
+                    // Fires for non-recursive callees (e.g. lambda-lifted wrappers) when the
+                    // call is a partial application supplying a known function for a parameter
+                    // that is forwarded into a recursive callee inside the body. Inlining the
+                    // wrapper here exposes the recursive call with a literal function argument,
+                    // which the recursive walk then routes through TrySpecializeRecursiveCall to
+                    // materialize a first-order specialized variant of the recursive helper.
+                    if (!funcInfo.IsRecursive &&
+                        EnablesSpecialization(context) &&
+                        !context.InliningStack.Contains(resolved.QualifiedName) &&
+                        ShouldInlinePartialApplicationWithCapturedFunction(
+                            funcInfo,
+                            funcImpl,
+                            appArgs,
+                            context))
+                    {
+                        var newContext =
+                            context with { InliningStack = context.InliningStack.Add(resolved.QualifiedName) };
+
+                        var (inlinedResult, inlinedDecls) =
+                            InlineFunctionCall(funcInfo.ModuleName, funcImpl, appArgs, newContext);
+
+                        newDecls.AddRange(inlinedDecls);
+
+                        return new InliningResult(inlinedResult, newDecls.ToImmutable());
+                    }
+
                     return
                         new InliningResult(
                             new SyntaxTypes.Expression.Application(
@@ -1646,11 +1673,21 @@ public partial class Inlining
                 // Check if we should inline based on config
                 var shouldInlineHigherOrder = ShouldInline(funcParams, funcImpl.Expression, appArgs, context);
 
+                var shouldInlineWrapperPartial =
+                    !shouldInlineHigherOrder &&
+                    EnablesSpecialization(context) &&
+                    ShouldInlinePartialApplicationWithCapturedFunction(
+                        funcInfo,
+                        funcImpl,
+                        appArgs,
+                        context);
+
                 var isSmallEnough =
                     !shouldInlineHigherOrder &&
+                    !shouldInlineWrapperPartial &&
                     IsSmallEnoughToInline(funcImpl.Expression, funcInfo.ModuleName, context);
 
-                if (shouldInlineHigherOrder || isSmallEnough)
+                if (shouldInlineHigherOrder || shouldInlineWrapperPartial || isSmallEnough)
                 {
                     // Add this function to the inlining stack to prevent infinite recursion
                     var newContext = context with { InliningStack = context.InliningStack.Add(resolved.QualifiedName) };
@@ -1938,6 +1975,114 @@ public partial class Inlining
             !resolved.FunctionInfo.IsRecursive)
         {
             return true;
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Detects the "wrapper-with-captured-function partial application" pattern:
+    /// the call is a partial application of a non-recursive function, at least one of the
+    /// supplied prefix arguments is a statically-known function expression bound to a
+    /// <see cref="SyntaxTypes.Pattern.VarPattern"/>, and that parameter is forwarded as an
+    /// argument to a recursive callee inside the body.
+    /// <para>
+    /// When this pattern matches, inlining the wrapper at the call site (substituting only
+    /// the supplied prefix args and emitting a lambda for the remaining params) exposes a
+    /// recursive call where the function-typed parameter is now a literal known function,
+    /// which then triggers the existing <see cref="TrySpecializeRecursiveCall"/> machinery
+    /// to materialize a first-order specialized variant of the recursive helper.
+    /// </para>
+    /// <para>
+    /// This is the primary mechanism that gives lambda-lifted wrappers (such as the
+    /// post-lambda-lifting <c>whileWithoutLinebreak__lifted__lambda1</c>) the ability to
+    /// propagate their captured function into the recursive helper they wrap.
+    /// </para>
+    /// </summary>
+    private static bool ShouldInlinePartialApplicationWithCapturedFunction(
+        FunctionInfo funcInfo,
+        SyntaxTypes.FunctionImplementation funcImpl,
+        IReadOnlyList<Node<SyntaxTypes.Expression>> appArgs,
+        InliningContext context)
+    {
+        if (funcInfo.IsRecursive)
+            return false;
+
+        if (!context.Config.IncludeHigherOrder)
+            return false;
+
+        var funcParams = funcImpl.Arguments;
+
+        // Only fires for partial applications. Full and over-applications are handled by
+        // the existing ShouldInline path.
+        if (appArgs.Count >= funcParams.Count)
+            return false;
+
+        if (appArgs.Count is 0)
+            return false;
+
+        for (var i = 0; i < appArgs.Count; i++)
+        {
+            if (funcParams[i].Value is not SyntaxTypes.Pattern.VarPattern varPattern)
+                continue;
+
+            if (!IsFunctionExpression(appArgs[i].Value, context))
+                continue;
+
+            if (BodyForwardsParameterToRecursiveCallArgument(
+                funcImpl.Expression.Value,
+                varPattern.Name,
+                context))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Returns true if <paramref name="expr"/> contains an <see cref="SyntaxTypes.Expression.Application"/>
+    /// whose head resolves to a recursive top-level function and whose argument list contains a bare
+    /// reference to <paramref name="paramName"/>. This indicates that substituting a literal function
+    /// for that parameter would produce a higher-order recursive call eligible for
+    /// <see cref="TrySpecializeRecursiveCall"/>.
+    /// </summary>
+    private static bool BodyForwardsParameterToRecursiveCallArgument(
+        SyntaxTypes.Expression expr,
+        string paramName,
+        InliningContext context)
+    {
+        var stack = new Stack<SyntaxTypes.Expression>();
+        stack.Push(expr);
+
+        while (stack.Count > 0)
+        {
+            var current = stack.Pop();
+
+            if (current is SyntaxTypes.Expression.Application app && app.Arguments.Count >= 2)
+            {
+                var head = ElmSyntaxTransformations.UnwrapParenthesized(app.Arguments[0].Value);
+
+                if (head is SyntaxTypes.Expression.FunctionOrValue headRef &&
+                    TryResolveKnownFunctionReference(headRef, context) is { } resolved &&
+                    resolved.FunctionInfo.IsRecursive)
+                {
+                    for (var i = 1; i < app.Arguments.Count; i++)
+                    {
+                        var unwrappedArg = ElmSyntaxTransformations.UnwrapParenthesized(app.Arguments[i].Value);
+
+                        if (unwrappedArg is SyntaxTypes.Expression.FunctionOrValue argRef &&
+                            argRef.ModuleName.Count is 0 &&
+                            argRef.Name == paramName)
+                        {
+                            return true;
+                        }
+                    }
+                }
+            }
+
+            ElmSyntaxTransformations.EnqueueChildExpressions(current, stack);
         }
 
         return false;

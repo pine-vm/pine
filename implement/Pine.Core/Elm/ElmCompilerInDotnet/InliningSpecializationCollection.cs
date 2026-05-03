@@ -342,7 +342,9 @@ public partial class Inlining
                 // For non-recursive functions that would be inlined, recurse into the inlined body
                 if (!resolved.FunctionInfo.IsRecursive &&
                     !context.InliningStack.Contains(resolved.QualifiedName) &&
-                    ShouldInline(funcParams, funcImpl.Expression, appArgs, context))
+                    (ShouldInline(funcParams, funcImpl.Expression, appArgs, context) ||
+                     ShouldInlinePartialApplicationWithCapturedFunction(
+                        resolved.FunctionInfo, funcImpl, appArgs, context)))
                 {
                     var newContext = context with { InliningStack = context.InliningStack.Add(resolved.QualifiedName) };
 

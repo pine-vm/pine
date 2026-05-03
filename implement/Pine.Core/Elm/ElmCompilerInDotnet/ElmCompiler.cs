@@ -162,13 +162,25 @@ public class ElmCompiler
     /// function-record wrappers. When <c>null</c>, no declarations are
     /// treated specially.
     /// </param>
+    /// <param name="sizeBasedInliningConfigOverride">
+    /// Optional override for the size-based inlining configuration used in
+    /// Phase 3 of the optimization pipeline (the phase that uses
+    /// <see cref="Inlining.Config.SmallFunctionsAndPlainValues"/>). When non-null,
+    /// a per-call configuration is built from this value and passed to the
+    /// pipeline in place of the static default. Threading the override through
+    /// the call stack avoids the parallelism race that mutating the static
+    /// fields used to introduce when tests ran concurrently. Used by
+    /// <c>MaxBodyNodeCountInliningShrinkingTests</c> to bisect threshold
+    /// values without affecting other concurrently executing tests.
+    /// </param>
     public static Result<string, (PineValue compiledEnvValue, CompilationPipelineStageResults pipelineStageResults)> CompileInteractiveEnvironment(
         FileTree appCodeTree,
         IReadOnlyList<IReadOnlyList<string>> rootFilePaths,
         bool disableInlining = false,
         int maxOptimizationRounds = MaxOptimizationRoundsDefault,
         bool disableGenericApplicationChainConsolidation = false,
-        IReadOnlyList<DeclQualifiedName>? rootDeclarationsAsPlainValues = null)
+        IReadOnlyList<DeclQualifiedName>? rootDeclarationsAsPlainValues = null,
+        Inlining.SmallFunctionsConfig? sizeBasedInliningConfigOverride = null)
     {
         // Centralize the hardcoded elm/core kernel module addition here so consumers of
         // ElmCompilerInDotnet pass only app/package sources and do not duplicate this merge.
@@ -376,7 +388,10 @@ public class ElmCompiler
         else
         {
             var pipelineResult =
-                ApplyOptimizationPipelineWithStageResults(lambdaLiftedModules, maxRounds: maxOptimizationRounds);
+                ApplyOptimizationPipelineWithStageResults(
+                    lambdaLiftedModules,
+                    maxRounds: maxOptimizationRounds,
+                    sizeBasedInliningConfigOverride: sizeBasedInliningConfigOverride);
 
             if (pipelineResult.IsErrOrNull() is { } pipelineErr)
                 return pipelineErr;
@@ -1556,8 +1571,24 @@ public class ElmCompiler
 
     private static Result<string, OptimizationPipelineStageResults> ApplyOptimizationPipelineWithStageResults(
         List<SyntaxTypes.File> lambdaLiftedModules,
-        int maxRounds)
+        int maxRounds,
+        Inlining.SmallFunctionsConfig? sizeBasedInliningConfigOverride = null)
     {
+        // When the caller supplies a size-based inlining override, build a per-call
+        // Inlining.Config that applies the override only to the size-based-inlining phase
+        // (Phase 3). Phases 1 and 2 use Inlining.Config.OnlyFunctions, which has no
+        // SmallFunctions component, so they are unaffected by the override. This avoids
+        // mutating any static state and is therefore safe under parallel test execution.
+        var sizeBasedInliningConfig =
+            sizeBasedInliningConfigOverride is null
+            ?
+            Inlining.Config.SmallFunctionsAndPlainValues
+            :
+            Inlining.Config.SmallFunctionsAndPlainValues with
+            {
+                SmallFunctions = sizeBasedInliningConfigOverride
+            };
+
         // Flatten the input modules into a declaration dictionary.
         // The pipeline operates on this flat representation throughout.
         var currentDecls = FlattenModulesToDeclarationDictionary(lambdaLiftedModules);
@@ -1620,12 +1651,12 @@ public class ElmCompiler
 
             // Phase 3: Size-based inlining and plain value inlining.
             // Runs after higher-order inlining to avoid cascading.
-            // Inlines small wrapper functions (≤10 AST nodes, no complex expressions) and
+            // Inlines small wrapper functions (≤10 AST nodes by default, no complex expressions) and
             // plain zero-parameter declarations with simple bodies.
             // Lambda lifting is combined: the transformation stage lifts any lambdas/local functions it introduces.
             {
                 var result =
-                    ElmSyntaxInlining.Apply(currentDecls, Inlining.Config.SmallFunctionsAndPlainValues);
+                    ElmSyntaxInlining.Apply(currentDecls, sizeBasedInliningConfig);
 
                 if (result.IsErrOrNull() is { } sizeInlineErr)
                     return $"Size-based inlining (round {round}) failed: " + sizeInlineErr;

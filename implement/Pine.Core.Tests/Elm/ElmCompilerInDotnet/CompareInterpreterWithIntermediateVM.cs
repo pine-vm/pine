@@ -14,6 +14,7 @@ using System.Text;
 
 using Stil4mToFull = Pine.Core.Elm.ElmSyntax.Stil4mElmSyntax7.ToFullSyntaxModel;
 using SyntaxModel = Pine.Core.Elm.ElmSyntax.SyntaxModel;
+using Stil4mElmSyntax7 = Pine.Core.Elm.ElmSyntax.Stil4mElmSyntax7;
 
 namespace Pine.Core.Tests.Elm.ElmCompilerInDotnet;
 
@@ -56,18 +57,29 @@ public sealed class CompareInterpreterWithIntermediateVM
 
     private readonly IReadOnlyDictionary<DeclQualifiedName, SyntaxModel.Declaration> _interpreterDeclarations;
 
+    /// <summary>
+    /// The post-optimization Elm module list — the exact input the bytecode-emission backend
+    /// consumes (<see cref="CompilationPipelineStageResults.ModulesForCompilation"/>).
+    /// Tests can render or inspect these to see how declarations look after the optimization
+    /// pipeline (specialization, higher-order inlining, size-based inlining), which is the
+    /// same shape the syntax interpreter dispatches against.
+    /// </summary>
+    public IReadOnlyList<Stil4mElmSyntax7.File> PostOptimizationModules { get; }
+
     private CompareInterpreterWithIntermediateVM(
         int maxOptimizationRounds,
         Core.Interpreter.IntermediateVM.PineVM vm,
         IReadOnlyDictionary<DeclQualifiedName, PineValue> entryFunctionValuesByQualifiedName,
         IReadOnlyDictionary<string, DeclQualifiedName> entryQualifiedNameBySimpleName,
-        IReadOnlyDictionary<DeclQualifiedName, SyntaxModel.Declaration> interpreterDeclarations)
+        IReadOnlyDictionary<DeclQualifiedName, SyntaxModel.Declaration> interpreterDeclarations,
+        IReadOnlyList<Stil4mElmSyntax7.File> postOptimizationModules)
     {
         MaxOptimizationRounds = maxOptimizationRounds;
         _vm = vm;
         _entryFunctionValuesByQualifiedName = entryFunctionValuesByQualifiedName;
         _entryQualifiedNameBySimpleName = entryQualifiedNameBySimpleName;
         _interpreterDeclarations = interpreterDeclarations;
+        PostOptimizationModules = postOptimizationModules;
     }
 
     /// <summary>
@@ -181,7 +193,8 @@ public sealed class CompareInterpreterWithIntermediateVM
                 vm: vm,
                 entryFunctionValuesByQualifiedName: entryFunctionValuesByQualifiedName,
                 entryQualifiedNameBySimpleName: entryQualifiedNameBySimpleName,
-                interpreterDeclarations: interpreterDeclarations);
+                interpreterDeclarations: interpreterDeclarations,
+                postOptimizationModules: pipelineStageResults.ModulesForCompilation);
     }
 
     /// <summary>
