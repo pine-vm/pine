@@ -953,24 +953,26 @@ public class ParserFastTests
                     row
                     col
 
-            else if let
-                        code : Basics.Int
-                        code =
-                            Pine_kernel.concat
-                                [ Pine_kernel.take
-                                    [ 1, 0 ]
-                                , nextChar
-                                ]
-                    in
-                    if
-                        Pine_kernel.int_is_sorted_asc
-                            [ 0x41, code, 0x5A ]
-                    then
-                        Basics.True
+            else if
+                let
+                    code : Basics.Int
+                    code =
+                        Pine_kernel.concat
+                            [ Pine_kernel.take
+                                [ 1, 0 ]
+                            , nextChar
+                            ]
+                in
+                if
+                    Pine_kernel.int_is_sorted_asc
+                        [ 0x41, code, 0x5A ]
+                then
+                    Basics.True
 
-                    else
-                        Pine_kernel.int_is_sorted_asc
-                            [ 0x61, code, 0x7A ] then
+                else
+                    Pine_kernel.int_is_sorted_asc
+                        [ 0x61, code, 0x7A ]
+            then
                 ParserFastTestModule.skipWhileWithoutLinebreakHelp__specialized__1
                     (Pine_builtin.int_add
                         [ offset, 4 ]

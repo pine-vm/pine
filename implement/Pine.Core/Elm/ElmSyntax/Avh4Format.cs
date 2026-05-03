@@ -469,6 +469,28 @@ public class Avh4Format
         range.End.Row > range.Start.Row;
 
     /// <summary>
+    /// Returns true for expressions whose canonical avh4 elm-format rendering
+    /// always spans multiple lines, regardless of the source <see cref="Range"/>
+    /// info on the syntax node. Used to force multi-line layout of an
+    /// enclosing <c>if</c> when its condition is one of these expressions even
+    /// if the condition's source range was collapsed to a single row (which
+    /// happens for synthesized syntax nodes produced by the optimization
+    /// pipeline as well as for source like
+    /// <c>if let x = 1 in x then a else b</c> where the user happened to write
+    /// the let on a single line).
+    /// </summary>
+    private static bool IsIntrinsicallyMultilineExpression(ExpressionSyntax expression) =>
+        expression switch
+        {
+            ExpressionSyntax.LetExpression => true,
+            ExpressionSyntax.CaseExpression => true,
+            ExpressionSyntax.IfBlock => true,
+
+            _ =>
+            false,
+        };
+
+    /// <summary>
     /// Helper to check if a collection of nodes spans multiple rows.
     /// </summary>
     private static bool NodesSpanMultipleRows<T>(IReadOnlyList<Node<T>> nodes)
@@ -736,7 +758,7 @@ public class Avh4Format
                     {
                         elemCtx =
                             elemCtx.ReturnToIndent(config.ContentIndentRef)
-                                .FormatAndAddCommentAndNextRowToIndent(comment);
+                            .FormatAndAddCommentAndNextRowToIndent(comment);
                     }
 
                     var elemResult = formatItem(currItem, elemCtx);
@@ -1363,8 +1385,7 @@ public class Avh4Format
                 normalizedImports
                 :
                 [
-                ..
-                    normalizedImports.Where(
+                ..normalizedImports.Where(
                     import =>
                     import.Range.Start.Row < firstDeclaration.Range.Start.Row)
                 ];
@@ -4988,7 +5009,8 @@ public class Avh4Format
             // Check if condition is multiline based on original layout
             var conditionIsMultiline =
                 SpansMultipleRows(ifBlock.Condition.Range) ||
-                ifBlock.ThenTokenLocation.Row > ifBlock.Condition.Range.Start.Row;
+                ifBlock.ThenTokenLocation.Row > ifBlock.Condition.Range.Start.Row ||
+                IsIntrinsicallyMultilineExpression(ifBlock.Condition.Value);
 
             // "if" or "if "
             var ifTokenLoc = context.CurrentLocation();
@@ -5001,7 +5023,6 @@ public class Avh4Format
                 chainBaseColumn.HasValue
                 ?
                 context // If chain base provided, context is already at that position
-
                 :
                 context.SetIndentToCurrentColumn();
 
@@ -5033,7 +5054,7 @@ public class Avh4Format
                         // Format the comment, add it to the context, and position at condition indent
                         conditionContext =
                             conditionContext.ReturnToIndent(conditionIndentRef)
-                                .FormatAndAddCommentAndNextRowToIndent(comment);
+                            .FormatAndAddCommentAndNextRowToIndent(comment);
                     }
                 }
 
@@ -5172,7 +5193,8 @@ public class Avh4Format
                 // Check if inner condition is multiline
                 var innerConditionIsMultiline =
                     SpansMultipleRows(innerIfBlock.Condition.Range) ||
-                    innerIfBlock.ThenTokenLocation.Row > innerIfBlock.Condition.Range.Start.Row;
+                    innerIfBlock.ThenTokenLocation.Row > innerIfBlock.Condition.Range.Start.Row ||
+                    IsIntrinsicallyMultilineExpression(innerIfBlock.Condition.Value);
 
                 FormattingResult<Node<ExpressionSyntax>> innerConditionResult;
                 Location innerThenLoc;
@@ -5199,7 +5221,7 @@ public class Avh4Format
                             // Format the comment, add it to the context, and position at inner condition indent
                             innerConditionContext =
                                 innerConditionContext.ReturnToIndent(innerCondIndentRef)
-                                    .FormatAndAddCommentAndNextRowToIndent(comment);
+                                .FormatAndAddCommentAndNextRowToIndent(comment);
                         }
                     }
 
@@ -5371,7 +5393,7 @@ public class Avh4Format
                             // Format the comment, add it to the context, and position at inner else body indent
                             innerElseBodyContext =
                                 innerElseBodyContext.ReturnToIndent(innerElseBodyIndentRef)
-                                    .FormatAndAddCommentAndNextRowToIndent(comment);
+                                .FormatAndAddCommentAndNextRowToIndent(comment);
                         }
                     }
 
@@ -5437,7 +5459,7 @@ public class Avh4Format
                         // Format the comment, add it to the context, and position at else body indent
                         elseBlockContext =
                             elseBlockContext.ReturnToIndent(elseBodyIndentRef)
-                                .FormatAndAddCommentAndNextRowToIndent(comment);
+                            .FormatAndAddCommentAndNextRowToIndent(comment);
                     }
                 }
 
