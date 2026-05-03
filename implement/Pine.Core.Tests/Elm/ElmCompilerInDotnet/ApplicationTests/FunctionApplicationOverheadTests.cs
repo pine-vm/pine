@@ -322,10 +322,10 @@ public class FunctionApplicationOverheadTests
 
         PerformanceCountersFormatting.FormatCounts(report).Should().Be(
             """
-            InstructionCount: 11
             InvocationCount: 2
             BuildListCount: 1
             LoopIterationCount: 0
+            InstructionCount: 11
             """);
     }
 
@@ -350,10 +350,10 @@ public class FunctionApplicationOverheadTests
 
         PerformanceCountersFormatting.FormatCounts(report).Should().Be(
             """
-            InstructionCount: 32
             InvocationCount: 4
             BuildListCount: 8
             LoopIterationCount: 0
+            InstructionCount: 32
             """);
     }
 
@@ -376,10 +376,10 @@ public class FunctionApplicationOverheadTests
 
         PerformanceCountersFormatting.FormatCounts(report).Should().Be(
             """
-            InstructionCount: 11
             InvocationCount: 2
             BuildListCount: 1
             LoopIterationCount: 0
+            InstructionCount: 11
             """);
     }
 
@@ -408,10 +408,10 @@ public class FunctionApplicationOverheadTests
 
         PerformanceCountersFormatting.FormatCounts(report).Should().Be(
             """
-            InstructionCount: 63
             InvocationCount: 6
             BuildListCount: 5
             LoopIterationCount: 0
+            InstructionCount: 63
             """);
     }
 
@@ -489,10 +489,10 @@ public class FunctionApplicationOverheadTests
 
         PerformanceCountersFormatting.FormatCounts(report).Should().Be(
             """
-            InstructionCount: 225
             InvocationCount: 9
             BuildListCount: 8
             LoopIterationCount: 0
+            InstructionCount: 225
             """);
 
         // --- StackFrameInstructions tracking ---
@@ -680,10 +680,10 @@ public class FunctionApplicationOverheadTests
 
         PerformanceCountersFormatting.FormatCounts(report).Should().Be(
             """
-            InstructionCount: 11
             InvocationCount: 2
             BuildListCount: 1
             LoopIterationCount: 0
+            InstructionCount: 11
             """);
     }
 
@@ -706,10 +706,10 @@ public class FunctionApplicationOverheadTests
 
         PerformanceCountersFormatting.FormatCounts(report).Should().Be(
             """
-            InstructionCount: 11
             InvocationCount: 2
             BuildListCount: 1
             LoopIterationCount: 0
+            InstructionCount: 11
             """);
     }
 
@@ -749,10 +749,10 @@ public class FunctionApplicationOverheadTests
 
         PerformanceCountersFormatting.FormatCounts(report).Should().Be(
             """
-            InstructionCount: 330
             InvocationCount: 24
             BuildListCount: 24
             LoopIterationCount: 0
+            InstructionCount: 330
             """);
     }
 
@@ -787,10 +787,10 @@ public class FunctionApplicationOverheadTests
 
         PerformanceCountersFormatting.FormatCounts(report).Should().Be(
             """
-            InstructionCount: 63
             InvocationCount: 6
             BuildListCount: 5
             LoopIterationCount: 0
+            InstructionCount: 63
             """);
     }
 
@@ -832,10 +832,10 @@ public class FunctionApplicationOverheadTests
 
         PerformanceCountersFormatting.FormatCounts(report).Should().Be(
             """
-            InstructionCount: 330
             InvocationCount: 24
             BuildListCount: 24
             LoopIterationCount: 0
+            InstructionCount: 330
             """);
     }
 
@@ -865,10 +865,10 @@ public class FunctionApplicationOverheadTests
 
         PerformanceCountersFormatting.FormatCounts(report).Should().Be(
             """
-            InstructionCount: 63
             InvocationCount: 6
             BuildListCount: 5
             LoopIterationCount: 0
+            InstructionCount: 63
             """);
     }
 
@@ -906,10 +906,10 @@ public class FunctionApplicationOverheadTests
 
         PerformanceCountersFormatting.FormatCounts(report).Should().Be(
             """
-            InstructionCount: 330
             InvocationCount: 24
             BuildListCount: 24
             LoopIterationCount: 0
+            InstructionCount: 330
             """);
     }
 }

@@ -5,25 +5,25 @@ namespace Pine.Core.Interpreter.IntermediateVM;
 /// <summary>
 /// Aggregated performance counters collected during expression evaluation.
 /// </summary>
-/// <param name="InstructionCount">The total number of VM instructions executed.</param>
 /// <param name="InvocationCount">The total number of runtime invocations performed, including parse-and-eval and direct stack-frame invocations.</param>
 /// <param name="BuildListCount">The total number of executed <c>Build_List</c> and <c>Build_List_Tagged_Const</c> instructions.</param>
 /// <param name="LoopIterationCount">The total number of loop iterations reported by the active stack frames.</param>
+/// <param name="InstructionCount">The total number of VM instructions executed.</param>
 public readonly record struct PerformanceCounters(
-    long InstructionCount,
     long InvocationCount,
     long BuildListCount,
-    long LoopIterationCount)
+    long LoopIterationCount,
+    long InstructionCount)
 {
     /// <summary>
     /// Returns the element-wise sum of two <see cref="PerformanceCounters"/> instances.
     /// </summary>
     public static PerformanceCounters Add(PerformanceCounters a, PerformanceCounters b) =>
         new(
-            InstructionCount: a.InstructionCount + b.InstructionCount,
             InvocationCount: a.InvocationCount + b.InvocationCount,
             BuildListCount: a.BuildListCount + b.BuildListCount,
-            LoopIterationCount: a.LoopIterationCount + b.LoopIterationCount);
+            LoopIterationCount: a.LoopIterationCount + b.LoopIterationCount,
+            InstructionCount: a.InstructionCount + b.InstructionCount);
 
     /// <summary>
     /// Sums all <see cref="PerformanceCounters"/> in the given sequence.
@@ -31,25 +31,25 @@ public readonly record struct PerformanceCounters(
     /// </summary>
     public static PerformanceCounters Aggregate(IEnumerable<PerformanceCounters> counters)
     {
-        long totalInstructions = 0;
         long totalInvocations = 0;
         long totalBuildLists = 0;
         long totalLoopIterations = 0;
+        long totalInstructions = 0;
 
         foreach (var c in counters)
         {
-            totalInstructions += c.InstructionCount;
             totalInvocations += c.InvocationCount;
             totalBuildLists += c.BuildListCount;
             totalLoopIterations += c.LoopIterationCount;
+            totalInstructions += c.InstructionCount;
         }
 
         return
             new PerformanceCounters(
-                InstructionCount: totalInstructions,
                 InvocationCount: totalInvocations,
                 BuildListCount: totalBuildLists,
-                LoopIterationCount: totalLoopIterations);
+                LoopIterationCount: totalLoopIterations,
+                InstructionCount: totalInstructions);
     }
 }
 

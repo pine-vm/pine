@@ -1155,10 +1155,10 @@ public class KernelJsonFunctionTests
 
         PerformanceCountersFormatting.FormatCounts(report).Should().Be(
             """
-            InstructionCount: 2_395
             InvocationCount: 93
             BuildListCount: 159
             LoopIterationCount: 0
+            InstructionCount: 2_395
             """);
     }
 
@@ -1177,10 +1177,10 @@ public class KernelJsonFunctionTests
 
         PerformanceCountersFormatting.FormatCounts(report).Should().Be(
             """
-            InstructionCount: 1_420
             InvocationCount: 53
             BuildListCount: 89
             LoopIterationCount: 0
+            InstructionCount: 1_420
             """);
     }
 
@@ -1234,10 +1234,10 @@ public class KernelJsonFunctionTests
 
         formattedCounts.Should().Be(
             """
-            InstructionCount: 1_622
             InvocationCount: 65
             BuildListCount: 112
             LoopIterationCount: 0
+            InstructionCount: 1_622
             """);
     }
 
@@ -1257,10 +1257,10 @@ public class KernelJsonFunctionTests
 
         formattedCounts.Should().Be(
             """
-            InstructionCount: 3_550
             InvocationCount: 145
             BuildListCount: 275
             LoopIterationCount: 0
+            InstructionCount: 3_550
             """);
     }
 
@@ -1280,10 +1280,10 @@ public class KernelJsonFunctionTests
 
         PerformanceCountersFormatting.FormatCounts(report).Should().Be(
             """
-            InstructionCount: 1_608
             InvocationCount: 56
             BuildListCount: 101
             LoopIterationCount: 0
+            InstructionCount: 1_608
             """);
     }
 
@@ -1301,10 +1301,10 @@ public class KernelJsonFunctionTests
 
         PerformanceCountersFormatting.FormatCounts(report).Should().Be(
             """
-            InstructionCount: 1_615
             InvocationCount: 56
             BuildListCount: 101
             LoopIterationCount: 0
+            InstructionCount: 1_615
             """);
     }
 
@@ -1364,10 +1364,10 @@ public class KernelJsonFunctionTests
 
         PerformanceCountersFormatting.FormatCounts(report).Should().Be(
             """
-            InstructionCount: 1_517
             InvocationCount: 47
             BuildListCount: 85
             LoopIterationCount: 0
+            InstructionCount: 1_517
             """);
     }
 
@@ -1384,10 +1384,10 @@ public class KernelJsonFunctionTests
 
         PerformanceCountersFormatting.FormatCounts(report).Should().Be(
             """
-            InstructionCount: 1_465
             InvocationCount: 48
             BuildListCount: 85
             LoopIterationCount: 0
+            InstructionCount: 1_465
             """);
     }
 
@@ -1432,10 +1432,10 @@ public class KernelJsonFunctionTests
 
         PerformanceCountersFormatting.FormatCounts(report).Should().Be(
             """
-            InstructionCount: 1_442
             InvocationCount: 28
             BuildListCount: 66
             LoopIterationCount: 0
+            InstructionCount: 1_442
             """);
     }
 
@@ -1477,10 +1477,10 @@ public class KernelJsonFunctionTests
 
         PerformanceCountersFormatting.FormatCounts(report).Should().Be(
             """
-            InstructionCount: 12_491
             InvocationCount: 411
             BuildListCount: 691
             LoopIterationCount: 0
+            InstructionCount: 12_491
             """);
     }
 
