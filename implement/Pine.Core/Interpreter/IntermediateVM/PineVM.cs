@@ -212,7 +212,7 @@ public class PineVM : IPineVM
 
     readonly Dictionary<Expression, ExpressionEntry> _expressionCompilationDict = [];
 
-    readonly Dictionary<Expression, Expression> _reducedExpressionDict = [];
+    readonly Dictionary<(Expression, ReductionConfig), Expression> _reducedExpressionDict = [];
 
     private record struct ExpressionEntry(
         ExpressionCompilation Compilation,

@@ -81,7 +81,7 @@ public record ExpressionCompilation(
         bool disableReduction,
         bool enableTailRecursionOptimization,
         Func<Expression, PineValueClass?, bool> skipInlining,
-        IDictionary<Expression, Expression>? reducedExpressionCache = null,
+        IDictionary<(Expression, ReductionConfig), Expression>? reducedExpressionCache = null,
         int pathMaxLowExclusive = DefaultPathMaxLowExclusive,
         int pathMaxHighInclusive = DefaultPathMaxHighInclusive,
         bool disableGenericApplicationChainConsolidation = false)
@@ -176,7 +176,7 @@ public record ExpressionCompilation(
         bool disableReduction,
         bool enableTailRecursionOptimization,
         Func<Expression, PineValueClass?, bool> skipInlining,
-        IDictionary<Expression, Expression>? reducedExpressionCache = null,
+        IDictionary<(Expression, ReductionConfig), Expression>? reducedExpressionCache = null,
         int pathMaxLowExclusive = DefaultPathMaxLowExclusive,
         int pathMaxHighInclusive = DefaultPathMaxHighInclusive,
         bool disableGenericApplicationChainConsolidation = false)
@@ -330,7 +330,7 @@ public record ExpressionCompilation(
         PineVMParseCache parseCache,
         bool disableRecurseAfterInline,
         Func<Expression, bool> skipInlining,
-        IDictionary<Expression, Expression>? reducedExpressionCache = null,
+        IDictionary<(Expression, ReductionConfig), Expression>? reducedExpressionCache = null,
         int pathMaxLowExclusive = DefaultPathMaxLowExclusive,
         int pathMaxHighInclusive = DefaultPathMaxHighInclusive,
         bool disableGenericApplicationChainConsolidation = false)
@@ -338,9 +338,9 @@ public record ExpressionCompilation(
         var expressionReduced =
             ReducePineExpression.ReduceExpressionBottomUp(
                 currentExpression,
+                new ReductionConfig(DisableGenericApplicationChainConsolidation: disableGenericApplicationChainConsolidation, DisableInliningParseAndEval: false),
                 parseCache,
-                reducedExpressionCache: reducedExpressionCache,
-                disableGenericApplicationChainConsolidation: disableGenericApplicationChainConsolidation);
+                reducedExpressionCache: reducedExpressionCache);
 
         if (maxDepth <= 0)
         {
@@ -407,9 +407,9 @@ public record ExpressionCompilation(
             var inlinedExprReduced =
                 ReducePineExpression.ReduceExpressionBottomUp(
                     inlinedExpr,
+                    new ReductionConfig(DisableGenericApplicationChainConsolidation: disableGenericApplicationChainConsolidation, DisableInliningParseAndEval: false),
                     parseCache,
-                    reducedExpressionCache: reducedExpressionCache,
-                    disableGenericApplicationChainConsolidation: disableGenericApplicationChainConsolidation);
+                    reducedExpressionCache: reducedExpressionCache);
 
             /*
              * Per-branch (max-of-paths) cost gate: a Conditional contributes the cost of
@@ -614,9 +614,9 @@ public record ExpressionCompilation(
         var expressionInlinedReduced =
             ReducePineExpression.ReduceExpressionBottomUp(
                 expressionInlined,
+                new ReductionConfig(DisableGenericApplicationChainConsolidation: disableGenericApplicationChainConsolidation, DisableInliningParseAndEval: false),
                 parseCache,
-                reducedExpressionCache: reducedExpressionCache,
-                disableGenericApplicationChainConsolidation: disableGenericApplicationChainConsolidation);
+                reducedExpressionCache: reducedExpressionCache);
 
         return expressionInlinedReduced;
     }
@@ -699,7 +699,7 @@ public record ExpressionCompilation(
         PineVMParseCache parseCache,
         bool disableRecurseAfterInline,
         Func<Expression, PineValueClass?, bool> skipInlining,
-        IDictionary<Expression, Expression>? reducedExpressionCache = null,
+        IDictionary<(Expression, ReductionConfig), Expression>? reducedExpressionCache = null,
         int pathMaxLowExclusive = DefaultPathMaxLowExclusive,
         int pathMaxHighInclusive = DefaultPathMaxHighInclusive,
         bool disableGenericApplicationChainConsolidation = false) =>
@@ -728,7 +728,7 @@ public record ExpressionCompilation(
         PineVMParseCache parseCache,
         bool disableRecurseAfterInline,
         Func<Expression, PineValueClass?, bool> skipInlining,
-        IDictionary<Expression, Expression>? reducedExpressionCache = null,
+        IDictionary<(Expression, ReductionConfig), Expression>? reducedExpressionCache = null,
         int pathMaxLowExclusive = DefaultPathMaxLowExclusive,
         int pathMaxHighInclusive = DefaultPathMaxHighInclusive,
         bool disableGenericApplicationChainConsolidation = false)
@@ -745,9 +745,9 @@ public record ExpressionCompilation(
         var expressionReduced =
             ReducePineExpression.ReduceExpressionBottomUp(
                 expressionSubstituted,
+                new ReductionConfig(DisableGenericApplicationChainConsolidation: disableGenericApplicationChainConsolidation, DisableInliningParseAndEval: false),
                 parseCache,
-                reducedExpressionCache: reducedExpressionCache,
-                disableGenericApplicationChainConsolidation: disableGenericApplicationChainConsolidation);
+                reducedExpressionCache: reducedExpressionCache);
 
         if (maxDepth <= 0)
         {
@@ -836,9 +836,9 @@ public record ExpressionCompilation(
                 var inlinedExprReduced =
                     ReducePineExpression.ReduceExpressionBottomUp(
                         inlinedExprSubstituted,
+                        new ReductionConfig(DisableGenericApplicationChainConsolidation: disableGenericApplicationChainConsolidation, DisableInliningParseAndEval: false),
                         parseCache,
-                        reducedExpressionCache: reducedExpressionCache,
-                        disableGenericApplicationChainConsolidation: disableGenericApplicationChainConsolidation);
+                        reducedExpressionCache: reducedExpressionCache);
 
                 bool IsExpansionCandidateForSecondInliner(Expression.ParseAndEval pe)
                 {
@@ -1002,9 +1002,9 @@ public record ExpressionCompilation(
         var expressionInlinedReduced =
             ReducePineExpression.ReduceExpressionBottomUp(
                 expressionInlined,
+                new ReductionConfig(DisableGenericApplicationChainConsolidation: disableGenericApplicationChainConsolidation, DisableInliningParseAndEval: false),
                 parseCache,
-                reducedExpressionCache: reducedExpressionCache,
-                disableGenericApplicationChainConsolidation: disableGenericApplicationChainConsolidation);
+                reducedExpressionCache: reducedExpressionCache);
 
         return expressionInlinedReduced;
     }

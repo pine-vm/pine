@@ -1,3 +1,4 @@
+using Pine.Core.CommonEncodings;
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
@@ -488,6 +489,43 @@ public class StaticProgramParser
         PineVMParseCache parseCache)
         where IdentifierT : notnull
     {
+        // Recovery for inlined construction shapes: when the bottom-up reducer's
+        // TryInlineEvalBottomUp inlines a ParseAndEval whose result is a constructed
+        // encoded expression value (e.g. List[Lit("ParseAndEval"), List[Lit(body), envBuild]]
+        // with envBuild containing Env references), the resulting outer ParseAndEval has a
+        // non-Literal Encoded slot that the rest of this method does not recognize.
+        // We invert the construction symbolically using
+        // TryDecodeApplicationOfConstructedEncoding, then re-parse the equivalent expression.
+        if (parseAndEvalExpr.Encoded is not Expression.Literal &&
+            ReducePineExpression.TryDecodeApplicationOfConstructedEncoding(
+                parseAndEvalExpr.Encoded,
+                parseAndEvalExpr.Environment,
+                parseCache) is { } decodedFromConstruction)
+        {
+            // The recovery is best-effort: if the decoded shape produces a function value
+            // that the parser config does not recognize (IdentifyInstanceRequired throws),
+            // fall through to the legacy paths below rather than failing the whole parse.
+            try
+            {
+                var recoveredResult =
+                    ParseExpression(
+                        path,
+                        decodedFromConstruction,
+                        envClass,
+                        parseConfig,
+                        parseCache);
+
+                if (recoveredResult.IsErrOrNull() is null)
+                {
+                    return recoveredResult;
+                }
+            }
+            catch (System.InvalidOperationException)
+            {
+                // Fall through to legacy parsing paths.
+            }
+        }
+
         // Form A detection: single (non-chained) ParseAndEval whose Encoded is a
         // Literal recognized as a known callee's EncodedExpression. Per §2.2 the
         // environment is uniformly List[Literal(envFuncs), arg0, ..., arg{n-1}].
@@ -659,10 +697,80 @@ public class StaticProgramParser
         }
 
         // Reached the innermost level with the actual function reference
-        var identifyFunctionResult =
-            parseConfig.IdentifyInstanceRequired(
-                path,
-                resolvedFunction.functionValue);
+        IdentifyResponse<IdentifierT> identifyFunctionResult;
+
+        try
+        {
+            identifyFunctionResult =
+                parseConfig.IdentifyInstanceRequired(
+                    path,
+                    resolvedFunction.functionValue);
+        }
+        catch (System.InvalidOperationException)
+        {
+            // The resolved function value is not a known callee. This happens for
+            // function values produced by inlining/specialization that are not part of
+            // the named declarations dictionary. Attempt to recover by inlining the
+            // body symbolically: parse the value as a function record and substitute
+            // the inner expression's Environment with the actual environment of this
+            // ParseAndEval, then re-parse the inlined expression.
+            if (FunctionRecord.ParseFunctionRecordTagged(
+                    resolvedFunction.functionValue,
+                    parseCache).IsOkOrNull() is { } innerFunctionRecord &&
+                innerFunctionRecord.ParameterCount == collectedArgs.Count)
+            {
+                var inlinedEnvFuncsItems = new Expression[innerFunctionRecord.EnvFunctions.Length];
+
+                for (var i = 0; i < innerFunctionRecord.EnvFunctions.Length; i++)
+                {
+                    inlinedEnvFuncsItems[i] = Expression.LiteralInstance(innerFunctionRecord.EnvFunctions.Span[i]);
+                }
+
+                var inlinedEnvFuncsList = Expression.ListInstance(inlinedEnvFuncsItems);
+
+                var inlineCollectedArgs = new Expression[collectedArgs.Count];
+
+                for (var i = 0; i < collectedArgs.Count; i++)
+                {
+                    // collectedArgs is in reverse-application order; reverse to first..last.
+                    inlineCollectedArgs[i] = collectedArgs[collectedArgs.Count - 1 - i];
+                }
+
+                Expression inlinedEnvironment;
+
+                if (innerFunctionRecord.UsesNestedArgFormat)
+                {
+                    var nestedEnvItems = new Expression[1 + inlineCollectedArgs.Length];
+                    nestedEnvItems[0] = inlinedEnvFuncsList;
+
+                    for (var i = 0; i < inlineCollectedArgs.Length; i++)
+                    {
+                        nestedEnvItems[1 + i] = inlineCollectedArgs[i];
+                    }
+
+                    inlinedEnvironment = Expression.ListInstance(nestedEnvItems);
+                }
+                else
+                {
+                    inlinedEnvironment =
+                        Expression.ListInstance(
+                            [
+                            inlinedEnvFuncsList,
+                            Expression.ListInstance(inlineCollectedArgs),
+                            ]);
+                }
+
+                var inlinedExpression =
+                    new Expression.ParseAndEval(
+                        encoded: Expression.LiteralInstance(
+                            ExpressionEncoding.EncodeExpressionAsValue(innerFunctionRecord.InnerFunction)),
+                        environment: inlinedEnvironment);
+
+                return ParseExpression(path, inlinedExpression, envClass, parseConfig, parseCache);
+            }
+
+            throw;
+        }
 
         // For full function applications, parse arguments from the environment structure
         if (resolvedFunction.isFullApplication)

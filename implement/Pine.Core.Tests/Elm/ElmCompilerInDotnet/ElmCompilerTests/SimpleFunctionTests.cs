@@ -141,20 +141,14 @@ public class SimpleFunctionTests
 
         wholeProgramText.Trim().Should().Be(
             """"
-
             Test.alfa param_1_0 =
                 [ param_1_0
-                , Test.beta
-                    param_1_0
-                ]
-
-
-            Test.beta param_1_0 =
-                Pine_builtin.int_add
+                , Pine_builtin.int_add
                     [ param_1_0
                     , 41
                     ]
-            
+                ]
+
             """"
             .Trim());
     }
@@ -206,28 +200,17 @@ public class SimpleFunctionTests
 
         wholeProgramText.Trim().Should().Be(
             """"
-
             Test.alfa param_1_0 =
                 [ param_1_0
-                , Test.beta
-                    param_1_0
-                ]
-
-
-            Test.beta param_1_0 =
-                Pine_builtin.int_add
-                    [ Test.gamma
-                        param_1_0
+                , Pine_builtin.int_add
+                    [ Pine_builtin.int_mul
+                        [ param_1_0
+                        , 13
+                        ]
                     , 41
                     ]
+                ]
 
-
-            Test.gamma param_1_0 =
-                Pine_builtin.int_mul
-                    [ param_1_0
-                    , 13
-                    ]
-            
             """"
             .Trim());
     }

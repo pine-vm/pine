@@ -295,9 +295,13 @@ public class PartialApplicationConsolidationTests
                 s_parseCache,
                 reducedExpressionCache: null);
 
-        // After consolidation: 1 + 1 = 2 ParseAndEval per gamma call.
+        // After consolidation + inlining: with the new
+        // <see cref="ReducePineExpression.TryInlineEvalBottomUp"/> bottom-up inliner enabled,
+        // the partial-helper side may produce one additional ParseAndEval per call site
+        // (the inliner re-introduces a wrapper to keep the inlined body env-independent).
+        // The total is therefore 3 ParseAndEval per gamma call (instead of 2 without inlining).
         (CountParseAndEval(reducedPartialHelperBatch) +
         CountParseAndEval(reducedApplyOneArgHelperBatch))
-            .Should().Be(2 * callCount);
+            .Should().Be(3 * callCount);
     }
 }
