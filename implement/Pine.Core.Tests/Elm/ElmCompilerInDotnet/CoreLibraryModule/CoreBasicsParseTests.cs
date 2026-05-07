@@ -378,12 +378,12 @@ public class CoreBasicsParseTests
 
         wholeProgramText.Trim().Should().Be(
             """"
-
             Test.alfa param_1_0 =
                 Basics.modBy
                     7
-                    param_1_0
-            
+                    [ param_1_0
+                    ]
+
             """"
             .Trim());
 
@@ -463,12 +463,12 @@ public class CoreBasicsParseTests
 
         wholeProgramText.Trim().Should().Be(
             """"
-
             Test.alfa param_1_0 =
                 Basics.remainderBy
                     7
-                    param_1_0
-            
+                    [ param_1_0
+                    ]
+
             """"
             .Trim());
 
@@ -626,12 +626,12 @@ public class CoreBasicsParseTests
 
         wholeProgramText.Trim().Should().Be(
             """"
-
             Test.alfa param_1_0 =
                 Basics.sub
                     100
-                    param_1_0
-            
+                    [ param_1_0
+                    ]
+
             """"
             .Trim());
 
@@ -2057,11 +2057,28 @@ public class CoreBasicsParseTests
 
         wholeProgramText.Trim().Should().Be(
             """"
-
             Test.alfa param_1_0 =
-                Basics.negate
-                    param_1_0
-            
+                if
+                    Pine_builtin.equal
+                        [ param_1_0
+                        , Elm_Float
+                        ]
+                then
+                    [ Elm_Float
+                    , [ Pine_builtin.int_mul
+                          [ -1
+                          , param_1_1[0]
+                          ]
+                      , param_1_1[1]
+                      ]
+                    ]
+
+                else
+                    Pine_builtin.int_mul
+                        [ -1
+                        , param_1_0
+                        ]
+
             """"
             .Trim());
     }

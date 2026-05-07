@@ -52,31 +52,25 @@ public class TypeInferenceFunctionDeclarationTests
 
         wholeProgramText.Trim().Should().Be(
             """"
-
-            Test.alfa param_1_0 =
-                if
-                    Pine_builtin.equal
-                        [ Pine_builtin.length
-                            param_1_0
-                        , 0
-                        ]
-                then
-                    13
-
-                else
-                    17
-
-
             Test.beta param_1_0 param_1_1 =
                 Pine_builtin.int_mul
                     [ param_1_1
                     , Pine_builtin.int_add
-                        [ Test.alfa
-                            param_1_0
+                        [ if
+                            Pine_builtin.equal
+                                [ Pine_builtin.length
+                                    param_1_0
+                                , 0
+                                ]
+                          then
+                            13
+
+                          else
+                            17
                         , 17
                         ]
                     ]
-            
+
             """"
             .Trim());
     }

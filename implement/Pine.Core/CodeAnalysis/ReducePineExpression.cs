@@ -11,6 +11,37 @@ using KernelFunctionSpecialized = Pine.Core.Internal.KernelFunctionSpecialized;
 namespace Pine.Core.CodeAnalysis;
 
 /// <summary>
+/// Configures optional behaviors of the bottom-up expression reducer
+/// (<see cref="ReducePineExpression.ReduceExpressionBottomUp(Expression, ReductionConfig, PineVMParseCache, IDictionary{ValueTuple{Expression, ReductionConfig}, Expression}?)"/>).
+/// <para>
+/// The configuration also participates in the cache key for the optional
+/// <c>reducedExpressionCache</c>, ensuring entries reduced under different
+/// configurations do not collide.
+/// </para>
+/// </summary>
+/// <param name="DisableGenericApplicationChainConsolidation">When <c>true</c>,
+/// suppresses
+/// <see cref="ReducePineExpression.TryConsolidateGenericFunctionApplicationChain(Expression.ParseAndEval, PineVMParseCache, ReductionConfig)"/>
+/// during reduction. Intended for diagnostic / inspection scenarios where the
+/// caller wants to observe the pre-consolidation behavior side-by-side with the
+/// optimized one.</param>
+/// <param name="DisableInliningParseAndEval">When <c>true</c>, suppresses
+/// <see cref="ReducePineExpression.TryInlineEvalBottomUp(Expression.ParseAndEval, ReductionConfig, PineVMParseCache, IDictionary{ValueTuple{Expression, ReductionConfig}, Expression}?)"/>
+/// during reduction, leaving <see cref="Expression.ParseAndEval"/> nodes whose
+/// encoded operand is a known constant un-inlined. Intended for diagnostic /
+/// inspection scenarios where the caller wants to observe the
+/// pre-inlining shape of the expression tree.</param>
+public record struct ReductionConfig(
+    bool DisableGenericApplicationChainConsolidation,
+    bool DisableInliningParseAndEval)
+{
+    /// <summary>
+    /// The default configuration: all optional behaviors enabled (no suppression flags set).
+    /// </summary>
+    public static readonly ReductionConfig Default = new();
+}
+
+/// <summary>
 /// Helpers for evaluating and reducing Pine expressions without requiring a runtime environment.
 /// Provides utilities for constant folding, small-step reductions, and tree transformations
 /// used by analyzers and compilers.
@@ -1216,21 +1247,50 @@ public class ReducePineExpression
     }
 
     /// <summary>
-    /// Performs a single bottom-up reduction pass:
+    /// Performs a single bottom-up reduction pass with the default <see cref="ReductionConfig"/>:
     ///   1. Recursively reduces children first.
     ///   2. Attempts to reduce the resulting node via <see cref="SearchForExpressionReduction"/>.
     /// </summary>
     /// <param name="expression">The expression to reduce.</param>
     /// <param name="parseCache">Cache used when parsing encoded expressions.</param>
+    /// <param name="reducedExpressionCache">Optional memoization cache keyed by
+    /// <c>(expression, config)</c>. When supplied, lookups and inserts are scoped per
+    /// <see cref="ReductionConfig"/> so entries from different configurations cannot collide.</param>
     /// <returns>The reduced expression if any reduction was possible; otherwise the original expression.</returns>
     public static Expression ReduceExpressionBottomUp(
         Expression expression,
         PineVMParseCache parseCache,
-        IDictionary<Expression, Expression>? reducedExpressionCache = null,
-        bool disableGenericApplicationChainConsolidation = false)
+        IDictionary<(Expression, ReductionConfig), Expression>? reducedExpressionCache = null)
+    {
+        return
+            ReduceExpressionBottomUp(
+                expression,
+                ReductionConfig.Default,
+                parseCache,
+                reducedExpressionCache);
+    }
+
+    /// <summary>
+    /// Performs a single bottom-up reduction pass:
+    ///   1. Recursively reduces children first.
+    ///   2. Attempts to reduce the resulting node via <see cref="SearchForExpressionReduction"/>.
+    /// </summary>
+    /// <param name="expression">The expression to reduce.</param>
+    /// <param name="config">Configuration controlling optional reduction behaviors.
+    /// Also forms part of the <paramref name="reducedExpressionCache"/> key.</param>
+    /// <param name="parseCache">Cache used when parsing encoded expressions.</param>
+    /// <param name="reducedExpressionCache">Optional memoization cache keyed by
+    /// <c>(expression, config)</c>. When supplied, lookups and inserts are scoped per
+    /// <see cref="ReductionConfig"/> so entries from different configurations cannot collide.</param>
+    /// <returns>The reduced expression if any reduction was possible; otherwise the original expression.</returns>
+    public static Expression ReduceExpressionBottomUp(
+        Expression expression,
+        ReductionConfig config,
+        PineVMParseCache parseCache,
+        IDictionary<(Expression, ReductionConfig), Expression>? reducedExpressionCache = null)
     {
         if (reducedExpressionCache is not null &&
-            reducedExpressionCache.TryGetValue(expression, out var cachedReducedExpression))
+            reducedExpressionCache.TryGetValue((expression, config), out var cachedReducedExpression))
         {
             return cachedReducedExpression;
         }
@@ -1246,35 +1306,35 @@ public class ReducePineExpression
                     listExpr,
                     parseCache,
                     reducedExpressionCache,
-                    disableGenericApplicationChainConsolidation),
+                    config),
 
                 Expression.KernelApplication kernelApp =>
                 ReduceKernelApplicationBottomUp(
                     kernelApp,
                     parseCache,
                     reducedExpressionCache,
-                    disableGenericApplicationChainConsolidation),
+                    config),
 
                 Expression.ParseAndEval parseAndEval =>
                 ReduceParseAndEvalBottomUp(
                     parseAndEval,
                     parseCache,
                     reducedExpressionCache,
-                    disableGenericApplicationChainConsolidation),
+                    config),
 
                 Expression.Conditional conditional =>
                 ReduceConditionalBottomUp(
                     conditional,
                     parseCache,
                     reducedExpressionCache,
-                    disableGenericApplicationChainConsolidation),
+                    config),
 
                 Expression.StringTag stringTag =>
                 ReduceStringTagBottomUp(
                     stringTag,
                     parseCache,
                     reducedExpressionCache,
-                    disableGenericApplicationChainConsolidation),
+                    config),
 
                 // These are direct references to the environment or stack.
                 // No further children to reduce.
@@ -1293,14 +1353,14 @@ public class ReducePineExpression
 
             if (reduced is not null)
             {
-                reducedExpressionCache?[expression] = reduced;
+                reducedExpressionCache?[(expression, config)] = reduced;
 
                 return reduced;
             }
         }
 
         // If no further reduction, just return our (possibly child-reduced) node.
-        reducedExpressionCache?[expression] = expressionWithReducedChildren;
+        reducedExpressionCache?[(expression, config)] = expressionWithReducedChildren;
 
         return expressionWithReducedChildren;
     }
@@ -1310,12 +1370,14 @@ public class ReducePineExpression
     /// </summary>
     /// <param name="listExpr">The list expression to reduce.</param>
     /// <param name="parseCache">Cache used when parsing encoded expressions.</param>
+    /// <param name="reducedExpressionCache">Optional memoization cache forwarded to recursive reductions.</param>
+    /// <param name="config">Configuration controlling optional reduction behaviors.</param>
     /// <returns>The reduced list expression or the original if no change occurs.</returns>
     public static Expression ReduceListExpressionBottomUp(
         Expression.List listExpr,
         PineVMParseCache parseCache,
-        IDictionary<Expression, Expression>? reducedExpressionCache,
-        bool disableGenericApplicationChainConsolidation = false)
+        IDictionary<(Expression, ReductionConfig), Expression>? reducedExpressionCache,
+        ReductionConfig config = default)
     {
         var items = listExpr.Items;
         var changed = false;
@@ -1326,9 +1388,9 @@ public class ReducePineExpression
             var reducedChild =
                 ReduceExpressionBottomUp(
                     items[i],
+                    config,
                     parseCache,
-                    reducedExpressionCache,
-                    disableGenericApplicationChainConsolidation);
+                    reducedExpressionCache);
 
             newItems[i] = reducedChild;
 
@@ -1350,19 +1412,21 @@ public class ReducePineExpression
     /// </summary>
     /// <param name="kernelApp">The kernel application to reduce.</param>
     /// <param name="parseCache">Cache used when parsing encoded expressions.</param>
+    /// <param name="reducedExpressionCache">Optional memoization cache forwarded to recursive reductions.</param>
+    /// <param name="config">Configuration controlling optional reduction behaviors.</param>
     /// <returns>The reduced expression or the original if no change occurs.</returns>
     public static Expression ReduceKernelApplicationBottomUp(
         Expression.KernelApplication kernelApp,
         PineVMParseCache parseCache,
-        IDictionary<Expression, Expression>? reducedExpressionCache,
-        bool disableGenericApplicationChainConsolidation = false)
+        IDictionary<(Expression, ReductionConfig), Expression>? reducedExpressionCache,
+        ReductionConfig config = default)
     {
         var reducedArg =
             ReduceExpressionBottomUp(
                 kernelApp.Input,
+                config,
                 parseCache,
-                reducedExpressionCache,
-                disableGenericApplicationChainConsolidation);
+                reducedExpressionCache);
 
         if (kernelApp.Function is nameof(KernelFunction.int_mul) &&
             reducedArg is Expression.List operandList)
@@ -1449,26 +1513,31 @@ public class ReducePineExpression
     /// </summary>
     /// <param name="parseAndEval">The Parse-and-Eval expression to reduce.</param>
     /// <param name="parseCache">Cache used when parsing encoded expressions.</param>
+    /// <param name="reducedExpressionCache">Optional memoization cache forwarded to recursive reductions.</param>
+    /// <param name="config">Configuration controlling optional reduction behaviors,
+    /// including whether
+    /// <see cref="TryConsolidateGenericFunctionApplicationChain(Expression.ParseAndEval, PineVMParseCache, ReductionConfig)"/>
+    /// is applied.</param>
     /// <returns>The reduced expression or the original if no change occurs.</returns>
     public static Expression ReduceParseAndEvalBottomUp(
         Expression.ParseAndEval parseAndEval,
         PineVMParseCache parseCache,
-        IDictionary<Expression, Expression>? reducedExpressionCache,
-        bool disableGenericApplicationChainConsolidation = false)
+        IDictionary<(Expression, ReductionConfig), Expression>? reducedExpressionCache,
+        ReductionConfig config = default)
     {
         var reducedEncoded =
             ReduceExpressionBottomUp(
                 parseAndEval.Encoded,
+                config,
                 parseCache,
-                reducedExpressionCache,
-                disableGenericApplicationChainConsolidation);
+                reducedExpressionCache);
 
         var reducedEnv =
             ReduceExpressionBottomUp(
                 parseAndEval.Environment,
+                config,
                 parseCache,
-                reducedExpressionCache,
-                disableGenericApplicationChainConsolidation);
+                reducedExpressionCache);
 
         var reduced =
             (reducedEncoded == parseAndEval.Encoded && reducedEnv == parseAndEval.Environment)
@@ -1484,7 +1553,7 @@ public class ReducePineExpression
         if (TryConsolidateGenericFunctionApplicationChain(
                 reduced,
                 parseCache,
-                disableGenericApplicationChainConsolidation) is { } consolidated)
+                config) is { } consolidated)
         {
             // The consolidation symbolically inlines the structural-encoding wrapper that
             // FunctionValueBuilder emits, which can leave behind kernel applications
@@ -1494,14 +1563,102 @@ public class ReducePineExpression
             var reducedConsolidated =
                 ReduceExpressionBottomUp(
                     consolidated,
+                    config,
                     parseCache,
-                    reducedExpressionCache,
-                    disableGenericApplicationChainConsolidation);
+                    reducedExpressionCache);
 
             return reducedConsolidated;
         }
 
+        if (!config.DisableInliningParseAndEval &&
+            TryInlineEvalBottomUp(reduced, config, parseCache, reducedExpressionCache) is { } inlined)
+        {
+            return inlined;
+        }
+
         return reduced;
+    }
+
+    /// <summary>
+    /// Attempts to inline a <see cref="Expression.ParseAndEval"/> whose
+    /// <see cref="Expression.ParseAndEval.Encoded"/> resolves to a known
+    /// constant Pine-encoded expression value, by substituting the parsed inner
+    /// expression's <see cref="Expression.Environment"/> nodes with the outer
+    /// <see cref="Expression.ParseAndEval.Environment"/>.
+    /// <para>
+    /// Conservatively bails out when the parsed inner expression contains any
+    /// <see cref="Expression.ParseAndEval"/> whose own subtrees reference the
+    /// environment, because substituting the outer environment in would rewrite
+    /// the dispatched code of those nested invocations.
+    /// </para>
+    /// </summary>
+    /// <param name="evalExpr">The parse-and-eval expression to attempt to inline.</param>
+    /// <param name="config">Configuration controlling optional reduction behaviors.</param>
+    /// <param name="parseCache">Cache used when parsing encoded expressions.</param>
+    /// <param name="reducedExpressionCache">Optional memoization cache forwarded to recursive reductions.</param>
+    public static Expression? TryInlineEvalBottomUp(
+        Expression.ParseAndEval evalExpr,
+        ReductionConfig config,
+        PineVMParseCache parseCache,
+        IDictionary<(Expression, ReductionConfig), Expression>? reducedExpressionCache)
+    {
+        if (evalExpr.Encoded.ReferencesEnvironment)
+            return null;
+
+        if (TryEvaluateExpressionIndependent(evalExpr.Encoded, parseCache).IsOkOrNull() is not { } encodedExprValue)
+            return null;
+
+        if (parseCache.ParseExpression(encodedExprValue).IsOkOrNull() is not { } innerExpr)
+            return null;
+
+        var evalCountBefore = 0;
+
+        foreach (var descendant in Expression.EnumerateSelfAndDescendants(evalExpr.Environment))
+        {
+            if (descendant is Expression.ParseAndEval)
+            {
+                evalCountBefore++;
+            }
+        }
+
+        foreach (var innerSubExpr in Expression.EnumerateSelfAndDescendants(innerExpr))
+        {
+            if (innerSubExpr is Expression.ParseAndEval { ReferencesEnvironment: true })
+            {
+                return null;
+            }
+        }
+
+        var innerExprReduced =
+            ReduceExpressionBottomUp(
+                innerExpr,
+                config,
+                parseCache,
+                reducedExpressionCache);
+
+        var substituted = SubstituteEnvironmentNode(expression: innerExprReduced, replacement: evalExpr.Environment);
+
+        var reducedViaEval =
+            ReduceExpressionBottomUp(
+                substituted,
+                config,
+                parseCache,
+                reducedExpressionCache);
+
+        var evalCountAfter = 0;
+
+        foreach (var descendant in Expression.EnumerateSelfAndDescendants(reducedViaEval))
+        {
+            if (descendant is Expression.ParseAndEval)
+                evalCountAfter++;
+        }
+
+        if (evalCountAfter > evalCountBefore)
+        {
+            return null;
+        }
+
+        return reducedViaEval;
     }
 
     /// <summary>
@@ -1522,7 +1679,8 @@ public class ReducePineExpression
     /// </summary>
     /// <param name="parseAndEval">The outermost <see cref="Expression.ParseAndEval"/> of the chain.</param>
     /// <param name="parseCache">Cache used when parsing encoded expressions.</param>
-    /// <param name="disableGenericApplicationChainConsolidation">When <c>true</c>,
+    /// <param name="config">Configuration controlling optional reduction behaviors. When
+    /// <see cref="ReductionConfig.DisableGenericApplicationChainConsolidation"/> is <c>true</c>,
     /// the method returns <c>null</c> regardless of the chain shape. Intended exclusively for
     /// diagnostic / inspection scenarios where the caller wants to observe the
     /// pre-consolidation behavior side-by-side with the optimized one.</param>
@@ -1530,9 +1688,9 @@ public class ReducePineExpression
     public static Expression? TryConsolidateGenericFunctionApplicationChain(
         Expression.ParseAndEval parseAndEval,
         PineVMParseCache parseCache,
-        bool disableGenericApplicationChainConsolidation = false)
+        ReductionConfig config = default)
     {
-        if (disableGenericApplicationChainConsolidation)
+        if (config.DisableGenericApplicationChainConsolidation)
         {
             return null;
         }
@@ -1585,7 +1743,12 @@ public class ReducePineExpression
     /// <see cref="ExpressionEncoding.EncodeExpressionAsValue(Expression)"/>.
     /// Returns <c>null</c> when the construction does not match a recognized encoded shape.
     /// </summary>
-    private static Expression? TryDecodeApplicationOfConstructedEncoding(
+    /// <param name="construction">An expression that, when evaluated, would yield an
+    /// encoded Pine expression value (matching the structural encoding scheme).</param>
+    /// <param name="envArg">The environment expression that the encoded inner expression
+    /// would receive at runtime.</param>
+    /// <param name="parseCache">Cache used when parsing encoded expressions.</param>
+    public static Expression? TryDecodeApplicationOfConstructedEncoding(
         Expression construction,
         Expression envArg,
         PineVMParseCache parseCache)
@@ -1777,33 +1940,35 @@ public class ReducePineExpression
     /// </summary>
     /// <param name="conditional">The conditional expression to reduce.</param>
     /// <param name="parseCache">Cache used when parsing encoded expressions.</param>
+    /// <param name="reducedExpressionCache">Optional memoization cache forwarded to recursive reductions.</param>
+    /// <param name="config">Configuration controlling optional reduction behaviors.</param>
     /// <returns>The reduced expression or the original if no change occurs.</returns>
     public static Expression ReduceConditionalBottomUp(
         Expression.Conditional conditional,
         PineVMParseCache parseCache,
-        IDictionary<Expression, Expression>? reducedExpressionCache,
-        bool disableGenericApplicationChainConsolidation = false)
+        IDictionary<(Expression, ReductionConfig), Expression>? reducedExpressionCache,
+        ReductionConfig config = default)
     {
         var reducedCondition =
             ReduceExpressionBottomUp(
                 conditional.Condition,
+                config,
                 parseCache,
-                reducedExpressionCache,
-                disableGenericApplicationChainConsolidation);
+                reducedExpressionCache);
 
         var reducedTrue =
             ReduceExpressionBottomUp(
                 conditional.TrueBranch,
+                config,
                 parseCache,
-                reducedExpressionCache,
-                disableGenericApplicationChainConsolidation);
+                reducedExpressionCache);
 
         var reducedFalse =
             ReduceExpressionBottomUp(
                 conditional.FalseBranch,
+                config,
                 parseCache,
-                reducedExpressionCache,
-                disableGenericApplicationChainConsolidation);
+                reducedExpressionCache);
 
         if (reducedCondition == conditional.Condition &&
             reducedTrue == conditional.TrueBranch &&
@@ -1824,19 +1989,21 @@ public class ReducePineExpression
     /// </summary>
     /// <param name="stringTag">The string tag expression to reduce.</param>
     /// <param name="parseCache">Cache used when parsing encoded expressions.</param>
+    /// <param name="reducedExpressionCache">Optional memoization cache forwarded to recursive reductions.</param>
+    /// <param name="config">Configuration controlling optional reduction behaviors.</param>
     /// <returns>The reduced expression or the original if no change occurs.</returns>
     public static Expression ReduceStringTagBottomUp(
         Expression.StringTag stringTag,
         PineVMParseCache parseCache,
-        IDictionary<Expression, Expression>? reducedExpressionCache,
-        bool disableGenericApplicationChainConsolidation = false)
+        IDictionary<(Expression, ReductionConfig), Expression>? reducedExpressionCache,
+        ReductionConfig config = default)
     {
         var reducedTagged =
             ReduceExpressionBottomUp(
                 stringTag.Tagged,
+                config,
                 parseCache,
-                reducedExpressionCache,
-                disableGenericApplicationChainConsolidation);
+                reducedExpressionCache);
 
         if (reducedTagged == stringTag.Tagged)
             return stringTag;
