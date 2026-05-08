@@ -133,7 +133,7 @@ public class ConsolidatedFormTemplateTests
 
         Expression EnvAccess(int idx)
         {
-            Expression cur = Expression.EnvironmentInstance;
+            var cur = Expression.EnvironmentInstance;
 
             for (var i = 0; i < idx; ++i)
             {

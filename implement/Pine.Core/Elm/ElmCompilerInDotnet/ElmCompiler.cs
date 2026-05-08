@@ -1593,9 +1593,9 @@ public class ElmCompiler
         // The pipeline operates on this flat representation throughout.
         var currentDecls = FlattenModulesToDeclarationDictionary(lambdaLiftedModules);
 
-        ImmutableDictionary<DeclQualifiedName, SyntaxTypes.Declaration> afterSpecialization = currentDecls;
-        ImmutableDictionary<DeclQualifiedName, SyntaxTypes.Declaration> afterHigherOrderInlining = currentDecls;
-        ImmutableDictionary<DeclQualifiedName, SyntaxTypes.Declaration> afterLambdaLifting = currentDecls;
+        var afterSpecialization = currentDecls;
+        var afterHigherOrderInlining = currentDecls;
+        var afterLambdaLifting = currentDecls;
 
         var iterationResults = ImmutableList.CreateBuilder<OptimizationIterationStageResults>();
 

@@ -171,7 +171,7 @@ public class PartialApplicationConsolidationTests
     /// </summary>
     private static Expression ListEnvAccess(int index)
     {
-        Expression current = Expression.EnvironmentInstance;
+        var current = Expression.EnvironmentInstance;
 
         for (var i = 0; i < index; ++i)
         {

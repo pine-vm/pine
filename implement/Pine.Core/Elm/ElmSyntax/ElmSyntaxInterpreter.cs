@@ -2640,7 +2640,7 @@ public partial class ElmSyntaxInterpreter
         {
             var freeNames = new HashSet<string>();
 
-            SyntaxModel.Expression rhs =
+            var rhs =
                 nonFunctionDecls[i].Value switch
                 {
                     SyntaxModel.Expression.LetDeclaration.LetFunction lf =>
