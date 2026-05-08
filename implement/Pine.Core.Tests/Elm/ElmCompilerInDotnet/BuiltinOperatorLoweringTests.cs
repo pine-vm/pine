@@ -564,6 +564,126 @@ public class BuiltinOperatorLoweringTests
             """.Trim());
     }
 
+    // ============================================================
+    // Lowering of `/=` / `Basics.neq` to a negated `Pine_builtin.equal`
+    // expressed as `if Pine_builtin.equal [ a, b ] then Basics.False else Basics.True`.
+    //
+    // This mirrors the `Basics.eq` / `==` lowering above, which is
+    // gated on the same primitive-equality type check
+    // (`ProvesPrimitiveEqualityBuiltin`). Production code paths
+    // exercising the `Char` form include
+    // `Elm.Parser.Comments.multiLineCommentNoCheck__lifted__lambda1/2`
+    // and `Elm.Parser.Tokens.skipWhile*Help__specialized__2`, all of
+    // which compare a parsed character against a `Char` literal via
+    // `c /= '\n'` (or similar).
+    // ============================================================
+
+    [Fact]
+    public void Lowers_neq_operator_application_for_Char_arguments()
+    {
+        var loweredModule =
+            LowerOperators(
+                """
+                module Test exposing (..)
+
+
+                neqChar : Char -> Char -> Bool
+                neqChar left right =
+                    left /= right
+                """);
+
+        RenderCanonicalized(loweredModule).Should().Be(
+            """
+            Test.neqChar : Char -> Char -> Bool
+            Test.neqChar left right =
+                if
+                    Pine_builtin.equal
+                        [ left, right ]
+                then
+                    Basics.False
+
+                else
+                    Basics.True
+            """.Trim());
+    }
+
+    [Fact]
+    public void Lowers_neq_operator_application_for_Int_arguments()
+    {
+        var loweredModule =
+            LowerOperators(
+                """
+                module Test exposing (..)
+
+
+                neqInt : Int -> Int -> Bool
+                neqInt left right =
+                    left /= right
+                """);
+
+        RenderCanonicalized(loweredModule).Should().Be(
+            """
+            Test.neqInt : Int -> Int -> Bool
+            Test.neqInt left right =
+                if
+                    Pine_builtin.equal
+                        [ left, right ]
+                then
+                    Basics.False
+
+                else
+                    Basics.True
+            """.Trim());
+    }
+
+    [Fact]
+    public void Lowers_Basics_neq_application_for_String_arguments()
+    {
+        var loweredModule =
+            LowerOperators(
+                """
+                module Test exposing (..)
+
+
+                neqString : String -> String -> Bool
+                neqString left right =
+                    Basics.neq left right
+                """);
+
+        RenderCanonicalized(loweredModule).Should().Be(
+            """
+            Test.neqString : String -> String -> Bool
+            Test.neqString left right =
+                if
+                    Pine_builtin.equal
+                        [ left, right ]
+                then
+                    Basics.False
+
+                else
+                    Basics.True
+            """.Trim());
+    }
+
+    [Fact]
+    public void Does_not_lower_neq_for_unknown_type()
+    {
+        var loweredModule =
+            LowerOperators(
+                """
+                module Test exposing (..)
+
+
+                neqGeneric : a -> a -> Bool
+                neqGeneric left right =
+                    left /= right
+                """);
+
+        // Should NOT be lowered because type variable 'a' could contain Dict/Set.
+        var rendered = RenderCanonicalized(loweredModule);
+        rendered.Should().NotContain("Pine_builtin.equal");
+    }
+
     [Fact]
     public void Lowers_eq_operator_application_for_tuple_of_Int()
     {

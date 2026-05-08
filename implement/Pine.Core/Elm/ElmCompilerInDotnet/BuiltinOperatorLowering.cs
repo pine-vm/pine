@@ -24,6 +24,7 @@ public static class BuiltinOperatorLowering
         IntSub,
         IntMul,
         Equal,
+        NotEqual,
         IntLt,
         IntGt,
         IntLe,
@@ -325,6 +326,33 @@ public static class BuiltinOperatorLowering
                             "equal",
                             rewrittenArguments[1],
                             rewrittenArguments[2]);
+                }
+            }
+            else if (loweredOp is LoweredOperator.NotEqual)
+            {
+                if (ProvesPrimitiveEqualityBuiltin(leftType, rightType, context))
+                {
+                    // Lower `a /= b` (and the equivalent `Basics.neq a b`) to
+                    //   `if Pine_builtin.equal [ a, b ] then Basics.False else Basics.True`
+                    // when the operand type supports primitive equality. Mirrors the
+                    // `LoweredOperator.Equal` branch above; the `if-then-else` form
+                    // (rather than e.g. `Pine_kernel.equal [ Pine_kernel.equal [a, b], False ]`)
+                    // matches the canonical lowering style used for `&&` / `||`,
+                    // composes cleanly with downstream constant-folding on Bool, and
+                    // sidesteps the FalseValue / TrueValue / skip-byte representational
+                    // collision documented in PineKernelValues.
+                    var equalApplication =
+                        WrapNode(
+                            BuildBuiltinApplication(
+                                "equal",
+                                rewrittenArguments[1],
+                                rewrittenArguments[2]));
+
+                    return
+                        BuildIfBlock(
+                            equalApplication,
+                            WrapNode(BuildBasicsBoolReference(value: false)),
+                            WrapNode(BuildBasicsBoolReference(value: true)));
                 }
             }
             else if (loweredOp is LoweredOperator.IntLt or LoweredOperator.IntGt or LoweredOperator.IntLe or LoweredOperator.IntGe)
@@ -732,6 +760,7 @@ public static class BuiltinOperatorLowering
                 "sub" => LoweredOperator.IntSub,
                 "mul" => LoweredOperator.IntMul,
                 "eq" => LoweredOperator.Equal,
+                "neq" => LoweredOperator.NotEqual,
                 "lt" => LoweredOperator.IntLt,
                 "gt" => LoweredOperator.IntGt,
                 "le" => LoweredOperator.IntLe,
@@ -752,6 +781,7 @@ public static class BuiltinOperatorLowering
                 "-" => LoweredOperator.IntSub,
                 "*" => LoweredOperator.IntMul,
                 "==" => LoweredOperator.Equal,
+                "/=" => LoweredOperator.NotEqual,
                 "<" => LoweredOperator.IntLt,
                 ">" => LoweredOperator.IntGt,
                 "<=" => LoweredOperator.IntLe,
