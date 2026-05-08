@@ -813,38 +813,35 @@ public class ReducePineExpression
     /// <returns><c>true</c> if the expression is provably boolean; otherwise <c>false</c>.</returns>
     public static bool IsKnownBooleanExpression(Expression expression)
     {
-        switch (expression)
+        return expression switch
         {
-            case Expression.Literal literal:
-                return
-                    literal.Value == PineKernelValues.TrueValue ||
-                    literal.Value == PineKernelValues.FalseValue;
+            Expression.Literal literal =>
+            literal.Value == PineKernelValues.TrueValue ||
+            literal.Value == PineKernelValues.FalseValue,
 
-            case Expression.KernelApplication kernelApp:
-                return kernelApp.Function switch
-                {
-                    nameof(KernelFunction.equal) => true,
-                    nameof(KernelFunction.int_is_sorted_asc) => true,
+            Expression.KernelApplication kernelApp =>
+            kernelApp.Function switch
+            {
+                nameof(KernelFunction.equal) => true,
+                nameof(KernelFunction.int_is_sorted_asc) => true,
 
-                    _ =>
-                    false,
-                };
+                _ =>
+                false,
+            },
 
-            case Expression.Conditional conditional:
-                return
-                    IsKnownBooleanExpression(conditional.TrueBranch) &&
-                    IsKnownBooleanExpression(conditional.FalseBranch);
+            Expression.Conditional conditional =>
+            IsKnownBooleanExpression(conditional.TrueBranch) &&
+            IsKnownBooleanExpression(conditional.FalseBranch),
 
-            case Expression.StringTag stringTag:
-                return IsKnownBooleanExpression(stringTag.Tagged);
+            Expression.StringTag stringTag =>
+            IsKnownBooleanExpression(stringTag.Tagged),
 
-            default:
-                return false;
-        }
+            _ =>
+            false,
+        };
     }
 
-
-
+    /// <summary>
     /// For example, <c>int_add([int_add([a, b]), c])</c> becomes <c>[a, b, c]</c>.
     /// Returns <c>null</c> if no flattening was possible (no nested same-function applications found).
     /// </summary>
@@ -1641,17 +1638,7 @@ public class ReducePineExpression
     /// constant Pine-encoded expression value, by substituting the parsed inner
     /// expression's <see cref="Expression.Environment"/> nodes with the outer
     /// <see cref="Expression.ParseAndEval.Environment"/>.
-    /// <para>
-    /// Conservatively bails out when the parsed inner expression contains any
-    /// <see cref="Expression.ParseAndEval"/> whose own subtrees reference the
-    /// environment, because substituting the outer environment in would rewrite
-    /// the dispatched code of those nested invocations.
-    /// </para>
     /// </summary>
-    /// <param name="evalExpr">The parse-and-eval expression to attempt to inline.</param>
-    /// <param name="config">Configuration controlling optional reduction behaviors.</param>
-    /// <param name="parseCache">Cache used when parsing encoded expressions.</param>
-    /// <param name="reducedExpressionCache">Optional memoization cache forwarded to recursive reductions.</param>
     public static Expression? TryInlineEvalBottomUp(
         Expression.ParseAndEval evalExpr,
         ReductionConfig config,
