@@ -6,7 +6,27 @@
         {
           "List": [
             [
-              { "Environment": [] },
+              {
+                "KernelApplication": [
+                  "equal",
+                  {
+                    "List": [
+                      [
+                        {
+                          "Environment": []
+                        },
+                        {
+                          "Literal": [
+                            {
+                              "AsBase64": "Bw=="
+                            }
+                          ]
+                        }
+                      ]
+                    ]
+                  }
+                ]
+              },
               {
                 "Literal": [
                   {

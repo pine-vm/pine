@@ -112,6 +112,141 @@ public class KernelJsonFunctionTests
                     "other"
 
 
+        -- ====== Diagnostic helpers for control-character escape regression ======
+
+        diagCharCode : Char -> Int
+        diagCharCode c =
+            Char.toCode c
+
+        diagCharCodeOf001F : Int -> Int
+        diagCharCodeOf001F _ =
+            Char.toCode '\u{001F}'
+
+        diagBitAnd0F : Int -> Int
+        diagBitAnd0F n =
+            Pine_kernel.bit_and
+                [ Pine_kernel.skip [ 1, 15 ]
+                , Pine_kernel.skip [ 1, n ]
+                ]
+
+        diagEncodeOneChar : Char -> String
+        diagEncodeOneChar c =
+            Json.Encode.encode 0 (Json.Encode.string (String.fromChar c))
+
+        diagHexNibbleZero : Int -> Char
+        diagHexNibbleZero _ =
+            myHexDigitCharFromNibble (Pine_kernel.skip [ 1, 0 ])
+
+        diagHexNibbleFifteen : Int -> Char
+        diagHexNibbleFifteen _ =
+            myHexDigitCharFromNibble (Pine_kernel.skip [ 1, 15 ])
+
+        diagHexNibble : Int -> Char
+        diagHexNibble n =
+            myHexDigitCharFromNibble (Pine_kernel.skip [ 1, n ])
+
+        diagShortChain : Int -> Char
+        diagShortChain n =
+            let
+                nibble =
+                    Pine_kernel.skip [ 1, n ]
+            in
+            if Pine_kernel.equal [ nibble, Pine_kernel.skip [ 1, 0 ] ] then
+                'a'
+            else if Pine_kernel.equal [ nibble, Pine_kernel.skip [ 1, 1 ] ] then
+                'b'
+            else if Pine_kernel.equal [ nibble, Pine_kernel.skip [ 1, 2 ] ] then
+                'c'
+            else
+                'z'
+
+        diagFiveChain : Int -> Char
+        diagFiveChain n =
+            let
+                nibble =
+                    Pine_kernel.skip [ 1, n ]
+            in
+            if Pine_kernel.equal [ nibble, Pine_kernel.skip [ 1, 0 ] ] then
+                'a'
+            else if Pine_kernel.equal [ nibble, Pine_kernel.skip [ 1, 1 ] ] then
+                'b'
+            else if Pine_kernel.equal [ nibble, Pine_kernel.skip [ 1, 2 ] ] then
+                'c'
+            else if Pine_kernel.equal [ nibble, Pine_kernel.skip [ 1, 3 ] ] then
+                'd'
+            else if Pine_kernel.equal [ nibble, Pine_kernel.skip [ 1, 4 ] ] then
+                'e'
+            else
+                'z'
+
+        diagTwoChain : Int -> Char
+        diagTwoChain n =
+            let
+                nibble =
+                    Pine_kernel.skip [ 1, n ]
+            in
+            if Pine_kernel.equal [ nibble, Pine_kernel.skip [ 1, 0 ] ] then
+                'a'
+            else if Pine_kernel.equal [ nibble, Pine_kernel.skip [ 1, 1 ] ] then
+                'b'
+            else
+                'z'
+
+        diagFourChain : Int -> Char
+        diagFourChain n =
+            let
+                nibble =
+                    Pine_kernel.skip [ 1, n ]
+            in
+            if Pine_kernel.equal [ nibble, Pine_kernel.skip [ 1, 0 ] ] then
+                'a'
+            else if Pine_kernel.equal [ nibble, Pine_kernel.skip [ 1, 1 ] ] then
+                'b'
+            else if Pine_kernel.equal [ nibble, Pine_kernel.skip [ 1, 2 ] ] then
+                'c'
+            else if Pine_kernel.equal [ nibble, Pine_kernel.skip [ 1, 3 ] ] then
+                'd'
+            else
+                'z'
+
+        myHexDigitCharFromNibble : Int -> Char
+        myHexDigitCharFromNibble nibble =
+            if Pine_kernel.equal [ nibble, Pine_kernel.skip [ 1, 0 ] ] then
+                '0'
+            else if Pine_kernel.equal [ nibble, Pine_kernel.skip [ 1, 1 ] ] then
+                '1'
+            else if Pine_kernel.equal [ nibble, Pine_kernel.skip [ 1, 2 ] ] then
+                '2'
+            else if Pine_kernel.equal [ nibble, Pine_kernel.skip [ 1, 3 ] ] then
+                '3'
+            else if Pine_kernel.equal [ nibble, Pine_kernel.skip [ 1, 4 ] ] then
+                '4'
+            else if Pine_kernel.equal [ nibble, Pine_kernel.skip [ 1, 5 ] ] then
+                '5'
+            else if Pine_kernel.equal [ nibble, Pine_kernel.skip [ 1, 6 ] ] then
+                '6'
+            else if Pine_kernel.equal [ nibble, Pine_kernel.skip [ 1, 7 ] ] then
+                '7'
+            else if Pine_kernel.equal [ nibble, Pine_kernel.skip [ 1, 8 ] ] then
+                '8'
+            else if Pine_kernel.equal [ nibble, Pine_kernel.skip [ 1, 9 ] ] then
+                '9'
+            else if Pine_kernel.equal [ nibble, Pine_kernel.skip [ 1, 10 ] ] then
+                'A'
+            else if Pine_kernel.equal [ nibble, Pine_kernel.skip [ 1, 11 ] ] then
+                'B'
+            else if Pine_kernel.equal [ nibble, Pine_kernel.skip [ 1, 12 ] ] then
+                'C'
+            else if Pine_kernel.equal [ nibble, Pine_kernel.skip [ 1, 13 ] ] then
+                'D'
+            else if Pine_kernel.equal [ nibble, Pine_kernel.skip [ 1, 14 ] ] then
+                'E'
+            else if Pine_kernel.equal [ nibble, Pine_kernel.skip [ 1, 15 ] ] then
+                'F'
+            else
+                '?'
+
+
         -- ====== Generic decoder wrappers ======
 
         decodeStringInt : String -> Result Json.Decode.Error Int
@@ -887,6 +1022,134 @@ public class KernelJsonFunctionTests
     public void Encode_string_with_backslash()
     {
         EncodeValue(JsonString("a\\b")).Should().Be(String("\"a\\\\b\""));
+    }
+
+    /// <summary>
+    /// Regression test: encoding a string containing the control character
+    /// <c>\u001F</c> via <c>Json.Encode.encode 0 (Json.Encode.string "\u{001F}")</c>
+    /// must produce the JSON escape sequence <c>"\u001F"</c>.
+    /// <para>
+    /// A defect in the expression-reduction pipeline on this branch caused the
+    /// fourth nibble emitted by <c>Json.Encode.hex4</c> to be wrong, producing
+    /// <c>"\u0012"</c> instead of <c>"\u001F"</c>. This is the same failure
+    /// reported by scenario <c>elm-kernel-json-encode</c> step 709 in the
+    /// integration tests.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void Encode_string_with_control_char_001F()
+    {
+        EncodeValue(JsonString("\u001F")).Should().Be(String("\"\\u001F\""));
+    }
+
+    [Fact]
+    public void Diagnostic_Char_toCode_001F()
+    {
+        ApplyUnary(GetTestFunction("diagCharCode"), ElmValue.CharInstance(0x001F))
+            .Should().Be(Integer(0x001F));
+    }
+
+    [Fact]
+    public void Diagnostic_Char_toCode_001F_literal()
+    {
+        ApplyUnary(GetTestFunction("diagCharCodeOf001F"), Integer(0))
+            .Should().Be(Integer(0x001F));
+    }
+
+    [Fact]
+    public void Diagnostic_bit_and_0F_with_001F()
+    {
+        ApplyUnary(GetTestFunction("diagBitAnd0F"), Integer(0x001F))
+            .Should().Be(ElmValue.CharInstance(0x000F));
+    }
+
+    [Fact]
+    public void Diagnostic_encode_single_char_001F()
+    {
+        ApplyUnary(GetTestFunction("diagEncodeOneChar"), ElmValue.CharInstance(0x001F))
+            .Should().Be(String("\"\\u001F\""));
+    }
+
+    [Theory]
+    [InlineData(0x0001, "\\u0001")]
+    [InlineData(0x000E, "\\u000E")]
+    [InlineData(0x000F, "\\u000F")]
+    [InlineData(0x0010, "\\u0010")]
+    [InlineData(0x0011, "\\u0011")]
+    [InlineData(0x0012, "\\u0012")]
+    [InlineData(0x001A, "\\u001A")]
+    [InlineData(0x001E, "\\u001E")]
+    [InlineData(0x001F, "\\u001F")]
+    public void Diagnostic_encode_single_control_char(int code, string expectedEscape)
+    {
+        ApplyUnary(GetTestFunction("diagEncodeOneChar"), ElmValue.CharInstance(code))
+            .Should().Be(String("\"" + expectedEscape + "\""));
+    }
+
+    [Theory]
+    [InlineData(0, '0')]
+    [InlineData(1, '1')]
+    [InlineData(9, '9')]
+    [InlineData(10, 'A')]
+    [InlineData(14, 'E')]
+    [InlineData(15, 'F')]
+    public void Diagnostic_hex_digit_for_nibble(int nibble, char expected)
+    {
+        ApplyUnary(GetTestFunction("diagHexNibble"), Integer(nibble))
+            .Should().Be(ElmValue.CharInstance(expected));
+    }
+
+    [Fact]
+    public void Diagnostic_hex_digit_for_nibble_15()
+    {
+        ApplyUnary(GetTestFunction("diagHexNibbleFifteen"), Integer(0))
+            .Should().Be(ElmValue.CharInstance('F'));
+    }
+
+    [Theory]
+    [InlineData(0, 'a')]
+    [InlineData(1, 'b')]
+    [InlineData(2, 'c')]
+    [InlineData(7, 'z')]
+    public void Diagnostic_short_chain(int n, char expected)
+    {
+        ApplyUnary(GetTestFunction("diagShortChain"), Integer(n))
+            .Should().Be(ElmValue.CharInstance(expected));
+    }
+
+    [Theory]
+    [InlineData(0, 'a')]
+    [InlineData(1, 'b')]
+    [InlineData(7, 'z')]
+    public void Diagnostic_two_chain(int n, char expected)
+    {
+        ApplyUnary(GetTestFunction("diagTwoChain"), Integer(n))
+            .Should().Be(ElmValue.CharInstance(expected));
+    }
+
+    [Theory]
+    [InlineData(0, 'a')]
+    [InlineData(1, 'b')]
+    [InlineData(2, 'c')]
+    [InlineData(3, 'd')]
+    [InlineData(7, 'z')]
+    public void Diagnostic_four_chain(int n, char expected)
+    {
+        ApplyUnary(GetTestFunction("diagFourChain"), Integer(n))
+            .Should().Be(ElmValue.CharInstance(expected));
+    }
+
+    [Theory]
+    [InlineData(0, 'a')]
+    [InlineData(1, 'b')]
+    [InlineData(2, 'c')]
+    [InlineData(3, 'd')]
+    [InlineData(4, 'e')]
+    [InlineData(7, 'z')]
+    public void Diagnostic_five_chain(int n, char expected)
+    {
+        ApplyUnary(GetTestFunction("diagFiveChain"), Integer(n))
+            .Should().Be(ElmValue.CharInstance(expected));
     }
 
     [Fact]

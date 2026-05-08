@@ -705,7 +705,8 @@ public class ReducePineExpression
                     {
                         if (equalArgsList.Items[1] is Expression.Literal { Value: var val1 })
                         {
-                            if (val1 == PineKernelValues.FalseValue)
+                            if (val1 == PineKernelValues.FalseValue &&
+                                IsKnownBooleanExpression(equalArgsList.Items[0]))
                             {
                                 return
                                     Expression.ConditionalInstance(
@@ -715,7 +716,8 @@ public class ReducePineExpression
 
                             }
 
-                            if (val1 == PineKernelValues.TrueValue)
+                            if (val1 == PineKernelValues.TrueValue &&
+                                IsKnownBooleanExpression(equalArgsList.Items[0]))
                             {
                                 return
                                     Expression.ConditionalInstance(
@@ -727,7 +729,8 @@ public class ReducePineExpression
 
                         if (equalArgsList.Items[0] is Expression.Literal { Value: var val0 })
                         {
-                            if (val0 == PineKernelValues.FalseValue)
+                            if (val0 == PineKernelValues.FalseValue &&
+                                IsKnownBooleanExpression(equalArgsList.Items[1]))
                             {
                                 return
                                     Expression.ConditionalInstance(
@@ -736,7 +739,8 @@ public class ReducePineExpression
                                         falseBranch: conditional.TrueBranch);
                             }
 
-                            if (val0 == PineKernelValues.TrueValue)
+                            if (val0 == PineKernelValues.TrueValue &&
+                                IsKnownBooleanExpression(equalArgsList.Items[1]))
                             {
                                 return
                                     Expression.ConditionalInstance(
@@ -757,7 +761,59 @@ public class ReducePineExpression
 
 
     /// <summary>
-    /// Attempts to flatten nested kernel applications of the same function.
+    /// Returns <c>true</c> when <paramref name="expression"/> is statically
+    /// known to evaluate to a Pine kernel boolean value
+    /// (<see cref="PineKernelValues.TrueValue"/> or
+    /// <see cref="PineKernelValues.FalseValue"/>).
+    /// <para>
+    /// This is conservative: it only returns <c>true</c> when the expression
+    /// is one of a small set of forms guaranteed to produce a boolean.
+    /// It is used to gate optimizations that would otherwise be unsound for
+    /// non-boolean values whose byte representation collides with that of
+    /// <see cref="PineKernelValues.TrueValue"/> (<c>Blob([4])</c>) or
+    /// <see cref="PineKernelValues.FalseValue"/> (<c>Blob([2])</c>).
+    /// In particular, the byte sequence <c>[0x02]</c> arises from
+    /// <c>Pine_kernel.skip [ 1, 2 ]</c> and
+    /// <c>[0x04]</c> from <c>Pine_kernel.skip [ 1, 4 ]</c>, neither of which
+    /// is intended to be interpreted as a boolean.
+    /// </para>
+    /// </summary>
+    /// <param name="expression">The expression to inspect.</param>
+    /// <returns><c>true</c> if the expression is provably boolean; otherwise <c>false</c>.</returns>
+    public static bool IsKnownBooleanExpression(Expression expression)
+    {
+        switch (expression)
+        {
+            case Expression.Literal literal:
+                return
+                    literal.Value == PineKernelValues.TrueValue ||
+                    literal.Value == PineKernelValues.FalseValue;
+
+            case Expression.KernelApplication kernelApp:
+                return kernelApp.Function switch
+                {
+                    nameof(KernelFunction.equal) => true,
+                    nameof(KernelFunction.int_is_sorted_asc) => true,
+
+                    _ =>
+                    false,
+                };
+
+            case Expression.Conditional conditional:
+                return
+                    IsKnownBooleanExpression(conditional.TrueBranch) &&
+                    IsKnownBooleanExpression(conditional.FalseBranch);
+
+            case Expression.StringTag stringTag:
+                return IsKnownBooleanExpression(stringTag.Tagged);
+
+            default:
+                return false;
+        }
+    }
+
+
+
     /// For example, <c>int_add([int_add([a, b]), c])</c> becomes <c>[a, b, c]</c>.
     /// Returns <c>null</c> if no flattening was possible (no nested same-function applications found).
     /// </summary>

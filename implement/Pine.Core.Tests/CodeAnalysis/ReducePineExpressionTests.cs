@@ -2,6 +2,7 @@ using AwesomeAssertions;
 using Pine.Core.CodeAnalysis;
 using Pine.Core.CommonEncodings;
 using Pine.Core.Json;
+using Pine.Core.PineVM;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
@@ -154,6 +155,123 @@ public class ReducePineExpressionTests
         var bounds = ReducePineExpression.EnumerateInferListLengthBounds(skip, dummyClass, s_parseCache).ToArray();
 
         bounds.Select(b => b.lower).Should().Contain(3);
+    }
+
+    [Fact]
+    public void IsKnownBooleanExpression_returns_true_for_Boolean_literals_and_predicate_kernels()
+    {
+        // Literals: TrueValue / FalseValue
+        ReducePineExpression
+            .IsKnownBooleanExpression(Expression.LiteralInstance(PineKernelValues.TrueValue))
+            .Should().BeTrue();
+
+        ReducePineExpression
+            .IsKnownBooleanExpression(Expression.LiteralInstance(PineKernelValues.FalseValue))
+            .Should().BeTrue();
+
+        // Predicate kernels
+        ReducePineExpression
+            .IsKnownBooleanExpression(
+            Expression.KernelApplicationInstance(
+                nameof(KernelFunction.equal),
+                Expression.ListInstance(
+                    [
+                    Expression.EnvironmentInstance,
+                    Expression.LiteralInstance(PineValue.Blob([7])),
+                    ])))
+            .Should().BeTrue();
+
+        ReducePineExpression
+            .IsKnownBooleanExpression(
+            Expression.KernelApplicationInstance(
+                nameof(KernelFunction.int_is_sorted_asc),
+                Expression.LiteralInstance(PineValue.EmptyList)))
+            .Should().BeTrue();
+    }
+
+    [Fact]
+    public void IsKnownBooleanExpression_returns_false_for_environment_and_non_predicate_kernels()
+    {
+        // Environment access: not provably Boolean.
+        ReducePineExpression
+            .IsKnownBooleanExpression(Expression.EnvironmentInstance)
+            .Should().BeFalse();
+
+        // skip[1, 2] reduces to a literal byte sequence [0x02] whose bytes match
+        // PineKernelValues.FalseValue, but the value semantically represents the
+        // integer 2, not Boolean false. The literal must therefore not be treated
+        // as Boolean here. (Note: a Literal whose Value compares-equal to
+        // FalseValue is, however, accepted - that is the only case where the
+        // ambiguous bit pattern can safely be treated as Boolean, since the
+        // calling reduction is the one that produced the ambiguity.)
+        ReducePineExpression
+            .IsKnownBooleanExpression(
+            Expression.KernelApplicationInstance(
+                nameof(KernelFunction.skip),
+                Expression.ListInstance(
+                    [
+                    Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(1)),
+                    Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(2)),
+                    ])))
+            .Should().BeFalse();
+
+        // Arithmetic: not Boolean.
+        ReducePineExpression
+            .IsKnownBooleanExpression(
+            Expression.KernelApplicationInstance(
+                nameof(KernelFunction.int_add),
+                Expression.LiteralInstance(PineValue.EmptyList)))
+            .Should().BeFalse();
+    }
+
+    [Fact]
+    public void Reduce_does_not_flip_branches_when_equal_compares_against_byte_2_with_non_Boolean_operand()
+    {
+        // Conditional( equal[ skip[1, n], skip[1, 2] ], trueBranch, falseBranch )
+        //
+        // skip[1, 2] reduces to a literal [0x02] which is byte-identical to
+        // PineKernelValues.FalseValue. A naive reducer would treat this as
+        // "equal to False" and flip the branches, even though the other operand
+        // (skip[1, n]) is a byte sequence that may or may not be Boolean.
+        //
+        // After the fix, this reduction is gated on the other operand being a
+        // known-Boolean expression, so the conditional is preserved.
+
+        var nibble =
+            Expression.KernelApplicationInstance(
+                nameof(KernelFunction.skip),
+                Expression.ListInstance(
+                    [
+                    Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(1)),
+                    Expression.EnvironmentInstance,
+                    ]));
+
+        var byteLiteralTwo = Expression.LiteralInstance(PineValue.Blob([0x02]));
+
+        var conditional =
+            Expression.ConditionalInstance(
+                condition:
+                Expression.KernelApplicationInstance(
+                    nameof(KernelFunction.equal),
+                    Expression.ListInstance([nibble, byteLiteralTwo])),
+                falseBranch: Expression.LiteralInstance(PineValue.Blob([0x07])),
+                trueBranch: Expression.LiteralInstance(PineValue.Blob([0x09])));
+
+        var reduced =
+            ReducePineExpression.ReduceExpressionBottomUp(conditional, s_parseCache);
+
+        // The conditional must remain a Conditional whose condition is still the
+        // equal-application; the branches must be unchanged.
+        var reducedConditional = reduced.Should().BeOfType<Expression.Conditional>().Subject;
+
+        reducedConditional.Condition.Should().BeOfType<Expression.KernelApplication>()
+            .Which.Function.Should().Be(nameof(KernelFunction.equal));
+
+        reducedConditional.TrueBranch.Should().BeOfType<Expression.Literal>()
+            .Which.Value.Should().Be(PineValue.Blob([0x09]));
+
+        reducedConditional.FalseBranch.Should().BeOfType<Expression.Literal>()
+            .Which.Value.Should().Be(PineValue.Blob([0x07]));
     }
 
     private static string SerializeExpressionPretty(Expression expression)
