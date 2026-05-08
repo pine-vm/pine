@@ -415,16 +415,16 @@ Generated specialized functions are named deterministically. Tooling and inspect
 Specialization uses two main passes:
 
 1. A collection pass walks expressions and records which function specializations are needed.
-2. A rewrite pass deduplicates those requests, assigns stable generated names, adds the specialized declarations to modules, and updates call sites to use them.
+2. A rewrite pass deduplicates those requests, assigns stable generated names, and updates call sites to use them.
 
 This split is important because recursive and mutually recursive functions often need a named specialized variant instead of direct substitution at the original call site.
 
 #### What the Specialization Stage Produces
 
-The input to the stage is a set of Elm module syntax trees after lambda lifting. The output is another set of Elm module syntax trees:
+The input to the stage is a set of Elm declaration syntax nodes. The output is another set of Elm declaration syntax nodes:
 
 + Existing declarations may have rewritten bodies.
-+ Modules may gain additional generated function declarations representing specialized variants.
++ The returned set might contain additional generated declarations representing specialized variants.
 + Generated declarations may have parameter lists that differ from the original source declaration because specialized-away parameters are removed or wrapper parameters are flattened.
 + The transformed syntax remains in Elm form so that later pipeline stages can continue to use the same syntax model and compilation logic.
 
@@ -444,7 +444,7 @@ The dedicated inlining stage runs after specialization and before the second lam
 
 #### Definition of Inlining
 
-**Inlining** means rewriting expressions inside existing declarations without introducing additional module-level declarations and without changing the signature of the declaration being rewritten.
+**Inlining** means rewriting expressions inside existing declarations without introducing additional top-level declarations and without changing the signature of the declaration being rewritten.
 
 This includes the following categories:
 
@@ -459,14 +459,12 @@ The defining properties are:
 + Inlining **does not change function signatures**.
 + Inlining rewrites bodies of existing declarations so later stages receive simpler Elm syntax.
 
-The stage operates on whole modules and can therefore rewrite both same-module and cross-module call sites, as long as the referenced function is available in the compiler's module set.
-
 #### What the Inlining Stage Produces
 
-The input to the stage is a set of Elm module syntax trees after specialization. The output is another set of Elm module syntax trees:
+The input to the stage is a set of Elm declaration syntax nodes. The output is another set of Elm declaration syntax nodes:
 
 + Existing declarations may have rewritten bodies.
-+ No additional module-level declarations are introduced by the inlining stage itself.
++ No additional declarations are introduced by the inlining stage itself.
 + Function names and function signatures of those existing declarations remain unchanged.
 + The transformed syntax remains in Elm form so that later pipeline stages can continue to use the same syntax model and compilation logic.
 
