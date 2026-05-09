@@ -178,6 +178,32 @@ public static class ElmValueEncoding
         Result<string, ElmValue> DecodeWithoutReport()
         {
             {
+                // New (flat) record format: odd-length list whose first item is the new record tag.
+                // Layout: [tag, fieldName0, fieldValue0, fieldName1, fieldValue1, ...].
+                // Records are tested before the 2-element tag-application branch so that the
+                // 1-item degenerate empty-record case is also recognized here.
+                if (listValue.Items.Length >= 1 &&
+                    (listValue.Items.Length & 1) == 1 &&
+                    listValue.Items.Span[0] == ElmValue.ElmRecordTypeTagNameAsValue)
+                {
+                    var asRecordResult =
+                        PineValueAsElmRecord(
+                            listValue,
+                            additionalReusableDecodings,
+                            reportNewDecoding);
+
+                    if (asRecordResult.IsOkOrNull() is { } ok)
+                        return ok;
+
+                    if (asRecordResult.IsErrOrNull() is { } err)
+                        return "Failed to convert value under Record tag: " + err;
+
+                    throw new NotImplementedException(
+                        "Unexpected result type: " + asRecordResult.GetType().FullName);
+                }
+            }
+
+            {
                 if (listValue.Items.Length is 2 &&
                     listValue.Items.Span[1] is PineValue.ListValue tagArgumentsList)
                 {
@@ -208,9 +234,10 @@ public static class ElmValueEncoding
                     }
 
                     {
-                        // Optimize, especially for the case of an Elm Record.
+                        // Legacy (pre-migration) Elm Record format: [tag_2025, [[ [name, value], ... ]]]
+                        // Kept so values still persisted in the old shape can be decoded.
 
-                        if (tagCandidateValue == ElmValue.ElmRecordTypeTagNameAsValue)
+                        if (tagCandidateValue == ElmValue.ElmRecordTypeTagNameAsValue_2025)
                         {
                             if (tagArgumentsList.Items.Length is not 1)
                             {
@@ -220,7 +247,7 @@ public static class ElmValueEncoding
                             var recordValue = tagArgumentsList.Items.Span[0];
 
                             var asRecordResult =
-                                PineValueAsElmRecord(
+                                PineValueAsElmRecord_2025(
                                     recordValue,
                                     additionalReusableDecodings,
                                     reportNewDecoding);
@@ -424,7 +451,58 @@ public static class ElmValueEncoding
     }
 
 
+    /// <summary>
+    /// Decodes a Pine value in the new (flat) record layout into an <see cref="ElmValue.ElmRecord"/>.
+    /// Expected structure: <c>[tag, fieldName0, fieldValue0, fieldName1, fieldValue1, ...]</c>.
+    /// The caller has already verified that the first item equals
+    /// <see cref="ElmValue.ElmRecordTypeTagNameAsValue"/> and that the list length is odd.
+    /// </summary>
     private static Result<string, ElmValue.ElmRecord> PineValueAsElmRecord(
+        PineValue.ListValue list,
+        IReadOnlyDictionary<PineValue, ElmValue>? additionalReusableDecodings,
+        Action<PineValue, ElmValue>? reportNewDecoding)
+    {
+        var itemsSpan = list.Items.Span;
+
+        var fieldCount = (itemsSpan.Length - 1) / 2;
+
+        var recordFields = new (string fieldName, ElmValue fieldValue)[fieldCount];
+
+        for (var i = 0; i < fieldCount; i++)
+        {
+            var fieldNameValue = itemsSpan[1 + 2 * i];
+            var fieldValueValue = itemsSpan[2 + 2 * i];
+
+            var fieldNameResult = StringEncoding.StringFromValue(fieldNameValue);
+
+            if (fieldNameResult.IsOkOrNull() is { } fieldName)
+            {
+                var fieldValueResult =
+                    PineValueAsElmValue(
+                        fieldValueValue,
+                        additionalReusableDecodings,
+                        reportNewDecoding);
+
+                if (fieldValueResult.IsOkOrNull() is { } fieldValueOk)
+                {
+                    recordFields[i] = (fieldName, fieldValueOk);
+                    continue;
+                }
+
+                return "Failed decoding field value: " + fieldValueResult;
+            }
+
+            if (fieldNameResult.IsErrOrNull() is { } error)
+                return "Failed decoding field name: " + error;
+
+            throw new NotImplementedException(
+                "Unexpected result type: " + fieldNameResult.GetType().FullName);
+        }
+
+        return new ElmValue.ElmRecord(recordFields);
+    }
+
+    private static Result<string, ElmValue.ElmRecord> PineValueAsElmRecord_2025(
         PineValue pineValue,
         IReadOnlyDictionary<PineValue, ElmValue>? additionalReusableDecodings,
         Action<PineValue, ElmValue>? reportNewDecoding)
@@ -479,13 +557,67 @@ public static class ElmValueEncoding
     }
 
     /// <summary>
-    /// Parses a Pine value expected to represent a record wrapped in the standard record tag.
+    /// Parses a Pine value expected to represent a record using the new (flat) record encoding.
+    /// </summary>
+    /// <param name="pineValue">
+    /// The Pine value to parse. Expected structure:
+    /// <c>[&lt;Record_Type&gt;, fieldName0, fieldValue0, fieldName1, fieldValue1, ...]</c>.
+    /// </param>
+    /// <returns>
+    /// <see cref="Result{ErrT, OkT}"/> with the ordered list of fields on success; otherwise an error message.
+    /// </returns>
+    public static Result<string, IReadOnlyList<(string fieldName, PineValue fieldValue)>> ParsePineValueAsRecordTagged(
+        PineValue pineValue)
+    {
+        if (pineValue is not PineValue.ListValue taggedRecordList)
+            return "Value is not a list.";
+
+        var itemsSpan = taggedRecordList.Items.Span;
+
+        if (itemsSpan.Length < 1)
+            return "List is empty.";
+
+        if ((itemsSpan.Length & 1) is not 1)
+            return "List does not have an odd number of elements.";
+
+        if (itemsSpan[0] != ElmValue.ElmRecordTypeTagNameAsValue)
+            return "First element is not the record tag name.";
+
+        var fieldCount = (itemsSpan.Length - 1) / 2;
+
+        var recordFields = new (string fieldName, PineValue fieldValue)[fieldCount];
+
+        for (var i = 0; i < fieldCount; i++)
+        {
+            var fieldNameValue = itemsSpan[1 + 2 * i];
+            var fieldValueValue = itemsSpan[2 + 2 * i];
+
+            var fieldNameResult = StringEncoding.StringFromValue(fieldNameValue);
+
+            if (fieldNameResult.IsOkOrNull() is { } fieldName)
+            {
+                recordFields[i] = (fieldName, fieldValueValue);
+                continue;
+            }
+
+            if (fieldNameResult.IsErrOrNull() is { } error)
+                return "Failed decoding field name: " + error;
+
+            throw new NotImplementedException(
+                "Unexpected result type: " + fieldNameResult.GetType().FullName);
+        }
+
+        return recordFields;
+    }
+
+    /// <summary>
+    /// Parses a Pine value expected to represent a record wrapped in the legacy nested record tag.
     /// </summary>
     /// <param name="pineValue">The Pine value to parse. Expected structure: [Elm_Record, [ [ [fieldName, fieldValue], ... ] ]].</param>
     /// <returns>
     /// <see cref="Result{ErrT, OkT}"/> with the ordered list of fields on success; otherwise an error message.
     /// </returns>
-    public static Result<string, IReadOnlyList<(string fieldName, PineValue fieldValue)>> ParsePineValueAsRecordTagged(
+    public static Result<string, IReadOnlyList<(string fieldName, PineValue fieldValue)>> ParsePineValueAsRecordTagged_2025(
         PineValue pineValue)
     {
         if (pineValue is not PineValue.ListValue taggedRecordList)
@@ -498,7 +630,7 @@ public static class ElmValueEncoding
 
         var tagNameValue = taggedRecordListElements[0];
 
-        if (tagNameValue != ElmValue.ElmRecordTypeTagNameAsValue)
+        if (tagNameValue != ElmValue.ElmRecordTypeTagNameAsValue_2025)
             return "First element is not the record tag name.";
 
         var recordFieldsListList = taggedRecordListElements[1];
@@ -509,17 +641,17 @@ public static class ElmValueEncoding
         if (recordFieldsList.Items.Length is not 1)
             return "Record fields list does not have 1 element.";
 
-        return ParsePineValueAsRecord(recordFieldsList.Items.Span[0]);
+        return ParsePineValueAsRecord_2025(recordFieldsList.Items.Span[0]);
     }
 
     /// <summary>
-    /// Parses a Pine list value representing record fields into a .NET list of (name, value) pairs.
+    /// Parses a Pine list value representing the legacy record-fields shape into a .NET list of (name, value) pairs.
     /// </summary>
     /// <param name="pineValue">The Pine value expected to be a list of two-element lists: [ [fieldName, fieldValue], ... ].</param>
     /// <returns>
     /// <see cref="Result{ErrT, OkT}"/> with the extracted field pairs on success; otherwise an error message.
     /// </returns>
-    public static Result<string, IReadOnlyList<(string fieldName, PineValue fieldValue)>> ParsePineValueAsRecord(
+    public static Result<string, IReadOnlyList<(string fieldName, PineValue fieldValue)>> ParsePineValueAsRecord_2025(
         PineValue pineValue)
     {
         if (pineValue is not PineValue.ListValue recordFieldsList)
@@ -738,13 +870,79 @@ public static class ElmValueEncoding
 
 
     /// <summary>
-    /// Encodes an Elm record as a <see cref="PineValue"/> using the standard record tag and field layout.
+    /// Encodes an Elm record as a <see cref="PineValue"/> using the new flat record layout.
+    /// <para>
+    /// The resulting value is a single Pine list with an odd number of items:
+    /// <c>[tag, fieldName0, fieldValue0, fieldName1, fieldValue1, ...]</c>. Field names
+    /// are sorted alphabetically (ordinal) before encoding so that two records with the
+    /// same fields in different declaration orders compare equal at the value level.
+    /// </para>
     /// </summary>
     /// <param name="fields">The record fields. Fields are ordered by name (ordinal) in the resulting value.</param>
     /// <param name="additionalReusableEncodings">Optional cache of precomputed encodings to reuse.</param>
     /// <param name="reportNewEncoding">Optional callback invoked when a new encoding is produced.</param>
     /// <returns>The encoded <see cref="PineValue"/> representing an Elm record.</returns>
     public static PineValue ElmRecordAsPineValue(
+        IReadOnlyList<(string FieldName, ElmValue FieldValue)> fields,
+        IReadOnlyDictionary<ElmValue, PineValue>? additionalReusableEncodings,
+        Action<ElmValue, PineValue>? reportNewEncoding)
+    {
+        var orderedFields = fields.OrderBy(f => f.FieldName, StringComparer.Ordinal).ToArray();
+
+        var items = new PineValue[orderedFields.Length * 2 + 1];
+
+        items[0] = ElmValue.ElmRecordTypeTagNameAsValue;
+
+        for (var i = 0; i < orderedFields.Length; i++)
+        {
+            var field = orderedFields[i];
+
+            items[1 + 2 * i] = StringEncoding.ValueFromString(field.FieldName);
+
+            items[2 + 2 * i] =
+                ElmValueAsPineValue(
+                    field.FieldValue,
+                    additionalReusableEncodings,
+                    reportNewEncoding);
+        }
+
+        return PineValue.List(items);
+    }
+
+    /// <summary>
+    /// Encodes an Elm record as a <see cref="PineValue"/> using the new flat record layout.
+    /// </summary>
+    /// <param name="fields">The record fields. Fields are ordered by name (ordinal) in the resulting value.</param>
+    /// <returns>The encoded <see cref="PineValue"/> representing an Elm record.</returns>
+    public static PineValue ElmRecordAsPineValue(
+        IReadOnlyList<(string FieldName, PineValue FieldValue)> fields)
+    {
+        var orderedFields = fields.OrderBy(f => f.FieldName, StringComparer.Ordinal).ToArray();
+
+        var items = new PineValue[orderedFields.Length * 2 + 1];
+
+        items[0] = ElmValue.ElmRecordTypeTagNameAsValue;
+
+        for (var i = 0; i < orderedFields.Length; i++)
+        {
+            var field = orderedFields[i];
+
+            items[1 + 2 * i] = StringEncoding.ValueFromString(field.FieldName);
+            items[2 + 2 * i] = field.FieldValue;
+        }
+
+        return PineValue.List(items);
+    }
+
+    /// <summary>
+    /// Encodes an Elm record using the legacy nested record layout. Retained for tests that
+    /// need to exercise the legacy decoder, and as the entry point for the recursive legacy
+    /// encoder <see cref="ElmValueAsPineValue_2025(ElmValue, IReadOnlyDictionary{ElmValue, PineValue}?, Action{ElmValue, PineValue}?)"/>
+    /// used to interoperate with the (still legacy-layout) Elm-in-Elm compiler. Production
+    /// encoding has switched to
+    /// <see cref="ElmRecordAsPineValue(IReadOnlyList{ValueTuple{string, ElmValue}}, IReadOnlyDictionary{ElmValue, PineValue}?, Action{ElmValue, PineValue}?)"/>.
+    /// </summary>
+    public static PineValue ElmRecordAsPineValue_2025(
         IReadOnlyList<(string FieldName, ElmValue FieldValue)> fields,
         IReadOnlyDictionary<ElmValue, PineValue>? additionalReusableEncodings,
         Action<ElmValue, PineValue>? reportNewEncoding)
@@ -761,7 +959,7 @@ public static class ElmValueEncoding
                 PineValue.List(
                     [
                     StringEncoding.ValueFromString(field.FieldName),
-                    ElmValueAsPineValue(
+                    ElmValueAsPineValue_2025(
                         field.FieldValue,
                         additionalReusableEncodings,
                         reportNewEncoding)
@@ -771,18 +969,18 @@ public static class ElmValueEncoding
         return
             PineValue.List(
                 [
-                ElmValue.ElmRecordTypeTagNameAsValue,
+                ElmValue.ElmRecordTypeTagNameAsValue_2025,
                 PineValue.List(
                     [PineValue.List(fieldsValues)])
                 ]);
     }
 
     /// <summary>
-    /// Encodes an Elm record as a <see cref="PineValue"/> using the standard record tag and field layout.
+    /// Encodes an Elm record using the legacy nested record layout. Retained for tests that
+    /// need to exercise the legacy decoder. Production encoding has switched to
+    /// <see cref="ElmRecordAsPineValue(IReadOnlyList{ValueTuple{string, PineValue}})"/>.
     /// </summary>
-    /// <param name="fields">The record fields. Fields are ordered by name (ordinal) in the resulting value.</param>
-    /// <returns>The encoded <see cref="PineValue"/> representing an Elm record.</returns>
-    public static PineValue ElmRecordAsPineValue(
+    public static PineValue ElmRecordAsPineValue_2025(
         IReadOnlyList<(string FieldName, PineValue FieldValue)> fields)
     {
         var orderedFields = fields.OrderBy(f => f.FieldName, StringComparer.Ordinal).ToArray();
@@ -804,10 +1002,135 @@ public static class ElmValueEncoding
         return
             PineValue.List(
                 [
-                ElmValue.ElmRecordTypeTagNameAsValue,
+                ElmValue.ElmRecordTypeTagNameAsValue_2025,
                 PineValue.List(
                     [PineValue.List(fieldsValues)])
                 ]);
+    }
+
+    /// <summary>
+    /// Recursive variant of <see cref="ElmValueAsPineValue(ElmValue, IReadOnlyDictionary{ElmValue, PineValue}?, Action{ElmValue, PineValue}?)"/>
+    /// that encodes every nested record using the legacy nested layout
+    /// (<c>[Elm_Record, [[ [name, value], ... ]]]</c>) instead of the new flat layout.
+    /// <para>
+    /// Used at the C#/Elm-in-Elm boundary: the bundled Elm-in-Elm compiler still emits and
+    /// destructures records in the legacy layout, so any record-shaped <see cref="PineValue"/>
+    /// constructed in C# and then handed to it (e.g. parsed-AST records produced by the .NET
+    /// Elm syntax parser) must be encoded with this helper to remain decodable on the other
+    /// side. Once the Elm-in-Elm compiler is migrated, all callers should switch back to
+    /// <see cref="ElmValueAsPineValue(ElmValue, IReadOnlyDictionary{ElmValue, PineValue}?, Action{ElmValue, PineValue}?)"/>.
+    /// </para>
+    /// </summary>
+    public static PineValue ElmValueAsPineValue_2025(
+        ElmValue elmValue) =>
+        ElmValueAsPineValue_2025(
+            elmValue,
+            additionalReusableEncodings: null,
+            reportNewEncoding: null);
+
+    /// <inheritdoc cref="ElmValueAsPineValue_2025(ElmValue)"/>
+    public static PineValue ElmValueAsPineValue_2025(
+        ElmValue elmValue,
+        IReadOnlyDictionary<ElmValue, PineValue>? additionalReusableEncodings,
+        Action<ElmValue, PineValue>? reportNewEncoding)
+    {
+        // Reused-instance lookup is intentionally NOT consulted here: the cached entries
+        // are produced by the production (flat-layout) encoder.
+
+        var encoded =
+            elmValue switch
+            {
+                ElmValue.ElmList elmList =>
+                ElmListAsPineValue_2025(elmList, additionalReusableEncodings, reportNewEncoding),
+
+                ElmValue.ElmChar elmChar =>
+                ElmCharAsPineValue(elmChar),
+
+                ElmValue.ElmInteger elmInteger =>
+                IntegerEncoding.EncodeSignedInteger(elmInteger.Value),
+
+                ElmValue.ElmString elmString =>
+                StringAsPineValue(elmString.Value),
+
+                ElmValue.ElmTag { TagName: "True", Arguments.Count: 0 } =>
+                PineKernelValues.TrueValue,
+
+                ElmValue.ElmTag { TagName: "False", Arguments.Count: 0 } =>
+                PineKernelValues.FalseValue,
+
+                ElmValue.ElmTag elmTag =>
+                TagAsPineValue(
+                    elmTag.TagName,
+                    [
+                    ..elmTag.Arguments
+                    .Select(
+                        item => ElmValueAsPineValue_2025(
+                            item,
+                            additionalReusableEncodings,
+                            reportNewEncoding))
+                    ]),
+
+                ElmValue.ElmRecord elmRecord =>
+                ElmRecordAsPineValue_2025(
+                    elmRecord.Fields,
+                    additionalReusableEncodings,
+                    reportNewEncoding),
+
+                ElmValue.ElmBytes elmBytes =>
+                PineValue.List(
+                    [
+                    ElmValue.ElmBytesTypeTagNameAsValue,
+                    PineValue.List([PineValue.Blob(elmBytes.Value)])
+                    ]),
+
+                ElmValue.ElmPineBlob elmPineBlob =>
+                PineValue.Blob(elmPineBlob.Value),
+
+                ElmValue.ElmInternal { Value: "empty-blob" } =>
+                PineValue.EmptyBlob,
+
+                ElmValue.ElmFloat elmFloat =>
+                PineValue.List(
+                    [
+                    ElmValue.ElmFloatTypeTagNameAsValue,
+                    PineValue.List(
+                        [
+                        IntegerEncoding.EncodeSignedInteger(elmFloat.Numerator),
+                        IntegerEncoding.EncodeSignedInteger(elmFloat.Denominator)
+                        ])
+                    ]),
+
+                _ =>
+                throw new NotImplementedException(
+                    "ElmValueAsPineValue_2025 not implemented for value type: " + elmValue.GetType().FullName)
+            };
+
+        return encoded;
+    }
+
+    /// <summary>
+    /// Recursive variant of <see cref="ElmListAsPineValue"/> used by
+    /// <see cref="ElmValueAsPineValue_2025(ElmValue, IReadOnlyDictionary{ElmValue, PineValue}?, Action{ElmValue, PineValue}?)"/>.
+    /// </summary>
+    public static PineValue ElmListAsPineValue_2025(
+        ElmValue.ElmList elmList,
+        IReadOnlyDictionary<ElmValue, PineValue>? additionalReusableEncodings,
+        Action<ElmValue, PineValue>? reportNewEncoding)
+    {
+        if (elmList.Items.Count is 0)
+        {
+            return PineValue.EmptyList;
+        }
+
+        var items = elmList.Items;
+        var encodedItems = new PineValue[items.Count];
+
+        for (var i = 0; i < items.Count; i++)
+        {
+            encodedItems[i] = ElmValueAsPineValue_2025(items[i], additionalReusableEncodings, reportNewEncoding);
+        }
+
+        return PineValue.List(encodedItems);
     }
 
     /// <summary>

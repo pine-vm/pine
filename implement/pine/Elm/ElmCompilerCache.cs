@@ -56,7 +56,7 @@ public class ElmCompilerCache
             }
 
             encoded =
-                ElmValueEncoding.ElmValueAsPineValue(
+                ElmValueEncoding.ElmValueAsPineValue_2025(
                     elmValue,
                     additionalReusableEncodings:
                     elmValueAsPineValueCache,

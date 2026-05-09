@@ -36,7 +36,7 @@ public static class RecordRuntime
     private static Expression BuildPineFunctionForRecordUpdate()
     {
         // Environment layout: [record, updates]
-        // record is: [ElmRecordTag, [[field1, field2, ...]]]
+        // record is the new flat layout: [tag, name0, value0, name1, value1, ...]
         // updates is: [[fieldName1, newValue1], [fieldName2, newValue2], ...]
 
         var recordExpr =
@@ -49,17 +49,11 @@ public static class RecordRuntime
                 [1],
                 Expression.EnvironmentInstance);
 
-        // Get the record tag (should be ElmRecord)
+        // The record's tag is its first item; the field stream starts at offset 1
+        // and is [name0, value0, name1, value1, ...].
         var recordTagExpr = BuiltinHelpers.ApplyBuiltinHead(recordExpr);
 
-        // Get the fields list: head of (skip 1 record)[0]
-        // record[1] = [[field1, field2, ...]]
-        // record[1][0] = [field1, field2, ...]
-        var recordFieldsListContainerExpr =
-            BuiltinHelpers.ApplyBuiltinHead(
-                BuiltinHelpers.ApplyBuiltinSkip(1, recordExpr));
-
-        var recordFieldsExpr = BuiltinHelpers.ApplyBuiltinHead(recordFieldsListContainerExpr);
+        var recordFieldsExpr = BuiltinHelpers.ApplyBuiltinSkip(1, recordExpr);
 
         // Build the recursive function to update fields
         var recursiveFunctionExpr = BuildRecursiveFieldUpdateFunction();
@@ -67,13 +61,15 @@ public static class RecordRuntime
         var recursiveFunctionValue = ExpressionEncoding.EncodeExpressionAsValue(recursiveFunctionExpr);
 
         // Call the recursive function with: [self, updates, [], fields]
+        // `processed` (initially empty) and `remaining` (initially the field stream) are
+        // both flat lists [name, value, name, value, ...].
         var recursiveCallEnv =
             Expression.ListInstance(
                 [
                 Expression.LiteralInstance(recursiveFunctionValue),
                 updatesExpr,
-                Expression.EmptyList, // processed fields (initially empty)
-                recordFieldsExpr// remaining fields
+                Expression.EmptyList, // processed flat fields (initially empty)
+                recordFieldsExpr // remaining flat fields
 
                 ]);
 
@@ -82,22 +78,28 @@ public static class RecordRuntime
                 encoded: Expression.LiteralInstance(recursiveFunctionValue),
                 environment: recursiveCallEnv);
 
-        // Reconstruct the record: [tag, [[updatedFields]]]
-        // updatedFieldsExpr is already a list of [fieldName, fieldValue] pairs
+        // Reconstruct the record by prepending the tag to the flat updated-field stream:
+        // concat([tag], updatedFields)
         return
-            Expression.ListInstance(
-                [
-                recordTagExpr,
-                Expression.ListInstance([updatedFieldsExpr])
-                ]);
+            Expression.KernelApplicationInstance(
+                nameof(KernelFunction.concat),
+                Expression.ListInstance(
+                    [
+                    Expression.ListInstance([recordTagExpr]),
+                    updatedFieldsExpr
+                    ]));
     }
 
     /// <summary>
     /// Builds a recursive function that iterates through record fields and updates matching ones.
     /// Environment layout: [self, updates, processedFields, remainingFields]
     /// 
-    /// IMPORTANT: Both remainingFields and updates must be sorted alphabetically by field name.
-    /// The algorithm relies on this ordering to efficiently merge the two lists in a single pass:
+    /// Both <c>processedFields</c> and <c>remainingFields</c> are flat lists in the new
+    /// record layout: <c>[name0, value0, name1, value1, ...]</c>.
+    /// 
+    /// IMPORTANT: Both <c>remainingFields</c> (read in pairs) and <c>updates</c> must be sorted
+    /// alphabetically by field name. The algorithm relies on this ordering to efficiently merge
+    /// the two streams in a single pass:
     /// - When names match: use the update value
     /// - When names don't match: the current field name must be less than the update field name
     ///   (since updates only contain valid field names from the record)
@@ -121,13 +123,15 @@ public static class RecordRuntime
         // (remaining is empty at this point, so we just return processed)
         var baseCase = processedExpr;
 
-        // Get the first remaining field
-        var firstFieldExpr = BuiltinHelpers.ApplyBuiltinHead(remainingExpr);
+        // Read the first (name, value) pair from the flat remaining stream.
+        var firstFieldNameExpr = BuiltinHelpers.ApplyBuiltinHead(remainingExpr);
 
-        var firstFieldNameExpr = BuiltinHelpers.ApplyBuiltinHead(firstFieldExpr);
+        var firstFieldValueExpr =
+            BuiltinHelpers.ApplyBuiltinHead(
+                BuiltinHelpers.ApplyBuiltinSkip(1, remainingExpr));
 
-        // Get the rest of the remaining fields
-        var restRemainingExpr = BuiltinHelpers.ApplyBuiltinSkip(1, remainingExpr);
+        // Drop both the name and the value: remainingFields advances 2 items at a time.
+        var restRemainingExpr = BuiltinHelpers.ApplyBuiltinSkip(2, remainingExpr);
 
         // Check if updates list is empty
         var updatesIsEmpty =
@@ -135,10 +139,14 @@ public static class RecordRuntime
                 updatesExpr,
                 Expression.EmptyList);
 
-        // Get the first update
+        // Get the first update [updateName, newValue]
         var firstUpdateExpr = BuiltinHelpers.ApplyBuiltinHead(updatesExpr);
 
         var firstUpdateNameExpr = BuiltinHelpers.ApplyBuiltinHead(firstUpdateExpr);
+
+        var firstUpdateValueExpr =
+            BuiltinHelpers.ApplyBuiltinHead(
+                BuiltinHelpers.ApplyBuiltinSkip(1, firstUpdateExpr));
 
         // Check if field name matches update name
         var namesMatch =
@@ -147,7 +155,7 @@ public static class RecordRuntime
                 firstUpdateNameExpr);
 
         // If names match: use the update value instead of original field
-        // newProcessed = concat(processed, [update])
+        // newProcessed = concat(processed, [originalName, newValue])
         // newUpdates = skip 1 updates (consume the update)
         // recurse with [self, newUpdates, newProcessed, restRemaining]
         var processedWithUpdate =
@@ -156,7 +164,7 @@ public static class RecordRuntime
                 Expression.ListInstance(
                     [
                     processedExpr,
-                    Expression.ListInstance([firstUpdateExpr])
+                    Expression.ListInstance([firstFieldNameExpr, firstUpdateValueExpr])
                     ]));
 
         var restUpdates = BuiltinHelpers.ApplyBuiltinSkip(1, updatesExpr);
@@ -173,7 +181,7 @@ public static class RecordRuntime
                     ]));
 
         // If names don't match: keep original field
-        // newProcessed = concat(processed, [firstField])
+        // newProcessed = concat(processed, [originalName, originalValue])
         // recurse with [self, updates, newProcessed, restRemaining]
         var processedWithOriginal =
             Expression.KernelApplicationInstance(
@@ -181,7 +189,7 @@ public static class RecordRuntime
                 Expression.ListInstance(
                     [
                     processedExpr,
-                    Expression.ListInstance([firstFieldExpr])
+                    Expression.ListInstance([firstFieldNameExpr, firstFieldValueExpr])
                     ]));
 
         var recurseWithOriginal =
@@ -223,8 +231,8 @@ public static class RecordRuntime
     private static Expression BuildPineFunctionForRecordAccess()
     {
         // Environment layout: [record, fieldName]
-        // record is: [ElmRecordTag, [[field1, field2, ...]]]
-        // fieldName is a string value
+        // record is the new flat layout: [tag, name0, value0, name1, value1, ...].
+        // fieldName is a string value.
 
         var recordExpr =
             ExpressionBuilder.BuildExpressionForPathInExpression(
@@ -236,15 +244,8 @@ public static class RecordRuntime
                 [1],
                 Expression.EnvironmentInstance);
 
-        // Get the record tag (should be ElmRecord)
-        var recordTagExpr = BuiltinHelpers.ApplyBuiltinHead(recordExpr);
-
-        // Get the fields list: record[1][0] = [field1, field2, ...]
-        var recordFieldsListContainerExpr =
-            BuiltinHelpers.ApplyBuiltinHead(
-                BuiltinHelpers.ApplyBuiltinSkip(1, recordExpr));
-
-        var recordFieldsExpr = BuiltinHelpers.ApplyBuiltinHead(recordFieldsListContainerExpr);
+        // Drop the record tag; remaining is the flat field stream [name, value, name, value, ...].
+        var recordFieldsExpr = BuiltinHelpers.ApplyBuiltinSkip(1, recordExpr);
 
         // Build the recursive function to look up the field
         var recursiveFunctionExpr = BuildRecursiveFieldLookupFunction();
@@ -267,9 +268,9 @@ public static class RecordRuntime
     }
 
     /// <summary>
-    /// Builds a recursive function that looks up a field by name in a list of record fields.
+    /// Builds a recursive function that looks up a field by name in a flat record-field stream.
     /// Environment layout: [self, fieldName, remainingFields]
-    /// Each field is [fieldName, fieldValue].
+    /// where <c>remainingFields</c> is <c>[name0, value0, name1, value1, ...]</c>.
     /// Returns the fieldValue when a match is found.
     /// </summary>
     private static Expression BuildRecursiveFieldLookupFunction()
@@ -288,14 +289,12 @@ public static class RecordRuntime
                 remainingExpr,
                 Expression.EmptyList);
 
-        // Get the first field from remaining
-        var firstFieldExpr = BuiltinHelpers.ApplyBuiltinHead(remainingExpr);
-        // first field is [fieldName, fieldValue]
-        var firstFieldNameExpr = BuiltinHelpers.ApplyBuiltinHead(firstFieldExpr);
+        // Read the first (name, value) pair from the flat remaining stream.
+        var firstFieldNameExpr = BuiltinHelpers.ApplyBuiltinHead(remainingExpr);
 
         var firstFieldValueExpr =
             BuiltinHelpers.ApplyBuiltinHead(
-                BuiltinHelpers.ApplyBuiltinSkip(1, firstFieldExpr));
+                BuiltinHelpers.ApplyBuiltinSkip(1, remainingExpr));
 
         // Check if field names match
         var namesMatch =
@@ -303,9 +302,8 @@ public static class RecordRuntime
                 firstFieldNameExpr,
                 targetFieldNameExpr);
 
-        // If match found, return the field value
-        // If no match, recurse with remaining fields
-        var restRemainingExpr = BuiltinHelpers.ApplyBuiltinSkip(1, remainingExpr);
+        // Advance two items: drop both the name and the value.
+        var restRemainingExpr = BuiltinHelpers.ApplyBuiltinSkip(2, remainingExpr);
 
         var recurseExpr =
             new Expression.ParseAndEval(

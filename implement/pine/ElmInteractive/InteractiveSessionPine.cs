@@ -230,7 +230,7 @@ public class InteractiveSessionPine : IInteractiveSession
             ElmValueInterop.PineValueEncodedAsInElmCompiler(PineValue.EmptyList);
 
         var initialStateElmValueInCompiler =
-            ElmValueEncoding.ElmValueAsPineValue(initialStateElmValue);
+            ElmValueEncoding.ElmValueAsPineValue_2025(initialStateElmValue);
 
         var compiledNewEnvInCompiler = initialStateElmValueInCompiler;
 
@@ -748,8 +748,11 @@ public class InteractiveSessionPine : IInteractiveSession
 
             if (fromDotnetResult.IsOkOrNull() is { } parsedOk)
             {
+                // The bundled Elm-in-Elm compiler still emits and destructures records using
+                // the legacy nested layout, so the AST handed to it must use the same layout.
+                // Once the Elm-in-Elm compiler is migrated, switch back to ElmValueAsPineValue.
                 var asPineValue =
-                    ElmValueEncoding.ElmValueAsPineValue(parsedOk);
+                    ElmValueEncoding.ElmValueAsPineValue_2025(parsedOk);
 
                 return
                     new KeyValuePair<IReadOnlyList<string>, PineValue>(
@@ -829,7 +832,8 @@ public class InteractiveSessionPine : IInteractiveSession
         }
 
         var parseAsRecordResult =
-            ElmValueEncoding.ParsePineValueAsRecordTagged(parseAsTagOk.tagArguments.Span[0]);
+            // Elm-in-Elm still emits records in the legacy nested layout, so use the legacy parser here.
+            ElmValueEncoding.ParsePineValueAsRecordTagged_2025(parseAsTagOk.tagArguments.Span[0]);
 
         if (parseAsRecordResult.IsErrOrNull() is { } parseAsRecordError)
             return "Failed to parse as record: " + parseAsRecordError;
@@ -851,9 +855,11 @@ public class InteractiveSessionPine : IInteractiveSession
     static PineValue ParsedElmFileRecordValue(
         string fileText,
         PineValue parsedModuleValue) =>
-        ElmValueEncoding.ElmRecordAsPineValue(
+        // Legacy nested layout: the bundled Elm-in-Elm compiler that consumes this record
+        // still expects the pre-2025 record encoding.
+        ElmValueEncoding.ElmRecordAsPineValue_2025(
             [
-            ("fileText", ElmValueEncoding.ElmValueAsPineValue(ElmValue.StringInstance(fileText)))
+            ("fileText", ElmValueEncoding.ElmValueAsPineValue_2025(ElmValue.StringInstance(fileText)))
             ,("parsedModule", parsedModuleValue)
             ]);
 

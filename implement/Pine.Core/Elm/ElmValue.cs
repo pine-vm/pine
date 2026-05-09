@@ -49,8 +49,29 @@ public abstract record ElmValue
 
     /// <summary>
     /// Tag name used to represent Elm records when encoding as <see cref="PineValue"/>.
+    /// <para>
+    /// This is the new (post-2025) flat encoding tag. A record is encoded as a flat list
+    /// <c>[tag, fieldName0, fieldValue0, fieldName1, fieldValue1, ...]</c> with field names
+    /// sorted alphabetically (ordinal). The literal contains characters that are not legal
+    /// in Elm identifiers, so it cannot collide with a user-defined constructor name.
+    /// </para>
+    /// <para>
+    /// For decoding values still persisted in the legacy nested layout, see
+    /// <see cref="ElmRecordTypeTagName_2025"/>.
+    /// </para>
     /// </summary>
-    public const string ElmRecordTypeTagName = "Elm_Record";
+    public const string ElmRecordTypeTagName = "<Record_Type>";
+
+    /// <summary>
+    /// Legacy (pre-migration) tag name used to represent Elm records when encoding as <see cref="PineValue"/>.
+    /// <para>
+    /// In the legacy nested layout, a record was encoded as
+    /// <c>[tag, [ [ [fieldName, fieldValue], ... ] ] ]</c>. The decoder still recognizes this
+    /// shape so that values persisted in the old format remain readable, but the encoder no
+    /// longer emits it. New code should use <see cref="ElmRecordTypeTagName"/> instead.
+    /// </para>
+    /// </summary>
+    public const string ElmRecordTypeTagName_2025 = "Elm_Record";
 
     /// <summary>
     /// Tag name used to represent instances of `Bytes.Bytes` from Elm when encoding as <see cref="PineValue"/>.
@@ -88,10 +109,17 @@ public abstract record ElmValue
     public const string ElmFloatTypeTagName = "Elm_Float";
 
     /// <summary>
-    /// Represents the 'Elm_Record' tag name as a <see cref="PineValue"/> using the default string encoding.
+    /// Represents the new record tag name (<c>&lt;Record_Type&gt;</c>) as a <see cref="PineValue"/> using the default string encoding.
     /// </summary>
     public static readonly PineValue ElmRecordTypeTagNameAsValue =
         StringEncoding.ValueFromString(ElmRecordTypeTagName);
+
+    /// <summary>
+    /// Represents the legacy record tag name (<c>Elm_Record</c>) as a <see cref="PineValue"/> using the default string encoding.
+    /// Used by the decoder to recognize values still persisted in the pre-migration nested layout.
+    /// </summary>
+    public static readonly PineValue ElmRecordTypeTagNameAsValue_2025 =
+        StringEncoding.ValueFromString(ElmRecordTypeTagName_2025);
 
     /// <summary>
     /// Represents the 'Elm_Bytes' tag name as a <see cref="PineValue"/> using the default string encoding.

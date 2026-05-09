@@ -389,23 +389,24 @@ public class ExpressionCompiler
                     .OrderBy(pair => pair.fieldName, StringComparer.Ordinal)
                     .ToList();
 
-                // Build the record field expressions
-                var recordFieldExprs =
-                    sortedPairs
-                    .Select(
-                        pair => Expression.ListInstance(
-                            [
-                            Expression.LiteralInstance(StringEncoding.ValueFromString(pair.fieldName)),
-                            pair.expr
-                            ]))
-                    .ToList();
+                // Build the record field expressions interleaved as
+                // [name0, value0, name1, value1, ...] for the new flat layout.
+                var recordFieldItems = new List<Expression>(sortedPairs.Count * 2);
 
-                // Build the record: [ElmRecordTag, [[field1, field2, ...]]]
+                foreach (var pair in sortedPairs)
+                {
+                    recordFieldItems.Add(
+                        Expression.LiteralInstance(StringEncoding.ValueFromString(pair.fieldName)));
+
+                    recordFieldItems.Add(pair.expr);
+                }
+
+                // Build the record: [ElmRecordTag, name0, value0, name1, value1, ...]
                 return
                     Expression.ListInstance(
                         [
                         Expression.LiteralInstance(ElmValue.ElmRecordTypeTagNameAsValue),
-                        Expression.ListInstance([Expression.ListInstance(recordFieldExprs)])
+                        ..recordFieldItems
                         ]);
             }
 
@@ -756,7 +757,7 @@ public class ExpressionCompiler
             .OrderBy(f => f.Value.fieldName.Value, StringComparer.Ordinal)
             .ToList();
 
-        var compiledFieldPairs = new List<Expression>();
+        var compiledFieldItems = new List<Expression>();
 
         foreach (var field in sortedFields)
         {
@@ -770,27 +771,19 @@ public class ExpressionCompiler
                 return err;
             }
 
-            // Each field is encoded as [fieldName, fieldValue]
-            var fieldPair =
-                Expression.ListInstance(
-                    [
-                    Expression.LiteralInstance(StringEncoding.ValueFromString(fieldName)),
-                    compiledValue.IsOkOrNull()!
-                    ]);
+            // New flat layout: emit name and value as adjacent items in the outer list.
+            compiledFieldItems.Add(
+                Expression.LiteralInstance(StringEncoding.ValueFromString(fieldName)));
 
-            compiledFieldPairs.Add(fieldPair);
+            compiledFieldItems.Add(compiledValue.IsOkOrNull()!);
         }
 
-        // A record is encoded as [recordTypeTag, [[field1, field2, ...]]]
-        var fieldsListExpr = Expression.ListInstance(compiledFieldPairs);
-
-        var innerListExpr = Expression.ListInstance([fieldsListExpr]);
-
+        // A record is encoded as [recordTypeTag, name0, value0, name1, value1, ...]
         return
             Expression.ListInstance(
                 [
                 Expression.LiteralInstance(ElmValue.ElmRecordTypeTagNameAsValue),
-                innerListExpr
+                ..compiledFieldItems
                 ]);
     }
 
@@ -918,70 +911,50 @@ public class ExpressionCompiler
         int totalFieldCount,
         IReadOnlyList<(int fieldIndex, Expression newValue)> updates)
     {
-        // Record structure: [ElmRecordTag, [[field1, field2, ...]]]
-        // Each field is [fieldName, fieldValue]
-        // 
-        // We need to construct a new record with the same structure but updated values.
-        // Strategy: Get the fields list, then construct a new list with updated values.
+        // New flat record structure: [tag, name0, value0, name1, value1, ...].
+        // Field i has its name at outer slot (2*i + 1) and its value at outer slot (2*i + 2).
+        //
+        // Strategy: build a fresh outer list whose tag and field names are read from the
+        // original record (so we don't have to know the name strings here), and whose
+        // values are either the original value (for unchanged slots) or the new value
+        // expression (for updated slots).
 
-        // Get record tag
-        var recordTagExpr = BuiltinHelpers.ApplyBuiltinHead(recordExpr);
-
-        // Get record[1] (skip tag)
-        var recordContentExpr =
-            BuiltinHelpers.ApplyBuiltinHead(
-                BuiltinHelpers.ApplyBuiltinSkip(1, recordExpr));
-
-        // Get record[1][0] = [field1, field2, ...]
-        var fieldsListExpr = BuiltinHelpers.ApplyBuiltinHead(recordContentExpr);
-
-        // Build the updated fields list
-        // For each field position, either use the original field or the new value
         var updatesDict = updates.ToDictionary(u => u.fieldIndex, u => u.newValue);
 
-        var updatedFieldExprs = new List<Expression>();
+        var resultItems =
+            new List<Expression>(totalFieldCount * 2 + 1)
+            {
+                // Tag: read from the original record so we don't bake the constant in twice.
+                BuiltinHelpers.ApplyBuiltinHead(recordExpr),
+            };
 
         for (var i = 0; i < totalFieldCount; i++)
         {
-            Expression fieldPairExpr;
+            // Field name at outer slot (2*i + 1) - always read from original.
+            var nameSlot = 2 * i + 1;
 
-            // Get the original field at index i
-            if (i is 0)
-            {
-                fieldPairExpr = BuiltinHelpers.ApplyBuiltinHead(fieldsListExpr);
-            }
-            else
-            {
-                fieldPairExpr =
-                    BuiltinHelpers.ApplyBuiltinHead(
-                        BuiltinHelpers.ApplyBuiltinSkip(i, fieldsListExpr));
-            }
+            var nameExpr =
+                BuiltinHelpers.ApplyBuiltinHead(
+                    BuiltinHelpers.ApplyBuiltinSkip(nameSlot, recordExpr));
 
+            resultItems.Add(nameExpr);
+
+            // Field value at outer slot (2*i + 2) - either the original value or the update.
             if (updatesDict.TryGetValue(i, out var newValueExpr))
             {
-                // This field is being updated
-                // Get the field name from the original field
-                var fieldNameExpr = BuiltinHelpers.ApplyBuiltinHead(fieldPairExpr);
-
-                // Create new field pair with updated value
-                updatedFieldExprs.Add(Expression.ListInstance([fieldNameExpr, newValueExpr]));
+                resultItems.Add(newValueExpr);
             }
             else
             {
-                // Keep the original field unchanged
-                updatedFieldExprs.Add(fieldPairExpr);
+                var valueSlot = 2 * i + 2;
+
+                resultItems.Add(
+                    BuiltinHelpers.ApplyBuiltinHead(
+                        BuiltinHelpers.ApplyBuiltinSkip(valueSlot, recordExpr)));
             }
         }
 
-        // Construct the new record: [tag, [[updatedFields]]]
-        var updatedFieldsListExpr = Expression.ListInstance(updatedFieldExprs);
-
-        return
-            Expression.ListInstance(
-                [
-                recordTagExpr,
-                Expression.ListInstance([updatedFieldsListExpr])
-                ]);
+        return Expression.ListInstance(resultItems);
     }
 
     private static Result<CompilationError, Expression> CompileRecordAccess(
@@ -1088,40 +1061,13 @@ public class ExpressionCompiler
     /// </summary>
     private static Expression CompileRecordAccessWithKnownIndex(Expression recordExpr, int fieldIndex)
     {
-        // Record structure: [ElmRecordTag, [[field1, field2, ...]]]
-        // field at index N: record[1][0][N][1]
-        // 
-        // record[1] = [[field1, field2, ...]]
-        // record[1][0] = [field1, field2, ...]
-        // record[1][0][N] = [fieldName_N, fieldValue_N]
-        // record[1][0][N][1] = fieldValue_N
+        // New flat record layout: [tag, name0, value0, name1, value1, ...].
+        // Field value at sorted index N is at position 2*N + 2 in the outer list.
+        var valueSlot = 2 * fieldIndex + 2;
 
-        // Get record[1] (skip tag)
-        var recordContentExpr =
-            BuiltinHelpers.ApplyBuiltinHead(
-                BuiltinHelpers.ApplyBuiltinSkip(1, recordExpr));
-
-        // Get record[1][0] (unwrap the inner list)
-        var fieldsListExpr = BuiltinHelpers.ApplyBuiltinHead(recordContentExpr);
-
-        // Get field at index N
-        Expression fieldPairExpr;
-
-        if (fieldIndex is 0)
-        {
-            fieldPairExpr = BuiltinHelpers.ApplyBuiltinHead(fieldsListExpr);
-        }
-        else
-        {
-            fieldPairExpr =
-                BuiltinHelpers.ApplyBuiltinHead(
-                    BuiltinHelpers.ApplyBuiltinSkip(fieldIndex, fieldsListExpr));
-        }
-
-        // Get the field value (index 1 in the pair)
         return
             BuiltinHelpers.ApplyBuiltinHead(
-                BuiltinHelpers.ApplyBuiltinSkip(1, fieldPairExpr));
+                BuiltinHelpers.ApplyBuiltinSkip(valueSlot, recordExpr));
     }
 
     /// <summary>
@@ -1929,21 +1875,21 @@ public class ExpressionCompiler
             .OrderBy(pair => pair.fieldName, StringComparer.Ordinal)
             .ToList();
 
-        var recordFieldExprs =
-            sortedPairs
-            .Select(
-                pair => Expression.ListInstance(
-                    [
-                    Expression.LiteralInstance(StringEncoding.ValueFromString(pair.fieldName)),
-                    pair.expr
-                    ]))
-            .ToList();
+        var recordFieldItems = new List<Expression>(sortedPairs.Count * 2);
+
+        foreach (var pair in sortedPairs)
+        {
+            recordFieldItems.Add(
+                Expression.LiteralInstance(StringEncoding.ValueFromString(pair.fieldName)));
+
+            recordFieldItems.Add(pair.expr);
+        }
 
         return
             Expression.ListInstance(
                 [
                 Expression.LiteralInstance(ElmValue.ElmRecordTypeTagNameAsValue),
-                Expression.ListInstance([Expression.ListInstance(recordFieldExprs)])
+                ..recordFieldItems
                 ]);
     }
 

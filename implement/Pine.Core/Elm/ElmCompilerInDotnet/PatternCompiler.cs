@@ -640,8 +640,6 @@ public class PatternCompiler
         Expression scrutinee,
         IReadOnlyList<string>? recordFieldNames)
     {
-        var fieldsListExpr = GetListElementExpression(GetListElementExpression(scrutinee, 1), 0);
-
         var bindings = ImmutableDictionary<string, Expression>.Empty;
 
         if (recordFieldNames is not null)
@@ -649,9 +647,10 @@ public class PatternCompiler
             // Type-driven path: the caller knows the scrutinee's full
             // record-field layout, so we compute each pattern field's
             // position in the record directly. Records are stored with
-            // their fields sorted alphabetically, so the index of the
-            // pattern field's name in `recordFieldNames` is the slot to
-            // read in the record's fields list.
+            // their fields sorted alphabetically in the new flat layout
+            // [tag, name0, value0, name1, value1, ...]. The index of the
+            // pattern field's name in `recordFieldNames` gives N, and the
+            // value at sorted index N lives at outer slot (2*N + 2).
             var fieldNameToIndex =
                 recordFieldNames
                 .Select((name, idx) => (name, idx))
@@ -669,8 +668,9 @@ public class PatternCompiler
                     indexInRecord = bindings.Count;
                 }
 
-                var fieldEntryExpr = GetListElementExpression(fieldsListExpr, indexInRecord);
-                var fieldValueExpr = GetListElementExpression(fieldEntryExpr, 1);
+                var fieldValueExpr =
+                    GetListElementExpression(scrutinee, 2 * indexInRecord + 2);
+
                 bindings = bindings.Add(fieldName, fieldValueExpr);
             }
 

@@ -491,7 +491,7 @@ public class ElmTimeJsonAdapter
 
 
             var parseDescAndHandlerRecordResult =
-                ElmValueEncoding.ParsePineValueAsRecordTagged(exposedFunctionDescriptionAndHandlerValue);
+                ElmValueEncoding.ParsePineValueAsRecordTagged_2025(exposedFunctionDescriptionAndHandlerValue);
 
             {
                 if (parseDescAndHandlerRecordResult.IsErrOrNull() is { } err)
@@ -1108,7 +1108,7 @@ public class ElmTimeJsonAdapter
             }
 
             var appStateIncludingShim =
-                ElmValueEncoding.ElmRecordAsPineValue(
+                ElmValueEncoding.ElmRecordAsPineValue_2025(
                     [
                     ("nextTaskIndex", IntegerEncoding.EncodeSignedInteger(0)),
                     ("posixTimeMilli", IntegerEncoding.EncodeSignedInteger(posixTimeMilli)),
@@ -1119,7 +1119,7 @@ public class ElmTimeJsonAdapter
                     ]);
 
             return
-                ElmValueEncoding.ElmRecordAsPineValue(
+                ElmValueEncoding.ElmRecordAsPineValue_2025(
                     [
                     ("stateArgument",
                     ElmValueEncoding.TagAsPineValue(
@@ -1228,7 +1228,7 @@ public class ElmTimeJsonAdapter
         }
         */
 
-        var asRecordResult = ElmValueEncoding.ParsePineValueAsRecordTagged(applyResponse);
+        var asRecordResult = ElmValueEncoding.ParsePineValueAsRecordTagged_2025(applyResponse);
 
         {
             if (asRecordResult.IsErrOrNull() is { } err)
@@ -1256,7 +1256,7 @@ public class ElmTimeJsonAdapter
     }
 
     private static readonly PineValue EmptyDictAsPineValue =
-        ElmValueEncoding.ElmValueAsPineValue(ElmValue.EmptyDict);
+        ElmValueEncoding.ElmValueAsPineValue_2025(ElmValue.EmptyDict);
 
     /// <summary>
     /// The original lowering implementation added a 'main' declaration to account for DCE.

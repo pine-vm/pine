@@ -324,11 +324,25 @@ Where the type is constrained to `Int`, we lower `Basics.add` and `Basics.mul` f
 
 For Elm code producing record values, we always produce records with fields sorted alphabetically by field name. This makes subsequent operations on these values, like equality checks, simpler.
 
+### On-the-wire layout
+
+A record is encoded as a flat Pine list with an odd number of items:
+
+```text
+[<Record_Type>, fieldName0, fieldValue0, fieldName1, fieldValue1, ...]
+```
+
+The first item is the tag (the UTF-32 encoding of the literal string `<Record_Type>`); the remaining items are field-name and field-value pairs interleaved, with the field names sorted alphabetically (ordinal). The empty record is `[<Record_Type>]` (length 1).
+
+The new tag uses characters that are not legal in Elm identifiers, so it cannot be confused with a user-defined custom-type constructor.
+
+For values still persisted in the legacy nested layout `[Elm_Record, [[ [name, value], ... ]]]` produced by older versions of the compiler (or by the Elm self-hosting compiler), the decoder in `ElmValueEncoding.cs` keeps a parallel `_2025`-suffixed code path. New code should always emit the flat layout.
+
 ### Record Access and Record Update
 
-How we handle record access and record updates depends on how much we know about the record type at compile time: when we have inferred a closed set of field names, we use the field-name index to perform an index-based lookup or insertion.
+How we handle record access and record updates depends on how much we know about the record type at compile time: when we have inferred a closed set of field names, we use the field-name index to perform an index-based lookup or insertion. With the flat layout, the value at sorted field index `N` lives at outer slot `2*N + 2` of the record list, so a static field access lowers to `head (skip (2*N + 2) record)`.
 
-However, due to row polymorphism, that index can vary across call sites if the function we emit has not been narrowed to a closed set of field names. In these cases, we emit a function that recursively scans the record to find the field with the matching name.
+However, due to row polymorphism, that index can vary across call sites if the function we emit has not been narrowed to a closed set of field names. In these cases, we emit a function that recursively scans the record to find the field with the matching name. The recursive helpers in `RecordRuntime.cs` walk the field stream in pairs (`skip 2` per step) after dropping the tag.
 
 ### Record Constructors
 

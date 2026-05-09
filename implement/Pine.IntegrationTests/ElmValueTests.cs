@@ -208,4 +208,98 @@ public class ElmValueTests
 
         asPineValueFormAlfa.Should().Be(asPineValueFormBeta);
     }
+
+    /// <summary>
+    /// Verifies that the new (post-2025) encoder produces the flat record layout
+    /// <c>[tag, name0, value0, name1, value1, ...]</c> with field names sorted
+    /// alphabetically (ordinal) and the new <c>&lt;Record_Type&gt;</c> tag.
+    /// </summary>
+    [Fact]
+    public void Elm_record_encoder_emits_flat_layout_with_new_tag()
+    {
+        var elmRecord =
+            new ElmValue.ElmRecord(
+                [
+                ("beta", ElmValue.Integer(13)),
+                ("alfa", ElmValue.Integer(11)),
+                ("gamma", ElmValue.Integer(17))
+                ]);
+
+        var asPineValue = ElmValueEncoding.ElmValueAsPineValue(elmRecord);
+
+        var asListValue = (PineValue.ListValue)asPineValue;
+
+        // 1 tag + 2 items per field × 3 fields = 7 items.
+        asListValue.Items.Length.Should().Be(7);
+
+        // First item must be the new tag, not the legacy one.
+        asListValue.Items.Span[0].Should().Be(ElmValue.ElmRecordTypeTagNameAsValue);
+        asListValue.Items.Span[0].Should().NotBe(ElmValue.ElmRecordTypeTagNameAsValue_2025);
+
+        // Field names alternate with values starting at index 1, sorted alphabetically.
+        asListValue.Items.Span[1].Should().Be(StringEncoding.ValueFromString("alfa"));
+        asListValue.Items.Span[2].Should().Be(IntegerEncoding.EncodeSignedInteger(11));
+        asListValue.Items.Span[3].Should().Be(StringEncoding.ValueFromString("beta"));
+        asListValue.Items.Span[4].Should().Be(IntegerEncoding.EncodeSignedInteger(13));
+        asListValue.Items.Span[5].Should().Be(StringEncoding.ValueFromString("gamma"));
+        asListValue.Items.Span[6].Should().Be(IntegerEncoding.EncodeSignedInteger(17));
+    }
+
+    /// <summary>
+    /// Verifies that values still persisted in the legacy nested record layout
+    /// <c>[Elm_Record, [[ [name, value], ... ]]]</c> remain decodable through
+    /// both the type-specific <c>ParsePineValueAsRecordTagged_2025</c> entry point
+    /// and the general <c>PineValueAsElmValue</c> fast path.
+    /// </summary>
+    [Fact]
+    public void Decoder_still_accepts_legacy_2025_record_layout()
+    {
+        var legacyEncoded =
+            ElmValueEncoding.ElmRecordAsPineValue_2025(
+                [
+                ("alfa", ElmValue.Integer(11)),
+                ("beta", ElmValue.Integer(13)),
+                ("gamma", ElmValue.Integer(17))
+                ],
+                additionalReusableEncodings: null,
+                reportNewEncoding: null);
+
+        // Spot-check the legacy shape: [Elm_Record, [[ [name, value], ... ]]].
+        var legacyAsListValue = (PineValue.ListValue)legacyEncoded;
+        legacyAsListValue.Items.Length.Should().Be(2);
+        legacyAsListValue.Items.Span[0].Should().Be(ElmValue.ElmRecordTypeTagNameAsValue_2025);
+
+        // 1) Type-specific legacy parser.
+        var taggedParseResult =
+            ElmValueEncoding.ParsePineValueAsRecordTagged_2025(legacyEncoded);
+
+        if (taggedParseResult is not Result<string, IReadOnlyList<(string fieldName, PineValue fieldValue)>>.Ok taggedOk)
+        {
+            throw new System.Exception(
+                "Legacy parser failed: " + taggedParseResult.GetType().FullName);
+        }
+
+        taggedOk.Value.Should().HaveCount(3);
+        taggedOk.Value[0].fieldName.Should().Be("alfa");
+        taggedOk.Value[1].fieldName.Should().Be("beta");
+        taggedOk.Value[2].fieldName.Should().Be("gamma");
+
+        // 2) General fast path: PineValueAsElmValue must classify the value as ElmRecord.
+        var generalParseResult = ElmValueEncoding.PineValueAsElmValue(legacyEncoded, null, null);
+
+        if (generalParseResult is not Result<string, ElmValue>.Ok generalOk)
+        {
+            throw new System.Exception(
+                "General decoder failed: " + generalParseResult.GetType().FullName);
+        }
+
+        var asRecord = (ElmValue.ElmRecord)generalOk.Value;
+        asRecord.Fields.Should().HaveCount(3);
+        asRecord.Fields[0].FieldName.Should().Be("alfa");
+        asRecord.Fields[0].Value.Should().Be(ElmValue.Integer(11));
+        asRecord.Fields[1].FieldName.Should().Be("beta");
+        asRecord.Fields[1].Value.Should().Be(ElmValue.Integer(13));
+        asRecord.Fields[2].FieldName.Should().Be("gamma");
+        asRecord.Fields[2].Value.Should().Be(ElmValue.Integer(17));
+    }
 }

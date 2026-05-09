@@ -255,7 +255,7 @@ type alias LoadDependencyStruct =
                 .Extract(err => throw new Exception("Failed applying function subscriptions: " + err));
 
             var subscriptionsElmRecord =
-                ElmValueEncoding.ParsePineValueAsRecordTagged(subscriptionsValue)
+                ElmValueEncoding.ParsePineValueAsRecordTagged_2025(subscriptionsValue)
                 .Extract(err => throw new Exception("Failed parsing subscriptions value as Elm record: " + err));
 
             var httpRequestFieldValue =
@@ -299,7 +299,7 @@ type alias LoadDependencyStruct =
             PineValue posixTimeIsPastValue)
         {
             var posixTimeIsPastElmRecord =
-                ElmValueEncoding.ParsePineValueAsRecordTagged(posixTimeIsPastValue)
+                ElmValueEncoding.ParsePineValueAsRecordTagged_2025(posixTimeIsPastValue)
                 .Extract(err => throw new Exception("Failed parsing posixTimeIsPast value as Elm record: " + err));
 
             var minimumPosixTimeMilliField =
@@ -619,7 +619,7 @@ type alias LoadDependencyStruct =
                 ("request", EncodeHttpRequestProperties(httpRequest.Request))
                 ]);
 
-        return ElmValueEncoding.ElmValueAsPineValue(asElmValue);
+        return ElmValueEncoding.ElmValueAsPineValue_2025(asElmValue);
     }
 
     public static ElmValue EncodeHttpRequestContext(HttpRequestContext requestContext)
@@ -694,7 +694,7 @@ type alias LoadDependencyStruct =
                     : ElmValue.TagInstance("Just", [ElmValue.StringInstance(record.OsPlatform)]))
                 ]);
 
-        return ElmValueEncoding.ElmValueAsPineValue(asElmValue);
+        return ElmValueEncoding.ElmValueAsPineValue_2025(asElmValue);
     }
 
     public static PineValue EncodeResult<ErrT, OkT>(
@@ -740,7 +740,7 @@ type alias LoadDependencyStruct =
                 ("exceptionToString", ElmValue.StringInstance(error.ExceptionToString))
                 ]);
 
-        return ElmValueEncoding.ElmValueAsPineValue(asElmValue);
+        return ElmValueEncoding.ElmValueAsPineValue_2025(asElmValue);
     }
 
     public static PineValue EncodeCreateVolatileProcessComplete(
@@ -752,7 +752,7 @@ type alias LoadDependencyStruct =
                 ("processId", ElmValue.StringInstance(complete.ProcessId))
                 ]);
 
-        return ElmValueEncoding.ElmValueAsPineValue(asElmValue);
+        return ElmValueEncoding.ElmValueAsPineValue_2025(asElmValue);
     }
 
     public static PineValue EncodeRequestToVolatileProcessResult(
@@ -772,7 +772,7 @@ type alias LoadDependencyStruct =
             EncodeResult(
                 result,
                 encodeErr: EncodeRequestToVolatileProcessError,
-                encodeOk: _ => ElmValueEncoding.ElmValueAsPineValue(ElmValue.TagInstance("Ok", [])));
+                encodeOk: _ => ElmValueEncoding.ElmValueAsPineValue_2025(ElmValue.TagInstance("Ok", [])));
     }
 
     public static PineValue EncodeRequestToVolatileProcessError(
@@ -781,11 +781,11 @@ type alias LoadDependencyStruct =
         return error switch
         {
             RequestToVolatileProcessError.ProcessNotFound =>
-                ElmValueEncoding.ElmValueAsPineValue(
+                ElmValueEncoding.ElmValueAsPineValue_2025(
                     ElmValue.TagInstance(nameof(RequestToVolatileProcessError.ProcessNotFound), [])),
 
             RequestToVolatileProcessError.RequestToVolatileProcessOtherError otherError =>
-                ElmValueEncoding.ElmValueAsPineValue(
+                ElmValueEncoding.ElmValueAsPineValue_2025(
                     ElmValue.TagInstance(
                         nameof(RequestToVolatileProcessError.RequestToVolatileProcessOtherError),
                         [
@@ -815,7 +815,7 @@ type alias LoadDependencyStruct =
                 ("durationInMilliseconds", ElmValue.Integer(complete.DurationInMilliseconds))
                 ]);
 
-        return ElmValueEncoding.ElmValueAsPineValue(asElmValue);
+        return ElmValueEncoding.ElmValueAsPineValue_2025(asElmValue);
     }
 
     public static PineValue EncodeEncodeReadAllFromVolatileProcessNativeResult(
@@ -841,7 +841,7 @@ type alias LoadDependencyStruct =
                     : ElmValue.TagInstance("Just", [ElmValue.Integer(complete.ExitCode.Value)]))
                 ]);
 
-        return ElmValueEncoding.ElmValueAsPineValue(asElmValue);
+        return ElmValueEncoding.ElmValueAsPineValue_2025(asElmValue);
     }
 
     public static Result<string, WebServiceEventResponse> ParseWebServiceConfigInit(
@@ -1159,7 +1159,7 @@ type alias LoadDependencyStruct =
         PineVMParseCache parseCache)
     {
         var parseRecordResult =
-            ElmValueEncoding.ParsePineValueAsRecordTagged(pineValue);
+            ElmValueEncoding.ParsePineValueAsRecordTagged_2025(pineValue);
 
         {
             if (parseRecordResult.IsErrOrNull() is { } err)
@@ -1663,7 +1663,7 @@ type alias LoadDependencyStruct =
         ElmCompilerCache elmCompilerCache,
         PineVMParseCache parseCache)
     {
-        var asRecordResult = ElmValueEncoding.ParsePineValueAsRecordTagged(pineValue);
+        var asRecordResult = ElmValueEncoding.ParsePineValueAsRecordTagged_2025(pineValue);
 
         {
             if (asRecordResult.IsErrOrNull() is { } err)
@@ -1732,7 +1732,7 @@ type alias LoadDependencyStruct =
         ElmCompilerCache elmCompilerCache,
         PineVMParseCache parseCache)
     {
-        var asRecordResult = ElmValueEncoding.ParsePineValueAsRecordTagged(pineValue);
+        var asRecordResult = ElmValueEncoding.ParsePineValueAsRecordTagged_2025(pineValue);
 
         {
             if (asRecordResult.IsErrOrNull() is { } err)
@@ -1829,7 +1829,7 @@ type alias LoadDependencyStruct =
         ElmCompilerCache elmCompilerCache,
         PineVMParseCache parseCache)
     {
-        var asRecordResult = ElmValueEncoding.ParsePineValueAsRecordTagged(pineValue);
+        var asRecordResult = ElmValueEncoding.ParsePineValueAsRecordTagged_2025(pineValue);
 
         {
             if (asRecordResult.IsErrOrNull() is { } err)
@@ -1927,7 +1927,7 @@ type alias LoadDependencyStruct =
         ElmCompilerCache elmCompilerCache,
         PineVMParseCache parseCache)
     {
-        var asRecordResult = ElmValueEncoding.ParsePineValueAsRecordTagged(pineValue);
+        var asRecordResult = ElmValueEncoding.ParsePineValueAsRecordTagged_2025(pineValue);
 
         {
             if (asRecordResult.IsErrOrNull() is { } err)
@@ -2310,7 +2310,7 @@ type alias LoadDependencyStruct =
         ElmTimeJsonAdapter.Parsed jsonAdapter)
     {
         var entryDeclRecordResult =
-            ElmValueEncoding.ParsePineValueAsRecordTagged(webServiceMainDeclValue);
+            ElmValueEncoding.ParsePineValueAsRecordTagged_2025(webServiceMainDeclValue);
 
         if (entryDeclRecordResult.IsErrOrNull() is { } recordErr)
             return "Failed to parse declaration: " + recordErr;

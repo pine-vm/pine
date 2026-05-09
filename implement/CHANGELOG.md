@@ -1,5 +1,37 @@
 # Pine Changelog - Implement
 
+## 2026-05-09 - Elm Compiler - Migrate Elm record encoding to flat `<Record_Type>` layout
+
+Switched the canonical encoding of Elm records from the legacy nested shape
+`[Elm_Record, [[ [name, value], ... ]]]` to a flat shape
+`[<Record_Type>, name0, value0, name1, value1, ...]`. Field names are still
+sorted alphabetically (ordinal). The new tag uses characters that cannot
+appear in an Elm constructor name, eliminating any chance of collision with a
+user-defined tag.
+
+Motivation: less list nesting per record means fewer `Pine_kernel.head` /
+`skip` operations per access, fewer intermediate `PineValue.List` allocations
+per record literal/update, and simpler code paths in
+`ExpressionCompiler`/`PatternCompiler`/`RecordRuntime`. Several VM
+performance-counter snapshots dropped accordingly (mostly visible as a
+reduction in `BuildListCount`).
+
+Back-compat for stored values: the decoder still recognizes the legacy
+nested shape via dedicated `_2025` entry points (`ParsePineValueAsRecordTagged_2025`,
+`ParsePineValueAsRecord_2025`, `ElmRecordAsPineValue_2025`,
+`ElmRecordTypeTagName_2025` / `ElmRecordTypeTagNameAsValue_2025`). The
+optimized `PineValueAsElmValue` fast path branches on both tag values, so
+existing serialized state remains readable without migration.
+
+Out of scope for this change:
+
++ The Elm self-hosting compiler (`elm-in-elm`) still emits the legacy layout.
+  It will likely be replaced entirely in the future, so investing in its
+  encoding now is not justified.
++ Cached/baked artifacts (the `danfishgold` JSON snapshot,
+  `ParserFastTests.cs` snapshot) were not regenerated. They keep working
+  because the legacy decoder still parses them.
+
 ## 2024-03-10 - Pine to CS Compiler - Change return type of compiled Pine expressions
 
 Changed the return type from the compiled representations of expressions from `Result<string, PineValue>` to `PineValue`.

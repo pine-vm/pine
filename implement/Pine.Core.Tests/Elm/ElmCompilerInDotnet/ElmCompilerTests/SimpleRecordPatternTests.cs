@@ -66,7 +66,7 @@ public class SimpleRecordPatternTests
         }
 
         // Helper to create a record with three fields: { alfa, beta, gamma }
-        // Record encoding: ["Elm_Record", [[["alfa", alfaValue], ["beta", betaValue], ["gamma", gammaValue]]]]
+        // Record encoding (flat layout): ["<Record_Type>", "alfa", alfaValue, "beta", betaValue, "gamma", gammaValue]
         // Fields are sorted alphabetically
         PineValue CreateRecord(int alfa, int beta, int gamma)
         {
