@@ -459,10 +459,7 @@ public class FunctionApplicationOverheadTests
                 reportEnterPrecompiledLeaf: null,
                 reportExitPrecompiledLeaf: null,
                 optimizationParametersSerial: null,
-                cacheFileStore: null,
-                reportEnteredStackFrame:
-                (in EnteredStackFrame entered) =>
-                enteredFrames.Add(entered));
+                cacheFileStore: null);
 
         var inputList =
             ElmValue.ListInstance(
@@ -472,7 +469,10 @@ public class FunctionApplicationOverheadTests
             CoreLibraryModule.CoreLibraryTestHelper.ApplyAndProfileUnary(
                 GetTestFunction("testListMapTripleAddThree"),
                 inputList,
-                vm);
+                vm,
+                reportEnteredStackFrame:
+                (in EnteredStackFrame entered) =>
+                enteredFrames.Add(entered));
 
         // 20 items processed in triples: (1+2+3), (4+5+6), (7+8+9), (10+11+12), (13+14+15), (16+17+18)
         // Last 2 items (19,20) are dropped because they don't form a complete triple.

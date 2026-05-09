@@ -292,6 +292,46 @@ public class ElmLanguageServiceTests
     }
 
     /// <summary>
+    /// Same as <see cref="ApplyWithProfiling(string, PineValue[])"/> but additionally
+    /// builds a per-evaluation <see cref="InvocationCountReport"/> by observing the
+    /// <see cref="ReportEnteredStackFrame"/> events of this single evaluation task.
+    /// This makes per-call histograms easy to aggregate across multiple
+    /// applications via
+    /// <see cref="InvocationCountReport.Aggregate(System.Collections.Generic.IEnumerable{InvocationCountReport})"/>.
+    /// </summary>
+    private static (PineValue result, EvaluationReport report, InvocationCountReport invocationCounts)
+        ApplyWithProfilingAndInvocationCounts(
+        string functionName,
+        PineValue[] arguments)
+    {
+        var env = s_env.Value;
+
+        var funcValue = GetTestFunction(env, functionName);
+
+        var functionRecord =
+            FunctionRecord.ParseFunctionRecordTagged(
+                funcValue,
+                parseCache: new PineVMParseCache())
+            .Extract(err => throw new Exception("Failed to parse function record for '" + functionName + "': " + err));
+
+        var evalArgs =
+            ElmInteractiveEnvironment.ApplyFunctionArgumentsForEvalExpr(functionRecord, arguments)
+            .Extract(err => throw new Exception("Failed to compose eval args for '" + functionName + "': " + err));
+
+        var invocationCountsBuilder = new InvocationCountReportBuilder();
+
+        var report =
+            s_vm.EvaluateExpressionOnCustomStack(
+                evalArgs.expression,
+                evalArgs.environment,
+                config: ElmCompilerTestHelper.DefaultTestEvaluationConfig,
+                reportEnteredStackFrame: invocationCountsBuilder.Add)
+            .Extract(err => throw new Exception("Failed eval for '" + functionName + "': " + err));
+
+        return (report.ReturnValue.Evaluate(), report, invocationCountsBuilder.ToReport());
+    }
+
+    /// <summary>
     /// ModuleA workspace file used by the
     /// <see cref="References_request_finds_usage_across_modules"/> scenario and
     /// the parallel intermediate-stage check
@@ -377,6 +417,7 @@ public class ElmLanguageServiceTests
     public void References_request_finds_usage_across_modules()
     {
         var reports = new List<EvaluationReport>();
+        var invocationCountReports = new List<InvocationCountReport>();
 
         // initState is a 0-argument top-level binding. Under the current
         // "Approach A1" compilation, its raw declaration value is a
@@ -384,8 +425,8 @@ public class ElmLanguageServiceTests
         // initial LanguageServiceState record value.
         var initStatePine = EvaluateZeroArgTestDeclaration("initState");
 
-        var (addModuleAResult, addModuleAReport) =
-            ApplyWithProfiling(
+        var (addModuleAResult, addModuleAReport, addModuleAInvocationCounts) =
+            ApplyWithProfilingAndInvocationCounts(
                 "addWorkspaceFile",
                 [
                 ElmValueEncoding.ElmValueAsPineValue(ElmString("src/ModuleA.elm")),
@@ -394,12 +435,13 @@ public class ElmLanguageServiceTests
                 ]);
 
         reports.Add(addModuleAReport);
+        invocationCountReports.Add(addModuleAInvocationCounts);
 
         var stateAfterModuleA =
             ((PineValue.ListValue)addModuleAResult).Items.Span[1];
 
-        var (addModuleBResult, addModuleBReport) =
-            ApplyWithProfiling(
+        var (addModuleBResult, addModuleBReport, addModuleBInvocationCounts) =
+            ApplyWithProfilingAndInvocationCounts(
                 "addWorkspaceFile",
                 [
                 ElmValueEncoding.ElmValueAsPineValue(ElmString("src/ModuleB.elm")),
@@ -408,12 +450,13 @@ public class ElmLanguageServiceTests
                 ]);
 
         reports.Add(addModuleBReport);
+        invocationCountReports.Add(addModuleBInvocationCounts);
 
         var stateAfterModuleB =
             ((PineValue.ListValue)addModuleBResult).Items.Span[1];
 
-        var (refsResult, refsReport) =
-            ApplyWithProfiling(
+        var (refsResult, refsReport, refsInvocationCounts) =
+            ApplyWithProfilingAndInvocationCounts(
                 "textDocumentReferences",
                 [
                 ElmValueEncoding.ElmValueAsPineValue(ElmString(ReferencesScenario_QueryFilePath)),
@@ -423,6 +466,7 @@ public class ElmLanguageServiceTests
                 ]);
 
         reports.Add(refsReport);
+        invocationCountReports.Add(refsInvocationCounts);
 
         // Extract response from tuple (first element)
         var responsePine =
@@ -447,6 +491,19 @@ public class ElmLanguageServiceTests
             BuildListCount: 189_895
             LoopIterationCount: 0
             InstructionCount: 820_710
+            """);
+
+        var aggregateInvocationCounts =
+            InvocationCountReport.Aggregate(invocationCountReports);
+
+        InvocationCountReportFormatting.FormatCounts(aggregateInvocationCounts).Should().Be(
+            """
+            CompiledExpressionCount: 541
+            InvocationCountTotal: 31_055
+            InvocationCountAverage: 57
+            InvocationCountPercentile10: 2
+            InvocationCountMedian: 12
+            InvocationCountPercentile90: 136
             """);
     }
 

@@ -158,6 +158,13 @@ public static class CoreLibraryTestHelper
         Core.Interpreter.IntermediateVM.PineVM vm) =>
         ApplyGenericWithProfiling(functionValue, [argument], vm);
 
+    public static (ElmValue value, PerformanceCounters report) ApplyAndProfileUnary(
+        PineValue functionValue,
+        ElmValue argument,
+        Core.Interpreter.IntermediateVM.PineVM vm,
+        ReportEnteredStackFrame? reportEnteredStackFrame) =>
+        ApplyGenericWithProfiling(functionValue, [argument], vm, reportEnteredStackFrame);
+
     public static (ElmValue value, PerformanceCounters report) ApplyAndProfileBinary(
         PineValue functionValue,
         ElmValue arg1,
@@ -168,7 +175,14 @@ public static class CoreLibraryTestHelper
     public static (ElmValue value, PerformanceCounters report) ApplyGenericWithProfiling(
         PineValue functionValue,
         ElmValue[] arguments,
-        Core.Interpreter.IntermediateVM.PineVM vm)
+        Core.Interpreter.IntermediateVM.PineVM vm) =>
+        ApplyGenericWithProfiling(functionValue, arguments, vm, reportEnteredStackFrame: null);
+
+    public static (ElmValue value, PerformanceCounters report) ApplyGenericWithProfiling(
+        PineValue functionValue,
+        ElmValue[] arguments,
+        Core.Interpreter.IntermediateVM.PineVM vm,
+        ReportEnteredStackFrame? reportEnteredStackFrame)
     {
         var pineArguments =
             new PineValue[arguments.Length];
@@ -180,7 +194,7 @@ public static class CoreLibraryTestHelper
         }
 
         var (resultPineValue, report) =
-            ApplyGenericPineWithProfiling(functionValue, pineArguments, vm);
+            ApplyGenericPineWithProfiling(functionValue, pineArguments, vm, reportEnteredStackFrame);
 
         var elmValue =
             ElmValueEncoding.PineValueAsElmValue(resultPineValue, null, null)
@@ -192,7 +206,14 @@ public static class CoreLibraryTestHelper
     public static (PineValue result, PerformanceCounters report) ApplyGenericPineWithProfiling(
         PineValue functionValue,
         IReadOnlyList<PineValue> arguments,
-        Core.Interpreter.IntermediateVM.PineVM vm)
+        Core.Interpreter.IntermediateVM.PineVM vm) =>
+        ApplyGenericPineWithProfiling(functionValue, arguments, vm, reportEnteredStackFrame: null);
+
+    public static (PineValue result, PerformanceCounters report) ApplyGenericPineWithProfiling(
+        PineValue functionValue,
+        IReadOnlyList<PineValue> arguments,
+        Core.Interpreter.IntermediateVM.PineVM vm,
+        ReportEnteredStackFrame? reportEnteredStackFrame)
     {
         if (arguments.Count is 0)
             throw new System.ArgumentException("Expected at least one argument", nameof(arguments));
@@ -212,7 +233,8 @@ public static class CoreLibraryTestHelper
                 vm.EvaluateExpressionOnCustomStack(
                     asIndependent,
                     PineValue.EmptyBlob,
-                    config: ElmCompilerTestHelper.DefaultTestEvaluationConfig)
+                    config: ElmCompilerTestHelper.DefaultTestEvaluationConfig,
+                    reportEnteredStackFrame: reportEnteredStackFrame)
                 .Extract(err => throw new System.Exception("Failed eval: " + err));
 
             currentValue = report.ReturnValue.Evaluate();

@@ -124,10 +124,7 @@ public class PineVMInstructionTraceTests
                 reportEnterPrecompiledLeaf: null,
                 reportExitPrecompiledLeaf: null,
                 optimizationParametersSerial: null,
-                cacheFileStore: null,
-                reportEnteredStackFrame:
-                (in enteredStackFrame) =>
-                enteredFrames.Add(enteredStackFrame));
+                cacheFileStore: null);
 
         var nestedEnvironment = IntegerEncoding.EncodeSignedInteger(7);
 
@@ -139,9 +136,24 @@ public class PineVMInstructionTraceTests
                 environment:
                 Expression.LiteralInstance(nestedEnvironment));
 
-        var result = vm.EvaluateExpression(expression, PineValue.EmptyBlob);
+        var evalResult =
+            vm.EvaluateExpressionOnCustomStack(
+                expression,
+                PineValue.EmptyBlob,
+                config:
+                new Core.Interpreter.IntermediateVM.PineVM.EvaluationConfig(
+                    InvocationCountLimit: null,
+                    LoopIterationCountLimit: null,
+                    StackDepthLimit: null),
+                reportEnteredStackFrame:
+                (in EnteredStackFrame enteredStackFrame) =>
+                enteredFrames.Add(enteredStackFrame));
 
-        result.IsOkOrNull().Should().Be(nestedEnvironment);
+        var result =
+            evalResult
+            .Extract(err => throw new System.Exception(err.Message));
+
+        result.ReturnValue.Evaluate().Should().Be(nestedEnvironment);
 
         // The root frame is replaced by the nested ParseAndEval frame (tail position),
         // so we see 2 frame entries total.

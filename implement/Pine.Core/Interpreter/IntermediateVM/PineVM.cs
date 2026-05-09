@@ -23,8 +23,6 @@ public class PineVM : IPineVM
 
     private readonly ReportExecutedStackInstruction? _reportExecutedStackInstruction;
 
-    private readonly ReportEnteredStackFrame? _reportEnteredStackFrame;
-
     private readonly ReportTailLoopIteration? _reportTailLoopIteration;
 
     private readonly ReportExpressionCompiled? _reportExpressionCompiled;
@@ -80,7 +78,6 @@ public class PineVM : IPineVM
         OptimizationParametersSerial? optimizationParametersSerial,
         IFileStore? cacheFileStore,
         ReportExecutedStackInstruction? reportExecutedStackInstruction = null,
-        ReportEnteredStackFrame? reportEnteredStackFrame = null,
         IReadOnlyDictionary<Expression, ExpressionCompilation>? expressionCompilationOverrides = null,
         int pathMaxLowExclusive = ExpressionCompilation.DefaultPathMaxLowExclusive,
         int pathMaxHighInclusive = ExpressionCompilation.DefaultPathMaxHighInclusive,
@@ -105,7 +102,6 @@ public class PineVM : IPineVM
                 optimizationParametersSerial: optimizationParametersSerial,
                 cacheFileStore: cacheFileStore,
                 reportExecutedStackInstruction: reportExecutedStackInstruction,
-                reportEnteredStackFrame: reportEnteredStackFrame,
                 expressionCompilationOverrides: expressionCompilationOverrides,
                 pathMaxLowExclusive: pathMaxLowExclusive,
                 pathMaxHighInclusive: pathMaxHighInclusive,
@@ -131,7 +127,6 @@ public class PineVM : IPineVM
         OptimizationParametersSerial? optimizationParametersSerial,
         IFileStore? cacheFileStore,
         ReportExecutedStackInstruction? reportExecutedStackInstruction,
-        ReportEnteredStackFrame? reportEnteredStackFrame,
         IReadOnlyDictionary<Expression, ExpressionCompilation>? expressionCompilationOverrides,
         int pathMaxLowExclusive = ExpressionCompilation.DefaultPathMaxLowExclusive,
         int pathMaxHighInclusive = ExpressionCompilation.DefaultPathMaxHighInclusive,
@@ -146,8 +141,6 @@ public class PineVM : IPineVM
         _reportFunctionApplication = reportFunctionApplication;
 
         _reportExecutedStackInstruction = reportExecutedStackInstruction;
-
-        _reportEnteredStackFrame = reportEnteredStackFrame;
 
         _reportTailLoopIteration = reportTailLoopIteration;
 
@@ -389,10 +382,18 @@ public class PineVM : IPineVM
     /// <summary>
     /// Evaluates an expression using the intermediate VM stack-frame machinery.
     /// </summary>
+    /// <param name="reportEnteredStackFrame">
+    /// Optional callback invoked once for every stack frame entered (pushed) during this
+    /// evaluation. Wiring this hook through the evaluation entry point — rather than as
+    /// a VM-instance-wide callback — keeps observers naturally scoped to a single
+    /// evaluation task, which makes it straightforward to derive per-task instrumentation
+    /// such as an <see cref="InvocationCountReport"/>.
+    /// </param>
     public Result<EvaluationError, EvaluationReport> EvaluateExpressionOnCustomStack(
         Expression rootExpression,
         PineValue rootEnvironment,
-        EvaluationConfig config)
+        EvaluationConfig config,
+        ReportEnteredStackFrame? reportEnteredStackFrame = null)
     {
         long instructionCount = 0;
         long invocationCount = 0;
@@ -1319,7 +1320,7 @@ public class PineVM : IPineVM
                             stackTraceHashes.Select(hash => Convert.ToHexStringLower(hash.Span)[..8])));
             }
 
-            if (_reportEnteredStackFrame is { } reportEnteredStackFrame &&
+            if (reportEnteredStackFrame is { } reportEnteredStackFrameLocal &&
                 newFrame.Instructions is { } frameInstructions)
             {
                 var enteredStackFrame =
@@ -1330,7 +1331,7 @@ public class PineVM : IPineVM
                         FrameExpression: newFrame.Expression,
                         FrameInput: newFrame.InputValues);
 
-                reportEnteredStackFrame(in enteredStackFrame);
+                reportEnteredStackFrameLocal(in enteredStackFrame);
             }
 
             return null;
