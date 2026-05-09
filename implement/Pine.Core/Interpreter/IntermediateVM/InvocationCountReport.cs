@@ -34,7 +34,7 @@ public readonly record struct InvocationCountReport(
     /// An empty report with no invocations recorded.
     /// </summary>
     public static InvocationCountReport Empty { get; } =
-        new(ImmutableDictionary<Expression, long>.Empty);
+        new([]);
 
     /// <summary>
     /// The number of distinct compiled expressions for which at least one
