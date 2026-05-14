@@ -35,7 +35,7 @@ jobs:
       run: |
         git config --global core.autocrlf false
 
-    - uses: actions/checkout@v5
+    - uses: actions/checkout@v6
 
     - uses: actions/setup-dotnet@v5
       with:
@@ -71,7 +71,7 @@ jobs:
         dotnet  run  --project=./implement/Pine.IntegrationTests/Pine.IntegrationTests.csproj  --  --report-xunit-trx  --diagnostic
 
     - name: Publish test results
-      uses: actions/upload-artifact@v5
+      uses: actions/upload-artifact@v7
       if: always()
       with:
         name: test-results-${{ github.sha }}-${{ matrix.environment }}
@@ -98,7 +98,7 @@ jobs:
         Get-ChildItem -Path "./dotnet-build/" -Filter "pine*" | ForEach-Object { Copy-Item -Path $_.FullName -Destination "./publish/" }
 
     - name: Publish artifacts
-      uses: actions/upload-artifact@v5
+      uses: actions/upload-artifact@v7
       with:
         name: pine-bin-${{ github.sha }}-${{ matrix.publish-runtime-id }}
         path: ./publish
@@ -107,7 +107,7 @@ jobs:
       run: dotnet publish -c Debug ./implement/pine --output ./publish-separate-assemblies
 
     - name: Publish artifacts with separate assemblies
-      uses: actions/upload-artifact@v5
+      uses: actions/upload-artifact@v7
       with:
         name: pine-separate-assemblies-${{ github.sha }}-${{ matrix.publish-runtime-id }}
         path: ./publish-separate-assemblies
