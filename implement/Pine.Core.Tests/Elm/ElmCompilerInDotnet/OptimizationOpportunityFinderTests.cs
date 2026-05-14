@@ -508,7 +508,6 @@ public class OptimizationOpportunityFinderTests
                 module Test exposing (..)
 
 
-                wrap : (Int -> Int) -> (Int -> Int)
                 wrap f =
                     \x -> f x
                 """);
@@ -603,6 +602,278 @@ public class OptimizationOpportunityFinderTests
     }
 
     [Fact]
+    public void Higher_order_parameter_reports_function_from_record_field_on_parameter()
+    {
+        // The parameter `r` itself isn't a function, but contains a
+        // function that gets applied via record-field access.
+        var rendered =
+            FindAndRender(
+                """
+                module Test exposing (..)
+
+
+                useField r x =
+                    r.go x
+                """,
+                ignoreRecordOperation: ["Test.useField"]);
+
+        rendered.Should().Be(
+            """
+            Test.useField: higher-order-parameter: r.go
+            """.Trim());
+    }
+
+    [Fact]
+    public void Higher_order_parameter_reports_function_from_nested_record_field_on_parameter()
+    {
+        var rendered =
+            FindAndRender(
+                """
+                module Test exposing (..)
+
+
+                useField r x =
+                    r.inner.go x
+                """,
+                ignoreRecordOperation: ["Test.useField"]);
+
+        rendered.Should().Be(
+            """
+            Test.useField: higher-order-parameter: r.inner.go
+            """.Trim());
+    }
+
+    [Fact]
+    public void Higher_order_parameter_reports_function_extracted_by_tag_pattern_in_parameter()
+    {
+        // `(Wrap inner)` only type-checks because `Wrap` is the single
+        // tag of `Wrap a`. The bound name `inner` is then applied, so
+        // the higher-order opportunity is reported.
+        var rendered =
+            FindAndRender(
+                """
+                module Test exposing (..)
+
+
+                type Wrap a = Wrap a
+
+
+                useWrap (Wrap inner) x =
+                    inner x
+                """,
+                ignoreRootLevelChoiceTagWrapper: ["Test.useWrap"]);
+
+        rendered.Should().Be(
+            """
+            Test.useWrap: higher-order-parameter: inner
+            """.Trim());
+    }
+
+    [Fact]
+    public void Higher_order_parameter_reports_function_extracted_by_tag_pattern_in_let_destructuring()
+    {
+        // Destructuring `p` in a `let` block via `(Wrap inner) = p` is
+        // only well-typed when `Wrap` is the single tag of its type;
+        // the resulting `inner` then participates as a higher-order
+        // application head.
+        var rendered =
+            FindAndRender(
+                """
+                module Test exposing (..)
+
+
+                type Wrap a = Wrap a
+
+
+                useWrap p x =
+                    let
+                        (Wrap inner) = p
+                    in
+                    inner x
+                """,
+                ignoreRootLevelChoiceTagWrapper: ["Test.useWrap"]);
+
+        rendered.Should().Be(
+            """
+            Test.useWrap: higher-order-parameter: inner
+            """.Trim());
+    }
+
+    [Fact]
+    public void Higher_order_parameter_reports_function_extracted_by_tag_pattern_in_case_of()
+    {
+        // The user-supplied example: `alfa` is a multi-tag value; in
+        // the `Delta delta -> delta beta` branch, the bound `delta` is
+        // applied. No type annotation present.
+        var rendered =
+            FindAndRender(
+                """
+                module Test exposing (..)
+
+
+                type Choice = Other | Delta (Int -> Int)
+
+
+                fun alfa beta =
+                    case alfa of
+                        Other -> 41
+
+                        Delta delta -> delta beta
+                """);
+
+        rendered.Should().Be(
+            """
+            Test.fun: higher-order-parameter: delta
+            """.Trim());
+    }
+
+    [Fact]
+    public void Higher_order_parameter_reports_each_function_extracted_by_multi_arg_tag_pattern_in_case_of()
+    {
+        // A multi-argument constructor binds multiple function-typed
+        // names; each one that is applied is reported separately.
+        var rendered =
+            FindAndRender(
+                """
+                module Test exposing (..)
+
+
+                type Choice = Pair (Int -> Int) (Int -> Int)
+
+
+                fun alfa beta =
+                    case alfa of
+                        Pair p1 p2 -> p1 (p2 beta)
+                """);
+
+        rendered.Should().Be(
+            """
+            Test.fun: higher-order-parameter: p1
+            Test.fun: higher-order-parameter: p2
+            """.Trim());
+    }
+
+    [Fact]
+    public void Higher_order_parameter_reports_functions_extracted_by_tuple_parameter_pattern()
+    {
+        var rendered =
+            FindAndRender(
+                """
+                module Test exposing (..)
+
+
+                useTuple (f, g) x =
+                    f (g x)
+                """);
+
+        rendered.Should().Be(
+            """
+            Test.useTuple: higher-order-parameter: f
+            Test.useTuple: higher-order-parameter: g
+            """.Trim());
+    }
+
+    [Fact]
+    public void Higher_order_parameter_reports_function_extracted_by_record_parameter_pattern()
+    {
+        // A record pattern `{go}` binds the field name as a local; if
+        // the bound `go` is then applied, the opportunity is reported.
+        var rendered =
+            FindAndRender(
+                """
+                module Test exposing (..)
+
+
+                useRecord {go} x =
+                    go x
+                """);
+
+        rendered.Should().Be(
+            """
+            Test.useRecord: higher-order-parameter: go
+            """.Trim());
+    }
+
+    [Fact]
+    public void Higher_order_parameter_reports_function_extracted_by_as_over_named_parameter_pattern()
+    {
+        // The `as` pattern binds the alias `whole`; the inner named
+        // pattern still binds `inner`. Only `inner` is applied here,
+        // so only `inner` is reported as a higher-order parameter.
+        var rendered =
+            FindAndRender(
+                """
+                module Test exposing (..)
+
+
+                type Wrap a = Wrap a
+
+
+                useAs ((Wrap inner) as whole) x =
+                    inner x
+                """,
+                ignoreRootLevelChoiceTagWrapper: ["Test.useAs"]);
+
+        rendered.Should().Be(
+            """
+            Test.useAs: higher-order-parameter: inner
+            """.Trim());
+    }
+
+    [Fact]
+    public void Higher_order_parameter_does_not_report_for_pattern_extracted_name_when_never_applied()
+    {
+        // `inner` is bound by destructuring but never appears as the
+        // head of an application — it is only returned. No
+        // higher-order-parameter finding should be emitted.
+        var rendered =
+            FindAndRender(
+                """
+                module Test exposing (..)
+
+
+                type Wrap a = Wrap a
+
+
+                justExtract (Wrap inner) =
+                    inner
+                """,
+                ignoreRootLevelChoiceTagWrapper: ["Test.justExtract"]);
+
+        rendered.Should().Be("");
+    }
+
+    [Fact]
+    public void Higher_order_parameter_reports_function_extracted_in_let_destructuring_inside_let_body()
+    {
+        // The let-bound destructured `inner` is in scope only within
+        // the `in` body; the application happens there. Verifies the
+        // scoping extension is applied to the body and not the RHS.
+        var rendered =
+            FindAndRender(
+                """
+                module Test exposing (..)
+
+
+                type Wrap a = Wrap a
+
+
+                useLater p x =
+                    let
+                        (Wrap inner) =
+                            p
+                    in
+                    inner x
+                """,
+                ignoreRootLevelChoiceTagWrapper: ["Test.useLater"]);
+
+        rendered.Should().Be(
+            """
+            Test.useLater: higher-order-parameter: inner
+            """.Trim());
+    }
+
+    [Fact]
     public void RenderOpportunitiesByCategory_groups_findings_under_category_headers()
     {
         var opportunities =
@@ -668,7 +939,7 @@ public class OptimizationOpportunityFinderTests
     public void RenderOpportunitiesByCategory_returns_empty_for_no_findings()
     {
         OptimizationOpportunityFinder
-            .RenderOpportunitiesByCategory(System.Array.Empty<Opportunity>())
+            .RenderOpportunitiesByCategory([])
             .Should().Be(string.Empty);
     }
 
@@ -704,6 +975,424 @@ public class OptimizationOpportunityFinderTests
             """.Trim());
     }
 
+    [Fact]
+    public void RootLevelChoiceTagWrapper_detected_via_signature_when_pattern_is_bare_var()
+    {
+        // Evidence source: type annotation alone. The parameter pattern
+        // is a bare variable so it carries no destructuring evidence,
+        // and the body simply returns the parameter so there is no
+        // wrap-aware return either.
+        var rendered =
+            FindAndRender(
+                """
+                module Test exposing (..)
+
+
+                type Wrap a = Wrap a
+
+
+                identityWrap : Wrap Int -> Wrap Int
+                identityWrap value =
+                    value
+                """);
+
+        rendered.Should().Be(
+            """
+            Test.identityWrap: root-level-choice-tag-wrapper: parameter[0] value: Test.Wrap -> Basics.Int
+            Test.identityWrap: root-level-choice-tag-wrapper: return: Test.Wrap -> Basics.Int
+            """.Trim());
+    }
+
+    [Fact]
+    public void RootLevelChoiceTagWrapper_detected_via_parameter_pattern_destructuring()
+    {
+        // Evidence source: the parameter pattern destructures the
+        // single-tag constructor. There is no signature on the
+        // function, so the report falls back to the constructor's
+        // own argument types (no generic substitution available).
+        var rendered =
+            FindAndRender(
+                """
+                module Test exposing (..)
+
+
+                type Wrap a = Wrap a
+
+
+                unwrap (Wrap inner) =
+                    inner
+                """);
+
+        rendered.Should().Be(
+            """
+            Test.unwrap: root-level-choice-tag-wrapper: parameter[0] inner: Test.Wrap -> a
+            """.Trim());
+    }
+
+    [Fact]
+    public void RootLevelChoiceTagWrapper_detected_via_let_block_destructuring_of_parameter()
+    {
+        // Evidence source: a top-level let block destructures the
+        // bare parameter through a single-tag constructor pattern.
+        var rendered =
+            FindAndRender(
+                """
+                module Test exposing (..)
+
+
+                type Wrap a = Wrap a
+
+
+                useWrap p =
+                    let
+                        (Wrap inner) = p
+                    in
+                    inner
+                """);
+
+        rendered.Should().Be(
+            """
+            Test.useWrap: root-level-choice-tag-wrapper: parameter[0] p: Test.Wrap -> a
+            """.Trim());
+    }
+
+    [Fact]
+    public void RootLevelChoiceTagWrapper_detected_when_all_return_leaves_use_the_same_constructor()
+    {
+        // Evidence source: every leaf of the body's return position
+        // wraps with the same single-tag constructor. The function
+        // has no signature; the parameter is unrelated to any wrap.
+        var rendered =
+            FindAndRender(
+                """
+                module Test exposing (..)
+
+
+                type Box a = Box a
+
+
+                choose flag =
+                    if flag then
+                        Box 1
+
+                    else
+                        Box 2
+                """);
+
+        rendered.Should().Be(
+            """
+            Test.choose: root-level-choice-tag-wrapper: return: Test.Box -> a
+            """.Trim());
+    }
+
+    [Fact]
+    public void RootLevelChoiceTagWrapper_detected_via_return_type_annotation()
+    {
+        // Evidence source: the function's signature names a single-tag
+        // type as the return type. The body builds the wrap inside a
+        // let block; the parameter is a bare Int that does not match
+        // a single-tag type.
+        var rendered =
+            FindAndRender(
+                """
+                module Test exposing (..)
+
+
+                type Box a = Box a
+
+
+                wrapInt : Int -> Box Int
+                wrapInt n =
+                    let
+                        wrapped = Box n
+                    in
+                    wrapped
+                """);
+
+        rendered.Should().Be(
+            """
+            Test.wrapInt: root-level-choice-tag-wrapper: return: Test.Box -> Basics.Int
+            """.Trim());
+    }
+
+    [Fact]
+    public void RootLevelChoiceTagWrapper_detects_parameter_and_return_in_canonical_parser_example()
+    {
+        // The user-supplied example: a Parser-shaped wrapper over a
+        // function-typed inner. Both the parameter and the return
+        // root types are reported and rendered with concrete generic
+        // substitution applied.
+        var rendered =
+            FindAndRender(
+                """
+                module Test exposing (..)
+
+
+                type State = State Int
+
+
+                type PStep a = PStep a
+
+
+                type Parser a = Parser (State -> PStep a)
+
+
+                skipWhileWhitespaceFollowedBy : Parser next -> Parser next
+                skipWhileWhitespaceFollowedBy (Parser parseNext) =
+                    Parser
+                        (\s0 ->
+                            parseNext s0
+                        )
+                """);
+
+        rendered.Should().Be(
+            """
+            Test.skipWhileWhitespaceFollowedBy: higher-order-parameter: parseNext
+            Test.skipWhileWhitespaceFollowedBy: root-level-choice-tag-wrapper: parameter[0] parseNext: Test.Parser -> (Test.State -> Test.PStep next)
+            Test.skipWhileWhitespaceFollowedBy: root-level-choice-tag-wrapper: return: Test.Parser -> (Test.State -> Test.PStep next)
+            """.Trim());
+    }
+
+    [Fact]
+    public void RootLevelChoiceTagWrapper_renders_two_argument_constructor_as_pair_tuple()
+    {
+        // A single-tag constructor with two arguments is rendered as
+        // a 2-tuple of the substituted argument types.
+        var rendered =
+            FindAndRender(
+                """
+                module Test exposing (..)
+
+
+                type Pair a b = Pair a b
+
+
+                mk : Pair Int String -> Pair Int String
+                mk x =
+                    x
+                """);
+
+        rendered.Should().Be(
+            """
+            Test.mk: root-level-choice-tag-wrapper: parameter[0] x: Test.Pair -> (Basics.Int, String.String)
+            Test.mk: root-level-choice-tag-wrapper: return: Test.Pair -> (Basics.Int, String.String)
+            """.Trim());
+    }
+
+    [Fact]
+    public void RootLevelChoiceTagWrapper_renders_three_argument_constructor_as_triple_tuple()
+    {
+        // A single-tag constructor with three arguments is rendered
+        // as a 3-tuple. Tuples of arity > 3 are also permissible at
+        // this stage of the compilation.
+        var rendered =
+            FindAndRender(
+                """
+                module Test exposing (..)
+
+
+                type Triple a b c = Triple a b c
+
+
+                id3 : Triple Int String Int -> Triple Int String Int
+                id3 x =
+                    x
+                """);
+
+        rendered.Should().Be(
+            """
+            Test.id3: root-level-choice-tag-wrapper: parameter[0] x: Test.Triple -> (Basics.Int, String.String, Basics.Int)
+            Test.id3: root-level-choice-tag-wrapper: return: Test.Triple -> (Basics.Int, String.String, Basics.Int)
+            """.Trim());
+    }
+
+    [Fact]
+    public void RootLevelChoiceTagWrapper_does_not_report_for_multi_constructor_type()
+    {
+        // A custom type with more than one constructor is intentionally
+        // excluded from the single-tag registry; no opportunity is
+        // reported even though the parameter and return both reference
+        // the type at their root.
+        var rendered =
+            FindAndRender(
+                """
+                module Test exposing (..)
+
+
+                type ChoiceOfTwo a = First a | Second a
+
+
+                idChoice : ChoiceOfTwo Int -> ChoiceOfTwo Int
+                idChoice x =
+                    x
+                """);
+
+        rendered.Should().Be("");
+    }
+
+    [Fact]
+    public void RootLevelChoiceTagWrapper_does_not_report_for_nested_wrapping()
+    {
+        // The single-tag constructor appears only inside another type
+        // constructor (`List`). Root-level scope deliberately excludes
+        // nested wrappings.
+        var rendered =
+            FindAndRender(
+                """
+                module Test exposing (..)
+
+
+                type Wrap a = Wrap a
+
+
+                onList : List (Wrap Int) -> List (Wrap Int)
+                onList xs =
+                    xs
+                """);
+
+        rendered.Should().Be("");
+    }
+
+    [Fact]
+    public void RootLevelChoiceTagWrapper_does_not_report_when_return_leaves_use_different_constructors()
+    {
+        // Two different single-tag constructors at distinct return
+        // leaves prevent return-value detection from firing — there is
+        // no single agreed-upon constructor.
+        var rendered =
+            FindAndRender(
+                """
+                module Test exposing (..)
+
+
+                type BoxA a = BoxA a
+
+
+                type BoxB a = BoxB a
+
+
+                pickByFlag flag =
+                    if flag then
+                        BoxA 1
+
+                    else
+                        BoxB 2
+                """);
+
+        rendered.Should().Be("");
+    }
+
+    [Fact]
+    public void RootLevelChoiceTagWrapper_can_be_whitelisted_per_decl_prefix()
+    {
+        // The ignore list suppresses findings for matching containing
+        // declarations. Other categories continue to fire normally
+        // (here there are no other categories to report).
+        var rendered =
+            FindAndRender(
+                """
+                module Test exposing (..)
+
+
+                type Wrap a = Wrap a
+
+
+                identityWrap : Wrap Int -> Wrap Int
+                identityWrap value =
+                    value
+                """,
+                ignoreRootLevelChoiceTagWrapper: ["Test.identityWrap"]);
+
+        rendered.Should().Be("");
+    }
+
+    [Fact]
+    public void TryRenderTransformedSignature_unwraps_parameter_and_return_root_types()
+    {
+        // The transformation utility produces a function-arrow chain
+        // in which every root-level wrapping has been replaced with
+        // the constructor's unwrapped (substituted) inner type — a
+        // function arrow on the parameter side gets parenthesised so
+        // the rendered form is unambiguous.
+        var declarations = ParseAndCanonicalize(
+            """
+            module Test exposing (..)
+
+
+            type State = State Int
+
+
+            type PStep a = PStep a
+
+
+            type Parser a = Parser (State -> PStep a)
+
+
+            skipWhileWhitespaceFollowedBy : Parser next -> Parser next
+            skipWhileWhitespaceFollowedBy (Parser parseNext) =
+                Parser
+                    (\s0 ->
+                        parseNext s0
+                    )
+            """);
+
+        var transformed =
+            OptimizationOpportunityFinder.TryRenderTransformedSignature(
+                declarations,
+                new DeclQualifiedName(["Test"], "skipWhileWhitespaceFollowedBy"));
+
+        transformed.Should().Be(
+            "(Test.State -> Test.PStep next) -> Test.State -> Test.PStep next");
+    }
+
+    [Fact]
+    public void TryRenderTransformedSignature_unwraps_two_argument_constructor_to_tuple()
+    {
+        var declarations = ParseAndCanonicalize(
+            """
+            module Test exposing (..)
+
+
+            type Pair a b = Pair a b
+
+
+            mk : Pair Int String -> Pair Int String
+            mk x =
+                x
+            """);
+
+        var transformed =
+            OptimizationOpportunityFinder.TryRenderTransformedSignature(
+                declarations,
+                new DeclQualifiedName(["Test"], "mk"));
+
+        transformed.Should().Be(
+            "(Basics.Int, String.String) -> (Basics.Int, String.String)");
+    }
+
+    [Fact]
+    public void TryRenderTransformedSignature_returns_null_when_function_has_no_signature()
+    {
+        var declarations = ParseAndCanonicalize(
+            """
+            module Test exposing (..)
+
+
+            type Wrap a = Wrap a
+
+
+            unwrap (Wrap inner) =
+                inner
+            """);
+
+        var transformed =
+            OptimizationOpportunityFinder.TryRenderTransformedSignature(
+                declarations,
+                new DeclQualifiedName(["Test"], "unwrap"));
+
+        transformed.Should().BeNull();
+    }
+
     private static string FindAndRender(
         string elmModuleText,
         ImmutableHashSet<string>? ignoreRecordOperation = null,
@@ -712,7 +1401,8 @@ public class OptimizationOpportunityFinderTests
         ImmutableHashSet<string>? ignoreBasicsEq = null,
         ImmutableHashSet<string>? ignoreBasicsAppend = null,
         ImmutableHashSet<string>? ignorePartialApplication = null,
-        ImmutableHashSet<string>? ignoreHigherOrderParameter = null)
+        ImmutableHashSet<string>? ignoreHigherOrderParameter = null,
+        ImmutableHashSet<string>? ignoreRootLevelChoiceTagWrapper = null)
     {
         var opportunities =
             OptimizationOpportunityFinder.FindOptimizationOpportunities(
@@ -723,7 +1413,8 @@ public class OptimizationOpportunityFinderTests
                 ignoreBasicsEq,
                 ignoreBasicsAppend,
                 ignorePartialApplication,
-                ignoreHigherOrderParameter);
+                ignoreHigherOrderParameter,
+                ignoreRootLevelChoiceTagWrapper);
 
         return OptimizationOpportunityFinder.RenderOpportunities(opportunities);
     }

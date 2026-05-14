@@ -8,6 +8,7 @@ using System.Text;
 
 using SyntaxTypes = Pine.Core.Elm.ElmSyntax.Stil4mElmSyntax7;
 using SyntaxModel = Pine.Core.Elm.ElmSyntax.SyntaxModel;
+using ModuleName = System.Collections.Generic.IReadOnlyList<string>;
 
 namespace Pine.Core.Tests.Elm.ElmCompilerInDotnet;
 
@@ -74,6 +75,35 @@ public enum OpportunityCategory
     /// argument so no application on a function-typed parameter remains.
     /// </summary>
     HigherOrderParameter,
+
+    /// <summary>
+    /// A root-level wrapping of either a top-level function parameter or
+    /// the top-level function return value in a single-tag (one-constructor)
+    /// custom type. The lowering stage is expected to strip the wrapping
+    /// constructor at the root, replacing the wrapped type with the
+    /// constructor's argument type (or a tuple of the constructor's
+    /// argument types when there is more than one).
+    /// <para>
+    /// "Root" means strictly at the top of a parameter type or the
+    /// outermost return type; nested occurrences inside other type
+    /// constructors are intentionally not reported because removing
+    /// them would require additional machinery (specialized type
+    /// declarations, mapping helpers) we do not pursue at this stage.
+    /// </para>
+    /// <para>
+    /// Description format:
+    /// <c>"parameter[&lt;i&gt;] &lt;name&gt;: &lt;CtorFullName&gt; -&gt; &lt;UnwrappedType&gt;"</c>
+    /// for parameters and
+    /// <c>"return: &lt;CtorFullName&gt; -&gt; &lt;UnwrappedType&gt;"</c>
+    /// for the return value. <c>UnwrappedType</c> is the constructor's
+    /// single argument type for 1-arg constructors, or a tuple
+    /// <c>(T1, T2, ...)</c> of argument types for N-arg constructors.
+    /// Generic type variables in the constructor's argument types are
+    /// substituted with the actual type arguments of the wrapped type
+    /// when the evidence source is a type annotation.
+    /// </para>
+    /// </summary>
+    RootLevelChoiceTagWrapper,
 }
 
 /// <summary>
@@ -98,6 +128,7 @@ public static class OpportunityCategoryFormatting
             OpportunityCategory.BasicsAppend => "Basics.append",
             OpportunityCategory.PartialApplication => "partial-application",
             OpportunityCategory.HigherOrderParameter => "higher-order-parameter",
+            OpportunityCategory.RootLevelChoiceTagWrapper => "root-level-choice-tag-wrapper",
 
             _ =>
             throw new System.NotImplementedException(
@@ -241,7 +272,9 @@ public static class OptimizationOpportunityFinder
         ImmutableHashSet<string>? ignoreBasicsEq = null,
         ImmutableHashSet<string>? ignoreBasicsAppend = null,
         ImmutableHashSet<string>? ignorePartialApplication = null,
-        ImmutableHashSet<string>? ignoreHigherOrderParameter = null)
+        ImmutableHashSet<string>? ignoreHigherOrderParameter = null,
+        ImmutableHashSet<string>? ignoreRootLevelChoiceTagWrapper = null,
+        IReadOnlyCollection<DeclQualifiedName>? restrictToReachableFromEntryPoints = null)
     {
         var whitelistByCategory =
             new Dictionary<OpportunityCategory, ImmutableHashSet<string>>
@@ -254,6 +287,7 @@ public static class OptimizationOpportunityFinder
                 [OpportunityCategory.BasicsAppend] = ignoreBasicsAppend ?? [],
                 [OpportunityCategory.PartialApplication] = ignorePartialApplication ?? [],
                 [OpportunityCategory.HigherOrderParameter] = ignoreHigherOrderParameter ?? [],
+                [OpportunityCategory.RootLevelChoiceTagWrapper] = ignoreRootLevelChoiceTagWrapper ?? [],
             };
 
         // Build the top-level arity map once. Only function declarations
@@ -270,11 +304,43 @@ public static class OptimizationOpportunityFinder
             }
         }
 
+        // Build the single-tag custom-type registry once. Indexed by both
+        // the type's qualified name and the (sole) constructor's qualified
+        // name so detection sites can look up via either direction. Only
+        // custom types that have exactly one constructor are recorded
+        // here — multi-constructor types are intentionally absent.
+        var singleTagRegistry = BuildSingleTagRegistry(declarations);
+
+        // When a reachability filter is supplied, compute the transitive
+        // closure of declarations reachable from the entry points by
+        // following every `FunctionOrValue` reference and every
+        // partial-application head. The walk is purely syntactic — it
+        // does not attempt to detect dead branches eliminated by the
+        // optimizer. Declarations not in the closure are skipped entirely
+        // so monomorphization-style follow-up tests can assert
+        // "no remaining HO parameters / partial applications **reachable
+        // from this entry point**", which is the property D2 is expected
+        // to drive to zero even when generic originals (e.g. publicly
+        // exposed `Maybe.map`) survive in the dictionary because of
+        // unrelated callers.
+        IReadOnlySet<DeclQualifiedName>? reachableSet = null;
+
+        if (restrictToReachableFromEntryPoints is not null)
+        {
+            reachableSet =
+                ComputeReachableDeclarations(
+                    declarations,
+                    restrictToReachableFromEntryPoints);
+        }
+
         var resultBuilder = ImmutableHashSet.CreateBuilder<Opportunity>();
 
         foreach (var (qualifiedName, declaration) in declarations)
         {
             if (declaration is not SyntaxTypes.Declaration.FunctionDeclaration funcDecl)
+                continue;
+
+            if (reachableSet is not null && !reachableSet.Contains(qualifiedName))
                 continue;
 
             // The top-level function's own parameters introduce names that
@@ -302,9 +368,253 @@ public static class OptimizationOpportunityFinder
                 paramOwnerDescription: null,
                 whitelistByCategory,
                 resultBuilder);
+
+            // Root-level single-tag-wrapper detection for top-level
+            // parameters and the outermost return value of the function.
+            CollectRootLevelChoiceTagWrapperFindings(
+                qualifiedName,
+                funcDecl.Function,
+                singleTagRegistry,
+                whitelistByCategory,
+                resultBuilder);
         }
 
         return resultBuilder.ToImmutable();
+    }
+
+    /// <summary>
+    /// Computes the set of <see cref="DeclQualifiedName"/> values reachable
+    /// (by syntactic <see cref="SyntaxTypes.Expression.FunctionOrValue"/>
+    /// reference) from any entry point in <paramref name="entryPoints"/>.
+    /// Used by the
+    /// <c>restrictToReachableFromEntryPoints</c> overload of
+    /// <see cref="FindOptimizationOpportunities(IReadOnlyDictionary{DeclQualifiedName, SyntaxTypes.Declaration},
+    /// ImmutableHashSet{string}?, ImmutableHashSet{string}?,
+    /// ImmutableHashSet{string}?, ImmutableHashSet{string}?,
+    /// ImmutableHashSet{string}?, ImmutableHashSet{string}?,
+    /// ImmutableHashSet{string}?, IReadOnlyCollection{DeclQualifiedName}?)"/>.
+    /// <para>
+    /// Walks bodies, types, and let-declarations. References to
+    /// declarations that are not in <paramref name="declarations"/> (e.g.
+    /// natively-implemented <c>Basics</c>) are silently ignored.
+    /// </para>
+    /// </summary>
+    public static IReadOnlySet<DeclQualifiedName> ComputeReachableDeclarations(
+        IReadOnlyDictionary<DeclQualifiedName, SyntaxTypes.Declaration> declarations,
+        IReadOnlyCollection<DeclQualifiedName> entryPoints)
+    {
+        // Index declarations by simple name within each module so an
+        // unqualified `FunctionOrValue` (introduced by canonicalization
+        // for in-module references) can be resolved against the module
+        // it appears in.
+        var byModuleAndName =
+            new Dictionary<(string moduleKey, string declName), DeclQualifiedName>();
+
+        foreach (var key in declarations.Keys)
+        {
+            var moduleKey = string.Join(".", key.Namespaces);
+            byModuleAndName[(moduleKey, key.DeclName)] = key;
+        }
+
+        var reachable = new HashSet<DeclQualifiedName>();
+        var queue = new Queue<DeclQualifiedName>();
+
+        foreach (var entry in entryPoints)
+        {
+            if (declarations.ContainsKey(entry) && reachable.Add(entry))
+            {
+                queue.Enqueue(entry);
+            }
+        }
+
+        while (queue.Count > 0)
+        {
+            var current = queue.Dequeue();
+
+            if (!declarations.TryGetValue(current, out var decl))
+                continue;
+
+            if (decl is not SyntaxTypes.Declaration.FunctionDeclaration funcDecl)
+                continue;
+
+            var ownModuleKey = string.Join(".", current.Namespaces);
+
+            CollectReferencesFromExpression(
+                funcDecl.Function.Declaration.Value.Expression.Value,
+                ownModuleKey,
+                byModuleAndName,
+                reference =>
+                {
+                    if (reachable.Add(reference))
+                    {
+                        queue.Enqueue(reference);
+                    }
+                });
+        }
+
+        return reachable;
+    }
+
+    private static void CollectReferencesFromExpression(
+        SyntaxTypes.Expression expression,
+        string ownModuleKey,
+        IReadOnlyDictionary<(string moduleKey, string declName), DeclQualifiedName> byModuleAndName,
+        System.Action<DeclQualifiedName> emit)
+    {
+        switch (expression)
+        {
+            case SyntaxTypes.Expression.FunctionOrValue funcOrValue:
+                {
+                    string moduleKey;
+
+                    if (funcOrValue.ModuleName.Count is 0)
+                    {
+                        moduleKey = ownModuleKey;
+                    }
+                    else
+                    {
+                        moduleKey = string.Join(".", funcOrValue.ModuleName);
+                    }
+
+                    if (byModuleAndName.TryGetValue((moduleKey, funcOrValue.Name), out var resolved))
+                    {
+                        emit(resolved);
+                    }
+                }
+
+                break;
+
+            case SyntaxTypes.Expression.Application app:
+                foreach (var arg in app.Arguments)
+                    CollectReferencesFromExpression(arg.Value, ownModuleKey, byModuleAndName, emit);
+
+                break;
+
+            case SyntaxTypes.Expression.OperatorApplication opApp:
+                CollectReferencesFromExpression(opApp.Left.Value, ownModuleKey, byModuleAndName, emit);
+                CollectReferencesFromExpression(opApp.Right.Value, ownModuleKey, byModuleAndName, emit);
+                break;
+
+            case SyntaxTypes.Expression.LetExpression letExpr:
+                foreach (var declNode in letExpr.Value.Declarations)
+                {
+                    switch (declNode.Value)
+                    {
+                        case SyntaxTypes.Expression.LetDeclaration.LetFunction letFunc:
+                            CollectReferencesFromExpression(
+                                letFunc.Function.Declaration.Value.Expression.Value,
+                                ownModuleKey,
+                                byModuleAndName,
+                                emit);
+
+                            break;
+
+                        case SyntaxTypes.Expression.LetDeclaration.LetDestructuring letDestr:
+                            CollectReferencesFromExpression(
+                                letDestr.Expression.Value,
+                                ownModuleKey,
+                                byModuleAndName,
+                                emit);
+
+                            break;
+
+                        default:
+                            throw new System.NotImplementedException(
+                                "CollectReferencesFromExpression does not handle let declaration variant: " +
+                                declNode.Value.GetType().Name);
+                    }
+                }
+
+                CollectReferencesFromExpression(
+                    letExpr.Value.Expression.Value,
+                    ownModuleKey,
+                    byModuleAndName,
+                    emit);
+
+                break;
+
+            case SyntaxTypes.Expression.LambdaExpression lambda:
+                CollectReferencesFromExpression(
+                    lambda.Lambda.Expression.Value,
+                    ownModuleKey,
+                    byModuleAndName,
+                    emit);
+
+                break;
+
+            case SyntaxTypes.Expression.ParenthesizedExpression paren:
+                CollectReferencesFromExpression(paren.Expression.Value, ownModuleKey, byModuleAndName, emit);
+                break;
+
+            case SyntaxTypes.Expression.IfBlock ifBlock:
+                CollectReferencesFromExpression(ifBlock.Condition.Value, ownModuleKey, byModuleAndName, emit);
+                CollectReferencesFromExpression(ifBlock.ThenBlock.Value, ownModuleKey, byModuleAndName, emit);
+                CollectReferencesFromExpression(ifBlock.ElseBlock.Value, ownModuleKey, byModuleAndName, emit);
+                break;
+
+            case SyntaxTypes.Expression.CaseExpression caseExpr:
+                CollectReferencesFromExpression(
+                    caseExpr.CaseBlock.Expression.Value,
+                    ownModuleKey,
+                    byModuleAndName,
+                    emit);
+
+                foreach (var caseEntry in caseExpr.CaseBlock.Cases)
+                    CollectReferencesFromExpression(caseEntry.Expression.Value, ownModuleKey, byModuleAndName, emit);
+
+                break;
+
+            case SyntaxTypes.Expression.ListExpr listExpr:
+                foreach (var element in listExpr.Elements)
+                    CollectReferencesFromExpression(element.Value, ownModuleKey, byModuleAndName, emit);
+
+                break;
+
+            case SyntaxTypes.Expression.TupledExpression tupled:
+                foreach (var element in tupled.Elements)
+                    CollectReferencesFromExpression(element.Value, ownModuleKey, byModuleAndName, emit);
+
+                break;
+
+            case SyntaxTypes.Expression.RecordExpr recordExpr:
+                foreach (var field in recordExpr.Fields)
+                    CollectReferencesFromExpression(field.Value.valueExpr.Value, ownModuleKey, byModuleAndName, emit);
+
+                break;
+
+            case SyntaxTypes.Expression.RecordUpdateExpression recordUpdate:
+                foreach (var field in recordUpdate.Fields)
+                    CollectReferencesFromExpression(field.Value.valueExpr.Value, ownModuleKey, byModuleAndName, emit);
+
+                break;
+
+            case SyntaxTypes.Expression.RecordAccess recordAccess:
+                CollectReferencesFromExpression(recordAccess.Record.Value, ownModuleKey, byModuleAndName, emit);
+                break;
+
+            case SyntaxTypes.Expression.Negation negation:
+                CollectReferencesFromExpression(negation.Expression.Value, ownModuleKey, byModuleAndName, emit);
+                break;
+
+            // Leaf variants without nested Expression children — and
+            // RecordAccessFunction / PrefixOperator which do not bind to
+            // a top-level declaration we can resolve syntactically.
+            case SyntaxTypes.Expression.RecordAccessFunction:
+            case SyntaxTypes.Expression.PrefixOperator:
+            case SyntaxTypes.Expression.UnitExpr:
+            case SyntaxTypes.Expression.Literal:
+            case SyntaxTypes.Expression.CharLiteral:
+            case SyntaxTypes.Expression.Integer:
+            case SyntaxTypes.Expression.Hex:
+            case SyntaxTypes.Expression.Floatable:
+            case SyntaxTypes.Expression.GLSLExpression:
+                break;
+
+            default:
+                throw new System.NotImplementedException(
+                    "CollectReferencesFromExpression does not handle expression variant: " +
+                    expression.GetType().Name);
+        }
     }
 
     /// <summary>
@@ -325,7 +635,9 @@ public static class OptimizationOpportunityFinder
         ImmutableHashSet<string>? ignoreBasicsEq = null,
         ImmutableHashSet<string>? ignoreBasicsAppend = null,
         ImmutableHashSet<string>? ignorePartialApplication = null,
-        ImmutableHashSet<string>? ignoreHigherOrderParameter = null)
+        ImmutableHashSet<string>? ignoreHigherOrderParameter = null,
+        ImmutableHashSet<string>? ignoreRootLevelChoiceTagWrapper = null,
+        IReadOnlyCollection<DeclQualifiedName>? restrictToReachableFromEntryPoints = null)
     {
         var declarations = ParseAndCanonicalizeToFlatDict(elmModulesTexts);
 
@@ -338,7 +650,9 @@ public static class OptimizationOpportunityFinder
                 ignoreBasicsEq,
                 ignoreBasicsAppend,
                 ignorePartialApplication,
-                ignoreHigherOrderParameter);
+                ignoreHigherOrderParameter,
+                ignoreRootLevelChoiceTagWrapper,
+                restrictToReachableFromEntryPoints);
     }
 
     /// <summary>
@@ -988,6 +1302,12 @@ public static class OptimizationOpportunityFinder
                     {
                         found.Add(funcOrValue.Name);
                     }
+                    else if (head is SyntaxTypes.Expression.RecordAccess recordAccessHead &&
+                             TryRenderRecordAccessChainRootedAtParam(
+                                 recordAccessHead, paramNames) is { } chainPath)
+                    {
+                        found.Add(chainPath);
+                    }
                 }
 
                 foreach (var arg in app.Arguments)
@@ -1001,6 +1321,14 @@ public static class OptimizationOpportunityFinder
                 break;
 
             case SyntaxTypes.Expression.LetExpression letExpr:
+
+                // Names bound by `let` destructuring patterns extend the
+                // visible-parameter set for the let body — when one of these
+                // bound names is itself function-typed and gets applied
+                // somewhere in the body, that points to the same kind of
+                // higher-order opportunity as a directly-named parameter.
+                var letDestructuredNames = ImmutableHashSet.CreateBuilder<string>();
+
                 foreach (var declNode in letExpr.Value.Declarations)
                 {
                     switch (declNode.Value)
@@ -1026,6 +1354,11 @@ public static class OptimizationOpportunityFinder
 
                         case SyntaxTypes.Expression.LetDeclaration.LetDestructuring letDestr:
                             FindAppliedParameterNames(letDestr.Expression.Value, paramNames, found);
+
+                            CollectVarPatternNamesFromPattern(
+                                letDestr.Pattern.Value,
+                                letDestructuredNames);
+
                             break;
 
                         default:
@@ -1035,7 +1368,11 @@ public static class OptimizationOpportunityFinder
                     }
                 }
 
-                FindAppliedParameterNames(letExpr.Value.Expression.Value, paramNames, found);
+                FindAppliedParameterNames(
+                    letExpr.Value.Expression.Value,
+                    paramNames.Union(letDestructuredNames),
+                    found);
+
                 break;
 
             case SyntaxTypes.Expression.LambdaExpression lambda:
@@ -1063,7 +1400,23 @@ public static class OptimizationOpportunityFinder
                 FindAppliedParameterNames(caseExpr.CaseBlock.Expression.Value, paramNames, found);
 
                 foreach (var caseEntry in caseExpr.CaseBlock.Cases)
-                    FindAppliedParameterNames(caseEntry.Expression.Value, paramNames, found);
+                {
+                    // Names bound by this branch's pattern extend the
+                    // visible-parameter set for the branch body. The
+                    // surrounding outer parameters remain visible too,
+                    // unless the pattern shadows one (we conservatively
+                    // keep both — Elm forbids shadowing in patterns).
+                    var branchBoundBuilder = ImmutableHashSet.CreateBuilder<string>();
+
+                    CollectVarPatternNamesFromPattern(
+                        caseEntry.Pattern.Value,
+                        branchBoundBuilder);
+
+                    FindAppliedParameterNames(
+                        caseEntry.Expression.Value,
+                        paramNames.Union(branchBoundBuilder),
+                        found);
+                }
 
                 break;
 
@@ -1157,9 +1510,47 @@ public static class OptimizationOpportunityFinder
                 CollectVarPatternNamesFromPattern(asPattern.Pattern.Value, builder);
                 break;
 
-            // Other pattern variants either bind names that we conservatively
-            // ignore (e.g. tuple destructuring of a function-typed value
-            // is not common in Elm) or do not bind names at all.
+            case SyntaxTypes.Pattern.NamedPattern namedPattern:
+
+                // A named-constructor pattern like `(Wrap inner)` binds the
+                // names from its argument patterns. The constructor itself
+                // does not introduce a name. A type-checking program can
+                // only reach this shape — outside of a `case` branch — when
+                // the value is of a single-tag type, so the bound names are
+                // always in scope.
+                foreach (var argNode in namedPattern.Arguments)
+                    CollectVarPatternNamesFromPattern(argNode.Value, builder);
+
+                break;
+
+            case SyntaxTypes.Pattern.TuplePattern tuplePattern:
+                foreach (var elementNode in tuplePattern.Elements)
+                    CollectVarPatternNamesFromPattern(elementNode.Value, builder);
+
+                break;
+
+            case SyntaxTypes.Pattern.RecordPattern recordPattern:
+
+                // A record pattern `{x, y}` binds the field names directly
+                // as local names.
+                foreach (var fieldNode in recordPattern.Fields)
+                    builder.Add(fieldNode.Value);
+
+                break;
+
+            case SyntaxTypes.Pattern.UnConsPattern unCons:
+                CollectVarPatternNamesFromPattern(unCons.Head.Value, builder);
+                CollectVarPatternNamesFromPattern(unCons.Tail.Value, builder);
+                break;
+
+            case SyntaxTypes.Pattern.ListPattern listPattern:
+                foreach (var elementNode in listPattern.Elements)
+                    CollectVarPatternNamesFromPattern(elementNode.Value, builder);
+
+                break;
+
+            // Other pattern variants do not bind names (literals, AllPattern,
+            // UnitPattern, etc.).
             default:
                 break;
         }
@@ -1173,6 +1564,43 @@ public static class OptimizationOpportunityFinder
         }
 
         return expression;
+    }
+
+    /// <summary>
+    /// If <paramref name="recordAccess"/> is a chain
+    /// <c>p.f1.f2.…fn</c> whose innermost record expression is a bare
+    /// <see cref="SyntaxTypes.Expression.FunctionOrValue"/> with module
+    /// part empty and name in <paramref name="paramNames"/>, returns
+    /// <c>"p.f1.f2.…fn"</c>; otherwise returns <c>null</c>. Parentheses
+    /// around the record expression at any level are tolerated.
+    /// </summary>
+    private static string? TryRenderRecordAccessChainRootedAtParam(
+        SyntaxTypes.Expression.RecordAccess recordAccess,
+        ImmutableHashSet<string> paramNames)
+    {
+        var fields = new System.Collections.Generic.List<string>();
+        SyntaxTypes.Expression current = recordAccess;
+
+        while (UnwrapParen(current) is SyntaxTypes.Expression.RecordAccess ra)
+        {
+            fields.Add(ra.FieldName.Value);
+            current = ra.Record.Value;
+        }
+
+        if (UnwrapParen(current) is not SyntaxTypes.Expression.FunctionOrValue rootFov)
+            return null;
+
+        if (rootFov.ModuleName.Count is not 0)
+            return null;
+
+        if (!paramNames.Contains(rootFov.Name))
+            return null;
+
+        // `fields` was built from outermost to innermost; reverse so the
+        // rendered chain reads root-to-leaf.
+        fields.Reverse();
+
+        return rootFov.Name + "." + string.Join(".", fields);
     }
 
     private static string TrimLeadingDot(string name) =>
@@ -1228,6 +1656,1026 @@ public static class OptimizationOpportunityFinder
             .ToList();
 
         return ElmCompiler.FlattenModulesToDeclarationDictionary(orderedCanonicalizedModules);
+    }
+
+    /// <summary>
+    /// Information about a single-tag (one-constructor) custom type used
+    /// by <see cref="OpportunityCategory.RootLevelChoiceTagWrapper"/> detection.
+    /// Carries the constructor's argument types and the type's generics
+    /// so detection sites can substitute generic type variables when
+    /// rendering the unwrapped type from a type annotation that supplies
+    /// concrete type arguments.
+    /// </summary>
+    private sealed record SingleTagShapeInfo(
+        DeclQualifiedName TypeName,
+        DeclQualifiedName ConstructorName,
+        IReadOnlyList<string> TypeGenerics,
+        IReadOnlyList<SyntaxTypes.TypeAnnotation> ConstructorArgumentTypes);
+
+    /// <summary>
+    /// Builds a registry of every custom type in <paramref name="declarations"/>
+    /// that has exactly one constructor (the constructor itself may have
+    /// any number of arguments, including zero). Both the type's
+    /// qualified name and the constructor's qualified name are mapped to
+    /// the same <see cref="SingleTagShapeInfo"/> so detection sites can
+    /// resolve from either direction.
+    /// </summary>
+    private static ImmutableDictionary<DeclQualifiedName, SingleTagShapeInfo>
+        BuildSingleTagRegistry(
+        IReadOnlyDictionary<DeclQualifiedName, SyntaxTypes.Declaration> declarations)
+    {
+        var builder = ImmutableDictionary.CreateBuilder<DeclQualifiedName, SingleTagShapeInfo>();
+
+        foreach (var (declName, decl) in declarations)
+        {
+            if (decl is not SyntaxTypes.Declaration.CustomTypeDeclaration ctd)
+                continue;
+
+            if (ctd.TypeDeclaration.Constructors.Count is not 1)
+                continue;
+
+            var ctor = ctd.TypeDeclaration.Constructors[0].Value;
+
+            var typeName =
+                new DeclQualifiedName(declName.Namespaces, ctd.TypeDeclaration.Name.Value);
+
+            var ctorName =
+                new DeclQualifiedName(declName.Namespaces, ctor.Name.Value);
+
+            var generics =
+                ctd.TypeDeclaration.Generics
+                .Select(g => g.Value)
+                .ToList();
+
+            var ctorArgs =
+                ctor.Arguments
+                .Select(a => a.Value)
+                .ToList();
+
+            var info = new SingleTagShapeInfo(typeName, ctorName, generics, ctorArgs);
+
+            builder[typeName] = info;
+            builder[ctorName] = info;
+        }
+
+        return builder.ToImmutable();
+    }
+
+    /// <summary>
+    /// Examines the top-level parameters and the outermost return value
+    /// of <paramref name="function"/> for evidence that they are wrapped
+    /// in a single-tag custom-type constructor and adds matching
+    /// <see cref="OpportunityCategory.RootLevelChoiceTagWrapper"/> findings
+    /// to <paramref name="resultBuilder"/>.
+    ///
+    /// <para>
+    /// Detection sources for parameters (any one is sufficient; only one
+    /// finding per parameter is emitted):
+    /// <list type="bullet">
+    /// <item>The function's signature names a single-tag type as the
+    /// parameter's root type.</item>
+    /// <item>The parameter pattern is a <see cref="SyntaxTypes.Pattern.NamedPattern"/>
+    /// (optionally wrapped in parens / as-pattern) whose constructor
+    /// resolves to a single-tag constructor.</item>
+    /// <item>The function body contains a top-level
+    /// <c>let (Ctor x ...) = paramName in ...</c> destructuring whose
+    /// constructor resolves to a single-tag constructor.</item>
+    /// </list>
+    /// </para>
+    ///
+    /// <para>
+    /// Detection sources for the return value:
+    /// <list type="bullet">
+    /// <item>The function's signature names a single-tag type as the
+    /// outermost return type.</item>
+    /// <item>Every "return leaf" position of the body (case arms, if
+    /// branches, let-in body, parens) is an
+    /// <c>Application[FunctionOrValue(Ctor), ...]</c> whose constructor
+    /// is the same single-tag constructor at every leaf.</item>
+    /// </list>
+    /// </para>
+    /// </summary>
+    private static void CollectRootLevelChoiceTagWrapperFindings(
+        DeclQualifiedName containing,
+        SyntaxTypes.FunctionStruct function,
+        ImmutableDictionary<DeclQualifiedName, SingleTagShapeInfo> singleTagRegistry,
+        IReadOnlyDictionary<OpportunityCategory, ImmutableHashSet<string>> whitelistByCategory,
+        ImmutableHashSet<Opportunity>.Builder resultBuilder)
+    {
+        if (singleTagRegistry.IsEmpty)
+            return;
+
+        var ownModule = containing.Namespaces;
+
+        var implementation = function.Declaration.Value;
+
+        // Walk the type signature into a list of parameter type
+        // annotations + a single return type annotation. A function
+        // without a signature contributes an empty list and a null
+        // return type.
+        var sigParamTypes = new List<SyntaxTypes.TypeAnnotation?>();
+        SyntaxTypes.TypeAnnotation? sigReturnType = null;
+
+        if (function.Signature is { } signatureNode)
+        {
+            DecomposeFunctionSignature(
+                signatureNode.Value.TypeAnnotation.Value,
+                implementation.Arguments.Count,
+                sigParamTypes,
+                out sigReturnType);
+        }
+
+        // Per-parameter detection.
+        for (var i = 0; i < implementation.Arguments.Count; i++)
+        {
+            var paramPattern = implementation.Arguments[i].Value;
+            var paramName = TryGetVarOrAsName(paramPattern);
+
+            // 1. Signature-based.
+            SingleTagShapeInfo? matchedFromSig = null;
+            string? unwrappedFromSig = null;
+
+            if (i < sigParamTypes.Count && sigParamTypes[i] is { } sigParamType)
+            {
+                var (sigInfo, sigUnwrapped) =
+                    TryResolveSingleTagWrap(sigParamType, singleTagRegistry, ownModule);
+
+                matchedFromSig = sigInfo;
+                unwrappedFromSig = sigUnwrapped;
+            }
+
+            // 2. Pattern-based.
+            var matchedFromPattern =
+                TryMatchSingleTagFromPattern(paramPattern, singleTagRegistry, ownModule);
+
+            // 3. Let-destructuring-based — only at the top level of the
+            // body's let chain (we deliberately do not descend into
+            // nested expressions to keep the detection root-scoped).
+            SingleTagShapeInfo? matchedFromLet = null;
+
+            if (paramName is not null)
+            {
+                matchedFromLet =
+                    TryMatchSingleTagFromTopLevelLetDestructuring(
+                        implementation.Expression.Value,
+                        paramName,
+                        singleTagRegistry,
+                        ownModule);
+            }
+
+            var anyMatch = matchedFromSig ?? matchedFromPattern ?? matchedFromLet;
+
+            if (anyMatch is null)
+                continue;
+
+            // Prefer the signature-derived "unwrapped" rendering when
+            // available because it has the actual concrete type
+            // arguments substituted; otherwise fall back to the
+            // constructor's argument types as declared.
+            var unwrapped =
+                unwrappedFromSig ?? RenderUnwrappedFromShape(anyMatch);
+
+            var description =
+                "parameter[" + i + "] " + (paramName ?? "_") + ": " +
+                anyMatch.ConstructorName.FullName + " -> " + ParenIfTopLevelArrow(unwrapped);
+
+            MaybeAdd(
+                OpportunityCategory.RootLevelChoiceTagWrapper,
+                description,
+                containing,
+                whitelistByCategory,
+                resultBuilder);
+        }
+
+        // Return-value detection.
+        SingleTagShapeInfo? returnMatched = null;
+        string? returnUnwrapped = null;
+
+        if (sigReturnType is not null)
+        {
+            var (sigInfo, sigUnwrapped) =
+                TryResolveSingleTagWrap(sigReturnType, singleTagRegistry, ownModule);
+
+            returnMatched = sigInfo;
+            returnUnwrapped = sigUnwrapped;
+        }
+
+        if (returnMatched is null)
+        {
+            returnMatched =
+                TryMatchSingleTagFromAllReturnLeaves(
+                    implementation.Expression.Value,
+                    singleTagRegistry,
+                    ownModule);
+        }
+
+        if (returnMatched is not null)
+        {
+            var unwrappedReturn =
+                returnUnwrapped ?? RenderUnwrappedFromShape(returnMatched);
+
+            MaybeAdd(
+                OpportunityCategory.RootLevelChoiceTagWrapper,
+                "return: " + returnMatched.ConstructorName.FullName + " -> " + ParenIfTopLevelArrow(unwrappedReturn),
+                containing,
+                whitelistByCategory,
+                resultBuilder);
+        }
+    }
+
+    /// <summary>
+    /// Splits a function-typed annotation into the leading
+    /// <paramref name="parameterCount"/> parameter type annotations and
+    /// the trailing return type annotation, mirroring how Elm desugars
+    /// curried functions. When the annotation has fewer arrows than the
+    /// implementation has parameters (for example because some
+    /// parameters are introduced by an inner lambda), the trailing
+    /// "missing" entries are recorded as <c>null</c> in
+    /// <paramref name="sigParamTypes"/>.
+    /// </summary>
+    private static void DecomposeFunctionSignature(
+        SyntaxTypes.TypeAnnotation annotation,
+        int parameterCount,
+        List<SyntaxTypes.TypeAnnotation?> sigParamTypes,
+        out SyntaxTypes.TypeAnnotation? sigReturnType)
+    {
+        var current = annotation;
+
+        for (var i = 0; i < parameterCount; i++)
+        {
+            if (current is SyntaxTypes.TypeAnnotation.FunctionTypeAnnotation fta)
+            {
+                sigParamTypes.Add(fta.ArgumentType.Value);
+                current = fta.ReturnType.Value;
+            }
+            else
+            {
+                sigParamTypes.Add(null);
+            }
+        }
+
+        sigReturnType = current;
+    }
+
+    /// <summary>
+    /// Returns the <see cref="SingleTagShapeInfo"/> for the supplied
+    /// type annotation when (after peeling parens) it is a
+    /// <see cref="SyntaxTypes.TypeAnnotation.Typed"/> reference to a
+    /// single-tag custom type, plus a textual rendering of the unwrapped
+    /// type with generic substitution applied. Returns
+    /// <c>(null, null)</c> for any other annotation shape.
+    /// </summary>
+    private static (SingleTagShapeInfo? Info, string? UnwrappedRendered)
+        TryResolveSingleTagWrap(
+        SyntaxTypes.TypeAnnotation annotation,
+        ImmutableDictionary<DeclQualifiedName, SingleTagShapeInfo> singleTagRegistry,
+        ModuleName ownModule)
+    {
+        if (annotation is not SyntaxTypes.TypeAnnotation.Typed typed)
+            return (null, null);
+
+        var typeRef = typed.TypeName.Value;
+
+        var qualified =
+            typeRef.ModuleName.Count > 0
+            ?
+            new DeclQualifiedName(typeRef.ModuleName, typeRef.Name)
+            :
+            new DeclQualifiedName(ownModule, typeRef.Name);
+
+        if (!singleTagRegistry.TryGetValue(qualified, out var info))
+            return (null, null);
+
+        // The matched entry must be the type (not the constructor): we
+        // are resolving a type annotation, not a constructor reference.
+        if (!info.TypeName.Equals(qualified))
+            return (null, null);
+
+        // Build the generic substitution from the type's declared
+        // generics to the actual type arguments at this annotation site.
+        var substitution = new Dictionary<string, SyntaxTypes.TypeAnnotation>();
+
+        for (var i = 0; i < info.TypeGenerics.Count; i++)
+        {
+            if (i < typed.TypeArguments.Count)
+            {
+                substitution[info.TypeGenerics[i]] = typed.TypeArguments[i].Value;
+            }
+        }
+
+        var substitutedArgs =
+            info.ConstructorArgumentTypes
+            .Select(a => SubstituteGenerics(a, substitution))
+            .ToList();
+
+        var unwrapped = RenderUnwrappedTypeAnnotations(substitutedArgs);
+
+        return (info, unwrapped);
+    }
+
+    /// <summary>
+    /// Returns the <see cref="SingleTagShapeInfo"/> implied by a
+    /// parameter or destructuring pattern when (after peeling parens
+    /// and as-patterns) the pattern is a
+    /// <see cref="SyntaxTypes.Pattern.NamedPattern"/> whose constructor
+    /// resolves to a single-tag constructor; otherwise <c>null</c>.
+    /// </summary>
+    private static SingleTagShapeInfo? TryMatchSingleTagFromPattern(
+        SyntaxTypes.Pattern pattern,
+        ImmutableDictionary<DeclQualifiedName, SingleTagShapeInfo> singleTagRegistry,
+        ModuleName ownModule)
+    {
+        var peeled = PeelPatternWrappers(pattern);
+
+        if (peeled is not SyntaxTypes.Pattern.NamedPattern named)
+            return null;
+
+        var qualified =
+            named.Name.ModuleName.Count > 0
+            ?
+            new DeclQualifiedName(named.Name.ModuleName, named.Name.Name)
+            :
+            new DeclQualifiedName(ownModule, named.Name.Name);
+
+        if (!singleTagRegistry.TryGetValue(qualified, out var info))
+            return null;
+
+        // Must resolve to the constructor entry (not the type entry
+        // which shares the registry under the type's name).
+        if (!info.ConstructorName.Equals(qualified))
+            return null;
+
+        return info;
+    }
+
+    /// <summary>
+    /// Walks <paramref name="body"/>'s leading let chain (only the let
+    /// blocks at the very top of the body, not nested ones) and returns
+    /// the single-tag <see cref="SingleTagShapeInfo"/> implied by any
+    /// <see cref="SyntaxTypes.Expression.LetDeclaration.LetDestructuring"/>
+    /// that matches a <see cref="SyntaxTypes.Pattern.NamedPattern"/>
+    /// applied to the bare parameter named
+    /// <paramref name="paramName"/>; <c>null</c> when no such
+    /// destructuring exists.
+    /// </summary>
+    private static SingleTagShapeInfo? TryMatchSingleTagFromTopLevelLetDestructuring(
+        SyntaxTypes.Expression body,
+        string paramName,
+        ImmutableDictionary<DeclQualifiedName, SingleTagShapeInfo> singleTagRegistry,
+        ModuleName ownModule)
+    {
+        var current = PeelExpressionParens(body);
+
+        while (current is SyntaxTypes.Expression.LetExpression letExpr)
+        {
+            foreach (var declNode in letExpr.Value.Declarations)
+            {
+                if (declNode.Value is not SyntaxTypes.Expression.LetDeclaration.LetDestructuring letDestr)
+                    continue;
+
+                var rhs = PeelExpressionParens(letDestr.Expression.Value);
+
+                if (rhs is not SyntaxTypes.Expression.FunctionOrValue rhsRef)
+                    continue;
+
+                if (rhsRef.ModuleName.Count is not 0 || rhsRef.Name != paramName)
+                    continue;
+
+                var match =
+                    TryMatchSingleTagFromPattern(
+                        letDestr.Pattern.Value,
+                        singleTagRegistry,
+                        ownModule);
+
+                if (match is not null)
+                    return match;
+            }
+
+            current = PeelExpressionParens(letExpr.Value.Expression.Value);
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Returns the single-tag <see cref="SingleTagShapeInfo"/> that
+    /// every "return leaf" of <paramref name="body"/> wraps with at
+    /// the root, when this is consistent across every leaf; otherwise
+    /// <c>null</c>. Return leaves are followed across
+    /// <see cref="SyntaxTypes.Expression.LetExpression"/>,
+    /// <see cref="SyntaxTypes.Expression.IfBlock"/>,
+    /// <see cref="SyntaxTypes.Expression.CaseExpression"/>, and
+    /// <see cref="SyntaxTypes.Expression.ParenthesizedExpression"/>.
+    /// </summary>
+    private static SingleTagShapeInfo? TryMatchSingleTagFromAllReturnLeaves(
+        SyntaxTypes.Expression body,
+        ImmutableDictionary<DeclQualifiedName, SingleTagShapeInfo> singleTagRegistry,
+        ModuleName ownModule)
+    {
+        SingleTagShapeInfo? agreed = null;
+
+        var allMatched =
+            AllReturnLeavesAgreeOnSingleTagCtor(
+                body,
+                singleTagRegistry,
+                ownModule,
+                ref agreed);
+
+        return allMatched ? agreed : null;
+    }
+
+    private static bool AllReturnLeavesAgreeOnSingleTagCtor(
+        SyntaxTypes.Expression expression,
+        ImmutableDictionary<DeclQualifiedName, SingleTagShapeInfo> singleTagRegistry,
+        ModuleName ownModule,
+        ref SingleTagShapeInfo? agreed)
+    {
+        var peeled = PeelExpressionParens(expression);
+
+        switch (peeled)
+        {
+            case SyntaxTypes.Expression.LetExpression letExpr:
+                return
+                    AllReturnLeavesAgreeOnSingleTagCtor(
+                        letExpr.Value.Expression.Value,
+                        singleTagRegistry,
+                        ownModule,
+                        ref agreed);
+
+            case SyntaxTypes.Expression.IfBlock ifBlock:
+                return
+                    AllReturnLeavesAgreeOnSingleTagCtor(
+                        ifBlock.ThenBlock.Value,
+                        singleTagRegistry,
+                        ownModule,
+                        ref agreed) &&
+                    AllReturnLeavesAgreeOnSingleTagCtor(
+                        ifBlock.ElseBlock.Value,
+                        singleTagRegistry,
+                        ownModule,
+                        ref agreed);
+
+            case SyntaxTypes.Expression.CaseExpression caseExpr:
+                if (caseExpr.CaseBlock.Cases.Count is 0)
+                    return false;
+
+                foreach (var arm in caseExpr.CaseBlock.Cases)
+                {
+                    if (!AllReturnLeavesAgreeOnSingleTagCtor(
+                            arm.Expression.Value,
+                            singleTagRegistry,
+                            ownModule,
+                            ref agreed))
+                    {
+                        return false;
+                    }
+                }
+
+                return true;
+
+            case SyntaxTypes.Expression.Application app:
+                if (app.Arguments.Count < 2)
+                    return false;
+
+                var head = PeelExpressionParens(app.Arguments[0].Value);
+
+                if (head is not SyntaxTypes.Expression.FunctionOrValue funcOrValue)
+                    return false;
+
+                var qualified =
+                    funcOrValue.ModuleName.Count > 0
+                    ?
+                    new DeclQualifiedName(funcOrValue.ModuleName, funcOrValue.Name)
+                    :
+                    new DeclQualifiedName(ownModule, funcOrValue.Name);
+
+                if (!singleTagRegistry.TryGetValue(qualified, out var info))
+                    return false;
+
+                if (!info.ConstructorName.Equals(qualified))
+                    return false;
+
+                // The application must supply exactly one positional
+                // argument per constructor field (Elm constructors are
+                // applied uncurried at the source level).
+                var suppliedArgCount = app.Arguments.Count - 1;
+
+                if (suppliedArgCount != info.ConstructorArgumentTypes.Count)
+                    return false;
+
+                if (agreed is null)
+                {
+                    agreed = info;
+                    return true;
+                }
+
+                return agreed.ConstructorName.Equals(info.ConstructorName);
+
+            default:
+                return false;
+        }
+    }
+
+    /// <summary>
+    /// Peels nested
+    /// <see cref="SyntaxTypes.Expression.ParenthesizedExpression"/>
+    /// layers from <paramref name="expression"/>.
+    /// </summary>
+    private static SyntaxTypes.Expression PeelExpressionParens(SyntaxTypes.Expression expression)
+    {
+        while (expression is SyntaxTypes.Expression.ParenthesizedExpression p)
+            expression = p.Expression.Value;
+
+        return expression;
+    }
+
+    /// <summary>
+    /// Peels nested
+    /// <see cref="SyntaxTypes.Pattern.ParenthesizedPattern"/> and
+    /// <see cref="SyntaxTypes.Pattern.AsPattern"/> layers from
+    /// <paramref name="pattern"/>.
+    /// </summary>
+    private static SyntaxTypes.Pattern PeelPatternWrappers(SyntaxTypes.Pattern pattern)
+    {
+        while (true)
+        {
+            switch (pattern)
+            {
+                case SyntaxTypes.Pattern.ParenthesizedPattern p:
+                    pattern = p.Pattern.Value;
+                    continue;
+
+                case SyntaxTypes.Pattern.AsPattern a:
+                    pattern = a.Pattern.Value;
+                    continue;
+
+                default:
+                    return pattern;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Returns the bound name of a parameter pattern that is most useful
+    /// for display. Recognises:
+    /// <list type="bullet">
+    /// <item>A bare <see cref="SyntaxTypes.Pattern.VarPattern"/> (the
+    /// pattern's own name).</item>
+    /// <item>An <see cref="SyntaxTypes.Pattern.AsPattern"/> (the
+    /// <c>as</c>-name).</item>
+    /// <item>A <see cref="SyntaxTypes.Pattern.NamedPattern"/> with a
+    /// single variable argument (the inner variable's name; this is
+    /// the destructuring shape <c>(Ctor inner)</c>).</item>
+    /// <item>Any of the above wrapped in
+    /// <see cref="SyntaxTypes.Pattern.ParenthesizedPattern"/>.</item>
+    /// </list>
+    /// Returns <c>null</c> for any other pattern shape.
+    /// </summary>
+    private static string? TryGetVarOrAsName(SyntaxTypes.Pattern pattern)
+    {
+        while (true)
+        {
+            switch (pattern)
+            {
+                case SyntaxTypes.Pattern.VarPattern vp:
+                    return vp.Name;
+
+                case SyntaxTypes.Pattern.AsPattern ap:
+                    return ap.Name.Value;
+
+                case SyntaxTypes.Pattern.ParenthesizedPattern pp:
+                    pattern = pp.Pattern.Value;
+                    continue;
+
+                case SyntaxTypes.Pattern.NamedPattern np when np.Arguments.Count is 1:
+                    pattern = np.Arguments[0].Value;
+                    continue;
+
+                default:
+                    return null;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Substitutes every <see cref="SyntaxTypes.TypeAnnotation.GenericType"/>
+    /// reference in <paramref name="annotation"/> with its corresponding
+    /// type argument from <paramref name="substitution"/>; references
+    /// not in the dictionary are left untouched.
+    /// </summary>
+    private static SyntaxTypes.TypeAnnotation SubstituteGenerics(
+        SyntaxTypes.TypeAnnotation annotation,
+        IReadOnlyDictionary<string, SyntaxTypes.TypeAnnotation> substitution)
+    {
+        switch (annotation)
+        {
+            case SyntaxTypes.TypeAnnotation.GenericType g:
+                return
+                    substitution.TryGetValue(g.Name, out var replacement)
+                    ?
+                    replacement
+                    :
+                    g;
+
+            case SyntaxTypes.TypeAnnotation.Typed t:
+                {
+                    var newArgs =
+                        t.TypeArguments
+                        .Select(
+                            arg =>
+                            new SyntaxModel.Node<SyntaxTypes.TypeAnnotation>(
+                                arg.Range,
+                                SubstituteGenerics(arg.Value, substitution)))
+                        .ToList();
+
+                    return new SyntaxTypes.TypeAnnotation.Typed(t.TypeName, newArgs);
+                }
+
+            case SyntaxTypes.TypeAnnotation.Unit:
+                return annotation;
+
+            case SyntaxTypes.TypeAnnotation.Tupled tupled:
+                {
+                    var newAnnots =
+                        tupled.TypeAnnotations
+                        .Select(
+                            a =>
+                            new SyntaxModel.Node<SyntaxTypes.TypeAnnotation>(
+                                a.Range,
+                                SubstituteGenerics(a.Value, substitution)))
+                        .ToList();
+
+                    return new SyntaxTypes.TypeAnnotation.Tupled(newAnnots);
+                }
+
+            case SyntaxTypes.TypeAnnotation.Record record:
+                {
+                    var newFields =
+                        record.RecordDefinition.Fields
+                        .Select(
+                            f =>
+                            new SyntaxModel.Node<SyntaxTypes.RecordField>(
+                                f.Range,
+                                new SyntaxTypes.RecordField(
+                                    f.Value.FieldName,
+                                    new SyntaxModel.Node<SyntaxTypes.TypeAnnotation>(
+                                        f.Value.FieldType.Range,
+                                        SubstituteGenerics(f.Value.FieldType.Value, substitution)))))
+                        .ToList();
+
+                    return
+                        new SyntaxTypes.TypeAnnotation.Record(
+                            new SyntaxTypes.RecordDefinition(newFields));
+                }
+
+            case SyntaxTypes.TypeAnnotation.GenericRecord gr:
+                {
+                    var newFields =
+                        gr.RecordDefinition.Value.Fields
+                        .Select(
+                            f =>
+                            new SyntaxModel.Node<SyntaxTypes.RecordField>(
+                                f.Range,
+                                new SyntaxTypes.RecordField(
+                                    f.Value.FieldName,
+                                    new SyntaxModel.Node<SyntaxTypes.TypeAnnotation>(
+                                        f.Value.FieldType.Range,
+                                        SubstituteGenerics(f.Value.FieldType.Value, substitution)))))
+                        .ToList();
+
+                    return
+                        new SyntaxTypes.TypeAnnotation.GenericRecord(
+                            gr.GenericName,
+                            new SyntaxModel.Node<SyntaxTypes.RecordDefinition>(
+                                gr.RecordDefinition.Range,
+                                new SyntaxTypes.RecordDefinition(newFields)));
+                }
+
+            case SyntaxTypes.TypeAnnotation.FunctionTypeAnnotation fta:
+                return
+                    new SyntaxTypes.TypeAnnotation.FunctionTypeAnnotation(
+                        new SyntaxModel.Node<SyntaxTypes.TypeAnnotation>(
+                            fta.ArgumentType.Range,
+                            SubstituteGenerics(fta.ArgumentType.Value, substitution)),
+                        new SyntaxModel.Node<SyntaxTypes.TypeAnnotation>(
+                            fta.ReturnType.Range,
+                            SubstituteGenerics(fta.ReturnType.Value, substitution)));
+
+            default:
+                throw new System.NotImplementedException(
+                    "SubstituteGenerics does not handle TypeAnnotation variant: " +
+                    annotation.GetType().Name);
+        }
+    }
+
+    /// <summary>
+    /// Renders the unwrapped type for a single-tag constructor based on
+    /// its constructor-argument types in the order they were declared.
+    /// 1-arg constructors render as the inner type; N-arg constructors
+    /// render as a tuple of the argument types — at this stage of the
+    /// compilation tuples of any arity are permissible.
+    /// </summary>
+    private static string RenderUnwrappedFromShape(SingleTagShapeInfo info) =>
+        RenderUnwrappedTypeAnnotations(info.ConstructorArgumentTypes);
+
+    private static string RenderUnwrappedTypeAnnotations(
+        IReadOnlyList<SyntaxTypes.TypeAnnotation> annotations)
+    {
+        if (annotations.Count is 0)
+            return "()";
+
+        if (annotations.Count is 1)
+            return RenderTypeAnnotation(annotations[0]);
+
+        var sb = new StringBuilder();
+        sb.Append('(');
+
+        for (var i = 0; i < annotations.Count; i++)
+        {
+            if (i > 0)
+                sb.Append(", ");
+
+            sb.Append(RenderTypeAnnotation(annotations[i]));
+        }
+
+        sb.Append(')');
+        return sb.ToString();
+    }
+
+    /// <summary>
+    /// Returns <paramref name="rendered"/> wrapped in parens when it
+    /// itself contains a function arrow at the top level — used by
+    /// description and signature rendering so that an unwrapped
+    /// function-typed inner does not run into surrounding arrows.
+    /// </summary>
+    private static string ParenIfTopLevelArrow(string rendered)
+    {
+        // Cheap top-level scan: the rendered string is well-formed and
+        // never contains comments. A " -> " outside any parens means
+        // the rendered type is a function arrow at the outer level.
+        var depth = 0;
+
+        for (var i = 0; i < rendered.Length; i++)
+        {
+            var c = rendered[i];
+
+            if (c is '(' or '{')
+            {
+                depth++;
+            }
+            else if (c is ')' or '}')
+            {
+                depth--;
+            }
+            else if (depth is 0 &&
+                c is '-' &&
+                i + 1 < rendered.Length &&
+                rendered[i + 1] is '>')
+            {
+                return "(" + rendered + ")";
+            }
+        }
+
+        return rendered;
+    }
+
+    /// <summary>
+    /// Stable, snapshot-friendly textual rendering of a type annotation
+    /// covering every <see cref="SyntaxTypes.TypeAnnotation"/> variant.
+    /// Function arrows, tuple commas and record braces are reproduced
+    /// in their canonical surface syntax; nested function arrows on the
+    /// left of an outer arrow are parenthesised so that the rendered
+    /// form unambiguously matches the source-level grouping.
+    /// </summary>
+    private static string RenderTypeAnnotation(SyntaxTypes.TypeAnnotation annotation)
+    {
+        switch (annotation)
+        {
+            case SyntaxTypes.TypeAnnotation.GenericType g:
+                return g.Name;
+
+            case SyntaxTypes.TypeAnnotation.Unit:
+                return "()";
+
+            case SyntaxTypes.TypeAnnotation.Typed t:
+                {
+                    var nameSb = new StringBuilder();
+
+                    foreach (var ns in t.TypeName.Value.ModuleName)
+                    {
+                        nameSb.Append(ns);
+                        nameSb.Append('.');
+                    }
+
+                    nameSb.Append(t.TypeName.Value.Name);
+
+                    if (t.TypeArguments.Count is 0)
+                        return nameSb.ToString();
+
+                    var sb = new StringBuilder();
+                    sb.Append(nameSb);
+
+                    foreach (var arg in t.TypeArguments)
+                    {
+                        sb.Append(' ');
+                        sb.Append(RenderTypeAnnotationParenIfComposite(arg.Value));
+                    }
+
+                    return sb.ToString();
+                }
+
+            case SyntaxTypes.TypeAnnotation.Tupled tupled:
+                {
+                    var sb = new StringBuilder();
+                    sb.Append('(');
+
+                    for (var i = 0; i < tupled.TypeAnnotations.Count; i++)
+                    {
+                        if (i > 0)
+                            sb.Append(", ");
+
+                        sb.Append(RenderTypeAnnotation(tupled.TypeAnnotations[i].Value));
+                    }
+
+                    sb.Append(')');
+                    return sb.ToString();
+                }
+
+            case SyntaxTypes.TypeAnnotation.Record record:
+                return RenderRecordDefinition(record.RecordDefinition);
+
+            case SyntaxTypes.TypeAnnotation.GenericRecord gr:
+                {
+                    var sb = new StringBuilder();
+                    sb.Append("{ ");
+                    sb.Append(gr.GenericName.Value);
+                    sb.Append(" | ");
+                    AppendRecordFields(sb, gr.RecordDefinition.Value);
+                    sb.Append(" }");
+                    return sb.ToString();
+                }
+
+            case SyntaxTypes.TypeAnnotation.FunctionTypeAnnotation fta:
+                {
+                    var left = RenderTypeAnnotation(fta.ArgumentType.Value);
+
+                    if (fta.ArgumentType.Value is SyntaxTypes.TypeAnnotation.FunctionTypeAnnotation)
+                        left = "(" + left + ")";
+
+                    var right = RenderTypeAnnotation(fta.ReturnType.Value);
+
+                    return left + " -> " + right;
+                }
+
+            default:
+                throw new System.NotImplementedException(
+                    "RenderTypeAnnotation does not handle TypeAnnotation variant: " +
+                    annotation.GetType().Name);
+        }
+    }
+
+    private static string RenderRecordDefinition(SyntaxTypes.RecordDefinition def)
+    {
+        if (def.Fields.Count is 0)
+            return "{}";
+
+        var sb = new StringBuilder();
+        sb.Append("{ ");
+        AppendRecordFields(sb, def);
+        sb.Append(" }");
+        return sb.ToString();
+    }
+
+    private static void AppendRecordFields(StringBuilder sb, SyntaxTypes.RecordDefinition def)
+    {
+        for (var i = 0; i < def.Fields.Count; i++)
+        {
+            if (i > 0)
+                sb.Append(", ");
+
+            sb.Append(def.Fields[i].Value.FieldName.Value);
+            sb.Append(" : ");
+            sb.Append(RenderTypeAnnotation(def.Fields[i].Value.FieldType.Value));
+        }
+    }
+
+    /// <summary>
+    /// Renders <paramref name="annotation"/> wrapping it in parens when
+    /// it is composite enough that printing it bare next to neighbouring
+    /// type-application arguments would be ambiguous.
+    /// </summary>
+    private static string RenderTypeAnnotationParenIfComposite(SyntaxTypes.TypeAnnotation annotation)
+    {
+        switch (annotation)
+        {
+            case SyntaxTypes.TypeAnnotation.GenericType:
+            case SyntaxTypes.TypeAnnotation.Unit:
+            case SyntaxTypes.TypeAnnotation.Tupled:
+            case SyntaxTypes.TypeAnnotation.Record:
+                return RenderTypeAnnotation(annotation);
+
+            case SyntaxTypes.TypeAnnotation.Typed t when t.TypeArguments.Count is 0:
+                return RenderTypeAnnotation(t);
+
+            default:
+                return "(" + RenderTypeAnnotation(annotation) + ")";
+        }
+    }
+
+    /// <summary>
+    /// Produces a transformed function type annotation in which every
+    /// root-level wrapping by a single-tag constructor (parameter or
+    /// return) has been replaced by the constructor's unwrapped type
+    /// (a tuple of constructor-argument types when there is more than
+    /// one). Used by tests to assert that a function's signature is
+    /// transformed accordingly to the unwrapped type.
+    /// <para>
+    /// Returns <c>null</c> when no transformation applies — either the
+    /// declaration is not a function declaration, the function has no
+    /// signature, or no root-level wrapping is detected.
+    /// </para>
+    /// </summary>
+    public static string? TryRenderTransformedSignature(
+        IReadOnlyDictionary<DeclQualifiedName, SyntaxTypes.Declaration> declarations,
+        DeclQualifiedName functionName)
+    {
+        if (!declarations.TryGetValue(functionName, out var decl))
+            return null;
+
+        if (decl is not SyntaxTypes.Declaration.FunctionDeclaration funcDecl)
+            return null;
+
+        if (funcDecl.Function.Signature is not { } signatureNode)
+            return null;
+
+        var singleTagRegistry = BuildSingleTagRegistry(declarations);
+
+        if (singleTagRegistry.IsEmpty)
+            return RenderTypeAnnotation(signatureNode.Value.TypeAnnotation.Value);
+
+        var ownModule = functionName.Namespaces;
+        var implementation = funcDecl.Function.Declaration.Value;
+        var paramCount = implementation.Arguments.Count;
+
+        var sigParamTypes = new List<SyntaxTypes.TypeAnnotation?>();
+        SyntaxTypes.TypeAnnotation? sigReturnType = null;
+
+        DecomposeFunctionSignature(
+            signatureNode.Value.TypeAnnotation.Value,
+            paramCount,
+            sigParamTypes,
+            out sigReturnType);
+
+        var transformedParts = new List<string>();
+
+        for (var i = 0; i < paramCount; i++)
+        {
+            var paramType = i < sigParamTypes.Count ? sigParamTypes[i] : null;
+
+            transformedParts.Add(
+                paramType is null
+                ?
+                "?"
+                :
+                RenderTransformedTypeAnnotationAtRoot(
+                    paramType,
+                    singleTagRegistry,
+                    ownModule));
+        }
+
+        var renderedReturn =
+            sigReturnType is null
+            ?
+            "?"
+            :
+            RenderTransformedTypeAnnotationAtRoot(
+                sigReturnType,
+                singleTagRegistry,
+                ownModule);
+
+        var sb = new StringBuilder();
+
+        for (var i = 0; i < transformedParts.Count; i++)
+        {
+            sb.Append(ParenIfTopLevelArrow(transformedParts[i]));
+            sb.Append(" -> ");
+        }
+
+        sb.Append(renderedReturn);
+        return sb.ToString();
+    }
+
+    private static string RenderTransformedTypeAnnotationAtRoot(
+        SyntaxTypes.TypeAnnotation annotation,
+        ImmutableDictionary<DeclQualifiedName, SingleTagShapeInfo> singleTagRegistry,
+        ModuleName ownModule)
+    {
+        var (info, unwrapped) = TryResolveSingleTagWrap(annotation, singleTagRegistry, ownModule);
+
+        if (info is not null && unwrapped is not null)
+            return unwrapped;
+
+        return RenderTypeAnnotation(annotation);
     }
 }
 
