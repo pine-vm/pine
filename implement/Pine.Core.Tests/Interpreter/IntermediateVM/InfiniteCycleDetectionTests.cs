@@ -370,9 +370,9 @@ public class InfiniteCycleDetectionTests
             .Unpack(
                 fromErr: err => err,
                 fromOk: ok =>
-                    throw new InvalidOperationException(
-                        "Expected the evaluation to fail with an infinite-cycle error " +
-                        "but it returned successfully with value: " + ok.ReturnValue.Evaluate()));
+                throw new InvalidOperationException(
+                    "Expected the evaluation to fail with an infinite-cycle error " +
+                    "but it returned successfully with value: " + ok.ReturnValue.Evaluate()));
     }
 
     private static EvaluationError EvaluateExpressionExpectingError(
@@ -409,8 +409,8 @@ public class InfiniteCycleDetectionTests
             .Unpack(
                 fromErr: err => err,
                 fromOk: ok =>
-                    throw new InvalidOperationException(
-                        "Expected the evaluation to fail with an infinite-cycle error " +
-                        "but it returned successfully with value: " + ok.ReturnValue.Evaluate()));
+                throw new InvalidOperationException(
+                    "Expected the evaluation to fail with an infinite-cycle error " +
+                    "but it returned successfully with value: " + ok.ReturnValue.Evaluate()));
     }
 }

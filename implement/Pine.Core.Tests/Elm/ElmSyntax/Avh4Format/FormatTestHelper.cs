@@ -11,7 +11,8 @@ public class FormatTestHelper
 {
     public static File ParseFile(string input)
     {
-        return ElmSyntaxParser.ParseModuleText(input)
+        return
+            ElmSyntaxParser.ParseModuleText(input)
             .Extract(err => throw new Exception($"Parsing failed: {err}"));
     }
 

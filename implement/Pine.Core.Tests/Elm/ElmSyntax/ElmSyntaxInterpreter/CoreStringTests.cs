@@ -43,11 +43,11 @@ public class CoreStringTests
         // includes the corresponding kernel modules.
         return
             [
-                LoadKernelModuleSource("String.elm"),
-                LoadKernelModuleSource("List.elm"),
-                LoadKernelModuleSource("Basics.elm"),
-                LoadKernelModuleSource("Maybe.elm"),
-                LoadKernelModuleSource("Char.elm"),
+            LoadKernelModuleSource("String.elm"),
+            LoadKernelModuleSource("List.elm"),
+            LoadKernelModuleSource("Basics.elm"),
+            LoadKernelModuleSource("Maybe.elm"),
+            LoadKernelModuleSource("Char.elm"),
             ];
     }
 

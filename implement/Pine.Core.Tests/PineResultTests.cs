@@ -9,11 +9,12 @@ public class PineResultTests
     [Fact]
     public void Result_JSON_coding_roundtrip_string_int()
     {
-        var testCases = new[]
-        {
-            Result<string, int>.err("Error string"),
-            Result<string, int>.ok(4567),
-        };
+        var testCases =
+            new[]
+            {
+                Result<string, int>.err("Error string"),
+                Result<string, int>.ok(4567),
+            };
 
         foreach (var testCase in testCases)
         {

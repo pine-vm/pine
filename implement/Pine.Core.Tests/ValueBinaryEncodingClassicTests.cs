@@ -19,25 +19,19 @@ public class ValueBinaryEncodingClassicTests
             PineValue.List(
                 PineValue.List(
                     IntegerEncoding.EncodeSignedInteger(71),
-                    largeComponent
-                    ),
+                    largeComponent),
                 PineValue.List(
-                    IntegerEncoding.EncodeSignedInteger(91)
-                    )
-                );
+                    IntegerEncoding.EncodeSignedInteger(91)));
 
         var compositionBeta =
             PineValue.List(
                 PineValue.List(
                     IntegerEncoding.EncodeSignedInteger(71),
-                    largeComponent
-                    ),
+                    largeComponent),
                 PineValue.List(
                     IntegerEncoding.EncodeSignedInteger(91),
-                    largeComponent
-                    ),
-                largeComponent
-                );
+                    largeComponent),
+                largeComponent);
 
         using var compositionAlfaEncodedBytes = new System.IO.MemoryStream();
 
@@ -179,7 +173,8 @@ public class ValueBinaryEncodingClassicTests
         var encoded32 = encoded32Stream.ToArray();
 
         // Encode with old 64-bit format by calling Encode64 directly via reflection
-        var encode64Method = typeof(ValueBinaryEncodingClassic)
+        var encode64Method =
+            typeof(ValueBinaryEncodingClassic)
             .GetMethod("Encode64", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
 
         using var encoded64Stream = new System.IO.MemoryStream();
@@ -222,7 +217,9 @@ public class ValueBinaryEncodingClassicTests
             // Encode with old 64-bit format using reflection
             var encode64Method =
                 typeof(ValueBinaryEncodingClassic)
-                .GetMethod("Encode64", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
+                .GetMethod(
+                    "Encode64",
+                    System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
 
             encode64Method.Should().NotBeNull();
 

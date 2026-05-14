@@ -11,7 +11,7 @@ public class KernelFunctionFusedTests
     public void ConcatAndReverse_SymmetricBehavior()
     {
         IReadOnlyList<PineValue[]> testCases =
-        [
+            [
             [],
 
             [PineValue.EmptyList],
@@ -19,33 +19,33 @@ public class KernelFunctionFusedTests
             [PineValue.Blob([1, 2, 3])],
 
             [
-                PineValue.Blob([10, 20]),
-                PineValue.Blob([30, 40])
+            PineValue.Blob([10, 20]),
+            PineValue.Blob([30, 40])
             ],
 
             [
-                PineValue.List(
-                    [
-                    PineValue.Blob([1]),
-                    PineValue.Blob([2])
-                    ]),
-                PineValue.List(
-                    [
-                    PineValue.Blob([3]),
-                    PineValue.Blob([4])
-                    ])
+            PineValue.List(
+                [
+                PineValue.Blob([1]),
+                PineValue.Blob([2])
+                ]),
+            PineValue.List(
+                [
+                PineValue.Blob([3]),
+                PineValue.Blob([4])
+                ])
             ],
 
             [
-                PineValue.Blob([10, 20]),
-                PineValue.List(
-                    [
-                    PineValue.Blob([30]),
-                    PineValue.Blob([40])
-                    ]),
-                PineValue.Blob([50, 60])
+            PineValue.Blob([10, 20]),
+            PineValue.List(
+                [
+                PineValue.Blob([30]),
+                PineValue.Blob([40])
+                ]),
+            PineValue.Blob([50, 60])
             ]
-        ];
+            ];
 
         for (var i = 0; i < testCases.Count; i++)
         {

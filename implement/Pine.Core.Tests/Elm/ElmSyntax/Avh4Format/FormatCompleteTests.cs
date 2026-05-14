@@ -5322,7 +5322,6 @@ public class FormatCompleteTests
                                                     )
                     )
             """",
-
             ];
 
         for (var i = 0; i < testCases.Count; i++)
@@ -5433,14 +5432,16 @@ public class FormatCompleteTests
                     {
                         throw new Exception(
                             "Failed in test case file: " + string.Join("/", elmModuleFile.Key) +
-                            " from source directory: " + sourceDirectory, exFile);
+                            " from source directory: " + sourceDirectory,
+                            exFile);
                     }
                 }
             }
             catch (Exception e)
             {
                 throw new Exception(
-                    "Failed for test case source: " + sourceDirectory, e);
+                    "Failed for test case source: " + sourceDirectory,
+                    e);
             }
         }
     }

@@ -15,63 +15,63 @@ public class JsonConverterForPineValueTests
 
         jsonSerializerOptions.Converters.Add(new JsonConverterForPineValue());
 
-        var testCases = new[]
-        {
-            IntegerEncoding.EncodeSignedInteger(0),
-            IntegerEncoding.EncodeSignedInteger(1234),
-            IntegerEncoding.EncodeSignedInteger(-45678),
+        var testCases =
+            new[]
+            {
+                IntegerEncoding.EncodeSignedInteger(0),
+                IntegerEncoding.EncodeSignedInteger(1234),
+                IntegerEncoding.EncodeSignedInteger(-45678),
 
-            PineValue.EmptyList,
+                PineValue.EmptyList,
 
-            PineValue.List(
-                [IntegerEncoding.EncodeSignedInteger(56), IntegerEncoding.EncodeSignedInteger(57)]),
+                PineValue.List(
+                    [IntegerEncoding.EncodeSignedInteger(56), IntegerEncoding.EncodeSignedInteger(57)]),
 
-            PineValue.Blob([]),
-            PineValue.Blob([32]),
-            PineValue.Blob([10,11,13]),
+                PineValue.Blob([]),
+                PineValue.Blob([32]),
+                PineValue.Blob([10,11,13]),
 
-            PineValue.Blob([0]),
+                PineValue.Blob([0]),
 
-            PineValue.Blob([0, 0]),
+                PineValue.Blob([0, 0]),
 
-            PineValue.Blob([0, 0, 0]),
+                PineValue.Blob([0, 0, 0]),
 
-            PineValue.List(
-                [PineValue.List([]), PineValue.List([])]),
+                PineValue.List(
+                    [PineValue.List([]), PineValue.List([])]),
 
-            PineValue.List(
-                [PineValue.Blob([32])]),
+                PineValue.List(
+                    [PineValue.Blob([32])]),
 
-            PineValue.List(
-                [PineValue.Blob([0])]),
+                PineValue.List(
+                    [PineValue.Blob([0])]),
 
-            PineValue.List(
-                [PineValue.Blob([0, 0])]),
+                PineValue.List(
+                    [PineValue.Blob([0, 0])]),
 
-            PineValue.List(
-                [PineValue.Blob([0, 41])]),
+                PineValue.List(
+                    [PineValue.Blob([0, 41])]),
 
-            StringEncoding.ValueFromString("Hello world!"),
+                StringEncoding.ValueFromString("Hello world!"),
 
-            PineValue.List(
-                [StringEncoding.ValueFromString(" ")]),
+                PineValue.List(
+                    [StringEncoding.ValueFromString(" ")]),
 
-            PineValue.List(
-                [StringEncoding.ValueFromString("Hello world!")]),
+                PineValue.List(
+                    [StringEncoding.ValueFromString("Hello world!")]),
 
-            PineValue.List(
-                [StringEncoding.ValueFromString("+")]),
+                PineValue.List(
+                    [StringEncoding.ValueFromString("+")]),
 
-            PineValue.List(
-                [StringEncoding.ValueFromString("\"")]),
+                PineValue.List(
+                    [StringEncoding.ValueFromString("\"")]),
 
-            PineValue.List(
-                [
-                StringEncoding.ValueFromString("String"),
-                PineValue.List([StringEncoding.ValueFromString("Hello world!")]),
-                ]),
-
-        };
+                PineValue.List(
+                    [
+                    StringEncoding.ValueFromString("String"),
+                    PineValue.List([StringEncoding.ValueFromString("Hello world!")]),
+                    ]),
+            };
 
         foreach (var testCase in testCases)
         {

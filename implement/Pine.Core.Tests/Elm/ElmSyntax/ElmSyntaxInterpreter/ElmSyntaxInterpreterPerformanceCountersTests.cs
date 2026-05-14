@@ -88,7 +88,7 @@ public class ElmSyntaxInterpreterPerformanceCountersTests
     {
         var moduleNode =
             BundledFiles.ElmKernelModulesDefault.Value
-                .GetNodeAtPath([fileName])
+            .GetNodeAtPath([fileName])
             ?? throw new Exception("Did not find elm-kernel-modules/" + fileName + " in bundled files.");
 
         if (moduleNode is not Files.FileTree.FileNode moduleFile)
@@ -118,7 +118,7 @@ public class ElmSyntaxInterpreterPerformanceCountersTests
 
         return
             (ElmValue.RenderAsElmExpression(value).expressionString,
-             ElmSyntaxInterpreterPerformanceCountersFormatting.FormatCounts(counters));
+            ElmSyntaxInterpreterPerformanceCountersFormatting.FormatCounts(counters));
     }
 
     // ============================================================

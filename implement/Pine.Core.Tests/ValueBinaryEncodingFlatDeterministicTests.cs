@@ -19,25 +19,19 @@ public class ValueBinaryEncodingFlatDeterministicTests
             PineValue.List(
                 PineValue.List(
                     IntegerEncoding.EncodeSignedInteger(71),
-                    largeComponent
-                    ),
+                    largeComponent),
                 PineValue.List(
-                    IntegerEncoding.EncodeSignedInteger(91)
-                    )
-                );
+                    IntegerEncoding.EncodeSignedInteger(91)));
 
         var compositionBeta =
             PineValue.List(
                 PineValue.List(
                     IntegerEncoding.EncodeSignedInteger(71),
-                    largeComponent
-                    ),
+                    largeComponent),
                 PineValue.List(
                     IntegerEncoding.EncodeSignedInteger(91),
-                    largeComponent
-                    ),
-                largeComponent
-                );
+                    largeComponent),
+                largeComponent);
 
         using var compositionAlfaEncodedBytes = new System.IO.MemoryStream();
 

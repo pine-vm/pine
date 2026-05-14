@@ -66,10 +66,10 @@ public class JsonConverterForChoiceTypeTests
             }
             """)
             .Should().Be(
-                new MixedClass<long>.VariantWithRecursion(
-                    123,
-                    new MixedClass<long>.VariantWithThreeArgs(-1, 876036854775808, "another text"),
-                    new MixedClass<int>.VariantWithTwoArgs(78, "a text")));
+            new MixedClass<long>.VariantWithRecursion(
+                123,
+                new MixedClass<long>.VariantWithThreeArgs(-1, 876036854775808, "another text"),
+                new MixedClass<int>.VariantWithTwoArgs(78, "a text")));
 
         JsonSerializer.Serialize<MixedClass<object>>(new MixedClass<object>.VariantWithoutArgs())
             .Should().Be($$"""{"VariantWithoutArgs":[]}""");
@@ -105,10 +105,10 @@ public class JsonConverterForChoiceTypeTests
         JsonSerializer.Deserialize<WithResults<long>>(
             $$"""{ "DiverseResults" : [ { "Err" : [ "error" ] }, { "Ok" : [ 123456789123456789 ] }, { "Ok" : [ { "Err" : [ "nested error" ] } ] } ] }""")
             .Should().Be(
-                new WithResults<long>.DiverseResults(
-                    Result<string, int>.err("error"),
-                    Result<string, long>.ok(123456789123456789),
-                    Result<string, Result<string, long>>.ok(Result<string, long>.err("nested error"))));
+            new WithResults<long>.DiverseResults(
+                Result<string, int>.err("error"),
+                Result<string, long>.ok(123456789123456789),
+                Result<string, Result<string, long>>.ok(Result<string, long>.err("nested error"))));
 
         JsonSerializer.Serialize<WithResults<long>>(
             new WithResults<long>.DiverseResults(

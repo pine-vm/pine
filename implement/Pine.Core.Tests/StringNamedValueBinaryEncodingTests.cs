@@ -13,24 +13,26 @@ public class StringNamedValueBinaryEncodingTests
     {
         IReadOnlyList<IReadOnlyDictionary<string, PineValue>> testCases =
             [
-                ImmutableDictionary<string, PineValue>.Empty
-                .SetItem("a", PineValue.EmptyBlob),
+            ImmutableDictionary<string, PineValue>.Empty
+            .SetItem("a", PineValue.EmptyBlob),
 
-                ImmutableDictionary<string, PineValue>.Empty
-                .SetItem(
-                    "alfa",
-                    PineValue.List(
-                        [
-                        StringEncoding.ValueFromString("tag-a"),
-                        StringEncoding.ValueFromString("Sed ut perspiciatis unde omnis iste natus error sit voluptatem accusantium doloremque laudantium, totam rem aperiam, eaque ipsa quae ab illo inventore veritatis et quasi architecto beatae vitae dicta sunt explicabo."),
-                        ]))
-                .SetItem(
-                    "beta",
-                    PineValue.List(
-                        [
-                        StringEncoding.ValueFromString("tag-b"),
-                        StringEncoding.ValueFromString("Sed ut perspiciatis unde omnis iste natus error sit voluptatem accusantium doloremque laudantium, totam rem aperiam, eaque ipsa quae ab illo inventore veritatis et quasi architecto beatae vitae dicta sunt explicabo."),
-                        ]))
+            ImmutableDictionary<string, PineValue>.Empty
+            .SetItem(
+                "alfa",
+                PineValue.List(
+                    [
+                    StringEncoding.ValueFromString("tag-a"),
+                    StringEncoding.ValueFromString(
+                        "Sed ut perspiciatis unde omnis iste natus error sit voluptatem accusantium doloremque laudantium, totam rem aperiam, eaque ipsa quae ab illo inventore veritatis et quasi architecto beatae vitae dicta sunt explicabo."),
+                    ]))
+            .SetItem(
+                "beta",
+                PineValue.List(
+                    [
+                    StringEncoding.ValueFromString("tag-b"),
+                    StringEncoding.ValueFromString(
+                        "Sed ut perspiciatis unde omnis iste natus error sit voluptatem accusantium doloremque laudantium, totam rem aperiam, eaque ipsa quae ab illo inventore veritatis et quasi architecto beatae vitae dicta sunt explicabo."),
+                    ]))
             ];
 
         for (var i = 0; i < testCases.Count; i++)

@@ -9,11 +9,12 @@ public class PineMaybeTests
     [Fact]
     public void Maybe_JSON_coding_roundtrip_string()
     {
-        var testCases = new[]
-        {
-            Maybe<string>.nothing(),
-            Maybe<string>.just("some text"),
-        };
+        var testCases =
+            new[]
+            {
+                Maybe<string>.nothing(),
+                Maybe<string>.just("some text"),
+            };
 
         foreach (var testCase in testCases)
         {

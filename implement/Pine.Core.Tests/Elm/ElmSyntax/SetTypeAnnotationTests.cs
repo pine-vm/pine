@@ -30,9 +30,7 @@ public class SetTypeAnnotationTests
         var declarationsTypeAnnotations =
             ImmutableDictionary<IReadOnlyList<string>, TypeAnnotation>.Empty
             .WithComparers(EnumerableExtensions.EqualityComparer<IReadOnlyList<string>>())
-            .Add(
-                ["foo"],
-                TypedAnnotation("Int"));
+            .Add(["foo"], TypedAnnotation("Int"));
 
         var resultText =
             SetTypeAnnotationsAndFormatToString(
@@ -68,9 +66,7 @@ public class SetTypeAnnotationTests
         var declarationsTypeAnnotations =
             ImmutableDictionary<IReadOnlyList<string>, TypeAnnotation>.Empty
             .WithComparers(EnumerableExtensions.EqualityComparer<IReadOnlyList<string>>())
-            .Add(
-                ["foo"],
-                TypedAnnotation("Int"));
+            .Add(["foo"], TypedAnnotation("Int"));
 
         var resultText =
             SetTypeAnnotationsAndFormatToString(
@@ -146,12 +142,8 @@ public class SetTypeAnnotationTests
         var declarationsTypeAnnotations =
             ImmutableDictionary<IReadOnlyList<string>, TypeAnnotation>.Empty
             .WithComparers(EnumerableExtensions.EqualityComparer<IReadOnlyList<string>>())
-            .Add(
-                ["foo"],
-                TypedAnnotation("Int"))
-            .Add(
-                ["foo", "helper"],
-                TypedAnnotation("Int"));
+            .Add(["foo"], TypedAnnotation("Int"))
+            .Add(["foo", "helper"], TypedAnnotation("Int"));
 
         var resultText =
             SetTypeAnnotationsAndFormatToString(
@@ -199,12 +191,8 @@ public class SetTypeAnnotationTests
         var declarationsTypeAnnotations =
             ImmutableDictionary<IReadOnlyList<string>, TypeAnnotation>.Empty
             .WithComparers(EnumerableExtensions.EqualityComparer<IReadOnlyList<string>>())
-            .Add(
-                ["foo"],
-                TypedAnnotation("Int"))
-            .Add(
-                ["foo", "outer"],
-                TypedAnnotation("Int"))
+            .Add(["foo"], TypedAnnotation("Int"))
+            .Add(["foo", "outer"], TypedAnnotation("Int"))
             .Add(
                 ["foo", "outer", "inner"],
                 TypedAnnotation("Int"));
@@ -256,12 +244,8 @@ public class SetTypeAnnotationTests
         var declarationsTypeAnnotations =
             ImmutableDictionary<IReadOnlyList<string>, TypeAnnotation>.Empty
             .WithComparers(EnumerableExtensions.EqualityComparer<IReadOnlyList<string>>())
-            .Add(
-                ["foo"],
-                TypedAnnotation("Int"))
-            .Add(
-                ["bar"],
-                TypedAnnotation("String"));
+            .Add(["foo"], TypedAnnotation("Int"))
+            .Add(["bar"], TypedAnnotation("String"));
 
         var resultText =
             SetTypeAnnotationsAndFormatToString(
@@ -463,15 +447,9 @@ public class SetTypeAnnotationTests
         var declarationsTypeAnnotations =
             ImmutableDictionary<IReadOnlyList<string>, TypeAnnotation>.Empty
             .WithComparers(EnumerableExtensions.EqualityComparer<IReadOnlyList<string>>())
-            .Add(
-                ["foo"],
-                TypedAnnotation("Int"))
-            .Add(
-                ["foo", "first"],
-                TypedAnnotation("Int"))
-            .Add(
-                ["foo", "second"],
-                TypedAnnotation("Int"));
+            .Add(["foo"], TypedAnnotation("Int"))
+            .Add(["foo", "first"], TypedAnnotation("Int"))
+            .Add(["foo", "second"], TypedAnnotation("Int"));
 
         var resultText =
             SetTypeAnnotationsAndFormatToString(
@@ -526,9 +504,7 @@ public class SetTypeAnnotationTests
             .Add(
                 ["foo"],
                 FunctionAnnotation(TypedAnnotation("Int"), TypedAnnotation("Int")))
-            .Add(
-                ["foo", "helper"],
-                TypedAnnotation("Int"));
+            .Add(["foo", "helper"], TypedAnnotation("Int"));
 
         var resultText =
             SetTypeAnnotationsAndFormatToString(
@@ -828,34 +804,34 @@ public class SetTypeAnnotationTests
         string typeName,
         params TypeAnnotation[] typeArguments)
     {
-        return new TypeAnnotation.Typed
-        (
-            TypeName:
+        return
+            new TypeAnnotation.Typed(
+                TypeName:
                 MakeNode<(IReadOnlyList<string> ModuleName, string Name)>(
                     (ModuleName: Array.Empty<string>(), Name: typeName),
                     s_rangeZero),
-
-            TypeArguments:
-                [.. typeArguments.Select(ta => MakeNode(ta, s_rangeZero))]
-        );
+                TypeArguments:
+                [.. typeArguments.Select(ta => MakeNode(ta, s_rangeZero))]);
     }
 
     private static TypeAnnotation.FunctionTypeAnnotation FunctionAnnotation(
         TypeAnnotation argumentType,
         TypeAnnotation returnType)
     {
-        return new TypeAnnotation.FunctionTypeAnnotation(
-            ArgumentType: MakeNode(argumentType, s_rangeZero),
-            ArrowLocation: s_locationZero,
-            ReturnType: MakeNode(returnType, s_rangeZero));
+        return
+            new TypeAnnotation.FunctionTypeAnnotation(
+                ArgumentType: MakeNode(argumentType, s_rangeZero),
+                ArrowLocation: s_locationZero,
+                ReturnType: MakeNode(returnType, s_rangeZero));
     }
 
     private static TypeAnnotation.Tupled TupledAnnotation(params TypeAnnotation[] elements)
     {
         if (elements.Length is 0)
         {
-            return new TypeAnnotation.Tupled(
-                TypeAnnotations: new SeparatedSyntaxList<Node<TypeAnnotation>>.Empty());
+            return
+                new TypeAnnotation.Tupled(
+                    TypeAnnotations: new SeparatedSyntaxList<Node<TypeAnnotation>>.Empty());
         }
 
         var first =
@@ -866,8 +842,9 @@ public class SetTypeAnnotationTests
             .Select(e => (s_locationZero, MakeNode(e, s_rangeZero)))
             .ToList();
 
-        return new TypeAnnotation.Tupled(
-            TypeAnnotations: new SeparatedSyntaxList<Node<TypeAnnotation>>.NonEmpty(first, rest));
+        return
+            new TypeAnnotation.Tupled(
+                TypeAnnotations: new SeparatedSyntaxList<Node<TypeAnnotation>>.NonEmpty(first, rest));
     }
 
     private static TypeAnnotation.GenericType GenericAnnotation(string name)
@@ -879,27 +856,36 @@ public class SetTypeAnnotationTests
     {
         if (fields.Length is 0)
         {
-            return new TypeAnnotation.Record(
-                RecordDefinition: new RecordDefinition(
-                    Fields: new SeparatedSyntaxList<Node<RecordField>>.Empty()));
+            return
+                new TypeAnnotation.Record(
+                    RecordDefinition: new RecordDefinition(
+                        Fields: new SeparatedSyntaxList<Node<RecordField>>.Empty()));
         }
 
-        var firstField = new RecordField(
-            FieldName: MakeNode(fields[0].name, s_rangeZero),
-            ColonLocation: s_locationZero,
-            FieldType: MakeNode(fields[0].type, s_rangeZero));
-
-        var restFields = fields.Skip(1)
-            .Select(f => (s_locationZero, MakeNode(new RecordField(
-                FieldName: MakeNode(f.name, s_rangeZero),
+        var firstField =
+            new RecordField(
+                FieldName: MakeNode(fields[0].name, s_rangeZero),
                 ColonLocation: s_locationZero,
-                FieldType: MakeNode(f.type, s_rangeZero)), s_rangeZero)))
+                FieldType: MakeNode(fields[0].type, s_rangeZero));
+
+        var restFields =
+            fields.Skip(1)
+            .Select(
+                f => (s_locationZero,
+                MakeNode(
+                    new RecordField(
+                        FieldName: MakeNode(f.name, s_rangeZero),
+                        ColonLocation: s_locationZero,
+                        FieldType: MakeNode(f.type, s_rangeZero)),
+                    s_rangeZero)))
             .ToList();
 
-        return new TypeAnnotation.Record(
-            RecordDefinition: new RecordDefinition(
-                Fields: new SeparatedSyntaxList<Node<RecordField>>.NonEmpty(
-                    MakeNode(firstField, s_rangeZero), restFields)));
+        return
+            new TypeAnnotation.Record(
+                RecordDefinition: new RecordDefinition(
+                    Fields: new SeparatedSyntaxList<Node<RecordField>>.NonEmpty(
+                        MakeNode(firstField, s_rangeZero),
+                        restFields)));
     }
 
     private static readonly Location s_locationZero = new(0, 0);
