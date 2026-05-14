@@ -6003,4 +6003,153 @@ public class CSharpFormatTests
 
         AssertFormattedSyntax(input, input, scriptMode: false);
     }
+
+    [Fact]
+    public void Preserve_comment_single_space_separation_after_collection_expression_item()
+    {
+        var input =
+            """"
+            var recursiveCallEnv =
+                Expression.ListInstance(
+                    [
+                    updatesExpr,
+                    Expression.EmptyList, // processed flat fields (initially empty)
+                    recordFieldsExpr // remaining flat fields
+                    ]);
+            """";
+
+        AssertFormattedSyntax(input, input, scriptMode: true);
+    }
+
+    [Fact]
+    public void Preserve_comment_sections_in_collection_expression_items()
+    {
+        var input =
+            """"
+            var test =
+                [
+                alfa,
+
+
+                // Comment
+
+                beta,
+                71,
+
+
+                // Another comment
+
+                gamma,
+                73
+                ]);
+            """";
+
+        AssertFormattedSyntax(input, input, scriptMode: true);
+    }
+
+    [Fact]
+    public void Format_multiline_string_literal_in_object_creation()
+    {
+        var input =
+            """"
+            var scenarios = new[]
+            {
+                new
+                {
+                    Name = "Literal_Integer",
+                    Decls = ImmutableDictionary<DeclQualifiedName, Expression>.Empty,
+                    Expected = """
+                    decl_a =
+                        1
+                    """
+                }
+            };
+            """";
+
+        var expected =
+            """"
+            var scenarios =
+                new[]
+                {
+                    new
+                    {
+                        Name = "Literal_Integer",
+                        Decls = ImmutableDictionary<DeclQualifiedName, Expression>.Empty,
+                        Expected =
+                        """
+                        decl_a =
+                            1
+                        """
+                    }
+                };
+            """";
+
+        AssertFormattedSyntax(input, expected, scriptMode: true);
+    }
+
+    [Fact]
+    public void Format_multiline_string_literal_in_array_creation_items()
+    {
+        var input =
+            """""
+            var testCases = new[]
+            {
+                """"
+                module Test exposing (..)
+
+
+                type MyType
+                    = ConstructorA
+
+                """"
+            };
+            """"";
+
+        var expected =
+            """""
+            var testCases =
+                new[]
+                {
+                    """"
+                    module Test exposing (..)
+
+
+                    type MyType
+                        = ConstructorA
+
+                    """"
+                };
+            """"";
+
+        AssertFormattedSyntax(input, expected, scriptMode: true);
+    }
+
+    [Fact]
+    public void Format_snapshot_assertion_containing_multiline_string_literal()
+    {
+        var input =
+            """"
+            ElmSyntaxInterpreterPerformanceCountersFormatting.FormatCounts(report.InterpreterCounters)
+                .Should().Be(
+                    """
+                    InstructionLoopCount: 2_249
+                    DirectFunctionApplicationCount: 360
+                    FunctionValueApplicationCount: 48
+                    PineBuiltinInvocationCount: 116
+                    """);
+            """";
+
+        var expected =
+            """"
+            ElmSyntaxInterpreterPerformanceCountersFormatting.FormatCounts(report.InterpreterCounters).Should().Be(
+                """
+                InstructionLoopCount: 2_249
+                DirectFunctionApplicationCount: 360
+                FunctionValueApplicationCount: 48
+                PineBuiltinInvocationCount: 116
+                """);
+            """";
+
+        AssertFormattedSyntax(input, expected, scriptMode: true);
+    }
 }

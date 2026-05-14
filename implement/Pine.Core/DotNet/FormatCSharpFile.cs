@@ -465,6 +465,105 @@ public static class FormatCSharpFile
     }
 
     /// <summary>
+    /// Rebuilds leading trivia preserving the blank-line distribution around any
+    /// comments or directives present in <paramref name="orig"/>. Each "gap" of
+    /// consecutive line breaks (between the previous token and the first comment,
+    /// between adjacent comments, and after the last comment) is preserved with
+    /// a minimum of 1 line break. Each comment is emitted at
+    /// <paramref name="indent"/>. The result lands at the given indent ready
+    /// for the next token.
+    /// </summary>
+    /// <remarks>
+    /// Unlike <see cref="EnsureLeadingBreaks"/>, this helper does not collapse
+    /// all leading line breaks before the first comment — it preserves the
+    /// position of blank lines around each comment so that, for example, a
+    /// comment that originally had a blank line after it keeps that blank line
+    /// after formatting instead of having all blanks moved before it.
+    /// </remarks>
+    private static SyntaxTriviaList RebuildLeadingTriviaPreservingBlanks(
+        SyntaxTriviaList orig, int extraFirstGapBreaks, int indent)
+    {
+        var gaps = new List<int>();
+        var preserved = new List<SyntaxTrivia>();
+        var currentBreaks = 0;
+
+        foreach (var t in orig)
+        {
+            if (IsLineBreak(t))
+            {
+                currentBreaks++;
+            }
+            else if (IsWhitespace(t))
+            {
+                // ignore — whitespace within trivia is not significant here
+            }
+            else
+            {
+                gaps.Add(currentBreaks);
+                preserved.Add(t);
+                currentBreaks = 0;
+            }
+        }
+
+        var trailingGap = currentBreaks;
+        var r = new List<SyntaxTrivia>();
+
+        if (preserved.Count is 0)
+        {
+            // No preserved items: emit at least one line break + indent.
+            // Preserve the original blank-line count from the combined gap.
+            var n = Math.Max(1, extraFirstGapBreaks + trailingGap);
+
+            for (var k = 0; k < n; k++)
+                r.Add(s_lineFeed);
+
+            r.Add(Indent(indent));
+            return [.. r];
+        }
+
+        // Combine the (stripped) separator trailing breaks into the first gap
+        // so the visual gap before the first comment is preserved.
+        gaps[0] += extraFirstGapBreaks;
+
+        for (var k = 0; k < preserved.Count; k++)
+        {
+            var gap = Math.Max(1, gaps[k]);
+
+            for (var j = 0; j < gap; j++)
+                r.Add(s_lineFeed);
+
+            var t = preserved[k];
+
+            // Preprocessor directives stay at column 0, except region directives
+            // which are indented to match their scope.
+            if (!IsDirectiveTrivia(t) || IsRegionDirective(t))
+                r.Add(Indent(indent));
+
+            r.Add(ReindentMultiLineComment(t, indent));
+
+            // Doc comments include their own trailing newline; others need one
+            if (!t.HasStructure)
+                r.Add(s_lineFeed);
+        }
+
+        // Trailing gap: comment emission already added 1 line break after the
+        // last comment, so subtract one from the desired gap.
+        var finalGap = Math.Max(1, trailingGap);
+
+        for (var j = 0; j < finalGap - 1; j++)
+            r.Add(s_lineFeed);
+
+        if (IsDirectiveTrivia(preserved[^1]))
+        {
+            // Match EnsureLeadingBreaks: directives get an extra trailing newline.
+            r.Add(s_lineFeed);
+        }
+
+        r.Add(Indent(indent));
+        return [.. r];
+    }
+
+    /// <summary>
     /// Re-indents a multi-line block comment so that internal lines match the given indent level.
     /// Single-line comments and non-comment trivia are returned unchanged.
     /// </summary>
@@ -2250,6 +2349,10 @@ public static class FormatCSharpFile
 
             a = a.WithLeadingTrivia(EnsureLeadingBreaks(origLeading, minBreaks, argIndent));
             a = a.WithTrailingTrivia(StripWhitespace(a.GetTrailingTrivia()));
+            // Re-indent multiline raw string literals so their content and closing
+            // delimiter line up with the new argument indent (token text is otherwise
+            // opaque to leading-trivia changes).
+            a = ReindentRawStringLiterals(a, argIndent);
 
             // For named arguments, normalize the expression's indent when it starts
             // on a new line after the colon.
@@ -2582,21 +2685,30 @@ public static class FormatCSharpFile
                 }
             }
 
-            // Preserve blank lines between elements by counting original breaks.
-            // Subtract comment count because EnsureLeadingBreaks adds a break
-            // after each comment, ensuring stable output across multiple passes.
-            var minBreaks = 1;
+            // Preserve blank lines between elements and around comments by
+            // walking the original trivia and emitting one line break per
+            // gap (max one blank line). Unlike EnsureLeadingBreaks, this
+            // preserves the *position* of blank lines around comments rather
+            // than collapsing them all before the first comment.
+            var sepTrailingBreaksForGap =
+                (i > 0 && i - 1 < origSeps.Count)
+                ?
+                CountLineBreaks(origSeps[i - 1].TrailingTrivia)
+                :
+                0;
 
-            if (i > 0 && i - 1 < origSeps.Count)
-            {
-                var sepTrailingBreaks = CountLineBreaks(origSeps[i - 1].TrailingTrivia);
-                var elemLeadingBreaks = CountLineBreaks(origLeading);
-                var commentCount = origLeading.Count(IsComment);
-                minBreaks = Math.Max(1, sepTrailingBreaks + elemLeadingBreaks - commentCount);
-            }
+            e =
+                e.WithLeadingTrivia(
+                    RebuildLeadingTriviaPreservingBlanks(
+                        origLeading,
+                        sepTrailingBreaksForGap,
+                        ctx.IndentLevel));
 
-            e = e.WithLeadingTrivia(EnsureLeadingBreaks(origLeading, minBreaks, ctx.IndentLevel));
-            e = e.WithTrailingTrivia(StripWhitespace(node.Elements[i].GetTrailingTrivia()));
+            var trailingTrivia =
+                EnsureSpaceBeforeComments(
+                    StripWhitespace(node.Elements[i].GetTrailingTrivia()));
+
+            e = e.WithTrailingTrivia(trailingTrivia);
             e = ReindentRawStringLiterals(e, ctx.IndentLevel);
             elems.Add(e);
         }
@@ -2680,6 +2792,12 @@ public static class FormatCSharpFile
             e =
                 e.WithTrailingTrivia(
                     EnsureSpaceBeforeComments(StripWhitespace(node.Expressions[i].GetTrailingTrivia())));
+
+            if (e is LiteralExpressionSyntax lit &&
+                lit.Token.IsKind(SyntaxKind.MultiLineRawStringLiteralToken))
+            {
+                e = ReindentRawStringLiterals(e, ci);
+            }
 
             exprs.Add(e);
         }
@@ -3130,6 +3248,41 @@ public static class FormatCSharpFile
 
         if (exprEnd != dotLine)
         {
+            // The original source had the dot on a later line than the expression.
+            // If the chain contains an invocation whose argument list spans multiple
+            // lines (e.g., a multi-line raw string argument), and the entire chain
+            // up to that opening paren would fit at the current indent, collapse
+            // any user-introduced dot breaks: the argument-list break already
+            // provides the visual separation.
+            {
+                SyntaxNode chainTop = node;
+                var walk = node.Parent;
+
+                while (walk is InvocationExpressionSyntax or MemberAccessExpressionSyntax)
+                {
+                    chainTop = walk;
+                    walk = walk.Parent;
+                }
+
+                if (ChainContainsMultiLineArgumentList(chainTop))
+                {
+                    var chainHeadWidth = ComputeChainHeadWidth(chainTop);
+
+                    if (ctx.IndentLevel * IndentSize + chainHeadWidth <= MaximumLineLength)
+                    {
+                        // Collapse the dot break: strip the line break from the
+                        // operator's leading trivia so the dot stays on the same
+                        // line as the expression.
+                        return
+                            node.WithExpression(
+                                fmtExpr.WithTrailingTrivia(
+                                    StripWhitespace(node.Expression.GetTrailingTrivia())))
+                            .WithOperatorToken(
+                                node.OperatorToken.WithLeadingTrivia().WithTrailingTrivia());
+                    }
+                }
+            }
+
             var dotIndent = GetMemberAccessContinuationIndent(node, ctx);
 
             return
@@ -3276,6 +3429,117 @@ public static class FormatCSharpFile
         }
 
         return node.WithExpression(fmtExpr);
+    }
+
+    /// <summary>
+    /// Returns true if any invocation in the given chain (a tree of nested
+    /// MemberAccessExpression and InvocationExpression nodes) has an argument
+    /// list containing a multi-line raw string literal token. Multi-line string
+    /// literals in argument position force a break at the open paren, so
+    /// preserving any earlier dot breaks in the chain becomes redundant noise.
+    /// </summary>
+    private static bool ChainContainsMultiLineArgumentList(SyntaxNode chainNode)
+    {
+        switch (chainNode)
+        {
+            case InvocationExpressionSyntax inv:
+                if (ArgumentListContainsMultiLineRawStringLiteral(inv.ArgumentList))
+                    return true;
+
+                return ChainContainsMultiLineArgumentList(inv.Expression);
+
+            case MemberAccessExpressionSyntax ma:
+                return ChainContainsMultiLineArgumentList(ma.Expression);
+
+            default:
+                return false;
+        }
+    }
+
+    /// <summary>
+    /// Returns true if the argument list contains at least one multi-line raw
+    /// string literal token directly as an argument (or wrapped only in trivial
+    /// expression nodes such as parenthesized expressions or casts).
+    /// </summary>
+    private static bool ArgumentListContainsMultiLineRawStringLiteral(ArgumentListSyntax argList)
+    {
+        foreach (var arg in argList.Arguments)
+        {
+            var expr = arg.Expression;
+
+            while (expr is ParenthesizedExpressionSyntax paren)
+                expr = paren.Expression;
+
+            if (expr is LiteralExpressionSyntax lit &&
+                lit.Token.IsKind(SyntaxKind.MultiLineRawStringLiteralToken))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Computes the width of the leading single-line portion of a member-access /
+    /// invocation chain. Walks the chain from the leftmost expression to the right,
+    /// stopping just before the first invocation whose argument list spans multiple
+    /// lines in the original source. The returned width includes the open paren of
+    /// that stopping invocation (so callers can compare against MaximumLineLength to
+    /// decide whether the entire chain head fits on one line).
+    /// </summary>
+    private static int ComputeChainHeadWidth(SyntaxNode chainTop)
+    {
+        // Build the head text by descending from chainTop to the leftmost atom and
+        // walking back up, concatenating each segment.
+        // Easier: render chainTop to a single line and stop at the first multi-line
+        // argument list.
+
+        var sb = new System.Text.StringBuilder();
+        AppendChainHead(chainTop, sb);
+        return sb.Length;
+    }
+
+    private static void AppendChainHead(SyntaxNode node, System.Text.StringBuilder sb)
+    {
+        switch (node)
+        {
+            case InvocationExpressionSyntax inv:
+                AppendChainHead(inv.Expression, sb);
+                sb.Append('(');
+                // Stop here if the argument list is multi-line; otherwise inline it.
+                if (SpansMultipleLines(inv.ArgumentList))
+                    return;
+
+                {
+                    var argsText = inv.ArgumentList.ToString();
+                    // strip surrounding parens, we already added the open
+                    if (argsText.StartsWith("(") && argsText.EndsWith(")"))
+                        argsText = argsText[1..^1];
+
+                    sb.Append(argsText);
+                    sb.Append(')');
+                }
+
+                return;
+
+            case MemberAccessExpressionSyntax ma:
+                AppendChainHead(ma.Expression, sb);
+                sb.Append(ma.OperatorToken.Text);
+                sb.Append(ma.Name.ToString());
+                return;
+
+            default:
+
+                // Leaf or non-chain node: render trimmed first line.
+                {
+                    var text = node.ToString().Trim();
+                    var nl = text.IndexOf('\n');
+                    sb.Append(nl >= 0 ? text[..nl].TrimEnd() : text);
+                }
+
+                return;
+        }
     }
 
     /// <summary>
@@ -3623,6 +3887,11 @@ public static class FormatCSharpFile
                 fmtExpr.WithLeadingTrivia(
                     EnsureLeadingBreaks(node.Expression.GetLeadingTrivia(), 1, indent));
 
+            // The expression starts on its own line at `indent`. Re-indent any
+            // multiline raw string literals inside it so their content and closing
+            // delimiter line up with the new indent.
+            fmtExpr = ReindentRawStringLiterals(fmtExpr, indent);
+
             return
                 node.WithNameEquals(
                     node.NameEquals.WithEqualsToken(
@@ -3718,6 +3987,12 @@ public static class FormatCSharpFile
             fmtRight =
                 fmtRight.WithLeadingTrivia(
                     EnsureLeadingBreaks(node.Right.GetLeadingTrivia(), 1, rhsIndent));
+
+            // The right-hand side starts on its own line at rhsIndent. Re-indent any
+            // multiline raw string literals inside it so their content and closing
+            // delimiter line up with the new indent (token text is otherwise opaque
+            // to leading-trivia changes).
+            fmtRight = ReindentRawStringLiterals(fmtRight, rhsIndent);
 
             return
                 node.WithLeft(fmtLeft)
