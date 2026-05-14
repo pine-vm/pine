@@ -1497,10 +1497,10 @@ public class KernelJsonFunctionTests
 
         formattedCounts.Should().Be(
             """
-            InvocationCount: 65
-            BuildListCount: 134
+            InvocationCount: 96
+            BuildListCount: 157
             LoopIterationCount: 0
-            InstructionCount: 1_645
+            InstructionCount: 2_254
             """);
     }
 
@@ -1520,10 +1520,10 @@ public class KernelJsonFunctionTests
 
         formattedCounts.Should().Be(
             """
-            InvocationCount: 123
-            BuildListCount: 260
+            InvocationCount: 196
+            BuildListCount: 407
             LoopIterationCount: 0
-            InstructionCount: 3_148
+            InstructionCount: 4_673
             """);
     }
 

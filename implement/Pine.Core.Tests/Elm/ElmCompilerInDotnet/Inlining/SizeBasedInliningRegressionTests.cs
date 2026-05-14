@@ -102,7 +102,7 @@ public class SizeBasedInliningRegressionTests
             ElmInteractiveEnvironment.ParseInteractiveEnvironment(envWith)
             .Extract(err => throw new Exception("Failed parsing env: " + err));
 
-        var elmParserWith = parsedWith.Modules.First(m => m.moduleName == "Elm.Parser");
+        var elmParserWith = parsedWith.Modules.First(m => m.moduleName is "Elm.Parser");
 
         var parseToFileWith = elmParserWith.moduleContent.FunctionDeclarations["parseToFile"];
 

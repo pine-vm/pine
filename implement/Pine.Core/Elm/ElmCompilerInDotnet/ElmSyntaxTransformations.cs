@@ -319,6 +319,117 @@ internal static class ElmSyntaxTransformations
         return new SyntaxTypes.Expression.Application([.. newArgs]);
     }
 
+    /// <summary>
+    /// Constructs an <see cref="SyntaxTypes.Expression.Application"/> from
+    /// the given argument list (where <c>arguments[0]</c> is the function-position
+    /// head and <c>arguments[1..]</c> are the arguments to apply to it),
+    /// flattening any nested-curried form.
+    /// 
+    /// <para>
+    /// If the head expression (after unwrapping <see cref="SyntaxTypes.Expression.ParenthesizedExpression"/>)
+    /// is itself an <see cref="SyntaxTypes.Expression.Application"/>, its
+    /// arguments are spliced in front of the new arguments to produce a
+    /// single flat <see cref="SyntaxTypes.Expression.Application"/>.
+    /// The transformation is applied recursively in case the inner head
+    /// is itself nested.
+    /// </para>
+    /// 
+    /// <para>
+    /// Concretely:
+    /// <code>
+    /// FlattenNestedApplicationHead([Application[h, a, b], c, d])
+    /// =&gt; Application[h, a, b, c, d]
+    /// </code>
+    /// This matters because <c>ExpressionCompiler.CompileApplication</c>
+    /// only takes the direct-call fast path when the head is a
+    /// <see cref="SyntaxTypes.Expression.FunctionOrValue"/>. If the head
+    /// is an <see cref="SyntaxTypes.Expression.Application"/>, the head
+    /// is recursively compiled as a partial application — emitting a
+    /// closure via <c>FunctionValueBuilder.EmitFunctionValueWithEnvFunctions</c>
+    /// — and the outer call then dispatches generically on the closure.
+    /// Flattening into a single <see cref="SyntaxTypes.Expression.Application"/>
+    /// turns this into a single direct (saturated) call, eliminating the
+    /// closure allocation.
+    /// </para>
+    /// 
+    /// <para>
+    /// This helper also re-runs <see cref="ParenthesizeApplicationArguments"/>
+    /// on the result so the rendered output preserves correct
+    /// parenthesization for the (now-promoted) inner arguments.
+    /// </para>
+    /// </summary>
+    internal static SyntaxTypes.Expression.Application ConstructFlatApplication(
+        IReadOnlyList<Node<SyntaxTypes.Expression>> arguments)
+    {
+        if (arguments.Count is 0)
+        {
+            return new SyntaxTypes.Expression.Application(arguments);
+        }
+
+        var headNode = arguments[0];
+        var headExpr = UnwrapParenthesized(headNode.Value);
+
+        if (headExpr is not SyntaxTypes.Expression.Application innerApp)
+        {
+            return new SyntaxTypes.Expression.Application(arguments);
+        }
+
+        // Recurse: the inner head might itself be nested.
+        var flattenedInner = ConstructFlatApplication(innerApp.Arguments);
+
+        var combined =
+            new List<Node<SyntaxTypes.Expression>>(
+                flattenedInner.Arguments.Count + arguments.Count - 1);
+
+        combined.AddRange(flattenedInner.Arguments);
+
+        for (var i = 1; i < arguments.Count; i++)
+        {
+            combined.Add(arguments[i]);
+        }
+
+        var rebuilt =
+            (SyntaxTypes.Expression.Application)ParenthesizeApplicationArguments(
+                new SyntaxTypes.Expression.Application(combined));
+
+        return rebuilt;
+    }
+
+    /// <summary>
+    /// Recursively walks the expression tree and replaces every
+    /// <see cref="SyntaxTypes.Expression.Application"/> whose head is
+    /// (after parenthesis unwrapping) itself an
+    /// <see cref="SyntaxTypes.Expression.Application"/> with the
+    /// equivalent flat form via <see cref="ConstructFlatApplication"/>.
+    /// 
+    /// <para>
+    /// This is the global-normalization counterpart to
+    /// <see cref="ConstructFlatApplication"/>: while construction-site
+    /// callers (e.g. pipe-operator desugaring) should preferably build
+    /// flat Applications directly, this pass is a final guard that
+    /// catches any nested form introduced by substitution-based
+    /// rewrites elsewhere in the pipeline.
+    /// </para>
+    /// </summary>
+    internal static Node<SyntaxTypes.Expression> FlattenAllNestedApplicationHeads(
+        Node<SyntaxTypes.Expression> exprNode)
+    {
+        return
+            RewriteExpressionTree(
+                exprNode,
+                (app, recurse) =>
+                {
+                    var rewrittenArgs = new List<Node<SyntaxTypes.Expression>>(app.Arguments.Count);
+
+                    for (var i = 0; i < app.Arguments.Count; i++)
+                    {
+                        rewrittenArgs.Add(recurse(app.Arguments[i]));
+                    }
+
+                    return ConstructFlatApplication(rewrittenArgs);
+                });
+    }
+
     internal static bool NeedsParenthesesInApplicationArgument(SyntaxTypes.Expression argument) =>
         argument switch
         {

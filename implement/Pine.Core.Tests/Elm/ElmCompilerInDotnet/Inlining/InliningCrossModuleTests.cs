@@ -162,10 +162,8 @@ public class InliningCrossModuleTests
 
             App.charLiteral : ParserFast.Parser App.Captured
             App.charLiteral =
-                (ParserFast.followedBySymbol "'"
-                    (ParserFast.Parser
-                        App.charLiteral__lifted__lambda1
-                    )
+                (App.followedBySymbol__specialized__2
+                    "'"
                 )
 
 
@@ -189,6 +187,13 @@ public class InliningCrossModuleTests
                     }
                     (Elm.Parser.Tokens.identityChar
                         '\n'
+                    )
+
+
+            App.followedBySymbol__specialized__2 _ =
+                ParserFast.Parser
+                    (ParserFast.followedBySymbol__lifted__lambda1
+                        App.charLiteral__lifted__lambda1
                     )
             """.Trim());
     }
@@ -1303,16 +1308,38 @@ public class InliningCrossModuleTests
             Elm.Parser.Expression.charLiteralExpression =
                 ParserFast.symbolFollowedBy
                     "'"
-                    (ParserFast.followedBySymbol "'"
-                        (ParserFast.Parser
-                            (Elm.Parser.Expression.oneOf2MapWithStartRowColumnAndEndRowColumn__specialized__1__lifted__lambda1
+                    (let
+                        ((ParserFast.String strBytes) as str) =
+                            "'"
+                     in
+                     let
+                        strBytesLength : Int
+                        strBytesLength =
+                            Pine_kernel.length
+                                strBytes
+
+                        strLength : Int
+                        strLength =
+                            Pine_kernel.concat
+                                [ Pine_kernel.take
+                                    [ 1, 0 ]
+                                , Pine_kernel.bit_shift_right
+                                    [ 2
+                                    , Pine_kernel.skip
+                                        [ 1, strBytesLength ]
+                                    ]
+                                ]
+                     in
+                     ParserFast.Parser
+                        (ParserFast.followedBySymbol__lifted__lambda1
+                            ( (Elm.Parser.Expression.oneOf2MapWithStartRowColumnAndEndRowColumn__specialized__1__lifted__lambda1
                                 ( (ParserFast.symbolFollowedByParser
                                     "\\"
                                     (Elm.Parser.Tokens.escapedCharValueMap
                                         Basics.identity
                                     )
                                   ), Elm.Parser.Expression.charLiteralExpression__lifted__lambda1, Elm.Parser.Expression.charLiteralExpression__lifted__lambda2 )
-                            )
+                              ), str, strBytes, strBytesLength, strLength )
                         )
                     )
 
@@ -1631,7 +1658,8 @@ public class InliningCrossModuleTests
                     ParserFast.Good elementResult s1 ->
                         Elm.Parser.Expression.loopWhileSucceedsHelp__specialized__1
                             element
-                            (reduce elementResult
+                            (reduce
+                                elementResult
                                 soFar
                             )
                             reduce
@@ -1652,10 +1680,53 @@ public class InliningCrossModuleTests
 
 
             Elm.Parser.Expression.loopWhileSucceedsHelp__specialized__1__specialized__1 soFar reduce s0 =
-                case (ParserFast.symbolFollowedByParser "." Elm.Parser.Tokens.functionNameNode) s0 of
+                case
+                    let
+                        ((ParserFast.String strBytes) as str) =
+                            "."
+
+                        (ParserFast.Parser parseNext) =
+                            Elm.Parser.Tokens.functionNameNode
+
+                        (ParserFast.PState sSrcBytes sOffset sIndent sRow sCol) =
+                            s0
+                    in
+                    let
+                        strBytesLength : Int
+                        strBytesLength =
+                            Pine_kernel.length strBytes
+
+                        strLength : Int
+                        strLength =
+                            Pine_kernel.concat [ Pine_kernel.take [ 1, 0 ], Pine_kernel.bit_shift_right [ 2, Pine_kernel.skip [ 1, strBytesLength ] ] ]
+
+                        sOffsetInt : Int
+                        sOffsetInt =
+                            sOffset
+
+                        sColInt : Int
+                        sColInt =
+                            sCol
+
+                        strSliceBytes : Int
+                        strSliceBytes =
+                            Pine_kernel.take [ strBytesLength, Pine_kernel.skip [ sOffsetInt, sSrcBytes ] ]
+                    in
+                    if Pine_kernel.equal [ strBytes, strSliceBytes ] then
+                        case parseNext (ParserFast.PState sSrcBytes (Pine_builtin.int_add [ sOffsetInt, strBytesLength ]) sIndent sRow (Pine_builtin.int_add [ sColInt, strLength ])) of
+                            (ParserFast.Good _ _) as good ->
+                                good
+
+                            ParserFast.Bad _ x ->
+                                ParserFast.Bad Basics.True x
+
+                    else
+                        ParserFast.Bad Basics.False (ParserFast.ExpectingSymbol sRow sCol str)
+                of
                     ParserFast.Good elementResult s1 ->
                         Elm.Parser.Expression.loopWhileSucceedsHelp__specialized__1__specialized__1
-                            (reduce elementResult
+                            (reduce
+                                elementResult
                                 soFar
                             )
                             reduce

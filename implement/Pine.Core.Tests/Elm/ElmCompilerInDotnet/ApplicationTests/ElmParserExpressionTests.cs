@@ -335,9 +335,9 @@ public class ElmParserExpressionTests
         ElmSyntaxInterpreterPerformanceCountersFormatting.FormatCounts(report.InterpreterCounters)
             .Should().Be(
                 """
-                InstructionLoopCount: 2_249
-                DirectFunctionApplicationCount: 360
-                FunctionValueApplicationCount: 48
+                InstructionLoopCount: 2_238
+                DirectFunctionApplicationCount: 357
+                FunctionValueApplicationCount: 46
                 PineBuiltinInvocationCount: 116
                 """);
     }
@@ -387,9 +387,9 @@ public class ElmParserExpressionTests
         ElmSyntaxInterpreterPerformanceCountersFormatting.FormatCounts(report.InterpreterCounters)
             .Should().Be(
                 """
-                InstructionLoopCount: 4_605
-                DirectFunctionApplicationCount: 799
-                FunctionValueApplicationCount: 99
+                InstructionLoopCount: 4_602
+                DirectFunctionApplicationCount: 798
+                FunctionValueApplicationCount: 98
                 PineBuiltinInvocationCount: 176
                 """);
     }
@@ -431,9 +431,9 @@ public class ElmParserExpressionTests
         ElmSyntaxInterpreterPerformanceCountersFormatting.FormatCounts(report.InterpreterCounters)
             .Should().Be(
                 """
-                InstructionLoopCount: 4_526
-                DirectFunctionApplicationCount: 775
-                FunctionValueApplicationCount: 99
+                InstructionLoopCount: 4_523
+                DirectFunctionApplicationCount: 774
+                FunctionValueApplicationCount: 98
                 PineBuiltinInvocationCount: 176
                 """);
     }

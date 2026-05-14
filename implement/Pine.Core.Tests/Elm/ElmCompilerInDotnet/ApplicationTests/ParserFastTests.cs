@@ -578,10 +578,10 @@ public class ParserFastTests
 
         PerformanceCountersFormatting.FormatCounts(report).Should().Be(
             """
-            InvocationCount: 15
-            BuildListCount: 18
+            InvocationCount: 5
+            BuildListCount: 6
             LoopIterationCount: 0
-            InstructionCount: 544
+            InstructionCount: 218
             """);
     }
 
@@ -598,10 +598,10 @@ public class ParserFastTests
 
         PerformanceCountersFormatting.FormatCounts(report).Should().Be(
             """
-            InvocationCount: 15
-            BuildListCount: 18
+            InvocationCount: 5
+            BuildListCount: 6
             LoopIterationCount: 0
-            InstructionCount: 439
+            InstructionCount: 183
             """);
     }
 
@@ -776,18 +776,18 @@ public class ParserFastTests
 
         PerformanceCountersFormatting.FormatCounts(report1).Should().Be(
             """
-            InvocationCount: 78
-            BuildListCount: 81
+            InvocationCount: 26
+            BuildListCount: 27
             LoopIterationCount: 0
-            InstructionCount: 2_497
+            InstructionCount: 869
             """);
 
         PerformanceCountersFormatting.FormatCounts(report2).Should().Be(
             """
-            InvocationCount: 156
-            BuildListCount: 159
+            InvocationCount: 52
+            BuildListCount: 53
             LoopIterationCount: 0
-            InstructionCount: 4_915
+            InstructionCount: 1_675
             """);
     }
 
@@ -808,16 +808,15 @@ public class ParserFastTests
     private const string ExpectedInterpreterInvocationLog_testWithoutLinebreak_alpha_abc =
         """
         direct testWithoutLinebreak_alpha [ "abc" ]
-        direct ParserFastTestModule.PState [ <pine_blob 12 bytes>, 0, 1, 1, 1 ]
         direct ParserFastTestModule.testWithoutLinebreak_alpha__lifted__lambda1 [  ]
         direct ParserFastTestModule.testWithoutLinebreak_alpha__lifted__lambda2 [  ]
-        direct ParserFastTestModule.map__lifted__lambda1 [ (<function>, <function>) ]
-        fnvalue ParserFastTestModule.map__lifted__lambda1 [ PState (<pine_blob 12 bytes>) 0 1 1 1 ]
+        direct ParserFastTestModule.map__lifted__lambda1__specialized__1 [ (<function>, <function>), [ <pine_blob 12 bytes>, 0, 1, 1, 1 ] ]
+        direct ParserFastTestModule.PState [ <pine_blob 12 bytes>, 0, 1, 1, 1 ]
         fnvalue ParserFastTestModule.testWithoutLinebreak_alpha__lifted__lambda2 [ PState (<pine_blob 12 bytes>) 0 1 1 1 ]
-        direct ParserFastTestModule.skipWhileWithoutLinebreakHelp__specialized__1 [ 0, 1, 1, <pine_blob 12 bytes>, 1 ]
-        direct ParserFastTestModule.skipWhileWithoutLinebreakHelp__specialized__1 [ 4, 1, 2, <pine_blob 12 bytes>, 1 ]
-        direct ParserFastTestModule.skipWhileWithoutLinebreakHelp__specialized__1 [ 8, 1, 3, <pine_blob 12 bytes>, 1 ]
-        direct ParserFastTestModule.skipWhileWithoutLinebreakHelp__specialized__1 [ 12, 1, 4, <pine_blob 12 bytes>, 1 ]
+        direct ParserFastTestModule.skipWhileWithoutLinebreakHelp__specialized__2 [ 0, 1, 1, <pine_blob 12 bytes>, 1 ]
+        direct ParserFastTestModule.skipWhileWithoutLinebreakHelp__specialized__2 [ 4, 1, 2, <pine_blob 12 bytes>, 1 ]
+        direct ParserFastTestModule.skipWhileWithoutLinebreakHelp__specialized__2 [ 8, 1, 3, <pine_blob 12 bytes>, 1 ]
+        direct ParserFastTestModule.skipWhileWithoutLinebreakHelp__specialized__2 [ 12, 1, 4, <pine_blob 12 bytes>, 1 ]
         direct ParserFastTestModule.PState [ <pine_blob 12 bytes>, 12, 1, 1, 4 ]
         direct ParserFastTestModule.String [ <pine_blob 12 bytes> ]
         direct ParserFastTestModule.Good [ "abc", PState (<pine_blob 12 bytes>) 12 1 1 4 ]
@@ -847,7 +846,7 @@ public class ParserFastTests
                     (ParserFastTestModule.String srcBytes) =
                         input
                 in
-                case (ParserFastTestModule.map__lifted__lambda1 ( ParserFastTestModule.testWithoutLinebreak_alpha__lifted__lambda1, ParserFastTestModule.testWithoutLinebreak_alpha__lifted__lambda2 )) (ParserFastTestModule.PState srcBytes 0 1 1 1) of
+                case ParserFastTestModule.map__lifted__lambda1__specialized__1 ( ParserFastTestModule.testWithoutLinebreak_alpha__lifted__lambda1, ParserFastTestModule.testWithoutLinebreak_alpha__lifted__lambda2 ) ( srcBytes, 0, 1, 1, 1 ) of
                     ParserFastTestModule.Good value (ParserFastTestModule.PState finalSrc finalOffset _ finalRow finalCol) ->
                         if Pine_kernel.equal [ finalOffset, Pine_kernel.length srcBytes ] then
                             Result.Ok value
@@ -883,7 +882,7 @@ public class ParserFastTests
 
                 s1 : ParserFastTestModule.State
                 s1 =
-                    ParserFastTestModule.skipWhileWithoutLinebreakHelp__specialized__1
+                    ParserFastTestModule.skipWhileWithoutLinebreakHelp__specialized__2
                         s0Offset
                         s0Row
                         s0Col

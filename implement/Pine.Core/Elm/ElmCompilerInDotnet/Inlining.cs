@@ -302,7 +302,88 @@ public partial class Inlining
         var beforeLambdaLifting = resultBuilder.ToImmutable();
         var afterLambdaLifting = LambdaLifting.LiftLambdas(beforeLambdaLifting);
 
-        return afterLambdaLifting;
+        // Normalize all Application nodes so no Application has another
+        // Application as its head. Substitution-based rewrites elsewhere
+        // in the pipeline (notably the pipe-operator desugaring above)
+        // can produce nested-curried Application form, which forces
+        // ExpressionCompiler.CompileApplication to fall through to the
+        // closure-allocating EmitFunctionValueWithEnvFunctions path
+        // instead of taking the direct-call fast path. Flattening here
+        // reshapes those into single saturated Applications without
+        // changing observable behavior.
+        var normalized = NormalizeApplicationsInDeclarationDictionary(afterLambdaLifting);
+
+        return normalized;
+    }
+
+    /// <summary>
+    /// Returns a copy of <paramref name="declarations"/> where every
+    /// expression body has been rewritten with
+    /// <see cref="ElmSyntaxTransformations.FlattenAllNestedApplicationHeads"/>
+    /// so that no <see cref="SyntaxTypes.Expression.Application"/> in the
+    /// output has another <see cref="SyntaxTypes.Expression.Application"/>
+    /// as its head. See the helper's documentation for why this matters
+    /// for code-emission performance.
+    /// </summary>
+    public static ImmutableDictionary<DeclQualifiedName, SyntaxTypes.Declaration>
+        NormalizeApplicationsInDeclarationDictionary(
+        ImmutableDictionary<DeclQualifiedName, SyntaxTypes.Declaration> declarations)
+    {
+        var builder = ImmutableDictionary.CreateBuilder<DeclQualifiedName, SyntaxTypes.Declaration>();
+
+        foreach (var (key, decl) in declarations)
+        {
+            builder[key] = NormalizeApplicationsInDeclaration(decl);
+        }
+
+        return builder.ToImmutable();
+    }
+
+    private static SyntaxTypes.Declaration NormalizeApplicationsInDeclaration(
+        SyntaxTypes.Declaration decl)
+    {
+        return decl switch
+        {
+            SyntaxTypes.Declaration.FunctionDeclaration funcDecl =>
+            new SyntaxTypes.Declaration.FunctionDeclaration(
+                NormalizeApplicationsInFunction(funcDecl.Function)),
+
+            // Type/alias/port/infix declarations contain no expression bodies
+            // that can host nested Application form.
+            SyntaxTypes.Declaration.CustomTypeDeclaration or
+            SyntaxTypes.Declaration.AliasDeclaration or
+            SyntaxTypes.Declaration.PortDeclaration or
+            SyntaxTypes.Declaration.InfixDeclaration =>
+            decl,
+
+            _ =>
+            throw new NotImplementedException(
+                "NormalizeApplicationsInDeclaration does not handle declaration variant: " +
+                decl.GetType().Name)
+        };
+    }
+
+    private static SyntaxTypes.FunctionStruct NormalizeApplicationsInFunction(
+        SyntaxTypes.FunctionStruct function)
+    {
+        var declValue = function.Declaration.Value;
+
+        var rewrittenBody =
+            ElmSyntaxTransformations.FlattenAllNestedApplicationHeads(declValue.Expression);
+
+        return
+            function with
+            {
+                Declaration =
+                function.Declaration with
+                {
+                    Value =
+                    declValue with
+                    {
+                        Expression = rewrittenBody
+                    }
+                }
+            };
     }
 
     private static bool EnablesSpecialization(InliningContext context) =>
