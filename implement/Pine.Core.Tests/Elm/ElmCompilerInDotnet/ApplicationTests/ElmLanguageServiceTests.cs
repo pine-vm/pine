@@ -86,7 +86,7 @@ public class ElmLanguageServiceTests
         ;
 
     private static readonly Lazy<ElmInteractiveEnvironment.ParsedInteractiveEnvironment> s_env =
-        new(() => BuildLanguageServiceEnv(disableInlining: true));
+        new(() => BuildLanguageServiceEnv(disableInlining: false));
 
     /// <summary>
     /// Builds the parsed interactive environment containing the bundled language
@@ -487,10 +487,10 @@ public class ElmLanguageServiceTests
 
         PerformanceCountersFormatting.FormatCounts(aggregateCounters).Should().Be(
             """
-            InvocationCount: 31_224
-            BuildListCount: 185_020
+            InvocationCount: 25_779
+            BuildListCount: 158_979
             LoopIterationCount: 0
-            InstructionCount: 822_160
+            InstructionCount: 726_811
             """);
 
         var aggregateInvocationCounts =
@@ -498,12 +498,12 @@ public class ElmLanguageServiceTests
 
         InvocationCountReportFormatting.FormatCounts(aggregateInvocationCounts).Should().Be(
             """
-            CompiledExpressionCount: 541
-            InvocationCountTotal: 31_227
-            InvocationCountAverage: 58
-            InvocationCountPercentile10: 2
-            InvocationCountMedian: 12
-            InvocationCountPercentile90: 136
+            CompiledExpressionCount: 508
+            InvocationCountTotal: 25_782
+            InvocationCountAverage: 51
+            InvocationCountPercentile10: 3
+            InvocationCountMedian: 14
+            InvocationCountPercentile90: 130
             """);
     }
 
