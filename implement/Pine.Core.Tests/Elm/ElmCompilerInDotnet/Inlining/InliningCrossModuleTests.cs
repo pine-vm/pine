@@ -1338,8 +1338,16 @@ public class InliningCrossModuleTests
                                     (Elm.Parser.Tokens.escapedCharValueMap
                                         Basics.identity
                                     )
-                                  ), Elm.Parser.Expression.charLiteralExpression__lifted__lambda1, Elm.Parser.Expression.charLiteralExpression__lifted__lambda2 )
-                              ), str, strBytes, strBytesLength, strLength )
+                                  )
+                                , Elm.Parser.Expression.charLiteralExpression__lifted__lambda1
+                                , Elm.Parser.Expression.charLiteralExpression__lifted__lambda2
+                                )
+                              )
+                            , str
+                            , strBytes
+                            , strBytesLength
+                            , strLength
+                            )
                         )
                     )
 

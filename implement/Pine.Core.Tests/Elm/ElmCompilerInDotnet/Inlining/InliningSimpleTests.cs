@@ -105,7 +105,9 @@ public class InliningSimpleTests
                 Pine_kernel.int_add
                     [ (Pine_kernel.int_multiply
                         [ 3, 2 ]
-                      ), 1 ]
+                      )
+                    , 1
+                    ]
             """";
 
         var rendered =

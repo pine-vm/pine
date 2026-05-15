@@ -199,7 +199,9 @@ public class PipelineStageSnapshotTests
                 Pine_builtin.int_add
                     [ (Pine_builtin.int_add
                         [ n, 1 ]
-                      ), 1 ]
+                      )
+                    , 1
+                    ]
             """);
     }
 

@@ -370,22 +370,15 @@ public class SnapshotTestFormat
             return false;
 
         // Make list multiline if it contains records, nested multiline lists, operator applications,
-        // or any applications (to make function calls readable in snapshots)
+        // or any applications (to make function calls readable in snapshots).
+        // Parenthesized expressions are peeled because they only affect surface
+        // syntax — a `(g x y z)` element is rendered exactly like a bare
+        // `g x y z` application as far as line breaks are concerned, and the
+        // outer container needs to switch to multi-line layout in both cases.
 
         for (var i = 0; i < list.Elements.Count; i++)
         {
-            var elem = list.Elements[i];
-
-            if (elem.Value is ExpressionSyntax.RecordExpr)
-                return true;
-
-            if (elem.Value is ExpressionSyntax.ListExpr innerList && ShouldFormatListAsMultiline(innerList))
-                return true;
-
-            if (elem.Value is ExpressionSyntax.OperatorApplication)
-                return true;
-
-            if (elem.Value is ExpressionSyntax.Application)
+            if (IsComplexElementForListOrTupleLayout(list.Elements[i].Value))
                 return true;
         }
 
@@ -403,24 +396,49 @@ public class SnapshotTestFormat
     private static bool ShouldFormatTupleAsMultiline(ExpressionSyntax.TupledExpression tuple)
     {
         // Format tuple as multiline if any element is an application, record,
-        // or a multiline list - same criteria used for lists.
+        // or a multiline list — same criteria used for lists. Parenthesized
+        // expressions are peeled because the parens are surface syntax: a
+        // `(g x y z)` element wraps to multiple lines exactly like a bare
+        // `g x y z` would, and failing to peel them produced a broken hybrid
+        // layout where the outer tuple stayed single-line while inner
+        // formatted content spanned multiple rows.
 
         for (var i = 0; i < tuple.Elements.Count; i++)
         {
-            var elem = tuple.Elements[i];
-
-            if (elem.Value is ExpressionSyntax.Application)
-                return true;
-
-            if (elem.Value is ExpressionSyntax.RecordExpr)
-                return true;
-
-            if (elem.Value is ExpressionSyntax.ListExpr innerList && ShouldFormatListAsMultiline(innerList))
-                return true;
-
-            if (elem.Value is ExpressionSyntax.OperatorApplication)
+            if (IsComplexElementForListOrTupleLayout(tuple.Elements[i].Value))
                 return true;
         }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Returns true when <paramref name="expression"/> would render across
+    /// multiple lines in snapshot format, so a containing tuple or list
+    /// must switch to multi-line layout. Peels
+    /// <see cref="ExpressionSyntax.ParenthesizedExpression"/> wrappers
+    /// before classifying because parens are surface-only.
+    /// </summary>
+    private static bool IsComplexElementForListOrTupleLayout(ExpressionSyntax expression)
+    {
+        // Peel ParenthesizedExpression wrappers — they only add surface
+        // parens and never change whether the inner content needs to wrap.
+        while (expression is ExpressionSyntax.ParenthesizedExpression paren)
+        {
+            expression = paren.Expression.Value;
+        }
+
+        if (expression is ExpressionSyntax.Application)
+            return true;
+
+        if (expression is ExpressionSyntax.RecordExpr)
+            return true;
+
+        if (expression is ExpressionSyntax.ListExpr innerList && ShouldFormatListAsMultiline(innerList))
+            return true;
+
+        if (expression is ExpressionSyntax.OperatorApplication)
+            return true;
 
         return false;
     }
