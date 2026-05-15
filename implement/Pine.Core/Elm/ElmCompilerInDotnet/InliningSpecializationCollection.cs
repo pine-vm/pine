@@ -554,10 +554,15 @@ public partial class Inlining
         var allNamed = new List<NamedSpecialization>();
         var usedNames = existingDeclNames is not null ? new HashSet<string>(existingDeclNames) : [];
 
-        foreach (var kvp in collected)
+        foreach (var kvp in collected.OrderBy(kvp => kvp.Key))
         {
             // Sort deterministically before naming to ensure stable __specialized__N numbering
-            // regardless of ImmutableHashSet iteration order.
+            // regardless of ImmutableHashSet iteration order. The outer iteration is also
+            // sorted (by DeclQualifiedName) so that the per-function name accumulator
+            // (`usedNames`) sees specializations in a stable order across runs — without
+            // this the same source program could compile to either
+            // `oneOf2…__specialized__1__specialized__1` or `…__specialized__1__specialized__2`
+            // depending on hash-bucket order.
             var sorted = kvp.Value.OrderBy(s => s.DeterministicSortKey).ToList();
             var named = SpecializationCatalog.NameSpecializations(kvp.Key, sorted, usedNames);
 
