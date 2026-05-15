@@ -48,7 +48,8 @@ public class BundledFiles
         DotNetAssembly.LoadDirectoryFilesFromManifestEmbeddedFileProviderAsDictionary(
             directoryPath: ["Elm", "elm-in-elm"],
             assembly: typeof(BundledFiles).Assembly)
-        .Map(files =>
+        .Map(
+            files =>
             (IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>>)files
             .Where(file => file.Key.Count > 0 && file.Key[0] != ElmKernelModulesDirectoryName)
             .ToImmutableDictionary(

@@ -70,7 +70,6 @@ public static class RecordRuntime
                 updatesExpr,
                 Expression.EmptyList, // processed flat fields (initially empty)
                 recordFieldsExpr // remaining flat fields
-
                 ]);
 
         var updatedFieldsExpr =

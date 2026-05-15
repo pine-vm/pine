@@ -3082,7 +3082,7 @@ public static class TypeInference
         var knownFunctionTypes =
             functionSignatures.ToDictionary(
                 kvp => QualifiedNameHelper.FromQualifiedNameString(kvp.Key),
-                kvp => new FunctionTypeInfo(kvp.Value, Array.Empty<InferredType>()));
+                kvp => new FunctionTypeInfo(kvp.Value, []));
 
         var returnType =
             InferExpressionType(

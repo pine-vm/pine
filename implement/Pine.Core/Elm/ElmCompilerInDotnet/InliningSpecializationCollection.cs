@@ -343,8 +343,11 @@ public partial class Inlining
                 if (!resolved.FunctionInfo.IsRecursive &&
                     !context.InliningStack.Contains(resolved.QualifiedName) &&
                     (ShouldInline(funcParams, funcImpl.Expression, appArgs, context) ||
-                     ShouldInlinePartialApplicationWithCapturedFunction(
-                        resolved.FunctionInfo, funcImpl, appArgs, context)))
+                    ShouldInlinePartialApplicationWithCapturedFunction(
+                        resolved.FunctionInfo,
+                        funcImpl,
+                        appArgs,
+                        context)))
                 {
                     var newContext = context with { InliningStack = context.InliningStack.Add(resolved.QualifiedName) };
 

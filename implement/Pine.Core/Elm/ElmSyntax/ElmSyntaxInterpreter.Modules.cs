@@ -89,10 +89,11 @@ public partial class ElmSyntaxInterpreter
         // must therefore use the modules' fully-qualified canonical names.
         var rootModuleText = BuildSyntheticRootModuleText(rootExpressionText);
 
-        var allModuleTexts = new List<string>(moduleSourceTexts.Count + 1)
-        {
-            rootModuleText,
-        };
+        var allModuleTexts =
+            new List<string>(moduleSourceTexts.Count + 1)
+            {
+                rootModuleText,
+            };
 
         for (var i = 0; i < moduleSourceTexts.Count; i++)
         {
@@ -114,15 +115,17 @@ public partial class ElmSyntaxInterpreter
                 // of the dependency modules.
                 if (i is 0)
                 {
-                    return new ElmInterpretationError(
-                        "Failed to parse synthetic root module wrapping the root expression: "
-                        + parseErr,
-                        []);
+                    return
+                        new ElmInterpretationError(
+                            "Failed to parse synthetic root module wrapping the root expression: "
+                            + parseErr,
+                            []);
                 }
 
-                return new ElmInterpretationError(
-                    "Failed to parse module #" + (i - 1) + ": " + parseErr,
-                    []);
+                return
+                    new ElmInterpretationError(
+                        "Failed to parse module #" + (i - 1) + ": " + parseErr,
+                        []);
             }
 
             if (parseResult.IsOkOrNull() is not { } parsedFile)
@@ -150,10 +153,11 @@ public partial class ElmSyntaxInterpreter
     {
         if (modules.Count is 0)
         {
-            return new ElmInterpretationError(
-                "ParseAndInterpret with modules requires at least one module "
-                + "(the synthetic root module containing 'pine_root_expression').",
-                []);
+            return
+                new ElmInterpretationError(
+                    "ParseAndInterpret with modules requires at least one module "
+                    + "(the synthetic root module containing 'pine_root_expression').",
+                    []);
         }
 
         // Convert to the Stil4mElmSyntax7 form expected by Canonicalization.
@@ -168,9 +172,10 @@ public partial class ElmSyntaxInterpreter
 
         if (canonicalizeResult.IsErrOrNull() is { } canonErr)
         {
-            return new ElmInterpretationError(
-                "Canonicalization failed: " + canonErr,
-                []);
+            return
+                new ElmInterpretationError(
+                    "Canonicalization failed: " + canonErr,
+                    []);
         }
 
         if (canonicalizeResult.IsOkOrNull() is not { } canonicalized)
@@ -208,6 +213,7 @@ public partial class ElmSyntaxInterpreter
                 {
                     declarations[new DeclQualifiedName(moduleNameParts, infixDecl.Infix.Operator.Value)] =
                         declNode.Value;
+
                     continue;
                 }
 
@@ -222,10 +228,11 @@ public partial class ElmSyntaxInterpreter
 
         if (canonicalizedRootContextFile is null)
         {
-            return new ElmInterpretationError(
-                "Canonicalization did not return the synthetic root module ("
-                + string.Join(".", rootContextModuleName) + ").",
-                []);
+            return
+                new ElmInterpretationError(
+                    "Canonicalization did not return the synthetic root module ("
+                    + string.Join(".", rootContextModuleName) + ").",
+                    []);
         }
 
         // Locate the synthetic root expression's body in the canonicalized root module.
@@ -243,11 +250,12 @@ public partial class ElmSyntaxInterpreter
 
         if (rootExpression is null)
         {
-            return new ElmInterpretationError(
-                "Synthetic root module does not contain the expected '" + SyntheticRootFunctionName
-                + "' declaration. When passing pre-parsed modules, the first module must declare "
-                + "this function with the expression to evaluate as its body.",
-                []);
+            return
+                new ElmInterpretationError(
+                    "Synthetic root module does not contain the expected '" + SyntheticRootFunctionName
+                    + "' declaration. When passing pre-parsed modules, the first module must declare "
+                    + "this function with the expression to evaluate as its body.",
+                    []);
         }
 
         return Interpret(rootExpression, declarations);
@@ -290,9 +298,9 @@ public partial class ElmSyntaxInterpreter
             string.Join(
                 "\n",
                 expressionText
-                    .Replace("\r\n", "\n")
-                    .Split('\n')
-                    .Select(line => "    " + line));
+                .Replace("\r\n", "\n")
+                .Split('\n')
+                .Select(line => "    " + line));
 
         return
             "module " + SyntheticRootModuleName + " exposing (..)\n\n\n"

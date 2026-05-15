@@ -1149,7 +1149,9 @@ public class ElmCompiler
             compiledBody =
                 ReducePineExpression.ReduceExpressionBottomUp(
                     compiledBody,
-                    new ReductionConfig(DisableGenericApplicationChainConsolidation: disableGenericApplicationChainConsolidation, DisableInliningParseAndEval: false),
+                    new ReductionConfig(
+                        DisableGenericApplicationChainConsolidation: disableGenericApplicationChainConsolidation,
+                        DisableInliningParseAndEval: false),
                     parseCache);
 
             compiledBodies[memberName] = (compiledBody, paramCount);
