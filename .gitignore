@@ -4,5 +4,8 @@
 .vs/
 *.csproj.user
 
+# C# Dev Kit language service cache (see https://aka.ms/lscache)
+*.lscache
+
 # Per-run test log files written by Pine.Core.Tests / Pine.IntegrationTests.
 **/artifacts/test-logs/
