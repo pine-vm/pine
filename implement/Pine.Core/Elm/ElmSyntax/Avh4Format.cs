@@ -5492,10 +5492,15 @@ public class Avh4Format
             var ofOnDifferentLine =
                 caseExpr.CaseBlock.OfTokenLocation.Row > caseExpr.CaseBlock.Expression.Range.End.Row;
 
-            // Match elm-format's behavior: when a case expression's scrutinee is a
-            // let expression, the let keyword must appear on a new line after case.
+            // Match elm-format's behavior: when a case expression's scrutinee
+            // is itself an intrinsically multi-line expression (a `let`, a
+            // nested `case`, or an `if`), the multi-line case-header layout
+            // must be used so the scrutinee's leading keyword starts on a new
+            // line after `case` (avoiding rendering like `case case ...` /
+            // `case let ...` / `case if ...`) and the matching `of` keyword
+            // appears on its own line aligned with `case`.
             var scrutineeIsLetExpression =
-                caseExpr.CaseBlock.Expression.Value is ExpressionSyntax.LetExpression;
+                IsIntrinsicallyMultilineExpression(caseExpr.CaseBlock.Expression.Value);
 
             var isMultilineCaseHeader = scrutineeOnNewLine || ofOnDifferentLine || scrutineeIsLetExpression;
 
