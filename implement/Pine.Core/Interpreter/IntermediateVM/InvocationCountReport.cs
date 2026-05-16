@@ -248,7 +248,7 @@ public readonly record struct InvocationCountReport(
 /// <para>
 /// One builder per evaluation is the recommended pattern; combining histograms
 /// from multiple evaluations is done after the fact via
-/// <see cref="InvocationCountReport.Aggregate(System.Collections.Generic.IEnumerable{InvocationCountReport})"/>.
+/// <see cref="InvocationCountReport.Aggregate(IEnumerable{InvocationCountReport})"/>.
 /// A single builder reused across multiple evaluations would silently merge their
 /// counts, defeating the per-evaluation scoping motivation behind exposing the
 /// callback at the eval entry point.

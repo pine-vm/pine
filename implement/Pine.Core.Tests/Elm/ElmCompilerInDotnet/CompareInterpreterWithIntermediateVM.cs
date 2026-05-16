@@ -209,7 +209,7 @@ public sealed class CompareInterpreterWithIntermediateVM
         int maxOptimizationRounds)
     {
         var testCase =
-            Pine.Core.Tests.Elm.ElmCompilerTests.TestCase.DefaultAppWithoutPackages(elmModuleTexts);
+            Elm.ElmCompilerTests.TestCase.DefaultAppWithoutPackages(elmModuleTexts);
 
         var appCodeTree = testCase.AsFileTree();
 

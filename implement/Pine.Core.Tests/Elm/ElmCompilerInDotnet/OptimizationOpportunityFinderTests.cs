@@ -1419,18 +1419,18 @@ public class OptimizationOpportunityFinderTests
         return OptimizationOpportunityFinder.RenderOpportunities(opportunities);
     }
 
-    private static System.Collections.Generic.IReadOnlyDictionary<DeclQualifiedName, Pine.Core.Elm.ElmSyntax.Stil4mElmSyntax7.Declaration>
+    private static System.Collections.Generic.IReadOnlyDictionary<DeclQualifiedName, Core.Elm.ElmSyntax.Stil4mElmSyntax7.Declaration>
         ParseAndCanonicalize(string elmModuleText)
     {
         var parsed =
-            Pine.Core.Elm.ElmSyntax.ElmSyntaxParser.ParseModuleText(elmModuleText)
+            Core.Elm.ElmSyntax.ElmSyntaxParser.ParseModuleText(elmModuleText)
             .Extract(err => throw new System.Exception("Failed parsing: " + err));
 
         var converted =
-            new[] { Pine.Core.Elm.ElmSyntax.Stil4mElmSyntax7.FromFullSyntaxModel.Convert(parsed) };
+            new[] { Core.Elm.ElmSyntax.Stil4mElmSyntax7.FromFullSyntaxModel.Convert(parsed) };
 
         var canonicalized =
-            Pine.Core.Elm.ElmCompilerInDotnet.Canonicalization.Canonicalize(converted)
+            Core.Elm.ElmCompilerInDotnet.Canonicalization.Canonicalize(converted)
             .Extract(err => throw new System.Exception("Failed canonicalization: " + err));
 
         var orderedModules =
@@ -1439,10 +1439,10 @@ public class OptimizationOpportunityFinderTests
                     converted,
                     module =>
                     canonicalized[
-                        Pine.Core.Elm.ElmSyntax.Stil4mElmSyntax7.Module.GetModuleName(
+                        Core.Elm.ElmSyntax.Stil4mElmSyntax7.Module.GetModuleName(
                             module.ModuleDefinition.Value).Value]
                     .Extract(err => throw new System.Exception("Module has errors: " + err))));
 
-        return Pine.Core.Elm.ElmCompilerInDotnet.ElmCompiler.FlattenModulesToDeclarationDictionary(orderedModules);
+        return Core.Elm.ElmCompilerInDotnet.ElmCompiler.FlattenModulesToDeclarationDictionary(orderedModules);
     }
 }

@@ -1578,7 +1578,7 @@ public static class OptimizationOpportunityFinder
         SyntaxTypes.Expression.RecordAccess recordAccess,
         ImmutableHashSet<string> paramNames)
     {
-        var fields = new System.Collections.Generic.List<string>();
+        var fields = new List<string>();
         SyntaxTypes.Expression current = recordAccess;
 
         while (UnwrapParen(current) is SyntaxTypes.Expression.RecordAccess ra)

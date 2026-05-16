@@ -39,7 +39,7 @@ using Inlining = Core.Elm.ElmCompilerInDotnet.Inlining;
 /// Nested form (<c>Application[Application[h, a], b]</c>): the inner
 /// Application is recognized as a partial application of <c>h</c> with
 /// arity 2 and only one supplied argument, forcing
-/// <see cref="Pine.Core.CodeAnalysis.FunctionValueBuilder"/>
+/// <see cref="Core.CodeAnalysis.FunctionValueBuilder"/>
 /// to emit a function-value wrapper that is then dispatched generically
 /// by the outer Application — a closure allocation and a generic
 /// dispatch that the direct-call path would have skipped entirely.
@@ -215,7 +215,7 @@ public class NestedApplicationFlatteningTests
     /// <para>
     /// After D2 the optimization pipeline must produce the flat form
     /// <c>Application[partialMap, g, (parseInt input)]</c> so the
-    /// <see cref="Pine.Core.Elm.ElmCompilerInDotnet.ExpressionCompiler"/>
+    /// <see cref="ExpressionCompiler"/>
     /// hits the direct-call fast path for the saturated 3-arg call.
     /// </para>
     /// </summary>

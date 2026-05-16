@@ -520,7 +520,7 @@ public class StaticProgramParser
                     return recoveredResult;
                 }
             }
-            catch (System.InvalidOperationException)
+            catch (InvalidOperationException)
             {
                 // Fall through to legacy parsing paths.
             }
@@ -706,7 +706,7 @@ public class StaticProgramParser
                     path,
                     resolvedFunction.functionValue);
         }
-        catch (System.InvalidOperationException)
+        catch (InvalidOperationException)
         {
             // The resolved function value is not a known callee. This happens for
             // function values produced by inlining/specialization that are not part of
