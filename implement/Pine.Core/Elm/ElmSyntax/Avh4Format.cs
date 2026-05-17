@@ -491,6 +491,23 @@ public class Avh4Format
         };
 
     /// <summary>
+    /// Like <see cref="IsIntrinsicallyMultilineExpression"/> but peels any
+    /// surrounding <see cref="ExpressionSyntax.ParenthesizedExpression"/>
+    /// wrappers first. Used to decide whether an application argument like
+    /// <c>(let ... in ...)</c> should force its enclosing application into
+    /// the multi-line layout.
+    /// </summary>
+    private static bool IsIntrinsicallyMultilineExpressionPeelingParens(ExpressionSyntax expression)
+    {
+        while (expression is ExpressionSyntax.ParenthesizedExpression paren)
+        {
+            expression = paren.Expression.Value;
+        }
+
+        return IsIntrinsicallyMultilineExpression(expression);
+    }
+
+    /// <summary>
     /// Helper to check if a collection of nodes spans multiple rows.
     /// </summary>
     private static bool NodesSpanMultipleRows<T>(IReadOnlyList<Node<T>> nodes)
@@ -4302,6 +4319,30 @@ public class Avh4Format
                         // Check if application spans multiple lines based on the containing node's range only
                         var isMultiline = SpansMultipleRows(originalRange);
 
+                        // Match elm-format's behavior: when any argument of an
+                        // application is an intrinsically multi-line expression
+                        // (a `let`, a nested `case`, or an `if`) — including when
+                        // wrapped in `ParenthesizedExpression` — the entire
+                        // application must be rendered with the multi-line layout
+                        // (function on its own line, each argument on its own
+                        // line at the argument indent). Otherwise the function
+                        // name and the opening keyword of the multi-line
+                        // argument get collapsed onto the same line (e.g.
+                        // `Good (let` / `Good (case` / `Good (if`), which avh4
+                        // never produces.
+                        if (!isMultiline)
+                        {
+                            for (var i = 0; i < app.Arguments.Count; i++)
+                            {
+                                if (IsIntrinsicallyMultilineExpressionPeelingParens(
+                                    app.Arguments[i].Value))
+                                {
+                                    isMultiline = true;
+                                    break;
+                                }
+                            }
+                        }
+
                         var functionResult = FormatExpression(app.Function, context);
                         var formattedArgs = new List<Node<ExpressionSyntax>>();
                         var appCtx = functionResult.Context.ReturnToIndent(context);
@@ -4328,10 +4369,19 @@ public class Avh4Format
                                 {
                                     // First applied argument: keep on same line only if:
                                     // 1. It was originally on the same line as the function, AND
-                                    // 2. It doesn't span multiple lines (is not multiline itself)
+                                    // 2. It doesn't span multiple lines (is not multiline itself), AND
+                                    // 3. It is not an intrinsically multi-line expression
+                                    //    (`let`/`case`/`if`, possibly wrapped in parens).
                                     var argStartsOnFunctionLine = arg.Range.Start.Row == functionRow;
                                     var argIsMultiline = SpansMultipleRows(arg.Range);
-                                    putOnNewLine = !argStartsOnFunctionLine || argIsMultiline;
+
+                                    var argIsIntrinsicallyMultiline =
+                                        IsIntrinsicallyMultilineExpressionPeelingParens(arg.Value);
+
+                                    putOnNewLine =
+                                        !argStartsOnFunctionLine
+                                        || argIsMultiline
+                                        || argIsIntrinsicallyMultiline;
                                 }
                                 else
                                 {
