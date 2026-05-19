@@ -440,6 +440,21 @@ public class SnapshotTestFormat
         if (expression is ExpressionSyntax.OperatorApplication)
             return true;
 
+        // Intrinsically multi-line expressions (let / case / if) always
+        // force the containing tuple or list into multi-line layout —
+        // otherwise the separator would land mid-line and the inner
+        // block's body would indent off an arbitrary column, matching
+        // the broken hybrid layout seen in `SnapshotTestFormatTupleWithLetElementTests`.
+        // This mirrors `Avh4Format.IsIntrinsicallyMultilineExpression`.
+        if (expression is ExpressionSyntax.LetExpression)
+            return true;
+
+        if (expression is ExpressionSyntax.CaseExpression)
+            return true;
+
+        if (expression is ExpressionSyntax.IfBlock)
+            return true;
+
         return false;
     }
 
@@ -860,6 +875,13 @@ public class SnapshotTestFormat
 
             ExpressionSyntax.Application app => app.Arguments.Count > 0,
 
+            // Intrinsically multi-line expressions (let / case / if) — even
+            // with a single-row dummy range they always render across multiple
+            // lines downstream, so a containing list must use multi-line layout.
+            ExpressionSyntax.LetExpression => true,
+            ExpressionSyntax.CaseExpression => true,
+            ExpressionSyntax.IfBlock => true,
+
             _ =>
             false
         };
@@ -1225,7 +1247,8 @@ public class SnapshotTestFormat
     public static string RenderQualifiedDeclarations(
         IReadOnlyDictionary<DeclQualifiedName, AbstractSyntaxTypes.Declaration> declarations,
         DeclarationSortOrder sortOrder,
-        IReadOnlyDictionary<QualifiedNameRef, QualifiedNameRef>? nameMap = null)
+        IReadOnlyDictionary<QualifiedNameRef, QualifiedNameRef>? nameMap = null,
+        bool validateCrossDeclReferences = true)
     {
         var parts = new List<string>();
 
@@ -1247,7 +1270,11 @@ public class SnapshotTestFormat
 
         foreach (var (qualifiedName, abstractDecl) in ordered)
         {
-            ValidateFullyQualifiedReferences(qualifiedName, abstractDecl);
+            if (validateCrossDeclReferences)
+            {
+                ValidateFullyQualifiedReferences(qualifiedName, abstractDecl);
+            }
+
             var fullDecl = ConvertAbstractDeclaration(abstractDecl);
             parts.Add(RenderQualifiedDeclaration(qualifiedName, fullDecl, nameMap));
         }
