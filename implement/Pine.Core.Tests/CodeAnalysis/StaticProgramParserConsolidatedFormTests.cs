@@ -90,7 +90,7 @@ public class StaticProgramParserConsolidatedFormTests
         var chain =
             (Expression.ParseAndEval)PineCodeAnalysis.BuildGenericFunctionApplication(
                 Expression.LiteralInstance(calleeValue),
-                new Expression[] { arg0, arg1 });
+                [arg0, arg1]);
 
         var consolidated =
             ReducePineExpression.TryConsolidateGenericFunctionApplicationChain(chain, parseCache);
@@ -149,7 +149,7 @@ public class StaticProgramParserConsolidatedFormTests
         var chain =
             (Expression.ParseAndEval)PineCodeAnalysis.BuildGenericFunctionApplication(
                 Expression.LiteralInstance(calleeValue),
-                new Expression[] { arg0, arg1, arg2 });
+                [arg0, arg1, arg2]);
 
         var consolidated =
             ReducePineExpression.TryConsolidateGenericFunctionApplicationChain(chain, parseCache);
@@ -209,7 +209,7 @@ public class StaticProgramParserConsolidatedFormTests
         var chain =
             (Expression.ParseAndEval)PineCodeAnalysis.BuildGenericFunctionApplication(
                 Expression.LiteralInstance(calleeValue),
-                new Expression[] { arg0, arg1 });
+                [arg0, arg1]);
 
         var consolidated =
             ReducePineExpression.TryConsolidateGenericFunctionApplicationChain(chain, parseCache);

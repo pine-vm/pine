@@ -939,7 +939,7 @@ public class PineVM : IPineVM
             }
             else
             {
-                traceWithTop = stackTrace.ToArray();
+                traceWithTop = [.. stackTrace];
             }
 
             var cycleHashes = new string[cycleEntries.Length];

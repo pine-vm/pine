@@ -515,7 +515,7 @@ public class ExpressionCompiler
             // caller's layout contains only its SCC members, so a cross-SCC
             // callee will not appear in the layout but will be in the cache
             // (because SCCs are compiled in dependency order).
-            int? functionIndexOpt = context.GetFunctionIndexInLayout(qualifiedFunctionName);
+            var functionIndexOpt = context.GetFunctionIndexInLayout(qualifiedFunctionName);
             CompiledFunctionInfo? cachedCalleeInfo = null;
 
             if (functionIndexOpt is null)

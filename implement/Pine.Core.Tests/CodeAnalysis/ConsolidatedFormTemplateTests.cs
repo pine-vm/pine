@@ -56,7 +56,7 @@ public class ConsolidatedFormTemplateTests
         var chain =
             (Expression.ParseAndEval)PineCodeAnalysis.BuildGenericFunctionApplication(
                 Expression.LiteralInstance(functionValue),
-                new Expression[] { arg0, arg1 });
+                [arg0, arg1]);
 
         var consolidated =
             ReducePineExpression.TryConsolidateGenericFunctionApplicationChain(chain, s_parseCache);
@@ -96,7 +96,7 @@ public class ConsolidatedFormTemplateTests
         var chain =
             (Expression.ParseAndEval)PineCodeAnalysis.BuildGenericFunctionApplication(
                 Expression.LiteralInstance(functionValue),
-                new Expression[] { arg0, arg1, arg2 });
+                [arg0, arg1, arg2]);
 
         var consolidated =
             ReducePineExpression.TryConsolidateGenericFunctionApplicationChain(chain, s_parseCache);
@@ -141,11 +141,10 @@ public class ConsolidatedFormTemplateTests
                     Expression.KernelApplicationInstance(
                         "skip",
                         Expression.ListInstance(
-                            new[]
-                            {
+                            [
                                 Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(1)),
                                 cur
-                            }));
+                            ]));
             }
 
             return Expression.KernelApplicationInstance("head", cur);
@@ -157,7 +156,7 @@ public class ConsolidatedFormTemplateTests
         var chain =
             (Expression.ParseAndEval)PineCodeAnalysis.BuildGenericFunctionApplication(
                 Expression.LiteralInstance(functionValue),
-                new Expression[] { arg0, arg1 });
+                [arg0, arg1]);
 
         var consolidated =
             ReducePineExpression.TryConsolidateGenericFunctionApplicationChain(chain, s_parseCache);
@@ -199,7 +198,7 @@ public class ConsolidatedFormTemplateTests
         var chain =
             (Expression.ParseAndEval)PineCodeAnalysis.BuildGenericFunctionApplication(
                 Expression.LiteralInstance(functionValue),
-                new Expression[] { arg0, arg1, arg2 });
+                [arg0, arg1, arg2]);
 
         var consolidated =
             ReducePineExpression.TryConsolidateGenericFunctionApplicationChain(chain, s_parseCache);

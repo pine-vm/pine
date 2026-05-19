@@ -54,7 +54,7 @@ public class CalleeRecognitionTests
         var config =
             CalleeRecognition.Augment(
                 EmptyBaseConfig(),
-                new[] { descriptor },
+                [descriptor],
                 s_parseCache);
 
         config.IdentifyInstanceOptional([], nonFunctionValue)
@@ -81,7 +81,7 @@ public class CalleeRecognitionTests
         var config =
             CalleeRecognition.Augment(
                 EmptyBaseConfig(),
-                new[] { descriptor },
+                [descriptor],
                 s_parseCache);
 
         // Form B / bare reference
@@ -118,7 +118,7 @@ public class CalleeRecognitionTests
         var config =
             CalleeRecognition.Augment(
                 EmptyBaseConfig(),
-                new[] { descriptor },
+                [descriptor],
                 s_parseCache);
 
         config.ConsolidatedFormTemplates.Should().NotBeNull();
@@ -144,7 +144,7 @@ public class CalleeRecognitionTests
         var config =
             CalleeRecognition.Augment(
                 EmptyBaseConfig(),
-                new[] { descriptor },
+                [descriptor],
                 s_parseCache);
 
         config.ConsolidatedFormTemplates.Should().NotBeNull();
@@ -170,7 +170,7 @@ public class CalleeRecognitionTests
         var config =
             CalleeRecognition.Augment(
                 EmptyBaseConfig(),
-                new[] { descriptor },
+                [descriptor],
                 s_parseCache);
 
         config.IdentifyInstanceOptional([], binaryFunctionValue)!.OriginalFunctionValue
@@ -202,7 +202,7 @@ public class CalleeRecognitionTests
         var config =
             CalleeRecognition.Augment(
                 EmptyBaseConfig(),
-                new[] { descriptor },
+                [descriptor],
                 s_parseCache);
 
         // Form C derivation must use the wrapper value as the function value.
@@ -246,7 +246,7 @@ public class CalleeRecognitionTests
         var config =
             CalleeRecognition.Augment(
                 previousConfig,
-                new[] { descriptor },
+                [descriptor],
                 s_parseCache);
 
         // Hit on the descriptor's NamedValue takes precedence.

@@ -134,7 +134,7 @@ public class InlineSmallNonRecursiveCalleeRegressionTests
 
         // True/False in Elm-on-Pine are blob singletons 0x04 / 0x02.
         var trueLiteral =
-            Expression.LiteralInstance(PineValue.Blob(new byte[] { 0x04 }));
+            Expression.LiteralInstance(PineValue.Blob([0x04]));
 
         var predicateBody =
             Expression.ConditionalInstance(
@@ -251,7 +251,7 @@ public class InlineSmallNonRecursiveCalleeRegressionTests
         //     encoded     = literal(helperBody),
         //     environment = [ literal(helperBody), "abc", 0 ])
 
-        var srcBytesValue = PineValue.Blob(new byte[] { 0x61, 0x62, 0x63 }); // "abc"
+        var srcBytesValue = PineValue.Blob([0x61, 0x62, 0x63]); // "abc"
 
         var rootExpression =
             new Expression.ParseAndEval(
