@@ -1364,8 +1364,21 @@ public static class FormatCSharpFile
 
             decl = decl.WithVariables(decl.Variables.Replace(decl.Variables[0], newVar));
         }
-        // Ensure space after type
-        decl = decl.WithType(decl.Type.WithTrailingTrivia(s_space));
+        // If the declared type itself spans multiple lines (e.g. a generic type
+        // distributed across rows), put the variable identifier on its own line
+        // indented one level deeper than the field declaration. Otherwise put a
+        // single space between the type and the identifier.
+        if (decl.Variables.Count > 0 && SpansMultipleLines(decl.Type))
+        {
+            decl = decl.WithType(decl.Type.WithTrailingTrivia());
+            var firstVar = decl.Variables[0];
+            firstVar = firstVar.WithLeadingTrivia(s_lineFeed, Indent(ctx.IndentLevel + 1));
+            decl = decl.WithVariables(decl.Variables.Replace(decl.Variables[0], firstVar));
+        }
+        else
+        {
+            decl = decl.WithType(decl.Type.WithTrailingTrivia(s_space));
+        }
 
         return node.WithDeclaration(decl);
     }
@@ -1662,7 +1675,29 @@ public static class FormatCSharpFile
                 s_lineFeed,
                 Indent(ctx.IndentLevel + 1));
 
-        var fmtExpr = (ExpressionSyntax)FormatNode(node.Expression, ctx);
+        // Preserve a user-introduced line break between the `in` keyword and the
+        // foreach source expression (e.g. a long invocation expression placed on
+        // its own line). Otherwise place the expression directly after `in `.
+        var originalOnNewLine = LineOf(node.Expression) > LineOf(node.InKeyword);
+
+        SyntaxToken inKeyword;
+        ExpressionSyntax exprWithLeading;
+
+        if (originalOnNewLine)
+        {
+            var exprCtx = ctx.Indented();
+            var fmtExpr = (ExpressionSyntax)FormatNode(node.Expression, exprCtx);
+            inKeyword = node.InKeyword.WithLeadingTrivia().WithTrailingTrivia();
+
+            exprWithLeading =
+                fmtExpr.WithLeadingTrivia(s_lineFeed, Indent(ctx.IndentLevel + 1));
+        }
+        else
+        {
+            var fmtExpr = (ExpressionSyntax)FormatNode(node.Expression, ctx);
+            inKeyword = node.InKeyword.WithLeadingTrivia().WithTrailingTrivia(s_space);
+            exprWithLeading = fmtExpr.WithLeadingTrivia(StripWhitespace(node.Expression.GetLeadingTrivia()));
+        }
 
         return
             node
@@ -1670,8 +1705,8 @@ public static class FormatCSharpFile
             .WithOpenParenToken(node.OpenParenToken.WithLeadingTrivia().WithTrailingTrivia())
             .WithType(node.Type.WithLeadingTrivia())
             .WithIdentifier(node.Identifier.WithTrailingTrivia(s_space))
-            .WithInKeyword(node.InKeyword.WithLeadingTrivia().WithTrailingTrivia(s_space))
-            .WithExpression(fmtExpr.WithLeadingTrivia(StripWhitespace(node.Expression.GetLeadingTrivia())))
+            .WithInKeyword(inKeyword)
+            .WithExpression(exprWithLeading)
             .WithCloseParenToken(node.CloseParenToken.WithLeadingTrivia().WithTrailingTrivia())
             .WithStatement(body);
     }
@@ -2358,7 +2393,11 @@ public static class FormatCSharpFile
             // on a new line after the colon.
             if (a is ArgumentSyntax argSyntax && argSyntax.NameColon is { } nameColon)
             {
-                var argText = a.ToFullString().Trim();
+                // Use ToString() (not ToFullString()) so leading-trivia comments
+                // attached to the argument are not counted as part of the argument
+                // text; otherwise their line breaks would spuriously force the
+                // "break after colon" layout and overwrite the preserved comments.
+                var argText = a.ToString().Trim();
                 var firstLine = argText.Split('\n')[0];
                 var lineLen = argIndent * IndentSize + firstLine.TrimEnd().Length;
 
@@ -3249,11 +3288,17 @@ public static class FormatCSharpFile
         if (exprEnd != dotLine)
         {
             // The original source had the dot on a later line than the expression.
-            // If the chain contains an invocation whose argument list spans multiple
-            // lines (e.g., a multi-line raw string argument), and the entire chain
-            // up to that opening paren would fit at the current indent, collapse
-            // any user-introduced dot breaks: the argument-list break already
-            // provides the visual separation.
+            // If an invocation to the RIGHT of this dot (i.e., one of node's
+            // ancestors in the chain) has an argument list that spans multiple
+            // lines (e.g., a multi-line raw string argument), and the entire
+            // chain up to that opening paren would fit at the current indent,
+            // collapse any user-introduced dot breaks at this dot: the argument-
+            // list break that follows already provides the visual separation.
+            //
+            // A multi-line argument that appears to the LEFT of this dot (in an
+            // invocation that is the expression-descendant of this dot) does NOT
+            // qualify — in that case the user-introduced break sits after the
+            // multi-line argument and is preserved as readable chain layout.
             {
                 SyntaxNode chainTop = node;
                 var walk = node.Parent;
@@ -3264,7 +3309,25 @@ public static class FormatCSharpFile
                     walk = walk.Parent;
                 }
 
-                if (ChainContainsMultiLineArgumentList(chainTop))
+                var rightSideHasMultiLineRawString = false;
+
+                {
+                    SyntaxNode? cur = node.Parent;
+
+                    while (cur is InvocationExpressionSyntax or MemberAccessExpressionSyntax)
+                    {
+                        if (cur is InvocationExpressionSyntax ancInv &&
+                            ArgumentListContainsMultiLineRawStringLiteral(ancInv.ArgumentList))
+                        {
+                            rightSideHasMultiLineRawString = true;
+                            break;
+                        }
+
+                        cur = cur.Parent;
+                    }
+                }
+
+                if (rightSideHasMultiLineRawString)
                 {
                     var chainHeadWidth = ComputeChainHeadWidth(chainTop);
 
@@ -3559,12 +3622,24 @@ public static class FormatCSharpFile
             chainTop = chainTop.Parent;
         }
 
-        return
-            chainTop.Parent is ExpressionStatementSyntax or IfStatementSyntax
-            ?
-            ctx.IndentLevel + 1
-            :
-            ctx.IndentLevel;
+        if (chainTop.Parent is ExpressionStatementSyntax or IfStatementSyntax)
+            return ctx.IndentLevel + 1;
+
+        // Also recognize chains that appear inside an `if` condition wrapped in
+        // binary/parenthesized/prefix-unary expressions (e.g. `if (chain.Count > 0)`):
+        // the chain continuation should still align one level deeper than the `if`.
+        var ancestor = chainTop.Parent;
+
+        while (ancestor is BinaryExpressionSyntax or ParenthesizedExpressionSyntax or
+            PrefixUnaryExpressionSyntax)
+        {
+            ancestor = ancestor.Parent;
+        }
+
+        if (ancestor is IfStatementSyntax)
+            return ctx.IndentLevel + 1;
+
+        return ctx.IndentLevel;
     }
 
     /// <summary>Formats an invocation expression, including its argument list.</summary>

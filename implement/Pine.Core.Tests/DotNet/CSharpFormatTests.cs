@@ -6152,4 +6152,104 @@ public class CSharpFormatTests
 
         AssertFormattedSyntax(input, expected, scriptMode: true);
     }
+
+    [Fact]
+    public void Preserve_should_be_on_new_line()
+    {
+        var input =
+            """"
+            InterpreterTestHelper.EvaluateInModuleOrCrashRendered(
+                """
+                let
+                    partial =
+                        Triple 1 2
+                in
+                partial 3
+                """,
+                elmModuleText)
+                .Should().Be("Triple 1 2 3");
+            """";
+
+        AssertFormattedSyntax(input, input, scriptMode: true);
+    }
+
+    [Fact]
+    public void Preserve_foreach_sequence_expression_on_new_line()
+    {
+        var input =
+            """"
+            foreach (var referenced in
+                EnumerateReferencedDeclarations(
+                    funcDecl.Function.Declaration.Value.Expression.Value,
+                    declarations))
+            {
+                if (reachableFunctions.Add(referenced))
+                    queue.Enqueue(referenced);
+            }
+            """";
+
+        AssertFormattedSyntax(input, input, scriptMode: true);
+    }
+
+    [Fact]
+    public void Preserve_member_type_instance_of_generic_distribution_over_multiple_lines()
+    {
+        var input =
+            """"
+            class Test
+            {
+                private static readonly ConditionalWeakTable<
+                    ImmutableDictionary<DeclQualifiedName, SyntaxTypes.Declaration>,
+                    ImmutableDictionary<ModuleName, ImmutableHashSet<string>>>
+                    s_topLevelNamesByModuleCache = new();
+            }
+            """";
+
+        AssertFormattedSyntax(input, input, scriptMode: false);
+
+
+    }
+
+    [Fact]
+    public void Preserve_if_expression_member_access_invocation_on_newline()
+    {
+        var input =
+            """"
+            if (HigherOrderParameterAnalysis
+                .FindHigherOrderNamesIntroducedByParameter(param, funcBody.Value)
+                .Count > 0)
+            {
+                return true;
+            }
+            """";
+
+        AssertFormattedSyntax(input, input, scriptMode: true);
+    }
+
+    [Fact]
+    public void Preserve_argument_list_single_line_comments_between_named_arguments()
+    {
+        var input =
+            """"
+            // `g` and `h` reference each other via the let; the cycle guard
+            // prevents infinite recursion.
+            AssertFlowFromBody(
+                """
+                module Test exposing (..)
+
+                apply f x =
+                    let
+                        g a = h a
+                        h a = g a
+                    in
+                    g x
+                """,
+                functionName: "apply",
+                // Neither g nor h reference an outer name as a function — only
+                // each other. Both are bound by the let. No outer flow reported.
+                expectedFlows: []);
+            """";
+
+        AssertFormattedSyntax(input, input, scriptMode: true);
+    }
 }
