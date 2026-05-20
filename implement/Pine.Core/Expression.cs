@@ -22,7 +22,7 @@ public abstract record Expression
     /// <summary>
     /// Number of subexpressions contained in this expression.
     /// </summary>
-    public abstract int SubexpressionCount { get; }
+    public abstract long SubexpressionCount { get; }
 
     /// <summary>
     /// True if the expression itself or any its subexpressions is of type <see cref="Environment"/>.
@@ -157,7 +157,7 @@ public abstract record Expression
         /// <summary>
         /// Always returns zero, as a <see cref="Literal"/> expression does not contain any subexpressions.
         /// </summary>
-        public override int SubexpressionCount { get; } = 0;
+        public override long SubexpressionCount { get; } = 0;
 
         /// <summary>
         /// Always returns false, as a <see cref="Literal"/> expression does not contain any subexpressions.
@@ -199,7 +199,7 @@ public abstract record Expression
         private readonly int _slimHashCode;
 
         /// <ihneritdoc/>
-        public override int SubexpressionCount { get; }
+        public override long SubexpressionCount { get; }
 
         /// <inheritdoc/>
         public override bool ReferencesEnvironment { get; } = false;
@@ -272,7 +272,7 @@ public abstract record Expression
 
         internal static string ToShortString(
             int itemsCount,
-            int subexpressionCount,
+            long subexpressionCount,
             bool referencesEnvironment)
         {
             if (itemsCount is 0)
@@ -361,7 +361,7 @@ public abstract record Expression
         new public Expression Environment { get; }
 
         /// <inheritdoc/>
-        public override int SubexpressionCount { get; }
+        public override long SubexpressionCount { get; }
 
         /// <inheritdoc/>
         public override bool ReferencesEnvironment { get; }
@@ -429,7 +429,7 @@ public abstract record Expression
         public Expression Input { get; }
 
         /// <inheritdoc/>
-        public override int SubexpressionCount { get; }
+        public override long SubexpressionCount { get; }
 
         /// <inheritdoc/>
         public override bool ReferencesEnvironment { get; }
@@ -498,7 +498,7 @@ public abstract record Expression
         public Expression TrueBranch { get; }
 
         /// <inheritdoc/>
-        public override int SubexpressionCount { get; }
+        public override long SubexpressionCount { get; }
 
         /// <inheritdoc/>
         public override bool ReferencesEnvironment { get; }
@@ -608,7 +608,7 @@ public abstract record Expression
     public record Environment : Expression
     {
         /// <inheritdoc/>
-        public override int SubexpressionCount { get; } = 0;
+        public override long SubexpressionCount { get; } = 0;
 
         /// <inheritdoc/>
         public override bool ReferencesEnvironment { get; } = true;
@@ -633,7 +633,7 @@ public abstract record Expression
         public Expression Tagged { get; }
 
         /// <inheritdoc/>
-        public override int SubexpressionCount { get; }
+        public override long SubexpressionCount { get; }
 
         /// <inheritdoc/>
         public override bool ReferencesEnvironment { get; }
