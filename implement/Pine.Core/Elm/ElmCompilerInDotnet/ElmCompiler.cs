@@ -538,6 +538,9 @@ public class ElmCompiler
             initialContext
             .WithDependencyLayouts(dependencyLayouts);
 
+        var reducedExpressionCache =
+            new Dictionary<(Expression, ReductionConfig), Expression>();
+
         // Second pass: Compile all SCCs in dependency order
         // This ensures all dependencies are compiled before they are needed
         foreach (var scc in sccsInDependencyOrder)
@@ -559,7 +562,12 @@ public class ElmCompiler
             if (!allLayoutDepsCompiled)
                 continue;
 
-            var compileSccResult = CompileSCC(scc, compilationContext, disableGenericApplicationChainConsolidation);
+            var compileSccResult =
+                CompileSCC(
+                    scc,
+                    compilationContext,
+                    reducedExpressionCache,
+                    disableGenericApplicationChainConsolidation);
 
             if (compileSccResult.IsErrOrNull() is { } compileSccErr)
             {
@@ -1023,6 +1031,7 @@ public class ElmCompiler
     private static Result<CompilationError, ModuleCompilationContext> CompileSCC(
         FunctionScc scc,
         ModuleCompilationContext context,
+        IDictionary<(Expression, ReductionConfig), Expression>? reducedExpressionCache,
         bool disableGenericApplicationChainConsolidation = false)
     {
         var sharedLayout = scc.GetLayout();
@@ -1152,7 +1161,8 @@ public class ElmCompiler
                     new ReductionConfig(
                         DisableGenericApplicationChainConsolidation: disableGenericApplicationChainConsolidation,
                         DisableInliningParseAndEval: false),
-                    parseCache);
+                    parseCache,
+                    reducedExpressionCache: reducedExpressionCache);
 
             compiledBodies[memberName] = (compiledBody, paramCount);
         }
