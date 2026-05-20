@@ -782,6 +782,17 @@ public record QualifiedNameRef(
 
         return new QualifiedNameRef(moduleName, name);
     }
+
+    /// <inheritdoc/>
+    public override string ToString()
+    {
+        return
+            ModuleName.Count > 0
+            ?
+            string.Join(".", ModuleName) + "." + Name
+            :
+            Name;
+    }
 }
 
 /// <summary>
