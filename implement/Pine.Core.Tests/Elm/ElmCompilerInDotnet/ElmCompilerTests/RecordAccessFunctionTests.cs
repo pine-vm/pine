@@ -83,16 +83,17 @@ public class RecordAccessFunctionTests
     [Fact]
     public void Prefix_accessor_on_inline_record_with_closure_field_invoked_with_arg()
     {
-        var env = CompileModule(
-            """"
-            module Test exposing (..)
+        var env =
+            CompileModule(
+                """"
+                module Test exposing (..)
 
 
-            use : Int -> Int
-            use x =
-                .f { f = \y -> y } x
+                use : Int -> Int
+                use x =
+                    .f { f = \y -> y } x
 
-            """");
+                """");
 
         var func = GetFunction(env, "Test", "use");
 
@@ -113,25 +114,26 @@ public class RecordAccessFunctionTests
     [Fact]
     public void Prefix_accessor_on_record_with_int_field_returns_field_value()
     {
-        var env = CompileModule(
-            """"
-            module Test exposing (..)
+        var env =
+            CompileModule(
+                """"
+                module Test exposing (..)
 
 
-            type alias R =
-                { f : Int }
+                type alias R =
+                    { f : Int }
 
 
-            r : R
-            r =
-                { f = 42 }
+                r : R
+                r =
+                    { f = 42 }
 
 
-            use : Int -> Int
-            use offset =
-                Pine_kernel.int_add [ .f r, offset ]
+                use : Int -> Int
+                use offset =
+                    Pine_kernel.int_add [ .f r, offset ]
 
-            """");
+                """");
 
         var func = GetFunction(env, "Test", "use");
 

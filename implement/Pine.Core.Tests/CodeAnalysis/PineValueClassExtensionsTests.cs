@@ -1,7 +1,7 @@
+using AwesomeAssertions;
 using Pine.Core.CodeAnalysis;
 using Pine.Core.CommonEncodings;
 using System.Collections.Generic;
-using AwesomeAssertions;
 using Xunit;
 
 namespace Pine.Core.Tests.CodeAnalysis;
@@ -34,9 +34,12 @@ public class PineValueClassExtensionsTests
     {
         // Constraint: path [0] must be a specific blob
         var constraintValue = PineValue.Blob([42]);
-        var pvClass = PineValueClass.Create([
-            new KeyValuePair<IReadOnlyList<int>, PineValue>([0], constraintValue)
-        ]);
+
+        var pvClass =
+            PineValueClass.Create(
+                [
+                new KeyValuePair<IReadOnlyList<int>, PineValue>([0], constraintValue)
+                ]);
 
         var result = pvClass.CreateMinimalValue();
 
@@ -53,10 +56,13 @@ public class PineValueClassExtensionsTests
         // Constraints: path [0] and path [2] have specific values
         var value0 = PineValue.Blob([10]);
         var value2 = PineValue.Blob([20]);
-        var pvClass = PineValueClass.Create([
-            new KeyValuePair<IReadOnlyList<int>, PineValue>([0], value0),
-            new KeyValuePair<IReadOnlyList<int>, PineValue>([2], value2)
-        ]);
+
+        var pvClass =
+            PineValueClass.Create(
+                [
+                new KeyValuePair<IReadOnlyList<int>, PineValue>([0], value0),
+                new KeyValuePair<IReadOnlyList<int>, PineValue>([2], value2)
+                ]);
 
         var result = pvClass.CreateMinimalValue();
 
@@ -74,9 +80,12 @@ public class PineValueClassExtensionsTests
     {
         // Constraint: path [0, 1] must be a specific blob
         var constraintValue = PineValue.Blob([99]);
-        var pvClass = PineValueClass.Create([
-            new KeyValuePair<IReadOnlyList<int>, PineValue>([0, 1], constraintValue)
-        ]);
+
+        var pvClass =
+            PineValueClass.Create(
+                [
+                new KeyValuePair<IReadOnlyList<int>, PineValue>([0, 1], constraintValue)
+                ]);
 
         var result = pvClass.CreateMinimalValue();
 
@@ -104,11 +113,13 @@ public class PineValueClassExtensionsTests
         var value02 = PineValue.Blob([2]);
         var value1 = PineValue.Blob([3]);
 
-        var pvClass = PineValueClass.Create([
-            new KeyValuePair<IReadOnlyList<int>, PineValue>([0, 0], value00),
-            new KeyValuePair<IReadOnlyList<int>, PineValue>([0, 2], value02),
-            new KeyValuePair<IReadOnlyList<int>, PineValue>([1], value1)
-        ]);
+        var pvClass =
+            PineValueClass.Create(
+                [
+                new KeyValuePair<IReadOnlyList<int>, PineValue>([0, 0], value00),
+                new KeyValuePair<IReadOnlyList<int>, PineValue>([0, 2], value02),
+                new KeyValuePair<IReadOnlyList<int>, PineValue>([1], value1)
+                ]);
 
         var result = pvClass.CreateMinimalValue();
 
@@ -134,9 +145,12 @@ public class PineValueClassExtensionsTests
     {
         // Constraint: path [0, 1, 2] must be a specific blob
         var constraintValue = PineValue.Blob([77]);
-        var pvClass = PineValueClass.Create([
-            new KeyValuePair<IReadOnlyList<int>, PineValue>([0, 1, 2], constraintValue)
-        ]);
+
+        var pvClass =
+            PineValueClass.Create(
+                [
+                new KeyValuePair<IReadOnlyList<int>, PineValue>([0, 1, 2], constraintValue)
+                ]);
 
         var result = pvClass.CreateMinimalValue();
 
@@ -163,16 +177,21 @@ public class PineValueClassExtensionsTests
         // Create a constraint with multiple paths
         var value0 = PineValue.Blob([10]);
         var value12 = PineValue.Blob([20]);
-        var value2 = PineValue.List([
-            PineValue.Blob([30]),
-            PineValue.Blob([40])
-        ]);
 
-        var pvClass = PineValueClass.Create([
-            new KeyValuePair<IReadOnlyList<int>, PineValue>([0], value0),
-            new KeyValuePair<IReadOnlyList<int>, PineValue>([1, 2], value12),
-            new KeyValuePair<IReadOnlyList<int>, PineValue>([2], value2)
-        ]);
+        var value2 =
+            PineValue.List(
+                [
+                PineValue.Blob([30]),
+                PineValue.Blob([40])
+                ]);
+
+        var pvClass =
+            PineValueClass.Create(
+                [
+                new KeyValuePair<IReadOnlyList<int>, PineValue>([0], value0),
+                new KeyValuePair<IReadOnlyList<int>, PineValue>([1, 2], value12),
+                new KeyValuePair<IReadOnlyList<int>, PineValue>([2], value2)
+                ]);
 
         var result = pvClass.CreateMinimalValue();
 
@@ -184,15 +203,19 @@ public class PineValueClassExtensionsTests
     public void CreateMinimalValue_with_list_as_constraint()
     {
         // Constraint: path [0] is a list containing specific items
-        var constraintValue = PineValue.List([
-            PineValue.Blob([1]),
-            PineValue.Blob([2]),
-            PineValue.Blob([3])
-        ]);
+        var constraintValue =
+            PineValue.List(
+                [
+                PineValue.Blob([1]),
+                PineValue.Blob([2]),
+                PineValue.Blob([3])
+                ]);
 
-        var pvClass = PineValueClass.Create([
-            new KeyValuePair<IReadOnlyList<int>, PineValue>([0], constraintValue)
-        ]);
+        var pvClass =
+            PineValueClass.Create(
+                [
+                new KeyValuePair<IReadOnlyList<int>, PineValue>([0], constraintValue)
+                ]);
 
         var result = pvClass.CreateMinimalValue();
 
@@ -212,11 +235,13 @@ public class PineValueClassExtensionsTests
         var value5 = PineValue.Blob([5]);
         var value10 = PineValue.Blob([10]);
 
-        var pvClass = PineValueClass.Create([
-            new KeyValuePair<IReadOnlyList<int>, PineValue>([0], value0),
-            new KeyValuePair<IReadOnlyList<int>, PineValue>([5], value5),
-            new KeyValuePair<IReadOnlyList<int>, PineValue>([10], value10)
-        ]);
+        var pvClass =
+            PineValueClass.Create(
+                [
+                new KeyValuePair<IReadOnlyList<int>, PineValue>([0], value0),
+                new KeyValuePair<IReadOnlyList<int>, PineValue>([5], value5),
+                new KeyValuePair<IReadOnlyList<int>, PineValue>([10], value10)
+                ]);
 
         var result = pvClass.CreateMinimalValue();
 
@@ -245,23 +270,26 @@ public class PineValueClassExtensionsTests
     public void CreateMinimalValue_with_complex_nested_structure()
     {
         // Create a more complex constraint that exercises multiple features
-        var pvClass = PineValueClass.Create([
-            new KeyValuePair<IReadOnlyList<int>, PineValue>(
-                [0, 0],
-                StringEncoding.BlobValueFromString("hello")),
-            new KeyValuePair<IReadOnlyList<int>, PineValue>(
-                [0, 1],
-                IntegerEncoding.EncodeSignedInteger(42)),
-            new KeyValuePair<IReadOnlyList<int>, PineValue>(
-                [1],
-                PineValue.List([
-                    PineValue.Blob([1, 2, 3]),
-                    PineValue.EmptyBlob
-                ])),
-            new KeyValuePair<IReadOnlyList<int>, PineValue>(
-                [2, 0, 1],
-                PineValue.Blob([99]))
-        ]);
+        var pvClass =
+            PineValueClass.Create(
+                [
+                new KeyValuePair<IReadOnlyList<int>, PineValue>(
+                    [0, 0],
+                    StringEncoding.BlobValueFromString("hello")),
+                new KeyValuePair<IReadOnlyList<int>, PineValue>(
+                    [0, 1],
+                    IntegerEncoding.EncodeSignedInteger(42)),
+                new KeyValuePair<IReadOnlyList<int>, PineValue>(
+                    [1],
+                    PineValue.List(
+                        [
+                        PineValue.Blob([1, 2, 3]),
+                        PineValue.EmptyBlob
+                        ])),
+                new KeyValuePair<IReadOnlyList<int>, PineValue>(
+                    [2, 0, 1],
+                    PineValue.Blob([99]))
+                ]);
 
         var result = pvClass.CreateMinimalValue();
 
@@ -277,9 +305,11 @@ public class PineValueClassExtensionsTests
     public void CreateMinimalValue_result_has_minimal_nodes_count()
     {
         // For a simple constraint, the result should not have extra nodes
-        var pvClass = PineValueClass.Create([
-            new KeyValuePair<IReadOnlyList<int>, PineValue>([0], PineValue.Blob([1]))
-        ]);
+        var pvClass =
+            PineValueClass.Create(
+                [
+                new KeyValuePair<IReadOnlyList<int>, PineValue>([0], PineValue.Blob([1]))
+                ]);
 
         var result = pvClass.CreateMinimalValue();
 

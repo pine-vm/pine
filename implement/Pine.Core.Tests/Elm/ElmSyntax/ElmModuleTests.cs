@@ -1,8 +1,8 @@
 using AwesomeAssertions;
+using Pine.Core.Elm.ElmSyntax;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using Xunit;
-using Pine.Core.Elm.ElmSyntax;
 
 namespace Pine.Core.Tests.Elm.ElmSyntax;
 
@@ -11,87 +11,88 @@ public class ElmModuleTests
     [Fact]
     public void Parse_Elm_module_name()
     {
-        var testCases = new[]
-        {
-            new
+        var testCases =
+            new[]
             {
-                moduleText = @"module TestModule exposing (..)",
+                new
+                {
+                    moduleText = @"module TestModule exposing (..)",
 
-                expectedModuleName =
-                (IReadOnlyList<string>)["TestModule"]
-            },
+                    expectedModuleName =
+                    (IReadOnlyList<string>)["TestModule"]
+                },
 
-            new
-            {
-                moduleText =
-                """
-                port module LanguageServiceWorker exposing (..)
-                """,
-                expectedModuleName =
-                (IReadOnlyList<string>)["LanguageServiceWorker"]
-            },
+                new
+                {
+                    moduleText =
+                    """
+                    port module LanguageServiceWorker exposing (..)
+                    """,
+                    expectedModuleName =
+                    (IReadOnlyList<string>)["LanguageServiceWorker"]
+                },
 
-            new
-            {
-                moduleText =
-                """
-                module Elm.JsArray
-                    exposing
-                        ( JsArray
-                        , empty
-                        , singleton
-                        , length
-                        , initialize
-                        , initializeFromList
-                        , unsafeGet
-                        , unsafeSet
-                        , push
-                        , foldl
-                        , foldr
-                        , map
-                        , indexedMap
-                        , slice
-                        , appendN
-                        )
-                """,
+                new
+                {
+                    moduleText =
+                    """
+                    module Elm.JsArray
+                        exposing
+                            ( JsArray
+                            , empty
+                            , singleton
+                            , length
+                            , initialize
+                            , initializeFromList
+                            , unsafeGet
+                            , unsafeSet
+                            , push
+                            , foldl
+                            , foldr
+                            , map
+                            , indexedMap
+                            , slice
+                            , appendN
+                            )
+                    """,
 
-                expectedModuleName =
-                (IReadOnlyList<string>)["Elm", "JsArray"]
-            },
+                    expectedModuleName =
+                    (IReadOnlyList<string>)["Elm", "JsArray"]
+                },
 
-            new
-            {
-                moduleText =
-                """
-                {-| Multi-line comment
-                -}
+                new
+                {
+                    moduleText =
+                    """
+                    {-| Multi-line comment
+                    -}
 
-                module Test exposing ( .. )
-                """,
+                    module Test exposing ( .. )
+                    """,
 
-                expectedModuleName =
-                (IReadOnlyList<string>)["Test"]
-            },
+                    expectedModuleName =
+                    (IReadOnlyList<string>)["Test"]
+                },
 
-            new
-            {
-                moduleText =
-                """
-                effect module Task where { command = MyCmd } exposing
-                  ( Task
-                  , succeed, fail
-                  , map, map2, map3, map4, map5
-                  , sequence
-                  , andThen
-                  , onError, mapError
-                  , perform, attempt
-                  )
-                """,
+                new
+                {
+                    moduleText =
+                    """
+                    effect module Task where { command = MyCmd } exposing
+                      ( Task
+                      , succeed, fail
+                      , map, map2, map3, map4, map5
+                      , sequence
+                      , andThen
+                      , onError, mapError
+                      , perform, attempt
+                      )
+                    """,
 
-                expectedModuleName =
-                (IReadOnlyList<string>)["Task"]
-            },
-        };
+                    expectedModuleName =
+                    (IReadOnlyList<string>)["Task"]
+                },
+            };
 
         foreach (var testCase in testCases)
         {
@@ -100,7 +101,8 @@ public class ElmModuleTests
             if (parseModuleNameResult.IsErrOrNull() is { } err)
             {
                 // Using FluentAssertion's approach to fail a test
-                "Failed test".Should().BeNull("Failed to parse module name: " + err + "\nmodule text:\n" + testCase.moduleText);
+                "Failed test".Should().BeNull(
+                    "Failed to parse module name: " + err + "\nmodule text:\n" + testCase.moduleText);
             }
 
             if (parseModuleNameResult.IsOkOrNull() is not { } parsedName)
@@ -140,74 +142,81 @@ public class ElmModuleTests
     [Fact]
     public void Parse_Elm_module_text_imports()
     {
-        var testCases = new[]
-        {
-            new
+        var testCases =
+            new[]
             {
-                moduleText = @"module TestModule exposing (..)",
-                expectedImports = System.Array.Empty<IReadOnlyList<string>>()
-            },
-
-            new
-            {
-                moduleText = """
-                module TestModule exposing (..)
-
-                import Basics exposing (Bool, Int)
-                import Dict
-                import List exposing ((::))
-                import Maybe exposing (Maybe(..))
-                """,
-
-                expectedImports = new IReadOnlyList<string>[]
+                new
                 {
-                    ["Basics"],
-                    ["Dict"],
-                    ["List"],
-                    ["Maybe"]
-                }
-            },
+                    moduleText = @"module TestModule exposing (..)",
+                    expectedImports = System.Array.Empty<IReadOnlyList<string>>()
+                },
 
-            new
-            {
-                moduleText = """"
-                module TestModule exposing (..)
-
-                import Dict
-
-                d = """
-                import List exposing ((::))
-                import Maybe exposing (Maybe(..))
-                """
-
-                """",
-
-                expectedImports = new IReadOnlyList<string>[]
+                new
                 {
-                    ["Dict"],
-                }
-            },
+                    moduleText =
+                    """
+                    module TestModule exposing (..)
 
-            new
-            {
-                moduleText = """"
-                module TestModule exposing (..)
-
-                import Dict
-
-                {-
+                    import Basics exposing (Bool, Int)
+                    import Dict
                     import List exposing ((::))
                     import Maybe exposing (Maybe(..))
-                -}
+                    """,
 
-                """",
+                    expectedImports =
+                    new IReadOnlyList<string>[]
+                    {
+                        ["Basics"],
+                        ["Dict"],
+                        ["List"],
+                        ["Maybe"]
+                    }
+                },
 
-                expectedImports = new IReadOnlyList<string>[]
+                new
                 {
-                    ["Dict"],
-                }
-            },
-        };
+                    moduleText =
+                    """"
+                    module TestModule exposing (..)
+
+                    import Dict
+
+                    d = """
+                    import List exposing ((::))
+                    import Maybe exposing (Maybe(..))
+                    """
+
+                    """",
+
+                    expectedImports =
+                    new IReadOnlyList<string>[]
+                    {
+                        ["Dict"],
+                    }
+                },
+
+                new
+                {
+                    moduleText =
+                    """"
+                    module TestModule exposing (..)
+
+                    import Dict
+
+                    {-
+                        import List exposing ((::))
+                        import Maybe exposing (Maybe(..))
+                    -}
+
+                    """",
+
+                    expectedImports =
+                    new IReadOnlyList<string>[]
+                    {
+                        ["Dict"],
+                    }
+                },
+            };
 
         foreach (var testCase in testCases)
         {
@@ -224,7 +233,8 @@ public class ElmModuleTests
     [Fact]
     public void Enumerate_module_lines()
     {
-        var testCases = new[]
+        var testCases =
+            new[]
             {
                 new
                 {
@@ -241,7 +251,7 @@ public class ElmModuleTests
                     "focaccia\narancino",
 
                     expectedLines =
-                    (IReadOnlyList<string>)["focaccia","arancino"]
+                    (IReadOnlyList<string>)["focaccia", "arancino"]
                 },
 
                 new
@@ -250,7 +260,7 @@ public class ElmModuleTests
                     "focaccia\narancino\n",
 
                     expectedLines =
-                    (IReadOnlyList<string>)["focaccia","arancino",""]
+                    (IReadOnlyList<string>)["focaccia", "arancino", ""]
                 },
 
                 new
@@ -259,7 +269,7 @@ public class ElmModuleTests
                     "focaccia\rarancino",
 
                     expectedLines =
-                    (IReadOnlyList<string>)["focaccia","arancino"]
+                    (IReadOnlyList<string>)["focaccia", "arancino"]
                 },
 
                 new
@@ -268,7 +278,7 @@ public class ElmModuleTests
                     "focaccia\r\narancino",
 
                     expectedLines =
-                    (IReadOnlyList<string>)["focaccia","arancino"]
+                    (IReadOnlyList<string>)["focaccia", "arancino"]
                 },
 
                 new
@@ -277,7 +287,7 @@ public class ElmModuleTests
                     "focaccia\n\rarancino",
 
                     expectedLines =
-                    (IReadOnlyList<string>)["focaccia","arancino"]
+                    (IReadOnlyList<string>)["focaccia", "arancino"]
                 },
 
                 new
@@ -286,7 +296,7 @@ public class ElmModuleTests
                     "focaccia\n\narancino",
 
                     expectedLines =
-                    (IReadOnlyList<string>)["focaccia","","arancino"]
+                    (IReadOnlyList<string>)["focaccia", "", "arancino"]
                 },
 
                 new
@@ -295,7 +305,7 @@ public class ElmModuleTests
                     "focaccia\n\r\narancino",
 
                     expectedLines =
-                    (IReadOnlyList<string>)["focaccia","","arancino"]
+                    (IReadOnlyList<string>)["focaccia", "", "arancino"]
                 },
 
                 new
@@ -304,7 +314,7 @@ public class ElmModuleTests
                     "focaccia\r\n\rarancino",
 
                     expectedLines =
-                    (IReadOnlyList<string>)["focaccia","","arancino"]
+                    (IReadOnlyList<string>)["focaccia", "", "arancino"]
                 },
             };
 

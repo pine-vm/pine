@@ -59,6 +59,7 @@ public class CalleeRecognitionTests
 
         config.IdentifyInstanceOptional([], nonFunctionValue)
             .Should().NotBeNull();
+
         config.IdentifyInstanceOptional([], nonFunctionValue)!.Ident.Should().Be("answer");
 
         config.IdentifyEncodedBodyOptional!.Invoke([], nonFunctionValue)
@@ -87,17 +88,20 @@ public class CalleeRecognitionTests
         // Form B / bare reference
         config.IdentifyInstanceOptional([], unaryFunctionValue)
             .Should().NotBeNull();
+
         config.IdentifyInstanceOptional([], unaryFunctionValue)!.Ident.Should().Be("u");
 
         // Form A: encoded body must be registered under its own key.
         var record =
-            FunctionRecord.ParseFunctionRecordTagged(unaryFunctionValue, s_parseCache).Extract(
-                err => throw new System.Exception(err));
+            FunctionRecord.ParseFunctionRecordTagged(unaryFunctionValue, s_parseCache)
+            .Extract(err => throw new System.Exception(err));
+
         var (encodedBody, _, _) =
             NamesFromCompiledEnv.BuildApplicationFromFunctionRecord(record, [], s_parseCache);
 
         config.IdentifyEncodedBodyOptional!.Invoke([], encodedBody)
             .Should().NotBeNull();
+
         config.IdentifyEncodedBodyOptional!.Invoke([], encodedBody)!.Ident.Should().Be("u");
 
         // No Form C templates for unary functions (K range [2, 1] is empty).
@@ -126,6 +130,7 @@ public class CalleeRecognitionTests
         config.ConsolidatedFormTemplates[0].Template.DepthK.Should().Be(2);
         config.ConsolidatedFormTemplates[0].Identify.Ident.Should().Be("b");
         config.ConsolidatedFormTemplates[0].Identify.ContinueParse.Should().BeTrue();
+
         config.ConsolidatedFormTemplates[0].Identify.OriginalFunctionValue
             .Should().Be(binaryFunctionValue);
     }
@@ -177,6 +182,7 @@ public class CalleeRecognitionTests
             .Should().BeNull();
 
         config.ConsolidatedFormTemplates![0].Identify.ContinueParse.Should().BeFalse();
+
         config.ConsolidatedFormTemplates![0].Identify.OriginalFunctionValue
             .Should().BeNull();
     }
@@ -220,21 +226,21 @@ public class CalleeRecognitionTests
             new StaticProgramParserConfig<string>(
                 IdentifyInstanceRequired:
                 (_, value) =>
-                    new StaticProgramParser.IdentifyResponse<string>(
-                        Ident: "from-previous",
-                        ContinueParse: false),
+                new StaticProgramParser.IdentifyResponse<string>(
+                    Ident: "from-previous",
+                    ContinueParse: false),
                 IdentifyInstanceOptional:
                 (_, _) =>
-                    new StaticProgramParser.IdentifyResponse<string>(
-                        Ident: "previous-optional",
-                        ContinueParse: false),
+                new StaticProgramParser.IdentifyResponse<string>(
+                    Ident: "previous-optional",
+                    ContinueParse: false),
                 IdentifyCrash:
                 (_, _) => throw new System.NotImplementedException(),
                 IdentifyEncodedBodyOptional:
                 (_, _) =>
-                    new StaticProgramParser.IdentifyResponse<string>(
-                        Ident: "previous-encoded",
-                        ContinueParse: false),
+                new StaticProgramParser.IdentifyResponse<string>(
+                    Ident: "previous-encoded",
+                    ContinueParse: false),
                 ConsolidatedFormTemplates: null);
 
         var descriptor =
@@ -256,6 +262,7 @@ public class CalleeRecognitionTests
         // Miss falls through to previousConfig.
         config.IdentifyInstanceOptional([], unrelatedValue)!.Ident
             .Should().Be("previous-optional");
+
         config.IdentifyEncodedBodyOptional!.Invoke([], unrelatedValue)!.Ident
             .Should().Be("previous-encoded");
     }

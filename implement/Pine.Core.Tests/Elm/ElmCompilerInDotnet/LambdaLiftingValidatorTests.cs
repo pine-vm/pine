@@ -250,8 +250,8 @@ public class LambdaLiftingValidatorTests
 
         ex.Violations.Should().Contain(
             v =>
-                v.Contains("compute__lifted__inner_1", StringComparison.Ordinal) &&
-                v.Contains("compute__lifted__outer_2", StringComparison.Ordinal));
+            v.Contains("compute__lifted__inner_1", StringComparison.Ordinal) &&
+            v.Contains("compute__lifted__outer_2", StringComparison.Ordinal));
     }
 
     /// <summary>
@@ -298,8 +298,8 @@ public class LambdaLiftingValidatorTests
 
         ex.Violations.Should().Contain(
             v =>
-                v.Contains("compute__lifted__helper_1", StringComparison.Ordinal) &&
-                v.Contains("compute__lifted__user_2", StringComparison.Ordinal));
+            v.Contains("compute__lifted__helper_1", StringComparison.Ordinal) &&
+            v.Contains("compute__lifted__user_2", StringComparison.Ordinal));
     }
 
     /// <summary>
@@ -339,8 +339,8 @@ public class LambdaLiftingValidatorTests
 
         ex.Violations.Should().Contain(
             v =>
-                v.Contains("compute__lifted__add_1", StringComparison.Ordinal) &&
-                v.Contains("compute", StringComparison.Ordinal));
+            v.Contains("compute__lifted__add_1", StringComparison.Ordinal) &&
+            v.Contains("compute", StringComparison.Ordinal));
     }
 
     /// <summary>

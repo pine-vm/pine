@@ -239,8 +239,8 @@ public class ElmSyntaxParserTests
 
         parsedFile.Declarations
             .Select(
-                declaration =>
-                    ((Declaration.FunctionDeclaration)declaration.Value).Function.Declaration.Value.Name.Value)
+            declaration =>
+            ((Declaration.FunctionDeclaration)declaration.Value).Function.Declaration.Value.Name.Value)
             .Should()
             .Equal("x", "y");
     }

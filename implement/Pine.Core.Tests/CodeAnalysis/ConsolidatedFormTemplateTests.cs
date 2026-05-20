@@ -142,8 +142,8 @@ public class ConsolidatedFormTemplateTests
                         "skip",
                         Expression.ListInstance(
                             [
-                                Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(1)),
-                                cur
+                            Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(1)),
+                            cur
                             ]));
             }
 

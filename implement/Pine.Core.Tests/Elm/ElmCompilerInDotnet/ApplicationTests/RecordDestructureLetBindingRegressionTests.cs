@@ -123,10 +123,10 @@ public class RecordDestructureLetBindingRegressionTests
         rendered.Should().Be(
             """[ "a", "b" ]""",
             because:
-                "`let { hoverItems } = record in hoverItems` must bind the " +
-                "name `hoverItems` to the value of the field named " +
-                "`hoverItems`, not to the value of the first field of the " +
-                "record. Got: " + rendered);
+            "`let { hoverItems } = record in hoverItems` must bind the " +
+            "name `hoverItems` to the value of the field named " +
+            "`hoverItems`, not to the value of the first field of the " +
+            "record. Got: " + rendered);
     }
 
     /// <summary>

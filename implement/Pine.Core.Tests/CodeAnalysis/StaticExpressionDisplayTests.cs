@@ -8,7 +8,6 @@ using Xunit;
 
 using StaticExpression = Pine.Core.CodeAnalysis.StaticExpression<Pine.Core.CodeAnalysis.DeclQualifiedName>;
 
-
 namespace Pine.Core.Tests.CodeAnalysis;
 
 public class StaticExpressionDisplayTests
@@ -17,13 +16,15 @@ public class StaticExpressionDisplayTests
         BuildProgramAndMetadata(
         IReadOnlyDictionary<DeclQualifiedName, (Expression origExpr, StaticFunctionInterface interf, StaticExpression<DeclQualifiedName> body, PineValueClass constraint)> decls)
     {
-        var program = new StaticProgram<DeclQualifiedName>(
-            EntryPoint: null,
-            decls.ToDictionary(kv => kv.Key, kv => kv.Value.body));
+        var program =
+            new StaticProgram<DeclQualifiedName>(
+                EntryPoint: null,
+                decls.ToDictionary(kv => kv.Key, kv => kv.Value.body));
 
-        var metadata = decls.ToDictionary(
-            kv => kv.Key,
-            kv => new StaticProgramFunctionMetadata(kv.Value.origExpr, kv.Value.interf, kv.Value.constraint));
+        var metadata =
+            decls.ToDictionary(
+                kv => kv.Key,
+                kv => new StaticProgramFunctionMetadata(kv.Value.origExpr, kv.Value.interf, kv.Value.constraint));
 
         return (program, metadata);
     }
@@ -37,11 +38,13 @@ public class StaticExpressionDisplayTests
         static StaticFunctionInterface InterfaceFromParamCount(int paramCount) =>
             StaticFunctionInterface.FromPathsSorted(
                 [
-                    .. Enumerable.Range(0, paramCount)
-                    .Select(i => (IReadOnlyList<int>)[1, i])
+                .. Enumerable.Range(0, paramCount)
+                .Select(i => (IReadOnlyList<int>)[1, i])
                 ]);
 
-        static StaticExpression FunctionApplicationInstance(string functionName, IReadOnlyList<StaticExpression> arguments) =>
+        static StaticExpression FunctionApplicationInstance(
+            string functionName,
+            IReadOnlyList<StaticExpression> arguments) =>
             StaticExpression.FunctionApplicationInstance(
                 DeclQualifiedName.FromString(functionName),
                 StaticExpression.ListInstance(
@@ -50,12 +53,13 @@ public class StaticExpressionDisplayTests
                     StaticExpression.ListInstance(arguments)
                     ]));
 
-        var scenarios = new[]
-        {
-            new
+        var scenarios =
+            new[]
             {
-                Name = "Literal_Integer",
-                Decls =
+                new
+                {
+                    Name = "Literal_Integer",
+                    Decls =
                     ImmutableDictionary<DeclQualifiedName, (Expression, StaticFunctionInterface, StaticExpression<DeclQualifiedName>, PineValueClass)>.Empty
                     .SetItem(
                         DeclQualifiedName.FromString("decl_a"),
@@ -64,16 +68,17 @@ public class StaticExpressionDisplayTests
                         StaticExpression.LiteralInstance(
                             ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(1))),
                         PineValueClass.Create([]))),
-                Expected = """
-                decl_a =
-                    1
-                """
-            },
+                    Expected =
+                    """
+                    decl_a =
+                        1
+                    """
+                },
 
-            new
-            {
-                Name = "Literal_Boolean_True",
-                Decls =
+                new
+                {
+                    Name = "Literal_Boolean_True",
+                    Decls =
                     ImmutableDictionary<DeclQualifiedName, (Expression, StaticFunctionInterface, StaticExpression<DeclQualifiedName>, PineValueClass)>.Empty
                     .SetItem(
                         DeclQualifiedName.FromString("decl_a"),
@@ -83,16 +88,17 @@ public class StaticExpressionDisplayTests
                             ElmValueEncoding.ElmValueAsPineValue(ElmValue.TrueValue)),
                         PineValueClass.Create([]))),
 
-                Expected = """
-                decl_a =
-                    True
-                """
-            },
+                    Expected =
+                    """
+                    decl_a =
+                        True
+                    """
+                },
 
-            new
-            {
-                Name = "Parameter_Ref",
-                Decls =
+                new
+                {
+                    Name = "Parameter_Ref",
+                    Decls =
                     ImmutableDictionary<DeclQualifiedName, (Expression, StaticFunctionInterface, StaticExpression<DeclQualifiedName>, PineValueClass)>.Empty
                     .SetItem(
                         DeclQualifiedName.FromString("decl_a"),
@@ -101,16 +107,17 @@ public class StaticExpressionDisplayTests
                         Param_1_0(),
                         PineValueClass.Create([]))),
 
-                Expected = """
-                decl_a param_1_0 =
-                    param_1_0
-                """
-            },
+                    Expected =
+                    """
+                    decl_a param_1_0 =
+                        param_1_0
+                    """
+                },
 
-            new
-            {
-                Name = "Literal_Char",
-                Decls =
+                new
+                {
+                    Name = "Literal_Char",
+                    Decls =
                     ImmutableDictionary<DeclQualifiedName, (Expression, StaticFunctionInterface, StaticExpression<DeclQualifiedName>, PineValueClass)>.Empty
                     .SetItem(
                         DeclQualifiedName.FromString("decl_a"),
@@ -119,16 +126,17 @@ public class StaticExpressionDisplayTests
                         StaticExpression.LiteralInstance(
                             ElmValueEncoding.ElmValueAsPineValue(ElmValue.CharInstance((int)'4'))),
                         PineValueClass.Create([]))),
-                Expected = """
-                decl_a =
-                    '4'
-                """
-            },
+                    Expected =
+                    """
+                    decl_a =
+                        '4'
+                    """
+                },
 
-            new
-            {
-                Name = "List_Param_And_Int",
-                Decls =
+                new
+                {
+                    Name = "List_Param_And_Int",
+                    Decls =
                     ImmutableDictionary<DeclQualifiedName, (Expression, StaticFunctionInterface, StaticExpression<DeclQualifiedName>, PineValueClass)>.Empty
                     .SetItem(
                         DeclQualifiedName.FromString("decl_a"),
@@ -136,44 +144,48 @@ public class StaticExpressionDisplayTests
                         InterfaceFromParamCount(1),
                         StaticExpression.ListInstance(
                             [
-                                Param_1_0(),
-                                StaticExpression.LiteralInstance(ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(1)))
+                            Param_1_0(),
+                            StaticExpression.LiteralInstance(ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(1)))
                             ]),
                         PineValueClass.Create([]))),
-                Expected = """
-                decl_a param_1_0 =
-                    [ param_1_0
-                    , 1
-                    ]
-                """
-            },
+                    Expected =
+                    """
+                    decl_a param_1_0 =
+                        [ param_1_0
+                        , 1
+                        ]
+                    """
+                },
 
-            new
-            {
-                Name = "List_Param_And_Char",
-                Decls =
+                new
+                {
+                    Name = "List_Param_And_Char",
+                    Decls =
                     ImmutableDictionary<DeclQualifiedName, (Expression, StaticFunctionInterface, StaticExpression<DeclQualifiedName>, PineValueClass)>.Empty
                     .SetItem(
                         DeclQualifiedName.FromString("decl_a"),
                         (Expression.ListInstance([]),
                         InterfaceFromParamCount(1),
-                        StaticExpression.ListInstance([
+                        StaticExpression.ListInstance(
+                            [
                             Param_1_0(),
-                            StaticExpression.LiteralInstance(ElmValueEncoding.ElmValueAsPineValue(ElmValue.CharInstance((int)'b')))
-                        ]),
+                            StaticExpression.LiteralInstance(
+                                ElmValueEncoding.ElmValueAsPineValue(ElmValue.CharInstance((int)'b')))
+                            ]),
                         PineValueClass.Create([]))),
-                Expected = """
-                decl_a param_1_0 =
-                    [ param_1_0
-                    , 'b'
-                    ]
-                """
-            },
+                    Expected =
+                    """
+                    decl_a param_1_0 =
+                        [ param_1_0
+                        , 'b'
+                        ]
+                    """
+                },
 
-            new
-            {
-                Name = "List_containing_function_application",
-                Decls =
+                new
+                {
+                    Name = "List_containing_function_application",
+                    Decls =
                     ImmutableDictionary<DeclQualifiedName, (Expression, StaticFunctionInterface, StaticExpression<DeclQualifiedName>, PineValueClass)>.Empty
                     .SetItem(
                         DeclQualifiedName.FromString("decl_a"),
@@ -181,13 +193,14 @@ public class StaticExpressionDisplayTests
                         InterfaceFromParamCount(0),
                         StaticExpression.ListInstance(
                             [
-                                StaticExpression.LiteralInstance(ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(41))),
-                                FunctionApplicationInstance(
-                                    functionName: "test",
-                                    arguments:
-                                    [
-                                        StaticExpression.LiteralInstance(ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(123))),
-                                    ])
+                            StaticExpression.LiteralInstance(ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(41))),
+                            FunctionApplicationInstance(
+                                functionName: "test",
+                                arguments:
+                                [
+                                StaticExpression.LiteralInstance(
+                                    ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(123))),
+                                ])
                             ]),
                         PineValueClass.Create([])))
                     .SetItem(
@@ -196,87 +209,95 @@ public class StaticExpressionDisplayTests
                         InterfaceFromParamCount(1),
                         Param_1_0(),
                         PineValueClass.Create([]))),
-                Expected = """
-                decl_a =
-                    [ 41
-                    , test
-                        123
-                    ]
-
-
-                test param_1_0 =
-                    param_1_0
-                """
-            },
-
-            new
-            {
-                Name = "Nested_list",
-                Decls =
-                    ImmutableDictionary<DeclQualifiedName, (Expression, StaticFunctionInterface, StaticExpression<DeclQualifiedName>, PineValueClass)>.Empty
-                    .SetItem(
-                        DeclQualifiedName.FromString("decl_a"),
-                        (Expression.ListInstance([]),
-                        InterfaceFromParamCount(0),
-                        StaticExpression.ListInstance(
-                            [
-                                StaticExpression.LiteralInstance(ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(41))),
-                                StaticExpression.ListInstance(
-                                    [
-                                        StaticExpression.LiteralInstance(ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(71))),
-                                        StaticExpression.LiteralInstance(ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(73))),
-                                    ])
-                            ]),
-                        PineValueClass.Create([]))),
-                Expected = """
-                decl_a =
-                    [ 41
-                    , [ 71
-                      , 73
-                      ]
-                    ]
-                """
-            },
-
-            new
-            {
-                Name = "Nested_list_twice",
-                Decls =
-                    ImmutableDictionary<DeclQualifiedName, (Expression, StaticFunctionInterface, StaticExpression<DeclQualifiedName>, PineValueClass)>.Empty
-                    .SetItem(
-                        DeclQualifiedName.FromString("decl_a"),
-                        (Expression.ListInstance([]),
-                        InterfaceFromParamCount(0),
-                        StaticExpression.ListInstance(
-                            [
-                                StaticExpression.LiteralInstance(ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(41))),
-                                StaticExpression.ListInstance(
-                                    [
-                                        StaticExpression.LiteralInstance(ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(71))),
-                                        StaticExpression.ListInstance(
-                                            [
-                                                StaticExpression.LiteralInstance(ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(73))),
-                                                StaticExpression.LiteralInstance(ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(79))),
-                                            ])
-                                    ])
-                            ]),
-                        PineValueClass.Create([]))),
-                Expected = """
-                decl_a =
-                    [ 41
-                    , [ 71
-                      , [ 73
-                        , 79
+                    Expected =
+                    """
+                    decl_a =
+                        [ 41
+                        , test
+                            123
                         ]
-                      ]
-                    ]
-                """
-            },
 
-            new
-            {
-                Name = "KernelApplication_With_List",
-                Decls =
+
+                    test param_1_0 =
+                        param_1_0
+                    """
+                },
+
+                new
+                {
+                    Name = "Nested_list",
+                    Decls =
+                    ImmutableDictionary<DeclQualifiedName, (Expression, StaticFunctionInterface, StaticExpression<DeclQualifiedName>, PineValueClass)>.Empty
+                    .SetItem(
+                        DeclQualifiedName.FromString("decl_a"),
+                        (Expression.ListInstance([]),
+                        InterfaceFromParamCount(0),
+                        StaticExpression.ListInstance(
+                            [
+                            StaticExpression.LiteralInstance(ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(41))),
+                            StaticExpression.ListInstance(
+                                [
+                                StaticExpression.LiteralInstance(
+                                    ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(71))),
+                                StaticExpression.LiteralInstance(
+                                    ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(73))),
+                                ])
+                            ]),
+                        PineValueClass.Create([]))),
+                    Expected =
+                    """
+                    decl_a =
+                        [ 41
+                        , [ 71
+                          , 73
+                          ]
+                        ]
+                    """
+                },
+
+                new
+                {
+                    Name = "Nested_list_twice",
+                    Decls =
+                    ImmutableDictionary<DeclQualifiedName, (Expression, StaticFunctionInterface, StaticExpression<DeclQualifiedName>, PineValueClass)>.Empty
+                    .SetItem(
+                        DeclQualifiedName.FromString("decl_a"),
+                        (Expression.ListInstance([]),
+                        InterfaceFromParamCount(0),
+                        StaticExpression.ListInstance(
+                            [
+                            StaticExpression.LiteralInstance(ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(41))),
+                            StaticExpression.ListInstance(
+                                [
+                                StaticExpression.LiteralInstance(
+                                    ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(71))),
+                                StaticExpression.ListInstance(
+                                    [
+                                    StaticExpression.LiteralInstance(
+                                        ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(73))),
+                                    StaticExpression.LiteralInstance(
+                                        ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(79))),
+                                    ])
+                                ])
+                            ]),
+                        PineValueClass.Create([]))),
+                    Expected =
+                    """
+                    decl_a =
+                        [ 41
+                        , [ 71
+                          , [ 73
+                            , 79
+                            ]
+                          ]
+                        ]
+                    """
+                },
+
+                new
+                {
+                    Name = "KernelApplication_With_List",
+                    Decls =
                     ImmutableDictionary<DeclQualifiedName, (Expression, StaticFunctionInterface, StaticExpression<DeclQualifiedName>, PineValueClass)>.Empty
                     .SetItem(
                         DeclQualifiedName.FromString("decl_a"),
@@ -286,23 +307,25 @@ public class StaticExpressionDisplayTests
                             function: "int_is_sorted_asc",
                             input: StaticExpression.ListInstance(
                                 [
-                                    Param_1_0(),
-                                    StaticExpression.LiteralInstance(ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(1)))
+                                Param_1_0(),
+                                StaticExpression.LiteralInstance(
+                                    ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(1)))
                                 ])),
                         PineValueClass.Create([]))),
-                Expected = """
-                decl_a param_1_0 =
-                    Pine_kernel.int_is_sorted_asc
-                        [ param_1_0
-                        , 1
-                        ]
-                """
-            },
+                    Expected =
+                    """
+                    decl_a param_1_0 =
+                        Pine_kernel.int_is_sorted_asc
+                            [ param_1_0
+                            , 1
+                            ]
+                    """
+                },
 
-            new
-            {
-                Name = "Function_Application",
-                Decls =
+                new
+                {
+                    Name = "Function_Application",
+                    Decls =
                     ImmutableDictionary<DeclQualifiedName, (Expression, StaticFunctionInterface, StaticExpression<DeclQualifiedName>, PineValueClass)>.Empty
                     .SetItem(
                         DeclQualifiedName.FromString("decl_a"),
@@ -312,7 +335,8 @@ public class StaticExpressionDisplayTests
                             functionName: "decl_b",
                             arguments:
                             [
-                                StaticExpression.LiteralInstance(ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(123))),
+                            StaticExpression.LiteralInstance(
+                                ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(123))),
                             ]),
                         PineValueClass.Create([])))
                     .SetItem(
@@ -322,21 +346,22 @@ public class StaticExpressionDisplayTests
                         Param_1_0(),
                         PineValueClass.Create([]))),
 
-                Expected = """
-                decl_a =
-                    decl_b
-                        123
+                    Expected =
+                    """
+                    decl_a =
+                        decl_b
+                            123
 
 
-                decl_b param_1_0 =
-                    param_1_0
-                """
-            },
+                    decl_b param_1_0 =
+                        param_1_0
+                    """
+                },
 
-            new
-            {
-                Name = "FunctionApplication_With_Kernel_Arg",
-                Decls =
+                new
+                {
+                    Name = "FunctionApplication_With_Kernel_Arg",
+                    Decls =
                     ImmutableDictionary<DeclQualifiedName, (Expression, StaticFunctionInterface, StaticExpression<DeclQualifiedName>, PineValueClass)>.Empty
                     .SetItem(
                         DeclQualifiedName.FromString("decl_a"),
@@ -346,13 +371,14 @@ public class StaticExpressionDisplayTests
                             functionName: "myFunc",
                             arguments:
                             [
-                                StaticExpression.KernelApplicationInstance(
-                                    function: "int_add",
-                                    input: StaticExpression.ListInstance(
-                                        [
-                                            Param_1_0(),
-                                            StaticExpression.LiteralInstance(ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(-1)))
-                                        ]))
+                            StaticExpression.KernelApplicationInstance(
+                                function: "int_add",
+                                input: StaticExpression.ListInstance(
+                                    [
+                                    Param_1_0(),
+                                    StaticExpression.LiteralInstance(
+                                        ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(-1)))
+                                    ]))
                             ]),
                         PineValueClass.Create([])))
                     .SetItem(
@@ -362,27 +388,27 @@ public class StaticExpressionDisplayTests
                         Param_1_0(),
                         PineValueClass.Create([]))),
 
-                Expected =
-                """
-                decl_a param_1_0 =
-                    myFunc
-                        (Pine_kernel.int_add
-                            [ param_1_0
-                            , -1
-                            ]
-                        )
+                    Expected =
+                    """
+                    decl_a param_1_0 =
+                        myFunc
+                            (Pine_kernel.int_add
+                                [ param_1_0
+                                , -1
+                                ]
+                            )
 
 
-                myFunc param_1_0 =
-                    param_1_0
+                    myFunc param_1_0 =
+                        param_1_0
                 
-                """
+                    """
                 },
 
-            new
-            {
-                Name = "Conditional_Complex",
-                Decls =
+                new
+                {
+                    Name = "Conditional_Complex",
+                    Decls =
                     ImmutableDictionary<DeclQualifiedName, (Expression, StaticFunctionInterface, StaticExpression<DeclQualifiedName>, PineValueClass)>.Empty
                     .SetItem(
                         DeclQualifiedName.FromString("decl_a"),
@@ -392,29 +418,32 @@ public class StaticExpressionDisplayTests
                             condition: StaticExpression.KernelApplicationInstance(
                                 function: "int_is_sorted_asc",
                                 input: StaticExpression.ListInstance(
-                                [
+                                    [
                                     Param_1_0(),
-                                    StaticExpression.LiteralInstance(ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(1)))
-                                ])),
+                                    StaticExpression.LiteralInstance(
+                                        ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(1)))
+                                    ])),
                             falseBranch: StaticExpression.KernelApplicationInstance(
                                 function: "int_mul",
                                 input: StaticExpression.ListInstance(
-                                [
+                                    [
                                     FunctionApplicationInstance(
                                         functionName: "decl_b",
                                         arguments:
                                         [
-                                            StaticExpression.KernelApplicationInstance(
-                                                function: "int_add",
-                                                input: StaticExpression.ListInstance(
+                                        StaticExpression.KernelApplicationInstance(
+                                            function: "int_add",
+                                            input: StaticExpression.ListInstance(
                                                 [
-                                                    Param_1_0(),
-                                                    StaticExpression.LiteralInstance(ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(-1)))
+                                                Param_1_0(),
+                                                StaticExpression.LiteralInstance(
+                                                    ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(-1)))
                                                 ]))
                                         ]),
                                     Param_1_0()
-                                ])),
-                            trueBranch: StaticExpression.LiteralInstance(ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(1)))),
+                                    ])),
+                            trueBranch:
+                            StaticExpression.LiteralInstance(ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(1)))),
                         PineValueClass.Create([])))
                     .SetItem(
                         DeclQualifiedName.FromString("decl_b"),
@@ -423,39 +452,39 @@ public class StaticExpressionDisplayTests
                         Param_1_0(),
                         PineValueClass.Create([]))),
 
-                Expected =
-                """
-                decl_a param_1_0 =
-                    if
-                        Pine_kernel.int_is_sorted_asc
-                            [ param_1_0
-                            , 1
-                            ]
-                    then
-                        1
+                    Expected =
+                    """
+                    decl_a param_1_0 =
+                        if
+                            Pine_kernel.int_is_sorted_asc
+                                [ param_1_0
+                                , 1
+                                ]
+                        then
+                            1
 
-                    else
-                        Pine_kernel.int_mul
-                            [ decl_b
-                                (Pine_kernel.int_add
-                                    [ param_1_0
-                                    , -1
-                                    ]
-                                )
-                            , param_1_0
-                            ]
+                        else
+                            Pine_kernel.int_mul
+                                [ decl_b
+                                    (Pine_kernel.int_add
+                                        [ param_1_0
+                                        , -1
+                                        ]
+                                    )
+                                , param_1_0
+                                ]
 
 
-                decl_b param_1_0 =
-                    param_1_0
+                    decl_b param_1_0 =
+                        param_1_0
                 
-                """
+                    """
                 },
 
-            new
-            {
-                Name = "Literal_Blob",
-                Decls =
+                new
+                {
+                    Name = "Literal_Blob",
+                    Decls =
                     ImmutableDictionary<DeclQualifiedName, (Expression, StaticFunctionInterface, StaticExpression<DeclQualifiedName>, PineValueClass)>.Empty
                     .SetItem(
                         DeclQualifiedName.FromString("decl_a"),
@@ -463,16 +492,17 @@ public class StaticExpressionDisplayTests
                         InterfaceFromParamCount(0),
                         StaticExpression.LiteralInstance(PineValue.Blob([0x12, 0x34, 1, 3])),
                         PineValueClass.Create([]))),
-                Expected = """
-                decl_a =
-                    Blob 0x12340103
-                """
-            },
+                    Expected =
+                    """
+                    decl_a =
+                        Blob 0x12340103
+                    """
+                },
 
-            new
-            {
-                Name = "List_With_Blob_Item",
-                Decls =
+                new
+                {
+                    Name = "List_With_Blob_Item",
+                    Decls =
                     ImmutableDictionary<DeclQualifiedName, (Expression, StaticFunctionInterface, StaticExpression<DeclQualifiedName>, PineValueClass)>.Empty
                     .SetItem(
                         DeclQualifiedName.FromString("decl_a"),
@@ -480,26 +510,26 @@ public class StaticExpressionDisplayTests
                         InterfaceFromParamCount(0),
                         StaticExpression.ListInstance(
                             [
-                                StaticExpression.LiteralInstance(ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(1))),
-                                StaticExpression.LiteralInstance(PineValue.Blob([0x12, 0x34, 1, 3])),
-                                StaticExpression.LiteralInstance(ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(2)))
+                            StaticExpression.LiteralInstance(ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(1))),
+                            StaticExpression.LiteralInstance(PineValue.Blob([0x12, 0x34, 1, 3])),
+                            StaticExpression.LiteralInstance(ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(2)))
                             ]),
                         PineValueClass.Create([]))),
 
-                Expected =
-                """
-                decl_a =
-                    [ 1
-                    , Blob 0x12340103
-                    , 2
-                    ]
-                """
-            },
+                    Expected =
+                    """
+                    decl_a =
+                        [ 1
+                        , Blob 0x12340103
+                        , 2
+                        ]
+                    """
+                },
 
-            new
-            {
-                Name = "Literal_ListValue_With_Blob_Item",
-                Decls =
+                new
+                {
+                    Name = "Literal_ListValue_With_Blob_Item",
+                    Decls =
                     ImmutableDictionary<DeclQualifiedName, (Expression, StaticFunctionInterface, StaticExpression<DeclQualifiedName>, PineValueClass)>.Empty
                     .SetItem(
                         DeclQualifiedName.FromString("decl_a"),
@@ -508,19 +538,19 @@ public class StaticExpressionDisplayTests
                         StaticExpression.LiteralInstance(
                             PineValue.List(
                                 PineValue.Blob([0x01, 1, 3, 7]),
-                                PineValue.Blob([0xAB, 1, 3, 7])
-                            )),
+                                PineValue.Blob([0xAB, 1, 3, 7]))),
                         PineValueClass.Create([]))),
-                Expected = """
-                decl_a =
-                    [ Blob 0x01010307, Blob 0xab010307 ]
-                """
-            },
+                    Expected =
+                    """
+                    decl_a =
+                        [ Blob 0x01010307, Blob 0xab010307 ]
+                    """
+                },
 
-            new
-            {
-                Name = "FunctionApplication_With_Blob_Arg",
-                Decls =
+                new
+                {
+                    Name = "FunctionApplication_With_Blob_Arg",
+                    Decls =
                     ImmutableDictionary<DeclQualifiedName, (Expression, StaticFunctionInterface, StaticExpression<DeclQualifiedName>, PineValueClass)>.Empty
                     .SetItem(
                         DeclQualifiedName.FromString("decl_a"),
@@ -528,8 +558,9 @@ public class StaticExpressionDisplayTests
                         InterfaceFromParamCount(0),
                         FunctionApplicationInstance(
                             functionName: "myFunc",
-                            arguments: [
-                                StaticExpression.LiteralInstance(PineValue.Blob([0x12, 0x34, 1, 7]))
+                            arguments:
+                            [
+                            StaticExpression.LiteralInstance(PineValue.Blob([0x12, 0x34, 1, 7]))
                             ]),
                         PineValueClass.Create([])))
                     .SetItem(
@@ -539,23 +570,23 @@ public class StaticExpressionDisplayTests
                         Param_1_0(),
                         PineValueClass.Create([]))),
 
-                Expected =
-                """
-                decl_a =
-                    myFunc
-                        (Blob 0x12340107)
+                    Expected =
+                    """
+                    decl_a =
+                        myFunc
+                            (Blob 0x12340107)
 
 
-                myFunc param_1_0 =
-                    param_1_0
+                    myFunc param_1_0 =
+                        param_1_0
                 
-                """
+                    """
                 },
 
-            new
-            {
-                Name = "Conditional_Nested_ElseIf",
-                Decls =
+                new
+                {
+                    Name = "Conditional_Nested_ElseIf",
+                    Decls =
                     ImmutableDictionary<DeclQualifiedName, (Expression, StaticFunctionInterface, StaticExpression<DeclQualifiedName>, PineValueClass)>.Empty
                     .SetItem(
                         DeclQualifiedName.FromString("decl_a"),
@@ -565,51 +596,56 @@ public class StaticExpressionDisplayTests
                             condition: StaticExpression.KernelApplicationInstance(
                                 function: "int_is_sorted_asc",
                                 input: StaticExpression.ListInstance(
-                                [
+                                    [
                                     Param_1_0(),
-                                    StaticExpression.LiteralInstance(ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(0)))
-                                ])),
+                                    StaticExpression.LiteralInstance(
+                                        ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(0)))
+                                    ])),
                             falseBranch: StaticExpression.ConditionalInstance(
                                 condition: StaticExpression.KernelApplicationInstance(
                                     function: "int_is_sorted_asc",
                                     input: StaticExpression.ListInstance(
-                                    [
+                                        [
                                         Param_1_0(),
-                                        StaticExpression.LiteralInstance(ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(1)))
-                                    ])),
-                                falseBranch: StaticExpression.LiteralInstance(ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(2))),
-                                trueBranch: StaticExpression.LiteralInstance(ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(1)))) ,
-                            trueBranch: StaticExpression.LiteralInstance(ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(0)))),
+                                        StaticExpression.LiteralInstance(
+                                            ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(1)))
+                                        ])),
+                                falseBranch: StaticExpression.LiteralInstance(
+                                    ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(2))),
+                                trueBranch: StaticExpression.LiteralInstance(
+                                    ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(1)))),
+                            trueBranch:
+                            StaticExpression.LiteralInstance(ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(0)))),
                         PineValueClass.Create([]))),
 
-                Expected =
-                """
-                decl_a param_1_0 =
-                    if
-                        Pine_kernel.int_is_sorted_asc
-                            [ param_1_0
-                            , 0
-                            ]
-                    then
-                        0
+                    Expected =
+                    """
+                    decl_a param_1_0 =
+                        if
+                            Pine_kernel.int_is_sorted_asc
+                                [ param_1_0
+                                , 0
+                                ]
+                        then
+                            0
 
-                    else if
-                        Pine_kernel.int_is_sorted_asc
-                            [ param_1_0
-                            , 1
-                            ]
-                    then
-                        1
+                        else if
+                            Pine_kernel.int_is_sorted_asc
+                                [ param_1_0
+                                , 1
+                                ]
+                        then
+                            1
 
-                    else
-                        2
-                """
-            },
+                        else
+                            2
+                    """
+                },
 
-            new
-            {
-                Name = "List_containing_conditional",
-                Decls =
+                new
+                {
+                    Name = "List_containing_conditional",
+                    Decls =
                     ImmutableDictionary<DeclQualifiedName, (Expression, StaticFunctionInterface, StaticExpression<DeclQualifiedName>, PineValueClass)>.Empty
                     .SetItem(
                         DeclQualifiedName.FromString("decl_a"),
@@ -617,42 +653,45 @@ public class StaticExpressionDisplayTests
                         InterfaceFromParamCount(1),
                         StaticExpression.ListInstance(
                             [
-                                StaticExpression.ConditionalInstance(
-                                    condition: StaticExpression.KernelApplicationInstance(
-                                        function: "int_is_sorted_asc",
-                                        input: StaticExpression.ListInstance(
-                                            [
-                                                Param_1_0(),
-                                                StaticExpression.LiteralInstance(ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(1)))
-                                            ])),
-                                    falseBranch: StaticExpression.LiteralInstance(ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(2))),
-                                    trueBranch: StaticExpression.LiteralInstance(ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(1)))),
-                                StaticExpression.LiteralInstance(ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(3)))
+                            StaticExpression.ConditionalInstance(
+                                condition: StaticExpression.KernelApplicationInstance(
+                                    function: "int_is_sorted_asc",
+                                    input: StaticExpression.ListInstance(
+                                        [
+                                        Param_1_0(),
+                                        StaticExpression.LiteralInstance(
+                                            ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(1)))
+                                        ])),
+                                falseBranch: StaticExpression.LiteralInstance(
+                                    ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(2))),
+                                trueBranch: StaticExpression.LiteralInstance(
+                                    ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(1)))),
+                            StaticExpression.LiteralInstance(ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(3)))
                             ]),
                         PineValueClass.Create([]))),
 
-                Expected =
-                """
-                decl_a param_1_0 =
-                    [ if
-                        Pine_kernel.int_is_sorted_asc
-                            [ param_1_0
-                            , 1
-                            ]
-                      then
-                        1
+                    Expected =
+                    """
+                    decl_a param_1_0 =
+                        [ if
+                            Pine_kernel.int_is_sorted_asc
+                                [ param_1_0
+                                , 1
+                                ]
+                          then
+                            1
 
-                      else
-                        2
-                    , 3
-                    ]
-                """
-            },
+                          else
+                            2
+                        , 3
+                        ]
+                    """
+                },
 
-            new
-            {
-                Name = "KernelApplication_Nested_Head_With_Parens",
-                Decls =
+                new
+                {
+                    Name = "KernelApplication_Nested_Head_With_Parens",
+                    Decls =
                     ImmutableDictionary<DeclQualifiedName, (Expression, StaticFunctionInterface, StaticExpression<DeclQualifiedName>, PineValueClass)>.Empty
                     .SetItem(
                         DeclQualifiedName.FromString("decl_a"),
@@ -664,28 +703,25 @@ public class StaticExpressionDisplayTests
                                 function: "skip",
                                 input: StaticExpression.ListInstance(
                                     [
-                                        StaticExpression.LiteralInstance(
-                                            ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(1))),
+                                    StaticExpression.LiteralInstance(
+                                        ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(1))),
 
-                                        Param_1_0(),
-                                    ]
-                                )
-                            )
-                        ),
+                                    Param_1_0(),
+                                    ]))),
                         PineValueClass.Create([]))),
 
-                Expected =
-                """
-                decl_a param_1_0 =
-                    Pine_kernel.head
-                        (Pine_kernel.skip
-                            [ 1
-                            , param_1_0
-                            ]
-                        )
-                """
-            },
-        };
+                    Expected =
+                    """
+                    decl_a param_1_0 =
+                        Pine_kernel.head
+                            (Pine_kernel.skip
+                                [ 1
+                                , param_1_0
+                                ]
+                            )
+                    """
+                },
+            };
 
         for (var i = 0; i < scenarios.Length; i++)
         {
@@ -693,7 +729,8 @@ public class StaticExpressionDisplayTests
 
             var (program, metadata) = BuildProgramAndMetadata(sc.Decls);
 
-            var actual = StaticExpressionDisplay.RenderStaticProgram(program, metadata, substituteEnvironmentPath: null);
+            var actual =
+                StaticExpressionDisplay.RenderStaticProgram(program, metadata, substituteEnvironmentPath: null);
 
             try
             {

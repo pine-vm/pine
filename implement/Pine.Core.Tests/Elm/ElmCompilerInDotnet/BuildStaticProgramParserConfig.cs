@@ -127,8 +127,8 @@ public class BuildStaticProgramParserConfig
             new StaticProgramParserConfig<IdentifierT>(
                 IdentifyInstanceRequired:
                 (_, pineValue) =>
-                    throw new System.InvalidOperationException(
-                        $"Could not identify required instance for Pine value: {pineValue}"),
+                throw new System.InvalidOperationException(
+                    $"Could not identify required instance for Pine value: {pineValue}"),
                 IdentifyInstanceOptional:
                 (_, _) => null,
                 IdentifyCrash:

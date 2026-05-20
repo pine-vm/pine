@@ -44,7 +44,8 @@ public class OperatorApplicationTests
         var invokeFunction = ElmCompilerTestHelper.CreateFunctionInvocationDelegate(declParsed);
 
         {
-            var (applyRunResult, _) = invokeFunction([ElmValueEncoding.ElmValueAsPineValue(new ElmValue.ElmInteger(1))]);
+            var (applyRunResult, _) =
+                invokeFunction([ElmValueEncoding.ElmValueAsPineValue(new ElmValue.ElmInteger(1))]);
 
             var resultValue = applyRunResult.ReturnValue.Evaluate();
 
@@ -58,7 +59,8 @@ public class OperatorApplicationTests
         }
 
         {
-            var (applyRunResult, _) = invokeFunction([ElmValueEncoding.ElmValueAsPineValue(new ElmValue.ElmInteger(99))]);
+            var (applyRunResult, _) =
+                invokeFunction([ElmValueEncoding.ElmValueAsPineValue(new ElmValue.ElmInteger(99))]);
 
             var resultValue = applyRunResult.ReturnValue.Evaluate();
 
@@ -107,7 +109,8 @@ public class OperatorApplicationTests
         var invokeFunction = ElmCompilerTestHelper.CreateFunctionInvocationDelegate(declParsed);
 
         {
-            var (applyRunResult, _) = invokeFunction([ElmValueEncoding.ElmValueAsPineValue(new ElmValue.ElmInteger(7))]);
+            var (applyRunResult, _) =
+                invokeFunction([ElmValueEncoding.ElmValueAsPineValue(new ElmValue.ElmInteger(7))]);
 
             var resultValue = applyRunResult.ReturnValue.Evaluate();
 
@@ -205,9 +208,10 @@ public class OperatorApplicationTests
         {
             var headArg = ElmValueEncoding.ElmValueAsPineValue(new ElmValue.ElmInteger(10));
 
-            var tailArg = ElmValueEncoding.ElmValueAsPineValue(
-                new ElmValue.ElmList(
-                    [new ElmValue.ElmInteger(20), new ElmValue.ElmInteger(30)]));
+            var tailArg =
+                ElmValueEncoding.ElmValueAsPineValue(
+                    new ElmValue.ElmList(
+                        [new ElmValue.ElmInteger(20), new ElmValue.ElmInteger(30)]));
 
             var (applyRunResult, _) = invokeFunction([headArg, tailArg]);
 
@@ -265,9 +269,10 @@ public class OperatorApplicationTests
         {
             var headArg = ElmValueEncoding.ElmValueAsPineValue(new ElmValue.ElmInteger(1));
 
-            var tailArg = ElmValueEncoding.ElmValueAsPineValue(
-                new ElmValue.ElmList(
-                    [new ElmValue.ElmInteger(2), new ElmValue.ElmInteger(3)]));
+            var tailArg =
+                ElmValueEncoding.ElmValueAsPineValue(
+                    new ElmValue.ElmList(
+                        [new ElmValue.ElmInteger(2), new ElmValue.ElmInteger(3)]));
 
             var (applyRunResult, _) = invokeFunction([headArg, tailArg]);
 

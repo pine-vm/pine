@@ -1314,27 +1314,28 @@ public class OptimizationOpportunityFinderTests
         // the constructor's unwrapped (substituted) inner type — a
         // function arrow on the parameter side gets parenthesised so
         // the rendered form is unambiguous.
-        var declarations = ParseAndCanonicalize(
-            """
-            module Test exposing (..)
+        var declarations =
+            ParseAndCanonicalize(
+                """
+                module Test exposing (..)
 
 
-            type State = State Int
+                type State = State Int
 
 
-            type PStep a = PStep a
+                type PStep a = PStep a
 
 
-            type Parser a = Parser (State -> PStep a)
+                type Parser a = Parser (State -> PStep a)
 
 
-            skipWhileWhitespaceFollowedBy : Parser next -> Parser next
-            skipWhileWhitespaceFollowedBy (Parser parseNext) =
-                Parser
-                    (\s0 ->
-                        parseNext s0
-                    )
-            """);
+                skipWhileWhitespaceFollowedBy : Parser next -> Parser next
+                skipWhileWhitespaceFollowedBy (Parser parseNext) =
+                    Parser
+                        (\s0 ->
+                            parseNext s0
+                        )
+                """);
 
         var transformed =
             OptimizationOpportunityFinder.TryRenderTransformedSignature(
@@ -1348,18 +1349,19 @@ public class OptimizationOpportunityFinderTests
     [Fact]
     public void TryRenderTransformedSignature_unwraps_two_argument_constructor_to_tuple()
     {
-        var declarations = ParseAndCanonicalize(
-            """
-            module Test exposing (..)
+        var declarations =
+            ParseAndCanonicalize(
+                """
+                module Test exposing (..)
 
 
-            type Pair a b = Pair a b
+                type Pair a b = Pair a b
 
 
-            mk : Pair Int String -> Pair Int String
-            mk x =
-                x
-            """);
+                mk : Pair Int String -> Pair Int String
+                mk x =
+                    x
+                """);
 
         var transformed =
             OptimizationOpportunityFinder.TryRenderTransformedSignature(
@@ -1373,17 +1375,18 @@ public class OptimizationOpportunityFinderTests
     [Fact]
     public void TryRenderTransformedSignature_returns_null_when_function_has_no_signature()
     {
-        var declarations = ParseAndCanonicalize(
-            """
-            module Test exposing (..)
+        var declarations =
+            ParseAndCanonicalize(
+                """
+                module Test exposing (..)
 
 
-            type Wrap a = Wrap a
+                type Wrap a = Wrap a
 
 
-            unwrap (Wrap inner) =
-                inner
-            """);
+                unwrap (Wrap inner) =
+                    inner
+                """);
 
         var transformed =
             OptimizationOpportunityFinder.TryRenderTransformedSignature(

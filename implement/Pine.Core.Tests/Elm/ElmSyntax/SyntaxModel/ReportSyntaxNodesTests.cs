@@ -80,14 +80,15 @@ public class ReportSyntaxNodesTests
     [Fact]
     public void Simple_integer_literal_reports_nothing()
     {
-        var funcDecl = ParseFirstFunctionDeclaration(
-            """
-            module Test exposing (..)
+        var funcDecl =
+            ParseFirstFunctionDeclaration(
+                """
+                module Test exposing (..)
 
 
-            value =
-                42
-            """);
+                value =
+                    42
+                """);
 
         var (lambdas, letBlocks, letFunctions) = CollectReports(new Declaration.FunctionDeclaration(funcDecl.Function));
 
@@ -99,14 +100,15 @@ public class ReportSyntaxNodesTests
     [Fact]
     public void String_literal_reports_nothing()
     {
-        var funcDecl = ParseFirstFunctionDeclaration(
-            """
-            module Test exposing (..)
+        var funcDecl =
+            ParseFirstFunctionDeclaration(
+                """
+                module Test exposing (..)
 
 
-            value =
-                "hello"
-            """);
+                value =
+                    "hello"
+                """);
 
         var (lambdas, letBlocks, letFunctions) = CollectReports(new Declaration.FunctionDeclaration(funcDecl.Function));
 
@@ -118,14 +120,15 @@ public class ReportSyntaxNodesTests
     [Fact]
     public void Function_or_value_reference_reports_nothing()
     {
-        var funcDecl = ParseFirstFunctionDeclaration(
-            """
-            module Test exposing (..)
+        var funcDecl =
+            ParseFirstFunctionDeclaration(
+                """
+                module Test exposing (..)
 
 
-            value =
-                someOtherValue
-            """);
+                value =
+                    someOtherValue
+                """);
 
         var (lambdas, letBlocks, letFunctions) = CollectReports(new Declaration.FunctionDeclaration(funcDecl.Function));
 
@@ -141,14 +144,15 @@ public class ReportSyntaxNodesTests
     [Fact]
     public void Single_lambda_is_reported()
     {
-        var funcDecl = ParseFirstFunctionDeclaration(
-            """
-            module Test exposing (..)
+        var funcDecl =
+            ParseFirstFunctionDeclaration(
+                """
+                module Test exposing (..)
 
 
-            value =
-                \x -> x
-            """);
+                value =
+                    \x -> x
+                """);
 
         var (lambdas, letBlocks, letFunctions) = CollectReports(new Declaration.FunctionDeclaration(funcDecl.Function));
 
@@ -160,14 +164,15 @@ public class ReportSyntaxNodesTests
     [Fact]
     public void Nested_lambdas_are_both_reported()
     {
-        var funcDecl = ParseFirstFunctionDeclaration(
-            """
-            module Test exposing (..)
+        var funcDecl =
+            ParseFirstFunctionDeclaration(
+                """
+                module Test exposing (..)
 
 
-            value =
-                \x -> \y -> x
-            """);
+                value =
+                    \x -> \y -> x
+                """);
 
         var (lambdas, letBlocks, letFunctions) = CollectReports(new Declaration.FunctionDeclaration(funcDecl.Function));
 
@@ -179,14 +184,15 @@ public class ReportSyntaxNodesTests
     [Fact]
     public void Lambda_inside_parentheses_is_reported()
     {
-        var funcDecl = ParseFirstFunctionDeclaration(
-            """
-            module Test exposing (..)
+        var funcDecl =
+            ParseFirstFunctionDeclaration(
+                """
+                module Test exposing (..)
 
 
-            value =
-                (\x -> x)
-            """);
+                value =
+                    (\x -> x)
+                """);
 
         var (lambdas, letBlocks, letFunctions) = CollectReports(new Declaration.FunctionDeclaration(funcDecl.Function));
 
@@ -200,18 +206,19 @@ public class ReportSyntaxNodesTests
     [Fact]
     public void Let_block_with_function_is_reported()
     {
-        var funcDecl = ParseFirstFunctionDeclaration(
-            """
-            module Test exposing (..)
+        var funcDecl =
+            ParseFirstFunctionDeclaration(
+                """
+                module Test exposing (..)
 
 
-            value =
-                let
-                    helper x =
-                        x
-                in
-                helper 1
-            """);
+                value =
+                    let
+                        helper x =
+                            x
+                    in
+                    helper 1
+                """);
 
         var (lambdas, letBlocks, letFunctions) = CollectReports(new Declaration.FunctionDeclaration(funcDecl.Function));
 
@@ -223,21 +230,22 @@ public class ReportSyntaxNodesTests
     [Fact]
     public void Let_block_with_multiple_functions_reports_all()
     {
-        var funcDecl = ParseFirstFunctionDeclaration(
-            """
-            module Test exposing (..)
+        var funcDecl =
+            ParseFirstFunctionDeclaration(
+                """
+                module Test exposing (..)
 
 
-            value =
-                let
-                    a x =
-                        x
+                value =
+                    let
+                        a x =
+                            x
 
-                    b y =
-                        y
-                in
-                a (b 1)
-            """);
+                        b y =
+                            y
+                    in
+                    a (b 1)
+                """);
 
         var (lambdas, letBlocks, letFunctions) = CollectReports(new Declaration.FunctionDeclaration(funcDecl.Function));
 
@@ -249,22 +257,23 @@ public class ReportSyntaxNodesTests
     [Fact]
     public void Nested_let_blocks_are_both_reported()
     {
-        var funcDecl = ParseFirstFunctionDeclaration(
-            """
-            module Test exposing (..)
+        var funcDecl =
+            ParseFirstFunctionDeclaration(
+                """
+                module Test exposing (..)
 
 
-            value =
-                let
-                    a =
-                        let
-                            b =
-                                1
-                        in
-                        b
-                in
-                a
-            """);
+                value =
+                    let
+                        a =
+                            let
+                                b =
+                                    1
+                            in
+                            b
+                    in
+                    a
+                """);
 
         var (lambdas, letBlocks, letFunctions) = CollectReports(new Declaration.FunctionDeclaration(funcDecl.Function));
 
@@ -275,18 +284,19 @@ public class ReportSyntaxNodesTests
     [Fact]
     public void Let_with_lambda_reports_both()
     {
-        var funcDecl = ParseFirstFunctionDeclaration(
-            """
-            module Test exposing (..)
+        var funcDecl =
+            ParseFirstFunctionDeclaration(
+                """
+                module Test exposing (..)
 
 
-            value =
-                let
-                    f =
-                        \x -> x
-                in
-                f 1
-            """);
+                value =
+                    let
+                        f =
+                            \x -> x
+                    in
+                    f 1
+                """);
 
         var (lambdas, letBlocks, letFunctions) = CollectReports(new Declaration.FunctionDeclaration(funcDecl.Function));
 
@@ -301,17 +311,18 @@ public class ReportSyntaxNodesTests
     [Fact]
     public void Lambda_inside_if_condition_is_reported()
     {
-        var funcDecl = ParseFirstFunctionDeclaration(
-            """
-            module Test exposing (..)
+        var funcDecl =
+            ParseFirstFunctionDeclaration(
+                """
+                module Test exposing (..)
 
 
-            value =
-                if (\x -> x) True then
-                    1
-                else
-                    2
-            """);
+                value =
+                    if (\x -> x) True then
+                        1
+                    else
+                        2
+                """);
 
         var (lambdas, _, _) = CollectReports(new Declaration.FunctionDeclaration(funcDecl.Function));
 
@@ -321,17 +332,18 @@ public class ReportSyntaxNodesTests
     [Fact]
     public void Lambda_inside_if_branches_are_reported()
     {
-        var funcDecl = ParseFirstFunctionDeclaration(
-            """
-            module Test exposing (..)
+        var funcDecl =
+            ParseFirstFunctionDeclaration(
+                """
+                module Test exposing (..)
 
 
-            value =
-                if True then
-                    \x -> x
-                else
-                    \y -> y
-            """);
+                value =
+                    if True then
+                        \x -> x
+                    else
+                        \y -> y
+                """);
 
         var (lambdas, _, _) = CollectReports(new Declaration.FunctionDeclaration(funcDecl.Function));
 
@@ -345,14 +357,15 @@ public class ReportSyntaxNodesTests
     [Fact]
     public void Lambda_inside_application_is_reported()
     {
-        var funcDecl = ParseFirstFunctionDeclaration(
-            """
-            module Test exposing (..)
+        var funcDecl =
+            ParseFirstFunctionDeclaration(
+                """
+                module Test exposing (..)
 
 
-            value =
-                List.map (\x -> x) items
-            """);
+                value =
+                    List.map (\x -> x) items
+                """);
 
         var (lambdas, _, _) = CollectReports(new Declaration.FunctionDeclaration(funcDecl.Function));
 
@@ -366,19 +379,20 @@ public class ReportSyntaxNodesTests
     [Fact]
     public void Lambda_inside_case_branch_is_reported()
     {
-        var funcDecl = ParseFirstFunctionDeclaration(
-            """
-            module Test exposing (..)
+        var funcDecl =
+            ParseFirstFunctionDeclaration(
+                """
+                module Test exposing (..)
 
 
-            value =
-                case something of
-                    0 ->
-                        \x -> x
+                value =
+                    case something of
+                        0 ->
+                            \x -> x
 
-                    _ ->
-                        \y -> y
-            """);
+                        _ ->
+                            \y -> y
+                """);
 
         var (lambdas, _, _) = CollectReports(new Declaration.FunctionDeclaration(funcDecl.Function));
 
@@ -388,16 +402,17 @@ public class ReportSyntaxNodesTests
     [Fact]
     public void Lambda_inside_case_scrutinee_is_reported()
     {
-        var funcDecl = ParseFirstFunctionDeclaration(
-            """
-            module Test exposing (..)
+        var funcDecl =
+            ParseFirstFunctionDeclaration(
+                """
+                module Test exposing (..)
 
 
-            value =
-                case (\x -> x) of
-                    _ ->
-                        1
-            """);
+                value =
+                    case (\x -> x) of
+                        _ ->
+                            1
+                """);
 
         var (lambdas, _, _) = CollectReports(new Declaration.FunctionDeclaration(funcDecl.Function));
 
@@ -411,14 +426,15 @@ public class ReportSyntaxNodesTests
     [Fact]
     public void Lambda_inside_operator_application_is_reported()
     {
-        var funcDecl = ParseFirstFunctionDeclaration(
-            """
-            module Test exposing (..)
+        var funcDecl =
+            ParseFirstFunctionDeclaration(
+                """
+                module Test exposing (..)
 
 
-            value =
-                (\x -> x) |> (\y -> y)
-            """);
+                value =
+                    (\x -> x) |> (\y -> y)
+                """);
 
         var (lambdas, _, _) = CollectReports(new Declaration.FunctionDeclaration(funcDecl.Function));
 
@@ -432,14 +448,15 @@ public class ReportSyntaxNodesTests
     [Fact]
     public void Lambda_inside_tuple_is_reported()
     {
-        var funcDecl = ParseFirstFunctionDeclaration(
-            """
-            module Test exposing (..)
+        var funcDecl =
+            ParseFirstFunctionDeclaration(
+                """
+                module Test exposing (..)
 
 
-            value =
-                ( \x -> x, \y -> y )
-            """);
+                value =
+                    ( \x -> x, \y -> y )
+                """);
 
         var (lambdas, _, _) = CollectReports(new Declaration.FunctionDeclaration(funcDecl.Function));
 
@@ -453,14 +470,15 @@ public class ReportSyntaxNodesTests
     [Fact]
     public void Lambda_inside_list_is_reported()
     {
-        var funcDecl = ParseFirstFunctionDeclaration(
-            """
-            module Test exposing (..)
+        var funcDecl =
+            ParseFirstFunctionDeclaration(
+                """
+                module Test exposing (..)
 
 
-            value =
-                [ \x -> x, \y -> y ]
-            """);
+                value =
+                    [ \x -> x, \y -> y ]
+                """);
 
         var (lambdas, _, _) = CollectReports(new Declaration.FunctionDeclaration(funcDecl.Function));
 
@@ -474,14 +492,15 @@ public class ReportSyntaxNodesTests
     [Fact]
     public void Lambda_inside_record_field_is_reported()
     {
-        var funcDecl = ParseFirstFunctionDeclaration(
-            """
-            module Test exposing (..)
+        var funcDecl =
+            ParseFirstFunctionDeclaration(
+                """
+                module Test exposing (..)
 
 
-            value =
-                { field = \x -> x }
-            """);
+                value =
+                    { field = \x -> x }
+                """);
 
         var (lambdas, _, _) = CollectReports(new Declaration.FunctionDeclaration(funcDecl.Function));
 
@@ -491,14 +510,15 @@ public class ReportSyntaxNodesTests
     [Fact]
     public void Lambda_inside_record_update_is_reported()
     {
-        var funcDecl = ParseFirstFunctionDeclaration(
-            """
-            module Test exposing (..)
+        var funcDecl =
+            ParseFirstFunctionDeclaration(
+                """
+                module Test exposing (..)
 
 
-            value =
-                { record | field = \x -> x }
-            """);
+                value =
+                    { record | field = \x -> x }
+                """);
 
         var (lambdas, _, _) = CollectReports(new Declaration.FunctionDeclaration(funcDecl.Function));
 
@@ -515,14 +535,15 @@ public class ReportSyntaxNodesTests
         // This tests that negation's subexpression is traversed.
         // While `-(\\x -> x)` isn't valid Elm, the parser may still build it.
         // We use a simpler case: negation of a parenthesized let.
-        var funcDecl = ParseFirstFunctionDeclaration(
-            """
-            module Test exposing (..)
+        var funcDecl =
+            ParseFirstFunctionDeclaration(
+                """
+                module Test exposing (..)
 
 
-            value =
-                -(let a = 1 in a)
-            """);
+                value =
+                    -(let a = 1 in a)
+                """);
 
         var (_, letBlocks, _) = CollectReports(new Declaration.FunctionDeclaration(funcDecl.Function));
 
@@ -536,14 +557,15 @@ public class ReportSyntaxNodesTests
     [Fact]
     public void Lambda_inside_record_access_base_is_reported()
     {
-        var funcDecl = ParseFirstFunctionDeclaration(
-            """
-            module Test exposing (..)
+        var funcDecl =
+            ParseFirstFunctionDeclaration(
+                """
+                module Test exposing (..)
 
 
-            value =
-                (let f = \x -> x in { field = f }).field
-            """);
+                value =
+                    (let f = \x -> x in { field = f }).field
+                """);
 
         var (lambdas, letBlocks, _) = CollectReports(new Declaration.FunctionDeclaration(funcDecl.Function));
 
@@ -610,27 +632,28 @@ public class ReportSyntaxNodesTests
     [Fact]
     public void Complex_nested_structure_reports_all_nodes()
     {
-        var funcDecl = ParseFirstFunctionDeclaration(
-            """
-            module Test exposing (..)
+        var funcDecl =
+            ParseFirstFunctionDeclaration(
+                """
+                module Test exposing (..)
 
 
-            value =
-                let
-                    helper x =
-                        case x of
-                            0 ->
-                                \y -> y
+                value =
+                    let
+                        helper x =
+                            case x of
+                                0 ->
+                                    \y -> y
 
-                            _ ->
-                                let
-                                    inner z =
-                                        z
-                                in
-                                inner x
-                in
-                List.map (\a -> helper a) [ 1, 2, 3 ]
-            """);
+                                _ ->
+                                    let
+                                        inner z =
+                                            z
+                                    in
+                                    inner x
+                    in
+                    List.map (\a -> helper a) [ 1, 2, 3 ]
+                """);
 
         var (lambdas, letBlocks, letFunctions) = CollectReports(new Declaration.FunctionDeclaration(funcDecl.Function));
 
@@ -647,18 +670,19 @@ public class ReportSyntaxNodesTests
     [Fact]
     public void Let_destructuring_body_is_traversed()
     {
-        var funcDecl = ParseFirstFunctionDeclaration(
-            """
-            module Test exposing (..)
+        var funcDecl =
+            ParseFirstFunctionDeclaration(
+                """
+                module Test exposing (..)
 
 
-            value =
-                let
-                    ( a, b ) =
-                        ( \x -> x, \y -> y )
-                in
-                a b
-            """);
+                value =
+                    let
+                        ( a, b ) =
+                            ( \x -> x, \y -> y )
+                    in
+                    a b
+                """);
 
         var (lambdas, letBlocks, _) = CollectReports(new Declaration.FunctionDeclaration(funcDecl.Function));
 
@@ -761,14 +785,15 @@ public class ReportSyntaxNodesTests
     [Fact]
     public void ReportFunctionDeclaration_with_simple_body()
     {
-        var funcDecl = ParseFirstFunctionDeclaration(
-            """
-            module Test exposing (..)
+        var funcDecl =
+            ParseFirstFunctionDeclaration(
+                """
+                module Test exposing (..)
 
 
-            identity x =
-                x
-            """);
+                identity x =
+                    x
+                """);
 
         var lambdas = new List<ExpressionSyntax.LambdaExpression>();
         var letBlocks = new List<ExpressionSyntax.LetBlock>();
@@ -788,14 +813,15 @@ public class ReportSyntaxNodesTests
     [Fact]
     public void ReportFunctionDeclaration_with_lambda_body()
     {
-        var funcDecl = ParseFirstFunctionDeclaration(
-            """
-            module Test exposing (..)
+        var funcDecl =
+            ParseFirstFunctionDeclaration(
+                """
+                module Test exposing (..)
 
 
-            value =
-                \x -> x
-            """);
+                value =
+                    \x -> x
+                """);
 
         var lambdas = new List<ExpressionSyntax.LambdaExpression>();
         var letBlocks = new List<ExpressionSyntax.LetBlock>();

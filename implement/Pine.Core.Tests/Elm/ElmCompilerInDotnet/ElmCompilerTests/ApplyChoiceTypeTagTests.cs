@@ -130,8 +130,8 @@ public class ApplyChoiceTypeTagTests
         result.Should().Be(
             PineValue.List(
                 [
-                    StringEncoding.ValueFromString("SingleArgInt"),
-                    PineValue.List([IntegerEncoding.EncodeSignedInteger(42)])
+                StringEncoding.ValueFromString("SingleArgInt"),
+                PineValue.List([IntegerEncoding.EncodeSignedInteger(42)])
                 ]));
     }
 
@@ -204,12 +204,12 @@ public class ApplyChoiceTypeTagTests
         finalResult.Should().Be(
             PineValue.List(
                 [
-                    StringEncoding.ValueFromString("TwoArgs"),
-                    PineValue.List(
-                        [
-                            StringEncoding.ValueFromString("hello"),
-                            IntegerEncoding.EncodeSignedInteger(42)
-                        ])
+                StringEncoding.ValueFromString("TwoArgs"),
+                PineValue.List(
+                    [
+                    StringEncoding.ValueFromString("hello"),
+                    IntegerEncoding.EncodeSignedInteger(42)
+                    ])
                 ]));
     }
 
@@ -274,23 +274,23 @@ public class ApplyChoiceTypeTagTests
 
             // Apply remaining two arguments at once
             var (finalResult, _) =
-                ElmCompilerTestHelper.CreateFunctionValueInvocationDelegate(firstApplied.returnValue, parseCache)
-                ([
+                ElmCompilerTestHelper.CreateFunctionValueInvocationDelegate(firstApplied.returnValue, parseCache)(
+                    [
                     StringEncoding.ValueFromString("middle"),
                     IntegerEncoding.EncodeSignedInteger(30)
-                ]);
+                    ]);
 
             // The result should be [ThreeArgs, [10, "middle", 30]]
             finalResult.Should().Be(
                 PineValue.List(
                     [
-                        StringEncoding.ValueFromString("ThreeArgs"),
-                        PineValue.List(
-                            [
-                                IntegerEncoding.EncodeSignedInteger(10),
-                                StringEncoding.ValueFromString("middle"),
-                                IntegerEncoding.EncodeSignedInteger(30)
-                            ])
+                    StringEncoding.ValueFromString("ThreeArgs"),
+                    PineValue.List(
+                        [
+                        IntegerEncoding.EncodeSignedInteger(10),
+                        StringEncoding.ValueFromString("middle"),
+                        IntegerEncoding.EncodeSignedInteger(30)
+                        ])
                     ]));
         }
 
@@ -307,8 +307,8 @@ public class ApplyChoiceTypeTagTests
             var twoArgsApplied =
                 invokeApplyFirstTwoArgs(
                     [
-                        IntegerEncoding.EncodeSignedInteger(100),
-                        StringEncoding.ValueFromString("test")
+                    IntegerEncoding.EncodeSignedInteger(100),
+                    StringEncoding.ValueFromString("test")
                     ]);
 
             // Should be an encoded expression
@@ -330,13 +330,13 @@ public class ApplyChoiceTypeTagTests
             finalResult.Should().Be(
                 PineValue.List(
                     [
-                        StringEncoding.ValueFromString("ThreeArgs"),
-                        PineValue.List(
-                            [
-                                IntegerEncoding.EncodeSignedInteger(100),
-                                StringEncoding.ValueFromString("test"),
-                                IntegerEncoding.EncodeSignedInteger(200)
-                            ])
+                    StringEncoding.ValueFromString("ThreeArgs"),
+                    PineValue.List(
+                        [
+                        IntegerEncoding.EncodeSignedInteger(100),
+                        StringEncoding.ValueFromString("test"),
+                        IntegerEncoding.EncodeSignedInteger(200)
+                        ])
                     ]));
         }
     }
@@ -403,8 +403,8 @@ public class ApplyChoiceTypeTagTests
         result.Should().Be(
             PineValue.List(
                 [
-                    StringEncoding.ValueFromString("SingleArgInt"),
-                    PineValue.List([IntegerEncoding.EncodeSignedInteger(42)])
+                StringEncoding.ValueFromString("SingleArgInt"),
+                PineValue.List([IntegerEncoding.EncodeSignedInteger(42)])
                 ]));
     }
 
@@ -480,12 +480,12 @@ public class ApplyChoiceTypeTagTests
         finalResult.Should().Be(
             PineValue.List(
                 [
-                    StringEncoding.ValueFromString("TwoArgs"),
-                    PineValue.List(
-                        [
-                            StringEncoding.ValueFromString("hello"),
-                            IntegerEncoding.EncodeSignedInteger(42)
-                        ])
+                StringEncoding.ValueFromString("TwoArgs"),
+                PineValue.List(
+                    [
+                    StringEncoding.ValueFromString("hello"),
+                    IntegerEncoding.EncodeSignedInteger(42)
+                    ])
                 ]));
     }
 
@@ -559,23 +559,23 @@ public class ApplyChoiceTypeTagTests
 
             // Apply remaining two arguments at once
             var (finalResult, _) =
-                ElmCompilerTestHelper.CreateFunctionValueInvocationDelegate(firstApplied.returnValue, parseCache)
-                ([
+                ElmCompilerTestHelper.CreateFunctionValueInvocationDelegate(firstApplied.returnValue, parseCache)(
+                    [
                     StringEncoding.ValueFromString("middle"),
                     IntegerEncoding.EncodeSignedInteger(30)
-                ]);
+                    ]);
 
             // The result should be [ThreeArgs, [10, "middle", 30]]
             finalResult.Should().Be(
                 PineValue.List(
                     [
-                        StringEncoding.ValueFromString("ThreeArgs"),
-                        PineValue.List(
-                            [
-                                IntegerEncoding.EncodeSignedInteger(10),
-                                StringEncoding.ValueFromString("middle"),
-                                IntegerEncoding.EncodeSignedInteger(30)
-                            ])
+                    StringEncoding.ValueFromString("ThreeArgs"),
+                    PineValue.List(
+                        [
+                        IntegerEncoding.EncodeSignedInteger(10),
+                        StringEncoding.ValueFromString("middle"),
+                        IntegerEncoding.EncodeSignedInteger(30)
+                        ])
                     ]));
         }
 
@@ -592,8 +592,8 @@ public class ApplyChoiceTypeTagTests
             var twoArgsApplied =
                 invokeApplyFirstTwoArgs(
                     [
-                        IntegerEncoding.EncodeSignedInteger(100),
-                        StringEncoding.ValueFromString("test")
+                    IntegerEncoding.EncodeSignedInteger(100),
+                    StringEncoding.ValueFromString("test")
                     ]);
 
             // Should be an encoded expression
@@ -615,13 +615,13 @@ public class ApplyChoiceTypeTagTests
             finalResult.Should().Be(
                 PineValue.List(
                     [
-                        StringEncoding.ValueFromString("ThreeArgs"),
-                        PineValue.List(
-                            [
-                                IntegerEncoding.EncodeSignedInteger(100),
-                                StringEncoding.ValueFromString("test"),
-                                IntegerEncoding.EncodeSignedInteger(200)
-                            ])
+                    StringEncoding.ValueFromString("ThreeArgs"),
+                    PineValue.List(
+                        [
+                        IntegerEncoding.EncodeSignedInteger(100),
+                        StringEncoding.ValueFromString("test"),
+                        IntegerEncoding.EncodeSignedInteger(200)
+                        ])
                     ]));
         }
     }
@@ -685,8 +685,8 @@ public class ApplyChoiceTypeTagTests
             result.Should().Be(
                 PineValue.List(
                     [
-                        StringEncoding.ValueFromString("SingleArgInt"),
-                        PineValue.List([IntegerEncoding.EncodeSignedInteger(42)])
+                    StringEncoding.ValueFromString("SingleArgInt"),
+                    PineValue.List([IntegerEncoding.EncodeSignedInteger(42)])
                     ]));
         }
 
@@ -721,12 +721,12 @@ public class ApplyChoiceTypeTagTests
             finalResult.Should().Be(
                 PineValue.List(
                     [
-                        StringEncoding.ValueFromString("TwoArgs"),
-                        PineValue.List(
-                            [
-                                StringEncoding.ValueFromString("hello"),
-                                IntegerEncoding.EncodeSignedInteger(99)
-                            ])
+                    StringEncoding.ValueFromString("TwoArgs"),
+                    PineValue.List(
+                        [
+                        StringEncoding.ValueFromString("hello"),
+                        IntegerEncoding.EncodeSignedInteger(99)
+                        ])
                     ]));
         }
     }

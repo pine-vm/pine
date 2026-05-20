@@ -1303,7 +1303,7 @@ public static class OptimizationOpportunityFinder
                         found.Add(funcOrValue.Name);
                     }
                     else if (head is SyntaxTypes.Expression.RecordAccess recordAccessHead &&
-                             TryRenderRecordAccessChainRootedAtParam(
+                        TryRenderRecordAccessChainRootedAtParam(
                                  recordAccessHead, paramNames) is { } chainPath)
                     {
                         found.Add(chainPath);

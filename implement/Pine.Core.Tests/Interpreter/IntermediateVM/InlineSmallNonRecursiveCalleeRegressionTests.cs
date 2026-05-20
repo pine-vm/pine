@@ -399,13 +399,14 @@ public class InlineSmallNonRecursiveCalleeRegressionTests
                 rootIR.Contains("Int_Unsigned_Less_Than_Or_Equal_Const (90)") &&
                 rootIR.Contains("Int_Unsigned_Greater_Than_Or_Equal_Const (97)") &&
                 rootIR.Contains("Int_Unsigned_Less_Than_Or_Equal_Const (122)");
+
             var fullyConstantFolded =
                 rootIR.Contains("Push_Literal") && rootIR.Contains("Return");
 
             (hasInlinedRangeChecks || fullyConstantFolded)
                 .Should().BeTrue(
-                    "root IR should either contain the inlined predicate range checks "
-                    + "or be reduced to a constant by the bottom-up inliner. Actual:\n" + rootIR);
+                "root IR should either contain the inlined predicate range checks "
+                + "or be reduced to a constant by the bottom-up inliner. Actual:\n" + rootIR);
         }
     }
 

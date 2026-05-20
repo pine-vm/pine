@@ -125,10 +125,12 @@ public class ParseGenericFunctionApplicationTests
 
         // Arguments may also be expressions referencing the environment.
         var arg0 = Expression.EnvironmentInstance;
+
         var arg1 =
             Expression.KernelApplicationInstance(
                 nameof(KernelFunction.head),
                 Expression.EnvironmentInstance);
+
         var arg2 = Expression.LiteralInstance(PineValue.Blob([0xCC]));
 
         var built =

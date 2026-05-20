@@ -1199,8 +1199,7 @@ public class FunctionValueBuilderTests
             Expression.ListInstance(
                 [
                 BuildExpressionForPathInEnvironment([0, 0]), // envFuncs[0]
-                BuildExpressionForPathInEnvironment([1])// arg
-
+                BuildExpressionForPathInEnvironment([1]) // arg
                 ]);
 
         var functionValue =
@@ -1236,8 +1235,7 @@ public class FunctionValueBuilderTests
             Expression.ListInstance(
                 [
                 BuildExpressionForPathInEnvironment([1]), // arg0
-                BuildExpressionForPathInEnvironment([2])// arg1
-
+                BuildExpressionForPathInEnvironment([2]) // arg1
                 ]);
 
         var functionValue =
@@ -1280,8 +1278,7 @@ public class FunctionValueBuilderTests
                 BuildExpressionForPathInEnvironment([0, 0]), // envFuncs[0]
                 BuildExpressionForPathInEnvironment([1]), // arg0
                 BuildExpressionForPathInEnvironment([2]), // arg1
-                BuildExpressionForPathInEnvironment([3])// arg2
-
+                BuildExpressionForPathInEnvironment([3]) // arg2
                 ]);
 
         var functionValue =
@@ -1399,7 +1396,10 @@ public class FunctionValueBuilderTests
             vm.EvaluateExpressionOnCustomStack(
                 expression,
                 environment,
-                config: new PineVM.EvaluationConfig(InvocationCountLimit: invocationCountLimit, LoopIterationCountLimit: null, StackDepthLimit: null))
+                config: new PineVM.EvaluationConfig(
+                    InvocationCountLimit: invocationCountLimit,
+                    LoopIterationCountLimit: null,
+                    StackDepthLimit: null))
             .Extract(err => throw new InvalidOperationException($"Evaluation failed: {err}"));
 
         return result.ReturnValue.Evaluate();

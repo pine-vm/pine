@@ -307,6 +307,7 @@ public class DependencyLayoutTests
 
         var liftedFuncName =
             layouts.Keys.FirstOrDefault(n => n.Contains("__lifted__"));
+
         liftedFuncName.Should().NotBeNull("a lifted lambda function should be present in the program");
 
         if (liftedFuncName is not null)

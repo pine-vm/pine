@@ -26,9 +26,10 @@ public class DictCompilerSupportTests
     private static ElmInteractiveEnvironment.ParsedInteractiveEnvironment CompileModule(
         string elmModuleText)
     {
-        return ElmCompilerTestHelper.CompileElmModules(
-            [elmModuleText],
-            disableInlining: true).parsedEnv;
+        return
+            ElmCompilerTestHelper.CompileElmModules(
+                [elmModuleText],
+                disableInlining: true).parsedEnv;
     }
 
     private static PineValue GetFunction(
@@ -36,7 +37,8 @@ public class DictCompilerSupportTests
         string moduleName,
         string funcName)
     {
-        return env.Modules
+        return
+            env.Modules
             .First(m => m.moduleName == moduleName)
             .moduleContent.FunctionDeclarations[funcName];
     }
@@ -57,8 +59,11 @@ public class DictCompilerSupportTests
     }
 
     private static ElmValue Int(long v) => ElmValue.Integer(v);
+
     private static ElmValue Str(string v) => ElmValue.StringInstance(v);
+
     private static ElmValue EList(params ElmValue[] items) => ElmValue.ListInstance([.. items]);
+
     private static ElmValue Pair(ElmValue a, ElmValue b) => ElmValue.ListInstance([a, b]);
 
     #endregion
@@ -68,21 +73,22 @@ public class DictCompilerSupportTests
     [Fact]
     public void Recursive_list_length_with_cons_pattern()
     {
-        var env = CompileModule(
-            """"
-            module Test exposing (..)
+        var env =
+            CompileModule(
+                """"
+                module Test exposing (..)
 
 
-            listLength : List a -> Int
-            listLength lst =
-                case lst of
-                    [] ->
-                        0
+                listLength : List a -> Int
+                listLength lst =
+                    case lst of
+                        [] ->
+                            0
 
-                    _ :: rest ->
-                        1 + listLength rest
+                        _ :: rest ->
+                            1 + listLength rest
 
-            """");
+                """");
 
         var func = GetFunction(env, "Test", "listLength");
 
@@ -96,21 +102,22 @@ public class DictCompilerSupportTests
     [Fact]
     public void Tuple_destructuring_in_cons_pattern()
     {
-        var env = CompileModule(
-            """"
-            module Test exposing (..)
+        var env =
+            CompileModule(
+                """"
+                module Test exposing (..)
 
 
-            firstKey : List ( Int, String ) -> Int
-            firstKey pairs =
-                case pairs of
-                    [] ->
-                        0
+                firstKey : List ( Int, String ) -> Int
+                firstKey pairs =
+                    case pairs of
+                        [] ->
+                            0
 
-                    ( key, value ) :: rest ->
-                        key
+                        ( key, value ) :: rest ->
+                            key
 
-            """");
+                """");
 
         var func = GetFunction(env, "Test", "firstKey");
 
@@ -124,26 +131,28 @@ public class DictCompilerSupportTests
     [Fact]
     public void Recursive_tuple_cons_sum_keys()
     {
-        var env = CompileModule(
-            """"
-            module Test exposing (..)
+        var env =
+            CompileModule(
+                """"
+                module Test exposing (..)
 
 
-            sumKeys : List ( Int, a ) -> Int
-            sumKeys pairs =
-                case pairs of
-                    [] ->
-                        0
+                sumKeys : List ( Int, a ) -> Int
+                sumKeys pairs =
+                    case pairs of
+                        [] ->
+                            0
 
-                    ( key, _ ) :: rest ->
-                        key + sumKeys rest
+                        ( key, _ ) :: rest ->
+                            key + sumKeys rest
 
-            """");
+                """");
 
         var func = GetFunction(env, "Test", "sumKeys");
 
         Invoke1(func, EList()).Should().Be(Int(0));
         Invoke1(func, EList(Pair(Int(1), Str("a")))).Should().Be(Int(1));
+
         Invoke1(func, EList(Pair(Int(1), Str("a")), Pair(Int(2), Str("b")), Pair(Int(3), Str("c"))))
             .Should().Be(Int(6));
     }
@@ -153,26 +162,27 @@ public class DictCompilerSupportTests
     [Fact]
     public void Custom_type_recursive_case_matching()
     {
-        var env = CompileModule(
-            """"
-            module Test exposing (..)
+        var env =
+            CompileModule(
+                """"
+                module Test exposing (..)
 
 
-            type MyTree
-                = Leaf
-                | Node Int MyTree MyTree
+                type MyTree
+                    = Leaf
+                    | Node Int MyTree MyTree
 
 
-            treeSize : MyTree -> Int
-            treeSize tree =
-                case tree of
-                    Leaf ->
-                        0
+                treeSize : MyTree -> Int
+                treeSize tree =
+                    case tree of
+                        Leaf ->
+                            0
 
-                    Node _ left right ->
-                        1 + treeSize left + treeSize right
+                        Node _ left right ->
+                            1 + treeSize left + treeSize right
 
-            """");
+                """");
 
         var func = GetFunction(env, "Test", "treeSize");
 
@@ -196,23 +206,24 @@ public class DictCompilerSupportTests
     [Fact]
     public void If_then_else_with_less_than()
     {
-        var env = CompileModule(
-            """"
-            module Test exposing (..)
+        var env =
+            CompileModule(
+                """"
+                module Test exposing (..)
 
 
-            classify : Int -> String
-            classify n =
-                if n < 0 then
-                    "negative"
+                classify : Int -> String
+                classify n =
+                    if n < 0 then
+                        "negative"
 
-                else if n == 0 then
-                    "zero"
+                    else if n == 0 then
+                        "zero"
 
-                else
-                    "positive"
+                    else
+                        "positive"
 
-            """");
+                """");
 
         var func = GetFunction(env, "Test", "classify");
 
@@ -226,21 +237,22 @@ public class DictCompilerSupportTests
     [Fact]
     public void Lambda_as_argument_to_function()
     {
-        var env = CompileModule(
-            """"
-            module Test exposing (..)
+        var env =
+            CompileModule(
+                """"
+                module Test exposing (..)
 
 
-            applyTwice : (Int -> Int) -> Int -> Int
-            applyTwice f x =
-                f (f x)
+                applyTwice : (Int -> Int) -> Int -> Int
+                applyTwice f x =
+                    f (f x)
 
 
-            doubleApply : Int -> Int
-            doubleApply x =
-                applyTwice (\n -> n + 1) x
+                doubleApply : Int -> Int
+                doubleApply x =
+                    applyTwice (\n -> n + 1) x
 
-            """");
+                """");
 
         var func = GetFunction(env, "Test", "doubleApply");
 
@@ -253,26 +265,27 @@ public class DictCompilerSupportTests
     [Fact]
     public void Multi_arg_lambda_in_foldl_style()
     {
-        var env = CompileModule(
-            """"
-            module Test exposing (..)
+        var env =
+            CompileModule(
+                """"
+                module Test exposing (..)
 
 
-            myFoldl : (a -> b -> b) -> b -> List a -> b
-            myFoldl func acc list =
-                case list of
-                    [] ->
-                        acc
+                myFoldl : (a -> b -> b) -> b -> List a -> b
+                myFoldl func acc list =
+                    case list of
+                        [] ->
+                            acc
 
-                    x :: rest ->
-                        myFoldl func (func x acc) rest
+                        x :: rest ->
+                            myFoldl func (func x acc) rest
 
 
-            sumList : List Int -> Int
-            sumList list =
-                myFoldl (\x acc -> x + acc) 0 list
+                sumList : List Int -> Int
+                sumList list =
+                    myFoldl (\x acc -> x + acc) 0 list
 
-            """");
+                """");
 
         var func = GetFunction(env, "Test", "sumList");
 
@@ -286,32 +299,35 @@ public class DictCompilerSupportTests
     [Fact]
     public void Three_arg_lambda_foldl()
     {
-        var env = CompileModule(
-            """"
-            module Test exposing (..)
+        var env =
+            CompileModule(
+                """"
+                module Test exposing (..)
 
 
-            myFoldl3 : (a -> b -> c -> c) -> c -> List ( a, b ) -> c
-            myFoldl3 func acc pairs =
-                case pairs of
-                    [] ->
-                        acc
+                myFoldl3 : (a -> b -> c -> c) -> c -> List ( a, b ) -> c
+                myFoldl3 func acc pairs =
+                    case pairs of
+                        [] ->
+                            acc
 
-                    ( a, b ) :: rest ->
-                        myFoldl3 func (func a b acc) rest
+                        ( a, b ) :: rest ->
+                            myFoldl3 func (func a b acc) rest
 
 
-            concatPairs : List ( String, String ) -> String
-            concatPairs pairs =
-                myFoldl3 (\a b acc -> acc ++ a ++ b) "" pairs
+                concatPairs : List ( String, String ) -> String
+                concatPairs pairs =
+                    myFoldl3 (\a b acc -> acc ++ a ++ b) "" pairs
 
-            """");
+                """");
 
         var func = GetFunction(env, "Test", "concatPairs");
 
         Invoke1(func, EList()).Should().Be(Str(""));
+
         Invoke1(func, EList(Pair(Str("a"), Str("b"))))
             .Should().Be(Str("ab"));
+
         Invoke1(func, EList(Pair(Str("a"), Str("b")), Pair(Str("c"), Str("d"))))
             .Should().Be(Str("abcd"));
     }
@@ -371,17 +387,21 @@ public class DictCompilerSupportTests
         // Now test: fromList [] should produce an empty dict
         var fromListResult = Invoke1(fromListFunc, EList());
         // Let's check what fromList [] actually returns as Pine value
-        var fromListPine = CoreLibraryModule.CoreLibraryTestHelper.ApplyGenericPine(
-            fromListFunc,
-            [ElmValueEncoding.ElmValueAsPineValue(EList())],
-            s_vm);
+        var fromListPine =
+            CoreLibraryModule.CoreLibraryTestHelper.ApplyGenericPine(
+                fromListFunc,
+                [ElmValueEncoding.ElmValueAsPineValue(EList())],
+                s_vm);
+
         var fromListElm =
             ElmValueEncoding.PineValueAsElmValue(fromListPine, null, null)
             .Extract(err => throw new Exception("Failed: " + err));
 
         // Check isEmpty on the result - debug what we got
         var emptyResult = Invoke1(isEmptyFunc, fromListElm);
-        emptyResult.Should().Be(ElmValue.TrueValue,
+
+        emptyResult.Should().Be(
+            ElmValue.TrueValue,
             "fromList [] should be isEmpty but got dict: " +
             ElmValue.RenderAsElmExpression(fromListElm).expressionString);
     }
@@ -425,18 +445,19 @@ public class DictCompilerSupportTests
     }
 
     private static readonly Lazy<ElmInteractiveEnvironment.ParsedInteractiveEnvironment> s_dictEnv =
-        new(() =>
-        {
-            var kernelModulesTree =
-                BundledFiles.ElmKernelModulesDefault.Value;
+        new(
+            () =>
+            {
+                var kernelModulesTree =
+                    BundledFiles.ElmKernelModulesDefault.Value;
 
-            var rootFilePaths =
-                kernelModulesTree.EnumerateFilesTransitive()
-                .Where(b => b.path[^1].Equals("Dict.elm", StringComparison.OrdinalIgnoreCase))
-                .Select(b => (IReadOnlyList<string>)b.path)
-                .ToList();
+                var rootFilePaths =
+                    kernelModulesTree.EnumerateFilesTransitive()
+                    .Where(b => b.path[^1].Equals("Dict.elm", StringComparison.OrdinalIgnoreCase))
+                    .Select(b => (IReadOnlyList<string>)b.path)
+                    .ToList();
 
-            var compiledEnv =
+                var compiledEnv =
                     ElmCompiler.CompileInteractiveEnvironment(
                         kernelModulesTree,
                         rootFilePaths: rootFilePaths,
@@ -444,8 +465,8 @@ public class DictCompilerSupportTests
                     .Map(r => r.compiledEnvValue)
                     .Extract(err => throw new Exception("Failed compiling Dict: " + err));
 
-            return
-                ElmInteractiveEnvironment.ParseInteractiveEnvironment(compiledEnv)
-                .Extract(err => throw new Exception("Failed parsing environment: " + err));
-        });
+                return
+                    ElmInteractiveEnvironment.ParseInteractiveEnvironment(compiledEnv)
+                    .Extract(err => throw new Exception("Failed parsing environment: " + err));
+            });
 }

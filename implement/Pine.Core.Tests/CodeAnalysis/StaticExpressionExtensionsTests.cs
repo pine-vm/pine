@@ -1,7 +1,7 @@
+using AwesomeAssertions;
 using Pine.Core.CodeAnalysis;
 using System.Collections.Generic;
 using System.Linq;
-using AwesomeAssertions;
 using Xunit;
 
 namespace Pine.Core.Tests.CodeAnalysis;
@@ -20,10 +20,11 @@ public class StaticExpressionExtensionsTests
                 falseBranch: StaticExpression<string>.FunctionApplicationInstance(
                     "F",
                     StaticExpression<string>.ListInstance([])),
-                trueBranch: StaticExpression<string>.ListInstance([
+                trueBranch: StaticExpression<string>.ListInstance(
+                    [
                     StaticExpression<string>.EnvironmentInstance,
                     StaticExpression<string>.LiteralInstance(PineValue.EmptyBlob)
-                ]));
+                    ]));
 
         var (mapped, referencesOriginalEnv) =
             StaticExpressionExtension.TransformStaticExpressionWithOptionalReplacement(
@@ -35,8 +36,8 @@ public class StaticExpressionExtensionsTests
         // Compute expected env presence in the original tree (there was one Environment node in true branch)
         var expectedEnvPresence =
             expr.EnumerateAllDescendants(skipDescendants: null)
-                .OfType<StaticExpression<string>.Environment>()
-                .Any();
+            .OfType<StaticExpression<string>.Environment>()
+            .Any();
 
         referencesOriginalEnv.Should().Be(expectedEnvPresence);
         expectedEnvPresence.Should().BeTrue(); // sanity: this tree should reference env
@@ -46,18 +47,21 @@ public class StaticExpressionExtensionsTests
     public void TransformStaticExpression_replace_environment_with_literal_removes_original_env_reference()
     {
         var expr =
-            StaticExpression<string>.ListInstance([
+            StaticExpression<string>.ListInstance(
+                [
                 StaticExpression<string>.EnvironmentInstance,
                 StaticExpression<string>.KernelApplicationInstance(
                     nameof(KernelFunction.head),
                     StaticExpression<string>.ListInstance([]))
-            ]);
+                ]);
 
         var (mapped, referencesOriginalEnv) =
             StaticExpressionExtension.TransformStaticExpressionWithOptionalReplacement(
                 findReplacement: e => e is StaticExpression<string>.Environment
-                    ? StaticExpression<string>.LiteralInstance(PineValue.EmptyList)
-                    : null,
+                ?
+                StaticExpression<string>.LiteralInstance(PineValue.EmptyList)
+                :
+                null,
                 expression: expr);
 
         referencesOriginalEnv.Should().BeFalse();
@@ -74,22 +78,26 @@ public class StaticExpressionExtensionsTests
     {
         // Original tree contains no environment
         var expr =
-            StaticExpression<string>.ListInstance([
+            StaticExpression<string>.ListInstance(
+                [
                 StaticExpression<string>.LiteralInstance(PineValue.EmptyList),
                 StaticExpression<string>.KernelApplicationInstance(
                     nameof(KernelFunction.length),
                     StaticExpression<string>.LiteralInstance(PineValue.EmptyList))
-            ]);
+                ]);
 
         var (mapped, referencesOriginalEnv) =
             StaticExpressionExtension.TransformStaticExpressionWithOptionalReplacement(
                 findReplacement: e => e is StaticExpression<string>.Literal
-                    ? StaticExpression<string>.EnvironmentInstance
-                    : null,
+                ?
+                StaticExpression<string>.EnvironmentInstance
+                :
+                null,
                 expression: expr);
 
         // Although replacements introduced Environment nodes, they do not reference the original env per contract
         referencesOriginalEnv.Should().BeFalse();
+
         mapped.EnumerateAllDescendants(skipDescendants: null)
             .OfType<StaticExpression<string>.Environment>()
             .Any()
@@ -103,10 +111,12 @@ public class StaticExpressionExtensionsTests
         var innerLit = StaticExpression<string>.LiteralInstance(PineValue.EmptyList);
         var innerList = StaticExpression<string>.ListInstance([env, innerLit]);
 
-        var root = StaticExpression<string>.ListInstance([
-            innerList,
-            StaticExpression<string>.LiteralInstance(PineValue.EmptyBlob)
-        ]);
+        var root =
+            StaticExpression<string>.ListInstance(
+                [
+                innerList,
+                StaticExpression<string>.LiteralInstance(PineValue.EmptyBlob)
+                ]);
 
         var visited = new HashSet<StaticExpression<string>>();
 
@@ -144,14 +154,17 @@ public class StaticExpressionExtensionsTests
     [Fact]
     public void TransformStaticExpression_crashing_parse_and_eval_children_are_transformed_and_flags_aggregated()
     {
-        var expr = new StaticExpression<string>.CrashingParseAndEval(
-            Encoded: StaticExpression<string>.ListInstance([
-                StaticExpression<string>.EnvironmentInstance,
-                StaticExpression<string>.LiteralInstance(PineValue.EmptyBlob)
-            ]),
-            EnvironmentExpr: StaticExpression<string>.ListInstance([
-                StaticExpression<string>.LiteralInstance(PineValue.EmptyList)
-            ]));
+        var expr =
+            new StaticExpression<string>.CrashingParseAndEval(
+                Encoded: StaticExpression<string>.ListInstance(
+                    [
+                    StaticExpression<string>.EnvironmentInstance,
+                    StaticExpression<string>.LiteralInstance(PineValue.EmptyBlob)
+                    ]),
+                EnvironmentExpr: StaticExpression<string>.ListInstance(
+                    [
+                    StaticExpression<string>.LiteralInstance(PineValue.EmptyList)
+                    ]));
 
         // First, no replacement: should report env presence from Encoded branch
         var (_, referencesOriginalEnv1) =
@@ -165,8 +178,10 @@ public class StaticExpressionExtensionsTests
         var (_, referencesOriginalEnv2) =
             StaticExpressionExtension.TransformStaticExpressionWithOptionalReplacement(
                 e => e is StaticExpression<string>.Environment
-                    ? StaticExpression<string>.LiteralInstance(PineValue.EmptyList)
-                    : null,
+                ?
+                StaticExpression<string>.LiteralInstance(PineValue.EmptyList)
+                :
+                null,
                 expr);
 
         referencesOriginalEnv2.Should().BeFalse();

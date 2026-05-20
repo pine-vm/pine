@@ -254,9 +254,9 @@ public class LanguageServiceCompileToPineVMRegressionTests
                 env,
                 "dictInsertThenRecordUpdate",
                 [
-                    ElmValueEncoding.ElmValueAsPineValue(ElmString("test.elm")),
-                    ElmValueEncoding.ElmValueAsPineValue(ElmString("module M exposing (..)\n")),
-                    initStatePine,
+                ElmValueEncoding.ElmValueAsPineValue(ElmString("test.elm")),
+                ElmValueEncoding.ElmValueAsPineValue(ElmString("module M exposing (..)\n")),
+                initStatePine,
                 ]);
 
         report.Counters.InstructionCount.Should().BeGreaterThan(0);

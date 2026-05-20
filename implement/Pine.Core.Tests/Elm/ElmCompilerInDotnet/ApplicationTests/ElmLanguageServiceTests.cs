@@ -159,17 +159,17 @@ public class ElmLanguageServiceTests
 
         var compiledEnv =
             (maxOptimizationRounds is { } rounds
-                ?
-                ElmCompiler.CompileInteractiveEnvironment(
-                    treeWithTest,
-                    rootFilePaths: rootFilePaths,
-                    disableInlining: disableInlining,
-                    maxOptimizationRounds: rounds)
-                :
-                ElmCompiler.CompileInteractiveEnvironment(
-                    treeWithTest,
-                    rootFilePaths: rootFilePaths,
-                    disableInlining: disableInlining))
+            ?
+            ElmCompiler.CompileInteractiveEnvironment(
+                treeWithTest,
+                rootFilePaths: rootFilePaths,
+                disableInlining: disableInlining,
+                maxOptimizationRounds: rounds)
+            :
+            ElmCompiler.CompileInteractiveEnvironment(
+                treeWithTest,
+                rootFilePaths: rootFilePaths,
+                disableInlining: disableInlining))
             .Map(r => r.compiledEnvValue)
             .Extract(err => throw new Exception("Failed compiling: " + err));
 

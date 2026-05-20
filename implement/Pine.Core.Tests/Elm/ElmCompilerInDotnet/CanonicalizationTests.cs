@@ -222,7 +222,8 @@ public class CanonicalizationTests
             ElmCompilerTestHelper.GetCanonicalizedModule(canonicalizeResult, ["MainModule"]);
 
         // Find the function declaration for 'main'
-        var mainFuncDecl = mainModule.Declarations
+        var mainFuncDecl =
+            mainModule.Declarations
             .Select(d => d.Value)
             .OfType<Declaration.FunctionDeclaration>()
             .Single(f => f.Function.Declaration.Value.Name.Value is "main");
@@ -239,9 +240,10 @@ public class CanonicalizationTests
         funcOrValue.Should().BeOfType<SyntaxTypes.Expression.FunctionOrValue>();
         var funcRef = (SyntaxTypes.Expression.FunctionOrValue)funcOrValue;
 
-        funcRef.Should().Be(new SyntaxTypes.Expression.FunctionOrValue(
-            ModuleName: ["OtherModule"],
-            Name: "otherFunc"));
+        funcRef.Should().Be(
+            new SyntaxTypes.Expression.FunctionOrValue(
+                ModuleName: ["OtherModule"],
+                Name: "otherFunc"));
     }
 
     [Fact]
@@ -521,7 +523,8 @@ public class CanonicalizationTests
         {
             var module =
                 moduleResult
-                .Extract(err => throw new System.Exception($"Module {string.Join(".", moduleName)} has errors: " + err));
+                .Extract(
+                    err => throw new System.Exception($"Module {string.Join(".", moduleName)} has errors: " + err));
 
             module.Imports.Should().BeEmpty();
         }
@@ -630,7 +633,8 @@ public class CanonicalizationTests
             ElmCompilerTestHelper.GetCanonicalizedModule(canonicalizeResult, ["Main"]);
 
         // Find the value declaration
-        var valueDecl = mainModule.Declarations
+        var valueDecl =
+            mainModule.Declarations
             .Select(d => d.Value)
             .OfType<Declaration.FunctionDeclaration>()
             .Single(f => f.Function.Declaration.Value.Name.Value is "value");
@@ -641,9 +645,10 @@ public class CanonicalizationTests
         var funcOrValue = (SyntaxTypes.Expression.FunctionOrValue)expr;
 
         // Should be resolved from alias "Decode" to actual module "Bytes.Decode"
-        funcOrValue.Should().Be(new SyntaxTypes.Expression.FunctionOrValue(
-            ModuleName: ["Bytes", "Decode"],
-            Name: "int"));
+        funcOrValue.Should().Be(
+            new SyntaxTypes.Expression.FunctionOrValue(
+                ModuleName: ["Bytes", "Decode"],
+                Name: "int"));
     }
 
     [Fact]
@@ -688,7 +693,8 @@ public class CanonicalizationTests
             ElmCompilerTestHelper.GetCanonicalizedModule(canonicalizeResult, ["Main"]);
 
         // Find the compute declaration
-        var computeDecl = mainModule.Declarations
+        var computeDecl =
+            mainModule.Declarations
             .Select(d => d.Value)
             .OfType<Declaration.FunctionDeclaration>()
             .Single(f => f.Function.Declaration.Value.Name.Value is "compute");
@@ -700,18 +706,22 @@ public class CanonicalizationTests
 
         // First argument should be Basics.add
         var addFunc = (SyntaxTypes.Expression.FunctionOrValue)addApp.Arguments[0].Value;
-        addFunc.Should().Be(new SyntaxTypes.Expression.FunctionOrValue(
-            ModuleName: ["Basics"],
-            Name: "add"));
+
+        addFunc.Should().Be(
+            new SyntaxTypes.Expression.FunctionOrValue(
+                ModuleName: ["Basics"],
+                Name: "add"));
 
         // Second argument should be application of double (left operand)
         var leftApp = addApp.Arguments[1].Value;
         leftApp.Should().BeOfType<SyntaxTypes.Expression.Application>();
         var doubleApp = (SyntaxTypes.Expression.Application)leftApp;
         var doubleFuncOrValue = (SyntaxTypes.Expression.FunctionOrValue)doubleApp.Arguments[0].Value;
-        doubleFuncOrValue.Should().Be(new SyntaxTypes.Expression.FunctionOrValue(
-            ModuleName: ["Helper"],
-            Name: "double"));
+
+        doubleFuncOrValue.Should().Be(
+            new SyntaxTypes.Expression.FunctionOrValue(
+                ModuleName: ["Helper"],
+                Name: "double"));
     }
 
     [Fact]
@@ -750,7 +760,8 @@ public class CanonicalizationTests
             ElmCompilerTestHelper.GetCanonicalizedModule(canonicalizeResult, ["Test"]);
 
         // Find the unwrap function
-        var unwrapFunc = canonicalizedModule.Declarations
+        var unwrapFunc =
+            canonicalizedModule.Declarations
             .Select(d => d.Value)
             .OfType<Declaration.FunctionDeclaration>()
             .Single(f => f.Function.Declaration.Value.Name.Value is "unwrap");
@@ -812,7 +823,8 @@ public class CanonicalizationTests
             ElmCompilerTestHelper.GetCanonicalizedModule(canonicalizeResult, ["Test"]);
 
         // Find the process function
-        var processFunc = canonicalizedModule.Declarations
+        var processFunc =
+            canonicalizedModule.Declarations
             .Select(d => d.Value)
             .OfType<Declaration.FunctionDeclaration>()
             .Single(f => f.Function.Declaration.Value.Name.Value is "process");
@@ -869,7 +881,8 @@ public class CanonicalizationTests
             ElmCompilerTestHelper.GetCanonicalizedModule(canonicalizeResult, ["Test"]);
 
         // Find the compute function
-        var computeFunc = canonicalizedModule.Declarations
+        var computeFunc =
+            canonicalizedModule.Declarations
             .Select(d => d.Value)
             .OfType<Declaration.FunctionDeclaration>()
             .Single(f => f.Function.Declaration.Value.Name.Value is "compute");
@@ -943,6 +956,7 @@ public class CanonicalizationTests
             .Select(d => d.Value)
             .OfType<Declaration.FunctionDeclaration>()
             .Single(f => f.Function.Declaration.Value.Name.Value is "intValue");
+
         var intType = (TypeAnnotation.Typed)intFunc.Function.Signature!.Value.TypeAnnotation.Value;
         var (intModuleName, intName) = intType.TypeName.Value;
         intModuleName.Should().Equal(["Basics"]);
@@ -1060,7 +1074,8 @@ public class CanonicalizationTests
         var errorMessage =
             moduleMainResult.Unpack(
                 fromErr: err => err,
-                fromOk: _ => throw new System.Exception("Expected Main module to have an error due to unknown constructor"));
+                fromOk:
+                _ => throw new System.Exception("Expected Main module to have an error due to unknown constructor"));
 
         errorMessage.Should().Contain("MyOk");
     }
@@ -1122,7 +1137,8 @@ public class CanonicalizationTests
         var canonicalizeResult =
             Canonicalization.Canonicalize([parsedModule1, parsedModule2, parsedModule3]);
 
-        var modulesDict = canonicalizeResult
+        var modulesDict =
+            canonicalizeResult
             .Extract(err => throw new System.Exception("Unexpected global error: " + err));
 
         // All modules should succeed - no clash because Module2 doesn't expose helper
@@ -1130,7 +1146,8 @@ public class CanonicalizationTests
             ElmCompilerTestHelper.GetCanonicalizedModule(canonicalizeResult, ["Main"]);
 
         // Find the main function
-        var mainFunc = mainModule.Declarations
+        var mainFunc =
+            mainModule.Declarations
             .Select(d => d.Value)
             .OfType<Declaration.FunctionDeclaration>()
             .Single(f => f.Function.Declaration.Value.Name.Value is "main");
@@ -1140,9 +1157,10 @@ public class CanonicalizationTests
         var helperRef = (SyntaxTypes.Expression.FunctionOrValue)application.Arguments[0].Value;
 
         // helper should resolve to Module1, not cause a clash
-        helperRef.Should().Be(new SyntaxTypes.Expression.FunctionOrValue(
-            ModuleName: ["Module1"],
-            Name: "helper"));
+        helperRef.Should().Be(
+            new SyntaxTypes.Expression.FunctionOrValue(
+                ModuleName: ["Module1"],
+                Name: "helper"));
     }
 
     [Fact]
@@ -1696,6 +1714,7 @@ public class CanonicalizationTests
             .OfType<CanonicalizationError.NamingClash>()
             .Select(c => c.Name)
             .ToList();
+
         clashNames.Should().Contain("x");
         clashNames.Should().Contain("y");
         clashNames.Should().Contain("z");
@@ -1762,6 +1781,7 @@ public class CanonicalizationTests
             .OfType<CanonicalizationError.NamingClash>()
             .Select(c => c.Name)
             .ToList();
+
         clashNames.Should().OnlyContain(n => n == "helper");
     }
 
@@ -1961,8 +1981,9 @@ public class CanonicalizationTests
         var pointRef = (SyntaxTypes.Expression.FunctionOrValue)application.Arguments[0].Value;
 
         // Point should resolve to Types module
-        pointRef.Should().Be(new SyntaxTypes.Expression.FunctionOrValue(
-            ModuleName: ["Types"],
-            Name: "Point"));
+        pointRef.Should().Be(
+            new SyntaxTypes.Expression.FunctionOrValue(
+                ModuleName: ["Types"],
+                Name: "Point"));
     }
 }

@@ -96,18 +96,16 @@ public class ElmMakeReportConverterTests
 
         problem.Message[0].Should().Be(
             new MessageItem.StringMessage(
-            "The 2nd element of this list does not match all the previous elements:\n\n8|     [ Html.text \"Hello World!\", 1234 ]\n                                   "));
+                "The 2nd element of this list does not match all the previous elements:\n\n8|     [ Html.text \"Hello World!\", 1234 ]\n                                   "));
 
         problem.Message.Count.Should().Be(9);
 
         problem.Message[1].Should().Be(
-            new MessageItem.StyledMessage
-            (
+            new MessageItem.StyledMessage(
                 Bold: false,
                 Underline: false,
                 Color: "RED",
-                String: "^^^^"
-            ));
+                String: "^^^^"));
     }
 
     [Fact]
@@ -148,19 +146,17 @@ public class ElmMakeReportConverterTests
 
         errorReport.Message[0].Should().Be(
             new MessageItem.StringMessage(
-            "It looks like you are starting a new Elm project. Very exciting! Try running:\n\n    "));
+                "It looks like you are starting a new Elm project. Very exciting! Try running:\n\n    "));
 
         errorReport.Message[1].Should().Be(
-            new MessageItem.StyledMessage
-            (
+            new MessageItem.StyledMessage(
                 Bold: false,
                 Underline: false,
                 Color: "GREEN",
-                String: "elm init"
-            ));
+                String: "elm init"));
 
         errorReport.Message[2].Should().Be(
             new MessageItem.StringMessage(
-            "\n\nIt will help you get set up. It is really simple!"));
+                "\n\nIt will help you get set up. It is really simple!"));
     }
 }

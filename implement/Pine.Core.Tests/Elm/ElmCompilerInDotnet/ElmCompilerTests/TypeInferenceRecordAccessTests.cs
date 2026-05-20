@@ -54,12 +54,18 @@ public class TypeInferenceRecordAccessTests
         var fields =
             new List<Node<(Node<string> fieldName, Node<SyntaxTypes.Expression> valueExpr)>>
             {
-                Node((Node("a"), Node<SyntaxTypes.Expression>(
-                    new SyntaxTypes.Expression.RecordAccess(Node(Param("r")), Node("name"))))),
-                Node((Node("b"), Node<SyntaxTypes.Expression>(
-                    new SyntaxTypes.Expression.RecordAccess(Node(Param("r")), Node("age"))))),
-                Node((Node("c"), Node<SyntaxTypes.Expression>(
-                    new SyntaxTypes.Expression.RecordAccess(Node(Param("r")), Node("email"))))),
+                Node(
+                    (Node("a"),
+                    Node<SyntaxTypes.Expression>(
+                        new SyntaxTypes.Expression.RecordAccess(Node(Param("r")), Node("name"))))),
+                Node(
+                    (Node("b"),
+                    Node<SyntaxTypes.Expression>(
+                        new SyntaxTypes.Expression.RecordAccess(Node(Param("r")), Node("age"))))),
+                Node(
+                    (Node("c"),
+                    Node<SyntaxTypes.Expression>(
+                        new SyntaxTypes.Expression.RecordAccess(Node(Param("r")), Node("email"))))),
             };
 
         var expression = new SyntaxTypes.Expression.RecordExpr(fields);
@@ -75,6 +81,7 @@ public class TypeInferenceRecordAccessTests
 
         var openRecord = (TypeInference.InferredType.OpenRecordType)parameterTypes["r"];
         var fieldNames = new HashSet<string>();
+
         foreach (var (name, _) in openRecord.KnownFields)
             fieldNames.Add(name);
 
@@ -113,8 +120,10 @@ public class TypeInferenceRecordAccessTests
         // r.name should infer String.
         var recordType =
             new TypeInference.InferredType.RecordType(
-                [("name", new TypeInference.InferredType.StringType()),
-                 ("age", new TypeInference.InferredType.IntType())]);
+                [
+                ("name", new TypeInference.InferredType.StringType()),
+                ("age", new TypeInference.InferredType.IntType())
+                ]);
 
         var expression =
             new SyntaxTypes.Expression.RecordAccess(Node(Param("r")), Node("name"));

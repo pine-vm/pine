@@ -268,7 +268,9 @@ public class FlatDeclarationSnapshotTests
         var canonicalizedModuleA =
             SnapshotTestFormat.FilterDeclarationsByModuleName(canonicalizedDict, ["ModuleA"]);
 
-        SnapshotTestFormat.RenderQualifiedDeclarations(canonicalizedModuleA, SnapshotTestFormat.DeclarationSortOrder.NameAsc).Should().Be(
+        SnapshotTestFormat.RenderQualifiedDeclarations(
+            canonicalizedModuleA,
+            SnapshotTestFormat.DeclarationSortOrder.NameAsc).Should().Be(
             """
             ModuleA.helper : Basics.Int -> Basics.Int
             ModuleA.helper x =
@@ -280,7 +282,9 @@ public class FlatDeclarationSnapshotTests
         var canonicalizedModuleB =
             SnapshotTestFormat.FilterDeclarationsByModuleName(canonicalizedDict, ["ModuleB"]);
 
-        SnapshotTestFormat.RenderQualifiedDeclarations(canonicalizedModuleB, SnapshotTestFormat.DeclarationSortOrder.NameAsc).Should().Be(
+        SnapshotTestFormat.RenderQualifiedDeclarations(
+            canonicalizedModuleB,
+            SnapshotTestFormat.DeclarationSortOrder.NameAsc).Should().Be(
             """
             ModuleB.combined : Basics.Int -> Basics.Int
             ModuleB.combined x =
@@ -296,7 +300,8 @@ public class FlatDeclarationSnapshotTests
         var finalModuleA =
             SnapshotTestFormat.FilterDeclarationsByModuleName(finalDict, ["ModuleA"]);
 
-        SnapshotTestFormat.RenderQualifiedDeclarations(finalModuleA, SnapshotTestFormat.DeclarationSortOrder.NameAsc).Should().Be(
+        SnapshotTestFormat.RenderQualifiedDeclarations(finalModuleA, SnapshotTestFormat.DeclarationSortOrder.NameAsc)
+            .Should().Be(
             """
             ModuleA.helper : Basics.Int -> Basics.Int
             ModuleA.helper x =
@@ -307,7 +312,8 @@ public class FlatDeclarationSnapshotTests
         var finalModuleB =
             SnapshotTestFormat.FilterDeclarationsByModuleName(finalDict, ["ModuleB"]);
 
-        SnapshotTestFormat.RenderQualifiedDeclarations(finalModuleB, SnapshotTestFormat.DeclarationSortOrder.NameAsc).Should().Be(
+        SnapshotTestFormat.RenderQualifiedDeclarations(finalModuleB, SnapshotTestFormat.DeclarationSortOrder.NameAsc)
+            .Should().Be(
             """
             ModuleB.combined : Basics.Int -> Basics.Int
             ModuleB.combined x =

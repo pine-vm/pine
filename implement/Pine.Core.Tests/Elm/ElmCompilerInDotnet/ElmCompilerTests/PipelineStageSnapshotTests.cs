@@ -60,7 +60,9 @@ public class PipelineStageSnapshotTests
         var canonicalizedProvider =
             SnapshotTestFormat.FilterDeclarationsByModuleName(canonicalizedDict, ["Provider"]);
 
-        SnapshotTestFormat.RenderQualifiedDeclarations(canonicalizedProvider, SnapshotTestFormat.DeclarationSortOrder.NameAsc).Should().Be(
+        SnapshotTestFormat.RenderQualifiedDeclarations(
+            canonicalizedProvider,
+            SnapshotTestFormat.DeclarationSortOrder.NameAsc).Should().Be(
             """
             Provider.applyTwice : (a -> a) -> a -> a
             Provider.applyTwice fn value =
@@ -73,7 +75,9 @@ public class PipelineStageSnapshotTests
         var canonicalizedConsumer =
             SnapshotTestFormat.FilterDeclarationsByModuleName(canonicalizedDict, ["Consumer"]);
 
-        SnapshotTestFormat.RenderQualifiedDeclarations(canonicalizedConsumer, SnapshotTestFormat.DeclarationSortOrder.NameAsc).Should().Be(
+        SnapshotTestFormat.RenderQualifiedDeclarations(
+            canonicalizedConsumer,
+            SnapshotTestFormat.DeclarationSortOrder.NameAsc).Should().Be(
             """
             Consumer.increment : Basics.Int -> Basics.Int
             Consumer.increment value =
@@ -93,7 +97,9 @@ public class PipelineStageSnapshotTests
         var specializedProvider =
             SnapshotTestFormat.FilterDeclarationsByModuleName(pipelineStageResults.Specialized!, ["Provider"]);
 
-        SnapshotTestFormat.RenderQualifiedDeclarations(specializedProvider, SnapshotTestFormat.DeclarationSortOrder.NameAsc).Should().Be(
+        SnapshotTestFormat.RenderQualifiedDeclarations(
+            specializedProvider,
+            SnapshotTestFormat.DeclarationSortOrder.NameAsc).Should().Be(
             """
             Provider.applyTwice : (a -> a) -> a -> a
             Provider.applyTwice fn value =
@@ -106,7 +112,9 @@ public class PipelineStageSnapshotTests
         var specializedConsumer =
             SnapshotTestFormat.FilterDeclarationsByModuleName(pipelineStageResults.Specialized!, ["Consumer"]);
 
-        SnapshotTestFormat.RenderQualifiedDeclarations(specializedConsumer, SnapshotTestFormat.DeclarationSortOrder.NameAsc).Should().Be(
+        SnapshotTestFormat.RenderQualifiedDeclarations(
+            specializedConsumer,
+            SnapshotTestFormat.DeclarationSortOrder.NameAsc).Should().Be(
             """
             Consumer.increment : Basics.Int -> Basics.Int
             Consumer.increment value =
@@ -129,7 +137,8 @@ public class PipelineStageSnapshotTests
         var inlinedProvider =
             SnapshotTestFormat.FilterDeclarationsByModuleName(pipelineStageResults.Inlined!, ["Provider"]);
 
-        SnapshotTestFormat.RenderQualifiedDeclarations(inlinedProvider, SnapshotTestFormat.DeclarationSortOrder.NameAsc).Should().Be(
+        SnapshotTestFormat.RenderQualifiedDeclarations(inlinedProvider, SnapshotTestFormat.DeclarationSortOrder.NameAsc)
+            .Should().Be(
             """
             Provider.applyTwice : (a -> a) -> a -> a
             Provider.applyTwice fn value =
@@ -145,7 +154,8 @@ public class PipelineStageSnapshotTests
         var inlinedConsumer =
             SnapshotTestFormat.FilterDeclarationsByModuleName(pipelineStageResults.Inlined!, ["Consumer"]);
 
-        SnapshotTestFormat.RenderQualifiedDeclarations(inlinedConsumer, SnapshotTestFormat.DeclarationSortOrder.NameAsc).Should().Be(
+        SnapshotTestFormat.RenderQualifiedDeclarations(inlinedConsumer, SnapshotTestFormat.DeclarationSortOrder.NameAsc)
+            .Should().Be(
             """
             Consumer.increment : Basics.Int -> Basics.Int
             Consumer.increment value =
@@ -172,7 +182,8 @@ public class PipelineStageSnapshotTests
         var finalProvider =
             SnapshotTestFormat.FilterDeclarationsByModuleName(finalDict, ["Provider"]);
 
-        SnapshotTestFormat.RenderQualifiedDeclarations(finalProvider, SnapshotTestFormat.DeclarationSortOrder.NameAsc).Should().Be(
+        SnapshotTestFormat.RenderQualifiedDeclarations(finalProvider, SnapshotTestFormat.DeclarationSortOrder.NameAsc)
+            .Should().Be(
             """
             Provider.applyTwice : (a -> a) -> a -> a
             Provider.applyTwice fn value =
@@ -186,7 +197,8 @@ public class PipelineStageSnapshotTests
         var finalConsumer =
             SnapshotTestFormat.FilterDeclarationsByModuleName(finalDict, ["Consumer"]);
 
-        SnapshotTestFormat.RenderQualifiedDeclarations(finalConsumer, SnapshotTestFormat.DeclarationSortOrder.NameAsc).Should().Be(
+        SnapshotTestFormat.RenderQualifiedDeclarations(finalConsumer, SnapshotTestFormat.DeclarationSortOrder.NameAsc)
+            .Should().Be(
             """
             Consumer.increment : Basics.Int -> Basics.Int
             Consumer.increment value =
@@ -274,7 +286,9 @@ public class PipelineStageSnapshotTests
         var canonicalizedModuleA =
             SnapshotTestFormat.FilterDeclarationsByModuleName(canonicalizedDict, ["ModuleA"]);
 
-        SnapshotTestFormat.RenderQualifiedDeclarations(canonicalizedModuleA, SnapshotTestFormat.DeclarationSortOrder.NameAsc).Should().Be(
+        SnapshotTestFormat.RenderQualifiedDeclarations(
+            canonicalizedModuleA,
+            SnapshotTestFormat.DeclarationSortOrder.NameAsc).Should().Be(
             """
             ModuleA.helper : Basics.Int -> Basics.Int
             ModuleA.helper x =
@@ -286,7 +300,9 @@ public class PipelineStageSnapshotTests
         var canonicalizedModuleB =
             SnapshotTestFormat.FilterDeclarationsByModuleName(canonicalizedDict, ["ModuleB"]);
 
-        SnapshotTestFormat.RenderQualifiedDeclarations(canonicalizedModuleB, SnapshotTestFormat.DeclarationSortOrder.NameAsc).Should().Be(
+        SnapshotTestFormat.RenderQualifiedDeclarations(
+            canonicalizedModuleB,
+            SnapshotTestFormat.DeclarationSortOrder.NameAsc).Should().Be(
             """
             ModuleB.combined : Basics.Int -> Basics.Int
             ModuleB.combined x =
@@ -298,7 +314,9 @@ public class PipelineStageSnapshotTests
         var specializedModuleA =
             SnapshotTestFormat.FilterDeclarationsByModuleName(pipelineStageResults.Specialized!, ["ModuleA"]);
 
-        SnapshotTestFormat.RenderQualifiedDeclarations(specializedModuleA, SnapshotTestFormat.DeclarationSortOrder.NameAsc).Should().Be(
+        SnapshotTestFormat.RenderQualifiedDeclarations(
+            specializedModuleA,
+            SnapshotTestFormat.DeclarationSortOrder.NameAsc).Should().Be(
             """
             ModuleA.helper : Basics.Int -> Basics.Int
             ModuleA.helper x =
@@ -310,7 +328,9 @@ public class PipelineStageSnapshotTests
         var specializedModuleB =
             SnapshotTestFormat.FilterDeclarationsByModuleName(pipelineStageResults.Specialized!, ["ModuleB"]);
 
-        SnapshotTestFormat.RenderQualifiedDeclarations(specializedModuleB, SnapshotTestFormat.DeclarationSortOrder.NameAsc).Should().Be(
+        SnapshotTestFormat.RenderQualifiedDeclarations(
+            specializedModuleB,
+            SnapshotTestFormat.DeclarationSortOrder.NameAsc).Should().Be(
             """
             ModuleB.combined : Basics.Int -> Basics.Int
             ModuleB.combined x =
@@ -323,7 +343,8 @@ public class PipelineStageSnapshotTests
         var inlinedModuleA =
             SnapshotTestFormat.FilterDeclarationsByModuleName(pipelineStageResults.Inlined!, ["ModuleA"]);
 
-        SnapshotTestFormat.RenderQualifiedDeclarations(inlinedModuleA, SnapshotTestFormat.DeclarationSortOrder.NameAsc).Should().Be(
+        SnapshotTestFormat.RenderQualifiedDeclarations(inlinedModuleA, SnapshotTestFormat.DeclarationSortOrder.NameAsc)
+            .Should().Be(
             """
             ModuleA.helper : Basics.Int -> Basics.Int
             ModuleA.helper x =
@@ -335,7 +356,8 @@ public class PipelineStageSnapshotTests
         var inlinedModuleB =
             SnapshotTestFormat.FilterDeclarationsByModuleName(pipelineStageResults.Inlined!, ["ModuleB"]);
 
-        SnapshotTestFormat.RenderQualifiedDeclarations(inlinedModuleB, SnapshotTestFormat.DeclarationSortOrder.NameAsc).Should().Be(
+        SnapshotTestFormat.RenderQualifiedDeclarations(inlinedModuleB, SnapshotTestFormat.DeclarationSortOrder.NameAsc)
+            .Should().Be(
             """
             ModuleB.combined : Basics.Int -> Basics.Int
             ModuleB.combined x =
@@ -352,7 +374,8 @@ public class PipelineStageSnapshotTests
         var finalModuleA =
             SnapshotTestFormat.FilterDeclarationsByModuleName(finalDict, ["ModuleA"]);
 
-        SnapshotTestFormat.RenderQualifiedDeclarations(finalModuleA, SnapshotTestFormat.DeclarationSortOrder.NameAsc).Should().Be(
+        SnapshotTestFormat.RenderQualifiedDeclarations(finalModuleA, SnapshotTestFormat.DeclarationSortOrder.NameAsc)
+            .Should().Be(
             """
             ModuleA.helper : Basics.Int -> Basics.Int
             ModuleA.helper x =
@@ -363,7 +386,8 @@ public class PipelineStageSnapshotTests
         var finalModuleB =
             SnapshotTestFormat.FilterDeclarationsByModuleName(finalDict, ["ModuleB"]);
 
-        SnapshotTestFormat.RenderQualifiedDeclarations(finalModuleB, SnapshotTestFormat.DeclarationSortOrder.NameAsc).Should().Be(
+        SnapshotTestFormat.RenderQualifiedDeclarations(finalModuleB, SnapshotTestFormat.DeclarationSortOrder.NameAsc)
+            .Should().Be(
             """
             ModuleB.combined : Basics.Int -> Basics.Int
             ModuleB.combined x =
@@ -416,7 +440,9 @@ public class PipelineStageSnapshotTests
         var canonicalizedModuleA =
             SnapshotTestFormat.FilterDeclarationsByModuleName(canonicalizedDict, ["ModuleA"]);
 
-        SnapshotTestFormat.RenderQualifiedDeclarations(canonicalizedModuleA, SnapshotTestFormat.DeclarationSortOrder.NameAsc).Should().Be(
+        SnapshotTestFormat.RenderQualifiedDeclarations(
+            canonicalizedModuleA,
+            SnapshotTestFormat.DeclarationSortOrder.NameAsc).Should().Be(
             """
             ModuleA.helper : Basics.Int -> Basics.Int
             ModuleA.helper x =
@@ -428,7 +454,9 @@ public class PipelineStageSnapshotTests
         var canonicalizedModuleB =
             SnapshotTestFormat.FilterDeclarationsByModuleName(canonicalizedDict, ["ModuleB"]);
 
-        SnapshotTestFormat.RenderQualifiedDeclarations(canonicalizedModuleB, SnapshotTestFormat.DeclarationSortOrder.NameAsc).Should().Be(
+        SnapshotTestFormat.RenderQualifiedDeclarations(
+            canonicalizedModuleB,
+            SnapshotTestFormat.DeclarationSortOrder.NameAsc).Should().Be(
             """
             ModuleB.combined : Basics.Int -> Basics.Int
             ModuleB.combined x =
@@ -444,7 +472,8 @@ public class PipelineStageSnapshotTests
         var finalModuleA =
             SnapshotTestFormat.FilterDeclarationsByModuleName(finalDict, ["ModuleA"]);
 
-        SnapshotTestFormat.RenderQualifiedDeclarations(finalModuleA, SnapshotTestFormat.DeclarationSortOrder.NameAsc).Should().Be(
+        SnapshotTestFormat.RenderQualifiedDeclarations(finalModuleA, SnapshotTestFormat.DeclarationSortOrder.NameAsc)
+            .Should().Be(
             """
             ModuleA.helper : Basics.Int -> Basics.Int
             ModuleA.helper x =
@@ -455,7 +484,8 @@ public class PipelineStageSnapshotTests
         var finalModuleB =
             SnapshotTestFormat.FilterDeclarationsByModuleName(finalDict, ["ModuleB"]);
 
-        SnapshotTestFormat.RenderQualifiedDeclarations(finalModuleB, SnapshotTestFormat.DeclarationSortOrder.NameAsc).Should().Be(
+        SnapshotTestFormat.RenderQualifiedDeclarations(finalModuleB, SnapshotTestFormat.DeclarationSortOrder.NameAsc)
+            .Should().Be(
             """
             ModuleB.combined : Basics.Int -> Basics.Int
             ModuleB.combined x =

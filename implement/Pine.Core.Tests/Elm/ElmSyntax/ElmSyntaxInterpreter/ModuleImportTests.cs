@@ -157,19 +157,19 @@ public class ModuleImportTests
             ElmInterpreter.ParseAndInterpret(
                 "F.bar",
                 [
-                    """
-                    module Mid exposing (..)
+                """
+                module Mid exposing (..)
 
-                    import Foo as F
-                    """,
-                    """
-                    module Foo exposing (..)
+                import Foo as F
+                """,
+                """
+                module Foo exposing (..)
 
 
-                    bar : Int
-                    bar =
-                        42
-                    """,
+                bar : Int
+                bar =
+                    42
+                """,
                 ]);
 
         result.IsErrOrNull().Should().NotBeNull();
@@ -220,29 +220,29 @@ public class ModuleImportTests
             ElmInterpreter.ParseAndInterpret(
                 "Mid.value",
                 [
-                    """
-                    module Mid exposing (..)
+                """
+                module Mid exposing (..)
 
-                    import Foo exposing (other)
-
-
-                    value : Int
-                    value =
-                        bar
-                    """,
-                    """
-                    module Foo exposing (..)
+                import Foo exposing (other)
 
 
-                    bar : Int
-                    bar =
-                        42
+                value : Int
+                value =
+                    bar
+                """,
+                """
+                module Foo exposing (..)
 
 
-                    other : Int
-                    other =
-                        7
-                    """,
+                bar : Int
+                bar =
+                    42
+
+
+                other : Int
+                other =
+                    7
+                """,
                 ]);
 
         result.IsErrOrNull().Should().NotBeNull();
@@ -258,19 +258,19 @@ public class ModuleImportTests
             ElmInterpreter.ParseAndInterpret(
                 "bar",
                 [
-                    """
-                    module Mid exposing (..)
+                """
+                module Mid exposing (..)
 
-                    import Foo exposing (bar)
-                    """,
-                    """
-                    module Foo exposing (..)
+                import Foo exposing (bar)
+                """,
+                """
+                module Foo exposing (..)
 
 
-                    bar : Int
-                    bar =
-                        42
-                    """,
+                bar : Int
+                bar =
+                    42
+                """,
                 ]);
 
         result.IsErrOrNull().Should().NotBeNull();

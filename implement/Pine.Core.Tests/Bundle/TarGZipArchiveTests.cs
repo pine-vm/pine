@@ -12,10 +12,11 @@ public class TarGZipArchiveTests
     [Fact]
     public void Roundtrip_single_file()
     {
-        var files = new Dictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>>
-        {
-            { new[] { "test.txt" }, new byte[] { 72, 101, 108, 108, 111 } } // "Hello"
-        };
+        var files =
+            new Dictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>>
+            {
+                { new[] { "test.txt" }, new byte[] { 72, 101, 108, 108, 111 } } // "Hello"
+            };
 
         var archive = TarGZipArchive.CreateArchive(files);
         var extracted = TarGZipArchive.ExtractArchive(archive);
@@ -27,6 +28,7 @@ public class TarGZipArchiveTests
         var extractedBytes = extractedFile.Value.ToArray();
         var expectedBytes = new byte[] { 72, 101, 108, 108, 111 };
         extractedBytes.Length.Should().Be(expectedBytes.Length);
+
         for (var i = 0; i < expectedBytes.Length; i++)
         {
             extractedBytes[i].Should().Be(expectedBytes[i]);
@@ -36,13 +38,14 @@ public class TarGZipArchiveTests
     [Fact]
     public void Roundtrip_multiple_files()
     {
-        var files = new Dictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>>
-        {
-            { new[] { "dir1", "file1.txt" }, new byte[] { 1, 2, 3 } },
-            { new[] { "dir1", "file2.txt" }, new byte[] { 4, 5, 6, 7 } },
-            { new[] { "dir2", "file3.txt" }, new byte[] { 8, 9 } },
-            { new[] { "root.txt" }, new byte[] { 10 } }
-        };
+        var files =
+            new Dictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>>
+            {
+                { new[] { "dir1", "file1.txt" }, new byte[] { 1, 2, 3 } },
+                { new[] { "dir1", "file2.txt" }, new byte[] { 4, 5, 6, 7 } },
+                { new[] { "dir2", "file3.txt" }, new byte[] { 8, 9 } },
+                { new[] { "root.txt" }, new byte[] { 10 } }
+            };
 
         var archive = TarGZipArchive.CreateArchive(files);
         var extracted = TarGZipArchive.ExtractArchive(archive);
@@ -50,9 +53,10 @@ public class TarGZipArchiveTests
         extracted.Count.Should().Be(4);
 
         // Convert to string-keyed dictionaries for easier comparison
-        var extractedByPath = extracted.ToDictionary(
-            kvp => string.Join("/", kvp.Key),
-            kvp => kvp.Value);
+        var extractedByPath =
+            extracted.ToDictionary(
+                kvp => string.Join("/", kvp.Key),
+                kvp => kvp.Value);
 
         foreach (var (key, value) in files)
         {
@@ -62,6 +66,7 @@ public class TarGZipArchiveTests
             var extractedBytes = extractedByPath[pathString].ToArray();
             var expectedBytes = value.ToArray();
             extractedBytes.Length.Should().Be(expectedBytes.Length);
+
             for (var i = 0; i < expectedBytes.Length; i++)
             {
                 extractedBytes[i].Should().Be(expectedBytes[i]);
@@ -72,10 +77,11 @@ public class TarGZipArchiveTests
     [Fact]
     public void Roundtrip_empty_file()
     {
-        var files = new Dictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>>
-        {
-            { new[] { "empty.txt" }, Array.Empty<byte>() }
-        };
+        var files =
+            new Dictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>>
+            {
+                { new[] { "empty.txt" }, Array.Empty<byte>() }
+            };
 
         var archive = TarGZipArchive.CreateArchive(files);
         var extracted = TarGZipArchive.ExtractArchive(archive);
@@ -90,17 +96,19 @@ public class TarGZipArchiveTests
     {
         // Create files with repetitive content that compresses well
         var repetitiveContent = new byte[10000];
+
         for (var i = 0; i < repetitiveContent.Length; i++)
         {
             repetitiveContent[i] = (byte)(i % 10);
         }
 
-        var files = new Dictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>>
-        {
-            { new[] { "file1.dat" }, new ReadOnlyMemory<byte>(repetitiveContent) },
-            { new[] { "file2.dat" }, new ReadOnlyMemory<byte>(repetitiveContent) },
-            { new[] { "file3.dat" }, new ReadOnlyMemory<byte>(repetitiveContent) }
-        };
+        var files =
+            new Dictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>>
+            {
+                { new[] { "file1.dat" }, new ReadOnlyMemory<byte>(repetitiveContent) },
+                { new[] { "file2.dat" }, new ReadOnlyMemory<byte>(repetitiveContent) },
+                { new[] { "file3.dat" }, new ReadOnlyMemory<byte>(repetitiveContent) }
+            };
 
         var archive = TarGZipArchive.CreateArchive(files);
 
@@ -115,11 +123,12 @@ public class TarGZipArchiveTests
     [Fact]
     public void Roundtrip_with_special_characters_in_paths()
     {
-        var files = new Dictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>>
-        {
-            { new[] { "dir with spaces", "file-with-dashes.txt" }, new byte[] { 1, 2, 3 } },
-            { new[] { "dir_underscore", "file.extension.multiple.dots" }, new byte[] { 4, 5 } }
-        };
+        var files =
+            new Dictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>>
+            {
+                { new[] { "dir with spaces", "file-with-dashes.txt" }, new byte[] { 1, 2, 3 } },
+                { new[] { "dir_underscore", "file.extension.multiple.dots" }, new byte[] { 4, 5 } }
+            };
 
         var archive = TarGZipArchive.CreateArchive(files);
         var extracted = TarGZipArchive.ExtractArchive(archive);
@@ -127,9 +136,10 @@ public class TarGZipArchiveTests
         extracted.Count.Should().Be(2);
 
         // Convert to string-keyed dictionaries for easier comparison
-        var extractedByPath = extracted.ToDictionary(
-            kvp => string.Join("/", kvp.Key),
-            kvp => kvp.Value);
+        var extractedByPath =
+            extracted.ToDictionary(
+                kvp => string.Join("/", kvp.Key),
+                kvp => kvp.Value);
 
         foreach (var (key, value) in files)
         {
@@ -139,6 +149,7 @@ public class TarGZipArchiveTests
             var extractedBytes = extractedByPath[pathString].ToArray();
             var expectedBytes = value.ToArray();
             extractedBytes.Length.Should().Be(expectedBytes.Length);
+
             for (var i = 0; i < expectedBytes.Length; i++)
             {
                 extractedBytes[i].Should().Be(expectedBytes[i]);
@@ -154,10 +165,11 @@ public class TarGZipArchiveTests
 
         new Random(42).NextBytes(largeContent);
 
-        var files = new Dictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>>
-        {
-            { new[] { "large.bin" }, new ReadOnlyMemory<byte>(largeContent) }
-        };
+        var files =
+            new Dictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>>
+            {
+                { new[] { "large.bin" }, new ReadOnlyMemory<byte>(largeContent) }
+            };
 
         var archive = TarGZipArchive.CreateArchive(files);
         var extracted = TarGZipArchive.ExtractArchive(archive);

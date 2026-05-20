@@ -122,8 +122,7 @@ public class PineValueTests
                         PineValue.List([]), // depth 2
                         PineValue.Blob([1]), // depth 1
                         PineValue.List([PineValue.List([])]), // depth 3
-                        PineValue.List([PineValue.List([PineValue.List([])])])// depth 4
-
+                        PineValue.List([PineValue.List([PineValue.List([])])]) // depth 4
                         ]),
                     expectedMaxDepth = 4L
                 },

@@ -20,7 +20,8 @@ public class ModuleCompilationContextTests
 
         var context =
             new ModuleCompilationContext(
-                AllFunctions: new Dictionary<QualifiedNameRef, (string moduleName, string functionName, SyntaxTypes.Declaration.FunctionDeclaration declaration)>(),
+                AllFunctions:
+                new Dictionary<QualifiedNameRef, (string moduleName, string functionName, SyntaxTypes.Declaration.FunctionDeclaration declaration)>(),
                 CompiledFunctionsCache: [],
                 PineKernelModuleNames: FrozenSet.Create<string>([]),
                 FunctionTypes: new Dictionary<QualifiedNameRef, FunctionTypeInfo>
@@ -47,7 +48,8 @@ public class ModuleCompilationContextTests
 
         var context =
             new ModuleCompilationContext(
-                AllFunctions: new Dictionary<QualifiedNameRef, (string moduleName, string functionName, SyntaxTypes.Declaration.FunctionDeclaration declaration)>(),
+                AllFunctions:
+                new Dictionary<QualifiedNameRef, (string moduleName, string functionName, SyntaxTypes.Declaration.FunctionDeclaration declaration)>(),
                 CompiledFunctionsCache: [],
                 PineKernelModuleNames: FrozenSet.Create<string>([]),
                 ChoiceTagArgumentTypes: new Dictionary<QualifiedNameRef, IReadOnlyList<TypeInference.InferredType>>

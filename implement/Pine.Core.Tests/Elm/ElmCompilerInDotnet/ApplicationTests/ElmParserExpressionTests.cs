@@ -332,14 +332,13 @@ public class ElmParserExpressionTests
         // direct bytecode. The gap is itself a useful signal: it identifies how much work
         // the Elm-source level still entails before optimization, which can guide further
         // optimization opportunities.
-        ElmSyntaxInterpreterPerformanceCountersFormatting.FormatCounts(report.InterpreterCounters)
-            .Should().Be(
-                """
-                InstructionLoopCount: 2_238
-                DirectFunctionApplicationCount: 357
-                FunctionValueApplicationCount: 46
-                PineBuiltinInvocationCount: 116
-                """);
+        ElmSyntaxInterpreterPerformanceCountersFormatting.FormatCounts(report.InterpreterCounters).Should().Be(
+            """
+            InstructionLoopCount: 2_238
+            DirectFunctionApplicationCount: 357
+            FunctionValueApplicationCount: 46
+            PineBuiltinInvocationCount: 116
+            """);
     }
 
     [Fact]
@@ -384,14 +383,13 @@ public class ElmParserExpressionTests
         // See the comment on Expression_char_literal: the interpreter's counts capture work
         // done at the Elm-source level and are useful as a baseline against which to read the
         // VM's optimized cost.
-        ElmSyntaxInterpreterPerformanceCountersFormatting.FormatCounts(report.InterpreterCounters)
-            .Should().Be(
-                """
-                InstructionLoopCount: 4_602
-                DirectFunctionApplicationCount: 798
-                FunctionValueApplicationCount: 98
-                PineBuiltinInvocationCount: 176
-                """);
+        ElmSyntaxInterpreterPerformanceCountersFormatting.FormatCounts(report.InterpreterCounters).Should().Be(
+            """
+            InstructionLoopCount: 4_602
+            DirectFunctionApplicationCount: 798
+            FunctionValueApplicationCount: 98
+            PineBuiltinInvocationCount: 176
+            """);
     }
 
     /// <summary>
@@ -428,14 +426,13 @@ public class ElmParserExpressionTests
             InstructionCount: 2_613
             """);
 
-        ElmSyntaxInterpreterPerformanceCountersFormatting.FormatCounts(report.InterpreterCounters)
-            .Should().Be(
-                """
-                InstructionLoopCount: 4_523
-                DirectFunctionApplicationCount: 774
-                FunctionValueApplicationCount: 98
-                PineBuiltinInvocationCount: 176
-                """);
+        ElmSyntaxInterpreterPerformanceCountersFormatting.FormatCounts(report.InterpreterCounters).Should().Be(
+            """
+            InstructionLoopCount: 4_523
+            DirectFunctionApplicationCount: 774
+            FunctionValueApplicationCount: 98
+            PineBuiltinInvocationCount: 176
+            """);
     }
 
     [Fact]
@@ -680,7 +677,7 @@ public class ElmParserExpressionTests
 
         ElmValue.RenderAsElmExpression(value).expressionString
             .Should().Be(
-                """Ok (OperatorApplication "+" Left (Node { end = { column = 2, row = 1 }, start = { column = 1, row = 1 } } (Integer 1)) (Node { end = { column = 6, row = 1 }, start = { column = 5, row = 1 } } (Integer 2)))""");
+            """Ok (OperatorApplication "+" Left (Node { end = { column = 2, row = 1 }, start = { column = 1, row = 1 } } (Integer 1)) (Node { end = { column = 6, row = 1 }, start = { column = 5, row = 1 } } (Integer 2)))""");
     }
 
     /// <summary>
@@ -703,7 +700,7 @@ public class ElmParserExpressionTests
 
         ElmValue.RenderAsElmExpression(value).expressionString
             .Should().Be(
-                """Ok (OperatorApplication "|>" Left (Node { end = { column = 2, row = 1 }, start = { column = 1, row = 1 } } (FunctionOrValue [] "a")) (Node { end = { column = 7, row = 1 }, start = { column = 6, row = 1 } } (FunctionOrValue [] "b")))""");
+            """Ok (OperatorApplication "|>" Left (Node { end = { column = 2, row = 1 }, start = { column = 1, row = 1 } } (FunctionOrValue [] "a")) (Node { end = { column = 7, row = 1 }, start = { column = 6, row = 1 } } (FunctionOrValue [] "b")))""");
     }
 
     /// <summary>
@@ -724,6 +721,6 @@ public class ElmParserExpressionTests
 
         ElmValue.RenderAsElmExpression(value).expressionString
             .Should().Be(
-                """Ok (OperatorApplication "==" Non (Node { end = { column = 2, row = 1 }, start = { column = 1, row = 1 } } (FunctionOrValue [] "a")) (Node { end = { column = 7, row = 1 }, start = { column = 6, row = 1 } } (FunctionOrValue [] "b")))""");
+            """Ok (OperatorApplication "==" Non (Node { end = { column = 2, row = 1 }, start = { column = 1, row = 1 } } (FunctionOrValue [] "a")) (Node { end = { column = 7, row = 1 }, start = { column = 6, row = 1 } } (FunctionOrValue [] "b")))""");
     }
 }

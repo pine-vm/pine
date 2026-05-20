@@ -43,10 +43,10 @@ public class StaticProgramParserConsolidatedFormTests
                     input:
                     Expression.ListInstance(
                         [
-                            BuildParamReference(0),
-                            BuildParamReference(1),
-                            BuildParamReference(2),
-                            Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(71))
+                        BuildParamReference(0),
+                        BuildParamReference(1),
+                        BuildParamReference(2),
+                        Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(71))
                         ])),
                 parameterCount: 3,
                 envFunctions: []);
@@ -65,11 +65,11 @@ public class StaticProgramParserConsolidatedFormTests
                     input:
                     Expression.ListInstance(
                         [
-                            BuildParamReference(0),
-                            BuildParamReference(1),
-                            BuildParamReference(2),
-                            BuildParamReference(3),
-                            Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(71))
+                        BuildParamReference(0),
+                        BuildParamReference(1),
+                        BuildParamReference(2),
+                        BuildParamReference(3),
+                        Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(71))
                         ])),
                 parameterCount: 4,
                 envFunctions: []);
@@ -124,14 +124,14 @@ public class StaticProgramParserConsolidatedFormTests
         parseResult[DeclQualifiedName.FromString("outer")].BodyExpression.Should().Be(
             StaticExpression<DeclQualifiedName>.ListInstance(
                 [
-                    StaticExpression<DeclQualifiedName>.FunctionApplicationInstance(
-                        functionName: DeclQualifiedName.FromString("callee"),
-                        arguments:
-                        StaticExpression<DeclQualifiedName>.ListInstance(
-                            [
-                                StaticExpression<DeclQualifiedName>.ParameterReference(0),
-                                StaticExpression<DeclQualifiedName>.ParameterReference(1)
-                            ]))
+                StaticExpression<DeclQualifiedName>.FunctionApplicationInstance(
+                    functionName: DeclQualifiedName.FromString("callee"),
+                    arguments:
+                    StaticExpression<DeclQualifiedName>.ListInstance(
+                        [
+                        StaticExpression<DeclQualifiedName>.ParameterReference(0),
+                        StaticExpression<DeclQualifiedName>.ParameterReference(1)
+                        ]))
                 ]));
     }
 
@@ -182,15 +182,15 @@ public class StaticProgramParserConsolidatedFormTests
         parseResult[DeclQualifiedName.FromString("outer")].BodyExpression.Should().Be(
             StaticExpression<DeclQualifiedName>.ListInstance(
                 [
-                    StaticExpression<DeclQualifiedName>.FunctionApplicationInstance(
-                        functionName: DeclQualifiedName.FromString("callee"),
-                        arguments:
-                        StaticExpression<DeclQualifiedName>.ListInstance(
-                            [
-                                StaticExpression<DeclQualifiedName>.ParameterReference(0),
-                                StaticExpression<DeclQualifiedName>.ParameterReference(1),
-                                StaticExpression<DeclQualifiedName>.ParameterReference(2)
-                            ]))
+                StaticExpression<DeclQualifiedName>.FunctionApplicationInstance(
+                    functionName: DeclQualifiedName.FromString("callee"),
+                    arguments:
+                    StaticExpression<DeclQualifiedName>.ListInstance(
+                        [
+                        StaticExpression<DeclQualifiedName>.ParameterReference(0),
+                        StaticExpression<DeclQualifiedName>.ParameterReference(1),
+                        StaticExpression<DeclQualifiedName>.ParameterReference(2)
+                        ]))
                 ]));
     }
 
@@ -242,14 +242,14 @@ public class StaticProgramParserConsolidatedFormTests
         parseResult[DeclQualifiedName.FromString("outer")].BodyExpression.Should().Be(
             StaticExpression<DeclQualifiedName>.ListInstance(
                 [
-                    StaticExpression<DeclQualifiedName>.FunctionApplicationInstance(
-                        functionName: DeclQualifiedName.FromString("callee"),
-                        arguments:
-                        StaticExpression<DeclQualifiedName>.ListInstance(
-                            [
-                                StaticExpression<DeclQualifiedName>.LiteralInstance(arg0.Value),
-                                StaticExpression<DeclQualifiedName>.LiteralInstance(arg1.Value)
-                            ])),
+                StaticExpression<DeclQualifiedName>.FunctionApplicationInstance(
+                    functionName: DeclQualifiedName.FromString("callee"),
+                    arguments:
+                    StaticExpression<DeclQualifiedName>.ListInstance(
+                        [
+                        StaticExpression<DeclQualifiedName>.LiteralInstance(arg0.Value),
+                        StaticExpression<DeclQualifiedName>.LiteralInstance(arg1.Value)
+                        ])),
                 ]));
     }
 }

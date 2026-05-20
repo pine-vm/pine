@@ -480,8 +480,8 @@ public class ParserFastTests
     /// </summary>
     private static (ElmValue value, PerformanceCounters report, IReadOnlyList<EvaluationReport> invocations)
         ApplyAndRecordInvocations(
-            PineValue functionValue,
-            ElmValue argument)
+        PineValue functionValue,
+        ElmValue argument)
     {
         var invocations = new List<EvaluationReport>();
         var vm = ElmCompilerTestHelper.PineVMForProfiling(invocations.Add);
@@ -698,9 +698,9 @@ public class ParserFastTests
         {
             var module =
                 s_compareFramework.Value.PostOptimizationModules
-                    .Single(
-                        f =>
-                        Pine.Core.Elm.ElmSyntax.Stil4mElmSyntax7.Module
+                .Single(
+                    f =>
+                    Pine.Core.Elm.ElmSyntax.Stil4mElmSyntax7.Module
                             .GetModuleName(f.ModuleDefinition.Value).Value
                             is ["ParserFastTestModule"]);
 
@@ -711,14 +711,15 @@ public class ParserFastTests
             {
                 var declNode =
                     fullModuleFile.Declarations
-                        .Single(
-                            d =>
-                            d.Value is Pine.Core.Elm.ElmSyntax.SyntaxModel.Declaration.FunctionDeclaration funcDecl &&
-                            funcDecl.Function.Declaration.Value.Name.Value == name);
+                    .Single(
+                        d =>
+                        d.Value is Pine.Core.Elm.ElmSyntax.SyntaxModel.Declaration.FunctionDeclaration funcDecl &&
+                        funcDecl.Function.Declaration.Value.Name.Value == name);
 
-                return Pine.Core.Elm.ElmSyntax.SnapshotTestFormat.RenderQualifiedDeclaration(
-                    new DeclQualifiedName(["ParserFastTestModule"], name),
-                    declNode.Value);
+                return
+                    Pine.Core.Elm.ElmSyntax.SnapshotTestFormat.RenderQualifiedDeclaration(
+                        new DeclQualifiedName(["ParserFastTestModule"], name),
+                        declNode.Value);
             }
 
             // After the wrapper-with-captured-function specialization fix:
@@ -733,18 +734,18 @@ public class ParserFastTests
             // This is the "Char.isAlpha appears locally in the helper" outcome we wanted.
             var allFunctionDeclNames =
                 fullModuleFile.Declarations
-                    .OfType<Pine.Core.Elm.ElmSyntax.SyntaxModel.Node<
+                .OfType<Pine.Core.Elm.ElmSyntax.SyntaxModel.Node<
                         Pine.Core.Elm.ElmSyntax.SyntaxModel.Declaration>>()
-                    .Select(d => d.Value)
-                    .OfType<Pine.Core.Elm.ElmSyntax.SyntaxModel.Declaration.FunctionDeclaration>()
-                    .Select(d => d.Function.Declaration.Value.Name.Value)
-                    .ToList();
+                .Select(d => d.Value)
+                .OfType<Pine.Core.Elm.ElmSyntax.SyntaxModel.Declaration.FunctionDeclaration>()
+                .Select(d => d.Function.Declaration.Value.Name.Value)
+                .ToList();
 
             allFunctionDeclNames
                 .Should().Contain(
-                    "skipWhileWithoutLinebreakHelp__specialized__1",
-                    "the wrapper-with-captured-function specialization must materialize a "
-                    + "first-order specialized helper with Char.isAlpha embedded locally.");
+                "skipWhileWithoutLinebreakHelp__specialized__1",
+                "the wrapper-with-captured-function specialization must materialize a "
+                + "first-order specialized helper with Char.isAlpha embedded locally.");
 
             var renderedTestEntry = RenderDeclByName("testWithoutLinebreak_alpha");
             var renderedHelperSpecialized = RenderDeclByName("skipWhileWithoutLinebreakHelp__specialized__1");

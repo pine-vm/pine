@@ -74,10 +74,10 @@ public class PartialApplicationTests
         finalResult.Should().Be(
             PineValue.List(
                 [
-                    IntegerEncoding.EncodeSignedInteger(13),
-                    IntegerEncoding.EncodeSignedInteger(17),
-                    IntegerEncoding.EncodeSignedInteger(17),
-                    IntegerEncoding.EncodeSignedInteger(13)
+                IntegerEncoding.EncodeSignedInteger(13),
+                IntegerEncoding.EncodeSignedInteger(17),
+                IntegerEncoding.EncodeSignedInteger(17),
+                IntegerEncoding.EncodeSignedInteger(13)
                 ]));
     }
 
@@ -148,11 +148,11 @@ public class PartialApplicationTests
                 // Use the test helper for the second batch of arguments
 
                 var (finalResult, _) =
-                    ElmCompilerTestHelper.CreateFunctionValueInvocationDelegate(firstApplied.returnValue, parseCache)
-                    ([
+                    ElmCompilerTestHelper.CreateFunctionValueInvocationDelegate(firstApplied.returnValue, parseCache)(
+                        [
                         IntegerEncoding.EncodeSignedInteger(17),
-                    IntegerEncoding.EncodeSignedInteger(19)
-                    ]);
+                        IntegerEncoding.EncodeSignedInteger(19)
+                        ]);
 
                 finalResult.Should().Be(
                     PineValue.List(
@@ -170,9 +170,9 @@ public class PartialApplicationTests
                 var (finalResult, _) =
                     applyTwoArgsInvokeDecl(
                         [
-                            firstApplied.returnValue,
-                            IntegerEncoding.EncodeSignedInteger(17),
-                            IntegerEncoding.EncodeSignedInteger(19)
+                        firstApplied.returnValue,
+                        IntegerEncoding.EncodeSignedInteger(17),
+                        IntegerEncoding.EncodeSignedInteger(19)
                         ]);
 
 
