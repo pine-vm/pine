@@ -447,46 +447,39 @@ public record ExpressionCompilationContext(
     /// Tries to get the type of a local binding by name.
     /// </summary>
     /// <param name="name">The binding name.</param>
-    /// <param name="type">The type if found.</param>
-    /// <returns>True if the binding type was found.</returns>
-    public bool TryGetLocalBindingType(string name, out TypeInference.InferredType? type)
+    /// <returns>The type if found, or null otherwise.</returns>
+    public TypeInference.InferredType? TryGetLocalBindingType(string name)
     {
         if (LocalBindingTypes is { } types && types.TryGetValue(name, out var t))
         {
-            type = t;
-            return true;
+            return t;
         }
 
-        type = null;
-        return false;
+        return null;
     }
 
     /// <summary>
     /// Tries to get a local binding by name.
     /// </summary>
     /// <param name="name">The binding name.</param>
-    /// <param name="expression">The bound expression if found.</param>
-    /// <returns>True if the binding was found.</returns>
-    public bool TryGetLocalBinding(string name, out Expression? expression)
+    /// <returns>The bound expression if found, or null otherwise.</returns>
+    public Expression? TryGetLocalBinding(string name)
     {
         if (LocalBindings is { } bindings && bindings.TryGetValue(name, out var expr))
         {
-            expression = expr;
-            return true;
+            return expr;
         }
 
-        expression = null;
-        return false;
+        return null;
     }
 
     /// <summary>
     /// Tries to get a parameter index by name.
     /// </summary>
     /// <param name="name">The parameter name.</param>
-    /// <param name="index">The parameter index if found.</param>
-    /// <returns>True if the parameter was found.</returns>
-    public bool TryGetParameterIndex(string name, out int index) =>
-        ParameterNames.TryGetValue(name, out index);
+    /// <returns>The parameter index if found, or null otherwise.</returns>
+    public int? TryGetParameterIndex(string name) =>
+        ParameterNames.TryGetValue(name, out var index) ? index : null;
 
     /// <summary>
     /// Gets the index of a function in the dependency layout.

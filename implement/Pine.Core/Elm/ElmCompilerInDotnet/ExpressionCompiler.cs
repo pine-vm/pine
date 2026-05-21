@@ -130,13 +130,13 @@ public class ExpressionCompiler
         if (expr.ModuleName.Count is 0)
         {
             // Check if it's a local binding from pattern matching first
-            if (context.TryGetLocalBinding(expr.Name, out var bindingExpr) && bindingExpr is not null)
+            if (context.TryGetLocalBinding(expr.Name) is { } bindingExpr)
             {
                 return bindingExpr;
             }
 
             // Check if it's a parameter reference
-            if (context.TryGetParameterIndex(expr.Name, out var paramIndex))
+            if (context.TryGetParameterIndex(expr.Name) is { } paramIndex)
             {
                 return BuiltinHelpers.BuildPathToParameter(paramIndex);
             }
@@ -451,13 +451,13 @@ public class ExpressionCompiler
             // where `func` is a parameter that holds a function value
             if (funcRef.ModuleName.Count is 0)
             {
-                if (context.TryGetLocalBinding(funcRef.Name, out var bindingExpr) && bindingExpr is not null)
+                if (context.TryGetLocalBinding(funcRef.Name) is { } bindingExpr)
                 {
                     // Apply arguments to the function value from local binding using generic application
                     return CompileGenericFunctionApplication(bindingExpr, compiledArguments);
                 }
 
-                if (context.TryGetParameterIndex(funcRef.Name, out var paramIndex))
+                if (context.TryGetParameterIndex(funcRef.Name) is { } paramIndex)
                 {
                     // Apply arguments to the function value from parameter using generic application
                     var funcExpr = BuiltinHelpers.BuildPathToParameter(paramIndex);
@@ -798,18 +798,17 @@ public class ExpressionCompiler
         TypeInference.InferredType.RecordType? recordType = null;
 
         // Check if it's a local binding first
-        if (context.TryGetLocalBinding(recordName, out var bindingExpr) && bindingExpr is not null)
+        if (context.TryGetLocalBinding(recordName) is { } bindingExpr)
         {
             recordExpr = bindingExpr;
             // Try to get the type from local bindings
-            if (context.TryGetLocalBindingType(recordName, out var localType) &&
-                localType is TypeInference.InferredType.RecordType localRecordType)
+            if (context.TryGetLocalBindingType(recordName) is TypeInference.InferredType.RecordType localRecordType)
             {
                 recordType = localRecordType;
             }
         }
         // Check if it's a parameter reference
-        else if (context.TryGetParameterIndex(recordName, out var paramIndex))
+        else if (context.TryGetParameterIndex(recordName) is { } paramIndex)
         {
             recordExpr = BuiltinHelpers.BuildPathToParameter(paramIndex);
             // Try to get the type from parameter types
@@ -1084,8 +1083,7 @@ public class ExpressionCompiler
             var varName = funcOrValue.Name;
 
             // Check local binding types first
-            if (context.TryGetLocalBindingType(varName, out var localType) &&
-                localType is TypeInference.InferredType.RecordType localRecordType)
+            if (context.TryGetLocalBindingType(varName) is TypeInference.InferredType.RecordType localRecordType)
             {
                 return localRecordType;
             }
