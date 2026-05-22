@@ -583,36 +583,66 @@ public class Program
                 standardOutput.Write(outputItem.Span);
             }
 
+            standardOutput.Flush();
+
             foreach (var outputItem in mutatingCliApp.DequeueStdErr())
             {
                 standardError.Write(outputItem.Span);
             }
+
+            standardError.Flush();
         }
 
         processStandardInput(ReadOnlyMemory<byte>.Empty);
 
+        if (mutatingCliApp.ExitCode is { } initExitCode)
+        {
+            return initExitCode;
+        }
+
         var buffer = new byte[0x100_000];
+
+        /*
+         * When the standard input has been redirected (for example when this process
+         * is launched as a subprocess by another program or by an integration test),
+         * `Console.ReadKey` throws `InvalidOperationException`. In that case we read
+         * raw bytes from the standard-input stream instead. The `Console.ReadKey`
+         * path is preserved for the interactive terminal case where, on Windows,
+         * reading from the standard-input stream blocks until a line break.
+         * */
+
+        if (Console.IsInputRedirected)
+        {
+            using var standardInput = Console.OpenStandardInput();
+
+            while (true)
+            {
+                var readCount = standardInput.Read(buffer);
+
+                if (readCount < 1)
+                {
+                    /*
+                     * EOF on standard input: forward to the Elm app as a zero-length
+                     * event so it can flush any buffered output, then exit if the
+                     * app has not requested an exit code on its own.
+                     * */
+
+                    processStandardInput(ReadOnlyMemory<byte>.Empty);
+
+                    return mutatingCliApp.ExitCode ?? 0;
+                }
+
+                processStandardInput(buffer.AsMemory()[..readCount]);
+
+                if (mutatingCliApp.ExitCode is { } exitCode)
+                {
+                    return exitCode;
+                }
+            }
+        }
 
         while (true)
         {
-            /*
-             * 2024-10-24:
-             * When testing on Windows 11, observed that `Read` on the stream obtained via Console.OpenStandardInput()
-             * Blocked until the user entered a line-break.
-             * We have not yet found a way to switch the interface into a 'raw' mode to avoid such a block.
-             * To avoid this block, we switch to Console.ReadKey for now.
-             *
-
-            var readCount = standardInput.Read(buffer);
-
-            if (readCount < 1)
-            {
-                continue;
-            }
-
-            var maybeExitCode = processStandardInput(buffer.AsMemory()[..readCount]);
-            */
-
             var keys = new List<ReadOnlyMemory<byte>>(capacity: 100);
 
             void readKey()
