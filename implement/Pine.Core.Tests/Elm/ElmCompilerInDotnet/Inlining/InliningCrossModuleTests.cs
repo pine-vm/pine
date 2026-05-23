@@ -925,7 +925,7 @@ public class InliningCrossModuleTests
                 | Non
 
 
-            Elm.Parser.Declarations.infixDirectionOnlyTwo : ParserFast.Parser ParserFast.Node Infix.InfixDirection
+            Elm.Parser.Declarations.infixDirectionOnlyTwo : ParserFast.Parser (ParserFast.Node Infix.InfixDirection)
             Elm.Parser.Declarations.infixDirectionOnlyTwo =
                 let
                     (ParserFast.Parser attemptFirst) =
@@ -1304,7 +1304,7 @@ public class InliningCrossModuleTests
                 = CharLiteral Char
 
 
-            Elm.Parser.Expression.charLiteralExpression : ParserFast.Parser ParserWithComments.WithComments Elm.Syntax.Node.Node Elm.Parser.Expression.Expression
+            Elm.Parser.Expression.charLiteralExpression : ParserFast.Parser (ParserWithComments.WithComments (Elm.Syntax.Node.Node Elm.Parser.Expression.Expression))
             Elm.Parser.Expression.charLiteralExpression =
                 ParserFast.symbolFollowedBy
                     "'"
@@ -1754,7 +1754,7 @@ public class InliningCrossModuleTests
                                 s0
 
 
-            Elm.Parser.Expression.multiRecordAccess : ParserFast.Parser List.List Elm.Syntax.Node.Node String
+            Elm.Parser.Expression.multiRecordAccess : ParserFast.Parser (List.List (Elm.Syntax.Node.Node String))
             Elm.Parser.Expression.multiRecordAccess =
                 ParserFast.Parser
                     Elm.Parser.Expression.multiRecordAccess__lifted__lambda1

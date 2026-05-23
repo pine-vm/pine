@@ -270,7 +270,7 @@ public static class ToFullSyntaxModel
             TypeAnnotation.Typed typed =>
             new FullTypes.TypeAnnotation.Typed(
                 ConvertNodePreserveValue(typed.TypeName),
-                ConvertNodes(typed.TypeArguments, Convert)),
+                [.. typed.TypeArguments.Select(ConvertTypedTypeArgument)]),
 
             TypeAnnotation.Unit =>
             new FullTypes.TypeAnnotation.Unit(),
@@ -629,31 +629,98 @@ public static class ToFullSyntaxModel
     {
         if (node.Value is TypeAnnotation.FunctionTypeAnnotation)
         {
-            // Wrap in parentheses using Tupled with a single element
-            var convertedInner = Convert(node.Value);
-            var innerNode = new Node<FullTypes.TypeAnnotation>(s_defaultRange, convertedInner);
-
-            var tupled =
-                new FullTypes.TypeAnnotation.Tupled(
-                    TypeAnnotations: new SeparatedSyntaxList<Node<FullTypes.TypeAnnotation>>.NonEmpty(
-                        innerNode,
-                        []));
-
-            return new Node<FullTypes.TypeAnnotation>(s_defaultRange, tupled);
+            return WrapInParens(Convert(node.Value));
         }
 
         return ConvertNode(node, Convert);
     }
 
     /// <summary>
-    /// Converts a type annotation used as a constructor argument.
-    /// Constructor arguments that are function types need parentheses, since
-    /// <c>TaggedFunc (a -> b)</c> is different from <c>TaggedFunc a -> b</c>.
-    /// The same wrapping logic as <see cref="ConvertFunctionTypeArgument"/> applies.
+    /// Converts a type annotation used as a constructor argument
+    /// (e.g. <c>Bar</c> in <c>type Foo = Bar (Maybe a)</c>).
+    /// Constructor arguments need parentheses around both
+    /// function types (<c>Bar (a -&gt; b)</c> vs <c>Bar a -&gt; b</c>)
+    /// and around any <see cref="TypeAnnotation.Typed"/> whose own
+    /// type-arguments are non-empty (<c>Bar (Maybe a)</c> vs
+    /// <c>Bar Maybe a</c>) — the latter would reparse as <c>Bar</c>
+    /// taking two type arguments. Delegates to the unified
+    /// <see cref="ConvertTypedTypeArgument"/> helper which encodes
+    /// the full set of positions where parens have to be restored
+    /// after the round-trip through the Stil4m simplified model
+    /// strips single-element <see cref="TypeAnnotation.Tupled"/>
+    /// wrappers in
+    /// <see cref="FromFullSyntaxModel.Convert(TypeAnnotation)"/>.
     /// </summary>
     private static Node<FullTypes.TypeAnnotation> ConvertConstructorArgument(
         Node<TypeAnnotation> node) =>
-        ConvertFunctionTypeArgument(node);
+        ConvertTypedTypeArgument(node);
+
+    /// <summary>
+    /// Converts a type annotation that appears as a type argument of a
+    /// <see cref="TypeAnnotation.Typed"/> (e.g. the <c>(a -&gt; a)</c>
+    /// in <c>Wrap (a -&gt; a)</c>) or as a constructor argument
+    /// (delegated to via <see cref="ConvertConstructorArgument"/>).
+    /// <para>
+    /// Wraps the converted annotation in a single-element
+    /// <see cref="FullTypes.TypeAnnotation.Tupled"/> (which the
+    /// formatter renders as <c>(element)</c>) whenever omitting
+    /// the parentheses would let the surrounding shape reparse
+    /// differently:
+    /// </para>
+    /// <list type="bullet">
+    ///   <item><see cref="TypeAnnotation.FunctionTypeAnnotation"/> — without
+    ///     parens, the outer arrow would consume the inner arrow's
+    ///     parameter (<c>Wrap a -&gt; a</c> instead of
+    ///     <c>Wrap (a -&gt; a)</c>).</item>
+    ///   <item><see cref="TypeAnnotation.Typed"/> with non-empty
+    ///     <see cref="TypeAnnotation.Typed.TypeArguments"/> — without
+    ///     parens, the outer type would absorb the inner type's
+    ///     arguments (<c>Wrap Maybe a</c> instead of
+    ///     <c>Wrap (Maybe a)</c>).</item>
+    /// </list>
+    /// <para>
+    /// All other shapes (<see cref="TypeAnnotation.GenericType"/>,
+    /// zero-arg <see cref="TypeAnnotation.Typed"/>,
+    /// <see cref="TypeAnnotation.Unit"/>, multi-element
+    /// <see cref="TypeAnnotation.Tupled"/>,
+    /// <see cref="TypeAnnotation.Record"/>,
+    /// <see cref="TypeAnnotation.GenericRecord"/>) are already
+    /// single lexical units after rendering, so no extra parens
+    /// are added.
+    /// </para>
+    /// </summary>
+    private static Node<FullTypes.TypeAnnotation> ConvertTypedTypeArgument(
+        Node<TypeAnnotation> node)
+    {
+        if (NeedsParensAsTypeArgument(node.Value))
+        {
+            return WrapInParens(Convert(node.Value));
+        }
+
+        return ConvertNode(node, Convert);
+    }
+
+    private static bool NeedsParensAsTypeArgument(TypeAnnotation value) =>
+        value switch
+        {
+            TypeAnnotation.FunctionTypeAnnotation => true,
+            TypeAnnotation.Typed typedArg => typedArg.TypeArguments.Count > 0,
+            _ => false,
+        };
+
+    private static Node<FullTypes.TypeAnnotation> WrapInParens(
+        FullTypes.TypeAnnotation convertedInner)
+    {
+        var innerNode = new Node<FullTypes.TypeAnnotation>(s_defaultRange, convertedInner);
+
+        var tupled =
+            new FullTypes.TypeAnnotation.Tupled(
+                TypeAnnotations: new SeparatedSyntaxList<Node<FullTypes.TypeAnnotation>>.NonEmpty(
+                    innerNode,
+                    []));
+
+        return new Node<FullTypes.TypeAnnotation>(s_defaultRange, tupled);
+    }
 
     private static Node<TResult> ConvertNode<TSource, TResult>(
         Node<TSource> node,

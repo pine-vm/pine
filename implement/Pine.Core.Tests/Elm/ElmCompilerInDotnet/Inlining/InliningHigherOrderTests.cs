@@ -244,7 +244,7 @@ public class InliningHigherOrderTests
                             )
 
 
-            App.result : List.List Int -> List.List List.List Int
+            App.result : List.List Int -> List.List (List.List Int)
             App.result list =
                 [ App.listMap__specialized__2
                     list

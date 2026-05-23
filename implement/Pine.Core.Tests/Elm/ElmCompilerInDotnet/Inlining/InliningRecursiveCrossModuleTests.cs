@@ -55,7 +55,7 @@ public class InliningRecursiveCrossModuleTests
                             acc
 
 
-            App.mapInst : List.List a -> List.List List.List a
+            App.mapInst : List.List a -> List.List (List.List a)
             App.mapInst xs =
                 App.mapHelp__specialized__1
                     xs
