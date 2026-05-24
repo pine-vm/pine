@@ -25,14 +25,21 @@ singleLineComment =
 
 multilineComment : ParserFast.Parser (Node String)
 multilineComment =
-    ParserFast.offsetSourceAndThen
-        (\offsetBytes sourceBytes ->
-            case Pine_kernel.take [ 4, Pine_kernel.skip [ offsetBytes + 8, sourceBytes ] ] of
-                '|' ->
-                    problemUnexpectedDocumentation
+    ParserFast.Parser
+        (\state ->
+            let
+                (ParserFast.PState sourceBytes offsetBytes _ _ _) =
+                    state
 
-                _ ->
-                    multiLineCommentNoCheck
+                (ParserFast.Parser chosen) =
+                    case Pine_kernel.take [ 4, Pine_kernel.skip [ Pine_kernel.int_add [ offsetBytes, 8 ], sourceBytes ] ] of
+                        '|' ->
+                            problemUnexpectedDocumentation
+
+                        _ ->
+                            multiLineCommentNoCheck
+            in
+            chosen state
         )
 
 

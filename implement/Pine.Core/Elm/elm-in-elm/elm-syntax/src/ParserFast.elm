@@ -9,8 +9,8 @@ module ParserFast exposing
     , map2, map2WithStartLocation, map2WithRange, map3, map3WithStartLocation, map3WithRange, map4, map4WithRange, map5, map5WithStartLocation, map5WithRange, map6, map6WithStartLocation, map6WithRange, map7WithRange, map8WithStartLocation, map9WithRange
     , loopWhileSucceeds, loopWhileSucceedsOntoResultFromParser, loopUntil
     , orSucceed, map2OrSucceed, map2WithRangeOrSucceed, map3OrSucceed, map4OrSucceed, oneOf2, oneOf2Map, oneOf2MapWithStartRowColumnAndEndRowColumn, oneOf2OrSucceed, oneOf3, oneOf4, oneOf5, oneOf7, oneOf9
-    , withIndentSetToColumn, withIndentSetToColumnMinus, columnIndentAndThen, validateEndColumnIndentation
-    , mapWithRange, columnAndThen, offsetSourceAndThen, offsetSourceAndThenOrSucceed
+    , withIndentSetToColumn, withIndentSetToColumnMinus, validateEndColumnIndentation
+    , mapWithRange
     , problem
     )
 
@@ -114,8 +114,8 @@ Once a path is chosen, it does not come back and try the others.
 
 # Indentation, Locations and source
 
-@docs withIndentSetToColumn, withIndentSetToColumnMinus, columnIndentAndThen, validateEndColumnIndentation
-@docs mapWithRange, columnAndThen, offsetSourceAndThen, offsetSourceAndThenOrSucceed
+@docs withIndentSetToColumn, withIndentSetToColumnMinus, validateEndColumnIndentation
+@docs mapWithRange
 @docs problem
 
 
@@ -319,47 +319,17 @@ validate isOkay problemOnNotOkay (Parser parseA) =
         )
 
 
-columnAndThen : (Int -> Parser a) -> Parser a
-columnAndThen callback =
-    Parser
-        (\s ->
-            let
-                (PState _ _ _ _ col) =
-                    s
-
-                (Parser parse) =
-                    callback col
-            in
-            parse s
-        )
-
-
 {-| Can be used to verify the current indentation like this:
 
     checkIndent : Parser ()
     checkIndent =
-        columnIndentAndThen (\indent column -> column > indent)
+        validateEndColumnIndentation (\column indent -> column > indent)
             "expecting more spaces"
 
 So the `checkIndent` parser only succeeds when you are "deeper" than the
 current indent level. You could use this to parse elm-style `let` expressions.
 
 -}
-columnIndentAndThen : (Int -> Int -> Parser b) -> Parser b
-columnIndentAndThen callback =
-    Parser
-        (\s ->
-            let
-                (PState _ _ indent _ col) =
-                    s
-
-                (Parser parse) =
-                    callback col indent
-            in
-            parse s
-        )
-
-
 validateEndColumnIndentation : (Int -> Int -> Bool) -> String -> Parser a -> Parser a
 validateEndColumnIndentation isOkay problemOnIsNotOkay (Parser parse) =
     Parser
@@ -378,48 +348,6 @@ validateEndColumnIndentation isOkay problemOnIsNotOkay (Parser parse) =
 
                 bad ->
                     bad
-        )
-
-
-{-| Editors think of code as a grid, but behind the scenes it is just a flat
-array of UTF-16 characters. `getOffset` tells you your index in that flat
-array. So if you consume `"\n\n\n\n"` you are on row 5, column 1, and offset 4.
-
-**Note:** JavaScript uses a somewhat odd version of UTF-16 strings, so a single
-character may take two slots. So in JavaScript, `'abc'.length === 3` but
-`'🙈🙉🙊'.length === 6`. Try it out! And since Elm runs in JavaScript, the offset
-moves by those rules.
-
--}
-offsetSourceAndThen : (Int -> Int -> Parser a) -> Parser a
-offsetSourceAndThen callback =
-    Parser
-        (\s ->
-            let
-                (PState srcBytes offset _ _ _) =
-                    s
-
-                (Parser parse) =
-                    callback offset srcBytes
-            in
-            parse s
-        )
-
-
-offsetSourceAndThenOrSucceed : (Int -> Int -> Maybe (Parser a)) -> a -> Parser a
-offsetSourceAndThenOrSucceed callback fallback =
-    Parser
-        (\s ->
-            let
-                (PState srcBytes offsetBytes _ _ _) =
-                    s
-            in
-            case callback offsetBytes srcBytes of
-                Nothing ->
-                    Good fallback s
-
-                Just (Parser parse) ->
-                    parse s
         )
 
 

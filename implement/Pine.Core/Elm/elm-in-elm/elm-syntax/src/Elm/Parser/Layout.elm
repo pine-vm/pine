@@ -25,9 +25,12 @@ whitespaceAndCommentsOrEmpty =
         --
         -- since comments are comparatively rare
         -- but expensive to check for, we allow shortcutting
-        (ParserFast.offsetSourceAndThenOrSucceed
-            (\offsetBytes sourceBytes ->
+        (ParserFast.Parser
+            (\state ->
                 let
+                    (ParserFast.PState sourceBytes offsetBytes _ _ _) =
+                        state
+
                     nextTwoChars =
                         Pine_kernel.take
                             [ 8
@@ -36,15 +39,22 @@ whitespaceAndCommentsOrEmpty =
                 in
                 if Pine_kernel.equal [ nextTwoChars, Pine_kernel.concat [ '-', '-' ] ] then
                     -- this will always succeed from here, so no need to fall back to Rope.empty
-                    Just fromSingleLineCommentNode
+                    let
+                        (ParserFast.Parser parse) =
+                            fromSingleLineCommentNode
+                    in
+                    parse state
 
                 else if Pine_kernel.equal [ nextTwoChars, Pine_kernel.concat [ '{', '-' ] ] then
-                    Just fromMultilineCommentNodeOrEmptyOnProblem
+                    let
+                        (ParserFast.Parser parse) =
+                            fromMultilineCommentNodeOrEmptyOnProblem
+                    in
+                    parse state
 
                 else
-                    Nothing
+                    ParserFast.Good Rope.empty state
             )
-            Rope.empty
         )
 
 
@@ -95,16 +105,7 @@ endsPositivelyIndented : Parser a -> Parser a
 endsPositivelyIndented parser =
     ParserFast.validateEndColumnIndentation
         (\column indent ->
-            let
-                columnInt : Int
-                columnInt =
-                    column
-
-                indentInt : Int
-                indentInt =
-                    indent
-            in
-            columnInt > indentInt
+            Pine_kernel.int_is_sorted_asc [ Pine_kernel.int_add [ indent, 1 ], column ]
         )
         "must be positively indented"
         parser
@@ -115,49 +116,42 @@ would be valid after [`maybeLayout`](#maybeLayout)
 -}
 positivelyIndentedPlusFollowedBy : Int -> Parser a -> Parser a
 positivelyIndentedPlusFollowedBy extraIndent nextParser =
-    ParserFast.columnIndentAndThen
-        (\column indent ->
+    ParserFast.Parser
+        (\state ->
             let
-                columnInt : Int
-                columnInt =
-                    column
-
-                indentInt : Int
-                indentInt =
-                    indent
+                (ParserFast.PState _ _ indent row column) =
+                    state
             in
-            if columnInt > indentInt + extraIndent then
-                nextParser
+            if Pine_kernel.int_is_sorted_asc [ Pine_kernel.int_add [ indent, extraIndent, 1 ], column ] then
+                let
+                    (ParserFast.Parser nextParser_unwrapped) =
+                        nextParser
+                in
+                nextParser_unwrapped state
 
             else
-                problemPositivelyIndented
+                ParserFast.Bad False (ParserFast.ExpectingCustom row column "must be positively indented")
         )
 
 
 positivelyIndentedFollowedBy : Parser a -> Parser a
 positivelyIndentedFollowedBy nextParser =
-    ParserFast.columnIndentAndThen
-        (\column indent ->
+    ParserFast.Parser
+        (\state ->
             let
-                columnInt : Int
-                columnInt =
-                    column
-
-                indentInt : Int
-                indentInt =
-                    indent
+                (ParserFast.PState _ _ indent row column) =
+                    state
             in
-            if columnInt > indentInt then
-                nextParser
+            if Pine_kernel.int_is_sorted_asc [ Pine_kernel.int_add [ indent, 1 ], column ] then
+                let
+                    (ParserFast.Parser nextParser_unwrapped) =
+                        nextParser
+                in
+                nextParser_unwrapped state
 
             else
-                problemPositivelyIndented
+                ParserFast.Bad False (ParserFast.ExpectingCustom row column "must be positively indented")
         )
-
-
-problemPositivelyIndented : Parser a
-problemPositivelyIndented =
-    ParserFast.problem "must be positively indented"
 
 
 optimisticLayout : Parser Comments
@@ -206,19 +200,22 @@ layoutStrict =
 
 moduleLevelIndentationFollowedBy : Parser a -> Parser a
 moduleLevelIndentationFollowedBy nextParser =
-    ParserFast.columnAndThen
-        (\column ->
+    ParserFast.Parser
+        (\state ->
+            let
+                (ParserFast.PState _ _ _ row column) =
+                    state
+            in
             if Pine_kernel.equal [ column, 1 ] then
-                nextParser
+                let
+                    (ParserFast.Parser nextParser_unwrapped) =
+                        nextParser
+                in
+                nextParser_unwrapped state
 
             else
-                problemModuleLevelIndentation
+                ParserFast.Bad False (ParserFast.ExpectingCustom row column "must be on module-level indentation")
         )
-
-
-problemModuleLevelIndentation : Parser a
-problemModuleLevelIndentation =
-    ParserFast.problem "must be on module-level indentation"
 
 
 endsTopIndented : Parser a -> Parser a
@@ -231,19 +228,22 @@ endsTopIndented parser =
 
 onTopIndentationFollowedBy : Parser a -> Parser a
 onTopIndentationFollowedBy nextParser =
-    ParserFast.columnIndentAndThen
-        (\column indent ->
+    ParserFast.Parser
+        (\state ->
+            let
+                (ParserFast.PState _ _ indent row column) =
+                    state
+            in
             if Pine_kernel.equal [ column, indent ] then
-                nextParser
+                let
+                    (ParserFast.Parser nextParser_unwrapped) =
+                        nextParser
+                in
+                nextParser_unwrapped state
 
             else
-                problemTopIndentation
+                ParserFast.Bad False (ParserFast.ExpectingCustom row column "must be on top indentation")
         )
-
-
-problemTopIndentation : Parser a
-problemTopIndentation =
-    ParserFast.problem "must be on top indentation"
 
 
 maybeAroundBothSides : Parser (WithComments b) -> Parser (WithComments b)

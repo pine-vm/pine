@@ -20,44 +20,51 @@ subExpression =
     -- functionally, a simple oneOf would be correct as well.
     -- However, since this parser is called _a lot_,
     --   we squeeze out a bit more speed by de-duplicating slices etc
-    ParserFast.offsetSourceAndThen
-        (\offsetBytes sourceBytes ->
-            case Pine_kernel.take [ 4, Pine_kernel.skip [ offsetBytes, sourceBytes ] ] of
-                '"' ->
-                    literalExpression
+    ParserFast.Parser
+        (\state ->
+            let
+                (ParserFast.PState sourceBytes offsetBytes _ _ _) =
+                    state
 
-                '(' ->
-                    tupledExpressionIfNecessaryFollowedByRecordAccess
+                (ParserFast.Parser chosen) =
+                    case Pine_kernel.take [ 4, Pine_kernel.skip [ offsetBytes, sourceBytes ] ] of
+                        '"' ->
+                            literalExpression
 
-                '[' ->
-                    listOrGlslExpression
+                        '(' ->
+                            tupledExpressionIfNecessaryFollowedByRecordAccess
 
-                '{' ->
-                    recordExpressionFollowedByRecordAccess
+                        '[' ->
+                            listOrGlslExpression
 
-                'c' ->
-                    caseOrUnqualifiedReferenceExpression
+                        '{' ->
+                            recordExpressionFollowedByRecordAccess
 
-                '\\' ->
-                    lambdaExpression
+                        'c' ->
+                            caseOrUnqualifiedReferenceExpression
 
-                'l' ->
-                    letOrUnqualifiedReferenceExpression
+                        '\\' ->
+                            lambdaExpression
 
-                'i' ->
-                    ifOrUnqualifiedReferenceExpression
+                        'l' ->
+                            letOrUnqualifiedReferenceExpression
 
-                '.' ->
-                    recordAccessFunctionExpression
+                        'i' ->
+                            ifOrUnqualifiedReferenceExpression
 
-                '-' ->
-                    negationOperation
+                        '.' ->
+                            recordAccessFunctionExpression
 
-                '\'' ->
-                    charLiteralExpression
+                        '-' ->
+                            negationOperation
 
-                _ ->
-                    referenceOrNumberExpression
+                        '\'' ->
+                            charLiteralExpression
+
+                        _ ->
+                            referenceOrNumberExpression
+            in
+            chosen state
         )
 
 
@@ -1058,30 +1065,37 @@ ifBlockExpression =
 negationOperation : Parser (WithComments (Node Expression))
 negationOperation =
     ParserFast.symbolBacktrackableFollowedBy "-"
-        (ParserFast.offsetSourceAndThen
-            (\offsetBytes sourceBytes ->
-                case
-                    Pine_kernel.take
-                        [ 4
-                        , Pine_kernel.skip [ Pine_kernel.int_add [ offsetBytes, -8 ], sourceBytes ]
-                        ]
-                of
-                    ' ' ->
-                        negationAfterMinus
+        (ParserFast.Parser
+            (\state ->
+                let
+                    (ParserFast.PState sourceBytes offsetBytes _ _ _) =
+                        state
 
-                    -- not "\n" or "\r" since expressions are always indented
-                    '(' ->
-                        negationAfterMinus
+                    (ParserFast.Parser chosen) =
+                        case
+                            Pine_kernel.take
+                                [ 4
+                                , Pine_kernel.skip [ Pine_kernel.int_add [ offsetBytes, -8 ], sourceBytes ]
+                                ]
+                        of
+                            ' ' ->
+                                negationAfterMinus
 
-                    ')' ->
-                        negationAfterMinus
+                            -- not "\n" or "\r" since expressions are always indented
+                            '(' ->
+                                negationAfterMinus
 
-                    -- from the end of a multiline comment
-                    '}' ->
-                        negationAfterMinus
+                            ')' ->
+                                negationAfterMinus
 
-                    _ ->
-                        negationWhitespaceProblem
+                            -- from the end of a multiline comment
+                            '}' ->
+                                negationAfterMinus
+
+                            _ ->
+                                negationWhitespaceProblem
+                in
+                chosen state
             )
         )
 
@@ -1269,8 +1283,14 @@ allowedPrefixOperatorFollowedByClosingParensOneOf =
             WithComments
                 Rope.empty
                 (Node
-                    { start = { row = operatorRange.start.row, column = operatorRange.start.column - 1 }
-                    , end = { row = operatorRange.end.row, column = operatorRange.end.column + 1 }
+                    { start =
+                        { row = operatorRange.start.row
+                        , column = Pine_kernel.int_add [ operatorRange.start.column, -1 ]
+                        }
+                    , end =
+                        { row = operatorRange.end.row
+                        , column = Pine_kernel.int_add [ operatorRange.end.column, 1 ]
+                        }
                     }
                     (PrefixOperator operator)
                 )
@@ -1636,12 +1656,7 @@ infixLeft leftPrecedence symbol =
             Layout.maybeLayout
             (extendedSubExpressionOptimisticLayout
                 (\info ->
-                    let
-                        infoLeftPrecedence : Int
-                        infoLeftPrecedence =
-                            info.leftPrecedence
-                    in
-                    if infoLeftPrecedence > leftPrecedence then
+                    if Pine_kernel.int_is_sorted_asc [ Pine_kernel.int_add [ leftPrecedence, 1 ], info.leftPrecedence ] then
                         Ok info
 
                     else
