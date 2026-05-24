@@ -53,7 +53,7 @@ public class LoopIterationCountLimitTests
             evaluationResult
             .Unpack(
                 fromErr: err => err.Message,
-                fromOk: _ => (string?)null);
+                fromOk: _ => null);
 
         error.Should().NotBeNull(
             "evaluating an infinite loop with a loop iteration count limit must return an error");
@@ -98,7 +98,7 @@ public class LoopIterationCountLimitTests
             evaluationResult
             .Unpack(
                 fromErr: err => err.Message,
-                fromOk: _ => (string?)null);
+                fromOk: _ => null);
 
         error.Should().NotBeNull();
 
