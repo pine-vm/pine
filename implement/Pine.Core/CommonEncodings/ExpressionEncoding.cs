@@ -15,11 +15,61 @@ public static class ExpressionEncoding
     /// This is the encoding used to map from data to code when evaluating a <see cref="Expression.ParseAndEval"/> expression.
     /// </summary>
     public static PineValue.ListValue EncodeExpressionAsValue(Expression expression) =>
-        ReusedInstances.Instance.ExpressionEncodings?.TryGetValue(expression, out var encoded) ?? false && encoded is not null
-        ?
-        encoded
-        :
-        expression switch
+        EncodeExpressionAsValue(expression, cache: null);
+
+    /// <summary>
+    /// The standard encoding of Pine expression as Pine value, optionally backed by a per-call
+    /// <see cref="PineExpressionEncodingCache"/> that memoizes results of repeated encoding of the
+    /// same <see cref="Expression"/> (and shared subtrees) across calls.
+    /// </summary>
+    /// <param name="expression">The expression to encode.</param>
+    /// <param name="cache">
+    /// Optional cache used to memoize encoding results. When non-null, the cache is consulted
+    /// before encoding and updated with the result. Recursive sub-encodings are threaded through
+    /// the same cache. Pass <see langword="null"/> to skip caching.
+    /// </param>
+    public static PineValue.ListValue EncodeExpressionAsValue(
+        Expression expression,
+        PineExpressionEncodingCache? cache)
+    {
+        if (cache is not null)
+            return cache.EncodeExpressionAsValue(expression);
+
+        if (expression.SubexpressionCount > 100)
+        {
+        }
+
+        return EncodeExpressionAsValueWithoutTopLevelCacheLookup(expression, EncodeExpressionAsValue);
+    }
+
+    /// <summary>
+    /// Performs the actual switch over <paramref name="expression"/> kinds without consulting any
+    /// top-level cache for <paramref name="expression"/> itself. Recursive sub-encodings are
+    /// delegated to <paramref name="encodeSubexpression"/>, which the caller uses to thread a
+    /// cache, an instrumentation hook, or any other intermediary.
+    /// <para>
+    /// <see cref="PineExpressionEncodingCache"/> uses this overload as its factory body, passing
+    /// its own <see cref="PineExpressionEncodingCache.EncodeExpressionAsValue(Expression)"/> as
+    /// <paramref name="encodeSubexpression"/>, so that recursive sub-encodings hit the same cache
+    /// while the entry for the key currently being populated is not re-looked-up.
+    /// </para>
+    /// <para>
+    /// Tests can supply a counting/instrumenting delegate as <paramref name="encodeSubexpression"/>
+    /// to verify that every direct subexpression of the input is consulted.
+    /// </para>
+    /// </summary>
+    /// <param name="expression">The expression to encode.</param>
+    /// <param name="encodeSubexpression">
+    /// Delegate used to encode each direct subexpression of <paramref name="expression"/>.
+    /// </param>
+    public static PineValue.ListValue EncodeExpressionAsValueWithoutTopLevelCacheLookup(
+        Expression expression,
+        Func<Expression, PineValue.ListValue> encodeSubexpression)
+    {
+        if ((ReusedInstances.Instance.ExpressionEncodings?.TryGetValue(expression, out var encoded) ?? false) && encoded is not null)
+            return encoded;
+
+        return expression switch
         {
             Expression.Literal literal =>
             EncodeChoiceTypeVariantAsPineValue(
@@ -30,40 +80,43 @@ public static class ExpressionEncoding
             s_environmentExpressionValue,
 
             Expression.List list =>
-            EncodeListExpressionAsValue(list),
+            EncodeListExpressionAsValue(list, encodeSubexpression),
 
             Expression.Conditional conditional =>
-            EncodeConditional(conditional),
+            EncodeConditional(conditional, encodeSubexpression),
 
             Expression.ParseAndEval parseAndEval =>
-            EncodeParseAndEval(parseAndEval),
+            EncodeParseAndEval(parseAndEval, encodeSubexpression),
 
             Expression.KernelApplication kernelAppl =>
-            EncodeKernelApplication(kernelAppl),
+            EncodeKernelApplication(kernelAppl, encodeSubexpression),
 
             Expression.StringTag stringTag =>
             EncodeChoiceTypeVariantAsPineValue(
                 "StringTag",
                 PineValue.List(
                     [StringEncoding.ValueFromString(stringTag.Tag),
-                    EncodeExpressionAsValue(stringTag.Tagged)
+                    encodeSubexpression(stringTag.Tagged)
                     ])),
 
             _ =>
             throw new Exception(
                 "Unsupported expression type: " + expression.GetType().FullName)
         };
+    }
 
     private static readonly PineValue.ListValue s_environmentExpressionValue =
         EncodeChoiceTypeVariantAsPineValue("Environment", PineValue.EmptyList);
 
-    private static PineValue.ListValue EncodeListExpressionAsValue(Expression.List list)
+    private static PineValue.ListValue EncodeListExpressionAsValue(
+        Expression.List list,
+        Func<Expression, PineValue.ListValue> encodeSubexpression)
     {
         var encodedItems = new PineValue[list.Items.Count];
 
         for (var i = 0; i < list.Items.Count; ++i)
         {
-            encodedItems[i] = EncodeExpressionAsValue(list.Items[i]);
+            encodedItems[i] = encodeSubexpression(list.Items[i]);
         }
 
         return
@@ -81,7 +134,7 @@ public static class ExpressionEncoding
     /// and <c>Err</c> contains a diagnostic message if decoding fails.
     /// </returns>
     /// <remarks>
-    /// Inverse of <see cref="EncodeExpressionAsValue"/>.
+    /// Inverse of <see cref="EncodeExpressionAsValue(Expression)"/>.
     /// This overload delegates to <see cref="ParseExpressionFromValue(PineValue, Func{PineValue, Result{string, Expression}})"/>
     /// using itself as the <c>generalParser</c> for nested expressions.
     /// </remarks>
@@ -207,12 +260,14 @@ public static class ExpressionEncoding
         return Expression.ListInstance(expressions);
     }
 
-    private static PineValue.ListValue EncodeParseAndEval(Expression.ParseAndEval parseAndEval) =>
+    private static PineValue.ListValue EncodeParseAndEval(
+        Expression.ParseAndEval parseAndEval,
+        Func<Expression, PineValue.ListValue> encodeSubexpression) =>
         EncodeChoiceTypeVariantAsPineValue("ParseAndEval",
             PineValue.List(
                 [
-                EncodeExpressionAsValue(parseAndEval.Encoded),
-                EncodeExpressionAsValue(parseAndEval.Environment)
+                encodeSubexpression(parseAndEval.Encoded),
+                encodeSubexpression(parseAndEval.Environment)
                 ]));
 
     private static Result<string, Expression> ParseParseAndEval(
@@ -257,13 +312,14 @@ public static class ExpressionEncoding
     /// Encodes a kernel application expression as a Pine value.
     /// </summary>
     private static PineValue.ListValue EncodeKernelApplication(
-        Expression.KernelApplication kernelApplicationExpression) =>
+        Expression.KernelApplication kernelApplicationExpression,
+        Func<Expression, PineValue.ListValue> encodeSubexpression) =>
         EncodeChoiceTypeVariantAsPineValue(
             "KernelApplication",
             PineValue.List(
                 [
                 StringEncoding.ValueFromString(kernelApplicationExpression.Function),
-                EncodeExpressionAsValue(kernelApplicationExpression.Input)
+                encodeSubexpression(kernelApplicationExpression.Input)
                 ]));
 
     private static Result<string, Expression> ParseKernelApplication(
@@ -306,14 +362,15 @@ public static class ExpressionEncoding
     }
 
     private static PineValue.ListValue EncodeConditional(
-        Expression.Conditional conditionalExpression) =>
+        Expression.Conditional conditionalExpression,
+        Func<Expression, PineValue.ListValue> encodeSubexpression) =>
         EncodeChoiceTypeVariantAsPineValue(
             "Conditional",
             PineValue.List(
                 [
-                EncodeExpressionAsValue(conditionalExpression.Condition),
-                EncodeExpressionAsValue(conditionalExpression.FalseBranch),
-                EncodeExpressionAsValue(conditionalExpression.TrueBranch)
+                encodeSubexpression(conditionalExpression.Condition),
+                encodeSubexpression(conditionalExpression.FalseBranch),
+                encodeSubexpression(conditionalExpression.TrueBranch)
                 ]));
 
     private static Result<string, Expression> ParseConditional(

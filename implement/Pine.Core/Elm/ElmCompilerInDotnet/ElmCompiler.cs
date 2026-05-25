@@ -541,6 +541,8 @@ public class ElmCompiler
         var reducedExpressionCache =
             new Dictionary<(Expression, ReductionConfig), Expression>();
 
+        var expressionEncodingCache = new PineExpressionEncodingCache();
+
         // Second pass: Compile all SCCs in dependency order
         // This ensures all dependencies are compiled before they are needed
         foreach (var scc in sccsInDependencyOrder)
@@ -567,6 +569,7 @@ public class ElmCompiler
                     scc,
                     compilationContext,
                     reducedExpressionCache,
+                    expressionEncodingCache,
                     disableGenericApplicationChainConsolidation);
 
             if (compileSccResult.IsErrOrNull() is { } compileSccErr)
@@ -1032,6 +1035,7 @@ public class ElmCompiler
         FunctionScc scc,
         ModuleCompilationContext context,
         IDictionary<(Expression, ReductionConfig), Expression>? reducedExpressionCache,
+        PineExpressionEncodingCache expressionEncodingCache,
         bool disableGenericApplicationChainConsolidation = false)
     {
         var sharedLayout = scc.GetLayout();
@@ -1171,7 +1175,7 @@ public class ElmCompiler
             compiledBodies
             .ToDictionary(
                 kvp => kvp.Key,
-                kvp => ExpressionEncoding.EncodeExpressionAsValue(kvp.Value.body));
+                kvp => ExpressionEncoding.EncodeExpressionAsValue(kvp.Value.body, expressionEncodingCache));
 
         // Phase 2: Build the envFunctionsList for SCC members.
         // §7.6b: for recursive SCCs sharedLayout is the member list, so
@@ -1216,7 +1220,8 @@ public class ElmCompiler
                 FunctionValueBuilder.EmitFunctionValueWithEnvFunctions(
                     bodyInfo.body,
                     bodyInfo.paramCount,
-                    envFunctionsList);
+                    envFunctionsList,
+                    encodeExprCache: expressionEncodingCache);
 
             var encodedBody = encodedBodies[memberName];
 

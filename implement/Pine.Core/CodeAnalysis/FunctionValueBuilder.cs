@@ -42,6 +42,7 @@ public static class FunctionValueBuilder
     /// <param name="innerExpression">The inner function expression body.</param>
     /// <param name="parameterCount">Total number of parameters expected by the function.</param>
     /// <param name="envFunctions">List of environment functions needed by the inner expression.</param>
+    /// <param name="encodeExprCache">Optional cache for encoding expressions to avoid redundant work.</param>
     /// <returns>
     /// A <see cref="PineValue"/> representing the nested wrapper expression encoded as a value.
     /// When evaluated with the first argument, it produces the next wrapper (or final result).
@@ -49,22 +50,23 @@ public static class FunctionValueBuilder
     public static PineValue EmitFunctionValueWithEnvFunctions(
         Expression innerExpression,
         int parameterCount,
-        IReadOnlyList<PineValue> envFunctions)
+        IReadOnlyList<PineValue> envFunctions,
+        PineExpressionEncodingCache? encodeExprCache = null)
     {
         if (parameterCount <= 0)
         {
             // Zero parameters: direct invocation
-            return EmitZeroParameterWrapper(innerExpression, envFunctions);
+            return EmitZeroParameterWrapper(innerExpression, envFunctions, encodeExprCache);
         }
 
         if (parameterCount is 1)
         {
             // Single parameter: simple wrapper that takes env as the argument
-            return EmitSingleParameterWrapper(innerExpression, envFunctions);
+            return EmitSingleParameterWrapper(innerExpression, envFunctions, encodeExprCache);
         }
 
         // Multiple parameters: build recursive wrapper structure
-        return EmitMultiParameterWrapper(innerExpression, parameterCount, envFunctions);
+        return EmitMultiParameterWrapper(innerExpression, parameterCount, envFunctions, encodeExprCache);
     }
 
     /// <summary>
@@ -519,7 +521,8 @@ public static class FunctionValueBuilder
     /// </summary>
     private static PineValue EmitZeroParameterWrapper(
         Expression innerExpression,
-        IReadOnlyList<PineValue> envFunctions)
+        IReadOnlyList<PineValue> envFunctions,
+        PineExpressionEncodingCache? encodeExprCache)
     {
         // ParseAndEval(innerExpr, [envFunctions])
         var envFunctionsExpr = CreateLiteralListExpression(envFunctions);
@@ -527,10 +530,10 @@ public static class FunctionValueBuilder
 
         var invocationExpr =
             new Expression.ParseAndEval(
-                encoded: Expression.LiteralInstance(ExpressionEncoding.EncodeExpressionAsValue(innerExpression)),
+                encoded: Expression.LiteralInstance(ExpressionEncoding.EncodeExpressionAsValue(innerExpression, encodeExprCache)),
                 environment: invocationEnv);
 
-        return ExpressionEncoding.EncodeExpressionAsValue(invocationExpr);
+        return ExpressionEncoding.EncodeExpressionAsValue(invocationExpr, encodeExprCache);
     }
 
     /// <summary>
@@ -539,7 +542,8 @@ public static class FunctionValueBuilder
     /// </summary>
     private static PineValue EmitSingleParameterWrapper(
         Expression innerExpression,
-        IReadOnlyList<PineValue> envFunctions)
+        IReadOnlyList<PineValue> envFunctions,
+        PineExpressionEncodingCache? encodeExprCache)
     {
         // Expression: ParseAndEval(innerExpr, [envFunctions, env])
         // Where env is the single argument
@@ -548,10 +552,10 @@ public static class FunctionValueBuilder
 
         var invocationExpr =
             new Expression.ParseAndEval(
-                encoded: Expression.LiteralInstance(ExpressionEncoding.EncodeExpressionAsValue(innerExpression)),
+                encoded: Expression.LiteralInstance(ExpressionEncoding.EncodeExpressionAsValue(innerExpression, encodeExprCache)),
                 environment: invocationEnv);
 
-        return ExpressionEncoding.EncodeExpressionAsValue(invocationExpr);
+        return ExpressionEncoding.EncodeExpressionAsValue(invocationExpr, encodeExprCache);
     }
 
     /// <summary>
@@ -566,7 +570,8 @@ public static class FunctionValueBuilder
     private static PineValue EmitMultiParameterWrapper(
         Expression innerExpression,
         int parameterCount,
-        IReadOnlyList<PineValue> envFunctions)
+        IReadOnlyList<PineValue> envFunctions,
+        PineExpressionEncodingCache? encodeExprCache)
     {
         // Build from innermost to outermost
         // Innermost level: takes last arg, invokes function with all args
@@ -575,10 +580,10 @@ public static class FunctionValueBuilder
         // Start with the innermost expression (level N-1)
         // This level receives: [[arg0..argN-2], argN-1] as environment
         // and invokes: ParseAndEval(innerExpr, concat([envFuncs], captured, [env[1]]))
-        var innermostExpr = BuildInnermostExpression(innerExpression, envFunctions);
+        var innermostExpr = BuildInnermostExpression(innerExpression, envFunctions, encodeExprCache);
 
         // Build outer levels from N-2 down to 0
-        PineValue currentEncoded = ExpressionEncoding.EncodeExpressionAsValue(innermostExpr);
+        PineValue currentEncoded = ExpressionEncoding.EncodeExpressionAsValue(innermostExpr, encodeExprCache);
 
         for (var level = parameterCount - 2; level >= 0; level--)
         {
@@ -596,7 +601,8 @@ public static class FunctionValueBuilder
     /// </summary>
     private static Expression BuildInnermostExpression(
         Expression innerExpression,
-        IReadOnlyList<PineValue> envFunctions)
+        IReadOnlyList<PineValue> envFunctions,
+        PineExpressionEncodingCache? encodeExprCache)
     {
         // env[0] = list of previously collected args
         // env[1] = last argument
@@ -623,7 +629,7 @@ public static class FunctionValueBuilder
         // ParseAndEval(innerExpr, invocationEnv)
         return
             new Expression.ParseAndEval(
-                encoded: Expression.LiteralInstance(ExpressionEncoding.EncodeExpressionAsValue(innerExpression)),
+                encoded: Expression.LiteralInstance(ExpressionEncoding.EncodeExpressionAsValue(innerExpression, encodeExprCache)),
                 environment: invocationEnv);
     }
 
