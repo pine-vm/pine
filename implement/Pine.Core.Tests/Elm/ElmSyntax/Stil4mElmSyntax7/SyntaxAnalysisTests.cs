@@ -72,7 +72,7 @@ public class SyntaxAnalysisTests
     }
 
     // =========================================================================
-    // ComputeFreeVariables
+    // CollectRemainingFreeVariables
     // =========================================================================
 
     [Fact]
@@ -196,6 +196,108 @@ public class SyntaxAnalysisTests
             """,
             functionName: "foo",
             expected: ["a"]);
+    }
+
+    // =========================================================================
+    // CollectRemainingFreeVariables — rebinding / refreeing scenarios
+    //
+    // The walker reports the free variables of an expression independently of
+    // the surrounding lexical context: an outer reference to a name `x` is
+    // reported as free even when an inner sub-expression (case arm pattern,
+    // lambda parameter, let binding) introduces `x` as a fresh local.
+    // Surface Elm cannot express these shapes — they arise from intermediate
+    // lowering stages that synthesize syntax and may reuse names.
+    // =========================================================================
+
+    [Fact]
+    public void FreeVariables_outer_reference_remains_free_when_inner_case_arm_binds_same_name()
+    {
+        // The `Just x -> x` arm binds `x` locally, but the outer `x +` reference
+        // is OUTSIDE the case-arm scope and must still be reported as free.
+        AssertFreeVariablesOfBody(
+            """
+            module Test exposing (..)
+
+            foo y =
+                x + (case y of
+                        Just x -> x
+                        Nothing -> 0)
+            """,
+            functionName: "foo",
+            expected: ["x", "y"]);
+    }
+
+    [Fact]
+    public void FreeVariables_outer_reference_remains_free_when_inner_lambda_param_binds_same_name()
+    {
+        // The lambda `(\x -> x)` binds `x` for its own body, but the outer
+        // `x +` reference is still free at the function-body level.
+        AssertFreeVariablesOfBody(
+            """
+            module Test exposing (..)
+
+            foo y =
+                x + ((\x -> x) y)
+            """,
+            functionName: "foo",
+            expected: ["x", "y"]);
+    }
+
+    [Fact]
+    public void FreeVariables_outer_reference_remains_free_when_inner_let_function_binds_same_name()
+    {
+        // The inner `let x = y in x` binds `x` for its own body; the outer
+        // `x +` reference must remain in the reported set.
+        AssertFreeVariablesOfBody(
+            """
+            module Test exposing (..)
+
+            foo y =
+                x + (let
+                        x = y
+                     in
+                        x)
+            """,
+            functionName: "foo",
+            expected: ["x", "y"]);
+    }
+
+    [Fact]
+    public void FreeVariables_outer_reference_remains_free_when_inner_let_destructure_binds_same_name()
+    {
+        // The let-destructuring `Just x = y` binds `x` for the body of the
+        // let-block; the outer `x +` reference outside that block is still
+        // free.
+        AssertFreeVariablesOfBody(
+            """
+            module Test exposing (..)
+
+            foo y =
+                x + (let
+                        (Just x) = y
+                     in
+                        x)
+            """,
+            functionName: "foo",
+            expected: ["x", "y"]);
+    }
+
+    [Fact]
+    public void FreeVariables_outer_reference_remains_free_when_nested_inner_binders_shadow_name()
+    {
+        // Nested binders (lambda inside a case arm both binding `x`) do not
+        // affect the outer `x` reference.
+        AssertFreeVariablesOfBody(
+            """
+            module Test exposing (..)
+
+            foo y =
+                x + (case y of
+                        Just z -> (\x -> x) z
+                        Nothing -> 0)
+            """,
+            functionName: "foo",
+            expected: ["x", "y"]);
     }
 
     // =========================================================================
@@ -483,7 +585,7 @@ public class SyntaxAnalysisTests
         var func = ParseFunctionByName(moduleText, functionName);
 
         var actual =
-            SyntaxAnalysis.ComputeFreeVariables(func.Expression.Value)
+            SyntaxAnalysis.CollectRemainingFreeVariables(func.Expression.Value)
             .OrderBy(s => s).ToImmutableArray();
 
         actual.Should().BeEquivalentTo(expected.OrderBy(s => s));

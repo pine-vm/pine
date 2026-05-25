@@ -74,8 +74,11 @@ public class PatternCompiler
             return scrutineeErr;
         }
 
-        var scrutinee = scrutineeResult.IsOkOrNull()!;
-        Expression? result = null;
+        if (scrutineeResult.IsOkOrNull() is not { } scrutinee)
+        {
+            throw new NotImplementedException(
+                "CompileCaseExpression: unexpected result type: " + scrutineeResult.GetType().Name);
+        }
 
         // Infer the type of the scrutinee for pattern type extraction
         var scrutineeType =
@@ -87,15 +90,103 @@ public class PatternCompiler
                 context.CurrentModuleName,
                 context.FunctionTypes);
 
-        for (var i = caseBlock.Cases.Count - 1; i >= 0; i--)
+        return CompileCaseBlock(scrutinee, scrutineeType, caseBlock.Cases, context);
+    }
+
+    /// <summary>
+    /// Compiles a case block expression to a Pine expression.
+    /// </summary>
+    public static Result<CompilationError, Expression> CompileCaseBlock(
+        Expression scrutineeExpr,
+        TypeInference.InferredType scrutineeType,
+        IReadOnlyList<SyntaxTypes.Case> cases,
+        ExpressionCompilationContext context)
+    {
+        /*
+         * TODO: Review exponential growth of expression size resulting from unconditional duplication of the case scrutinee expression.
+         * Consider using an `eval` invocation to reuse representation of the scrutinee across all patterns and case arms without repeating the whole epxression.
+         * This could depend on a heuristic like in the `compileElmSyntaxCaseBlock` function of the classic Elm compiler:
+         * https://github.com/pine-vm/pine/blob/4a5eab9f139bedb519e47a77c0c2960df9e72b98/implement/Pine.Core/Elm/elm-in-elm/src/ElmCompiler.elm#L1923-L1976
+         * 
+         * A smarter heuristic would compare outcomes of both approaches after reduction.
+         * */
+
+        if (scrutineeExpr.SubexpressionCount > 400)
         {
-            var caseItem = caseBlock.Cases[i];
+            var invokedResult =
+                CompileCaseBlockViaInvocation(
+                    scrutineeExpr,
+                    scrutineeType,
+                    cases,
+                    context);
+
+            if (invokedResult.IsErrOrNull() is { } invokedErr)
+            {
+                return
+                    invokedErr
+                    .Scoped(
+                        "CompileCaseBlockViaInvocation failed for case block with scrutinee expression of size " +
+                        scrutineeExpr.SubexpressionCount);
+            }
+
+            if (invokedResult.IsOkOrNull() is not { } invokedExpr)
+            {
+                throw new NotImplementedException(
+                    "CompileCaseBlock: unexpected result type from invocation-based compilation: " +
+                    invokedResult.GetType().Name);
+            }
+
+            return invokedExpr;
+        }
+
+        var inlinedResult =
+            CompileCaseBlockInliningScrutinee(
+                scrutineeExpr,
+                scrutineeType,
+                cases,
+                context);
+
+        if (inlinedResult.IsErrOrNull() is { } inlinedErr)
+        {
+            return
+                inlinedErr
+                .Scoped(
+                    "CompileCaseBlockInliningScrutinee failed for case block with scrutinee expression of size " +
+                    scrutineeExpr.SubexpressionCount);
+        }
+
+        if (inlinedResult.IsOkOrNull() is not { } inlinedExpr)
+        {
+            throw new NotImplementedException(
+                "CompileCaseBlock: unexpected result type from inlined compilation: " + inlinedResult.GetType().Name);
+        }
+
+        return inlinedExpr;
+    }
+
+    /// <summary>
+    /// Compiles a case block expression to a Pine expression via inlining the scrutinee expression into each pattern match condition.
+    /// This inlining means the scrutinee expression is duplicated in the generated code for each pattern match condition.
+    /// In combination with nested case blocks, this can lead to exponential growth in
+    /// the size of the resulting expression if there are many patterns or if the scrutinee is complex.
+    /// </summary>
+    public static Result<CompilationError, Expression> CompileCaseBlockInliningScrutinee(
+        Expression scrutineeExpr,
+        TypeInference.InferredType scrutineeType,
+        IReadOnlyList<SyntaxTypes.Case> cases,
+        ExpressionCompilationContext context)
+    {
+        Expression? result = null;
+
+        for (var i = cases.Count - 1; i >= 0; i--)
+        {
+            var caseItem = cases[i];
             var pattern = caseItem.Pattern.Value;
 
             var patternBindings =
                 ExtractPatternBindings(
                     pattern,
-                    scrutinee,
+                    scrutineeExpr,
                     scrutineeType: scrutineeType,
                     recordTypeAliasFields:
                     context.ModuleCompilationContext.RecordTypeAliasConstructors,
@@ -139,8 +230,13 @@ public class PatternCompiler
                 return caseErr;
             }
 
-            var caseBody = caseBodyResult.IsOkOrNull()!;
-            var conditionExpr = CompilePatternCondition(pattern, scrutinee);
+            if (caseBodyResult.IsOkOrNull() is not { } caseBody)
+            {
+                throw new NotImplementedException(
+                    "CompileCaseExpression: unexpected result type: " + caseBodyResult.GetType().Name);
+            }
+
+            var conditionExpr = CompilePatternCondition(pattern, scrutineeExpr);
 
             if (conditionExpr is null)
             {
@@ -162,6 +258,186 @@ public class PatternCompiler
         }
 
         return result;
+    }
+
+    /// <summary>
+    /// Compiles a case block using an eval invocation to contain all case arms.
+    /// </summary>
+    public static Result<CompilationError, Expression> CompileCaseBlockViaInvocation(
+        Expression scrutineeOuterExpr,
+        TypeInference.InferredType scrutineeType,
+        IReadOnlyList<SyntaxTypes.Case> cases,
+        ExpressionCompilationContext outerContext)
+    {
+        // Find out which bindings are used and must be forwarded
+
+        var bindingsNames = ImmutableHashSet<string>.Empty;
+
+        for (var caseIndex = 0; caseIndex < cases.Count; caseIndex++)
+        {
+            var caseItem = cases[caseIndex];
+
+            bindingsNames =
+                bindingsNames.Union(
+                    SyntaxTypes.SyntaxAnalysis.CollectRemainingFreeVariables(caseItem));
+        }
+
+        var bindingsNamesSorted =
+            bindingsNames
+            .OrderBy(name => name)
+            .ToImmutableList();
+
+        /*
+         * Compose the layout for the inner expression so it follows the
+         * established convention used by all other compiled bodies:
+         *
+         *   Item 0:     the env-functions list (forwarded from the outer
+         *               environment so that sibling-SCC references inside
+         *               the case-arm bodies — which always look up
+         *               Env[0][functionIndex] — keep working).
+         *   Item 1:     the scrutinee.
+         *   Item 2 - N: all bindings required by the case-arm expressions.
+         * */
+
+        var argumentList = new Expression[2 + bindingsNames.Count];
+
+        argumentList[0] = GetListElementExpression(Expression.EnvironmentInstance, 0);
+        argumentList[1] = scrutineeOuterExpr;
+
+        for (var i = 0; i < bindingsNamesSorted.Count; i++)
+        {
+            var name = bindingsNamesSorted[i];
+
+            var nameExprResult =
+                ExpressionCompiler.CompileFunctionOrValue(
+                    new SyntaxTypes.Expression.FunctionOrValue(ModuleName: [], name),
+                    outerContext);
+
+            if (nameExprResult.IsErrOrNull() is { } nameExprErr)
+            {
+                return
+                    nameExprErr
+                    .Scoped(
+                        $"CompileCaseBlockViaInvocation: failed to compile expression for binding {name} required by case arms");
+            }
+
+            if (nameExprResult.IsOkOrNull() is not { } nameExpr)
+            {
+                throw new NotImplementedException(
+                    "CompileCaseBlockViaInvocation: unexpected result type when compiling binding expression: " +
+                    nameExprResult.GetType().Name);
+            }
+
+            argumentList[2 + i] = nameExpr;
+        }
+
+        var scrutineeInnerExpr = GetListElementExpression(Expression.EnvironmentInstance, 1);
+
+        var innerBindings =
+            bindingsNamesSorted
+            .Select((name, index) => (name, expr: GetListElementExpression(Expression.EnvironmentInstance, 2 + index)))
+            .ToImmutableDictionary(
+                nameAndExpr => nameAndExpr.name,
+                nameAndExpr => nameAndExpr.expr);
+
+        var innerContext =
+            outerContext
+            .WithReplacedLocalBindings(innerBindings);
+
+        Expression? invokedBodyExpr = null;
+
+        for (var i = cases.Count - 1; i >= 0; i--)
+        {
+            var caseItem = cases[i];
+            var pattern = caseItem.Pattern.Value;
+
+            var patternBindings =
+                ExtractPatternBindings(
+                    pattern,
+                    scrutineeInnerExpr,
+                    scrutineeType: scrutineeType,
+                    recordTypeAliasFields:
+                    innerContext.ModuleCompilationContext.RecordTypeAliasConstructors,
+                    choiceTagArgumentTypes:
+                    innerContext.ModuleCompilationContext.ChoiceTagArgumentTypes);
+
+            // Extract binding types from the pattern
+            var patternBindingTypes =
+                TypeInference.ExtractPatternBindingTypesFromInferred(
+                    pattern,
+                    scrutineeType,
+                    [],
+                    innerContext.ModuleCompilationContext.ChoiceTagArgumentTypes);
+
+            // Create case context with both bindings and binding types
+            var caseContext = innerContext;
+
+            if (patternBindings.Count > 0)
+            {
+                caseContext = caseContext.WithLocalBindings(patternBindings);
+            }
+
+            if (patternBindingTypes.Count > 0)
+            {
+                // Merge existing binding types with new pattern binding types
+                var mergedBindingTypes =
+                    innerContext.LocalBindingTypes is { } existingTypes
+                    ?
+                    existingTypes.ToImmutableDictionary().SetItems(patternBindingTypes)
+                    :
+                    patternBindingTypes;
+
+                caseContext =
+                    caseContext.WithReplacedLocalBindingsAndTypes(caseContext.LocalBindings, mergedBindingTypes);
+            }
+
+            var caseBodyResult = ExpressionCompiler.Compile(caseItem.Expression.Value, caseContext);
+
+            if (caseBodyResult.IsErrOrNull() is { } caseErr)
+            {
+                return caseErr;
+            }
+
+            if (caseBodyResult.IsOkOrNull() is not { } caseBody)
+            {
+                throw new NotImplementedException(
+                    "CompileCaseExpression: unexpected result type: " + caseBodyResult.GetType().Name);
+            }
+
+            var conditionExpr = CompilePatternCondition(pattern, scrutineeInnerExpr);
+
+            if (conditionExpr is null)
+            {
+                invokedBodyExpr = caseBody;
+            }
+            else
+            {
+                invokedBodyExpr =
+                    Expression.ConditionalInstance(
+                        condition: conditionExpr,
+                        trueBranch: caseBody,
+                        falseBranch: invokedBodyExpr ?? caseBody);
+            }
+        }
+
+        if (invokedBodyExpr is null)
+        {
+            return new CompilationError.CaseExpressionNoPatterns();
+        }
+
+        var invokedBodyExprReduced =
+            CodeAnalysis.ReducePineExpression.ReduceExpressionBottomUp(
+                invokedBodyExpr,
+                parseCache: outerContext.ParseCache,
+                reducedExpressionCache: outerContext.ReducedExpressionCache);
+
+        var invokedBodyExprEncoded =
+            ExpressionEncoding.EncodeExpressionAsValue(invokedBodyExpr);
+
+        return
+            new Expression.ParseAndEval(
+                encoded: Expression.LiteralInstance(invokedBodyExprEncoded),
+                environment: Expression.ListInstance(argumentList));
     }
 
     /// <summary>
@@ -917,7 +1193,7 @@ public class PatternCompiler
     /// </summary>
     public static Expression GetListElementExpression(Expression listExpr, int index)
     {
-        if (index == 0)
+        if (index is 0)
         {
             return BuiltinHelpers.ApplyBuiltinHead(listExpr);
         }

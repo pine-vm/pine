@@ -1,6 +1,8 @@
+using Pine.Core.Elm.ElmSyntax.SyntaxModel;
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
+using System.Linq;
 
 namespace Pine.Core.Elm.ElmSyntax.Stil4mElmSyntax7;
 
@@ -16,7 +18,7 @@ namespace Pine.Core.Elm.ElmSyntax.Stil4mElmSyntax7;
 ///
 /// <para>
 /// The primary entry points are
-/// <see cref="ComputeFreeVariables"/> — the set of names referenced inside the
+/// <see cref="CollectRemainingFreeVariables(Expression)"/> — the set of names referenced inside the
 /// expression but not bound by any binder strictly within it — and
 /// <see cref="ComputeNamesFlowingIntoApplicationFunctions"/> — the set of names that
 /// influence the value of <em>any</em> expression that appears in the function
@@ -55,73 +57,83 @@ public static class SyntaxAnalysis
     public static ImmutableHashSet<string> CollectNamesBoundByPattern(
         Pattern pattern)
     {
-        var builder = ImmutableHashSet<string>.Empty.ToBuilder();
-        AddNamesBoundByPattern(pattern, builder);
-        return builder.ToImmutable();
+        var names = new HashSet<string>();
+        CollectNamesBoundByPatternInto(pattern, names);
+        return [.. names];
     }
 
-    private static void AddNamesBoundByPattern(
+    /// <summary>
+    /// Convenience union of every name bound by every pattern in
+    /// <paramref name="patterns"/> — useful for parameter lists (function arguments,
+    /// lambda arguments).
+    /// </summary>
+    public static ImmutableHashSet<string> CollectNamesBoundByPatterns(
+        IReadOnlyList<Node<Pattern>> patterns)
+    {
+        var names = new HashSet<string>();
+
+        foreach (var patternNode in patterns)
+            CollectNamesBoundByPatternInto(patternNode.Value, names);
+
+        return [.. names];
+    }
+
+    /// <summary>
+    /// Accumulator-form pattern-name walker shared by
+    /// <see cref="CollectNamesBoundByPattern"/>,
+    /// <see cref="CollectNamesBoundByPatterns"/> and the
+    /// <c>HashSet</c>-based mirrors retained on
+    /// <c>ElmSyntaxTransformations</c> for legacy mutable-collection call sites.
+    /// </summary>
+    internal static void CollectNamesBoundByPatternInto(
         Pattern pattern,
-        ImmutableHashSet<string>.Builder builder)
+        HashSet<string> names)
     {
         switch (pattern)
         {
             case Pattern.VarPattern varPattern:
-                builder.Add(varPattern.Name);
-                break;
-
-            case Pattern.ParenthesizedPattern paren:
-                AddNamesBoundByPattern(paren.Pattern.Value, builder);
-                break;
-
-            case Pattern.AsPattern asPattern:
-                builder.Add(asPattern.Name.Value);
-                AddNamesBoundByPattern(asPattern.Pattern.Value, builder);
-                break;
-
-            case Pattern.NamedPattern namedPattern:
-                foreach (var arg in namedPattern.Arguments)
-                    AddNamesBoundByPattern(arg.Value, builder);
-
+                names.Add(varPattern.Name);
                 break;
 
             case Pattern.TuplePattern tuplePattern:
-                foreach (var element in tuplePattern.Elements)
-                    AddNamesBoundByPattern(element.Value, builder);
+                foreach (var elem in tuplePattern.Elements)
+                    CollectNamesBoundByPatternInto(elem.Value, names);
 
                 break;
 
             case Pattern.RecordPattern recordPattern:
                 foreach (var field in recordPattern.Fields)
-                    builder.Add(field.Value);
+                    names.Add(field.Value);
 
                 break;
 
-            case Pattern.UnConsPattern unCons:
-                AddNamesBoundByPattern(unCons.Head.Value, builder);
-                AddNamesBoundByPattern(unCons.Tail.Value, builder);
+            case Pattern.UnConsPattern unconsPattern:
+                CollectNamesBoundByPatternInto(unconsPattern.Head.Value, names);
+                CollectNamesBoundByPatternInto(unconsPattern.Tail.Value, names);
                 break;
 
             case Pattern.ListPattern listPattern:
-                foreach (var element in listPattern.Elements)
-                    AddNamesBoundByPattern(element.Value, builder);
+                foreach (var elem in listPattern.Elements)
+                    CollectNamesBoundByPatternInto(elem.Value, names);
 
                 break;
 
-            // Patterns that introduce no names.
-            case Pattern.AllPattern:
-            case Pattern.UnitPattern:
-            case Pattern.CharPattern:
-            case Pattern.StringPattern:
-            case Pattern.IntPattern:
-            case Pattern.HexPattern:
-            case Pattern.FloatPattern:
+            case Pattern.NamedPattern namedPattern:
+                foreach (var arg in namedPattern.Arguments)
+                    CollectNamesBoundByPatternInto(arg.Value, names);
+
                 break;
 
-            default:
-                throw new NotImplementedException(
-                    "AddNamesBoundByPattern does not handle pattern variant: " +
-                    pattern.GetType().Name);
+            case Pattern.AsPattern asPattern:
+                names.Add(asPattern.Name.Value);
+                CollectNamesBoundByPatternInto(asPattern.Pattern.Value, names);
+                break;
+
+            case Pattern.ParenthesizedPattern parenPattern:
+                CollectNamesBoundByPatternInto(parenPattern.Pattern.Value, names);
+                break;
+
+                // Other pattern variants (literal / unit / wildcard / ...) introduce nothing.
         }
     }
 
@@ -146,187 +158,228 @@ public static class SyntaxAnalysis
     /// them is therefore reported as a free variable.
     /// </para>
     /// </summary>
-    public static ImmutableHashSet<string> ComputeFreeVariables(
+    /// <summary>
+    /// Computes the set of free variable names referenced inside
+    /// <paramref name="expression"/>. A "free variable" is an unqualified
+    /// <see cref="Expression.FunctionOrValue"/> (one with an empty
+    /// module name) whose name is <em>not</em> introduced by any binder strictly
+    /// within <paramref name="expression"/> (lambda parameters, let-function
+    /// parameters, let-function names, let-destructure patterns, case branch
+    /// patterns).
+    ///
+    /// <para>
+    /// Names referenced with a non-empty module qualifier are never free in the
+    /// expression-local sense — they always resolve to a top-level declaration —
+    /// and are therefore excluded from the result.
+    /// </para>
+    ///
+    /// <para>
+    /// When the analysis is applied to a function body in isolation, the
+    /// function's parameters are unbound in this context and any reference to
+    /// them is therefore reported as a free variable.
+    /// </para>
+    ///
+    /// <para>
+    /// The implementation is directly recursive and returns an
+    /// <see cref="ImmutableHashSet{T}"/> at every level — no accumulator
+    /// parameters are threaded through. At each binding site (lambda,
+    /// case arm, let-block), names introduced locally are removed from the
+    /// child sub-expression's result before it is returned to the parent.
+    /// Outer scopes therefore do not need to be communicated downward.
+    /// </para>
+    ///
+    /// <para>
+    /// The walker treats every unqualified <see cref="Expression.FunctionOrValue"/>
+    /// reference as contributing to its sub-expression's free-variable set,
+    /// regardless of whether an enclosing binder happens to introduce the
+    /// same name. As a consequence, a name referenced on an outer expression
+    /// that an inner pattern <em>also</em> binds (a "rebinding/refreeing"
+    /// shape that lowering passes can produce) is reported correctly as free
+    /// at the outer site, even though the inner reference is bound — see
+    /// the regression tests in <c>SyntaxAnalysisTests</c>.
+    /// </para>
+    /// </summary>
+    public static ImmutableHashSet<string> CollectRemainingFreeVariables(
         Expression expression)
-    {
-        var builder = ImmutableHashSet<string>.Empty.ToBuilder();
-        AddFreeVariables(expression, [], builder);
-        return builder.ToImmutable();
-    }
-
-    private static void AddFreeVariables(
-        Expression expression,
-        ImmutableHashSet<string> bound,
-        ImmutableHashSet<string>.Builder result)
     {
         switch (expression)
         {
-            case Expression.FunctionOrValue funcOrValue:
-                if (funcOrValue.ModuleName.Count is 0 && !bound.Contains(funcOrValue.Name))
-                    result.Add(funcOrValue.Name);
+            case Expression.FunctionOrValue funcOrValue when funcOrValue.ModuleName.Count is 0:
+                return [funcOrValue.Name];
 
-                break;
+            // Qualified FunctionOrValue references resolve to a module-level name and
+            // contribute no free local variables.
+            case Expression.FunctionOrValue:
+                return [];
 
-            case Expression.Application app:
-                foreach (var arg in app.Arguments)
-                    AddFreeVariables(arg.Value, bound, result);
-
-                break;
-
-            case Expression.ParenthesizedExpression paren:
-                AddFreeVariables(paren.Expression.Value, bound, result);
-                break;
-
-            case Expression.IfBlock ifBlock:
-                AddFreeVariables(ifBlock.Condition.Value, bound, result);
-                AddFreeVariables(ifBlock.ThenBlock.Value, bound, result);
-                AddFreeVariables(ifBlock.ElseBlock.Value, bound, result);
-                break;
-
-            case Expression.LambdaExpression lambda:
+            case Expression.LambdaExpression lambdaExpr:
                 {
-                    var newBound = bound;
+                    var bound =
+                        CollectNamesBoundByPatterns(lambdaExpr.Lambda.Arguments);
 
-                    foreach (var arg in lambda.Lambda.Arguments)
-                        newBound = newBound.Union(CollectNamesBoundByPattern(arg.Value));
-
-                    AddFreeVariables(lambda.Lambda.Expression.Value, newBound, result);
-                    break;
+                    return
+                        CollectRemainingFreeVariables(lambdaExpr.Lambda.Expression.Value)
+                        .Except(bound);
                 }
 
             case Expression.CaseExpression caseExpr:
-                AddFreeVariables(caseExpr.CaseBlock.Expression.Value, bound, result);
-
-                foreach (var branch in caseExpr.CaseBlock.Cases)
                 {
-                    var branchBound =
-                        bound.Union(CollectNamesBoundByPattern(branch.Pattern.Value));
+                    var result =
+                        CollectRemainingFreeVariables(caseExpr.CaseBlock.Expression.Value);
 
-                    AddFreeVariables(branch.Expression.Value, branchBound, result);
+                    foreach (var caseItem in caseExpr.CaseBlock.Cases)
+                    {
+                        var armBound =
+                            CollectNamesBoundByPattern(caseItem.Pattern.Value);
+
+                        result =
+                            result.Union(
+                                CollectRemainingFreeVariables(caseItem.Expression.Value)
+                                .Except(armBound));
+                    }
+
+                    return result;
                 }
-
-                break;
 
             case Expression.LetExpression letExpr:
                 {
-                    // All declared names are mutually in scope across the let block,
-                    // including each declaration's RHS (Elm allows mutual recursion
-                    // among let-function declarations).
-                    var declared = bound;
+                    // Let bindings are mutually recursive: every name introduced by the
+                    // block is in scope for every RHS and for the body. Collect them all
+                    // first, then take the union of each child's remaining-free set and
+                    // subtract the let-bound names at the end.
+                    var letBoundBuilder = ImmutableHashSet.CreateBuilder<string>();
 
                     foreach (var decl in letExpr.Value.Declarations)
                     {
                         switch (decl.Value)
                         {
-                            case Expression.LetDeclaration.LetFunction lf:
-                                declared = declared.Add(lf.Function.Declaration.Value.Name.Value);
-                                break;
-
-                            case Expression.LetDeclaration.LetDestructuring ld:
-                                declared =
-                                    declared.Union(CollectNamesBoundByPattern(ld.Pattern.Value));
+                            case Expression.LetDeclaration.LetFunction letFunc:
+                                letBoundBuilder.Add(
+                                    letFunc.Function.Declaration.Value.Name.Value);
 
                                 break;
 
-                            default:
-                                throw new NotImplementedException(
-                                    "AddFreeVariables does not handle let declaration variant: " +
-                                    decl.Value.GetType().Name);
+                            case Expression.LetDeclaration.LetDestructuring letDestr:
+                                foreach (var name in CollectNamesBoundByPattern(letDestr.Pattern.Value))
+                                    letBoundBuilder.Add(name);
+
+                                break;
                         }
                     }
 
+                    var letBound = letBoundBuilder.ToImmutable();
+
+                    var result = ImmutableHashSet<string>.Empty;
+
                     foreach (var decl in letExpr.Value.Declarations)
                     {
                         switch (decl.Value)
                         {
-                            case Expression.LetDeclaration.LetFunction lf:
+                            case Expression.LetDeclaration.LetFunction letFunc:
                                 {
-                                    var inner = declared;
+                                    var paramBound =
+                                        CollectNamesBoundByPatterns(
+                                            letFunc.Function.Declaration.Value.Arguments);
 
-                                    foreach (var arg in lf.Function.Declaration.Value.Arguments)
-                                        inner = inner.Union(CollectNamesBoundByPattern(arg.Value));
-
-                                    AddFreeVariables(
-                                        lf.Function.Declaration.Value.Expression.Value,
-                                        inner,
-                                        result);
+                                    result =
+                                        result.Union(
+                                            CollectRemainingFreeVariables(
+                                                letFunc.Function.Declaration.Value.Expression.Value)
+                                            .Except(paramBound));
 
                                     break;
                                 }
 
-                            case Expression.LetDeclaration.LetDestructuring ld:
-                                AddFreeVariables(ld.Expression.Value, declared, result);
-                                break;
+                            case Expression.LetDeclaration.LetDestructuring letDestr:
+                                result =
+                                    result.Union(
+                                        CollectRemainingFreeVariables(letDestr.Expression.Value));
 
-                            default:
-                                throw new NotImplementedException(
-                                    "AddFreeVariables does not handle let declaration variant: " +
-                                    decl.Value.GetType().Name);
+                                break;
                         }
                     }
 
-                    AddFreeVariables(letExpr.Value.Expression.Value, declared, result);
-                    break;
+                    result =
+                        result.Union(
+                            CollectRemainingFreeVariables(letExpr.Value.Expression.Value));
+
+                    return result.Except(letBound);
                 }
 
-            case Expression.ListExpr listExpr:
-                foreach (var e in listExpr.Elements)
-                    AddFreeVariables(e.Value, bound, result);
-
-                break;
-
-            case Expression.TupledExpression tupled:
-                foreach (var e in tupled.Elements)
-                    AddFreeVariables(e.Value, bound, result);
-
-                break;
-
-            case Expression.RecordExpr recordExpr:
-                foreach (var f in recordExpr.Fields)
-                    AddFreeVariables(f.Value.valueExpr.Value, bound, result);
-
-                break;
-
             case Expression.RecordUpdateExpression recordUpdate:
-                if (!bound.Contains(recordUpdate.RecordName.Value))
-                    result.Add(recordUpdate.RecordName.Value);
+                {
+                    // The record name on the LHS is itself a value reference.
+                    var result = ImmutableHashSet.Create(recordUpdate.RecordName.Value);
 
-                foreach (var f in recordUpdate.Fields)
-                    AddFreeVariables(f.Value.valueExpr.Value, bound, result);
+                    foreach (var field in recordUpdate.Fields)
+                        result =
+                            result.Union(
+                                CollectRemainingFreeVariables(field.Value.valueExpr.Value));
 
-                break;
+                    return result;
+                }
 
-            case Expression.RecordAccess recordAccess:
-                AddFreeVariables(recordAccess.Record.Value, bound, result);
-                break;
-
-            case Expression.Negation negation:
-                AddFreeVariables(negation.Expression.Value, bound, result);
-                break;
-
-            case Expression.OperatorApplication opApp:
-                AddFreeVariables(opApp.Left.Value, bound, result);
-                AddFreeVariables(opApp.Right.Value, bound, result);
-                break;
-
-            // Leaf variants that reference no names.
+            // Variants with no binding semantics: recurse into every immediate
+            // child expression via the shared ForEachChildExpression walker.
+            // Each variant is listed explicitly so the throwing default below
+            // never fires for valid expression values.
             case Expression.UnitExpr:
             case Expression.Literal:
             case Expression.CharLiteral:
             case Expression.Integer:
             case Expression.Hex:
             case Expression.Floatable:
+            case Expression.Negation:
+            case Expression.ListExpr:
+            case Expression.IfBlock:
             case Expression.PrefixOperator:
+            case Expression.ParenthesizedExpression:
+            case Expression.Application:
+            case Expression.OperatorApplication:
+            case Expression.TupledExpression:
+            case Expression.RecordExpr:
+            case Expression.RecordAccess:
             case Expression.RecordAccessFunction:
             case Expression.GLSLExpression:
-                break;
+                {
+                    var result = ImmutableHashSet<string>.Empty;
+
+                    ForEachChildExpression(
+                        expression,
+                        child =>
+                        {
+                            result = result.Union(CollectRemainingFreeVariables(child));
+                        });
+
+                    return result;
+                }
 
             default:
                 throw new NotImplementedException(
-                    "AddFreeVariables does not handle expression variant: " +
+                    "CollectRemainingFreeVariables does not handle expression variant: " +
                     expression.GetType().Name);
         }
     }
+
+    /// <summary>
+    /// Computes the free variables in a case arm by determining which variables used in the expression are not bound by
+    /// the pattern.
+    /// </summary>
+    /// <param name="caseArm">The case arm to analyze.</param>
+    /// <returns>A set of variable names that are free (not bound by the pattern) in the case arm's expression.</returns>
+    public static ImmutableHashSet<string> CollectRemainingFreeVariables(
+        Case caseArm)
+    {
+        var expressionFreeVariables =
+            CollectRemainingFreeVariables(caseArm.Expression.Value);
+
+        var patternBoundNames =
+            CollectNamesBoundByPattern(caseArm.Pattern.Value);
+
+        return
+            [.. expressionFreeVariables.Where(name => !patternBoundNames.Contains(name))];
+    }
+
 
     /// <summary>
     /// Computes the set of names that flow into the function-position expression
@@ -633,14 +686,14 @@ public static class SyntaxAnalysis
     /// The <paramref name="visited"/> set guards against infinite recursion for
     /// mutually recursive let-bindings.
     /// </summary>
-    private static void AddFlowingNamesOf(
+    internal static void AddFlowingNamesOf(
         Expression expression,
         ImmutableDictionary<string, Expression> letRhsByName,
         ImmutableHashSet<string> bound,
         ImmutableHashSet<string>.Builder result,
         ImmutableHashSet<string> visited)
     {
-        var freeVars = ComputeFreeVariables(expression);
+        var freeVars = CollectRemainingFreeVariables(expression);
 
         foreach (var name in freeVars)
         {
@@ -673,5 +726,121 @@ public static class SyntaxAnalysis
             builder.Remove(k);
 
         return builder.ToImmutable();
+    }
+
+    /// <summary>
+    /// Invokes the given delegate for each direct child expression.
+    /// </summary>
+    internal static void ForEachChildExpression(
+        Expression expr,
+        Action<Expression> reportChild)
+    {
+        switch (expr)
+        {
+            case Expression.Application app:
+                foreach (var arg in app.Arguments)
+                    reportChild(arg.Value);
+
+                break;
+
+            case Expression.ParenthesizedExpression paren:
+                reportChild(paren.Expression.Value);
+                break;
+
+            case Expression.IfBlock ifBlock:
+                reportChild(ifBlock.Condition.Value);
+                reportChild(ifBlock.ThenBlock.Value);
+                reportChild(ifBlock.ElseBlock.Value);
+                break;
+
+            case Expression.CaseExpression caseExpr:
+                reportChild(caseExpr.CaseBlock.Expression.Value);
+
+                foreach (var c in caseExpr.CaseBlock.Cases)
+                    reportChild(c.Expression.Value);
+
+                break;
+
+            case Expression.LetExpression letExpr:
+                foreach (var decl in letExpr.Value.Declarations)
+                {
+                    switch (decl.Value)
+                    {
+                        case Expression.LetDeclaration.LetFunction lf:
+                            reportChild(lf.Function.Declaration.Value.Expression.Value);
+                            break;
+
+                        case Expression.LetDeclaration.LetDestructuring ld:
+                            reportChild(ld.Expression.Value);
+                            break;
+
+                        default:
+                            throw new NotImplementedException(
+                                "EnqueueChildExpressions does not handle let declaration variant: " +
+                                decl.Value.GetType().Name);
+                    }
+                }
+
+                reportChild(letExpr.Value.Expression.Value);
+                break;
+
+            case Expression.LambdaExpression lambda:
+                reportChild(lambda.Lambda.Expression.Value);
+                break;
+
+            case Expression.ListExpr listExpr:
+                foreach (var e in listExpr.Elements)
+                    reportChild(e.Value);
+
+                break;
+
+            case Expression.TupledExpression tupled:
+                foreach (var e in tupled.Elements)
+                    reportChild(e.Value);
+
+                break;
+
+            case Expression.RecordExpr recordExpr:
+                foreach (var f in recordExpr.Fields)
+                    reportChild(f.Value.valueExpr.Value);
+
+                break;
+
+            case Expression.RecordUpdateExpression recordUpdate:
+                foreach (var f in recordUpdate.Fields)
+                    reportChild(f.Value.valueExpr.Value);
+
+                break;
+
+            case Expression.RecordAccess recordAccess:
+                reportChild(recordAccess.Record.Value);
+                break;
+
+            case Expression.Negation negation:
+                reportChild(negation.Expression.Value);
+                break;
+
+            case Expression.OperatorApplication opApp:
+                reportChild(opApp.Left.Value);
+                reportChild(opApp.Right.Value);
+                break;
+
+            // Leaf expression variants: no child expressions to enqueue.
+            case Expression.UnitExpr:
+            case Expression.Literal:
+            case Expression.CharLiteral:
+            case Expression.Integer:
+            case Expression.Hex:
+            case Expression.Floatable:
+            case Expression.FunctionOrValue:
+            case Expression.PrefixOperator:
+            case Expression.RecordAccessFunction:
+            case Expression.GLSLExpression:
+                break;
+
+            default:
+                throw new NotImplementedException(
+                    "EnqueueChildExpressions does not handle expression variant: " + expr.GetType().Name);
+        }
     }
 }

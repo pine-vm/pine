@@ -1143,6 +1143,8 @@ public class ElmCompiler
                     LocalBindingTypes: null,
                     DependencyLayout: sharedLayout,
                     ModuleCompilationContext: context,
+                    ParseCache: parseCache,
+                    ReducedExpressionCache: reducedExpressionCache,
                     FunctionTypes: context.FunctionTypes);
 
             // Compile the body

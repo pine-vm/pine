@@ -123,7 +123,7 @@ public class ExpressionCompiler
         SyntaxTypes.Expression.CharLiteral expr) =>
         Expression.LiteralInstance(EmitCharLiteral(expr.Value));
 
-    private static Result<CompilationError, Expression> CompileFunctionOrValue(
+    internal static Result<CompilationError, Expression> CompileFunctionOrValue(
         SyntaxTypes.Expression.FunctionOrValue expr,
         ExpressionCompilationContext context)
     {

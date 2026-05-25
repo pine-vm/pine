@@ -38,6 +38,12 @@ public abstract record CompilationError
     }
 
     /// <summary>
+    /// Describe the context of an error as a string.
+    /// </summary>
+    public CompilationError Scoped(string scopeDescription) =>
+        new ScopedError(scopeDescription, this);
+
+    /// <summary>
     /// Expression type is not supported by the compiler.
     /// </summary>
     public sealed record UnsupportedExpressionError(string ExpressionType) : CompilationError

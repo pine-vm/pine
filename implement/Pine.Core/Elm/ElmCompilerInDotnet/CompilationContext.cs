@@ -371,19 +371,9 @@ public record ModuleCompilationContext(
 }
 
 /// <summary>
-/// Immutable context for expression compilation.
+/// Context for expression compilation.
 /// Contains all information needed to compile an expression.
-/// This is the new immutable version of ExpressionCompilationContext.
 /// </summary>
-/// <param name="ParameterNames">Mapping from parameter names to their indices.</param>
-/// <param name="ParameterTypes">Mapping from parameter names to their inferred types.</param>
-/// <param name="CurrentModuleName">Name of the module being compiled.</param>
-/// <param name="CurrentFunctionName">Name of the function being compiled (if any).</param>
-/// <param name="LocalBindings">Local variable bindings from let expressions or patterns.</param>
-/// <param name="LocalBindingTypes">Mapping from local binding names to their inferred types.</param>
-/// <param name="DependencyLayout">Layout of function dependencies for the current function.</param>
-/// <param name="ModuleCompilationContext">The parent module compilation context.</param>
-/// <param name="FunctionTypes">Mapping from qualified function names to their return and parameter types.</param>
 public record ExpressionCompilationContext(
     IReadOnlyDictionary<string, int> ParameterNames,
     IReadOnlyDictionary<string, TypeInference.InferredType> ParameterTypes,
@@ -393,6 +383,8 @@ public record ExpressionCompilationContext(
     IReadOnlyDictionary<string, TypeInference.InferredType>? LocalBindingTypes,
     IReadOnlyList<string> DependencyLayout,
     ModuleCompilationContext ModuleCompilationContext,
+    CodeAnalysis.PineVMParseCache ParseCache,
+    IDictionary<(Expression, CodeAnalysis.ReductionConfig), Expression>? ReducedExpressionCache,
     IReadOnlyDictionary<SyntaxModelTypes.QualifiedNameRef, FunctionTypeInfo>? FunctionTypes = null)
 {
 
