@@ -294,4 +294,139 @@ public class ElmSyntaxParserTests
         nestedCase.CaseBlock.Cases.Should().HaveCount(2);
         outerCase.CaseBlock.Cases[1].Expression.Value.Should().BeOfType<ExpressionSyntax.FunctionOrValue>();
     }
+
+    [Fact]
+    public void Cons_pattern_with_multi_argument_constructor_head_parses()
+    {
+        // Regression test reproducing a ParserException seen when parsing
+        // elm/parser-1.1.0 src/Parser/Advanced.elm:
+        //
+        //     case parsers of
+        //         [] -> Bad False bag
+        //         Parser parse :: remainingParsers -> ...
+        //
+        // The parser used to consume `Parser parse` as a NamedPattern with
+        // an argument and return immediately, never looking for `::` on the
+        // outer cons pattern, so the `::` token was left at the case-branch
+        // pattern position and the `->` that followed was reported as an
+        // unexpected token.
+        var input =
+            """"
+            module Test exposing (..)
+
+
+            run parsers =
+                case parsers of
+                    [] ->
+                        0
+
+                    Parser parse :: remainingParsers ->
+                        parse remainingParsers
+            """";
+
+        var parsedFile =
+            ElmSyntaxParser.ParseModuleText(input)
+            .Extract(err => throw new System.Exception(err));
+
+        parsedFile.IncompleteDeclarations.Should().BeEmpty();
+
+        var funcDecl =
+            parsedFile.Declarations[0].Value as Declaration.FunctionDeclaration;
+
+        funcDecl.Should().NotBeNull();
+
+        var caseExpr =
+            funcDecl!.Function.Declaration.Value.Expression.Value
+            .Should()
+            .BeOfType<ExpressionSyntax.CaseExpression>()
+            .Subject;
+
+        caseExpr.CaseBlock.Cases.Should().HaveCount(2);
+
+        var consBranch = caseExpr.CaseBlock.Cases[1];
+
+        var consPattern =
+            consBranch.Pattern.Value
+            .Should()
+            .BeOfType<Pattern.UnConsPattern>()
+            .Subject;
+
+        var headPattern =
+            consPattern.Head.Value
+            .Should()
+            .BeOfType<Pattern.NamedPattern>()
+            .Subject;
+
+        headPattern.Name.Name.Should().Be("Parser");
+        headPattern.Arguments.Should().HaveCount(1);
+
+        headPattern.Arguments[0].Value.Should().BeOfType<Pattern.VarPattern>()
+            .Which.Name.Should().Be("parse");
+
+        consPattern.Tail.Value.Should().BeOfType<Pattern.VarPattern>()
+            .Which.Name.Should().Be("remainingParsers");
+    }
+
+    [Fact]
+    public void As_pattern_after_multi_argument_constructor_parses()
+    {
+        // Regression test reproducing the companion shape from
+        // elm/parser-1.1.0 src/Parser/Advanced.elm `oneOfHelp`:
+        //
+        //     case parse s0 of
+        //         Good _ _ _ as step -> step
+        //         Bad p x as step -> ...
+        //
+        // Same root cause as the cons-pattern regression: a NamedPattern with
+        // arguments must still allow a trailing `as <name>` alias.
+        var input =
+            """"
+            module Test exposing (..)
+
+
+            classify step =
+                case step of
+                    Good a b c as ok ->
+                        ok
+
+                    Bad p x as bad ->
+                        bad
+            """";
+
+        var parsedFile =
+            ElmSyntaxParser.ParseModuleText(input)
+            .Extract(err => throw new System.Exception(err));
+
+        parsedFile.IncompleteDeclarations.Should().BeEmpty();
+
+        var funcDecl =
+            parsedFile.Declarations[0].Value as Declaration.FunctionDeclaration;
+
+        funcDecl.Should().NotBeNull();
+
+        var caseExpr =
+            funcDecl!.Function.Declaration.Value.Expression.Value
+            .Should()
+            .BeOfType<ExpressionSyntax.CaseExpression>()
+            .Subject;
+
+        caseExpr.CaseBlock.Cases.Should().HaveCount(2);
+
+        var firstAs =
+            caseExpr.CaseBlock.Cases[0].Pattern.Value
+            .Should()
+            .BeOfType<Pattern.AsPattern>()
+            .Subject;
+
+        firstAs.Name.Value.Should().Be("ok");
+
+        var firstInner =
+            firstAs.Pattern.Value
+            .Should()
+            .BeOfType<Pattern.NamedPattern>()
+            .Subject;
+
+        firstInner.Name.Name.Should().Be("Good");
+        firstInner.Arguments.Should().HaveCount(3);
+    }
 }

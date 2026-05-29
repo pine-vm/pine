@@ -3139,10 +3139,18 @@ public class ElmSyntaxParser
 
                 if (firstIdentifierToken.Lexeme is "if")
                 {
+                    // For `else if` chains, the inner `if`'s branches inherit the
+                    // outer expression's indentation. Without this, a body like
+                    //   if outer then a else if inner then Good { ... } else b
+                    // would parse `Good`'s record argument with the inner `if`'s
+                    // column as indentMin and fail to consume it.
+                    var ifBranchIndentMin =
+                        System.Math.Min(indentMin, firstIdentifierToken.Range.Start.Column);
+
                     ConsumeAllTrivia();
 
                     var condition =
-                        ParseExpression(indentMin: firstIdentifierToken.Range.Start.Column);
+                        ParseExpression(indentMin: ifBranchIndentMin);
 
                     ConsumeAllTrivia();
 
@@ -3151,7 +3159,7 @@ public class ElmSyntaxParser
                     ConsumeAllTrivia();
 
                     var thenBranch =
-                        ParseExpression(indentMin: firstIdentifierToken.Range.Start.Column);
+                        ParseExpression(indentMin: ifBranchIndentMin);
 
                     ConsumeAllTrivia();
 
@@ -3160,7 +3168,7 @@ public class ElmSyntaxParser
                     ConsumeAllTrivia();
 
                     var elseBranch =
-                        ParseExpression(indentMin: firstIdentifierToken.Range.Start.Column);
+                        ParseExpression(indentMin: ifBranchIndentMin);
 
                     var ifBlockRange =
                         MakeRange(
@@ -3682,6 +3690,51 @@ public class ElmSyntaxParser
 
             ConsumeAllTrivia();
 
+            // Augment a bare NamedPattern with its constructor arguments (e.g. `Just x`,
+            // `Parser parse`, `Good a b c`) before checking for `::` or `as`. Otherwise a
+            // pattern like `Parser parse :: rest` or `Good a b c as step` would stop after
+            // the head identifier and never see the trailing operator/keyword.
+            if (lessUncons.Value is SyntaxTypes.Pattern.NamedPattern namedLeft &&
+                namedLeft.Arguments.Count is 0 &&
+                NextTokenMatches(
+                    peek =>
+                    lessUncons.Range.Start.Column <= peek.Start.Column &&
+                    CanStartNamedPatternArgument(peek)))
+            {
+                var patternArguments = new List<Node<SyntaxTypes.Pattern>>();
+
+                while (NextTokenMatches(
+                    peek =>
+                    lessUncons.Range.Start.Column <= peek.Start.Column &&
+                    CanStartNamedPatternArgument(peek)))
+                {
+                    var patternArgument = ParsePatternLessUncons(indentMin);
+
+                    patternArguments.Add(patternArgument);
+
+                    ConsumeAllTrivia();
+                }
+
+                if (patternArguments.Count > 0)
+                {
+                    var patternRangeEnd =
+                        patternArguments[^1].Range.End;
+
+                    var patternRange =
+                        lessUncons.Range with
+                        {
+                            End = patternRangeEnd
+                        };
+
+                    lessUncons =
+                        new Node<SyntaxTypes.Pattern>(
+                            patternRange,
+                            new SyntaxTypes.Pattern.NamedPattern(
+                                namedLeft.Name,
+                                patternArguments));
+                }
+            }
+
             if (NextTokenMatches(peek => peek.Lexeme is "::"))
             {
                 // | UnConsPattern (Node Pattern) (Node Pattern)
@@ -3725,51 +3778,6 @@ public class ElmSyntaxParser
                     new Node<SyntaxTypes.Pattern>(
                         MakeRange(lessUncons.Range.Start, nameToken.End),
                         asPattern);
-            }
-
-            if (lessUncons.Value is SyntaxTypes.Pattern.NamedPattern namedLeft &&
-                namedLeft.Arguments.Count is 0 &&
-                NextTokenMatches(CanStartPattern))
-            {
-                ConsumeAllTrivia();
-
-                var patternArguments = new List<Node<SyntaxTypes.Pattern>>();
-
-                while (NextTokenMatches(
-                    peek =>
-                    lessUncons.Range.Start.Column <= peek.Start.Column &&
-                    CanStartPattern(peek)))
-                {
-                    var patternArgument = ParsePatternLessUncons(indentMin);
-
-                    patternArguments.Add(patternArgument);
-
-                    ConsumeAllTrivia();
-                }
-
-                if (patternArguments.Count is 0)
-                {
-                    return lessUncons;
-                }
-
-                var patternRangeEnd =
-                    patternArguments.Last().Range.End;
-
-                var patternRange =
-                    lessUncons.Range with
-                    {
-                        End = patternRangeEnd
-                    };
-
-                var namedPattern =
-                    new SyntaxTypes.Pattern.NamedPattern(
-                        namedLeft.Name,
-                        patternArguments);
-
-                return
-                    new Node<SyntaxTypes.Pattern>(
-                        patternRange,
-                        namedPattern);
             }
 
             return lessUncons;
@@ -4134,6 +4142,27 @@ public class ElmSyntaxParser
                 _ =>
                 false,
             };
+        }
+
+        // Like CanStartPattern, but additionally excludes keywords that, while
+        // tokenized as identifiers, terminate the argument list of a NamedPattern
+        // (e.g. `as` in `Good a b c as step`, `of` ending a case scrutinee
+        // pattern, `then`/`else`/`in`/`let` ending a let-destructuring pattern).
+        private static bool CanStartNamedPatternArgument(Token token)
+        {
+            if (!CanStartPattern(token))
+            {
+                return false;
+            }
+
+            if (token.Type is TokenType.Identifier &&
+                token.Lexeme is
+                "as" or "of" or "then" or "else" or "in" or "let")
+            {
+                return false;
+            }
+
+            return true;
         }
 
         private Node<SyntaxTypes.Expression> ParseRecordExpr(
