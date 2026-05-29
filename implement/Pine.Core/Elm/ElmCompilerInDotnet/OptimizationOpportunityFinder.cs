@@ -1,5 +1,4 @@
 using Pine.Core.CodeAnalysis;
-using Pine.Core.Elm.ElmCompilerInDotnet;
 using Pine.Core.Elm.ElmSyntax;
 using System.Collections.Generic;
 using System.Collections.Immutable;
@@ -10,7 +9,7 @@ using SyntaxTypes = Pine.Core.Elm.ElmSyntax.Stil4mElmSyntax7;
 using SyntaxModel = Pine.Core.Elm.ElmSyntax.SyntaxModel;
 using ModuleName = System.Collections.Generic.IReadOnlyList<string>;
 
-namespace Pine.Core.Tests.Elm.ElmCompilerInDotnet;
+namespace Pine.Core.Elm.ElmCompilerInDotnet;
 
 /// <summary>
 /// Categorises an <see cref="Opportunity"/> by the kind of generic operation
@@ -74,7 +73,24 @@ public enum OpportunityCategory
     /// to specialize the function on each statically known higher-order
     /// argument so no application on a function-typed parameter remains.
     /// </summary>
-    HigherOrderParameter,
+    HigherOrderParameter_Direct,
+
+    /// <summary>
+    /// A function parameter (top-level) that is not itself applied inside
+    /// the containing decl, but is forwarded as an argument to another
+    /// top-level function whose corresponding parameter is reported as
+    /// <see cref="HigherOrderParameter_Direct"/> (or, transitively, as
+    /// <see cref="HigherOrderParameter_Indirect"/>). The description
+    /// carries a <c>"distance N"</c> suffix where <c>N = 1</c> when the
+    /// callee is directly higher-order, and <c>N = k + 1</c> when the
+    /// callee is itself indirect with distance <c>k</c>. The category
+    /// exists primarily to instrument and debug the limitations of the
+    /// data-flow analysis driving cross-decl specialization: every
+    /// indirect finding is an opportunity the specializer must be able
+    /// to resolve before all higher-order parameters can be monomorphized
+    /// away.
+    /// </summary>
+    HigherOrderParameter_Indirect,
 
     /// <summary>
     /// A root-level wrapping of either a top-level function parameter or
@@ -127,7 +143,8 @@ public static class OpportunityCategoryFormatting
             OpportunityCategory.BasicsEq => "Basics.eq",
             OpportunityCategory.BasicsAppend => "Basics.append",
             OpportunityCategory.PartialApplication => "partial-application",
-            OpportunityCategory.HigherOrderParameter => "higher-order-parameter",
+            OpportunityCategory.HigherOrderParameter_Direct => "higher-order-parameter-direct",
+            OpportunityCategory.HigherOrderParameter_Indirect => "higher-order-parameter-indirect",
             OpportunityCategory.RootLevelChoiceTagWrapper => "root-level-choice-tag-wrapper",
 
             _ =>
@@ -189,11 +206,11 @@ public record Opportunity(
 /// </para>
 ///
 /// <para>
-/// Per-category whitelist parameters take an <see cref="ImmutableHashSet{T}"/>
-/// of declaration name prefixes. A whitelisted prefix matches every
-/// declaration whose <see cref="DeclQualifiedName.FullName"/> begins with
-/// that prefix — for example <c>"App.test"</c> also covers
-/// <c>"App.test_specialized_1"</c>.
+/// Filtering by category or by containing declaration is the caller's
+/// responsibility: each <see cref="Opportunity"/> exposes a structured
+/// <see cref="Opportunity.Category"/> and
+/// <see cref="Opportunity.ContainingDecl"/> so consumers can apply
+/// any predicate they need with a LINQ <c>Where</c>.
 /// </para>
 /// </summary>
 public static class OptimizationOpportunityFinder
@@ -250,46 +267,17 @@ public static class OptimizationOpportunityFinder
     /// containing top-level declaration.
     ///
     /// <para>
-    /// Each per-category whitelist parameter (for example
-    /// <paramref name="ignoreRecordOperation"/>) is a set of declaration
-    /// name prefixes that suppress findings of that category for any
-    /// declaration whose <see cref="DeclQualifiedName.FullName"/> starts
-    /// with one of the listed prefixes. Pass <c>null</c> for an empty
-    /// whitelist.
-    /// </para>
-    ///
-    /// <para>
-    /// <paramref name="ignoreRecordOperation"/> applies to both
-    /// <see cref="OpportunityCategory.RecordAccess"/> and
-    /// <see cref="OpportunityCategory.RecordUpdate"/>.
+    /// Filtering by category or by containing declaration is intentionally
+    /// not built into the finder: each <see cref="Opportunity"/> carries a
+    /// structured <see cref="Opportunity.Category"/> and
+    /// <see cref="Opportunity.ContainingDecl"/>, so callers needing a
+    /// narrower view should apply LINQ filters on the returned set.
     /// </para>
     /// </summary>
     public static ImmutableHashSet<Opportunity> FindOptimizationOpportunities(
         IReadOnlyDictionary<DeclQualifiedName, SyntaxTypes.Declaration> declarations,
-        ImmutableHashSet<string>? ignoreRecordOperation = null,
-        ImmutableHashSet<string>? ignoreBasicsArithmetic = null,
-        ImmutableHashSet<string>? ignoreBasicsCompare = null,
-        ImmutableHashSet<string>? ignoreBasicsEq = null,
-        ImmutableHashSet<string>? ignoreBasicsAppend = null,
-        ImmutableHashSet<string>? ignorePartialApplication = null,
-        ImmutableHashSet<string>? ignoreHigherOrderParameter = null,
-        ImmutableHashSet<string>? ignoreRootLevelChoiceTagWrapper = null,
         IReadOnlyCollection<DeclQualifiedName>? restrictToReachableFromEntryPoints = null)
     {
-        var whitelistByCategory =
-            new Dictionary<OpportunityCategory, ImmutableHashSet<string>>
-            {
-                [OpportunityCategory.RecordAccess] = ignoreRecordOperation ?? [],
-                [OpportunityCategory.RecordUpdate] = ignoreRecordOperation ?? [],
-                [OpportunityCategory.BasicsArithmetic] = ignoreBasicsArithmetic ?? [],
-                [OpportunityCategory.BasicsCompare] = ignoreBasicsCompare ?? [],
-                [OpportunityCategory.BasicsEq] = ignoreBasicsEq ?? [],
-                [OpportunityCategory.BasicsAppend] = ignoreBasicsAppend ?? [],
-                [OpportunityCategory.PartialApplication] = ignorePartialApplication ?? [],
-                [OpportunityCategory.HigherOrderParameter] = ignoreHigherOrderParameter ?? [],
-                [OpportunityCategory.RootLevelChoiceTagWrapper] = ignoreRootLevelChoiceTagWrapper ?? [],
-            };
-
         // Build the top-level arity map once. Only function declarations
         // contribute — type aliases / custom types / ports / infix
         // declarations do not have a callable arity in this analysis.
@@ -347,12 +335,11 @@ public static class OptimizationOpportunityFinder
             // may be applied as application heads inside the body. Collect
             // them up front so the body walker can flag every site.
             var topLevelParamNames =
-                CollectVarPatternNames(funcDecl.Function.Declaration.Value.Arguments);
+                ElmSyntaxTransformations.CollectNamesBoundByPatterns(funcDecl.Function.Declaration.Value.Arguments);
 
             CollectFromExpression(
                 funcDecl.Function.Declaration.Value.Expression.Value,
                 qualifiedName,
-                whitelistByCategory,
                 topLevelArity,
                 [],
                 topLevelParamNames,
@@ -366,7 +353,6 @@ public static class OptimizationOpportunityFinder
                 topLevelParamNames,
                 qualifiedName,
                 paramOwnerDescription: null,
-                whitelistByCategory,
                 resultBuilder);
 
             // Root-level single-tag-wrapper detection for top-level
@@ -375,9 +361,20 @@ public static class OptimizationOpportunityFinder
                 qualifiedName,
                 funcDecl.Function,
                 singleTagRegistry,
-                whitelistByCategory,
                 resultBuilder);
         }
+
+        // Cross-decl indirect-higher-order-parameter detection: a
+        // top-level parameter that is forwarded to a callee whose
+        // corresponding parameter is itself higher-order (directly or
+        // transitively) is reported with a distance counter. Direct
+        // findings emitted above act as the distance-0 seeds; this
+        // pass converts forwarding edges into HigherOrderParameter_Indirect
+        // findings with distance N >= 1.
+        CollectIndirectHigherOrderParameterFindings(
+            declarations,
+            reachableSet,
+            resultBuilder);
 
         return resultBuilder.ToImmutable();
     }
@@ -388,11 +385,7 @@ public static class OptimizationOpportunityFinder
     /// reference) from any entry point in <paramref name="entryPoints"/>.
     /// Used by the
     /// <c>restrictToReachableFromEntryPoints</c> overload of
-    /// <see cref="FindOptimizationOpportunities(IReadOnlyDictionary{DeclQualifiedName, SyntaxTypes.Declaration},
-    /// ImmutableHashSet{string}?, ImmutableHashSet{string}?,
-    /// ImmutableHashSet{string}?, ImmutableHashSet{string}?,
-    /// ImmutableHashSet{string}?, ImmutableHashSet{string}?,
-    /// ImmutableHashSet{string}?, IReadOnlyCollection{DeclQualifiedName}?)"/>.
+    /// <see cref="FindOptimizationOpportunities(IReadOnlyDictionary{DeclQualifiedName, SyntaxTypes.Declaration}, IReadOnlyCollection{DeclQualifiedName}?)"/>.
     /// <para>
     /// Walks bodies, types, and let-declarations. References to
     /// declarations that are not in <paramref name="declarations"/> (e.g.
@@ -403,17 +396,19 @@ public static class OptimizationOpportunityFinder
         IReadOnlyDictionary<DeclQualifiedName, SyntaxTypes.Declaration> declarations,
         IReadOnlyCollection<DeclQualifiedName> entryPoints)
     {
-        // Index declarations by simple name within each module so an
-        // unqualified `FunctionOrValue` (introduced by canonicalization
-        // for in-module references) can be resolved against the module
-        // it appears in.
-        var byModuleAndName =
-            new Dictionary<(string moduleKey, string declName), DeclQualifiedName>();
+        // Build forward edge map: caller → set of callees that are present
+        // in the declaration dictionary.
+        var forwardEdges = new Dictionary<DeclQualifiedName, HashSet<DeclQualifiedName>>();
 
-        foreach (var key in declarations.Keys)
+        foreach (var (caller, callee) in EnumerateReferenceEdges(declarations))
         {
-            var moduleKey = string.Join(".", key.Namespaces);
-            byModuleAndName[(moduleKey, key.DeclName)] = key;
+            if (!forwardEdges.TryGetValue(caller, out var callees))
+            {
+                callees = [];
+                forwardEdges[caller] = callees;
+            }
+
+            callees.Add(callee);
         }
 
         var reachable = new HashSet<DeclQualifiedName>();
@@ -431,28 +426,88 @@ public static class OptimizationOpportunityFinder
         {
             var current = queue.Dequeue();
 
-            if (!declarations.TryGetValue(current, out var decl))
+            if (!forwardEdges.TryGetValue(current, out var callees))
                 continue;
 
+            foreach (var callee in callees)
+            {
+                if (reachable.Add(callee))
+                    queue.Enqueue(callee);
+            }
+        }
+
+        return reachable;
+    }
+
+    /// <summary>
+    /// Returns the set of declarations in <paramref name="declarations"/>
+    /// whose body contains at least one syntactic
+    /// <see cref="SyntaxTypes.Expression.FunctionOrValue"/> reference that
+    /// resolves to <paramref name="target"/>.
+    /// <para>
+    /// Resolution rules match
+    /// <see cref="ComputeReachableDeclarations(IReadOnlyDictionary{DeclQualifiedName, SyntaxTypes.Declaration}, IReadOnlyCollection{DeclQualifiedName})"/>:
+    /// unqualified references in a declaration body resolve against the
+    /// module that declaration belongs to. The target itself is never
+    /// reported as its own referrer.
+    /// </para>
+    /// </summary>
+    public static IReadOnlySet<DeclQualifiedName> FindDirectReferrers(
+        IReadOnlyDictionary<DeclQualifiedName, SyntaxTypes.Declaration> declarations,
+        DeclQualifiedName target)
+    {
+        var referrers = new HashSet<DeclQualifiedName>();
+
+        foreach (var (caller, callee) in EnumerateReferenceEdges(declarations))
+        {
+            if (caller.Equals(target))
+                continue;
+
+            if (callee.Equals(target))
+                referrers.Add(caller);
+        }
+
+        return referrers;
+    }
+
+    /// <summary>
+    /// Yields every syntactic <c>(caller, callee)</c> reference edge
+    /// derivable from <paramref name="declarations"/>. Each
+    /// <see cref="SyntaxTypes.Expression.FunctionOrValue"/> reference in
+    /// the body of a function declaration is resolved against
+    /// <see cref="ElmSyntaxTransformations.BuildModuleKeyAndDeclNameIndex(IReadOnlyDictionary{DeclQualifiedName, SyntaxTypes.Declaration})"/>
+    /// — unqualified references resolve against the caller's enclosing
+    /// module. References to declarations not present in
+    /// <paramref name="declarations"/> are silently dropped.
+    /// <para>
+    /// The same edge may be yielded multiple times if it occurs multiple
+    /// times in the source. Callers that need set semantics should
+    /// deduplicate.
+    /// </para>
+    /// </summary>
+    private static IEnumerable<(DeclQualifiedName caller, DeclQualifiedName callee)> EnumerateReferenceEdges(
+        IReadOnlyDictionary<DeclQualifiedName, SyntaxTypes.Declaration> declarations)
+    {
+        var byModuleAndName =
+            ElmSyntaxTransformations.BuildModuleKeyAndDeclNameIndex(declarations);
+
+        foreach (var (declKey, decl) in declarations)
+        {
             if (decl is not SyntaxTypes.Declaration.FunctionDeclaration funcDecl)
                 continue;
 
-            var ownModuleKey = string.Join(".", current.Namespaces);
+            var ownModuleKey = string.Join(".", declKey.Namespaces);
+            var edges = new List<DeclQualifiedName>();
 
             CollectReferencesFromExpression(
                 funcDecl.Function.Declaration.Value.Expression.Value,
                 ownModuleKey,
                 byModuleAndName,
-                reference =>
-                {
-                    if (reachable.Add(reference))
-                    {
-                        queue.Enqueue(reference);
-                    }
-                });
-        }
+                edges.Add);
 
-        return reachable;
+            foreach (var callee in edges)
+                yield return (declKey, callee);
+        }
     }
 
     private static void CollectReferencesFromExpression(
@@ -461,182 +516,39 @@ public static class OptimizationOpportunityFinder
         IReadOnlyDictionary<(string moduleKey, string declName), DeclQualifiedName> byModuleAndName,
         System.Action<DeclQualifiedName> emit)
     {
-        switch (expression)
-        {
-            case SyntaxTypes.Expression.FunctionOrValue funcOrValue:
-                {
-                    string moduleKey;
+        // The reference collector emits at every FunctionOrValue regardless
+        // of lexical scope: locally-bound names cannot appear as keys in
+        // byModuleAndName (which only indexes top-level declarations), so
+        // the resolution will silently fail for them anyway.
+        ElmSyntaxTransformations.WalkExpressionsWithScope(
+            expression,
+            [],
+            (node, _) =>
+            {
+                if (node is not SyntaxTypes.Expression.FunctionOrValue funcOrValue)
+                    return;
 
-                    if (funcOrValue.ModuleName.Count is 0)
-                    {
-                        moduleKey = ownModuleKey;
-                    }
-                    else
-                    {
-                        moduleKey = string.Join(".", funcOrValue.ModuleName);
-                    }
+                var moduleKey =
+                    funcOrValue.ModuleName.Count is 0
+                    ?
+                    ownModuleKey
+                    :
+                    string.Join(".", funcOrValue.ModuleName);
 
-                    if (byModuleAndName.TryGetValue((moduleKey, funcOrValue.Name), out var resolved))
-                    {
-                        emit(resolved);
-                    }
-                }
-
-                break;
-
-            case SyntaxTypes.Expression.Application app:
-                foreach (var arg in app.Arguments)
-                    CollectReferencesFromExpression(arg.Value, ownModuleKey, byModuleAndName, emit);
-
-                break;
-
-            case SyntaxTypes.Expression.OperatorApplication opApp:
-                CollectReferencesFromExpression(opApp.Left.Value, ownModuleKey, byModuleAndName, emit);
-                CollectReferencesFromExpression(opApp.Right.Value, ownModuleKey, byModuleAndName, emit);
-                break;
-
-            case SyntaxTypes.Expression.LetExpression letExpr:
-                foreach (var declNode in letExpr.Value.Declarations)
-                {
-                    switch (declNode.Value)
-                    {
-                        case SyntaxTypes.Expression.LetDeclaration.LetFunction letFunc:
-                            CollectReferencesFromExpression(
-                                letFunc.Function.Declaration.Value.Expression.Value,
-                                ownModuleKey,
-                                byModuleAndName,
-                                emit);
-
-                            break;
-
-                        case SyntaxTypes.Expression.LetDeclaration.LetDestructuring letDestr:
-                            CollectReferencesFromExpression(
-                                letDestr.Expression.Value,
-                                ownModuleKey,
-                                byModuleAndName,
-                                emit);
-
-                            break;
-
-                        default:
-                            throw new System.NotImplementedException(
-                                "CollectReferencesFromExpression does not handle let declaration variant: " +
-                                declNode.Value.GetType().Name);
-                    }
-                }
-
-                CollectReferencesFromExpression(
-                    letExpr.Value.Expression.Value,
-                    ownModuleKey,
-                    byModuleAndName,
-                    emit);
-
-                break;
-
-            case SyntaxTypes.Expression.LambdaExpression lambda:
-                CollectReferencesFromExpression(
-                    lambda.Lambda.Expression.Value,
-                    ownModuleKey,
-                    byModuleAndName,
-                    emit);
-
-                break;
-
-            case SyntaxTypes.Expression.ParenthesizedExpression paren:
-                CollectReferencesFromExpression(paren.Expression.Value, ownModuleKey, byModuleAndName, emit);
-                break;
-
-            case SyntaxTypes.Expression.IfBlock ifBlock:
-                CollectReferencesFromExpression(ifBlock.Condition.Value, ownModuleKey, byModuleAndName, emit);
-                CollectReferencesFromExpression(ifBlock.ThenBlock.Value, ownModuleKey, byModuleAndName, emit);
-                CollectReferencesFromExpression(ifBlock.ElseBlock.Value, ownModuleKey, byModuleAndName, emit);
-                break;
-
-            case SyntaxTypes.Expression.CaseExpression caseExpr:
-                CollectReferencesFromExpression(
-                    caseExpr.CaseBlock.Expression.Value,
-                    ownModuleKey,
-                    byModuleAndName,
-                    emit);
-
-                foreach (var caseEntry in caseExpr.CaseBlock.Cases)
-                    CollectReferencesFromExpression(caseEntry.Expression.Value, ownModuleKey, byModuleAndName, emit);
-
-                break;
-
-            case SyntaxTypes.Expression.ListExpr listExpr:
-                foreach (var element in listExpr.Elements)
-                    CollectReferencesFromExpression(element.Value, ownModuleKey, byModuleAndName, emit);
-
-                break;
-
-            case SyntaxTypes.Expression.TupledExpression tupled:
-                foreach (var element in tupled.Elements)
-                    CollectReferencesFromExpression(element.Value, ownModuleKey, byModuleAndName, emit);
-
-                break;
-
-            case SyntaxTypes.Expression.RecordExpr recordExpr:
-                foreach (var field in recordExpr.Fields)
-                    CollectReferencesFromExpression(field.Value.valueExpr.Value, ownModuleKey, byModuleAndName, emit);
-
-                break;
-
-            case SyntaxTypes.Expression.RecordUpdateExpression recordUpdate:
-                foreach (var field in recordUpdate.Fields)
-                    CollectReferencesFromExpression(field.Value.valueExpr.Value, ownModuleKey, byModuleAndName, emit);
-
-                break;
-
-            case SyntaxTypes.Expression.RecordAccess recordAccess:
-                CollectReferencesFromExpression(recordAccess.Record.Value, ownModuleKey, byModuleAndName, emit);
-                break;
-
-            case SyntaxTypes.Expression.Negation negation:
-                CollectReferencesFromExpression(negation.Expression.Value, ownModuleKey, byModuleAndName, emit);
-                break;
-
-            // Leaf variants without nested Expression children — and
-            // RecordAccessFunction / PrefixOperator which do not bind to
-            // a top-level declaration we can resolve syntactically.
-            case SyntaxTypes.Expression.RecordAccessFunction:
-            case SyntaxTypes.Expression.PrefixOperator:
-            case SyntaxTypes.Expression.UnitExpr:
-            case SyntaxTypes.Expression.Literal:
-            case SyntaxTypes.Expression.CharLiteral:
-            case SyntaxTypes.Expression.Integer:
-            case SyntaxTypes.Expression.Hex:
-            case SyntaxTypes.Expression.Floatable:
-            case SyntaxTypes.Expression.GLSLExpression:
-                break;
-
-            default:
-                throw new System.NotImplementedException(
-                    "CollectReferencesFromExpression does not handle expression variant: " +
-                    expression.GetType().Name);
-        }
+                if (byModuleAndName.TryGetValue((moduleKey, funcOrValue.Name), out var resolved))
+                    emit(resolved);
+            });
     }
 
     /// <summary>
     /// Convenience overload that parses and canonicalizes the supplied Elm
     /// module texts, then runs
-    /// <see cref="FindOptimizationOpportunities(IReadOnlyDictionary{DeclQualifiedName, SyntaxTypes.Declaration},
-    /// ImmutableHashSet{string}?, ImmutableHashSet{string}?,
-    /// ImmutableHashSet{string}?, ImmutableHashSet{string}?,
-    /// ImmutableHashSet{string}?, ImmutableHashSet{string}?,
-    /// ImmutableHashSet{string}?)"/> on the resulting flat declaration
-    /// dictionary. Useful for short, inline test scenarios.
+    /// <see cref="FindOptimizationOpportunities(IReadOnlyDictionary{DeclQualifiedName, SyntaxTypes.Declaration}, IReadOnlyCollection{DeclQualifiedName}?)"/>
+    /// on the resulting flat declaration dictionary. Useful for short,
+    /// inline test scenarios.
     /// </summary>
     public static ImmutableHashSet<Opportunity> FindOptimizationOpportunities(
-        IReadOnlyList<string> elmModulesTexts,
-        ImmutableHashSet<string>? ignoreRecordOperation = null,
-        ImmutableHashSet<string>? ignoreBasicsArithmetic = null,
-        ImmutableHashSet<string>? ignoreBasicsCompare = null,
-        ImmutableHashSet<string>? ignoreBasicsEq = null,
-        ImmutableHashSet<string>? ignoreBasicsAppend = null,
-        ImmutableHashSet<string>? ignorePartialApplication = null,
-        ImmutableHashSet<string>? ignoreHigherOrderParameter = null,
-        ImmutableHashSet<string>? ignoreRootLevelChoiceTagWrapper = null,
+        ModuleName elmModulesTexts,
         IReadOnlyCollection<DeclQualifiedName>? restrictToReachableFromEntryPoints = null)
     {
         var declarations = ParseAndCanonicalizeToFlatDict(elmModulesTexts);
@@ -644,14 +556,6 @@ public static class OptimizationOpportunityFinder
         return
             FindOptimizationOpportunities(
                 declarations,
-                ignoreRecordOperation,
-                ignoreBasicsArithmetic,
-                ignoreBasicsCompare,
-                ignoreBasicsEq,
-                ignoreBasicsAppend,
-                ignorePartialApplication,
-                ignoreHigherOrderParameter,
-                ignoreRootLevelChoiceTagWrapper,
                 restrictToReachableFromEntryPoints);
     }
 
@@ -743,7 +647,6 @@ public static class OptimizationOpportunityFinder
     private static void CollectFromExpression(
         SyntaxTypes.Expression expression,
         DeclQualifiedName containing,
-        IReadOnlyDictionary<OpportunityCategory, ImmutableHashSet<string>> whitelistByCategory,
         IReadOnlyDictionary<DeclQualifiedName, int> topLevelArity,
         ImmutableDictionary<string, int> letScope,
         ImmutableHashSet<string> functionTypedParameterNames,
@@ -762,13 +665,11 @@ public static class OptimizationOpportunityFinder
                     OpportunityCategory.RecordAccess,
                     recordAccess.FieldName.Value,
                     containing,
-                    whitelistByCategory,
                     resultBuilder);
 
                 CollectFromExpression(
                     recordAccess.Record.Value,
                     containing,
-                    whitelistByCategory,
                     topLevelArity,
                     letScope,
                     functionTypedParameterNames,
@@ -781,7 +682,6 @@ public static class OptimizationOpportunityFinder
                     OpportunityCategory.RecordAccess,
                     TrimLeadingDot(recordAccessFunction.FunctionName),
                     containing,
-                    whitelistByCategory,
                     resultBuilder);
 
                 break;
@@ -793,13 +693,11 @@ public static class OptimizationOpportunityFinder
                         OpportunityCategory.RecordUpdate,
                         field.Value.fieldName.Value,
                         containing,
-                        whitelistByCategory,
                         resultBuilder);
 
                     CollectFromExpression(
                         field.Value.valueExpr.Value,
                         containing,
-                        whitelistByCategory,
                         topLevelArity,
                         letScope,
                         functionTypedParameterNames,
@@ -817,7 +715,6 @@ public static class OptimizationOpportunityFinder
                         funcCategory,
                         funcOrValue.Name,
                         containing,
-                        whitelistByCategory,
                         resultBuilder);
                 }
 
@@ -830,14 +727,12 @@ public static class OptimizationOpportunityFinder
                         opCategory,
                         "(" + opApp.Operator + ")",
                         containing,
-                        whitelistByCategory,
                         resultBuilder);
                 }
 
                 CollectFromExpression(
                     opApp.Left.Value,
                     containing,
-                    whitelistByCategory,
                     topLevelArity,
                     letScope,
                     functionTypedParameterNames,
@@ -846,7 +741,6 @@ public static class OptimizationOpportunityFinder
                 CollectFromExpression(
                     opApp.Right.Value,
                     containing,
-                    whitelistByCategory,
                     topLevelArity,
                     letScope,
                     functionTypedParameterNames,
@@ -861,7 +755,6 @@ public static class OptimizationOpportunityFinder
                         prefixCategory,
                         "(" + prefixOp.Operator + ")",
                         containing,
-                        whitelistByCategory,
                         resultBuilder);
                 }
 
@@ -871,7 +764,6 @@ public static class OptimizationOpportunityFinder
                 MaybeReportPartialApplication(
                     app,
                     containing,
-                    whitelistByCategory,
                     topLevelArity,
                     letScope,
                     resultBuilder);
@@ -881,7 +773,6 @@ public static class OptimizationOpportunityFinder
                     CollectFromExpression(
                         arg.Value,
                         containing,
-                        whitelistByCategory,
                         topLevelArity,
                         letScope,
                         functionTypedParameterNames,
@@ -922,13 +813,12 @@ public static class OptimizationOpportunityFinder
                             // description so they do not collide with
                             // identically-named outer parameters.
                             var letParamNames =
-                                CollectVarPatternNames(
+                                ElmSyntaxTransformations.CollectNamesBoundByPatterns(
                                     letFunc.Function.Declaration.Value.Arguments);
 
                             CollectFromExpression(
                                 letFunc.Function.Declaration.Value.Expression.Value,
                                 containing,
-                                whitelistByCategory,
                                 topLevelArity,
                                 extendedLetScope,
                                 // The outer function's parameters are still
@@ -946,7 +836,6 @@ public static class OptimizationOpportunityFinder
                                 containing,
                                 paramOwnerDescription:
                                 letFunc.Function.Declaration.Value.Name.Value,
-                                whitelistByCategory,
                                 resultBuilder);
 
                             break;
@@ -955,7 +844,6 @@ public static class OptimizationOpportunityFinder
                             CollectFromExpression(
                                 letDestr.Expression.Value,
                                 containing,
-                                whitelistByCategory,
                                 topLevelArity,
                                 extendedLetScope,
                                 functionTypedParameterNames,
@@ -973,7 +861,6 @@ public static class OptimizationOpportunityFinder
                 CollectFromExpression(
                     letExpr.Value.Expression.Value,
                     containing,
-                    whitelistByCategory,
                     topLevelArity,
                     extendedLetScope,
                     functionTypedParameterNames,
@@ -985,7 +872,6 @@ public static class OptimizationOpportunityFinder
                 CollectFromExpression(
                     lambda.Lambda.Expression.Value,
                     containing,
-                    whitelistByCategory,
                     topLevelArity,
                     letScope,
                     functionTypedParameterNames,
@@ -997,7 +883,6 @@ public static class OptimizationOpportunityFinder
                 CollectFromExpression(
                     paren.Expression.Value,
                     containing,
-                    whitelistByCategory,
                     topLevelArity,
                     letScope,
                     functionTypedParameterNames,
@@ -1009,7 +894,6 @@ public static class OptimizationOpportunityFinder
                 CollectFromExpression(
                     ifBlock.Condition.Value,
                     containing,
-                    whitelistByCategory,
                     topLevelArity,
                     letScope,
                     functionTypedParameterNames,
@@ -1018,7 +902,6 @@ public static class OptimizationOpportunityFinder
                 CollectFromExpression(
                     ifBlock.ThenBlock.Value,
                     containing,
-                    whitelistByCategory,
                     topLevelArity,
                     letScope,
                     functionTypedParameterNames,
@@ -1027,7 +910,6 @@ public static class OptimizationOpportunityFinder
                 CollectFromExpression(
                     ifBlock.ElseBlock.Value,
                     containing,
-                    whitelistByCategory,
                     topLevelArity,
                     letScope,
                     functionTypedParameterNames,
@@ -1039,7 +921,6 @@ public static class OptimizationOpportunityFinder
                 CollectFromExpression(
                     caseExpr.CaseBlock.Expression.Value,
                     containing,
-                    whitelistByCategory,
                     topLevelArity,
                     letScope,
                     functionTypedParameterNames,
@@ -1050,7 +931,6 @@ public static class OptimizationOpportunityFinder
                     CollectFromExpression(
                         caseEntry.Expression.Value,
                         containing,
-                        whitelistByCategory,
                         topLevelArity,
                         letScope,
                         functionTypedParameterNames,
@@ -1065,7 +945,6 @@ public static class OptimizationOpportunityFinder
                     CollectFromExpression(
                         element.Value,
                         containing,
-                        whitelistByCategory,
                         topLevelArity,
                         letScope,
                         functionTypedParameterNames,
@@ -1080,7 +959,6 @@ public static class OptimizationOpportunityFinder
                     CollectFromExpression(
                         element.Value,
                         containing,
-                        whitelistByCategory,
                         topLevelArity,
                         letScope,
                         functionTypedParameterNames,
@@ -1095,7 +973,6 @@ public static class OptimizationOpportunityFinder
                     CollectFromExpression(
                         field.Value.valueExpr.Value,
                         containing,
-                        whitelistByCategory,
                         topLevelArity,
                         letScope,
                         functionTypedParameterNames,
@@ -1108,7 +985,6 @@ public static class OptimizationOpportunityFinder
                 CollectFromExpression(
                     negation.Expression.Value,
                     containing,
-                    whitelistByCategory,
                     topLevelArity,
                     letScope,
                     functionTypedParameterNames,
@@ -1156,7 +1032,6 @@ public static class OptimizationOpportunityFinder
     private static void MaybeReportPartialApplication(
         SyntaxTypes.Expression.Application app,
         DeclQualifiedName containing,
-        IReadOnlyDictionary<OpportunityCategory, ImmutableHashSet<string>> whitelistByCategory,
         IReadOnlyDictionary<DeclQualifiedName, int> topLevelArity,
         ImmutableDictionary<string, int> letScope,
         ImmutableHashSet<Opportunity>.Builder resultBuilder)
@@ -1169,7 +1044,7 @@ public static class OptimizationOpportunityFinder
             return;
         }
 
-        var head = UnwrapParen(app.Arguments[0].Value);
+        var head = SyntaxTypes.SyntaxAnalysis.UnwrapParenthesized(app.Arguments[0].Value);
 
         var addedArguments = app.Arguments.Count - 1;
 
@@ -1206,7 +1081,6 @@ public static class OptimizationOpportunityFinder
                             displayName +
                             "(" + addedArguments + "/" + arityValue + ")",
                             containing,
-                            whitelistByCategory,
                             resultBuilder);
                     }
                 }
@@ -1216,16 +1090,15 @@ public static class OptimizationOpportunityFinder
             case SyntaxTypes.Expression.PrefixOperator prefixOp:
                 {
                     // Source-level binary operators always have arity 2.
-                    const int operatorArity = 2;
+                    const int OperatorArity = 2;
 
-                    if (addedArguments < operatorArity)
+                    if (addedArguments < OperatorArity)
                     {
                         MaybeAdd(
                             OpportunityCategory.PartialApplication,
                             "(" + prefixOp.Operator + ")" +
-                            "(" + addedArguments + "/" + operatorArity + ")",
+                            "(" + addedArguments + "/" + OperatorArity + ")",
                             containing,
-                            whitelistByCategory,
                             resultBuilder);
                     }
                 }
@@ -1236,7 +1109,7 @@ public static class OptimizationOpportunityFinder
 
     /// <summary>
     /// Walks <paramref name="body"/> and records one
-    /// <see cref="OpportunityCategory.HigherOrderParameter"/> finding per
+    /// <see cref="OpportunityCategory.HigherOrderParameter_Direct"/> finding per
     /// parameter in <paramref name="paramNames"/> that is observed as the
     /// head of an <see cref="SyntaxTypes.Expression.Application"/>. The
     /// description is the bare parameter name when
@@ -1251,7 +1124,6 @@ public static class OptimizationOpportunityFinder
         ImmutableHashSet<string> paramNames,
         DeclQualifiedName containing,
         string? paramOwnerDescription,
-        IReadOnlyDictionary<OpportunityCategory, ImmutableHashSet<string>> whitelistByCategory,
         ImmutableHashSet<Opportunity>.Builder resultBuilder)
     {
         if (paramNames.Count is 0)
@@ -1271,11 +1143,63 @@ public static class OptimizationOpportunityFinder
                 paramOwnerDescription + "." + name;
 
             MaybeAdd(
-                OpportunityCategory.HigherOrderParameter,
+                OpportunityCategory.HigherOrderParameter_Direct,
                 description,
                 containing,
-                whitelistByCategory,
                 resultBuilder);
+        }
+    }
+
+    /// <summary>
+    /// Cross-decl pass: emits <see cref="OpportunityCategory.HigherOrderParameter_Indirect"/>
+    /// findings for owned bindings (top-level parameters or
+    /// let-introduced bindings) that flow into a callee's higher-order
+    /// parameter (directly higher-order at distance 1, or transitively
+    /// at distance k+1).
+    ///
+    /// <para>
+    /// Delegates the entire higher-order findings computation —
+    /// destructured-name discovery, let-binding source tracking,
+    /// forwarding-edge construction, reverse-BFS distance computation —
+    /// to <see cref="HigherOrderParameterAnalysis.FindAllHigherOrderFindings"/>.
+    /// This method only renders the result: each finding at distance
+    /// <c>N &gt;= 1</c> becomes one <c>_Indirect</c> opportunity.
+    /// Distance-0 findings are not converted here; the body walker in
+    /// <see cref="CollectHigherOrderParameterFindings"/> already covers
+    /// the direct-use cases (and also reports record-access chains
+    /// rooted at a parameter and let-bound-function parameters, which
+    /// the HOPA distance-0 view does not model).
+    /// </para>
+    /// </summary>
+    private static void CollectIndirectHigherOrderParameterFindings(
+        IReadOnlyDictionary<DeclQualifiedName, SyntaxTypes.Declaration> declarations,
+        IReadOnlySet<DeclQualifiedName>? reachableSet,
+        ImmutableHashSet<Opportunity>.Builder resultBuilder)
+    {
+        var allFindings =
+            HigherOrderParameterAnalysis.FindAllHigherOrderFindings(declarations);
+
+        foreach (var entry in allFindings
+            .OrderBy(kvp => kvp.Key))
+        {
+            var decl = entry.Key;
+
+            if (reachableSet is not null && !reachableSet.Contains(decl))
+                continue;
+
+            foreach (var finding in entry.Value
+                .OrderBy(f => f.Name, System.StringComparer.Ordinal))
+            {
+                if (finding.Distance < 1)
+                    continue;
+
+                resultBuilder.Add(
+                    new Opportunity(
+                        decl,
+                        OpportunityCategory.HigherOrderParameter_Indirect,
+                        finding.Name + " @ distance " +
+                        finding.Distance.ToString(System.Globalization.CultureInfo.InvariantCulture)));
+            }
         }
     }
 
@@ -1294,7 +1218,7 @@ public static class OptimizationOpportunityFinder
             case SyntaxTypes.Expression.Application app:
                 if (app.Arguments.Count >= 1)
                 {
-                    var head = UnwrapParen(app.Arguments[0].Value);
+                    var head = SyntaxTypes.SyntaxAnalysis.UnwrapParenthesized(app.Arguments[0].Value);
 
                     if (head is SyntaxTypes.Expression.FunctionOrValue funcOrValue &&
                         funcOrValue.ModuleName.Count is 0 &&
@@ -1339,7 +1263,7 @@ public static class OptimizationOpportunityFinder
                             // shadow any outer parameters of the same name,
                             // so remove them from the set before descending.
                             var letParamNames =
-                                CollectVarPatternNames(
+                                ElmSyntaxTransformations.CollectNamesBoundByPatterns(
                                     letFunc.Function.Declaration.Value.Arguments);
 
                             var visibleHere =
@@ -1355,9 +1279,8 @@ public static class OptimizationOpportunityFinder
                         case SyntaxTypes.Expression.LetDeclaration.LetDestructuring letDestr:
                             FindAppliedParameterNames(letDestr.Expression.Value, paramNames, found);
 
-                            CollectVarPatternNamesFromPattern(
-                                letDestr.Pattern.Value,
-                                letDestructuredNames);
+                            foreach (var n in ElmSyntaxTransformations.CollectPatternNames(letDestr.Pattern.Value))
+                                letDestructuredNames.Add(n);
 
                             break;
 
@@ -1377,7 +1300,7 @@ public static class OptimizationOpportunityFinder
 
             case SyntaxTypes.Expression.LambdaExpression lambda:
                 var lambdaParams =
-                    CollectVarPatternNames(lambda.Lambda.Arguments);
+                    ElmSyntaxTransformations.CollectNamesBoundByPatterns(lambda.Lambda.Arguments);
 
                 FindAppliedParameterNames(
                     lambda.Lambda.Expression.Value,
@@ -1406,15 +1329,12 @@ public static class OptimizationOpportunityFinder
                     // surrounding outer parameters remain visible too,
                     // unless the pattern shadows one (we conservatively
                     // keep both — Elm forbids shadowing in patterns).
-                    var branchBoundBuilder = ImmutableHashSet.CreateBuilder<string>();
-
-                    CollectVarPatternNamesFromPattern(
-                        caseEntry.Pattern.Value,
-                        branchBoundBuilder);
+                    var branchBound =
+                        SyntaxTypes.SyntaxAnalysis.CollectNamesBoundByPattern(caseEntry.Pattern.Value);
 
                     FindAppliedParameterNames(
                         caseEntry.Expression.Value,
-                        paramNames.Union(branchBoundBuilder),
+                        paramNames.Union(branchBound),
                         found);
                 }
 
@@ -1472,101 +1392,6 @@ public static class OptimizationOpportunityFinder
     }
 
     /// <summary>
-    /// Returns the set of variable-pattern names introduced by a function's
-    /// or lambda's argument-pattern list. Non-variable patterns (tuple
-    /// destructuring, named patterns, etc.) are skipped — they are still
-    /// in scope but are not addressable by simple-name lookup so they
-    /// cannot be applied as the head of an <c>Application</c>.
-    /// </summary>
-    private static ImmutableHashSet<string> CollectVarPatternNames(
-        IReadOnlyList<SyntaxModel.Node<SyntaxTypes.Pattern>> arguments)
-    {
-        var builder = ImmutableHashSet.CreateBuilder<string>();
-
-        foreach (var argNode in arguments)
-        {
-            CollectVarPatternNamesFromPattern(argNode.Value, builder);
-        }
-
-        return builder.ToImmutable();
-    }
-
-    private static void CollectVarPatternNamesFromPattern(
-        SyntaxTypes.Pattern pattern,
-        ImmutableHashSet<string>.Builder builder)
-    {
-        switch (pattern)
-        {
-            case SyntaxTypes.Pattern.VarPattern varPattern:
-                builder.Add(varPattern.Name);
-                break;
-
-            case SyntaxTypes.Pattern.ParenthesizedPattern paren:
-                CollectVarPatternNamesFromPattern(paren.Pattern.Value, builder);
-                break;
-
-            case SyntaxTypes.Pattern.AsPattern asPattern:
-                builder.Add(asPattern.Name.Value);
-                CollectVarPatternNamesFromPattern(asPattern.Pattern.Value, builder);
-                break;
-
-            case SyntaxTypes.Pattern.NamedPattern namedPattern:
-
-                // A named-constructor pattern like `(Wrap inner)` binds the
-                // names from its argument patterns. The constructor itself
-                // does not introduce a name. A type-checking program can
-                // only reach this shape — outside of a `case` branch — when
-                // the value is of a single-tag type, so the bound names are
-                // always in scope.
-                foreach (var argNode in namedPattern.Arguments)
-                    CollectVarPatternNamesFromPattern(argNode.Value, builder);
-
-                break;
-
-            case SyntaxTypes.Pattern.TuplePattern tuplePattern:
-                foreach (var elementNode in tuplePattern.Elements)
-                    CollectVarPatternNamesFromPattern(elementNode.Value, builder);
-
-                break;
-
-            case SyntaxTypes.Pattern.RecordPattern recordPattern:
-
-                // A record pattern `{x, y}` binds the field names directly
-                // as local names.
-                foreach (var fieldNode in recordPattern.Fields)
-                    builder.Add(fieldNode.Value);
-
-                break;
-
-            case SyntaxTypes.Pattern.UnConsPattern unCons:
-                CollectVarPatternNamesFromPattern(unCons.Head.Value, builder);
-                CollectVarPatternNamesFromPattern(unCons.Tail.Value, builder);
-                break;
-
-            case SyntaxTypes.Pattern.ListPattern listPattern:
-                foreach (var elementNode in listPattern.Elements)
-                    CollectVarPatternNamesFromPattern(elementNode.Value, builder);
-
-                break;
-
-            // Other pattern variants do not bind names (literals, AllPattern,
-            // UnitPattern, etc.).
-            default:
-                break;
-        }
-    }
-
-    private static SyntaxTypes.Expression UnwrapParen(SyntaxTypes.Expression expression)
-    {
-        while (expression is SyntaxTypes.Expression.ParenthesizedExpression paren)
-        {
-            expression = paren.Expression.Value;
-        }
-
-        return expression;
-    }
-
-    /// <summary>
     /// If <paramref name="recordAccess"/> is a chain
     /// <c>p.f1.f2.…fn</c> whose innermost record expression is a bare
     /// <see cref="SyntaxTypes.Expression.FunctionOrValue"/> with module
@@ -1581,13 +1406,13 @@ public static class OptimizationOpportunityFinder
         var fields = new List<string>();
         SyntaxTypes.Expression current = recordAccess;
 
-        while (UnwrapParen(current) is SyntaxTypes.Expression.RecordAccess ra)
+        while (SyntaxTypes.SyntaxAnalysis.UnwrapParenthesized(current) is SyntaxTypes.Expression.RecordAccess ra)
         {
             fields.Add(ra.FieldName.Value);
             current = ra.Record.Value;
         }
 
-        if (UnwrapParen(current) is not SyntaxTypes.Expression.FunctionOrValue rootFov)
+        if (SyntaxTypes.SyntaxAnalysis.UnwrapParenthesized(current) is not SyntaxTypes.Expression.FunctionOrValue rootFov)
             return null;
 
         if (rootFov.ModuleName.Count is not 0)
@@ -1610,24 +1435,13 @@ public static class OptimizationOpportunityFinder
         OpportunityCategory category,
         string description,
         DeclQualifiedName containing,
-        IReadOnlyDictionary<OpportunityCategory, ImmutableHashSet<string>> whitelistByCategory,
         ImmutableHashSet<Opportunity>.Builder resultBuilder)
     {
-        var whitelist = whitelistByCategory[category];
-
-        var fullName = containing.FullName;
-
-        foreach (var prefix in whitelist)
-        {
-            if (fullName.StartsWith(prefix, System.StringComparison.Ordinal))
-                return;
-        }
-
         resultBuilder.Add(new Opportunity(containing, category, description));
     }
 
     private static IReadOnlyDictionary<DeclQualifiedName, SyntaxTypes.Declaration>
-        ParseAndCanonicalizeToFlatDict(IReadOnlyList<string> elmModulesTexts)
+        ParseAndCanonicalizeToFlatDict(ModuleName elmModulesTexts)
     {
         var parsedModules =
             elmModulesTexts
@@ -1669,7 +1483,7 @@ public static class OptimizationOpportunityFinder
     private sealed record SingleTagShapeInfo(
         DeclQualifiedName TypeName,
         DeclQualifiedName ConstructorName,
-        IReadOnlyList<string> TypeGenerics,
+        ModuleName TypeGenerics,
         IReadOnlyList<SyntaxTypes.TypeAnnotation> ConstructorArgumentTypes);
 
     /// <summary>
@@ -1759,7 +1573,6 @@ public static class OptimizationOpportunityFinder
         DeclQualifiedName containing,
         SyntaxTypes.FunctionStruct function,
         ImmutableDictionary<DeclQualifiedName, SingleTagShapeInfo> singleTagRegistry,
-        IReadOnlyDictionary<OpportunityCategory, ImmutableHashSet<string>> whitelistByCategory,
         ImmutableHashSet<Opportunity>.Builder resultBuilder)
     {
         if (singleTagRegistry.IsEmpty)
@@ -1789,7 +1602,7 @@ public static class OptimizationOpportunityFinder
         for (var i = 0; i < implementation.Arguments.Count; i++)
         {
             var paramPattern = implementation.Arguments[i].Value;
-            var paramName = TryGetVarOrAsName(paramPattern);
+            var paramName = ElmSyntaxTransformations.TryGetParameterDisplayName(paramPattern);
 
             // 1. Signature-based.
             SingleTagShapeInfo? matchedFromSig = null;
@@ -1843,7 +1656,6 @@ public static class OptimizationOpportunityFinder
                 OpportunityCategory.RootLevelChoiceTagWrapper,
                 description,
                 containing,
-                whitelistByCategory,
                 resultBuilder);
         }
 
@@ -1860,14 +1672,11 @@ public static class OptimizationOpportunityFinder
             returnUnwrapped = sigUnwrapped;
         }
 
-        if (returnMatched is null)
-        {
-            returnMatched =
-                TryMatchSingleTagFromAllReturnLeaves(
-                    implementation.Expression.Value,
-                    singleTagRegistry,
-                    ownModule);
-        }
+        returnMatched ??=
+            TryMatchSingleTagFromAllReturnLeaves(
+                implementation.Expression.Value,
+                singleTagRegistry,
+                ownModule);
 
         if (returnMatched is not null)
         {
@@ -1878,7 +1687,6 @@ public static class OptimizationOpportunityFinder
                 OpportunityCategory.RootLevelChoiceTagWrapper,
                 "return: " + returnMatched.ConstructorName.FullName + " -> " + ParenIfTopLevelArrow(unwrappedReturn),
                 containing,
-                whitelistByCategory,
                 resultBuilder);
         }
     }
@@ -1985,7 +1793,7 @@ public static class OptimizationOpportunityFinder
         ImmutableDictionary<DeclQualifiedName, SingleTagShapeInfo> singleTagRegistry,
         ModuleName ownModule)
     {
-        var peeled = PeelPatternWrappers(pattern);
+        var peeled = ElmSyntaxTransformations.PeelPatternParenthesesAndAsBinder(pattern);
 
         if (peeled is not SyntaxTypes.Pattern.NamedPattern named)
             return null;
@@ -2024,7 +1832,7 @@ public static class OptimizationOpportunityFinder
         ImmutableDictionary<DeclQualifiedName, SingleTagShapeInfo> singleTagRegistry,
         ModuleName ownModule)
     {
-        var current = PeelExpressionParens(body);
+        var current = SyntaxTypes.SyntaxAnalysis.UnwrapParenthesized(body);
 
         while (current is SyntaxTypes.Expression.LetExpression letExpr)
         {
@@ -2033,7 +1841,7 @@ public static class OptimizationOpportunityFinder
                 if (declNode.Value is not SyntaxTypes.Expression.LetDeclaration.LetDestructuring letDestr)
                     continue;
 
-                var rhs = PeelExpressionParens(letDestr.Expression.Value);
+                var rhs = SyntaxTypes.SyntaxAnalysis.UnwrapParenthesized(letDestr.Expression.Value);
 
                 if (rhs is not SyntaxTypes.Expression.FunctionOrValue rhsRef)
                     continue;
@@ -2051,7 +1859,7 @@ public static class OptimizationOpportunityFinder
                     return match;
             }
 
-            current = PeelExpressionParens(letExpr.Value.Expression.Value);
+            current = SyntaxTypes.SyntaxAnalysis.UnwrapParenthesized(letExpr.Value.Expression.Value);
         }
 
         return null;
@@ -2090,171 +1898,51 @@ public static class OptimizationOpportunityFinder
         ModuleName ownModule,
         ref SingleTagShapeInfo? agreed)
     {
-        var peeled = PeelExpressionParens(expression);
-
-        switch (peeled)
+        foreach (var leaf in SyntaxTypes.SyntaxAnalysis.EnumerateReturnLeaves(expression))
         {
-            case SyntaxTypes.Expression.LetExpression letExpr:
-                return
-                    AllReturnLeavesAgreeOnSingleTagCtor(
-                        letExpr.Value.Expression.Value,
-                        singleTagRegistry,
-                        ownModule,
-                        ref agreed);
+            if (leaf is not SyntaxTypes.Expression.Application app)
+                return false;
 
-            case SyntaxTypes.Expression.IfBlock ifBlock:
-                return
-                    AllReturnLeavesAgreeOnSingleTagCtor(
-                        ifBlock.ThenBlock.Value,
-                        singleTagRegistry,
-                        ownModule,
-                        ref agreed) &&
-                    AllReturnLeavesAgreeOnSingleTagCtor(
-                        ifBlock.ElseBlock.Value,
-                        singleTagRegistry,
-                        ownModule,
-                        ref agreed);
+            if (app.Arguments.Count < 2)
+                return false;
 
-            case SyntaxTypes.Expression.CaseExpression caseExpr:
-                if (caseExpr.CaseBlock.Cases.Count is 0)
-                    return false;
+            var head = SyntaxTypes.SyntaxAnalysis.UnwrapParenthesized(app.Arguments[0].Value);
 
-                foreach (var arm in caseExpr.CaseBlock.Cases)
-                {
-                    if (!AllReturnLeavesAgreeOnSingleTagCtor(
-                            arm.Expression.Value,
-                            singleTagRegistry,
-                            ownModule,
-                            ref agreed))
-                    {
-                        return false;
-                    }
-                }
+            if (head is not SyntaxTypes.Expression.FunctionOrValue funcOrValue)
+                return false;
 
-                return true;
+            var qualified =
+                funcOrValue.ModuleName.Count > 0
+                ?
+                new DeclQualifiedName(funcOrValue.ModuleName, funcOrValue.Name)
+                :
+                new DeclQualifiedName(ownModule, funcOrValue.Name);
 
-            case SyntaxTypes.Expression.Application app:
-                if (app.Arguments.Count < 2)
-                    return false;
+            if (!singleTagRegistry.TryGetValue(qualified, out var info))
+                return false;
 
-                var head = PeelExpressionParens(app.Arguments[0].Value);
+            if (!info.ConstructorName.Equals(qualified))
+                return false;
 
-                if (head is not SyntaxTypes.Expression.FunctionOrValue funcOrValue)
-                    return false;
+            // The application must supply exactly one positional
+            // argument per constructor field (Elm constructors are
+            // applied uncurried at the source level).
+            var suppliedArgCount = app.Arguments.Count - 1;
 
-                var qualified =
-                    funcOrValue.ModuleName.Count > 0
-                    ?
-                    new DeclQualifiedName(funcOrValue.ModuleName, funcOrValue.Name)
-                    :
-                    new DeclQualifiedName(ownModule, funcOrValue.Name);
+            if (suppliedArgCount != info.ConstructorArgumentTypes.Count)
+                return false;
 
-                if (!singleTagRegistry.TryGetValue(qualified, out var info))
-                    return false;
+            if (agreed is null)
+            {
+                agreed = info;
+                continue;
+            }
 
-                if (!info.ConstructorName.Equals(qualified))
-                    return false;
-
-                // The application must supply exactly one positional
-                // argument per constructor field (Elm constructors are
-                // applied uncurried at the source level).
-                var suppliedArgCount = app.Arguments.Count - 1;
-
-                if (suppliedArgCount != info.ConstructorArgumentTypes.Count)
-                    return false;
-
-                if (agreed is null)
-                {
-                    agreed = info;
-                    return true;
-                }
-
-                return agreed.ConstructorName.Equals(info.ConstructorName);
-
-            default:
+            if (!agreed.ConstructorName.Equals(info.ConstructorName))
                 return false;
         }
-    }
 
-    /// <summary>
-    /// Peels nested
-    /// <see cref="SyntaxTypes.Expression.ParenthesizedExpression"/>
-    /// layers from <paramref name="expression"/>.
-    /// </summary>
-    private static SyntaxTypes.Expression PeelExpressionParens(SyntaxTypes.Expression expression)
-    {
-        while (expression is SyntaxTypes.Expression.ParenthesizedExpression p)
-            expression = p.Expression.Value;
-
-        return expression;
-    }
-
-    /// <summary>
-    /// Peels nested
-    /// <see cref="SyntaxTypes.Pattern.ParenthesizedPattern"/> and
-    /// <see cref="SyntaxTypes.Pattern.AsPattern"/> layers from
-    /// <paramref name="pattern"/>.
-    /// </summary>
-    private static SyntaxTypes.Pattern PeelPatternWrappers(SyntaxTypes.Pattern pattern)
-    {
-        while (true)
-        {
-            switch (pattern)
-            {
-                case SyntaxTypes.Pattern.ParenthesizedPattern p:
-                    pattern = p.Pattern.Value;
-                    continue;
-
-                case SyntaxTypes.Pattern.AsPattern a:
-                    pattern = a.Pattern.Value;
-                    continue;
-
-                default:
-                    return pattern;
-            }
-        }
-    }
-
-    /// <summary>
-    /// Returns the bound name of a parameter pattern that is most useful
-    /// for display. Recognises:
-    /// <list type="bullet">
-    /// <item>A bare <see cref="SyntaxTypes.Pattern.VarPattern"/> (the
-    /// pattern's own name).</item>
-    /// <item>An <see cref="SyntaxTypes.Pattern.AsPattern"/> (the
-    /// <c>as</c>-name).</item>
-    /// <item>A <see cref="SyntaxTypes.Pattern.NamedPattern"/> with a
-    /// single variable argument (the inner variable's name; this is
-    /// the destructuring shape <c>(Ctor inner)</c>).</item>
-    /// <item>Any of the above wrapped in
-    /// <see cref="SyntaxTypes.Pattern.ParenthesizedPattern"/>.</item>
-    /// </list>
-    /// Returns <c>null</c> for any other pattern shape.
-    /// </summary>
-    private static string? TryGetVarOrAsName(SyntaxTypes.Pattern pattern)
-    {
-        while (true)
-        {
-            switch (pattern)
-            {
-                case SyntaxTypes.Pattern.VarPattern vp:
-                    return vp.Name;
-
-                case SyntaxTypes.Pattern.AsPattern ap:
-                    return ap.Name.Value;
-
-                case SyntaxTypes.Pattern.ParenthesizedPattern pp:
-                    pattern = pp.Pattern.Value;
-                    continue;
-
-                case SyntaxTypes.Pattern.NamedPattern np when np.Arguments.Count is 1:
-                    pattern = np.Arguments[0].Value;
-                    continue;
-
-                default:
-                    return null;
-            }
-        }
+        return agreed is not null;
     }
 
     /// <summary>
@@ -2566,20 +2254,16 @@ public static class OptimizationOpportunityFinder
     /// </summary>
     private static string RenderTypeAnnotationParenIfComposite(SyntaxTypes.TypeAnnotation annotation)
     {
-        switch (annotation)
+        return annotation switch
         {
-            case SyntaxTypes.TypeAnnotation.GenericType:
-            case SyntaxTypes.TypeAnnotation.Unit:
-            case SyntaxTypes.TypeAnnotation.Tupled:
-            case SyntaxTypes.TypeAnnotation.Record:
-                return RenderTypeAnnotation(annotation);
+            SyntaxTypes.TypeAnnotation.GenericType or SyntaxTypes.TypeAnnotation.Unit or SyntaxTypes.TypeAnnotation.Tupled or SyntaxTypes.TypeAnnotation.Record =>
+            RenderTypeAnnotation(annotation),
 
-            case SyntaxTypes.TypeAnnotation.Typed t when t.TypeArguments.Count is 0:
-                return RenderTypeAnnotation(t);
+            SyntaxTypes.TypeAnnotation.Typed t when t.TypeArguments.Count is 0 => RenderTypeAnnotation(t),
 
-            default:
-                return "(" + RenderTypeAnnotation(annotation) + ")";
-        }
+            _ =>
+            "(" + RenderTypeAnnotation(annotation) + ")",
+        };
     }
 
     /// <summary>
@@ -2618,13 +2302,12 @@ public static class OptimizationOpportunityFinder
         var paramCount = implementation.Arguments.Count;
 
         var sigParamTypes = new List<SyntaxTypes.TypeAnnotation?>();
-        SyntaxTypes.TypeAnnotation? sigReturnType = null;
 
         DecomposeFunctionSignature(
             signatureNode.Value.TypeAnnotation.Value,
             paramCount,
             sigParamTypes,
-            out sigReturnType);
+            out var sigReturnType);
 
         var transformedParts = new List<string>();
 

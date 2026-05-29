@@ -1,6 +1,8 @@
 using AwesomeAssertions;
 using Pine.Core.CodeAnalysis;
+using Pine.Core.Elm.ElmCompilerInDotnet;
 using System.Collections.Immutable;
+using System.Linq;
 using Xunit;
 
 namespace Pine.Core.Tests.Elm.ElmCompilerInDotnet;
@@ -233,8 +235,13 @@ public class OptimizationOpportunityFinderTests
 
         var opportunities =
             OptimizationOpportunityFinder.FindOptimizationOpportunities(
-                withSpecialized,
-                ignoreRecordOperation: ["Test.hot"]);
+                withSpecialized)
+            .Where(
+                o =>
+                !(o.Category is OpportunityCategory.RecordAccess
+                              or OpportunityCategory.RecordUpdate &&
+                  o.ContainingDecl.FullName.StartsWith("Test.hot", System.StringComparison.Ordinal)))
+            .ToImmutableHashSet();
 
         var rendered = OptimizationOpportunityFinder.RenderOpportunities(opportunities);
 
@@ -456,7 +463,7 @@ public class OptimizationOpportunityFinderTests
 
         rendered.Should().Be(
             """
-            Test.apply: higher-order-parameter: f
+            Test.apply: higher-order-parameter-direct: f
             """.Trim());
     }
 
@@ -476,7 +483,7 @@ public class OptimizationOpportunityFinderTests
 
         rendered.Should().Be(
             """
-            Test.runTwice: higher-order-parameter: f
+            Test.runTwice: higher-order-parameter-direct: f
             """.Trim());
     }
 
@@ -514,7 +521,7 @@ public class OptimizationOpportunityFinderTests
 
         rendered.Should().Be(
             """
-            Test.wrap: higher-order-parameter: f
+            Test.wrap: higher-order-parameter-direct: f
             """.Trim());
     }
 
@@ -542,7 +549,7 @@ public class OptimizationOpportunityFinderTests
 
         rendered.Should().Be(
             """
-            Test.outer: higher-order-parameter: helper.g
+            Test.outer: higher-order-parameter-direct: helper.g
             """.Trim());
     }
 
@@ -571,7 +578,7 @@ public class OptimizationOpportunityFinderTests
 
         rendered.Should().Be(
             """
-            Test.outer: higher-order-parameter: helper.f
+            Test.outer: higher-order-parameter-direct: helper.f
             """.Trim());
     }
 
@@ -597,7 +604,7 @@ public class OptimizationOpportunityFinderTests
 
         rendered.Should().Be(
             """
-            Test.cold: higher-order-parameter: f
+            Test.cold: higher-order-parameter-direct: f
             """.Trim());
     }
 
@@ -619,7 +626,7 @@ public class OptimizationOpportunityFinderTests
 
         rendered.Should().Be(
             """
-            Test.useField: higher-order-parameter: r.go
+            Test.useField: higher-order-parameter-direct: r.go
             """.Trim());
     }
 
@@ -639,7 +646,7 @@ public class OptimizationOpportunityFinderTests
 
         rendered.Should().Be(
             """
-            Test.useField: higher-order-parameter: r.inner.go
+            Test.useField: higher-order-parameter-direct: r.inner.go
             """.Trim());
     }
 
@@ -665,7 +672,7 @@ public class OptimizationOpportunityFinderTests
 
         rendered.Should().Be(
             """
-            Test.useWrap: higher-order-parameter: inner
+            Test.useWrap: higher-order-parameter-direct: inner
             """.Trim());
     }
 
@@ -695,7 +702,7 @@ public class OptimizationOpportunityFinderTests
 
         rendered.Should().Be(
             """
-            Test.useWrap: higher-order-parameter: inner
+            Test.useWrap: higher-order-parameter-direct: inner
             """.Trim());
     }
 
@@ -723,7 +730,7 @@ public class OptimizationOpportunityFinderTests
 
         rendered.Should().Be(
             """
-            Test.fun: higher-order-parameter: delta
+            Test.fun: higher-order-parameter-direct: delta
             """.Trim());
     }
 
@@ -748,8 +755,8 @@ public class OptimizationOpportunityFinderTests
 
         rendered.Should().Be(
             """
-            Test.fun: higher-order-parameter: p1
-            Test.fun: higher-order-parameter: p2
+            Test.fun: higher-order-parameter-direct: p1
+            Test.fun: higher-order-parameter-direct: p2
             """.Trim());
     }
 
@@ -768,8 +775,8 @@ public class OptimizationOpportunityFinderTests
 
         rendered.Should().Be(
             """
-            Test.useTuple: higher-order-parameter: f
-            Test.useTuple: higher-order-parameter: g
+            Test.useTuple: higher-order-parameter-direct: f
+            Test.useTuple: higher-order-parameter-direct: g
             """.Trim());
     }
 
@@ -790,7 +797,7 @@ public class OptimizationOpportunityFinderTests
 
         rendered.Should().Be(
             """
-            Test.useRecord: higher-order-parameter: go
+            Test.useRecord: higher-order-parameter-direct: go
             """.Trim());
     }
 
@@ -816,7 +823,7 @@ public class OptimizationOpportunityFinderTests
 
         rendered.Should().Be(
             """
-            Test.useAs: higher-order-parameter: inner
+            Test.useAs: higher-order-parameter-direct: inner
             """.Trim());
     }
 
@@ -869,7 +876,7 @@ public class OptimizationOpportunityFinderTests
 
         rendered.Should().Be(
             """
-            Test.useLater: higher-order-parameter: inner
+            Test.useLater: higher-order-parameter-direct: inner
             """.Trim());
     }
 
@@ -930,7 +937,7 @@ public class OptimizationOpportunityFinderTests
             partial-application:
               Test.partialAdd: Test.makeAdder(2/3)
 
-            higher-order-parameter:
+            higher-order-parameter-direct:
               Test.apply: f
             """.Trim());
     }
@@ -969,7 +976,7 @@ public class OptimizationOpportunityFinderTests
 
         rendered.Should().Be(
             """
-            higher-order-parameter:
+            higher-order-parameter-direct:
               Test.apply: f
               Test.runTwice: g
             """.Trim());
@@ -1147,7 +1154,7 @@ public class OptimizationOpportunityFinderTests
 
         rendered.Should().Be(
             """
-            Test.skipWhileWhitespaceFollowedBy: higher-order-parameter: parseNext
+            Test.skipWhileWhitespaceFollowedBy: higher-order-parameter-direct: parseNext
             Test.skipWhileWhitespaceFollowedBy: root-level-choice-tag-wrapper: parameter[0] parseNext: Test.Parser -> (Test.State -> Test.PStep next)
             Test.skipWhileWhitespaceFollowedBy: root-level-choice-tag-wrapper: return: Test.Parser -> (Test.State -> Test.PStep next)
             """.Trim());
@@ -1396,6 +1403,335 @@ public class OptimizationOpportunityFinderTests
         transformed.Should().BeNull();
     }
 
+    [Fact]
+    public void Higher_order_parameter_indirect_distance_1_reported_for_pure_forwarder()
+    {
+        // `indirect` only forwards `f` to `direct`; `direct` is the
+        // function that actually applies `f`. `direct` is reported as
+        // higher-order-parameter-direct and `indirect` as
+        // higher-order-parameter-indirect with distance 1.
+        var rendered =
+            FindAndRender(
+                """
+                module Test exposing (..)
+
+
+                direct : (Int -> Int) -> Int -> Int
+                direct f x =
+                    f x
+
+
+                indirect : (Int -> Int) -> Int -> Int
+                indirect f x =
+                    direct f x
+                """);
+
+        rendered.Should().Be(
+            """
+            Test.direct: higher-order-parameter-direct: f
+            Test.indirect: higher-order-parameter-indirect: f @ distance 1
+            """.Trim());
+    }
+
+    [Fact]
+    public void Higher_order_parameter_indirect_distance_2_reported_for_two_forwarders()
+    {
+        // Two hops of forwarding to a `direct` callee. The middle decl
+        // is distance 1 and the outermost decl is distance 2.
+        var rendered =
+            FindAndRender(
+                """
+                module Test exposing (..)
+
+
+                direct : (Int -> Int) -> Int -> Int
+                direct f x =
+                    f x
+
+
+                indirect1 : (Int -> Int) -> Int -> Int
+                indirect1 f x =
+                    direct f x
+
+
+                indirect2 : (Int -> Int) -> Int -> Int
+                indirect2 f x =
+                    indirect1 f x
+                """);
+
+        rendered.Should().Be(
+            """
+            Test.direct: higher-order-parameter-direct: f
+            Test.indirect1: higher-order-parameter-indirect: f @ distance 1
+            Test.indirect2: higher-order-parameter-indirect: f @ distance 2
+            """.Trim());
+    }
+
+    [Fact]
+    public void Higher_order_parameter_indirect_distance_3_reported_for_three_forwarders()
+    {
+        var rendered =
+            FindAndRender(
+                """
+                module Test exposing (..)
+
+
+                direct : (Int -> Int) -> Int -> Int
+                direct f x =
+                    f x
+
+
+                indirect1 : (Int -> Int) -> Int -> Int
+                indirect1 f x =
+                    direct f x
+
+
+                indirect2 : (Int -> Int) -> Int -> Int
+                indirect2 f x =
+                    indirect1 f x
+
+
+                indirect3 : (Int -> Int) -> Int -> Int
+                indirect3 f x =
+                    indirect2 f x
+                """);
+
+        rendered.Should().Be(
+            """
+            Test.direct: higher-order-parameter-direct: f
+            Test.indirect1: higher-order-parameter-indirect: f @ distance 1
+            Test.indirect2: higher-order-parameter-indirect: f @ distance 2
+            Test.indirect3: higher-order-parameter-indirect: f @ distance 3
+            """.Trim());
+    }
+
+    [Fact]
+    public void Higher_order_parameter_indirect_takes_min_distance_across_paths()
+    {
+        // `mixed` forwards `f` twice: once directly to `direct` (distance 1)
+        // and once through `indirect1` (distance 2). The minimum wins.
+        var rendered =
+            FindAndRender(
+                """
+                module Test exposing (..)
+
+
+                direct : (Int -> Int) -> Int -> Int
+                direct f x =
+                    f x
+
+
+                indirect1 : (Int -> Int) -> Int -> Int
+                indirect1 f x =
+                    direct f x
+
+
+                mixed : (Int -> Int) -> Int -> Int
+                mixed f x =
+                    Pine_kernel.int_add [ direct f x, indirect1 f x ]
+                """);
+
+        rendered.Should().Be(
+            """
+            Test.direct: higher-order-parameter-direct: f
+            Test.indirect1: higher-order-parameter-indirect: f @ distance 1
+            Test.mixed: higher-order-parameter-indirect: f @ distance 1
+            """.Trim());
+    }
+
+    [Fact]
+    public void Higher_order_parameter_indirect_not_reported_when_decl_also_applies_param_directly()
+    {
+        // A function that both forwards `f` to a `_Direct` callee and
+        // applies `f` itself is reported as `_Direct` only; the
+        // `_Indirect` finding is intentionally suppressed because the
+        // direct report already drives the specialization opportunity.
+        var rendered =
+            FindAndRender(
+                """
+                module Test exposing (..)
+
+
+                direct : (Int -> Int) -> Int -> Int
+                direct f x =
+                    f x
+
+
+                both : (Int -> Int) -> Int -> Int
+                both f x =
+                    Pine_kernel.int_add [ direct f x, f x ]
+                """);
+
+        rendered.Should().Be(
+            """
+            Test.both: higher-order-parameter-direct: f
+            Test.direct: higher-order-parameter-direct: f
+            """.Trim());
+    }
+
+    [Fact]
+    public void Higher_order_parameter_indirect_does_not_propagate_for_non_function_argument_position()
+    {
+        // `outer` passes its plain Int param `n` to `direct` at the
+        // second positional slot. `direct.x` is not a higher-order
+        // parameter, so no indirect finding is emitted for `outer.n`.
+        var rendered =
+            FindAndRender(
+                """
+                module Test exposing (..)
+
+
+                direct : (Int -> Int) -> Int -> Int
+                direct f x =
+                    f x
+
+
+                outer : Int -> Int
+                outer n =
+                    direct (\y -> Pine_kernel.int_add [ y, 1 ]) n
+                """);
+
+        rendered.Should().Be(
+            """
+            Test.direct: higher-order-parameter-direct: f
+            """.Trim());
+    }
+
+    [Fact]
+    public void Higher_order_parameter_full_listing_snapshot_with_direct_and_indirect()
+    {
+        // End-to-end snapshot exercising direct + indirect at multiple
+        // distances mixed with non-HO findings.
+        var rendered =
+            FindAndRender(
+                """
+                module Test exposing (..)
+
+
+                apply : (Int -> Int) -> Int -> Int
+                apply f x =
+                    f x
+
+
+                showName : { a | name : String } -> String
+                showName r =
+                    r.name
+
+
+                forwarderOne : (Int -> Int) -> Int -> Int
+                forwarderOne f x =
+                    apply f x
+
+
+                forwarderTwo : (Int -> Int) -> Int -> Int
+                forwarderTwo f x =
+                    forwarderOne f x
+                """);
+
+        rendered.Should().Be(
+            """
+            Test.apply: higher-order-parameter-direct: f
+            Test.forwarderOne: higher-order-parameter-indirect: f @ distance 1
+            Test.forwarderTwo: higher-order-parameter-indirect: f @ distance 2
+            Test.showName: record-access: name
+            """.Trim());
+    }
+
+    [Fact]
+    public void Higher_order_parameter_indirect_through_record_pattern_parameter_and_record_argument()
+    {
+        // Analog of HigherOrderParameterAnalysisTests
+        // .Reports_indirect_higher_order_through_record_pattern_parameter_and_record_argument.
+        //
+        // The callee `liftedLambda` destructures a record parameter
+        // whose two fields are both directly-HO. The caller supplies a
+        // record-expression literal that forwards bare references for
+        // each field, so both of the caller's parameters `h` and `f`
+        // must be reported as indirect-HO at distance 1.
+        var rendered =
+            FindAndRender(
+                """
+                module Test exposing (..)
+
+
+                liftedLambda { handler, finalizer } x =
+                    handler (finalizer x)
+
+
+                caller h f x =
+                    liftedLambda { handler = h, finalizer = f } x
+                """);
+
+        rendered.Should().Be(
+            """
+            Test.caller: higher-order-parameter-indirect: f @ distance 1
+            Test.caller: higher-order-parameter-indirect: h @ distance 1
+            Test.liftedLambda: higher-order-parameter-direct: finalizer
+            Test.liftedLambda: higher-order-parameter-direct: handler
+            """.Trim());
+    }
+
+    [Fact]
+    public void Higher_order_parameter_indirect_distance_1_for_let_destructured_bindings_forwarded_through_tuple_to_tuple_pattern_parameter()
+    {
+        // Analog of HigherOrderParameterAnalysisTests
+        // .Reports_indirect_distance_1_for_let_destructured_bindings_forwarded_through_tuple_to_tuple_pattern_parameter.
+        //
+        // `liftedLambda` takes a tuple-pattern parameter whose three
+        // destructured names are each used as application heads. `caller`
+        // has no parameters; it let-destructures three Parser-wrapped
+        // values via the NamedPattern shape `(Parser x) = ...` into
+        // local bindings, then forwards them as a tuple expression to
+        // `liftedLambda`. Each let-destructured binding must be reported
+        // at indirect distance 1.
+        var rendered =
+            FindAndRender(
+                """
+                module Test exposing (..)
+
+
+                type Parser a = Parser a
+
+
+                sourceA : Parser Int
+                sourceA = Parser 0
+
+
+                sourceB : Parser Int
+                sourceB = Parser 0
+
+
+                sourceC : Parser Int
+                sourceC = Parser 0
+
+
+                liftedLambda ( parseA, parseB, parseC ) s0 =
+                    parseA (parseB (parseC s0))
+
+
+                caller =
+                    let
+                        (Parser parseA_0_0) = sourceA
+
+                        (Parser parseB_0_0) = sourceB
+
+                        (Parser parseC_0) = sourceC
+                    in
+                    liftedLambda ( parseA_0_0, parseB_0_0, parseC_0 ) 0
+                """,
+                ignoreRootLevelChoiceTagWrapper: ["Test.sourceA", "Test.sourceB", "Test.sourceC"]);
+
+        rendered.Should().Be(
+            """
+            Test.caller: higher-order-parameter-indirect: parseA_0_0 @ distance 1
+            Test.caller: higher-order-parameter-indirect: parseB_0_0 @ distance 1
+            Test.caller: higher-order-parameter-indirect: parseC_0 @ distance 1
+            Test.liftedLambda: higher-order-parameter-direct: parseA
+            Test.liftedLambda: higher-order-parameter-direct: parseB
+            Test.liftedLambda: higher-order-parameter-direct: parseC
+            """.Trim());
+    }
+
     private static string FindAndRender(
         string elmModuleText,
         ImmutableHashSet<string>? ignoreRecordOperation = null,
@@ -1409,17 +1745,54 @@ public class OptimizationOpportunityFinderTests
     {
         var opportunities =
             OptimizationOpportunityFinder.FindOptimizationOpportunities(
-                [elmModuleText],
-                ignoreRecordOperation,
-                ignoreBasicsArithmetic,
-                ignoreBasicsCompare,
-                ignoreBasicsEq,
-                ignoreBasicsAppend,
-                ignorePartialApplication,
-                ignoreHigherOrderParameter,
-                ignoreRootLevelChoiceTagWrapper);
+                [elmModuleText]);
 
-        return OptimizationOpportunityFinder.RenderOpportunities(opportunities);
+        // The whitelist parameters are no longer part of
+        // OptimizationOpportunityFinder's API; callers filter the
+        // returned set themselves. The helper preserves the old
+        // per-category prefix-match semantics for the existing tests
+        // that exercised the old surface.
+        var filtered =
+            opportunities
+            .Where(
+                o =>
+                !MatchesAnyPrefix(o, ignoreRecordOperation,
+                    OpportunityCategory.RecordAccess, OpportunityCategory.RecordUpdate) &&
+                !MatchesAnyPrefix(o, ignoreBasicsArithmetic, OpportunityCategory.BasicsArithmetic) &&
+                !MatchesAnyPrefix(o, ignoreBasicsCompare, OpportunityCategory.BasicsCompare) &&
+                !MatchesAnyPrefix(o, ignoreBasicsEq, OpportunityCategory.BasicsEq) &&
+                !MatchesAnyPrefix(o, ignoreBasicsAppend, OpportunityCategory.BasicsAppend) &&
+                !MatchesAnyPrefix(o, ignorePartialApplication, OpportunityCategory.PartialApplication) &&
+                !MatchesAnyPrefix(o, ignoreHigherOrderParameter,
+                    OpportunityCategory.HigherOrderParameter_Direct,
+                    OpportunityCategory.HigherOrderParameter_Indirect) &&
+                !MatchesAnyPrefix(o, ignoreRootLevelChoiceTagWrapper,
+                    OpportunityCategory.RootLevelChoiceTagWrapper))
+            .ToImmutableHashSet();
+
+        return OptimizationOpportunityFinder.RenderOpportunities(filtered);
+    }
+
+    private static bool MatchesAnyPrefix(
+        Opportunity opportunity,
+        ImmutableHashSet<string>? prefixes,
+        params OpportunityCategory[] applicableCategories)
+    {
+        if (prefixes is null || prefixes.Count is 0)
+            return false;
+
+        if (System.Array.IndexOf(applicableCategories, opportunity.Category) < 0)
+            return false;
+
+        var fullName = opportunity.ContainingDecl.FullName;
+
+        foreach (var prefix in prefixes)
+        {
+            if (fullName.StartsWith(prefix, System.StringComparison.Ordinal))
+                return true;
+        }
+
+        return false;
     }
 
     private static System.Collections.Generic.IReadOnlyDictionary<DeclQualifiedName, Core.Elm.ElmSyntax.Stil4mElmSyntax7.Declaration>
@@ -1433,12 +1806,12 @@ public class OptimizationOpportunityFinderTests
             new[] { Core.Elm.ElmSyntax.Stil4mElmSyntax7.FromFullSyntaxModel.Convert(parsed) };
 
         var canonicalized =
-            Core.Elm.ElmCompilerInDotnet.Canonicalization.Canonicalize(converted)
+            Canonicalization.Canonicalize(converted)
             .Extract(err => throw new System.Exception("Failed canonicalization: " + err));
 
         var orderedModules =
-            System.Linq.Enumerable.ToList(
-                System.Linq.Enumerable.Select(
+            Enumerable.ToList(
+                Enumerable.Select(
                     converted,
                     module =>
                     canonicalized[
@@ -1446,6 +1819,6 @@ public class OptimizationOpportunityFinderTests
                             module.ModuleDefinition.Value).Value]
                     .Extract(err => throw new System.Exception("Module has errors: " + err))));
 
-        return Core.Elm.ElmCompilerInDotnet.ElmCompiler.FlattenModulesToDeclarationDictionary(orderedModules);
+        return ElmCompiler.FlattenModulesToDeclarationDictionary(orderedModules);
     }
 }
