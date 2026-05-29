@@ -4,7 +4,7 @@ namespace Pine.Core.Interpreter.IntermediateVM;
 
 /// <summary>
 /// Rich error description returned from
-/// <see cref="PineVM.EvaluateExpressionOnCustomStack(Expression, PineValue, PineVM.EvaluationConfig)"/>
+/// <see cref="PineVM.EvaluateExpressionOnCustomStack(Expression, PineValue, PineVM.EvaluationConfig, ReportEnteredStackFrame?)"/>
 /// when evaluation of Pine code fails at runtime.
 ///
 /// In addition to the textual <see cref="Message"/>, this record captures two
@@ -57,10 +57,10 @@ public record EvaluationError(
 
         return
             Message +
-            " - stack frames: " + frameCount +
-            " - instructions: " + Counters.InstructionCount +
-            " - invocations: " + Counters.InvocationCount +
-            " - build lists: " + Counters.BuildListCount +
-            " - loop iterations: " + Counters.LoopIterationCount;
+            " - stack frames: " + CommandLineInterface.FormatIntegerForDisplay(frameCount) +
+            " - instructions: " + CommandLineInterface.FormatIntegerForDisplay(Counters.InstructionCount) +
+            " - invocations: " + CommandLineInterface.FormatIntegerForDisplay(Counters.InvocationCount) +
+            " - build lists: " + CommandLineInterface.FormatIntegerForDisplay(Counters.BuildListCount) +
+            " - loop iterations: " + CommandLineInterface.FormatIntegerForDisplay(Counters.LoopIterationCount);
     }
 }
