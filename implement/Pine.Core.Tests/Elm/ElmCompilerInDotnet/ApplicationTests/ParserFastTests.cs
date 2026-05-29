@@ -700,12 +700,12 @@ public class ParserFastTests
                 s_compareFramework.Value.PostOptimizationModules
                 .Single(
                     f =>
-                    Pine.Core.Elm.ElmSyntax.Stil4mElmSyntax7.Module
+                    Core.Elm.ElmSyntax.Stil4mElmSyntax7.Module
                             .GetModuleName(f.ModuleDefinition.Value).Value
                             is ["ParserFastTestModule"]);
 
             var fullModuleFile =
-                Pine.Core.Elm.ElmSyntax.Stil4mElmSyntax7.ToFullSyntaxModel.Convert(module);
+                Core.Elm.ElmSyntax.Stil4mElmSyntax7.ToFullSyntaxModel.Convert(module);
 
             string RenderDeclByName(string name)
             {
@@ -713,11 +713,11 @@ public class ParserFastTests
                     fullModuleFile.Declarations
                     .Single(
                         d =>
-                        d.Value is Pine.Core.Elm.ElmSyntax.SyntaxModel.Declaration.FunctionDeclaration funcDecl &&
+                        d.Value is Core.Elm.ElmSyntax.SyntaxModel.Declaration.FunctionDeclaration funcDecl &&
                         funcDecl.Function.Declaration.Value.Name.Value == name);
 
                 return
-                    Pine.Core.Elm.ElmSyntax.SnapshotTestFormat.RenderQualifiedDeclaration(
+                    SnapshotTestFormat.RenderQualifiedDeclaration(
                         new DeclQualifiedName(["ParserFastTestModule"], name),
                         declNode.Value);
             }
@@ -728,16 +728,22 @@ public class ParserFastTests
             // pipeline now inlines the wrapper at that call site, exposing a recursive call
             // `skipWhileWithoutLinebreakHelp Char.isAlpha ...` that the existing recursive-spec
             // machinery turns into a first-order `skipWhileWithoutLinebreakHelp__specialized__1`
-            // with `Char.isAlpha` embedded as a local literal call. The remaining lambda from
-            // the inlined wrapper body is lifted to a new `testWithoutLinebreak_alpha__lifted__lambda2`.
+            // with `Char.isAlpha` embedded as a local literal call.
             //
-            // This is the "Char.isAlpha appears locally in the helper" outcome we wanted.
+            // Note: with the broadened higher-order detection in
+            // `Inlining.ShouldInline` (callee-driven via
+            // `HigherOrderParameterAnalysis`), the inlined-wrapper closure is
+            // no longer lifted into a dedicated
+            // `testWithoutLinebreak_alpha__lifted__lambda2` — the inlining
+            // happens differently and that synthetic sibling is not emitted.
+            // The first-order helper `skipWhileWithoutLinebreakHelp__specialized__1`
+            // is still materialized.
             var allFunctionDeclNames =
                 fullModuleFile.Declarations
-                .OfType<Pine.Core.Elm.ElmSyntax.SyntaxModel.Node<
-                        Pine.Core.Elm.ElmSyntax.SyntaxModel.Declaration>>()
+                .OfType<Core.Elm.ElmSyntax.SyntaxModel.Node<
+                        Core.Elm.ElmSyntax.SyntaxModel.Declaration>>()
                 .Select(d => d.Value)
-                .OfType<Pine.Core.Elm.ElmSyntax.SyntaxModel.Declaration.FunctionDeclaration>()
+                .OfType<Core.Elm.ElmSyntax.SyntaxModel.Declaration.FunctionDeclaration>()
                 .Select(d => d.Function.Declaration.Value.Name.Value)
                 .ToList();
 

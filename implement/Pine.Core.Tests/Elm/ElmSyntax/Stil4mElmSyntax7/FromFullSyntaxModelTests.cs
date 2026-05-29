@@ -287,8 +287,6 @@ public class FromFullSyntaxModelTests
     public void Pattern_TuplePattern_converts_correctly()
     {
         var range = new Range(new Location(1, 1), new Location(1, 10));
-        var openLoc = new Location(1, 1);
-        var closeLoc = new Location(1, 10);
 
         var firstElem = new Node<Pattern>(range, new Pattern.VarPattern("x"));
         var secondElem = new Node<Pattern>(range, new Pattern.VarPattern("y"));

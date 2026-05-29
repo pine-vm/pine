@@ -163,7 +163,6 @@ public class SnapshotTestFormatApplicationWithLetArgumentTests
                 Expression: WrapNode(letExpr));
 
         return
-            (SyntaxTypes.Expression)
             new SyntaxTypes.Expression.Application(
                 [
                 WrapNode((SyntaxTypes.Expression)new SyntaxTypes.Expression.FunctionOrValue([], "Good")),

@@ -56,7 +56,7 @@ public class ValueEncodingFlatDeterministicTests
 
         compositionAlfaEncodedBytes.Seek(
             offset: 0,
-            System.IO.SeekOrigin.Begin);
+            SeekOrigin.Begin);
 
         var reproducedAlfa =
             ValueEncodingFlatDeterministic.DecodeRoot(compositionAlfaEncodedBytes.ToArray());
@@ -67,7 +67,7 @@ public class ValueEncodingFlatDeterministicTests
 
         compositionBetaEncodedBytes.Seek(
             offset: 0,
-            System.IO.SeekOrigin.Begin);
+            SeekOrigin.Begin);
 
         var reproducedBeta =
             ValueEncodingFlatDeterministic.DecodeRoot(compositionBetaEncodedBytes.ToArray());

@@ -178,9 +178,6 @@ public class ElmLanguageServiceTests
             .Extract(err => throw new Exception("Failed parsing: " + err));
     }
 
-    private static PineValue GetTestFunction(string name) =>
-        GetTestFunction(s_env.Value, name);
-
     private static PineValue GetTestFunction(
         ElmInteractiveEnvironment.ParsedInteractiveEnvironment env,
         string name) =>
@@ -217,7 +214,7 @@ public class ElmLanguageServiceTests
                 err => throw new Exception(
                     "Failed to parse function record for '" + name + "': " + err));
 
-        if (functionRecord.ParameterCount != 0)
+        if (functionRecord.ParameterCount is not 0)
         {
             throw new InvalidOperationException(
                 nameof(EvaluateZeroArgTestDeclaration) + " requires a 0-arg declaration, " +
@@ -297,7 +294,7 @@ public class ElmLanguageServiceTests
     /// <see cref="ReportEnteredStackFrame"/> events of this single evaluation task.
     /// This makes per-call histograms easy to aggregate across multiple
     /// applications via
-    /// <see cref="InvocationCountReport.Aggregate(System.Collections.Generic.IEnumerable{InvocationCountReport})"/>.
+    /// <see cref="InvocationCountReport.Aggregate(IEnumerable{InvocationCountReport})"/>.
     /// </summary>
     private static (PineValue result, EvaluationReport report, InvocationCountReport invocationCounts)
         ApplyWithProfilingAndInvocationCounts(

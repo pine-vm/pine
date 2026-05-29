@@ -649,7 +649,7 @@ public static class ToFullSyntaxModel
     /// after the round-trip through the Stil4m simplified model
     /// strips single-element <see cref="TypeAnnotation.Tupled"/>
     /// wrappers in
-    /// <see cref="FromFullSyntaxModel.Convert(TypeAnnotation)"/>.
+    /// <see cref="FromFullSyntaxModel.ConvertTypeAnnotationNode(Node{FullTypes.TypeAnnotation})"/>.
     /// </summary>
     private static Node<FullTypes.TypeAnnotation> ConvertConstructorArgument(
         Node<TypeAnnotation> node) =>
@@ -705,7 +705,9 @@ public static class ToFullSyntaxModel
         {
             TypeAnnotation.FunctionTypeAnnotation => true,
             TypeAnnotation.Typed typedArg => typedArg.TypeArguments.Count > 0,
-            _ => false,
+
+            _ =>
+            false,
         };
 
     private static Node<FullTypes.TypeAnnotation> WrapInParens(

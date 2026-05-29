@@ -264,10 +264,11 @@ public class ElmCompiler
         // a required dependency is broken.
         var rootModuleNames =
             rootFilePaths
-            .Select(path =>
+            .Select(
+                path =>
                 filePathToModuleName.TryGetValue(path, out var name) ? name : null)
             .Where(name => name is not null)
-            .ToHashSet()!;
+            .ToHashSet();
 
         // Start the closure with roots that parsed successfully.
         // Roots that failed to parse are silently skipped (they were never needed).
@@ -1516,29 +1517,6 @@ public class ElmCompiler
         }
 
         return parameterTypes;
-    }
-
-    private static Expression CompileExpression(
-        SyntaxTypes.Expression expression,
-        ExpressionCompilationContext context)
-    {
-        var result = ExpressionCompiler.Compile(expression, context);
-
-        if (result.IsErrOrNull() is { } error)
-        {
-            throw new NotImplementedException(error.ToString());
-        }
-
-        return result.IsOkOrNull()!;
-    }
-
-    private static PineValue EmitPlainValueDeclaration(PineValue value)
-    {
-        return
-            FunctionValueBuilder.EmitFunctionValueWithEnvFunctions(
-                Expression.LiteralInstance(value),
-                parameterCount: 0,
-                envFunctions: []);
     }
 
     private static PineValue EmitModuleValue(

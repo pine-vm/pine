@@ -97,7 +97,7 @@ public class RecordDestructureLetBindingRegressionTests
     [Fact]
     public void Record_pattern_let_picks_named_field_not_first_field()
     {
-        const string moduleText =
+        const string ModuleText =
             """
             module M exposing (..)
 
@@ -118,7 +118,7 @@ public class RecordDestructureLetBindingRegressionTests
                 hoverItems
             """;
 
-        var rendered = Render(ApplyZero(moduleText, "extractHoverItems"));
+        var rendered = Render(ApplyZero(ModuleText, "extractHoverItems"));
 
         rendered.Should().Be(
             """[ "a", "b" ]""",
@@ -139,7 +139,7 @@ public class RecordDestructureLetBindingRegressionTests
     [Fact]
     public void Record_dot_access_returns_named_field()
     {
-        const string moduleText =
+        const string ModuleText =
             """
             module M exposing (..)
 
@@ -156,7 +156,7 @@ public class RecordDestructureLetBindingRegressionTests
                 (buildRecord 0).hoverItems
             """;
 
-        var rendered = Render(ApplyZero(moduleText, "extractHoverItems"));
+        var rendered = Render(ApplyZero(ModuleText, "extractHoverItems"));
 
         rendered.Should().Be("""[ "a", "b" ]""");
     }

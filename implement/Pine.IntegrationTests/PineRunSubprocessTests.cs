@@ -449,7 +449,7 @@ public class PineRunSubprocessTests
                 StdOut: GetStdOutSnapshot(),
                 StdErr: GetStdErrSnapshot(),
                 HasExited: _process.HasExited,
-                ExitCode: _process.HasExited ? _process.ExitCode : (int?)null,
+                ExitCode: _process.HasExited ? _process.ExitCode : null,
                 ElapsedSinceStart: DateTimeOffset.UtcNow - _startedAt,
                 SinceLastStdOutRead: DateTimeOffset.UtcNow - _lastStdOutReadAt,
                 SinceLastStdErrRead: DateTimeOffset.UtcNow - _lastStdErrReadAt);
