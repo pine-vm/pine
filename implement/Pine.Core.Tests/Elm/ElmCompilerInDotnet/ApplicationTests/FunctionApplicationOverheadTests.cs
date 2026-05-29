@@ -688,10 +688,13 @@ public class FunctionApplicationOverheadTests
     }
 
     /// <summary>
-    /// Demonstrates how overhead compounds when chaining closures through
-    /// the generic application path. Two closures applied via
-    /// <c>Helpers.apply</c> result in 152 instructions and 14 invocations
-    /// for adding 10 to a number (3 + 7).
+    /// Demonstrates that even when closures are chained through a higher-order wrapper such
+    /// as <c>Helpers.apply</c>, the wrapper is now eliminated by the higher-order inliner
+    /// (because <c>Helpers.apply</c>'s body applies its first parameter as a function), and
+    /// the captured constants <c>3</c> and <c>7</c> are folded into the lifted lambdas. The
+    /// compiled <c>testChainedClosures</c> reduces to a single direct invocation containing
+    /// two nested <c>int_add</c> calls — 11 instructions and 2 invocations for adding
+    /// <c>10</c> to a number (<c>3 + 7</c>).
     /// </summary>
     [Fact]
     public void Chained_closures_with_apply()

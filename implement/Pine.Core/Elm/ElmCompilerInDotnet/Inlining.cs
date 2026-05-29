@@ -515,7 +515,7 @@ public partial class Inlining
                 results.Add(new DeclQualifiedName(funcOrValue.ModuleName, funcOrValue.Name));
             }
 
-            ElmSyntaxTransformations.EnqueueChildExpressions(current, worklist);
+            SyntaxTypes.SyntaxAnalysis.EnqueueChildExpressions(current, worklist);
         }
 
         return results;
@@ -1517,9 +1517,9 @@ public partial class Inlining
                 var inner = pipeFunc.Name is "composeR" ? app.Arguments[1] : app.Arguments[2];
                 var outer = pipeFunc.Name is "composeR" ? app.Arguments[2] : app.Arguments[1];
 
-                // Count == 3 means the operator + 2 function arguments (no application argument yet).
+                // Count is 3 means the operator + 2 function arguments (no application argument yet).
                 // Count > 3 means extra arguments are being applied to the composed result.
-                if (app.Arguments.Count == 3)
+                if (app.Arguments.Count is 3)
                 {
                     // No application argument: produce a lambda \composeArg -> outer (inner composeArg)
                     var param =
@@ -1584,7 +1584,7 @@ public partial class Inlining
         // Beta-reduce lambda applications: (\x -> body) arg  →  body[x := arg]
         if (EnablesClassicInlining(context))
         {
-            var unwrapped = ElmSyntaxTransformations.UnwrapParenthesized(funcExpr);
+            var unwrapped = SyntaxTypes.SyntaxAnalysis.UnwrapParenthesized(funcExpr);
 
             if (unwrapped is SyntaxTypes.Expression.LambdaExpression lambda)
             {
@@ -1600,7 +1600,7 @@ public partial class Inlining
         // higher-order applications in specialized parser-like loops.
         if (EnablesClassicInlining(context))
         {
-            var unwrapped = ElmSyntaxTransformations.UnwrapParenthesized(funcExpr);
+            var unwrapped = SyntaxTypes.SyntaxAnalysis.UnwrapParenthesized(funcExpr);
 
             if (unwrapped is SyntaxTypes.Expression.RecordAccessFunction recordAccessFunction &&
                 app.Arguments.Count >= 2)
@@ -1619,7 +1619,7 @@ public partial class Inlining
                         if (field.Value.fieldName.Value != fieldName)
                             continue;
 
-                        if (app.Arguments.Count == 2)
+                        if (app.Arguments.Count is 2)
                         {
                             var (fieldExpr, fieldDecls) =
                                 InlineExpression(field.Value.valueExpr, context);
@@ -1653,7 +1653,7 @@ public partial class Inlining
         // Check if this is a call to a known function. Unwrap any parenthesization
         // around the head: lambda lifting can introduce parenthesized references such as
         // `(myFunc) arg` that would otherwise prevent us from resolving the callee.
-        if (ElmSyntaxTransformations.UnwrapParenthesized(funcExpr) is SyntaxTypes.Expression.FunctionOrValue funcOrValue)
+        if (SyntaxTypes.SyntaxAnalysis.UnwrapParenthesized(funcExpr) is SyntaxTypes.Expression.FunctionOrValue funcOrValue)
         {
             if (TryResolveKnownFunctionReference(funcOrValue, context) is { } resolved)
             {
@@ -1974,7 +1974,7 @@ public partial class Inlining
             return false;
         }
 
-        if (ElmSyntaxTransformations.CountExpressionNodes(funcBody.Value) > smallConfig.MaxBodyNodeCount)
+        if (SyntaxTypes.SyntaxAnalysis.CountExpressionNodes(funcBody.Value) > smallConfig.MaxBodyNodeCount)
         {
             return false;
         }
@@ -2015,7 +2015,7 @@ public partial class Inlining
                 }
             }
 
-            ElmSyntaxTransformations.EnqueueChildExpressions(current, worklist);
+            SyntaxTypes.SyntaxAnalysis.EnqueueChildExpressions(current, worklist);
         }
 
         return false;
@@ -2143,7 +2143,7 @@ public partial class Inlining
 
             if (current is SyntaxTypes.Expression.Application app && app.Arguments.Count >= 2)
             {
-                var head = ElmSyntaxTransformations.UnwrapParenthesized(app.Arguments[0].Value);
+                var head = SyntaxTypes.SyntaxAnalysis.UnwrapParenthesized(app.Arguments[0].Value);
 
                 if (head is SyntaxTypes.Expression.FunctionOrValue headRef &&
                     TryResolveKnownFunctionReference(headRef, context) is { } resolved &&
@@ -2151,7 +2151,7 @@ public partial class Inlining
                 {
                     for (var i = 1; i < app.Arguments.Count; i++)
                     {
-                        var unwrappedArg = ElmSyntaxTransformations.UnwrapParenthesized(app.Arguments[i].Value);
+                        var unwrappedArg = SyntaxTypes.SyntaxAnalysis.UnwrapParenthesized(app.Arguments[i].Value);
 
                         if (unwrappedArg is SyntaxTypes.Expression.FunctionOrValue argRef &&
                             argRef.ModuleName.Count is 0 &&
@@ -2163,7 +2163,7 @@ public partial class Inlining
                 }
             }
 
-            ElmSyntaxTransformations.EnqueueChildExpressions(current, stack);
+            SyntaxTypes.SyntaxAnalysis.EnqueueChildExpressions(current, stack);
         }
 
         return false;
@@ -2298,7 +2298,7 @@ public partial class Inlining
         InliningContext context)
     {
         if (app.Arguments.Count is 0 ||
-            ElmSyntaxTransformations.UnwrapParenthesized(app.Arguments[0].Value) is not SyntaxTypes.Expression.FunctionOrValue funcOrValue ||
+            SyntaxTypes.SyntaxAnalysis.UnwrapParenthesized(app.Arguments[0].Value) is not SyntaxTypes.Expression.FunctionOrValue funcOrValue ||
             TryGetFunctionReferenceInferredType(funcOrValue, context) is not { } inferredType)
         {
             return false;
@@ -2546,7 +2546,7 @@ public partial class Inlining
                 // Simple variable pattern - direct substitution
                 substitutions[varPattern.Name] = arg;
             }
-            else if (ElmSyntaxTransformations.UnwrapParenthesizedPattern(param.Value) is SyntaxTypes.Pattern.AllPattern)
+            else if (SyntaxTypes.SyntaxAnalysis.UnwrapParenthesized(param.Value) is SyntaxTypes.Pattern.AllPattern)
             {
                 // Wildcard patterns do not bind anything, so there is no need to retain a
                 // generated let-destructuring binding for them in the inlined body.
@@ -2570,7 +2570,7 @@ public partial class Inlining
                             knownCtorApp.FieldExpressions);
                 }
             }
-            else if (ElmSyntaxTransformations.UnwrapParenthesizedPattern(param.Value) is SyntaxTypes.Pattern.TuplePattern tuplePattern &&
+            else if (SyntaxTypes.SyntaxAnalysis.UnwrapParenthesized(param.Value) is SyntaxTypes.Pattern.TuplePattern tuplePattern &&
                 arg.Value is SyntaxTypes.Expression.TupledExpression tupleArg &&
                 tuplePattern.Elements.Count == tupleArg.Elements.Count)
             {
@@ -3114,7 +3114,7 @@ nextParam:;
                 for (var fieldIndex = 0; fieldIndex < actualFieldExpressions.Count; fieldIndex++)
                 {
                     var fieldPatternUnwrapped =
-                        ElmSyntaxTransformations.UnwrapParenthesizedPattern(namedPattern.Arguments[fieldIndex].Value);
+                        SyntaxTypes.SyntaxAnalysis.UnwrapParenthesized(namedPattern.Arguments[fieldIndex].Value);
 
                     if (fieldPatternUnwrapped is not SyntaxTypes.Pattern.VarPattern fieldVarPattern)
                     {
@@ -3411,7 +3411,7 @@ nextParam:;
             context.Resolution.SingleChoiceConstructors.ContainsKey(resolvedCtorApp.ConstructorName) &&
             resolvedCtorApp.FieldExpressions.Any(
                 fieldExpr =>
-                ElmSyntaxTransformations.UnwrapParenthesized(fieldExpr.Value) is
+                SyntaxTypes.SyntaxAnalysis.UnwrapParenthesized(fieldExpr.Value) is
                 SyntaxTypes.Expression.LambdaExpression))
         {
             return resolvedCtorApp;
@@ -3419,13 +3419,6 @@ nextParam:;
 
         return null;
     }
-
-
-
-
-
-
-
 
     /// <summary>
     /// Attempts to specialize a recursive function call by substituting loop-invariant
@@ -3480,7 +3473,7 @@ nextParam:;
 
         // Skip specialization for very large function bodies to avoid
         // stack overflow in the recursive AST rewriting pass.
-        if (ElmSyntaxTransformations.CountExpressionNodes(funcImpl.Expression.Value) > 2000)
+        if (SyntaxTypes.SyntaxAnalysis.CountExpressionNodes(funcImpl.Expression.Value) > 2000)
             return null;
 
         var invariantIndicesSet = new HashSet<int>(invariantFuncParamIndices);
@@ -3637,11 +3630,9 @@ nextParam:;
         // those expressions may reference local variables from the call site that are
         // not in scope at the module level. We capture these as extra parameters.
         var freeVarsInBody =
-            ElmSyntaxTransformations.CollectFreeVariables(
-                qualifiedBody.Value,
-                remainingParams
-                .SelectMany(p => ElmSyntaxTransformations.CollectPatternNames(p.Value))
-                .ToHashSet());
+            SyntaxTypes.SyntaxAnalysis.CollectRemainingFreeVariables(qualifiedBody.Value)
+            .Except(SyntaxTypes.SyntaxAnalysis.CollectNamesBoundByPatterns(remainingParams))
+            .ToHashSet();
 
         // Remove names that are in scope at the module level (function names, constructors, etc.)
         freeVarsInBody.ExceptWith(context.ModuleLevelNames);
@@ -3855,11 +3846,9 @@ nextParam:;
 
         // Detect free variables introduced by substitution (same logic as TrySpecializeRecursiveCall).
         var freeVarsInBody =
-            ElmSyntaxTransformations.CollectFreeVariables(
-                qualifiedBody.Value,
-                remainingParameters
-                .SelectMany(p => ElmSyntaxTransformations.CollectPatternNames(p.Value))
-                .ToHashSet());
+            SyntaxTypes.SyntaxAnalysis.CollectRemainingFreeVariables(qualifiedBody.Value)
+            .Except(SyntaxTypes.SyntaxAnalysis.CollectNamesBoundByPatterns(remainingParameters))
+            .ToHashSet();
 
         freeVarsInBody.ExceptWith(context.ModuleLevelNames);
         freeVarsInBody.Remove(specializedName);
@@ -3999,7 +3988,7 @@ nextParam:;
                 }
             }
 
-            ElmSyntaxTransformations.EnqueueChildExpressions(expr, worklist);
+            SyntaxTypes.SyntaxAnalysis.EnqueueChildExpressions(expr, worklist);
         }
 
         return true;
@@ -4061,7 +4050,7 @@ nextParam:;
                 continue;
 
             // Size check
-            if (ElmSyntaxTransformations.CountExpressionNodes(refBody) > 2000)
+            if (SyntaxTypes.SyntaxAnalysis.CountExpressionNodes(refBody) > 2000)
                 continue;
 
             candidates.Add(refFunc);
@@ -4823,7 +4812,7 @@ nextParam:;
                 }
             }
             else if (declNode.Value is SyntaxTypes.Expression.LetDeclaration.LetDestructuring letDestr &&
-                ElmSyntaxTransformations.UnwrapParenthesizedPattern(letDestr.Pattern.Value) is
+                SyntaxTypes.SyntaxAnalysis.UnwrapParenthesized(letDestr.Pattern.Value) is
                 SyntaxTypes.Pattern.AllPattern)
             {
                 propagated = true;

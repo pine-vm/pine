@@ -405,10 +405,9 @@ public class SyntaxAnalysisTests
     public void Flow_via_case_branch_pattern()
     {
         // In branch `Just g -> g x`, head `g` is bound by the pattern; the
-        // analysis traces back to the scrutinee `maybeFn`.
-        // Pattern-introduced names are *not* expanded transitively (we don't
-        // know precisely how they relate to the scrutinee), so this case
-        // currently reports no flow from the head. Document the behaviour.
+        // analysis traces back to the scrutinee `maybeFn` by mapping each
+        // branch-pattern binding to the scrutinee expression in the local
+        // let-RHS scope (same over-approximation as let-destructuring).
         AssertFlowFromBody(
             """
             module Test exposing (..)
@@ -419,10 +418,10 @@ public class SyntaxAnalysisTests
                     Nothing -> x
             """,
             functionName: "apply",
-            // Branch-pattern names are bound within the branch; the analysis
-            // does not (yet) trace them back to the scrutinee. This is
-            // intentional under-approximation for case branches.
-            expectedFlows: []);
+            // Branch-pattern names carry information from the scrutinee, so
+            // a later use of one as the head of an Application flows back
+            // to the scrutinee's free variables (`maybeFn`).
+            expectedFlows: ["maybeFn"]);
     }
 
     [Fact]
@@ -644,5 +643,403 @@ public class SyntaxAnalysisTests
         }
 
         throw new System.Exception("Function '" + functionName + "' not found.");
+    }
+
+    // =========================================================================
+    // TryPredictOutermostConstructorTag
+    // =========================================================================
+
+    [Fact]
+    public void TryPredictOutermostConstructorTag_bare_uppercase_FunctionOrValue()
+    {
+        AssertOutermostConstructorTagOfBody(
+            """
+            module Test exposing (..)
+
+
+            foo = Nothing
+            """,
+            functionName: "foo",
+            expectedTagFullName: "Nothing");
+    }
+
+    [Fact]
+    public void TryPredictOutermostConstructorTag_qualified_constructor()
+    {
+        AssertOutermostConstructorTagOfBody(
+            """
+            module Test exposing (..)
+
+
+            foo = Maybe.Nothing
+            """,
+            functionName: "foo",
+            expectedTagFullName: "Maybe.Nothing");
+    }
+
+    [Fact]
+    public void TryPredictOutermostConstructorTag_applied_constructor()
+    {
+        AssertOutermostConstructorTagOfBody(
+            """
+            module Test exposing (..)
+
+
+            foo x = Maybe.Just x
+            """,
+            functionName: "foo",
+            expectedTagFullName: "Maybe.Just");
+    }
+
+    [Fact]
+    public void TryPredictOutermostConstructorTag_through_let_wrapper()
+    {
+        AssertOutermostConstructorTagOfBody(
+            """
+            module Test exposing (..)
+
+
+            foo x =
+                let
+                    y = x
+                in
+                Maybe.Just y
+            """,
+            functionName: "foo",
+            expectedTagFullName: "Maybe.Just");
+    }
+
+    [Fact]
+    public void TryPredictOutermostConstructorTag_through_paren_wrapper()
+    {
+        AssertOutermostConstructorTagOfBody(
+            """
+            module Test exposing (..)
+
+
+            foo x = (Maybe.Just x)
+            """,
+            functionName: "foo",
+            expectedTagFullName: "Maybe.Just");
+    }
+
+    [Fact]
+    public void TryPredictOutermostConstructorTag_lowercase_call_returns_null()
+    {
+        AssertOutermostConstructorTagOfBody(
+            """
+            module Test exposing (..)
+
+
+            foo x = identity x
+            """,
+            functionName: "foo",
+            expectedTagFullName: null);
+    }
+
+    [Fact]
+    public void TryPredictOutermostConstructorTag_kernel_call_returns_null()
+    {
+        AssertOutermostConstructorTagOfBody(
+            """
+            module Test exposing (..)
+
+
+            foo a = Pine_kernel.int_add [ a, 1 ]
+            """,
+            functionName: "foo",
+            expectedTagFullName: null);
+    }
+
+    [Fact]
+    public void TryPredictOutermostConstructorTag_lambda_returns_null()
+    {
+        AssertOutermostConstructorTagOfBody(
+            """
+            module Test exposing (..)
+
+
+            foo = \x -> x
+            """,
+            functionName: "foo",
+            expectedTagFullName: null);
+    }
+
+    [Fact]
+    public void TryPredictOutermostConstructorTag_record_literal_returns_null()
+    {
+        AssertOutermostConstructorTagOfBody(
+            """
+            module Test exposing (..)
+
+
+            foo = { a = 1 }
+            """,
+            functionName: "foo",
+            expectedTagFullName: null);
+    }
+
+    [Fact]
+    public void TryPredictOutermostConstructorTag_if_both_branches_same_tag()
+    {
+        AssertOutermostConstructorTagOfBody(
+            """
+            module Test exposing (..)
+
+
+            foo b x y = if b then Maybe.Just x else Maybe.Just y
+            """,
+            functionName: "foo",
+            expectedTagFullName: "Maybe.Just");
+    }
+
+    [Fact]
+    public void TryPredictOutermostConstructorTag_if_mixed_branches_returns_null()
+    {
+        AssertOutermostConstructorTagOfBody(
+            """
+            module Test exposing (..)
+
+
+            foo b x = if b then Maybe.Just x else Maybe.Nothing
+            """,
+            functionName: "foo",
+            expectedTagFullName: null);
+    }
+
+    // =========================================================================
+    // EnumerateConstructorTaggedLeavesOfIfChain
+    // =========================================================================
+
+    [Fact]
+    public void EnumerateConstructorTaggedLeavesOfIfChain_two_branch_if()
+    {
+        AssertIfChainLeaves(
+            """
+            module Test exposing (..)
+
+
+            foo b x = if b then Maybe.Just x else Maybe.Nothing
+            """,
+            functionName: "foo",
+            expectedTagFullNames: ["Maybe.Just", "Maybe.Nothing"]);
+    }
+
+    [Fact]
+    public void EnumerateConstructorTaggedLeavesOfIfChain_else_if_chain()
+    {
+        AssertIfChainLeaves(
+            """
+            module Test exposing (..)
+
+
+            foo b1 b2 x =
+                if b1 then
+                    Maybe.Just x
+
+                else if b2 then
+                    Maybe.Just x
+
+                else
+                    Maybe.Nothing
+            """,
+            functionName: "foo",
+            expectedTagFullNames: ["Maybe.Just", "Maybe.Just", "Maybe.Nothing"]);
+    }
+
+    [Fact]
+    public void EnumerateConstructorTaggedLeavesOfIfChain_through_let_root()
+    {
+        AssertIfChainLeaves(
+            """
+            module Test exposing (..)
+
+
+            foo b x =
+                let
+                    z = x
+                in
+                if b then Maybe.Just z else Maybe.Nothing
+            """,
+            functionName: "foo",
+            expectedTagFullNames: ["Maybe.Just", "Maybe.Nothing"]);
+    }
+
+    [Fact]
+    public void EnumerateConstructorTaggedLeavesOfIfChain_non_if_returns_null()
+    {
+        var func =
+            ParseFunctionByName(
+                """
+                module Test exposing (..)
+
+
+                foo = Maybe.Just 1
+                """,
+                "foo");
+
+        var leaves =
+            SyntaxAnalysis.EnumerateConstructorTaggedLeavesOfIfChain(func.Expression.Value);
+
+        leaves.Should().BeNull();
+    }
+
+    [Fact]
+    public void EnumerateConstructorTaggedLeavesOfIfChain_mismatched_leaf_returns_null()
+    {
+        var func =
+            ParseFunctionByName(
+                """
+                module Test exposing (..)
+
+
+                foo b x = if b then Maybe.Just x else identity x
+                """,
+                "foo");
+
+        var leaves =
+            SyntaxAnalysis.EnumerateConstructorTaggedLeavesOfIfChain(func.Expression.Value);
+
+        leaves.Should().BeNull();
+    }
+
+    // =========================================================================
+    // TryPredictOutermostConstructorTagInArmBody
+    // =========================================================================
+
+    [Fact]
+    public void TryPredictOutermostConstructorTagInArmBody_direct_constructor_body()
+    {
+        AssertArmBodyTag(
+            armPatternText: "Bad x",
+            armBodyText: "Bad x",
+            expectedTagFullName: "Bad");
+    }
+
+    [Fact]
+    public void TryPredictOutermostConstructorTagInArmBody_as_alias_body_with_named_inner()
+    {
+        AssertArmBodyTag(
+            armPatternText: "(Good a b) as good",
+            armBodyText: "good",
+            expectedTagFullName: "Good");
+    }
+
+    [Fact]
+    public void TryPredictOutermostConstructorTagInArmBody_as_alias_body_mismatched_name_returns_null()
+    {
+        AssertArmBodyTag(
+            armPatternText: "(Good a b) as good",
+            armBodyText: "other",
+            expectedTagFullName: null);
+    }
+
+    [Fact]
+    public void TryPredictOutermostConstructorTagInArmBody_var_pattern_returns_null()
+    {
+        AssertArmBodyTag(
+            armPatternText: "x",
+            armBodyText: "x",
+            expectedTagFullName: null);
+    }
+
+    [Fact]
+    public void TryPredictOutermostConstructorTagInArmBody_qualified_constructor_body()
+    {
+        AssertArmBodyTag(
+            armPatternText: "Bad x",
+            armBodyText: "ParserFast.Bad Basics.True x",
+            expectedTagFullName: "ParserFast.Bad");
+    }
+
+    // =========================================================================
+    // Helpers for tag prediction tests
+    // =========================================================================
+
+    private static void AssertOutermostConstructorTagOfBody(
+        string moduleText,
+        string functionName,
+        string? expectedTagFullName)
+    {
+        var func = ParseFunctionByName(moduleText, functionName);
+
+        var actual = SyntaxAnalysis.TryPredictOutermostConstructorTag(func.Expression.Value);
+
+        if (expectedTagFullName is null)
+        {
+            actual.Should().BeNull();
+        }
+        else
+        {
+            actual.Should().NotBeNull();
+            FormatQualifiedNameRef(actual!).Should().Be(expectedTagFullName);
+        }
+    }
+
+    private static void AssertIfChainLeaves(
+        string moduleText,
+        string functionName,
+        IReadOnlyList<string> expectedTagFullNames)
+    {
+        var func = ParseFunctionByName(moduleText, functionName);
+
+        var leaves =
+            SyntaxAnalysis.EnumerateConstructorTaggedLeavesOfIfChain(func.Expression.Value);
+
+        leaves.Should().NotBeNull();
+
+        leaves!.Select(l => FormatQualifiedNameRef(l.PredictedTag))
+            .Should().Equal(expectedTagFullNames);
+    }
+
+    private static void AssertArmBodyTag(
+        string armPatternText,
+        string armBodyText,
+        string? expectedTagFullName)
+    {
+        var moduleText =
+            "module Test exposing (..)\n\n\n" +
+            "foo scrutinee =\n" +
+            "    case scrutinee of\n" +
+            "        " + armPatternText + " ->\n" +
+            "            " + armBodyText + "\n";
+
+        var func = ParseFunctionByName(moduleText, "foo");
+
+        var body = func.Expression.Value;
+
+        // Unwrap parens around the case body.
+        while (body is Pine.Core.Elm.ElmSyntax.Stil4mElmSyntax7.Expression.ParenthesizedExpression paren)
+        {
+            body = paren.Expression.Value;
+        }
+
+        var caseExpr = (Pine.Core.Elm.ElmSyntax.Stil4mElmSyntax7.Expression.CaseExpression)body;
+        var firstArm = caseExpr.CaseBlock.Cases[0];
+
+        var actual =
+            SyntaxAnalysis.TryPredictOutermostConstructorTagInArmBody(
+                firstArm.Pattern.Value,
+                firstArm.Expression.Value);
+
+        if (expectedTagFullName is null)
+        {
+            actual.Should().BeNull();
+        }
+        else
+        {
+            actual.Should().NotBeNull();
+            FormatQualifiedNameRef(actual!).Should().Be(expectedTagFullName);
+        }
+    }
+
+    private static string FormatQualifiedNameRef(QualifiedNameRef name)
+    {
+        return
+            name.ModuleName.Count is 0
+            ?
+            name.Name
+            :
+            string.Join(".", name.ModuleName) + "." + name.Name;
     }
 }

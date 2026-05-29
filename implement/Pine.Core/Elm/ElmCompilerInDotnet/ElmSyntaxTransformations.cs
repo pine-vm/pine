@@ -2,6 +2,7 @@ using Pine.Core.CodeAnalysis;
 using Pine.Core.Elm.ElmSyntax.SyntaxModel;
 using System;
 using System.Collections.Generic;
+using System.Collections.Immutable;
 using System.Linq;
 
 using ModuleName = System.Collections.Generic.IReadOnlyList<string>;
@@ -14,7 +15,7 @@ namespace Pine.Core.Elm.ElmCompilerInDotnet;
 
 /// <summary>
 /// Pure syntax transformations that operate only on Elm syntax elements.
-/// Extracted from <see cref="Inlining"/> for clarity: these methods do not
+/// Extracted from <see cref="ElmSyntaxOptimization"/> for clarity: these methods do not
 /// depend on inlining context, function dictionaries, or module resolution.
 /// </summary>
 internal static class ElmSyntaxTransformations
@@ -101,7 +102,7 @@ internal static class ElmSyntaxTransformations
 
         for (var index = 0; index < namedPattern.Arguments.Count; index++)
         {
-            if (UnwrapParenthesizedPattern(namedPattern.Arguments[index].Value) is not SyntaxTypes.Pattern.VarPattern varPattern)
+            if (SyntaxTypes.SyntaxAnalysis.UnwrapParenthesized(namedPattern.Arguments[index].Value) is not SyntaxTypes.Pattern.VarPattern varPattern)
             {
                 return false;
             }
@@ -139,7 +140,7 @@ internal static class ElmSyntaxTransformations
         SyntaxTypes.Expression.Application app)
     {
         if (app.Arguments.Count < 2 ||
-            UnwrapParenthesized(app.Arguments[0].Value) is not SyntaxTypes.Expression.LambdaExpression lambda)
+            SyntaxTypes.SyntaxAnalysis.UnwrapParenthesized(app.Arguments[0].Value) is not SyntaxTypes.Expression.LambdaExpression lambda)
         {
             return null;
         }
@@ -184,7 +185,7 @@ internal static class ElmSyntaxTransformations
             var parameter = parameters[index];
             var argument = consumedArgs[index];
 
-            switch (UnwrapParenthesizedPattern(parameter.Value))
+            switch (SyntaxTypes.SyntaxAnalysis.UnwrapParenthesized(parameter.Value))
             {
                 case SyntaxTypes.Pattern.VarPattern varPattern:
                     substitutions[varPattern.Name] = argument;
@@ -226,7 +227,7 @@ internal static class ElmSyntaxTransformations
         SyntaxTypes.Expression expr,
         string variableName)
     {
-        expr = UnwrapParenthesized(expr);
+        expr = SyntaxTypes.SyntaxAnalysis.UnwrapParenthesized(expr);
 
         if (IsLocalVariableReference(expr, variableName))
         {
@@ -242,7 +243,7 @@ internal static class ElmSyntaxTransformations
 
         foreach (var parameter in lambda.Lambda.Arguments)
         {
-            switch (UnwrapParenthesizedPattern(parameter.Value))
+            switch (SyntaxTypes.SyntaxAnalysis.UnwrapParenthesized(parameter.Value))
             {
                 case SyntaxTypes.Pattern.VarPattern varPattern:
                     expectedArguments.Add(
@@ -265,18 +266,19 @@ internal static class ElmSyntaxTransformations
             }
         }
 
-        var lambdaBody = UnwrapParenthesized(lambda.Lambda.Expression.Value);
+        var lambdaBody = SyntaxTypes.SyntaxAnalysis.UnwrapParenthesized(lambda.Lambda.Expression.Value);
 
         if (lambdaBody is not SyntaxTypes.Expression.Application app ||
             app.Arguments.Count != expectedArguments.Count + 1 ||
-            !IsLocalVariableReference(UnwrapParenthesized(app.Arguments[0].Value), variableName))
+            !IsLocalVariableReference(SyntaxTypes.SyntaxAnalysis.UnwrapParenthesized(app.Arguments[0].Value), variableName))
         {
             return false;
         }
 
         for (var index = 0; index < expectedArguments.Count; index++)
         {
-            if (!expectedArguments[index].Value.Equals(UnwrapParenthesized(app.Arguments[index + 1].Value)))
+            if (!expectedArguments[index].Value.Equals(
+                SyntaxTypes.SyntaxAnalysis.UnwrapParenthesized(app.Arguments[index + 1].Value)))
             {
                 return false;
             }
@@ -367,7 +369,7 @@ internal static class ElmSyntaxTransformations
         }
 
         var headNode = arguments[0];
-        var headExpr = UnwrapParenthesized(headNode.Value);
+        var headExpr = SyntaxTypes.SyntaxAnalysis.UnwrapParenthesized(headNode.Value);
 
         if (headExpr is not SyntaxTypes.Expression.Application innerApp)
         {
@@ -497,16 +499,36 @@ internal static class ElmSyntaxTransformations
     }
 
     /// <summary>
-    /// Unwraps nested ParenthesizedExpression wrappers to get the inner expression.
+    /// Resolves a <see cref="SyntaxTypes.Expression.FunctionOrValue"/>
+    /// reference into a fully-qualified name. References without an
+    /// explicit module qualifier are interpreted as belonging to the
+    /// declaring module.
     /// </summary>
-    internal static SyntaxTypes.Expression UnwrapParenthesized(SyntaxTypes.Expression expr)
+    internal static DeclQualifiedName ResolveReference(
+        SyntaxTypes.Expression.FunctionOrValue reference,
+        ModuleName currentModuleName)
     {
-        while (expr is SyntaxTypes.Expression.ParenthesizedExpression paren)
-        {
-            expr = paren.Expression.Value;
-        }
+        if (reference.ModuleName.Count is 0)
+            return new DeclQualifiedName(currentModuleName, reference.Name);
 
-        return expr;
+        return new DeclQualifiedName(reference.ModuleName, reference.Name);
+    }
+
+    /// <summary>
+    /// Resolves a <see cref="SyntaxTypes.QualifiedNameRef"/> (e.g. a
+    /// constructor name appearing in a pattern or constructor
+    /// application) into a fully-qualified name. References without an
+    /// explicit module qualifier are interpreted as belonging to the
+    /// declaring module.
+    /// </summary>
+    internal static DeclQualifiedName ResolveReference(
+        SyntaxTypes.QualifiedNameRef qname,
+        ModuleName currentModuleName)
+    {
+        if (qname.ModuleName.Count is 0)
+            return new DeclQualifiedName(currentModuleName, qname.Name);
+
+        return new DeclQualifiedName(qname.ModuleName, qname.Name);
     }
 
     /// <summary>
@@ -531,7 +553,7 @@ internal static class ElmSyntaxTransformations
                 return true;
             }
 
-            EnqueueChildExpressions(current, worklist);
+            SyntaxTypes.SyntaxAnalysis.ForEachChildExpression(current, worklist.Push);
         }
 
         return false;
@@ -642,7 +664,7 @@ internal static class ElmSyntaxTransformations
                         expr.GetType().Name);
             }
 
-            EnqueueChildExpressions(expr, worklist);
+            SyntaxTypes.SyntaxAnalysis.ForEachChildExpression(expr, worklist.Push);
         }
 
         return false;
@@ -689,15 +711,73 @@ internal static class ElmSyntaxTransformations
         };
     }
 
-    internal static SyntaxTypes.Pattern UnwrapParenthesizedPattern(SyntaxTypes.Pattern pattern)
+    /// <summary>
+    /// Peels nested <see cref="SyntaxTypes.Pattern.ParenthesizedPattern"/>
+    /// and <see cref="SyntaxTypes.Pattern.AsPattern"/> wrappers off
+    /// <paramref name="pattern"/>, returning the innermost pattern.
+    /// The strict superset of <see cref="UnwrapParenthesizedPattern"/>:
+    /// recurses into the inner pattern of every as-binder.
+    /// </summary>
+    internal static SyntaxTypes.Pattern PeelPatternParenthesesAndAsBinder(SyntaxTypes.Pattern pattern)
     {
-        return pattern switch
+        while (true)
         {
-            SyntaxTypes.Pattern.ParenthesizedPattern pp => UnwrapParenthesizedPattern(pp.Pattern.Value),
+            switch (pattern)
+            {
+                case SyntaxTypes.Pattern.ParenthesizedPattern p:
+                    pattern = p.Pattern.Value;
+                    continue;
 
-            _ =>
-            pattern
-        };
+                case SyntaxTypes.Pattern.AsPattern a:
+                    pattern = a.Pattern.Value;
+                    continue;
+
+                default:
+                    return pattern;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Returns the bound name of a parameter pattern that is most useful
+    /// for display. Recognises:
+    /// <list type="bullet">
+    /// <item>A bare <see cref="SyntaxTypes.Pattern.VarPattern"/> (the
+    /// pattern's own name).</item>
+    /// <item>An <see cref="SyntaxTypes.Pattern.AsPattern"/> (the
+    /// <c>as</c>-name).</item>
+    /// <item>A <see cref="SyntaxTypes.Pattern.NamedPattern"/> with a
+    /// single argument (the inner var name; the destructuring shape
+    /// <c>(Ctor inner)</c>).</item>
+    /// <item>Any of the above wrapped in
+    /// <see cref="SyntaxTypes.Pattern.ParenthesizedPattern"/>.</item>
+    /// </list>
+    /// Returns <c>null</c> for any other pattern shape.
+    /// </summary>
+    internal static string? TryGetParameterDisplayName(SyntaxTypes.Pattern pattern)
+    {
+        while (true)
+        {
+            switch (pattern)
+            {
+                case SyntaxTypes.Pattern.VarPattern vp:
+                    return vp.Name;
+
+                case SyntaxTypes.Pattern.AsPattern ap:
+                    return ap.Name.Value;
+
+                case SyntaxTypes.Pattern.ParenthesizedPattern pp:
+                    pattern = pp.Pattern.Value;
+                    continue;
+
+                case SyntaxTypes.Pattern.NamedPattern np when np.Arguments.Count is 1:
+                    pattern = np.Arguments[0].Value;
+                    continue;
+
+                default:
+                    return null;
+            }
+        }
     }
 
     internal static ConstructorApplication? TryDeconstructConstructorApplication(
@@ -709,7 +789,7 @@ internal static class ElmSyntaxTransformations
     internal static ConstructorApplication? TryDeconstructConstructorApplication(
         SyntaxTypes.Expression expr)
     {
-        switch (UnwrapParenthesized(expr))
+        switch (SyntaxTypes.SyntaxAnalysis.UnwrapParenthesized(expr))
         {
             case SyntaxTypes.Expression.FunctionOrValue funcOrValue:
                 return
@@ -771,7 +851,7 @@ internal static class ElmSyntaxTransformations
                 return false;
             }
 
-            if (UnwrapParenthesizedPattern(letDestr.Pattern.Value) is not SyntaxTypes.Pattern.AllPattern)
+            if (SyntaxTypes.SyntaxAnalysis.UnwrapParenthesized(letDestr.Pattern.Value) is not SyntaxTypes.Pattern.AllPattern)
             {
                 return false;
             }
@@ -804,7 +884,7 @@ internal static class ElmSyntaxTransformations
         string variableName)
     {
         return
-            UnwrapParenthesized(expr) is SyntaxTypes.Expression.FunctionOrValue funcOrValue &&
+            SyntaxTypes.SyntaxAnalysis.UnwrapParenthesized(expr) is SyntaxTypes.Expression.FunctionOrValue funcOrValue &&
             funcOrValue.ModuleName.Count is 0 &&
             funcOrValue.Name == variableName;
     }
@@ -1012,125 +1092,6 @@ internal static class ElmSyntaxTransformations
     }
 
     /// <summary>
-    /// Enqueues all immediate child expressions of an expression node onto the given worklist.
-    /// This centralizes the ~15-case expression variant traversal for iterative walkers,
-    /// ensuring consistency and avoiding the need to duplicate the switch in every walker.
-    /// Uses an iterative worklist to avoid stack overflow on deeply nested expressions.
-    /// </summary>
-    internal static void EnqueueChildExpressions(
-        SyntaxTypes.Expression expr,
-        Stack<SyntaxTypes.Expression> worklist)
-    {
-        switch (expr)
-        {
-            case SyntaxTypes.Expression.Application app:
-                foreach (var arg in app.Arguments)
-                    worklist.Push(arg.Value);
-
-                break;
-
-            case SyntaxTypes.Expression.ParenthesizedExpression paren:
-                worklist.Push(paren.Expression.Value);
-                break;
-
-            case SyntaxTypes.Expression.IfBlock ifBlock:
-                worklist.Push(ifBlock.Condition.Value);
-                worklist.Push(ifBlock.ThenBlock.Value);
-                worklist.Push(ifBlock.ElseBlock.Value);
-                break;
-
-            case SyntaxTypes.Expression.CaseExpression caseExpr:
-                worklist.Push(caseExpr.CaseBlock.Expression.Value);
-
-                foreach (var c in caseExpr.CaseBlock.Cases)
-                    worklist.Push(c.Expression.Value);
-
-                break;
-
-            case SyntaxTypes.Expression.LetExpression letExpr:
-                foreach (var decl in letExpr.Value.Declarations)
-                {
-                    switch (decl.Value)
-                    {
-                        case SyntaxTypes.Expression.LetDeclaration.LetFunction lf:
-                            worklist.Push(lf.Function.Declaration.Value.Expression.Value);
-                            break;
-
-                        case SyntaxTypes.Expression.LetDeclaration.LetDestructuring ld:
-                            worklist.Push(ld.Expression.Value);
-                            break;
-
-                        default:
-                            throw new NotImplementedException(
-                                "EnqueueChildExpressions does not handle let declaration variant: " +
-                                decl.Value.GetType().Name);
-                    }
-                }
-
-                worklist.Push(letExpr.Value.Expression.Value);
-                break;
-
-            case SyntaxTypes.Expression.LambdaExpression lambda:
-                worklist.Push(lambda.Lambda.Expression.Value);
-                break;
-
-            case SyntaxTypes.Expression.ListExpr listExpr:
-                foreach (var e in listExpr.Elements)
-                    worklist.Push(e.Value);
-
-                break;
-
-            case SyntaxTypes.Expression.TupledExpression tupled:
-                foreach (var e in tupled.Elements)
-                    worklist.Push(e.Value);
-
-                break;
-
-            case SyntaxTypes.Expression.RecordExpr recordExpr:
-                foreach (var f in recordExpr.Fields)
-                    worklist.Push(f.Value.valueExpr.Value);
-
-                break;
-
-            case SyntaxTypes.Expression.RecordUpdateExpression recordUpdate:
-                foreach (var f in recordUpdate.Fields)
-                    worklist.Push(f.Value.valueExpr.Value);
-
-                break;
-
-            case SyntaxTypes.Expression.RecordAccess recordAccess:
-                worklist.Push(recordAccess.Record.Value);
-                break;
-
-            case SyntaxTypes.Expression.Negation negation:
-                worklist.Push(negation.Expression.Value);
-                break;
-
-            case SyntaxTypes.Expression.OperatorApplication opApp:
-                worklist.Push(opApp.Left.Value);
-                worklist.Push(opApp.Right.Value);
-                break;
-
-            // Leaf expression variants: no child expressions to enqueue.
-            case SyntaxTypes.Expression.UnitExpr:
-            case SyntaxTypes.Expression.Literal:
-            case SyntaxTypes.Expression.CharLiteral:
-            case SyntaxTypes.Expression.Integer:
-            case SyntaxTypes.Expression.Hex:
-            case SyntaxTypes.Expression.Floatable:
-            case SyntaxTypes.Expression.FunctionOrValue:
-            case SyntaxTypes.Expression.PrefixOperator:
-            case SyntaxTypes.Expression.RecordAccessFunction:
-            case SyntaxTypes.Expression.GLSLExpression:
-                break;
-
-            default:
-                throw new NotImplementedException(
-                    "EnqueueChildExpressions does not handle expression variant: " + expr.GetType().Name);
-        }
-    }
-
-    /// <summary>
     /// Rebuilds an expression by applying <paramref name="mapChild"/> to all immediate child
     /// expression nodes. This centralizes the ~15-case expression variant reconstruction pattern
     /// for tree-mapping operations (substitution, qualification, parenthesization, rewriting).
@@ -1278,22 +1239,353 @@ internal static class ElmSyntaxTransformations
     }
 
     /// <summary>
-    /// Counts the number of expression nodes in the AST, up to a maximum.
-    /// Uses an iterative worklist to avoid stack overflow.
+    /// Scope-tracking variant of <see cref="MapChildExpressions"/>: rebuilds
+    /// <paramref name="expr"/> by applying <paramref name="mapChild"/> to all
+    /// immediate child expression nodes, threading a lexical scope of
+    /// in-scope identifier names through the traversal.
+    /// <para>
+    /// Scope-extending expression variants (lambda, let, case) are handled
+    /// specially: each child is invoked with the scope extended by the names
+    /// introduced by the enclosing pattern (lambda / case arm) or by the
+    /// mutually-visible bindings of the surrounding <c>let</c> block. For
+    /// non-scope-extending variants the callback is invoked with
+    /// <paramref name="currentScope"/> unchanged and the result is rebuilt
+    /// via <see cref="MapChildExpressions"/>.
+    /// </para>
+    /// <para>
+    /// Like <see cref="MapChildExpressions"/>, returns
+    /// <paramref name="expr"/> unchanged (reference-equal) when no child
+    /// was rewritten — callers can use this as a fast-path. See
+    /// <c>explore/internal-analysis/2026-05-18-eliminate-higher-order-parameters-in-focused-tests.md</c>
+    /// §11.13 for the motivating refactor.
+    /// </para>
     /// </summary>
-    internal static int CountExpressionNodes(SyntaxTypes.Expression body, int max = 3000)
+    internal static SyntaxTypes.Expression MapChildExpressionsWithScope(
+        SyntaxTypes.Expression expr,
+        ImmutableHashSet<string> currentScope,
+        Func<Node<SyntaxTypes.Expression>, ImmutableHashSet<string>, Node<SyntaxTypes.Expression>> mapChild)
     {
-        var count = 0;
-        var worklist = new Stack<SyntaxTypes.Expression>();
-        worklist.Push(body);
-
-        while (worklist.Count > 0 && count < max)
+        switch (expr)
         {
-            count++;
-            EnqueueChildExpressions(worklist.Pop(), worklist);
-        }
+            case SyntaxTypes.Expression.LambdaExpression lambda:
+                {
+                    var bodyScope = ExtendScopeWithPatternList(currentScope, lambda.Lambda.Arguments);
 
-        return count;
+                    var bodyNode = mapChild(lambda.Lambda.Expression, bodyScope);
+
+                    if (ReferenceEquals(bodyNode, lambda.Lambda.Expression))
+                        return expr;
+
+                    return
+                        new SyntaxTypes.Expression.LambdaExpression(
+                            new SyntaxTypes.LambdaStruct(
+                                lambda.Lambda.Arguments,
+                                bodyNode));
+                }
+
+            case SyntaxTypes.Expression.LetExpression letExpr:
+                {
+                    // Mutual recursion: every let-bound name is visible to
+                    // every declaration body and to the let's final
+                    // expression.
+                    var letScope = currentScope;
+
+                    foreach (var declNode in letExpr.Value.Declarations)
+                        letScope = AddLetDeclarationBindingsToScope(declNode.Value, letScope);
+
+                    var newDecls =
+                        new List<Node<SyntaxTypes.Expression.LetDeclaration>>(letExpr.Value.Declarations.Count);
+
+                    var declsChanged = false;
+
+                    foreach (var declNode in letExpr.Value.Declarations)
+                    {
+                        var rewrittenDecl =
+                            MapChildExpressionsInLetDeclarationWithScope(declNode.Value, letScope, mapChild);
+
+                        if (!ReferenceEquals(rewrittenDecl, declNode.Value))
+                            declsChanged = true;
+
+                        newDecls.Add(
+                            new Node<SyntaxTypes.Expression.LetDeclaration>(declNode.Range, rewrittenDecl));
+                    }
+
+                    var bodyNode = mapChild(letExpr.Value.Expression, letScope);
+
+                    if (!declsChanged && ReferenceEquals(bodyNode, letExpr.Value.Expression))
+                        return expr;
+
+                    return
+                        new SyntaxTypes.Expression.LetExpression(
+                            new SyntaxTypes.Expression.LetBlock(
+                                Declarations: newDecls,
+                                Expression: bodyNode));
+                }
+
+            case SyntaxTypes.Expression.CaseExpression caseExpr:
+                {
+                    var scrut = mapChild(caseExpr.CaseBlock.Expression, currentScope);
+
+                    var newArms = new List<SyntaxTypes.Case>(caseExpr.CaseBlock.Cases.Count);
+
+                    var armsChanged = false;
+
+                    foreach (var arm in caseExpr.CaseBlock.Cases)
+                    {
+                        var armScope = ExtendScopeWithPattern(currentScope, arm.Pattern.Value);
+
+                        var armBody = mapChild(arm.Expression, armScope);
+
+                        if (!ReferenceEquals(armBody, arm.Expression))
+                            armsChanged = true;
+
+                        newArms.Add(new SyntaxTypes.Case(arm.Pattern, armBody));
+                    }
+
+                    if (!armsChanged && ReferenceEquals(scrut, caseExpr.CaseBlock.Expression))
+                        return expr;
+
+                    return
+                        new SyntaxTypes.Expression.CaseExpression(
+                            new SyntaxTypes.CaseBlock(
+                                Expression: scrut,
+                                Cases: newArms));
+                }
+
+            default:
+                return MapChildExpressions(expr, child => mapChild(child, currentScope));
+        }
+    }
+
+    private static SyntaxTypes.Expression.LetDeclaration
+        MapChildExpressionsInLetDeclarationWithScope(
+        SyntaxTypes.Expression.LetDeclaration letDecl,
+        ImmutableHashSet<string> letScope,
+        Func<Node<SyntaxTypes.Expression>, ImmutableHashSet<string>, Node<SyntaxTypes.Expression>> mapChild)
+    {
+        switch (letDecl)
+        {
+            case SyntaxTypes.Expression.LetDeclaration.LetFunction letFunc:
+                {
+                    var impl = letFunc.Function.Declaration.Value;
+
+                    var fnScope = ExtendScopeWithPatternList(letScope, impl.Arguments);
+
+                    var bodyNode = mapChild(impl.Expression, fnScope);
+
+                    if (ReferenceEquals(bodyNode, impl.Expression))
+                        return letDecl;
+
+                    var newImpl = impl with { Expression = bodyNode };
+
+                    var newFunc =
+                        letFunc.Function with
+                        {
+                            Declaration =
+                            new Node<SyntaxTypes.FunctionImplementation>(
+                                letFunc.Function.Declaration.Range,
+                                newImpl),
+                        };
+
+                    return new SyntaxTypes.Expression.LetDeclaration.LetFunction(newFunc);
+                }
+
+            case SyntaxTypes.Expression.LetDeclaration.LetDestructuring letDest:
+                {
+                    var rewrittenExpr = mapChild(letDest.Expression, letScope);
+
+                    if (ReferenceEquals(rewrittenExpr, letDest.Expression))
+                        return letDecl;
+
+                    return
+                        new SyntaxTypes.Expression.LetDeclaration.LetDestructuring(
+                            letDest.Pattern,
+                            rewrittenExpr);
+                }
+
+            default:
+                return letDecl;
+        }
+    }
+
+    /// <summary>
+    /// Pre-order traversal visitor that invokes <paramref name="onNode"/>
+    /// for <paramref name="expression"/> and every nested
+    /// <see cref="SyntaxTypes.Expression"/> reachable through it. The
+    /// scope argument passed to the callback is
+    /// <paramref name="initialScope"/> extended at every binding site
+    /// (lambda parameter, let-function name + parameters, let-destructure
+    /// pattern, case-branch pattern) according to the same policy used
+    /// by <see cref="MapChildExpressionsWithScope"/>.
+    /// <para>
+    /// This is the read-only counterpart of
+    /// <see cref="MapChildExpressionsWithScope"/>; use it when you need
+    /// to inspect every node under a stable scope without rebuilding the
+    /// expression tree.
+    /// </para>
+    /// </summary>
+    public static void WalkExpressionsWithScope(
+        SyntaxTypes.Expression expression,
+        ImmutableHashSet<string> initialScope,
+        Action<SyntaxTypes.Expression, ImmutableHashSet<string>> onNode)
+    {
+        onNode(expression, initialScope);
+
+        switch (expression)
+        {
+            case SyntaxTypes.Expression.LambdaExpression lambda:
+                {
+                    var bodyScope = ExtendScopeWithPatternList(initialScope, lambda.Lambda.Arguments);
+                    WalkExpressionsWithScope(lambda.Lambda.Expression.Value, bodyScope, onNode);
+                    break;
+                }
+
+            case SyntaxTypes.Expression.LetExpression letExpr:
+                {
+                    var letScope = initialScope;
+
+                    foreach (var declNode in letExpr.Value.Declarations)
+                        letScope = AddLetDeclarationBindingsToScope(declNode.Value, letScope);
+
+                    foreach (var declNode in letExpr.Value.Declarations)
+                    {
+                        switch (declNode.Value)
+                        {
+                            case SyntaxTypes.Expression.LetDeclaration.LetFunction letFunc:
+                                {
+                                    var impl = letFunc.Function.Declaration.Value;
+                                    var fnScope = ExtendScopeWithPatternList(letScope, impl.Arguments);
+                                    WalkExpressionsWithScope(impl.Expression.Value, fnScope, onNode);
+                                    break;
+                                }
+
+                            case SyntaxTypes.Expression.LetDeclaration.LetDestructuring letDest:
+                                WalkExpressionsWithScope(letDest.Expression.Value, letScope, onNode);
+                                break;
+                        }
+                    }
+
+                    WalkExpressionsWithScope(letExpr.Value.Expression.Value, letScope, onNode);
+                    break;
+                }
+
+            case SyntaxTypes.Expression.CaseExpression caseExpr:
+                {
+                    WalkExpressionsWithScope(caseExpr.CaseBlock.Expression.Value, initialScope, onNode);
+
+                    foreach (var arm in caseExpr.CaseBlock.Cases)
+                    {
+                        var armScope = ExtendScopeWithPattern(initialScope, arm.Pattern.Value);
+                        WalkExpressionsWithScope(arm.Expression.Value, armScope, onNode);
+                    }
+
+                    break;
+                }
+
+            case SyntaxTypes.Expression.Application app:
+                foreach (var arg in app.Arguments)
+                    WalkExpressionsWithScope(arg.Value, initialScope, onNode);
+
+                break;
+
+            case SyntaxTypes.Expression.OperatorApplication opApp:
+                WalkExpressionsWithScope(opApp.Left.Value, initialScope, onNode);
+                WalkExpressionsWithScope(opApp.Right.Value, initialScope, onNode);
+                break;
+
+            case SyntaxTypes.Expression.ParenthesizedExpression paren:
+                WalkExpressionsWithScope(paren.Expression.Value, initialScope, onNode);
+                break;
+
+            case SyntaxTypes.Expression.IfBlock ifBlock:
+                WalkExpressionsWithScope(ifBlock.Condition.Value, initialScope, onNode);
+                WalkExpressionsWithScope(ifBlock.ThenBlock.Value, initialScope, onNode);
+                WalkExpressionsWithScope(ifBlock.ElseBlock.Value, initialScope, onNode);
+                break;
+
+            case SyntaxTypes.Expression.ListExpr listExpr:
+                foreach (var element in listExpr.Elements)
+                    WalkExpressionsWithScope(element.Value, initialScope, onNode);
+
+                break;
+
+            case SyntaxTypes.Expression.TupledExpression tupled:
+                foreach (var element in tupled.Elements)
+                    WalkExpressionsWithScope(element.Value, initialScope, onNode);
+
+                break;
+
+            case SyntaxTypes.Expression.RecordExpr recordExpr:
+                foreach (var field in recordExpr.Fields)
+                    WalkExpressionsWithScope(field.Value.valueExpr.Value, initialScope, onNode);
+
+                break;
+
+            case SyntaxTypes.Expression.RecordUpdateExpression recordUpdate:
+                foreach (var field in recordUpdate.Fields)
+                    WalkExpressionsWithScope(field.Value.valueExpr.Value, initialScope, onNode);
+
+                break;
+
+            case SyntaxTypes.Expression.RecordAccess recordAccess:
+                WalkExpressionsWithScope(recordAccess.Record.Value, initialScope, onNode);
+                break;
+
+            case SyntaxTypes.Expression.Negation negation:
+                WalkExpressionsWithScope(negation.Expression.Value, initialScope, onNode);
+                break;
+
+            // Leaf variants — already visited via onNode at the top.
+            case SyntaxTypes.Expression.FunctionOrValue:
+            case SyntaxTypes.Expression.UnitExpr:
+            case SyntaxTypes.Expression.Literal:
+            case SyntaxTypes.Expression.CharLiteral:
+            case SyntaxTypes.Expression.Integer:
+            case SyntaxTypes.Expression.Hex:
+            case SyntaxTypes.Expression.Floatable:
+            case SyntaxTypes.Expression.PrefixOperator:
+            case SyntaxTypes.Expression.RecordAccessFunction:
+            case SyntaxTypes.Expression.GLSLExpression:
+                break;
+        }
+    }
+
+    private static ImmutableHashSet<string> ExtendScopeWithPatternList(
+        ImmutableHashSet<string> scope,
+        IReadOnlyList<Node<SyntaxTypes.Pattern>> patterns)
+    {
+        var extended = scope;
+
+        foreach (var patternNode in patterns)
+            extended = ExtendScopeWithPattern(extended, patternNode.Value);
+
+        return extended;
+    }
+
+    private static ImmutableHashSet<string> ExtendScopeWithPattern(
+        ImmutableHashSet<string> scope,
+        SyntaxTypes.Pattern pattern)
+    {
+        var names = CollectPatternNames(pattern);
+
+        return names.Count is 0 ? scope : scope.Union(names);
+    }
+
+    private static ImmutableHashSet<string> AddLetDeclarationBindingsToScope(
+        SyntaxTypes.Expression.LetDeclaration letDecl,
+        ImmutableHashSet<string> scope)
+    {
+        switch (letDecl)
+        {
+            case SyntaxTypes.Expression.LetDeclaration.LetFunction lf:
+                return scope.Add(lf.Function.Declaration.Value.Name.Value);
+
+            case SyntaxTypes.Expression.LetDeclaration.LetDestructuring ld:
+                return ExtendScopeWithPattern(scope, ld.Pattern.Value);
+
+            default:
+                return scope;
+        }
     }
 
     /// <summary>
@@ -1353,6 +1645,42 @@ internal static class ElmSyntaxTransformations
 
         return new Node<SyntaxTypes.Expression>(exprNode.Range, rewrittenExpr);
     }
+
+    /// <summary>
+    /// Public, clearly-named entry point for capture-avoiding parallel substitution.
+    /// Replaces every free occurrence of each key <c>x_i</c> in <paramref name="exprNode"/>
+    /// with the corresponding value <c>v_i</c> from <paramref name="substitutions"/>,
+    /// applying both standard safety conditions:
+    /// </summary>
+    /// <remarks>
+    /// <list type="number">
+    /// <item><description>
+    /// <b>Shadowed-substitutions:</b> when traversing into a binder (lambda parameter,
+    /// case pattern, let-decl binder) whose pattern names contain some <c>x_i</c>,
+    /// that key is removed from the substitution map for the subtree of the binder's
+    /// body. (Inner shadowing wins.)
+    /// </description></item>
+    /// <item><description>
+    /// <b>Free-variable-capture:</b> when a binder name <c>y</c> would capture some
+    /// free variable of a substitution value <c>v_i</c> (i.e. <c>y</c> occurs free in
+    /// some <c>v_i</c>), the binder is alpha-renamed to a fresh name BEFORE
+    /// substitution proceeds so that <c>v_i</c>'s reference to its original outer
+    /// <c>y</c> is preserved.
+    /// </description></item>
+    /// </list>
+    /// <para>
+    /// This is recommendation #1 from
+    /// <c>explore/internal-analysis/2026-05-19-loop-int-list-regression-findings.md</c>:
+    /// a single named API for capture-avoiding substitution makes it harder to
+    /// accidentally call an unsafe primitive that only enforces one of the two
+    /// safety conditions.
+    /// </para>
+    /// </remarks>
+    /// <seealso cref="SubstituteInExpression"/>
+    public static Node<SyntaxTypes.Expression> SubstituteCaptureAvoiding(
+        Node<SyntaxTypes.Expression> exprNode,
+        IReadOnlyDictionary<string, Node<SyntaxTypes.Expression>> substitutions) =>
+        SubstituteInExpression(exprNode, substitutions);
 
     internal static Node<SyntaxTypes.Expression> SubstituteInExpression(
         Node<SyntaxTypes.Expression> exprNode,
@@ -1482,12 +1810,12 @@ internal static class ElmSyntaxTransformations
         // (otherwise the let-binding would shadow a name that the inner expressions read).
         var avoidNames = new HashSet<string>();
 
-        foreach (var name in CollectFreeVariables(replacement.Value))
+        foreach (var name in SyntaxTypes.SyntaxAnalysis.CollectRemainingFreeVariables(replacement.Value))
             avoidNames.Add(name);
 
         foreach (var field in substitutedFields)
         {
-            foreach (var name in CollectFreeVariables(field.Value.valueExpr.Value))
+            foreach (var name in SyntaxTypes.SyntaxAnalysis.CollectRemainingFreeVariables(field.Value.valueExpr.Value))
                 avoidNames.Add(name);
         }
 
@@ -1632,8 +1960,32 @@ internal static class ElmSyntaxTransformations
         SyntaxTypes.Case caseItem,
         IReadOnlyDictionary<string, Node<SyntaxTypes.Expression>> substitutions)
     {
-        // Remove substitutions shadowed by the pattern
-        var shadowedNames = CollectPatternNames(caseItem.Pattern.Value);
+        // Capture-avoiding alpha-rename of pattern bindings (see comment on
+        // SubstituteInLambdaStruct for rationale).
+        var freeInValues = CollectFreeVariablesAcrossSubstitutionValues(substitutions);
+
+        var pattern = caseItem.Pattern;
+        var caseBodyExpression = caseItem.Expression;
+
+        if (ShouldAlphaRenameForCaptureAvoidance([pattern], freeInValues))
+        {
+            var namesInScope = new HashSet<string>(freeInValues);
+
+            var (renamedPattern, patternBindings) =
+                RenamePatternBindings(pattern, namesInScope, crossModuleQualification: null);
+
+            pattern = renamedPattern;
+
+            caseBodyExpression =
+                RenameExpressionBindings(
+                    caseBodyExpression,
+                    patternBindings,
+                    namesInScope,
+                    crossModuleQualification: null);
+        }
+
+        // Remove substitutions shadowed by the (post-rename) pattern.
+        var shadowedNames = CollectPatternNames(pattern.Value);
 
         var filteredSubstitutions =
             substitutions
@@ -1642,18 +1994,108 @@ internal static class ElmSyntaxTransformations
 
         return
             new SyntaxTypes.Case(
-                Pattern: caseItem.Pattern,
-                Expression: SubstituteInExpression(caseItem.Expression, filteredSubstitutions));
+                Pattern: pattern,
+                Expression: SubstituteInExpression(caseBodyExpression, filteredSubstitutions));
     }
 
     internal static SyntaxTypes.Expression.LetBlock SubstituteInLetBlock(
         SyntaxTypes.Expression.LetBlock letBlock,
         IReadOnlyDictionary<string, Node<SyntaxTypes.Expression>> substitutions)
     {
-        // Collect names introduced by let declarations
+        // Capture-avoiding alpha-rename of let-introduced names (see comment on
+        // SubstituteInLambdaStruct). A let-block is a single mutual-recursion
+        // group: all of its declarations share one scope that covers each
+        // declaration body AND the in-expression, so a single collision among
+        // the bindings forces all conflicting names to be renamed consistently
+        // throughout the block.
+        var freeInValues = CollectFreeVariablesAcrossSubstitutionValues(substitutions);
+
+        var letDeclarations = letBlock.Declarations;
+        var letBodyExpression = letBlock.Expression;
+
+        // Collect all binder names introduced by the let-block.
+        var letBinderPatterns = new List<Node<SyntaxTypes.Pattern>>();
+
+        foreach (var decl in letDeclarations)
+        {
+            switch (decl.Value)
+            {
+                case SyntaxTypes.Expression.LetDeclaration.LetFunction letFunc:
+                    {
+                        var nameNode = letFunc.Function.Declaration.Value.Name;
+
+                        letBinderPatterns.Add(
+                            new Node<SyntaxTypes.Pattern>(
+                                nameNode.Range,
+                                new SyntaxTypes.Pattern.VarPattern(nameNode.Value)));
+
+                        break;
+                    }
+
+                case SyntaxTypes.Expression.LetDeclaration.LetDestructuring letDestr:
+                    {
+                        letBinderPatterns.Add(letDestr.Pattern);
+
+                        break;
+                    }
+            }
+        }
+
+        if (ShouldAlphaRenameForCaptureAvoidance(letBinderPatterns, freeInValues))
+        {
+            // Build a consistent rename map for all colliding let-introduced names.
+            var namesInScope = new HashSet<string>(freeInValues);
+            var letRenames = new Dictionary<string, string>();
+
+            foreach (var decl in letDeclarations)
+            {
+                IReadOnlyList<string> introduced =
+                    decl.Value switch
+                    {
+                        SyntaxTypes.Expression.LetDeclaration.LetFunction letFunc =>
+                        new[] { letFunc.Function.Declaration.Value.Name.Value },
+
+                        SyntaxTypes.Expression.LetDeclaration.LetDestructuring letDestr =>
+                        CollectPatternNames(letDestr.Pattern.Value).ToList(),
+
+                        _ =>
+                        [],
+                    };
+
+                foreach (var name in introduced)
+                {
+                    if (letRenames.ContainsKey(name))
+                        continue;
+
+                    var chosen =
+                        namesInScope.Contains(name)
+                        ?
+                        GenerateUniqueLocalName(name, namesInScope)
+                        :
+                        name;
+
+                    namesInScope.Add(chosen);
+                    letRenames[name] = chosen;
+                }
+            }
+
+            // Apply the consistent rename across every declaration body (which can
+            // call mutual siblings) and across the in-expression.
+            letDeclarations =
+                [.. letDeclarations.Select(d => RenameLetDeclaration(d, letRenames, namesInScope))];
+
+            letBodyExpression =
+                RenameExpressionBindings(
+                    letBodyExpression,
+                    letRenames,
+                    namesInScope,
+                    crossModuleQualification: null);
+        }
+
+        // Recompute the (possibly renamed) let-bound name set for shadowing.
         var letNames = new HashSet<string>();
 
-        foreach (var decl in letBlock.Declarations)
+        foreach (var decl in letDeclarations)
         {
             if (decl.Value is SyntaxTypes.Expression.LetDeclaration.LetFunction letFunc)
             {
@@ -1676,8 +2118,137 @@ internal static class ElmSyntaxTransformations
 
         return
             new SyntaxTypes.Expression.LetBlock(
-                Declarations: [.. letBlock.Declarations.Select(d => SubstituteInLetDeclaration(d, substitutions))],
-                Expression: SubstituteInExpression(letBlock.Expression, filteredSubstitutions));
+                Declarations: [.. letDeclarations.Select(d => SubstituteInLetDeclaration(d, substitutions))],
+                Expression: SubstituteInExpression(letBodyExpression, filteredSubstitutions));
+    }
+
+    /// <summary>
+    /// Applies a name-rename map to a single let-declaration (function or destructuring).
+    /// For let-functions: renames the function name (if mapped) and recursively renames
+    /// references in the function body, treating its own parameters as a nested scope.
+    /// For let-destructuring: renames the pattern's introduced names (if mapped) and
+    /// rewrites references in the binding expression.
+    /// </summary>
+    private static Node<SyntaxTypes.Expression.LetDeclaration> RenameLetDeclaration(
+        Node<SyntaxTypes.Expression.LetDeclaration> declNode,
+        IReadOnlyDictionary<string, string> activeRenames,
+        IReadOnlySet<string> namesInScope)
+    {
+        switch (declNode.Value)
+        {
+            case SyntaxTypes.Expression.LetDeclaration.LetFunction letFunc:
+                {
+                    var origImpl = letFunc.Function.Declaration.Value;
+
+                    var newName =
+                        activeRenames.TryGetValue(origImpl.Name.Value, out var renamedName)
+                        ?
+                        renamedName
+                        :
+                        origImpl.Name.Value;
+
+                    var renamedExpression =
+                        RenameExpressionBindings(
+                            origImpl.Expression,
+                            activeRenames,
+                            namesInScope,
+                            crossModuleQualification: null);
+
+                    var newImpl =
+                        new SyntaxTypes.FunctionImplementation(
+                            Name: new Node<string>(origImpl.Name.Range, newName),
+                            Arguments: origImpl.Arguments,
+                            Expression: renamedExpression);
+
+                    var newFunc =
+                        letFunc.Function with
+                        {
+                            Declaration =
+                            new Node<SyntaxTypes.FunctionImplementation>(
+                                letFunc.Function.Declaration.Range,
+                                newImpl)
+                        };
+
+                    return
+                        new Node<SyntaxTypes.Expression.LetDeclaration>(
+                            declNode.Range,
+                            new SyntaxTypes.Expression.LetDeclaration.LetFunction(newFunc));
+                }
+
+            case SyntaxTypes.Expression.LetDeclaration.LetDestructuring letDestr:
+                {
+                    // Rebuild the pattern with renamed binder names; leave the
+                    // binding expression unchanged (it's evaluated in the OUTER
+                    // scope, where it cannot see the let's own introduced names).
+                    var renamedPattern = RenamePatternWithMap(letDestr.Pattern, activeRenames);
+
+                    return
+                        new Node<SyntaxTypes.Expression.LetDeclaration>(
+                            declNode.Range,
+                            new SyntaxTypes.Expression.LetDeclaration.LetDestructuring(
+                                renamedPattern,
+                                letDestr.Expression));
+                }
+
+            default:
+                return declNode;
+        }
+    }
+
+    /// <summary>
+    /// Rebuilds a pattern with every <c>VarPattern</c> name replaced via
+    /// <paramref name="renames"/> when present. Used when alpha-renaming let
+    /// destructurings: the binding expression keeps its outer-scope semantics
+    /// and only the pattern's bound names need to be relabeled.
+    /// </summary>
+    private static Node<SyntaxTypes.Pattern> RenamePatternWithMap(
+        Node<SyntaxTypes.Pattern> patternNode,
+        IReadOnlyDictionary<string, string> renames)
+    {
+        SyntaxTypes.Pattern RewriteValue(SyntaxTypes.Pattern pattern)
+        {
+            return pattern switch
+            {
+                SyntaxTypes.Pattern.VarPattern v when renames.TryGetValue(v.Name, out var renamed) =>
+                new SyntaxTypes.Pattern.VarPattern(renamed),
+
+                SyntaxTypes.Pattern.TuplePattern t =>
+                new SyntaxTypes.Pattern.TuplePattern(
+                    [.. t.Elements.Select(e => RenamePatternWithMap(e, renames))]),
+
+                SyntaxTypes.Pattern.UnConsPattern unCons =>
+                new SyntaxTypes.Pattern.UnConsPattern(
+                    RenamePatternWithMap(unCons.Head, renames),
+                    RenamePatternWithMap(unCons.Tail, renames)),
+
+                SyntaxTypes.Pattern.ListPattern l =>
+                new SyntaxTypes.Pattern.ListPattern(
+                    [.. l.Elements.Select(e => RenamePatternWithMap(e, renames))]),
+
+                SyntaxTypes.Pattern.NamedPattern n =>
+                new SyntaxTypes.Pattern.NamedPattern(
+                    n.Name,
+                    [.. n.Arguments.Select(p => RenamePatternWithMap(p, renames))]),
+
+                SyntaxTypes.Pattern.AsPattern a =>
+                new SyntaxTypes.Pattern.AsPattern(
+                    RenamePatternWithMap(a.Pattern, renames),
+                    renames.TryGetValue(a.Name.Value, out var renamedAlias)
+                    ?
+                    new Node<string>(a.Name.Range, renamedAlias)
+                    :
+                    a.Name),
+
+                SyntaxTypes.Pattern.ParenthesizedPattern p =>
+                new SyntaxTypes.Pattern.ParenthesizedPattern(
+                    RenamePatternWithMap(p.Pattern, renames)),
+
+                _ =>
+                pattern,
+            };
+        }
+
+        return new Node<SyntaxTypes.Pattern>(patternNode.Range, RewriteValue(patternNode.Value));
     }
 
     internal static Node<SyntaxTypes.Expression.LetDeclaration> SubstituteInLetDeclaration(
@@ -1711,10 +2282,25 @@ internal static class ElmSyntaxTransformations
     {
         var impl = func.Declaration.Value;
 
-        // Remove substitutions shadowed by function parameters
+        // Capture-avoiding alpha-rename of function parameters (see
+        // SubstituteInLambdaStruct for rationale). Function-struct substitution
+        // appears in let-functions; the same capture risk applies.
+        var freeInValues = CollectFreeVariablesAcrossSubstitutionValues(substitutions);
+
+        var renamedArguments = impl.Arguments;
+        var renamedExpression = impl.Expression;
+
+        if (ShouldAlphaRenameForCaptureAvoidance(impl.Arguments, freeInValues))
+        {
+            var renamedImpl = RenameBindingsAvoidingCapture(impl, freeInValues);
+            renamedArguments = renamedImpl.Arguments;
+            renamedExpression = renamedImpl.Expression;
+        }
+
+        // Remove substitutions shadowed by (post-rename) function parameters
         var paramNames = new HashSet<string>();
 
-        foreach (var param in impl.Arguments)
+        foreach (var param in renamedArguments)
         {
             foreach (var name in CollectPatternNames(param.Value))
             {
@@ -1730,8 +2316,8 @@ internal static class ElmSyntaxTransformations
         var substitutedImpl =
             new SyntaxTypes.FunctionImplementation(
                 Name: impl.Name,
-                Arguments: impl.Arguments,
-                Expression: SubstituteInExpression(impl.Expression, filteredSubstitutions));
+                Arguments: renamedArguments,
+                Expression: SubstituteInExpression(renamedExpression, filteredSubstitutions));
 
         return
             func with
@@ -1743,14 +2329,51 @@ internal static class ElmSyntaxTransformations
             };
     }
 
+    /// <summary>
+    /// Collects the union of free variable names across the values in a
+    /// substitution map. Used by the capture-avoiding substitution helpers
+    /// (<see cref="SubstituteInLambdaStruct"/>, <see cref="SubstituteInCase"/>,
+    /// <see cref="SubstituteInLetBlock"/>, <see cref="SubstituteInFunctionStruct"/>)
+    /// to decide which binder names would capture a free variable from a
+    /// substitution value and therefore must be alpha-renamed before substitution
+    /// proceeds.
+    /// </summary>
+    private static HashSet<string> CollectFreeVariablesAcrossSubstitutionValues(
+        IReadOnlyDictionary<string, Node<SyntaxTypes.Expression>> substitutions)
+    {
+        var freeInValues = new HashSet<string>();
+
+        foreach (var (_, valueNode) in substitutions)
+        {
+            foreach (var name in SyntaxTypes.SyntaxAnalysis.CollectRemainingFreeVariables(valueNode.Value))
+                freeInValues.Add(name);
+        }
+
+        return freeInValues;
+    }
+
     internal static SyntaxTypes.LambdaStruct SubstituteInLambdaStruct(
         SyntaxTypes.LambdaStruct lambda,
         IReadOnlyDictionary<string, Node<SyntaxTypes.Expression>> substitutions)
     {
-        // Remove substitutions shadowed by lambda parameters
+        // Capture-avoiding alpha-rename: if any lambda parameter binds a name that
+        // also occurs FREE in a substitution value, the naive substitution would
+        // capture that free reference (binding it to the lambda's parameter instead
+        // of leaving it to refer to the outer scope it came from). Rename the
+        // colliding parameters to fresh names before substituting.
+        var freeInValues = CollectFreeVariablesAcrossSubstitutionValues(substitutions);
+
+        var renamedLambda =
+            ShouldAlphaRenameForCaptureAvoidance(lambda.Arguments, freeInValues)
+            ?
+            RenameBindingsAvoidingCapture(lambda, freeInValues)
+            :
+            lambda;
+
+        // Remove substitutions shadowed by lambda parameters (post-rename names).
         var paramNames = new HashSet<string>();
 
-        foreach (var param in lambda.Arguments)
+        foreach (var param in renamedLambda.Arguments)
         {
             foreach (var name in CollectPatternNames(param.Value))
             {
@@ -1765,8 +2388,34 @@ internal static class ElmSyntaxTransformations
 
         return
             new SyntaxTypes.LambdaStruct(
-                Arguments: lambda.Arguments,
-                Expression: SubstituteInExpression(lambda.Expression, filteredSubstitutions));
+                Arguments: renamedLambda.Arguments,
+                Expression: SubstituteInExpression(renamedLambda.Expression, filteredSubstitutions));
+    }
+
+    /// <summary>
+    /// Returns true when any binder name in <paramref name="bindingPatterns"/>
+    /// collides with a name in <paramref name="namesToAvoid"/> and therefore
+    /// requires alpha-renaming to avoid capture during substitution.
+    /// </summary>
+    private static bool ShouldAlphaRenameForCaptureAvoidance(
+        IReadOnlyList<Node<SyntaxTypes.Pattern>> bindingPatterns,
+        IReadOnlyCollection<string> namesToAvoid)
+    {
+        if (namesToAvoid.Count is 0)
+            return false;
+
+        foreach (var pattern in bindingPatterns)
+        {
+            var patternNames = CollectPatternNames(pattern.Value);
+
+            foreach (var name in patternNames)
+            {
+                if (namesToAvoid.Contains(name))
+                    return true;
+            }
+        }
+
+        return false;
     }
 
     internal static Node<(Node<string>, Node<SyntaxTypes.Expression>)> SubstituteInRecordField(
@@ -1781,72 +2430,43 @@ internal static class ElmSyntaxTransformations
                 (fieldName, SubstituteInExpression(valueExpr, substitutions)));
     }
 
+    internal static IReadOnlyDictionary<(string moduleKey, string declName), DeclQualifiedName>
+        BuildModuleKeyAndDeclNameIndex(
+        IReadOnlyDictionary<DeclQualifiedName, SyntaxTypes.Declaration> declarations)
+    {
+        var byModuleAndName =
+            new Dictionary<(string moduleKey, string declName), DeclQualifiedName>(declarations.Count);
+
+        foreach (var key in declarations.Keys)
+        {
+            byModuleAndName[(string.Join(".", key.Namespaces), key.DeclName)] = key;
+        }
+
+        return byModuleAndName;
+    }
+
     internal static HashSet<string> CollectPatternNames(SyntaxTypes.Pattern pattern)
     {
         var names = new HashSet<string>();
 
-        CollectPatternNamesRecursive(pattern, names);
+        SyntaxTypes.SyntaxAnalysis.CollectNamesBoundByPatternInto(pattern, names);
 
         return names;
     }
 
-    internal static void CollectPatternNamesRecursive(SyntaxTypes.Pattern pattern, HashSet<string> names)
+    /// <summary>
+    /// Union of every name bound by every pattern in <paramref name="patterns"/>.
+    /// Convenience for parameter-list use-cases (function arguments,
+    /// lambda arguments).
+    /// </summary>
+    internal static ImmutableHashSet<string> CollectNamesBoundByPatterns(
+        IReadOnlyList<Node<SyntaxTypes.Pattern>> patterns)
     {
-        switch (pattern)
-        {
-            case SyntaxTypes.Pattern.VarPattern varPattern:
-                names.Add(varPattern.Name);
-                break;
-
-            case SyntaxTypes.Pattern.TuplePattern tuplePattern:
-                foreach (var elem in tuplePattern.Elements)
-                {
-                    CollectPatternNamesRecursive(elem.Value, names);
-                }
-
-                break;
-
-            case SyntaxTypes.Pattern.RecordPattern recordPattern:
-                foreach (var field in recordPattern.Fields)
-                {
-                    names.Add(field.Value);
-                }
-
-                break;
-
-            case SyntaxTypes.Pattern.UnConsPattern unconsPattern:
-                CollectPatternNamesRecursive(unconsPattern.Head.Value, names);
-                CollectPatternNamesRecursive(unconsPattern.Tail.Value, names);
-                break;
-
-            case SyntaxTypes.Pattern.ListPattern listPattern:
-                foreach (var elem in listPattern.Elements)
-                {
-                    CollectPatternNamesRecursive(elem.Value, names);
-                }
-
-                break;
-
-            case SyntaxTypes.Pattern.NamedPattern namedPattern:
-                foreach (var arg in namedPattern.Arguments)
-                {
-                    CollectPatternNamesRecursive(arg.Value, names);
-                }
-
-                break;
-
-            case SyntaxTypes.Pattern.AsPattern asPattern:
-                names.Add(asPattern.Name.Value);
-                CollectPatternNamesRecursive(asPattern.Pattern.Value, names);
-                break;
-
-            case SyntaxTypes.Pattern.ParenthesizedPattern parenPattern:
-                CollectPatternNamesRecursive(parenPattern.Pattern.Value, names);
-                break;
-
-                // Other pattern types don't introduce names
-        }
+        return SyntaxTypes.SyntaxAnalysis.CollectNamesBoundByPatterns(patterns);
     }
+
+    internal static void CollectPatternNamesRecursive(SyntaxTypes.Pattern pattern, HashSet<string> names) =>
+        SyntaxTypes.SyntaxAnalysis.CollectNamesBoundByPatternInto(pattern, names);
 
     internal static string GenerateUniqueLocalName(
         string baseName,
@@ -2536,191 +3156,6 @@ internal static class ElmSyntaxTransformations
             bindings);
     }
 
-    /// <summary>
-    /// Collects all unqualified <see cref="SyntaxTypes.Expression.FunctionOrValue"/> names
-    /// in an expression that are NOT bound by any enclosing pattern (parameters, let-bindings,
-    /// lambda arguments, case branches). These are the "free variables" of the expression.
-    /// Used by cross-module inlining to determine which unqualified references in a callee
-    /// function body need qualification when inlined into a different module.
-    /// </summary>
-    internal static HashSet<string> CollectFreeVariables(
-        SyntaxTypes.Expression expression,
-        IReadOnlyCollection<string>? initialBound = null)
-    {
-        var freeVars = new HashSet<string>();
-        var boundNames = new HashSet<string>(initialBound ?? []);
-
-        CollectFreeVariablesRecursive(expression, boundNames, freeVars);
-
-        return freeVars;
-    }
-
-    /// <summary>
-    /// Overload that collects free variables from a <see cref="SyntaxTypes.FunctionImplementation"/>,
-    /// treating the function's own parameters as bound names.
-    /// </summary>
-    internal static HashSet<string> CollectFreeVariables(
-        SyntaxTypes.FunctionImplementation funcImpl)
-    {
-        var boundNames = new HashSet<string>();
-
-        foreach (var param in funcImpl.Arguments)
-            CollectPatternNamesRecursive(param.Value, boundNames);
-
-        var freeVars = new HashSet<string>();
-
-        CollectFreeVariablesRecursive(funcImpl.Expression.Value, boundNames, freeVars);
-
-        return freeVars;
-    }
-
-    private static void CollectFreeVariablesRecursive(
-        SyntaxTypes.Expression expression,
-        HashSet<string> boundNames,
-        HashSet<string> freeVars)
-    {
-        switch (expression)
-        {
-            case SyntaxTypes.Expression.FunctionOrValue funcOrValue when funcOrValue.ModuleName.Count is 0:
-                if (!boundNames.Contains(funcOrValue.Name))
-                    freeVars.Add(funcOrValue.Name);
-
-                break;
-
-            case SyntaxTypes.Expression.LambdaExpression lambdaExpr:
-                {
-                    var innerBound = new HashSet<string>(boundNames);
-
-                    foreach (var arg in lambdaExpr.Lambda.Arguments)
-                        CollectPatternNamesRecursive(arg.Value, innerBound);
-
-                    CollectFreeVariablesRecursive(lambdaExpr.Lambda.Expression.Value, innerBound, freeVars);
-                    break;
-                }
-
-            case SyntaxTypes.Expression.CaseExpression caseExpr:
-                {
-                    CollectFreeVariablesRecursive(caseExpr.CaseBlock.Expression.Value, boundNames, freeVars);
-
-                    foreach (var caseItem in caseExpr.CaseBlock.Cases)
-                    {
-                        var branchBound = new HashSet<string>(boundNames);
-                        CollectPatternNamesRecursive(caseItem.Pattern.Value, branchBound);
-                        CollectFreeVariablesRecursive(caseItem.Expression.Value, branchBound, freeVars);
-                    }
-
-                    break;
-                }
-
-            case SyntaxTypes.Expression.LetExpression letExpr:
-                {
-                    // Let bindings are mutually recursive in Elm, so all names are in scope
-                    // for all RHS expressions and the body.
-                    var letBound = new HashSet<string>(boundNames);
-
-                    foreach (var decl in letExpr.Value.Declarations)
-                    {
-                        switch (decl.Value)
-                        {
-                            case SyntaxTypes.Expression.LetDeclaration.LetFunction letFunc:
-                                letBound.Add(letFunc.Function.Declaration.Value.Name.Value);
-                                break;
-
-                            case SyntaxTypes.Expression.LetDeclaration.LetDestructuring letDestr:
-                                CollectPatternNamesRecursive(letDestr.Pattern.Value, letBound);
-                                break;
-                        }
-                    }
-
-                    // Process each declaration's RHS with the let-scoped bound names
-                    foreach (var decl in letExpr.Value.Declarations)
-                    {
-                        switch (decl.Value)
-                        {
-                            case SyntaxTypes.Expression.LetDeclaration.LetFunction letFunc:
-                                {
-                                    var funcBound = new HashSet<string>(letBound);
-
-                                    foreach (var arg in letFunc.Function.Declaration.Value.Arguments)
-                                        CollectPatternNamesRecursive(arg.Value, funcBound);
-
-                                    CollectFreeVariablesRecursive(
-                                        letFunc.Function.Declaration.Value.Expression.Value,
-                                        funcBound,
-                                        freeVars);
-
-                                    break;
-                                }
-
-                            case SyntaxTypes.Expression.LetDeclaration.LetDestructuring letDestr:
-                                CollectFreeVariablesRecursive(letDestr.Expression.Value, letBound, freeVars);
-                                break;
-                        }
-                    }
-
-                    // Process the body expression
-                    CollectFreeVariablesRecursive(letExpr.Value.Expression.Value, letBound, freeVars);
-                    break;
-                }
-
-            case SyntaxTypes.Expression.RecordUpdateExpression recordUpdate:
-                {
-                    // The RecordName references a local variable; treat it as a free use
-                    // exactly like a bare FunctionOrValue reference would be.
-                    if (!boundNames.Contains(recordUpdate.RecordName.Value))
-                        freeVars.Add(recordUpdate.RecordName.Value);
-
-                    foreach (var field in recordUpdate.Fields)
-                        CollectFreeVariablesRecursive(field.Value.valueExpr.Value, boundNames, freeVars);
-
-                    break;
-                }
-
-            // Qualified FunctionOrValue references (those that don't match the bare-local
-            // guard at the top) refer to module-level names and contribute no free local
-            // variables. Listing the variant explicitly keeps the throwing default below
-            // from firing.
-            case SyntaxTypes.Expression.FunctionOrValue:
-                break;
-
-            // All other expression variants have no special binding semantics here:
-            // recurse into their direct children via EnqueueChildExpressions. Each variant
-            // is enumerated explicitly so the throwing default below never fires for valid
-            // expression values.
-            case SyntaxTypes.Expression.UnitExpr:
-            case SyntaxTypes.Expression.Literal:
-            case SyntaxTypes.Expression.CharLiteral:
-            case SyntaxTypes.Expression.Integer:
-            case SyntaxTypes.Expression.Hex:
-            case SyntaxTypes.Expression.Floatable:
-            case SyntaxTypes.Expression.Negation:
-            case SyntaxTypes.Expression.ListExpr:
-            case SyntaxTypes.Expression.IfBlock:
-            case SyntaxTypes.Expression.PrefixOperator:
-            case SyntaxTypes.Expression.ParenthesizedExpression:
-            case SyntaxTypes.Expression.Application:
-            case SyntaxTypes.Expression.OperatorApplication:
-            case SyntaxTypes.Expression.TupledExpression:
-            case SyntaxTypes.Expression.RecordExpr:
-            case SyntaxTypes.Expression.RecordAccess:
-            case SyntaxTypes.Expression.RecordAccessFunction:
-            case SyntaxTypes.Expression.GLSLExpression:
-                {
-                    var worklist = new Stack<SyntaxTypes.Expression>();
-                    EnqueueChildExpressions(expression, worklist);
-
-                    while (worklist.Count > 0)
-                        CollectFreeVariablesRecursive(worklist.Pop(), boundNames, freeVars);
-
-                    break;
-                }
-
-            default:
-                throw new NotImplementedException(
-                    "CollectFreeVariablesRecursive does not handle expression variant: " +
-                    expression.GetType().Name);
-        }
-    }
 
     /// <summary>
     /// Context for qualifying unqualified references during cross-module inlining.

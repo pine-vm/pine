@@ -513,7 +513,7 @@ public partial class Inlining
             return (null, s_emptyCollected);
 
         // Skip specialization for very large function bodies
-        if (ElmSyntaxTransformations.CountExpressionNodes(funcImpl.Expression.Value) > 2000)
+        if (SyntaxTypes.SyntaxAnalysis.CountExpressionNodes(funcImpl.Expression.Value) > 2000)
             return (null, s_emptyCollected);
 
         var builtParamSpecs = paramSpecs.ToImmutable();
