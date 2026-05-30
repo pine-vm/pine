@@ -41,7 +41,9 @@ public abstract record Result<ErrT, OkT>
         this switch
         {
             Err _ => true,
-            _ => false
+
+            _ =>
+            false
         };
 
     /// <summary>
@@ -51,7 +53,9 @@ public abstract record Result<ErrT, OkT>
         this switch
         {
             Ok _ => true,
-            _ => false
+
+            _ =>
+            false
         };
 
     /// <summary>
@@ -76,7 +80,8 @@ public abstract record Result<ErrT, OkT>
             Err err =>
             new Result<ErrT, MappedOkT>.Err(err.Value),
 
-            _ => throw new NotImplementedException()
+            _ =>
+            throw new NotImplementedException()
         };
 
     /// <summary>
@@ -87,7 +92,9 @@ public abstract record Result<ErrT, OkT>
         {
             Ok ok => new Result<MappedErrT, OkT>.Ok(ok.Value),
             Err err => new Result<MappedErrT, OkT>.Err(errMap(err.Value)),
-            _ => throw new NotImplementedException()
+
+            _ =>
+            throw new NotImplementedException()
         };
 
     /// <summary>

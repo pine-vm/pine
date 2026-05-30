@@ -18,13 +18,14 @@ public class MakeGuiCache
     {
         var makeResult =
             LoadGuiElmProgramCodeFiles()
-            .AndThen(elmProgramCodeFiles =>
-            Program.Make(
-                sourceFiles: elmProgramCodeFiles,
-                workingDirectoryRelative: null,
-                pathToFileWithElmEntryPoint: ["src", "Frontend", "Main.elm"],
-                outputFileName: "index.html",
-                elmMakeCommandAppendix: null));
+            .AndThen(
+                elmProgramCodeFiles =>
+                Program.Make(
+                    sourceFiles: elmProgramCodeFiles,
+                    workingDirectoryRelative: null,
+                    pathToFileWithElmEntryPoint: ["src", "Frontend", "Main.elm"],
+                    outputFileName: "index.html",
+                    elmMakeCommandAppendix: null));
 
         if (makeResult.IsErrOrNull() is { } err)
         {

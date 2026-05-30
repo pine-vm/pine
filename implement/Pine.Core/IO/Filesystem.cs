@@ -20,7 +20,8 @@ public static class Filesystem
         //  https://stackoverflow.com/questions/39224518/path-to-localappdata-in-asp-net-core-application#comment83608153_39225227
         Path.Combine(
             Environment.GetEnvironmentVariable(RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? "LOCALAPPDATA" : "HOME")!,
-            "pine", ".cache");
+            "pine",
+            ".cache");
 
     /// <summary>
     /// Recursively reads all files from <paramref name="directoryPath"/> returning relative paths and contents.
@@ -55,24 +56,28 @@ public static class Filesystem
         string directoryPath,
         Func<IReadOnlyList<string>, bool> filterByRelativeName,
         Func<IReadOnlyList<string>, IOException, bool>? ignoreFileOnIOException = null) =>
-        [.. Directory.GetFiles(directoryPath, "*", SearchOption.AllDirectories)
-        .Select(filePath =>
+        [
+        .. Directory.GetFiles(directoryPath, "*", SearchOption.AllDirectories)
+        .Select(
+            filePath =>
             (absolutePath: filePath,
             relativePath: (IReadOnlyList<string>)GetRelativePath(directoryPath, filePath).Split(Path.DirectorySeparatorChar)))
         .Where(filePath => filterByRelativeName(filePath.relativePath))
-        .SelectMany(filePath =>
-        {
-            try
+        .SelectMany(
+            filePath =>
             {
-                return
-                (IReadOnlyCollection<(IReadOnlyList<string> path, ReadOnlyMemory<byte> content)>)
-                [(filePath.relativePath, (ReadOnlyMemory<byte>)File.ReadAllBytes(filePath.absolutePath))];
-            }
-            catch (IOException exception) when (ignoreFileOnIOException?.Invoke(filePath.relativePath, exception) ?? false)
-            {
-                return [];
-            }
-        })];
+                try
+                {
+                    return
+                        (IReadOnlyCollection<(IReadOnlyList<string> path, ReadOnlyMemory<byte> content)>)
+                        [(filePath.relativePath, (ReadOnlyMemory<byte>)File.ReadAllBytes(filePath.absolutePath))];
+                }
+                catch (IOException exception) when (ignoreFileOnIOException?.Invoke(filePath.relativePath, exception) ?? false)
+                {
+                    return [];
+                }
+            })
+        ];
 
     /// <summary>
     /// Computes the relative path of <paramref name="path"/> with respect to <paramref name="relativeTo"/>.

@@ -63,8 +63,12 @@ public class RecordingFileStoreWriter : IFileStoreWriter
         /// <param name="writeOperations">The operations to apply in order.</param>
         /// <param name="fileStoreReader">The base reader over which to apply operations.</param>
         /// <returns>A reader representing the combined effect of the operations over the base.</returns>
-        public static IFileStoreReader Apply(IEnumerable<WriteOperation> writeOperations, IFileStoreReader fileStoreReader) =>
-            writeOperations.Aggregate(fileStoreReader, (previousState, writeOperation) => writeOperation.Apply(previousState));
+        public static IFileStoreReader Apply(
+            IEnumerable<WriteOperation> writeOperations,
+            IFileStoreReader fileStoreReader) =>
+            writeOperations.Aggregate(
+                fileStoreReader,
+                (previousState, writeOperation) => writeOperation.Apply(previousState));
 
         /// <summary>
         /// Applies <paramref name="writeOperations"/> onto an empty file store and returns a reader for the result.
@@ -171,81 +175,87 @@ public class RecordingFileStoreWriter : IFileStoreWriter
         {
             if (SetFileContent?.path is { } setFilePath)
             {
-                return new DelegatingFileStoreReader
-                (
-                    GetFileContentDelegate: filePath =>
-                    {
-                        if (filePath.SequenceEqual(setFilePath))
+                return
+                    new DelegatingFileStoreReader(
+                        GetFileContentDelegate: filePath =>
                         {
-                            return SetFileContent.Value.fileContent;
-                        }
+                            if (filePath.SequenceEqual(setFilePath))
+                            {
+                                return SetFileContent.Value.fileContent;
+                            }
 
-                        var previousFileContent = previousState.GetFileContent(filePath);
+                            var previousFileContent = previousState.GetFileContent(filePath);
 
-                        return previousFileContent;
-                    },
-                    ListFilesInDirectoryDelegate: directoryPath =>
-                    {
-                        var previousFilesInDirectory = previousState.ListFilesInDirectory(directoryPath);
-
-                        if (setFilePath.Take(directoryPath.Count).SequenceEqual(directoryPath))
+                            return previousFileContent;
+                        },
+                        ListFilesInDirectoryDelegate: directoryPath =>
                         {
-                            return previousFilesInDirectory.Append(setFilePath.Skip(directoryPath.Count).ToImmutableList()).Distinct();
-                        }
+                            var previousFilesInDirectory = previousState.ListFilesInDirectory(directoryPath);
 
-                        return previousFilesInDirectory;
-                    }
-                );
+                            if (setFilePath.Take(directoryPath.Count).SequenceEqual(directoryPath))
+                            {
+                                return
+                                    previousFilesInDirectory.Append(
+                                        setFilePath.Skip(directoryPath.Count).ToImmutableList())
+                                    .Distinct();
+                            }
+
+                            return previousFilesInDirectory;
+                        });
             }
 
             if (AppendFileContent?.path is { } appendPath)
             {
-                return new DelegatingFileStoreReader
-                (
-                    GetFileContentDelegate: filePath =>
-                    {
-                        var previousFileContent = previousState.GetFileContent(filePath);
-
-                        if (filePath.SequenceEqual(appendPath))
+                return
+                    new DelegatingFileStoreReader(
+                        GetFileContentDelegate: filePath =>
                         {
-                            return BytesConversions.Concat(
-                                (previousFileContent ?? ReadOnlyMemory<byte>.Empty).Span,
-                                AppendFileContent.Value.fileContent.Span);
-                        }
+                            var previousFileContent = previousState.GetFileContent(filePath);
 
-                        return previousFileContent;
-                    },
-                    ListFilesInDirectoryDelegate: directoryPath =>
-                    {
-                        var previousFilesInDirectory = previousState.ListFilesInDirectory(directoryPath);
+                            if (filePath.SequenceEqual(appendPath))
+                            {
+                                return
+                                    BytesConversions.Concat(
+                                        (previousFileContent ?? ReadOnlyMemory<byte>.Empty).Span,
+                                        AppendFileContent.Value.fileContent.Span);
+                            }
 
-                        if (appendPath.Take(directoryPath.Count).SequenceEqual(directoryPath))
+                            return previousFileContent;
+                        },
+                        ListFilesInDirectoryDelegate: directoryPath =>
                         {
-                            return previousFilesInDirectory.Append(appendPath.Skip(directoryPath.Count).ToImmutableList()).Distinct();
-                        }
+                            var previousFilesInDirectory = previousState.ListFilesInDirectory(directoryPath);
 
-                        return previousFilesInDirectory;
-                    }
-                );
+                            if (appendPath.Take(directoryPath.Count).SequenceEqual(directoryPath))
+                            {
+                                return
+                                    previousFilesInDirectory.Append(
+                                        appendPath.Skip(directoryPath.Count).ToImmutableList())
+                                    .Distinct();
+                            }
+
+                            return previousFilesInDirectory;
+                        });
             }
 
             if (DeleteFile is not null)
             {
-                return new DelegatingFileStoreReader
-                (
-                    GetFileContentDelegate: filePath =>
-                    {
-                        if (filePath.SequenceEqual(DeleteFile))
-                            return null;
+                return
+                    new DelegatingFileStoreReader(
+                        GetFileContentDelegate: filePath =>
+                        {
+                            if (filePath.SequenceEqual(DeleteFile))
+                                return null;
 
-                        return previousState.GetFileContent(filePath);
-                    },
+                            return previousState.GetFileContent(filePath);
+                        },
 
-                    ListFilesInDirectoryDelegate: directoryPath =>
-                       previousState
-                       .ListFilesInDirectory(directoryPath)
-                       .Where(filePathInDirectory => !directoryPath.AddRange(filePathInDirectory).SequenceEqual(DeleteFile))
-                );
+                        ListFilesInDirectoryDelegate: directoryPath =>
+                        previousState
+                        .ListFilesInDirectory(directoryPath)
+                        .Where(
+                            filePathInDirectory =>
+                            !directoryPath.AddRange(filePathInDirectory).SequenceEqual(DeleteFile)));
             }
 
             throw new Exception("Invalid construction");

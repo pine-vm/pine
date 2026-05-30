@@ -36,14 +36,14 @@ public record BundledDeclarations(
     /// <returns>The loaded <see cref="BundledDeclarations"/>, or <c>null</c> if loading failed.</returns>
     public static BundledDeclarations? LoadFromEmbedded(
         System.Reflection.Assembly assembly) =>
-         LoadEmbedded(assembly)
+        LoadEmbedded(assembly)
         .Extract(
-             err =>
-             {
-                 Console.WriteLine("Failed loading from embedded resource: " + err);
+            err =>
+            {
+                Console.WriteLine("Failed loading from embedded resource: " + err);
 
-                 return null;
-             });
+                return null;
+            });
 
     /// <summary>
     /// Loads <see cref="BundledDeclarations"/> from an assembly's embedded resource at the specified path.

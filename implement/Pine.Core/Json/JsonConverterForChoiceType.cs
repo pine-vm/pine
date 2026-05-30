@@ -64,7 +64,8 @@ public class JsonConverterForChoiceType : JsonConverterFactory
     /// <param name="Default">Value to use when constructing a variant during deserialization</param>
     public record JsonIgnore(object? Default);
 
-    private static readonly ConcurrentDictionary<Type, Result<string, ParsedChoiceType>> s_parseTypeToConvertCache = new();
+    private static readonly ConcurrentDictionary<Type, Result<string, ParsedChoiceType>> s_parseTypeToConvertCache =
+        new();
 
     /// <summary>
     /// Checks if the given type is a choice type of a supported declaration format.
@@ -77,7 +78,8 @@ public class JsonConverterForChoiceType : JsonConverterFactory
     public override JsonConverter CreateConverter(
         Type typeToConvert, JsonSerializerOptions options)
     {
-        var converter = (JsonConverter)Activator.CreateInstance(
+        var converter =
+            (JsonConverter)Activator.CreateInstance(
             typeof(JsonConverterForChoiceType<>)
             .MakeGenericType(typeToConvert),
             BindingFlags.Instance | BindingFlags.Public,
@@ -169,57 +171,68 @@ public class JsonConverterForChoiceType : JsonConverterFactory
             variantType.GetConstructors(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance)
             .OrderBy(c => c.IsPublic ? 0 : 1)
             .ThenByDescending(c => c.GetParameters().Length)
-            .Select(constructor =>
-            {
-                var constructorParams = constructor.GetParameters();
+            .Select(
+                constructor =>
+                {
+                    var constructorParams = constructor.GetParameters();
 
-                var constructorParamPropertiesResults =
-                    constructorParams
-                    .Select((constructorParam, i) =>
-                    {
-                        var constructorParamProperty =
-                            allProperties
-                            .FirstOrDefault(p => string.Equals(p.Name, constructorParams[i].Name, StringComparison.OrdinalIgnoreCase));
+                    var constructorParamPropertiesResults =
+                        constructorParams
+                        .Select(
+                            (constructorParam, i) =>
+                            {
+                                var constructorParamProperty =
+                                    allProperties
+                                    .FirstOrDefault(
+                                        p =>
+                                        string.Equals(
+                                            p.Name,
+                                            constructorParams[i].Name,
+                                            StringComparison.OrdinalIgnoreCase));
 
-                        if (constructorParamProperty is null)
-                        {
-                            return
-                                (Result<string, ConstructorParameter>)
-                                "Did not find a matching property for constructor param " + constructorParam.Name;
-                        }
+                                if (constructorParamProperty is null)
+                                {
+                                    return
+                                        (Result<string, ConstructorParameter>)
+                                        "Did not find a matching property for constructor param " +
+                                        constructorParam.Name;
+                                }
 
-                        JsonIgnore? jsonIgnore = null;
+                                JsonIgnore? jsonIgnore = null;
 
-                        if (constructorParamProperty.CustomAttributes.Any(ca => ca.AttributeType.Equals(typeof(JsonIgnoreAttribute))))
-                        {
-                            jsonIgnore = new JsonIgnore(DefaultValueFromType(constructorParamProperty.PropertyType));
-                        }
+                                if (constructorParamProperty.CustomAttributes.Any(
+                                    ca => ca.AttributeType.Equals(typeof(JsonIgnoreAttribute))))
+                                {
+                                    jsonIgnore =
+                                        new JsonIgnore(DefaultValueFromType(constructorParamProperty.PropertyType));
+                                }
 
-                        return
-                            (Result<string, ConstructorParameter>)
-                            new ConstructorParameter(
-                                PropertyInfo: constructorParamProperty,
-                                JsonIgnore: jsonIgnore);
+                                return
+                                    (Result<string, ConstructorParameter>)
+                                    new ConstructorParameter(
+                                        PropertyInfo: constructorParamProperty,
+                                        JsonIgnore: jsonIgnore);
 
-                    })
-                    .ToImmutableList();
+                            })
+                        .ToImmutableList();
 
-                return
-                constructorParamPropertiesResults
-                .ListCombine()
-                .Map(arguments => (constructor, arguments));
-            })
+                    return
+                        constructorParamPropertiesResults
+                        .ListCombine()
+                        .Map(arguments => (constructor, arguments));
+                })
             .ToImmutableList();
 
         foreach (var constructorResult in constructorsResults)
         {
             if (constructorResult.IsOkOrNullable() is { } constructorMatch)
             {
-                return new ParsedChoiceType.Variant(
-                    variantType.Name,
-                    variantType,
-                    constructorMatch.constructor,
-                    constructorMatch.arguments);
+                return
+                    new ParsedChoiceType.Variant(
+                        variantType.Name,
+                        variantType,
+                        constructorMatch.constructor,
+                        constructorMatch.arguments);
             }
         }
 
@@ -305,6 +318,7 @@ public class JsonConverterForChoiceType<T> : JsonConverter<T>
         }
 
         reader.Read();
+
         if (reader.TokenType is not JsonTokenType.EndObject)
         {
             throw new JsonException("Expected end object");

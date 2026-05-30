@@ -38,11 +38,12 @@ public static class StringNamedPineValueBinaryEncoding
         {
             // A declaration is represented as a 2-element array: [name, value]
 
-            return PineValue.List(
-                [
-                StringEncoding.ValueFromString(name),
-                value
-                ]);
+            return
+                PineValue.List(
+                    [
+                    StringEncoding.ValueFromString(name),
+                    value
+                    ]);
         }
 
         var declsValues = new PineValue[declarations.Count];
@@ -147,7 +148,9 @@ public static class StringNamedPineValueBinaryEncoding
             catch (Exception ex)
             {
                 throw new InvalidDataException(
-                    "Error decoding declaration at index " + declIndex + " of " + declsList.Items.Length + ": " + ex.Message, ex);
+                    "Error decoding declaration at index " + declIndex + " of " + declsList.Items.Length + ": " +
+                    ex.Message,
+                    ex);
             }
         }
 

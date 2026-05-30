@@ -264,9 +264,9 @@ public abstract record StaticExpression<IdentifierT>
 
             return
                 _slimHashCode == notNull._slimHashCode &&
-                   Condition.Equals(notNull.Condition) &&
-                   FalseBranch.Equals(notNull.FalseBranch) &&
-                   TrueBranch.Equals(notNull.TrueBranch);
+                Condition.Equals(notNull.Condition) &&
+                FalseBranch.Equals(notNull.FalseBranch) &&
+                TrueBranch.Equals(notNull.TrueBranch);
         }
 
         /// <inheritdoc/>
@@ -306,10 +306,10 @@ public abstract record StaticExpression<IdentifierT>
             public readonly bool Equals(ConditionalStruct other)
             {
                 return
-                other.SlimHashCode == SlimHashCode &&
-                other.Condition.Equals(Condition) &&
-                other.FalseBranch.Equals(FalseBranch) &&
-                other.TrueBranch.Equals(TrueBranch);
+                    other.SlimHashCode == SlimHashCode &&
+                    other.Condition.Equals(Condition) &&
+                    other.FalseBranch.Equals(FalseBranch) &&
+                    other.TrueBranch.Equals(TrueBranch);
             }
 
             public static int ComputeHashCode(
@@ -529,30 +529,30 @@ public abstract record StaticExpression<IdentifierT>
         return expression switch
         {
             List list =>
-                StaticExpression<TOut>.ListInstance(
-                    [.. list.Items.Select(item => MapFunctionIdentifier(item, mapIdentifier))]),
+            StaticExpression<TOut>.ListInstance(
+                [.. list.Items.Select(item => MapFunctionIdentifier(item, mapIdentifier))]),
 
             Literal literal =>
-                StaticExpression<TOut>.LiteralInstance(literal.Value),
+            StaticExpression<TOut>.LiteralInstance(literal.Value),
 
             Environment =>
             StaticExpression<TOut>.EnvironmentInstance,
 
             Conditional conditional =>
-                StaticExpression<TOut>.ConditionalInstance(
-                    MapFunctionIdentifier(conditional.Condition, mapIdentifier),
-                    MapFunctionIdentifier(conditional.FalseBranch, mapIdentifier),
-                    MapFunctionIdentifier(conditional.TrueBranch, mapIdentifier)),
+            StaticExpression<TOut>.ConditionalInstance(
+                MapFunctionIdentifier(conditional.Condition, mapIdentifier),
+                MapFunctionIdentifier(conditional.FalseBranch, mapIdentifier),
+                MapFunctionIdentifier(conditional.TrueBranch, mapIdentifier)),
 
             KernelApplication kernel =>
-                StaticExpression<TOut>.KernelApplicationInstance(
-                    kernel.Function,
-                    MapFunctionIdentifier(kernel.Input, mapIdentifier)),
+            StaticExpression<TOut>.KernelApplicationInstance(
+                kernel.Function,
+                MapFunctionIdentifier(kernel.Input, mapIdentifier)),
 
             FunctionApplication funApp =>
-                StaticExpression<TOut>.FunctionApplicationInstance(
-                    mapIdentifier(funApp.FunctionName),
-                    MapFunctionIdentifier(funApp.Arguments, mapIdentifier)),
+            StaticExpression<TOut>.FunctionApplicationInstance(
+                mapIdentifier(funApp.FunctionName),
+                MapFunctionIdentifier(funApp.Arguments, mapIdentifier)),
 
             CrashingParseAndEval crashing =>
             new StaticExpression<TOut>.CrashingParseAndEval(

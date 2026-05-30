@@ -36,11 +36,9 @@ public static class FileStoreExtension
     /// <returns>A reader that applies <paramref name="pathMap"/> on every operation.</returns>
     public static IFileStoreReader WithMappedPath(
         this IFileStoreReader originalFileStore, Func<IImmutableList<string>, IImmutableList<string>> pathMap) =>
-        new DelegatingFileStoreReader
-        (
+        new DelegatingFileStoreReader(
             GetFileContentDelegate: originalPath => originalFileStore.GetFileContent(pathMap(originalPath)),
-            ListFilesInDirectoryDelegate: originalPath => originalFileStore.ListFilesInDirectory(pathMap(originalPath))
-        );
+            ListFilesInDirectoryDelegate: originalPath => originalFileStore.ListFilesInDirectory(pathMap(originalPath)));
 
     /// <summary>
     /// Returns a reader scoped to the given subdirectory.
@@ -70,8 +68,7 @@ public static class FileStoreExtension
     /// <returns>A writer that applies <paramref name="pathMap"/> on every operation.</returns>
     public static IFileStoreWriter WithMappedPath(
         this IFileStoreWriter originalFileStore, Func<IImmutableList<string>, IImmutableList<string>> pathMap) =>
-        new DelegatingFileStoreWriter
-        (
+        new DelegatingFileStoreWriter(
             SetFileContentDelegate:
             pathAndFileContent =>
             originalFileStore.SetFileContent(pathMap(pathAndFileContent.path), pathAndFileContent.fileContent),
@@ -81,8 +78,7 @@ public static class FileStoreExtension
             originalFileStore.AppendFileContent(pathMap(pathAndFileContent.path), pathAndFileContent.fileContent),
 
             DeleteFileDelegate:
-            originalPath => originalFileStore.DeleteFile(pathMap(originalPath))
-        );
+            originalPath => originalFileStore.DeleteFile(pathMap(originalPath)));
 
     /// <summary>
     /// Returns a writer scoped to the given subdirectory.
@@ -143,14 +139,12 @@ public static class FileStoreExtension
         }
 
         var mergedReader =
-            new DelegatingFileStoreReader
-            (
+            new DelegatingFileStoreReader(
                 GetFileContentDelegate:
                 GetFileContent,
 
                 ListFilesInDirectoryDelegate:
-                path => [.. secondary.ListFilesInDirectory(path), .. primary.ListFilesInDirectory(path)]
-            );
+                path => [.. secondary.ListFilesInDirectory(path), .. primary.ListFilesInDirectory(path)]);
 
         return new FileStoreFromWriterAndReader(primary, mergedReader);
     }
@@ -166,12 +160,10 @@ public static class FileStoreExtension
     public static IFileStoreReader MergeReader(
         this IFileStoreReader primary,
         IFileStoreReader secondary) =>
-        new DelegatingFileStoreReader
-        (
+        new DelegatingFileStoreReader(
             GetFileContentDelegate:
             path => primary.GetFileContent(path) ?? secondary.GetFileContent(path),
 
             ListFilesInDirectoryDelegate:
-            path => [.. secondary.ListFilesInDirectory(path), .. primary.ListFilesInDirectory(path)]
-        );
+            path => [.. secondary.ListFilesInDirectory(path), .. primary.ListFilesInDirectory(path)]);
 }

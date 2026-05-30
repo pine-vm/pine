@@ -52,7 +52,8 @@ public class FileStoreHttpClient(HttpClient httpClient) : IFileStore
     }
 
     /// <inheritdoc />
-    public async Task<IEnumerable<IImmutableList<string>>> ListFilesInDirectoryAsync(IImmutableList<string> directoryPath)
+    public async Task<IEnumerable<IImmutableList<string>>> ListFilesInDirectoryAsync(
+        IImmutableList<string> directoryPath)
     {
         var url = "/dirs/" + string.Join("/", directoryPath);
 
@@ -75,9 +76,13 @@ public class FileStoreHttpClient(HttpClient httpClient) : IFileStore
                 return [];
             }
 
-            return result.Entries
+            return
+                result.Entries
                 .Where(entry => entry.Type is "file")
-                .Select(entry => (IImmutableList<string>)[.. entry.Name.Split('/', StringSplitOptions.RemoveEmptyEntries)]);
+                .Select(
+                    entry => (IImmutableList<string>)[
+                    .. entry.Name.Split('/', StringSplitOptions.RemoveEmptyEntries)
+                    ]);
         }
         catch (HttpRequestException)
         {
@@ -121,10 +126,12 @@ public class FileStoreHttpClient(HttpClient httpClient) : IFileStore
         using var content = new ByteArrayContent(fileContent.ToArray());
         content.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/octet-stream");
 
-        var request = new HttpRequestMessage(HttpMethod.Post, url)
-        {
-            Content = content
-        };
+        var request =
+            new HttpRequestMessage(HttpMethod.Post, url)
+            {
+                Content = content
+            };
+
         request.Headers.Add("X-Operation", "append");
 
         var response = await _httpClient.SendAsync(request);
@@ -169,6 +176,7 @@ public class FileStoreHttpClient(HttpClient httpClient) : IFileStore
     }
 
     private record DirectoryListingResponse(DirectoryEntry[] Entries);
+
     private record DirectoryEntry(string Name, string Type);
 
     private static readonly JsonSerializerOptions s_jsonOptions = BuildJsonSerializerOptions();
@@ -193,7 +201,9 @@ public static class FileStoreHttpClientExtensions
     /// <summary>
     /// Async version of GetFileContent.
     /// </summary>
-    public static async Task<ReadOnlyMemory<byte>?> GetFileContentAsync(this IFileStore fileStore, IImmutableList<string> path)
+    public static async Task<ReadOnlyMemory<byte>?> GetFileContentAsync(
+        this IFileStore fileStore,
+        IImmutableList<string> path)
     {
         if (fileStore is FileStoreHttpClient httpClient)
         {
@@ -207,7 +217,9 @@ public static class FileStoreHttpClientExtensions
     /// <summary>
     /// Async version of ListFilesInDirectory.
     /// </summary>
-    public static async Task<IEnumerable<IImmutableList<string>>> ListFilesInDirectoryAsync(this IFileStore fileStore, IImmutableList<string> directoryPath)
+    public static async Task<IEnumerable<IImmutableList<string>>> ListFilesInDirectoryAsync(
+        this IFileStore fileStore,
+        IImmutableList<string> directoryPath)
     {
         if (fileStore is FileStoreHttpClient httpClient)
         {
@@ -221,7 +233,10 @@ public static class FileStoreHttpClientExtensions
     /// <summary>
     /// Async version of SetFileContent.
     /// </summary>
-    public static async Task SetFileContentAsync(this IFileStore fileStore, IImmutableList<string> path, ReadOnlyMemory<byte> fileContent)
+    public static async Task SetFileContentAsync(
+        this IFileStore fileStore,
+        IImmutableList<string> path,
+        ReadOnlyMemory<byte> fileContent)
     {
         if (fileStore is FileStoreHttpClient httpClient)
         {
@@ -237,7 +252,10 @@ public static class FileStoreHttpClientExtensions
     /// <summary>
     /// Async version of AppendFileContent.
     /// </summary>
-    public static async Task AppendFileContentAsync(this IFileStore fileStore, IImmutableList<string> path, ReadOnlyMemory<byte> fileContent)
+    public static async Task AppendFileContentAsync(
+        this IFileStore fileStore,
+        IImmutableList<string> path,
+        ReadOnlyMemory<byte> fileContent)
     {
         if (fileStore is FileStoreHttpClient httpClient)
         {

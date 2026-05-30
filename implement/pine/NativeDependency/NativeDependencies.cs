@@ -34,7 +34,8 @@ public class NativeDependencies
                 getIfNotCached:
                 () =>
                 BlobLibrary.DownloadFromUrlAndExtractBlobWithMatchingHashFromListOfRemoteSources(
-                    dependency.RemoteSources, hash))?.content
+                    dependency.RemoteSources,
+                    hash))?.content
             ?? throw new Exception(
                 "Did not find dependency " + dependency.HashBase16 +
                 " (" + dependency.ExpectedFileName + ") in any of the " +

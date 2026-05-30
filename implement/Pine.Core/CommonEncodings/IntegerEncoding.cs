@@ -34,8 +34,10 @@ public static class IntegerEncoding
     }
 
     private static readonly IReadOnlyList<PineValue> s_reusedValueFromUnsignedInteger =
-        [..Enumerable.Range(0, 10_000)
-        .Select(range => EncodeUnsignedInteger(range).Extract(err => throw new Exception(err)))];
+        [
+        ..Enumerable.Range(0, 10_000)
+        .Select(range => EncodeUnsignedInteger(range).Extract(err => throw new Exception(err)))
+        ];
 
     private static readonly IReadOnlyList<PineValue> s_reusedValueFromSignedIntegerPositive =
         [.. Enumerable.Range(0, 10_000).Select(range => EncodeSignedInteger(range))];
@@ -196,10 +198,11 @@ public static class IntegerEncoding
         if (value is not PineValue.BlobValue blob)
             return "Not a blob.";
 
-        return ParseSignedInteger(
-            blob.Bytes.Span,
-            rejectLeadingZero: rejectLeadingZero,
-            rejectNegativeZero: rejectNegativeZero);
+        return
+            ParseSignedInteger(
+                blob.Bytes.Span,
+                rejectLeadingZero: rejectLeadingZero,
+                rejectNegativeZero: rejectNegativeZero);
     }
 
     /// <summary>

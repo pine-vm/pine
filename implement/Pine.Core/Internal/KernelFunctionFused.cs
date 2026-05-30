@@ -118,9 +118,10 @@ public class KernelFunctionFused
             {
                 // 'int_add' only returns positive zero.
 
-                return PineValue.ReusedBlobTupleFromBytes(
-                    first: 4,
-                    second: 0);
+                return
+                    PineValue.ReusedBlobTupleFromBytes(
+                        first: 4,
+                        second: 0);
             }
 
             return
@@ -152,9 +153,10 @@ public class KernelFunctionFused
             {
                 // 'int_add' only returns positive zero.
 
-                return PineValue.ReusedBlobTupleFromBytes(
-                    first: 4,
-                    second: 0);
+                return
+                    PineValue.ReusedBlobTupleFromBytes(
+                        first: 4,
+                        second: 0);
             }
 
             return
@@ -172,9 +174,10 @@ public class KernelFunctionFused
             {
                 // 'int_add' only returns positive zero.
 
-                return PineValue.ReusedBlobTupleFromBytes(
-                    first: 4,
-                    second: 0);
+                return
+                    PineValue.ReusedBlobTupleFromBytes(
+                        first: 4,
+                        second: 0);
             }
 
             if (signIsPositive)
@@ -574,9 +577,10 @@ public class KernelFunctionFused
 
             if (concatenatedBytes.Length is 2)
             {
-                return PineValue.ReusedBlobTupleFromBytes(
-                    concatenatedBytes.Span[1],
-                    concatenatedBytes.Span[0]);
+                return
+                    PineValue.ReusedBlobTupleFromBytes(
+                        concatenatedBytes.Span[1],
+                        concatenatedBytes.Span[0]);
             }
 
             var reversed = concatenatedBytes.ToArray();

@@ -48,7 +48,9 @@ public static partial class EnumerableExtensions
     /// <param name="source">An <see cref="IEnumerable{T}"/> to invoke a transform function on.</param>
     /// <param name="selector">A transform function to apply to each element, which may return null.</param>
     /// <returns>An <see cref="IEnumerable{OutT}"/> whose elements are the non-null results of invoking the transform function on each element of <paramref name="source"/>.</returns>
-    public static IEnumerable<OutT> SelectWhereNotNull<InT, OutT>(this IEnumerable<InT> source, Func<InT, OutT?> selector) where OutT : class
+    public static IEnumerable<OutT> SelectWhereNotNull<InT, OutT>(
+        this IEnumerable<InT> source,
+        Func<InT, OutT?> selector) where OutT : class
     {
         foreach (var item in source)
             if (selector(item) is { } notNull)
@@ -88,16 +90,21 @@ public static partial class EnumerableExtensions
     /// <returns>An <see cref="IEnumerable{TSource}"/> that contains elements from the input sequence that satisfy the condition, plus the one that makes it false.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="source"/> or <paramref name="predicate"/> is null.</exception>
     // From https://github.com/morelinq/MoreLINQ/blob/07bd0861658b381ce97c8b44d3b9f2cd3c9bf769/MoreLinq/TakeUntil.cs
-    public static IEnumerable<TSource> TakeUntil<TSource>(this IEnumerable<TSource> source, Func<TSource, bool> predicate)
+    public static IEnumerable<TSource> TakeUntil<TSource>(
+        this IEnumerable<TSource> source,
+        Func<TSource, bool> predicate)
     {
         ArgumentNullException.ThrowIfNull(source);
         ArgumentNullException.ThrowIfNull(predicate);
 
-        return _(); IEnumerable<TSource> _()
+        return _();
+
+        IEnumerable<TSource> _()
         {
             foreach (var item in source)
             {
                 yield return item;
+
                 if (predicate(item))
                     yield break;
             }
@@ -176,7 +183,9 @@ public static partial class EnumerableExtensions
     /// <param name="items">An <see cref="IEnumerable{String}"/> to sort.</param>
     /// <param name="stringComparer">An optional <see cref="StringComparer"/> to use for comparing non-numeric parts of the strings. If null, <see cref="StringComparer.CurrentCulture"/> is used.</param>
     /// <returns>An <see cref="IEnumerable{String}"/> whose elements are sorted according to natural sort order.</returns>
-    public static IEnumerable<string> OrderByNatural(this IEnumerable<string> items, StringComparer? stringComparer = null) =>
+    public static IEnumerable<string> OrderByNatural(
+        this IEnumerable<string> items,
+        StringComparer? stringComparer = null) =>
         items.OrderByNatural(s => s, stringComparer);
 
     /// <summary>
@@ -189,18 +198,24 @@ public static partial class EnumerableExtensions
     /// <param name="selector">A function to extract a string key from an element.</param>
     /// <param name="stringComparer">An optional <see cref="StringComparer"/> to use for comparing non-numeric parts of the keys. If null, <see cref="StringComparer.CurrentCulture"/> is used.</param>
     /// <returns>An <see cref="IEnumerable{T}"/> whose elements are sorted according to the natural sort order of their keys.</returns>
-    public static IEnumerable<T> OrderByNatural<T>(this IEnumerable<T> items, Func<T, string> selector, StringComparer? stringComparer = null)
+    public static IEnumerable<T> OrderByNatural<T>(
+        this IEnumerable<T> items,
+        Func<T, string> selector,
+        StringComparer? stringComparer = null)
     {
         var regex = oneOrMoreDigitsRegex();
 
         var maxDigits =
             items
-            .SelectMany(i => regex.Matches(selector(i)).Cast<Match>().Select(digitChunk => (int?)digitChunk.Value.Length))
+            .SelectMany(
+                i => regex.Matches(selector(i)).Cast<Match>().Select(digitChunk => (int?)digitChunk.Value.Length))
             .Max() ?? 0;
 
         return
             items
-            .OrderBy(i => regex.Replace(selector(i), match => match.Value.PadLeft(maxDigits, '0')), stringComparer ?? StringComparer.CurrentCulture);
+            .OrderBy(
+                i => regex.Replace(selector(i), match => match.Value.PadLeft(maxDigits, '0')),
+                stringComparer ?? StringComparer.CurrentCulture);
     }
 
     /// <summary>
@@ -211,7 +226,9 @@ public static partial class EnumerableExtensions
     /// <param name="source">An <see cref="IEnumerable{InT}"/> to invoke a transform function on.</param>
     /// <param name="selector">A transform function to apply to each element, returning a <see cref="Maybe{OutT}"/>.</param>
     /// <returns>An <see cref="IEnumerable{OutT}"/> whose elements are the <c>Just</c> values from the results of invoking the transform function on each element of <paramref name="source"/>.</returns>
-    public static IEnumerable<OutT> SelectWhere<InT, OutT>(this IEnumerable<InT> source, Func<InT, Maybe<OutT>> selector)
+    public static IEnumerable<OutT> SelectWhere<InT, OutT>(
+        this IEnumerable<InT> source,
+        Func<InT, Maybe<OutT>> selector)
     {
         foreach (var item in source)
         {

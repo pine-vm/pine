@@ -86,13 +86,14 @@ public sealed class ProcessLiveRepresentation : IAsyncDisposable
         IEnumerable<PineValue> artifactSourceCompositions,
         System.Threading.CancellationToken cancellationToken = default)
     {
-        return new ProcessLiveRepresentation(
-            webServiceConfig,
-            lastAppState,
-            progressWriter,
-            getDateTimeOffset,
-            artifactSourceCompositions,
-            cancellationToken);
+        return
+            new ProcessLiveRepresentation(
+                webServiceConfig,
+                lastAppState,
+                progressWriter,
+                getDateTimeOffset,
+                artifactSourceCompositions,
+                cancellationToken);
     }
 
     private ProcessLiveRepresentation(
@@ -119,22 +120,23 @@ public sealed class ProcessLiveRepresentation : IAsyncDisposable
             _mutatingWebServiceApp.ResetAppState(lastAppState);
         }
 
-        _notifyTimeHasArrivedTimer = new System.Threading.Timer(
-            callback: _ =>
-            {
-                if (cancellationToken.IsCancellationRequested)
+        _notifyTimeHasArrivedTimer =
+            new System.Threading.Timer(
+                callback: _ =>
                 {
-                    _notifyTimeHasArrivedTimer?.Dispose();
-                    return;
-                }
+                    if (cancellationToken.IsCancellationRequested)
+                    {
+                        _notifyTimeHasArrivedTimer?.Dispose();
+                        return;
+                    }
 
-                ProcessElmAppCmdsAsync().Wait();
+                    ProcessElmAppCmdsAsync().Wait();
 
-                ProcessEventTimeHasArrived(getDateTimeOffset());
-            },
-            state: null,
-            dueTime: TimeSpan.Zero,
-            period: TimeSpan.FromMilliseconds(100));
+                    ProcessEventTimeHasArrived(getDateTimeOffset());
+                },
+                state: null,
+                dueTime: TimeSpan.Zero,
+                period: TimeSpan.FromMilliseconds(100));
 
         ProcessEventTimeHasArrived(getDateTimeOffset());
     }

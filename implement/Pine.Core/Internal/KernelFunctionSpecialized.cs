@@ -582,6 +582,7 @@ public static class KernelFunctionSpecialized
 
             resultArray[i] = (byte)(leftByte ^ rightByte);
         }
+
         return PineValue.Blob(resultArray);
     }
 

@@ -38,14 +38,14 @@ public record BundledPineToDotnet(
     /// <returns>The loaded <see cref="BundledPineToDotnet"/>, or <c>null</c> if loading failed.</returns>
     public static BundledPineToDotnet? LoadFromEmbedded(
         Assembly assembly) =>
-         LoadEmbedded(assembly)
+        LoadEmbedded(assembly)
         .Extract(
-             err =>
-             {
-                 Console.WriteLine("Failed loading from embedded resource: " + err);
+            err =>
+            {
+                Console.WriteLine("Failed loading from embedded resource: " + err);
 
-                 return null;
-             });
+                return null;
+            });
 
     public static Result<string, BundledPineToDotnet> LoadEmbedded(
         Assembly assembly,
@@ -173,6 +173,7 @@ public record BundledPineToDotnet(
             new DeclQualifiedName(["Pine"], "stringFromValue"),
             new DeclQualifiedName(["Pine"], "valueFromString"),
             new DeclQualifiedName(["Pine"], "applyKernelFunction"),
+
             /*
              * Would benefit more from memoization, not clear which variant is more efficient at the moment.
              * 
@@ -267,7 +268,7 @@ public record BundledPineToDotnet(
         var fileContent = System.IO.File.ReadAllBytes(fileSystemPath);
 
         if (fileSystemPath.EndsWith(".tar.gz", StringComparison.InvariantCultureIgnoreCase) ||
-           fileSystemPath.EndsWith(".tgz", StringComparison.InvariantCultureIgnoreCase))
+            fileSystemPath.EndsWith(".tgz", StringComparison.InvariantCultureIgnoreCase))
         {
             return TarGZipArchive.ExtractArchive(fileContent);
         }
@@ -315,8 +316,9 @@ public record BundledPineToDotnet(
             CompileToAssembly.Compile(
                 csharpFiles,
                 optimizationLevel: Microsoft.CodeAnalysis.OptimizationLevel.Debug)
-            .Extract(err =>
-            throw new Exception("Compilation to assembly failed: " + err));
+            .Extract(
+                err =>
+                throw new Exception("Compilation to assembly failed: " + err));
 
         return compileToAssemblyResult.Assembly;
     }

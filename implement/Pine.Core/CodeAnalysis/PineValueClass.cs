@@ -207,20 +207,21 @@ public record PineValueClass
     {
         var parsedItems =
             observedPart.ParsedEnvItems
-            .SelectMany(path =>
-            {
-                var itemValue = valueClass.TryGetValue(path);
-
-                if (itemValue is null)
+            .SelectMany(
+                path =>
                 {
-                    if (skipUnavailableItems)
-                        return Enumerable.Empty<KeyValuePair<IReadOnlyList<int>, PineValue>>();
+                    var itemValue = valueClass.TryGetValue(path);
 
-                    throw new Exception("Item value null for path " + string.Join(", ", path));
-                }
+                    if (itemValue is null)
+                    {
+                        if (skipUnavailableItems)
+                            return Enumerable.Empty<KeyValuePair<IReadOnlyList<int>, PineValue>>();
 
-                return [new KeyValuePair<IReadOnlyList<int>, PineValue>(path, itemValue)];
-            })
+                        throw new Exception("Item value null for path " + string.Join(", ", path));
+                    }
+
+                    return [new KeyValuePair<IReadOnlyList<int>, PineValue>(path, itemValue)];
+                })
             .OrderBy(kv => kv.Key, IntPathComparer.Instance)
             .ToImmutableArray();
 
@@ -239,20 +240,26 @@ public record PineValueClass
             return Empty;
 
         PineValue[] parsedItemsPineValues =
-            [.. parsedItems
+            [
+            .. parsedItems
             .OrderBy(kv => kv.Key, IntPathComparer.Instance)
-            .Select(item =>
-            (PineValue)
-            PineValue.List(
-                [PineValue.List([.. item.Key.Select(pathItem => IntegerEncoding.EncodeSignedInteger(pathItem))]),
-                item.Value]))];
+            .Select(
+                item =>
+                (PineValue)
+                PineValue.List(
+                    [
+                    PineValue.List([.. item.Key.Select(pathItem => IntegerEncoding.EncodeSignedInteger(pathItem))]),
+                    item.Value
+                    ]))
+            ];
 
         var hashBase16 =
             Convert.ToHexStringLower(s_valueHashCache.GetHash(PineValue.List(parsedItemsPineValues)).Span);
 
-        return new PineValueClass(
-            parsedItems.ToImmutableSortedDictionary(keyComparer: IntPathComparer.Instance),
-            hashBase16: hashBase16);
+        return
+            new PineValueClass(
+                parsedItems.ToImmutableSortedDictionary(keyComparer: IntPathComparer.Instance),
+                hashBase16: hashBase16);
     }
 
     /// <summary>
@@ -406,8 +413,10 @@ public record PineValueClass
         }
 
         var commonLength =
-            listA.Items.Length < listB.Items.Length ?
-            listA.Items.Length :
+            listA.Items.Length < listB.Items.Length
+            ?
+            listA.Items.Length
+            :
             listB.Items.Length;
 
         var children = new List<(int, IntersectionNode)>();
@@ -449,7 +458,8 @@ public record PineValueClass
                 continue;
             }
 
-            if (item.Value is not PineValue.ListValue constraintItemList || pathValue is not PineValue.ListValue valueItemList)
+            if (item.Value is not PineValue.ListValue constraintItemList ||
+                pathValue is not PineValue.ListValue valueItemList)
             {
                 continue;
             }
@@ -482,15 +492,19 @@ public record PineValueClass
     {
         var filteredUnderPath =
             ParsedItems
-            .SelectMany(item =>
-            {
-                if (!item.Key.Take(path.Count).SequenceEqual(path))
+            .SelectMany(
+                item =>
                 {
-                    return (IReadOnlyList<KeyValuePair<IReadOnlyList<int>, PineValue>>)[];
-                }
+                    if (!item.Key.Take(path.Count).SequenceEqual(path))
+                    {
+                        return (IReadOnlyList<KeyValuePair<IReadOnlyList<int>, PineValue>>)[];
+                    }
 
-                return [new KeyValuePair<IReadOnlyList<int>, PineValue>([.. item.Key.Skip(path.Count)], item.Value)];
-            }).ToList();
+                    return
+                        [
+                        new KeyValuePair<IReadOnlyList<int>, PineValue>([.. item.Key.Skip(path.Count)], item.Value)
+                        ];
+                }).ToList();
 
         if (TryGetValue(path) is { } valueAtPath)
         {

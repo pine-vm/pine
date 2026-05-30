@@ -93,15 +93,16 @@ public class FileStoreFromSystemIOFile(
         if (directoryPath is not null)
             Directory.CreateDirectory(directoryPath);
 
-        ExecuteWithRetry(() =>
-        {
-            using var fileStream = new FileStream(filePath, FileMode.Create, FileAccess.Write);
+        ExecuteWithRetry(
+            () =>
+            {
+                using var fileStream = new FileStream(filePath, FileMode.Create, FileAccess.Write);
 
-            fileStream.Write(fileContent.Span);
+                fileStream.Write(fileContent.Span);
 
-            fileStream.Flush();
-            return true;
-        });
+                fileStream.Flush();
+                return true;
+            });
     }
 
     /// <inheritdoc />
@@ -129,21 +130,23 @@ public class FileStoreFromSystemIOFile(
     {
         var filePath = CombinePath(path);
 
-        return ExecuteWithRetry<ReadOnlyMemory<byte>?>(() =>
-        {
-            try
-            {
-                return File.ReadAllBytes(filePath);
-            }
-            catch (FileNotFoundException)
-            {
-                return null;
-            }
-            catch (DirectoryNotFoundException)
-            {
-                return null;
-            }
-        });
+        return
+            ExecuteWithRetry<ReadOnlyMemory<byte>?>(
+                () =>
+                {
+                    try
+                    {
+                        return File.ReadAllBytes(filePath);
+                    }
+                    catch (FileNotFoundException)
+                    {
+                        return null;
+                    }
+                    catch (DirectoryNotFoundException)
+                    {
+                        return null;
+                    }
+                });
     }
 
     /// <inheritdoc />
@@ -153,18 +156,20 @@ public class FileStoreFromSystemIOFile(
         var fileSystemDirectoryPath = CombinePath(directoryPath);
 
         return
-            ExecuteWithRetry<IEnumerable<IImmutableList<string>>>(() =>
-            {
-                if (!Directory.Exists(fileSystemDirectoryPath))
-                    return [];
+            ExecuteWithRetry<IEnumerable<IImmutableList<string>>>(
+                () =>
+                {
+                    if (!Directory.Exists(fileSystemDirectoryPath))
+                        return [];
 
-                return
-                    Directory.GetFiles(fileSystemDirectoryPath, "*", SearchOption.AllDirectories)
-                    .Order()
-                    .Select(filePath =>
-                    Path.GetRelativePath(fileSystemDirectoryPath, filePath).Split(Path.DirectorySeparatorChar)
-                    .ToImmutableList());
-            });
+                    return
+                        Directory.GetFiles(fileSystemDirectoryPath, "*", SearchOption.AllDirectories)
+                        .Order()
+                        .Select(
+                            filePath =>
+                            Path.GetRelativePath(fileSystemDirectoryPath, filePath).Split(Path.DirectorySeparatorChar)
+                            .ToImmutableList());
+                });
     }
 
     /// <inheritdoc />
@@ -172,14 +177,15 @@ public class FileStoreFromSystemIOFile(
     {
         var fileSystemPath = CombinePath(path);
 
-        ExecuteWithRetry(() =>
-        {
-            if (!File.Exists(fileSystemPath))
-                return true;
+        ExecuteWithRetry(
+            () =>
+            {
+                if (!File.Exists(fileSystemPath))
+                    return true;
 
-            File.Delete(fileSystemPath);
-            return true;
-        });
+                File.Delete(fileSystemPath);
+                return true;
+            });
     }
 
     /// <summary>

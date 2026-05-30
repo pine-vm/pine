@@ -26,7 +26,8 @@ public static class Configuration
     public static IWebHostBuilder WithProcessStoreFileStore(
         this IWebHostBuilder orig,
         IFileStore fileStore) =>
-        orig.ConfigureServices(serviceCollection => serviceCollection.AddSingleton(new FileStoreForProcessStore(fileStore)));
+        orig.ConfigureServices(
+            serviceCollection => serviceCollection.AddSingleton(new FileStoreForProcessStore(fileStore)));
 
     public static IWebHostBuilder WithSettingProcessStoreDirectoryPath(
         this IWebHostBuilder orig,
@@ -36,11 +37,14 @@ public static class Configuration
     public static IWebHostBuilder WithSettingProcessStoreSeparateReaderDirectoryPath(
         this IWebHostBuilder orig,
         string? processStoreSeparateReaderDirectoryPath) =>
-        orig.ConfigureServices(serviceCollection => serviceCollection.AddSingleton(
-            new FileStoreForProcessStoreReader(
-                processStoreSeparateReaderDirectoryPath == null
-                ? null
-                : new FileStoreFromSystemIOFile(processStoreSeparateReaderDirectoryPath))));
+        orig.ConfigureServices(
+            serviceCollection => serviceCollection.AddSingleton(
+                new FileStoreForProcessStoreReader(
+                    processStoreSeparateReaderDirectoryPath == null
+                    ?
+                    null
+                    :
+                    new FileStoreFromSystemIOFile(processStoreSeparateReaderDirectoryPath))));
 
     public static IWebHostBuilder WithDeployZipArchive(
         this IWebHostBuilder orig,

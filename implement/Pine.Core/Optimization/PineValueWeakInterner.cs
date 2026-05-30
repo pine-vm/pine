@@ -23,11 +23,13 @@ internal static class PineValueWeakInterner
     }
 
     private static readonly ConcurrentDictionary<ListBucketKey, Bucket<PineValue.ListValue>> s_listBuckets = new();
+
     private static readonly ConcurrentDictionary<BlobBucketKey, Bucket<PineValue.BlobValue>> s_blobBuckets = new();
 
     // Probabilistic sweeper configuration
-    private const int RandomSweepDenominator = 100_000;      // ~0.01% chance per new bucket
-    private const int RandomSweepSampleSize = 100_000;       // buckets to sample per sweep
+    private const int RandomSweepDenominator = 100_000; // ~0.01% chance per new bucket
+
+    private const int RandomSweepSampleSize = 100_000; // buckets to sample per sweep
 
     public static PineValue.ListValue GetOrAdd(PineValue.ListValue candidate)
     {
@@ -85,9 +87,12 @@ internal static class PineValueWeakInterner
             return null;
         }
 
-        return bucket.TryFind(candidate, out var canonical)
-            ? canonical
-            : null;
+        return
+            bucket.TryFind(candidate, out var canonical)
+            ?
+            canonical
+            :
+            null;
     }
 
     public static void Register(PineValue.ListValue canonical) => _ = GetOrAdd(canonical);
@@ -101,9 +106,12 @@ internal static class PineValueWeakInterner
             return null;
         }
 
-        return bucket.TryFind(candidate, out var canonical)
-            ? canonical
-            : null;
+        return
+            bucket.TryFind(candidate, out var canonical)
+            ?
+            canonical
+            :
+            null;
     }
 
     public static void Register(PineValue.BlobValue canonical) => _ = GetOrAdd(canonical);
@@ -120,10 +128,11 @@ internal static class PineValueWeakInterner
             if (Random.Shared.Next(RandomSweepDenominator / 41) is 0)
             {
                 // Occasionally sweep a larger slice
-                Task.Run(() =>
-                {
-                    SweepRandomSlice(buckets, RandomSweepSampleSize);
-                });
+                Task.Run(
+                    () =>
+                    {
+                        SweepRandomSlice(buckets, RandomSweepSampleSize);
+                    });
             }
         }
     }
@@ -167,6 +176,7 @@ internal static class PineValueWeakInterner
 
         // First pass: skip "offset" items, then take
         var skipped = 0;
+
         foreach (var kvp in buckets)
         {
             if (skipped < offset)
@@ -200,6 +210,7 @@ internal static class PineValueWeakInterner
         where TVal : class
     {
         private WeakReference<TVal>[] _entries = [];
+
         private readonly Lock _gate = new();
 
         public bool TryFind(TVal candidate, out TVal canonical)

@@ -46,7 +46,8 @@ public class BasicAuthenticationMiddleware(RequestDelegate next, BasicAuthentica
     {
         var authorizationHeader = context.Request.Headers["Authorization"].ToString();
 
-        if (string.IsNullOrEmpty(authorizationHeader) || !authorizationHeader.StartsWith("Basic ", StringComparison.OrdinalIgnoreCase))
+        if (string.IsNullOrEmpty(authorizationHeader) ||
+            !authorizationHeader.StartsWith("Basic ", StringComparison.OrdinalIgnoreCase))
         {
             return false;
         }
@@ -59,6 +60,7 @@ public class BasicAuthenticationMiddleware(RequestDelegate next, BasicAuthentica
             // For Basic auth format: username:password
             // We'll accept any username with the correct password
             var colonIndex = decodedCredentials.IndexOf(':');
+
             if (colonIndex < 0)
             {
                 return false;

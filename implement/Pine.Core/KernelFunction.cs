@@ -219,7 +219,8 @@ public static class KernelFunction
         value switch
         {
             PineValue.ListValue listValue =>
-            listValue.Items.Length is 2 ?
+            listValue.Items.Length is 2
+            ?
             SignedIntegerFromValueRelaxed(listValue.Items.Span[0]) switch
             {
                 { } count =>
@@ -265,9 +266,10 @@ public static class KernelFunction
 
             if (blobValue.Bytes.Length is 2)
             {
-                return PineValue.ReusedBlobTupleFromBytes(
-                    blobValue.Bytes.Span[1],
-                    blobValue.Bytes.Span[0]);
+                return
+                    PineValue.ReusedBlobTupleFromBytes(
+                        blobValue.Bytes.Span[1],
+                        blobValue.Bytes.Span[0]);
             }
 
             var reversed = blobValue.Bytes.ToArray();
@@ -687,27 +689,30 @@ public static class KernelFunction
 
         if (blobBytes.Length is 2)
         {
-            return new BigInteger(
-                blobBytes[0] << 8 |
-                blobBytes[1]);
+            return
+                new BigInteger(
+                    blobBytes[0] << 8 |
+                    blobBytes[1]);
         }
 
         if (blobBytes.Length is 3)
         {
-            return new BigInteger(
-                blobBytes[0] << 16 |
-                blobBytes[1] << 8 |
-                blobBytes[2]);
+            return
+                new BigInteger(
+                    blobBytes[0] << 16 |
+                    blobBytes[1] << 8 |
+                    blobBytes[2]);
         }
 
         if (blobBytes.Length is 4)
         {
-            return new BigInteger(
-                (uint)
-                (blobBytes[0] << 24 |
-                blobBytes[1] << 16 |
-                blobBytes[2] << 8 |
-                blobBytes[3]));
+            return
+                new BigInteger(
+                    (uint)
+                    (blobBytes[0] << 24 |
+                    blobBytes[1] << 16 |
+                    blobBytes[2] << 8 |
+                    blobBytes[3]));
         }
 
         return
@@ -730,7 +735,9 @@ public static class KernelFunction
     /// Value representing 'true' or 'false' as returned by Pine kernel functions.
     /// </summary>
     public static PineValue ValueFromBool(bool b) =>
-        b ?
-        PineKernelValues.TrueValue :
+        b
+        ?
+        PineKernelValues.TrueValue
+        :
         PineKernelValues.FalseValue;
 }

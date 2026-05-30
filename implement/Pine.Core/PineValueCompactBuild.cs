@@ -83,19 +83,20 @@ public class PineValueCompactBuild
         var blobEntriesList =
             blobValues
             .OrderBy(blob => blob.Bytes.Length)
-            .Select((blobValue, blobIndex) =>
-            {
-                var entryKey = "blob-" + blobIndex.ToString();
+            .Select(
+                (blobValue, blobIndex) =>
+                {
+                    var entryKey = "blob-" + blobIndex.ToString();
 
-                mutatedBlobsDict[blobValue] = entryKey;
+                    mutatedBlobsDict[blobValue] = entryKey;
 
-                return
-                new ListEntry(
-                    Key: entryKey,
-                    new ListEntryValue(
-                        BlobBytesBase64: System.Convert.ToBase64String(blobValue.Bytes.Span),
-                        ListItemsKeys: null));
-            })
+                    return
+                        new ListEntry(
+                            Key: entryKey,
+                            new ListEntryValue(
+                                BlobBytesBase64: System.Convert.ToBase64String(blobValue.Bytes.Span),
+                                ListItemsKeys: null));
+                })
             .ToList();
 
         var listsOrdered =
@@ -127,29 +128,33 @@ public class PineValueCompactBuild
                 itemsIds[i] = itemId(itemValues.Span[i]);
             }
 
-            return new ListEntryValue(
-                BlobBytesBase64: null,
-                ListItemsKeys: itemsIds);
+            return
+                new ListEntryValue(
+                    BlobBytesBase64: null,
+                    ListItemsKeys: itemsIds);
         }
 
         var listEntriesList =
             listsOrdered
-            .Select((listInstance, index) =>
-            {
-                var entryKey = "list-" + index.ToString();
+            .Select(
+                (listInstance, index) =>
+                {
+                    var entryKey = "list-" + index.ToString();
 
-                mutatedListDict[listInstance] = entryKey;
+                    mutatedListDict[listInstance] = entryKey;
 
-                return
-                    new ListEntry(
-                        Key: entryKey,
-                        Value: entryValueFromListItems(listInstance.Items));
-            })
+                    return
+                        new ListEntry(
+                            Key: entryKey,
+                            Value: entryValueFromListItems(listInstance.Items));
+                })
             .ToList();
 
         return
-            ([..blobEntriesList
-            ,..listEntriesList],
+            ([
+            ..blobEntriesList,
+            ..listEntriesList
+            ],
             entryValueFromListItems);
     }
 }

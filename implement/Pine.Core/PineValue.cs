@@ -143,24 +143,34 @@ public abstract record PineValue : IEquatable<PineValue>
     public static readonly BlobValue EmptyBlob = new(ReadOnlyMemory<byte>.Empty);
 
     private static readonly BlobValue[] s_reusedBlobSingle =
-        [..Enumerable.Range(0, 256)
-        .Select(i => new BlobValue(new byte[] { (byte)i }))];
+        [
+        ..Enumerable.Range(0, 256)
+        .Select(i => new BlobValue(new byte[] { (byte)i }))
+        ];
 
     private static readonly BlobValue[] s_reusedBlobTuple =
-        [..Enumerable.Range(0, 256)
-        .SelectMany(i => Enumerable.Range(0, 256).Select(j => new BlobValue(new byte[] { (byte)i, (byte)j })))];
+        [
+        ..Enumerable.Range(0, 256)
+        .SelectMany(i => Enumerable.Range(0, 256).Select(j => new BlobValue(new byte[] { (byte)i, (byte)j })))
+        ];
 
     private static readonly BlobValue[] s_reusedBlobInteger3ByteNegative =
-        [..Enumerable.Range(0, 0x1_00_00)
-        .Select(i => new BlobValue(new byte[] { 2, (byte)(i >> 8), (byte)(i & 0xff) }))];
+        [
+        ..Enumerable.Range(0, 0x1_00_00)
+        .Select(i => new BlobValue(new byte[] { 2, (byte)(i >> 8), (byte)(i & 0xff) }))
+        ];
 
     private static readonly BlobValue[] s_reusedBlobInteger3BytePositive =
-        [..Enumerable.Range(0, 0x1_00_00)
-        .Select(i => new BlobValue(new byte[] { 4, (byte)(i >> 8), (byte)(i & 0xff) }))];
+        [
+        ..Enumerable.Range(0, 0x1_00_00)
+        .Select(i => new BlobValue(new byte[] { 4, (byte)(i >> 8), (byte)(i & 0xff) }))
+        ];
 
     private static readonly BlobValue[] s_reusedBlobChar4Byte =
-        [..Enumerable.Range(0, 0x1_00_00)
-        .Select(i => new BlobValue(new byte[] { 0, (byte)(i >> 16), (byte)(i >> 8), (byte)(i & 0xff) }))];
+        [
+        ..Enumerable.Range(0, 0x1_00_00)
+        .Select(i => new BlobValue(new byte[] { 0, (byte)(i >> 16), (byte)(i >> 8), (byte)(i & 0xff) }))
+        ];
 
     /// <summary>
     /// Returns a reused <see cref="BlobValue"/> instance representing a tuple of two bytes.
@@ -212,13 +222,15 @@ public abstract record PineValue : IEquatable<PineValue>
     /// </summary>
     public static readonly FrozenSet<BlobValue> ReusedBlobInstances =
         new HashSet<BlobValue>(
-            [EmptyBlob,
+            [
+            EmptyBlob,
             .. s_reusedBlobSingle,
             .. s_reusedBlobTuple,
             ..s_reusedBlobInteger3ByteNegative,
             ..s_reusedBlobInteger3BytePositive,
             ..s_reusedBlobChar4Byte,
-            ..PopularValues.PopularStrings.Select(StringEncoding.BlobValueFromString)])
+            ..PopularValues.PopularStrings.Select(StringEncoding.BlobValueFromString)
+            ])
         .ToFrozenSet();
 
     /// <summary>
@@ -301,8 +313,10 @@ public abstract record PineValue : IEquatable<PineValue>
                         nodesCount += listItem.NodesCount;
                         blobsBytesCount += listItem.BlobsBytesCount;
                         var childDepth = 1 + listItem.MaxDepth;
+
                         if (childDepth > maxDepth)
                             maxDepth = childDepth;
+
                         break;
 
                     case BlobValue blobItem:

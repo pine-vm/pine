@@ -23,11 +23,11 @@ public static class FileTreeEncoding
             composition switch
             {
                 PineValue.BlobValue compositionAsBlob =>
-                    Result<IReadOnlyList<(int index, string name)>, FileTree>.ok(
-                        FileTree.File(compositionAsBlob.Bytes)),
+                Result<IReadOnlyList<(int index, string name)>, FileTree>.ok(
+                    FileTree.File(compositionAsBlob.Bytes)),
 
                 PineValue.ListValue compositionAsList =>
-                    Parse(compositionAsList),
+                Parse(compositionAsList),
 
                 _ =>
                 throw new NotImplementedException(
@@ -88,8 +88,8 @@ public static class FileTreeEncoding
                 encodedItems[itemIndex] =
                     PineValue.List(
                         [
-                            StringEncoding.ValueFromString(name),
-                            Encode(component)
+                        StringEncoding.ValueFromString(name),
+                        Encode(component)
                         ]);
             }
 

@@ -83,13 +83,14 @@ public sealed class PersistentProcessLive : IAsyncDisposable
         ElmAppInterfaceConfig? overrideElmAppInterfaceConfig = null,
         System.Threading.CancellationToken cancellationToken = default)
     {
-        return new PersistentProcessLive(
-            lastAppConfig,
-            lastAppState,
-            storeWriter,
-            getDateTimeOffset,
-            overrideElmAppInterfaceConfig,
-            cancellationToken);
+        return
+            new PersistentProcessLive(
+                lastAppConfig,
+                lastAppState,
+                storeWriter,
+                getDateTimeOffset,
+                overrideElmAppInterfaceConfig,
+                cancellationToken);
     }
 
     private PersistentProcessLive(
@@ -161,14 +162,12 @@ public sealed class PersistentProcessLive : IAsyncDisposable
                     new CompositionLogRecordInFile.CompositionEvent
                     {
                         ApplyFunctionOnLiteralAndState =
-                        new CompositionLogRecordInFile.ApplyFunctionOnLiteralAndStateEvent
-                        (
+                        new CompositionLogRecordInFile.ApplyFunctionOnLiteralAndStateEvent(
                             Function:
                             new ValueInFileStructure(HashBase16: functionHash),
 
                             Arguments:
-                            new ValueInFileStructure(LiteralStringUtf8: argumentsJsonString)
-                        )
+                            new ValueInFileStructure(LiteralStringUtf8: argumentsJsonString))
                     };
 
                 var recordHash =
@@ -241,8 +240,7 @@ public sealed class PersistentProcessLive : IAsyncDisposable
         return
             FunctionRecord.EncodeFunctionRecordInValueTagged(
                 functionRecord:
-                appliedFunction
-                with
+                appliedFunction with
                 {
                     InnerFunction = getStateExpr,
                 });
@@ -360,7 +358,8 @@ public sealed class PersistentProcessLive : IAsyncDisposable
         var compositionEvent =
             new CompositionLogRecordInFile.CompositionEvent
             {
-                SetElmAppState = new ValueInFileStructure
+                SetElmAppState =
+                new ValueInFileStructure
                 {
                     HashBase16 = appStateHash.hashBase16
                 }
@@ -385,19 +384,20 @@ public sealed class PersistentProcessLive : IAsyncDisposable
         var recordHashBase16 = StoreCompositionRecord();
 
         var taskStoringReduction =
-            System.Threading.Tasks.Task.Run(() =>
-            {
-                _storeWriter.StoreProvisionalReduction(
-                    new ProvisionalReductionRecordInFile(
-                        reducedCompositionHashBase16: recordHashBase16,
-                        elmAppState:
-                        new ValueInFileStructure(
-                            HashBase16: appStateHash.hashBase16),
-                        appConfig:
-                        new ValueInFileStructure(
-                            HashBase16:
-                            appConfigHash.hashBase16)));
-            });
+            System.Threading.Tasks.Task.Run(
+                () =>
+                {
+                    _storeWriter.StoreProvisionalReduction(
+                        new ProvisionalReductionRecordInFile(
+                            reducedCompositionHashBase16: recordHashBase16,
+                            elmAppState:
+                            new ValueInFileStructure(
+                                HashBase16: appStateHash.hashBase16),
+                            appConfig:
+                            new ValueInFileStructure(
+                                HashBase16:
+                                appConfigHash.hashBase16)));
+                });
 
         var report =
             new StoreAppStateResetAndReductionReport(
@@ -420,21 +420,20 @@ public sealed class PersistentProcessLive : IAsyncDisposable
             new ConcurrentDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>>(
                 EnumerableExtensions.EqualityComparer<IReadOnlyList<string>>());
 
-        var recordingReader = new DelegatingFileStoreReader
-        (
-            ListFilesInDirectoryDelegate: fileStoreReader.ListFilesInDirectory,
-            GetFileContentDelegate: filePath =>
-            {
-                var fileContent = fileStoreReader.GetFileContent(filePath);
-
-                if (fileContent is not null)
+        var recordingReader =
+            new DelegatingFileStoreReader(
+                ListFilesInDirectoryDelegate: fileStoreReader.ListFilesInDirectory,
+                GetFileContentDelegate: filePath =>
                 {
-                    filesForProcessRestore[filePath] = fileContent.Value;
-                }
+                    var fileContent = fileStoreReader.GetFileContent(filePath);
 
-                return fileContent;
-            }
-        );
+                    if (fileContent is not null)
+                    {
+                        filesForProcessRestore[filePath] = fileContent.Value;
+                    }
+
+                    return fileContent;
+                });
 
         Dictionary<string, PineValue> componentCache = [];
 
@@ -444,8 +443,8 @@ public sealed class PersistentProcessLive : IAsyncDisposable
                 componentCache)
             .ToImmutableList();
 
-        return (
-            files: filesForProcessRestore.ToImmutableDictionary(EnumerableExtensions.EqualityComparer<IReadOnlyList<string>>()),
+        return
+            (files: filesForProcessRestore.ToImmutableDictionary(EnumerableExtensions.EqualityComparer<IReadOnlyList<string>>()),
             lastCompositionLogRecordHashBase16: compositionLogRecords.LastOrDefault().CompositionRecordHashBase16);
     }
 
@@ -453,67 +452,69 @@ public sealed class PersistentProcessLive : IAsyncDisposable
         EnumerateCompositionLogRecordsForRestoreProcessAndLoadDependencies(
         IProcessStoreReader storeReader,
         Dictionary<string, PineValue> componentCache) =>
-            storeReader
-            .EnumerateSerializedCompositionLogRecordsReverse()
-            .Select(serializedCompositionLogRecord =>
+        storeReader
+        .EnumerateSerializedCompositionLogRecordsReverse()
+        .Select(
+            serializedCompositionLogRecord =>
             {
                 var compositionRecordHashBase16 =
                     CompositionLogRecordInFile.HashBase16FromCompositionRecord(serializedCompositionLogRecord);
 
                 var compositionRecord =
-                JsonSerializer.Deserialize<CompositionLogRecordInFile>(
+                    JsonSerializer.Deserialize<CompositionLogRecordInFile>(
                     Encoding.UTF8.GetString(serializedCompositionLogRecord))!;
 
                 var reductionRecord = storeReader.LoadProvisionalReduction(compositionRecordHashBase16);
 
                 ReductionWithResolvedDependencies? reduction = null;
 
-                if (reductionRecord?.appConfig?.HashBase16 is { } appConfigHash && reductionRecord?.elmAppState?.HashBase16 is { } appStateHash)
+                if (reductionRecord?.appConfig?.HashBase16 is { } appConfigHash &&
+                    reductionRecord?.elmAppState?.HashBase16 is { } appStateHash)
                 {
                     var appConfigComponent =
-                    LoadComponentFromStoreReader(
-                        appConfigHash,
-                        cache: true,
-                        storeReader,
-                        componentCache);
+                        LoadComponentFromStoreReader(
+                            appConfigHash,
+                            cache: true,
+                            storeReader,
+                            componentCache);
 
                     var elmAppStateComponent =
-                    LoadComponentFromStoreReader(
-                        appStateHash,
-                        cache: true,
-                        storeReader,
-                        componentCache);
+                        LoadComponentFromStoreReader(
+                            appStateHash,
+                            cache: true,
+                            storeReader,
+                            componentCache);
 
                     if (appConfigComponent is not null && elmAppStateComponent is not null)
                     {
                         var appConfigAsTree =
-                        FileTreeEncoding.Parse(appConfigComponent)
-                        .Extract(_ => throw new Exception(
-                            "Unexpected content of appConfigComponent " + appConfigHash + ": Failed to parse as tree."));
+                            FileTreeEncoding.Parse(appConfigComponent)
+                            .Extract(
+                                _ => throw new Exception(
+                                    "Unexpected content of appConfigComponent " + appConfigHash +
+                                    ": Failed to parse as tree."));
 
-                        reduction = new ReductionWithResolvedDependencies
-                        (
-                            AppConfig: appConfigComponent,
-                            AppConfigAsTree: appConfigAsTree,
-                            ElmAppState: elmAppStateComponent
-                        );
+                        reduction =
+                            new ReductionWithResolvedDependencies(
+                                AppConfig: appConfigComponent,
+                                AppConfigAsTree: appConfigAsTree,
+                                ElmAppState: elmAppStateComponent);
                     }
                 }
 
-                return new CompositionLogRecordWithResolvedDependencies
-                (
-                    CompositionRecord: compositionRecord,
-                    CompositionRecordHashBase16: compositionRecordHashBase16,
-                    Composition:
-                    LoadCompositionEventDependencies(
-                        compositionRecord.compositionEvent,
-                        storeReader,
-                        componentCache: componentCache),
-                    Reduction: reduction
-                );
+                return
+                    new CompositionLogRecordWithResolvedDependencies(
+                        CompositionRecord: compositionRecord,
+                        CompositionRecordHashBase16: compositionRecordHashBase16,
+                        Composition:
+                        LoadCompositionEventDependencies(
+                            compositionRecord.compositionEvent,
+                            storeReader,
+                            componentCache: componentCache),
+                        Reduction: reduction);
             })
-            .TakeUntil(compositionAndReduction => compositionAndReduction.Reduction is not null)
-            .Reverse();
+        .TakeUntil(compositionAndReduction => compositionAndReduction.Reduction is not null)
+        .Reverse();
 
     public static Result<string, RestoreFromCompositionEventSequenceResult>
         LoadFromStoreAndRestoreProcess(
@@ -576,7 +577,8 @@ public sealed class PersistentProcessLive : IAsyncDisposable
             compositionLogRecords.FirstOrDefault();
 
         if (firstCompositionLogRecord.Reduction is null &&
-            firstCompositionLogRecord.CompositionRecord.parentHashBase16 != CompositionLogRecordInFile.CompositionLogFirstRecordParentHashBase16)
+            firstCompositionLogRecord.CompositionRecord.parentHashBase16 !=
+            CompositionLogRecordInFile.CompositionLogFirstRecordParentHashBase16)
         {
             return
                 "Failed to get sufficient history: Composition log record points to parent " +
@@ -587,11 +589,12 @@ public sealed class PersistentProcessLive : IAsyncDisposable
 
         var pineVM = SetupVM.Create(pineVMCache);
 
-        var initialProcessRepresentation = new PersistentProcessLiveRepresentationDuringRestore(
-            LastCompositionLogRecordHashBase16: null,
-            LastAppConfig: null,
-            InitOrMigrateCmds: [],
-            LastAppState: null);
+        var initialProcessRepresentation =
+            new PersistentProcessLiveRepresentationDuringRestore(
+                LastCompositionLogRecordHashBase16: null,
+                LastAppConfig: null,
+                InitOrMigrateCmds: [],
+                LastAppState: null);
 
 
         Result<string, PersistentProcessLiveRepresentationDuringRestore> integrateCompositionLogRecord(
@@ -600,11 +603,11 @@ public sealed class PersistentProcessLive : IAsyncDisposable
         {
             Result<string, PersistentProcessLiveRepresentationDuringRestore> ContinueOk(
                 PersistentProcessLiveRepresentationDuringRestore process) =>
-                Result<string, PersistentProcessLiveRepresentationDuringRestore>.ok(process
-                with
-                {
-                    LastCompositionLogRecordHashBase16 = compositionLogRecord.CompositionRecordHashBase16
-                });
+                Result<string, PersistentProcessLiveRepresentationDuringRestore>.ok(
+                    process with
+                    {
+                        LastCompositionLogRecordHashBase16 = compositionLogRecord.CompositionRecordHashBase16
+                    });
 
             var compositionEvent = compositionLogRecord.CompositionRecord.compositionEvent;
 
@@ -612,8 +615,7 @@ public sealed class PersistentProcessLive : IAsyncDisposable
             {
                 return
                     ContinueOk(
-                        process
-                        with
+                        process with
                         {
                             LastAppConfig =
                             new ProcessAppConfig(reductionWithResolvedDependencies.AppConfig),
@@ -629,7 +631,9 @@ public sealed class PersistentProcessLive : IAsyncDisposable
                     return
                         "Error in enumeration of process composition events: Got revert to " +
                         revertProcessTo.HashBase16 +
-                        ", but previous version in the enumerated sequence was " + process.LastCompositionLogRecordHashBase16 + ".";
+                        ", but previous version in the enumerated sequence was " +
+                        process.LastCompositionLogRecordHashBase16 +
+                        ".";
                 }
 
                 return ContinueOk(process);
@@ -649,35 +653,37 @@ public sealed class PersistentProcessLive : IAsyncDisposable
             compositionLogRecords.Aggregate(
                 seed: Result<string, PersistentProcessLiveRepresentationDuringRestore>.ok(initialProcessRepresentation),
                 func: (intermediateResult, compositionLogRecord) =>
-                intermediateResult.AndThen(intermediateOk =>
-                integrateCompositionLogRecord(intermediateOk, compositionLogRecord)));
+                intermediateResult.AndThen(
+                    intermediateOk =>
+                    integrateCompositionLogRecord(intermediateOk, compositionLogRecord)));
 
         return
             aggregateLogRecordsResult
-            .AndThen(aggregateOk =>
-            {
-                if (aggregateOk.LastCompositionLogRecordHashBase16 is null ||
-                    aggregateOk.LastAppConfig is not { } lastAppConfig)
+            .AndThen(
+                aggregateOk =>
                 {
-                    return
-                    (Result<string, RestoreFromCompositionEventSequenceResult>)
-                    "Failed to get sufficient history: " +
-                    nameof(compositionLogRecords) +
-                    " does not contain app init.";
-                }
+                    if (aggregateOk.LastCompositionLogRecordHashBase16 is null ||
+                        aggregateOk.LastAppConfig is not { } lastAppConfig)
+                    {
+                        return
+                            (Result<string, RestoreFromCompositionEventSequenceResult>)
+                            "Failed to get sufficient history: " +
+                            nameof(compositionLogRecords) +
+                            " does not contain app init.";
+                    }
 
-                return
-                    (Result<string, RestoreFromCompositionEventSequenceResult>)
-                    new RestoreFromCompositionEventSequenceResult(
-                        Create(
-                            lastAppConfig: lastAppConfig,
-                            lastAppState: aggregateOk.LastAppState,
-                            storeWriter: storeWriter,
-                            getDateTimeOffset,
-                            overrideElmAppInterfaceConfig,
-                            cancellationToken),
-                        aggregateOk.InitOrMigrateCmds);
-            });
+                    return
+                        (Result<string, RestoreFromCompositionEventSequenceResult>)
+                        new RestoreFromCompositionEventSequenceResult(
+                            Create(
+                                lastAppConfig: lastAppConfig,
+                                lastAppState: aggregateOk.LastAppState,
+                                storeWriter: storeWriter,
+                                getDateTimeOffset,
+                                overrideElmAppInterfaceConfig,
+                                cancellationToken),
+                            aggregateOk.InitOrMigrateCmds);
+                });
     }
 
     private record PersistentProcessLiveRepresentationDuringRestore(
@@ -758,12 +764,12 @@ public sealed class PersistentProcessLive : IAsyncDisposable
             }
 
             return
-                processBefore
-                with
+                processBefore with
                 {
                     LastAppConfig =
-                    new ProcessAppConfig(FileTreeEncoding.Encode(
-                        deployAppConfigAndMigrateElmAppState)),
+                    new ProcessAppConfig(
+                        FileTreeEncoding.Encode(
+                            deployAppConfigAndMigrateElmAppState)),
 
                     LastAppState = migrateOk.newState,
                 };
@@ -777,11 +783,10 @@ public sealed class PersistentProcessLive : IAsyncDisposable
                     overrideElmAppInterfaceConfig);
 
             return
-                processBefore
-                with
+                processBefore with
                 {
                     LastAppConfig =
-                        new ProcessAppConfig(FileTreeEncoding.Encode(appConfig)),
+                    new ProcessAppConfig(FileTreeEncoding.Encode(appConfig)),
                     LastAppState = appConfigParsed.Init.State,
                     InitOrMigrateCmds = []
                 };
@@ -813,8 +818,7 @@ public sealed class PersistentProcessLive : IAsyncDisposable
             }
 
             return
-                processBefore
-                with
+                processBefore with
                 {
                     LastAppState = evalOk
                 };
@@ -884,54 +888,60 @@ public sealed class PersistentProcessLive : IAsyncDisposable
 
             return
                 FileTreeEncoding.Parse(component)
-                .Extract(_ => throw new Exception("Failed to load component " + component + " as tree: Failed to parse as tree."));
+                .Extract(
+                    _ =>
+                    throw new Exception("Failed to load component " + component + " as tree: Failed to parse as tree."));
         }
 
         if (compositionEvent.SetElmAppState is { } setElmAppState)
         {
-            return new CompositionEventWithResolvedDependencies
-            {
-                SetElmAppState =
-                LoadComponentFromValueInFileStructure(
-                    setElmAppState,
-                    cacheFromStore: false)
-            };
+            return
+                new CompositionEventWithResolvedDependencies
+                {
+                    SetElmAppState =
+                    LoadComponentFromValueInFileStructure(
+                        setElmAppState,
+                        cacheFromStore: false)
+                };
         }
 
         if (compositionEvent.DeployAppConfigAndMigrateElmAppState is { } deployAppConfigAndMigrateElmAppState)
         {
-            return new CompositionEventWithResolvedDependencies
-            {
-                DeployAppConfigAndMigrateElmAppState =
-                LoadComponentFromStoreAndAssertIsTree(deployAppConfigAndMigrateElmAppState),
-            };
+            return
+                new CompositionEventWithResolvedDependencies
+                {
+                    DeployAppConfigAndMigrateElmAppState =
+                    LoadComponentFromStoreAndAssertIsTree(deployAppConfigAndMigrateElmAppState),
+                };
         }
 
         if (compositionEvent.DeployAppConfigAndInitElmAppState is { } deployAppConfigAndInitElmAppState)
         {
-            return new CompositionEventWithResolvedDependencies
-            {
-                DeployAppConfigAndInitElmAppState =
-                LoadComponentFromStoreAndAssertIsTree(deployAppConfigAndInitElmAppState),
-            };
+            return
+                new CompositionEventWithResolvedDependencies
+                {
+                    DeployAppConfigAndInitElmAppState =
+                    LoadComponentFromStoreAndAssertIsTree(deployAppConfigAndInitElmAppState),
+                };
         }
 
         if (compositionEvent.ApplyFunctionOnLiteralAndState is { } applyFunctionOnLiteralAndState)
         {
-            return new CompositionEventWithResolvedDependencies
-            {
-                ApplyFunctionOnLiteralsAndState =
-                new ApplyFunctionOnLiteralsAndStateEvent(
-                    Function:
-                    LoadComponentFromValueInFileStructure(
-                        applyFunctionOnLiteralAndState.Function,
-                        cacheFromStore: true),
+            return
+                new CompositionEventWithResolvedDependencies
+                {
+                    ApplyFunctionOnLiteralsAndState =
+                    new ApplyFunctionOnLiteralsAndStateEvent(
+                        Function:
+                        LoadComponentFromValueInFileStructure(
+                            applyFunctionOnLiteralAndState.Function,
+                            cacheFromStore: true),
 
-                    Arguments:
-                    LoadComponentFromValueInFileStructure(
-                        applyFunctionOnLiteralAndState.Arguments,
-                        cacheFromStore: false))
-            };
+                        Arguments:
+                        LoadComponentFromValueInFileStructure(
+                            applyFunctionOnLiteralAndState.Arguments,
+                            cacheFromStore: false))
+                };
         }
 
         throw new NotImplementedException(
@@ -964,9 +974,9 @@ public sealed class PersistentProcessLive : IAsyncDisposable
 
     public static Result<string, FileStoreReaderProjectionResult>
         TestContinueWithCompositionEvent(
-            CompositionLogRecordInFile.CompositionEvent compositionLogEvent,
-            IFileStoreReader fileStoreReader,
-            Action<string>? logger = null)
+        CompositionLogRecordInFile.CompositionEvent compositionLogEvent,
+        IFileStoreReader fileStoreReader,
+        Action<string>? logger = null)
     {
         var projectionResult =
             IProcessStoreReader.ProjectFileStoreReaderForAppendedCompositionLogEvent(
@@ -1241,15 +1251,17 @@ public sealed class PersistentProcessLive : IAsyncDisposable
     {
         return
             Result<string, IReadOnlyList<StateShim.InterfaceToHost.NamedExposedFunction>>.ok(
-            [.._appConfigParsed.JsonAdapter.ExposedFunctions
-            .Select(exposedFunc => new StateShim.InterfaceToHost.NamedExposedFunction(
-                functionName: exposedFunc.Key,
-                functionDescription: MapExposedFunctionDescription(exposedFunc.Value)))
-            ]);
+                [
+                .._appConfigParsed.JsonAdapter.ExposedFunctions
+                .Select(
+                    exposedFunc => new StateShim.InterfaceToHost.NamedExposedFunction(
+                        functionName: exposedFunc.Key,
+                        functionDescription: MapExposedFunctionDescription(exposedFunc.Value)))
+                ]);
     }
 
     private static StateShim.InterfaceToHost.ExposedFunctionDescription MapExposedFunctionDescription(
-       ElmTimeJsonAdapter.ExposedFunction exposedFunction)
+        ElmTimeJsonAdapter.ExposedFunction exposedFunction)
     {
         return
             new StateShim.InterfaceToHost.ExposedFunctionDescription(
@@ -1259,8 +1271,9 @@ public sealed class PersistentProcessLive : IAsyncDisposable
                     containsAppStateType: exposedFunction.Description.ReturnType.ContainsAppStateType),
                 parameters:
                 [
-                    ..exposedFunction.Description.Parameters
-                    .Select(param => new StateShim.InterfaceToHost.ExposedFunctionParameterDescription(
+                ..exposedFunction.Description.Parameters
+                .Select(
+                    param => new StateShim.InterfaceToHost.ExposedFunctionParameterDescription(
                         patternSourceCodeText: param.PatternSourceCodeText,
                         typeSourceCodeText: param.TypeSourceCodeText,
                         typeIsAppStateType: param.TypeIsAppStateType))

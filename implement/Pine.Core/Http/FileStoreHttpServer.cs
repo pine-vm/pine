@@ -64,18 +64,23 @@ public class FileStoreHttpServer(IFileStore fileStore)
             case "GET":
                 await HandleGetFileAsync(context, pathSegments);
                 break;
+
             case "HEAD":
                 await HandleHeadFileAsync(context, pathSegments);
                 break;
+
             case "PUT":
                 await HandlePutFileAsync(context, pathSegments);
                 break;
+
             case "POST":
                 await HandlePostFileAsync(context, pathSegments);
                 break;
+
             case "DELETE":
                 await HandleDeleteFileAsync(context, pathSegments);
                 break;
+
             default:
                 context.Response.StatusCode = 405; // Method Not Allowed
                 break;
@@ -97,6 +102,7 @@ public class FileStoreHttpServer(IFileStore fileStore)
     private async Task HandleGetFileAsync(HttpContext context, IImmutableList<string> pathSegments)
     {
         var fileContent = _fileStore.GetFileContent(pathSegments);
+
         if (fileContent == null)
         {
             context.Response.StatusCode = 404;
@@ -120,6 +126,7 @@ public class FileStoreHttpServer(IFileStore fileStore)
 
         // Check for JSON format request
         var acceptHeader = context.Request.Headers["Accept"].FirstOrDefault();
+
         if (acceptHeader?.Contains("application/json") == true)
         {
             var base64Content = Convert.ToBase64String(contentBytes.Span);
@@ -138,6 +145,7 @@ public class FileStoreHttpServer(IFileStore fileStore)
     private async Task HandleHeadFileAsync(HttpContext context, IImmutableList<string> pathSegments)
     {
         var fileContent = _fileStore.GetFileContent(pathSegments);
+
         if (fileContent == null)
         {
             context.Response.StatusCode = 404;
@@ -161,6 +169,7 @@ public class FileStoreHttpServer(IFileStore fileStore)
 
         // Handle If-None-Match: * (create only)
         var ifNoneMatch = context.Request.Headers["If-None-Match"].FirstOrDefault();
+
         if (ifNoneMatch == "*" && fileExists)
         {
             context.Response.StatusCode = 412; // Precondition Failed
@@ -169,10 +178,12 @@ public class FileStoreHttpServer(IFileStore fileStore)
 
         // Handle If-Match (replace only if ETag matches)
         var ifMatch = context.Request.Headers["If-Match"].FirstOrDefault();
+
         if (ifMatch != null && fileExists)
         {
             var currentETag = ComputeETag(existingContent!.Value);
             var requestedETag = ifMatch.Trim('"');
+
             if (currentETag != requestedETag)
             {
                 context.Response.StatusCode = 412; // Precondition Failed
@@ -198,6 +209,7 @@ public class FileStoreHttpServer(IFileStore fileStore)
     private async Task HandlePostFileAsync(HttpContext context, IImmutableList<string> pathSegments)
     {
         var operation = context.Request.Headers["X-Operation"].FirstOrDefault();
+
         if (operation != "append")
         {
             context.Response.StatusCode = 400; // Bad Request
@@ -209,10 +221,12 @@ public class FileStoreHttpServer(IFileStore fileStore)
 
         // Handle If-Match for concurrency control
         var ifMatch = context.Request.Headers["If-Match"].FirstOrDefault();
+
         if (ifMatch != null && existingContent != null)
         {
             var currentETag = ComputeETag(existingContent.Value);
             var requestedETag = ifMatch.Trim('"');
+
             if (currentETag != requestedETag)
             {
                 context.Response.StatusCode = 412; // Precondition Failed
@@ -222,9 +236,11 @@ public class FileStoreHttpServer(IFileStore fileStore)
 
         // Handle X-Expected-Length
         var expectedLengthHeader = context.Request.Headers["X-Expected-Length"].FirstOrDefault();
+
         if (expectedLengthHeader != null && int.TryParse(expectedLengthHeader, out var expectedLength))
         {
             var currentLength = existingContent?.Length ?? 0;
+
             if (currentLength != expectedLength)
             {
                 context.Response.StatusCode = 412; // Precondition Failed
@@ -245,6 +261,7 @@ public class FileStoreHttpServer(IFileStore fileStore)
 
         // Get the updated content to compute new ETag and length
         var updatedContent = _fileStore.GetFileContent(pathSegments);
+
         if (updatedContent != null)
         {
             var newETag = ComputeETag(updatedContent.Value);
@@ -263,6 +280,7 @@ public class FileStoreHttpServer(IFileStore fileStore)
     private async Task HandleDeleteFileAsync(HttpContext context, IImmutableList<string> pathSegments)
     {
         var existingContent = _fileStore.GetFileContent(pathSegments);
+
         if (existingContent == null)
         {
             context.Response.StatusCode = 404;
@@ -280,7 +298,8 @@ public class FileStoreHttpServer(IFileStore fileStore)
             // List all files under the directory (all descendants). Emit only file entries.
             var files = _fileStore.ListFilesInDirectory(pathSegments);
 
-            var entries = files
+            var entries =
+                files
                 .Select(relativePath => new DirectoryEntry(string.Join('/', relativePath), "file"))
                 .ToArray();
 
@@ -366,6 +385,7 @@ public class FileStoreHttpServer(IFileStore fileStore)
 public class FileStoreHttpServerMiddleware(RequestDelegate next, IFileStore fileStore)
 {
     private readonly RequestDelegate _next = next;
+
     private readonly FileStoreHttpServer _server = new(fileStore);
 
     public async Task InvokeAsync(HttpContext context)

@@ -71,9 +71,10 @@ public record ReusedInstances(
     {
         var (_, allBlobs) =
             PineValue.CollectAllComponentsFromRoots(
-                [.. source.PineValueLists.Values
-                ,..source.ValuesExpectedInCompilerLists
-                ,..source.ValuesExpectedInCompilerBlobs
+                [
+                .. source.PineValueLists.Values,
+                ..source.ValuesExpectedInCompilerLists,
+                ..source.ValuesExpectedInCompilerBlobs
                 ]);
 
         var mutatedBlobsDict = new Dictionary<PineValue.BlobValue, string>();
@@ -85,16 +86,17 @@ public record ReusedInstances(
             .OrderBy(l => l.NodesCount)
             .ToList();
 
-        var mutatedDict = new Dictionary<string, PineValue>
-        {
-            [expectedInCompilerKey] =
-            PineValue.List(
-                [
+        var mutatedDict =
+            new Dictionary<string, PineValue>
+            {
+                [expectedInCompilerKey] =
+                PineValue.List(
+                    [
                     .. source.ValuesExpectedInCompilerBlobs
                     .Cast<PineValue>(),
                     .. source.ValuesExpectedInCompilerLists,
-                ])
-        };
+                    ])
+            };
 
         mutatedDict["other-reused"] =
             PineValue.List(
@@ -110,15 +112,17 @@ public record ReusedInstances(
     public static PineListValueReusedInstances LoadPrecompiledFromEmbeddedOrDefault(
         System.Func<IEnumerable<Expression>> loadExpressionRootsSource,
         BundledDeclarations? bundledDeclarations) =>
-         LoadEmbeddedPrebuilt(bundledDeclarations)
-        .Extract(err =>
-        {
-            System.Console.WriteLine("Failed loading from embedded resource: " + err);
+        LoadEmbeddedPrebuilt(bundledDeclarations)
+        .Extract(
+            err =>
+            {
+                System.Console.WriteLine("Failed loading from embedded resource: " + err);
 
-            return BuildPineListValueReusedInstances(
-                loadExpressionRootsSource(),
-                additionalRoots: []);
-        });
+                return
+                    BuildPineListValueReusedInstances(
+                        loadExpressionRootsSource(),
+                        additionalRoots: []);
+            });
 
     private static Result<string, PineListValueReusedInstances> LoadEmbeddedPrebuilt(
         BundledDeclarations? bundledDeclarations)
@@ -171,10 +175,11 @@ public record ReusedInstances(
             valueListsDict[new PineValue.ListValue.ListValueStruct(listValue)] = listValue;
         }
 
-        return new PineListValueReusedInstances(
-            ValuesExpectedInCompilerLists: listValuesExpectedInCompiler,
-            ValuesExpectedInCompilerBlobs: blobValuesExpectedInCompiler,
-            PineValueLists: valueListsDict);
+        return
+            new PineListValueReusedInstances(
+                ValuesExpectedInCompilerLists: listValuesExpectedInCompiler,
+                ValuesExpectedInCompilerBlobs: blobValuesExpectedInCompiler,
+                PineValueLists: valueListsDict);
     }
 
     public record PineListValueReusedInstances(
@@ -193,21 +198,23 @@ public record ReusedInstances(
             StringEncoding.ValueFromString("column");
 
         IReadOnlyList<PineValue.ListValue> listsFromElmSyntaxLocations =
-            [..Enumerable.Range(0, 1600)
-            .SelectMany(index =>
-            {
-                var intValue = IntegerEncoding.EncodeSignedInteger(index);
+            [
+            ..Enumerable.Range(0, 1600)
+            .SelectMany(
+                index =>
+                {
+                    var intValue = IntegerEncoding.EncodeSignedInteger(index);
 
-                /*
-                 * These fields appear as parts of records returned from the Elm syntax parser.
-                 * */
-                return
-                (IReadOnlyList<PineValue.ListValue>)
-                [
-                    PineValue.List([rowStringValue, intValue]),
-                    PineValue.List([columnStringValue, intValue])
-                ];
-            })
+                    /*
+                     * These fields appear as parts of records returned from the Elm syntax parser.
+                     * */
+                    return
+                        (IReadOnlyList<PineValue.ListValue>)
+                        [
+                        PineValue.List([rowStringValue, intValue]),
+                        PineValue.List([columnStringValue, intValue])
+                        ];
+                })
             ];
 
         var valueRootsFromProgramsSorted =
@@ -302,10 +309,11 @@ public record ReusedInstances(
                     elementSelector: asRef => asRef.Value);
         }
 
-        return new PineListValueReusedInstances(
-            valuesExpectedInCompilerLists,
-            valuesExpectedInCompilerBlobs,
-            PineValueLists);
+        return
+            new PineListValueReusedInstances(
+                valuesExpectedInCompilerLists,
+                valuesExpectedInCompilerBlobs,
+                PineValueLists);
     }
 
     private void BuildFromEmbedded()

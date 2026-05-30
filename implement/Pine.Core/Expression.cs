@@ -701,9 +701,9 @@ public abstract record Expression
 
                     Conditional conditionalExpression =>
                     [
-                        conditionalExpression.Condition,
-                        conditionalExpression.FalseBranch,
-                        conditionalExpression.TrueBranch
+                    conditionalExpression.Condition,
+                    conditionalExpression.FalseBranch,
+                    conditionalExpression.TrueBranch
                     ],
 
                     KernelApplication kernelApplicationExpression =>
@@ -773,6 +773,7 @@ public abstract record Expression
                     {
                         stack.Push(list.Items[i]);
                     }
+
                     break;
 
                 case ParseAndEval parseAndEvaluate:

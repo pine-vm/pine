@@ -48,12 +48,14 @@ public class RunServer
                         MaxRetryDelay: TimeSpan.FromSeconds(4),
                         MaxRetryAttempts: 10);
 
-                return new FileStoreFromSystemIOFile(
-                    processStorePath,
-                    retryOptions: retryOptions);
+                return
+                    new FileStoreFromSystemIOFile(
+                        processStorePath,
+                        retryOptions: retryOptions);
             }
 
-            Console.WriteLine("I got no path to a persistent store for the process. This process will not be persisted!");
+            Console.WriteLine(
+                "I got no path to a persistent store for the process. This process will not be persisted!");
 
             var inMemoryFileStore = new FileStoreFromConcurrentDictionary();
 
@@ -117,7 +119,8 @@ public class RunServer
                 (deletePreviousProcess || processStorePath is null) && copyProcess is null;
 
             var compositionLogEvent =
-                Platform.WebService.ProcessStoreSupportingMigrations.CompositionLogRecordInFile.CompositionEvent.EventForDeployAppConfig(
+                Platform.WebService
+                .ProcessStoreSupportingMigrations.CompositionLogRecordInFile.CompositionEvent.EventForDeployAppConfig(
                     appConfigValueInFile: appConfigValueInFile,
                     initElmAppState: initElmAppState);
 
@@ -173,11 +176,17 @@ public class RunServer
         {
             Console.WriteLine("Begin reading process history from '" + sourcePath + "' ...");
 
-            var (files, lastCompositionLogRecordHashBase16) = ReadFilesForRestoreProcessFromAdminInterface(
-                sourceAdminInterface: sourcePath,
-                sourceAdminPassword: sourcePassword);
+            var (files, lastCompositionLogRecordHashBase16) =
+                ReadFilesForRestoreProcessFromAdminInterface(
+                    sourceAdminInterface: sourcePath,
+                    sourceAdminPassword: sourcePassword);
 
-            Console.WriteLine("Completed reading files to restore process " + lastCompositionLogRecordHashBase16 + ". Read " + files.Count + " files from '" + sourcePath + "'.");
+            Console.WriteLine(
+                "Completed reading files to restore process " + lastCompositionLogRecordHashBase16 + ". Read " +
+                files.Count +
+                " files from '" +
+                sourcePath +
+                "'.");
 
             return files;
         }
@@ -211,19 +220,24 @@ public class RunServer
 
         using var httpClient = new System.Net.Http.HttpClient();
 
-        httpClient.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue(
-            "Basic",
-            Convert.ToBase64String(Encoding.UTF8.GetBytes(Configuration.BasicAuthenticationForAdmin(sitePassword))));
+        httpClient.DefaultRequestHeaders.Authorization =
+            new System.Net.Http.Headers.AuthenticationHeaderValue(
+                "Basic",
+                Convert.ToBase64String(
+                    Encoding.UTF8.GetBytes(Configuration.BasicAuthenticationForAdmin(sitePassword))));
 
         var deployAddress =
             site.TrimEnd('/') +
             StartupAdminInterface.PathApiReplaceProcessHistory;
 
-        Console.WriteLine("Beginning to place process history '" + processHistoryComponentHashBase16 + "' at '" + deployAddress + "'...");
+        Console.WriteLine(
+            "Beginning to place process history '" + processHistoryComponentHashBase16 + "' at '" + deployAddress +
+            "'...");
 
         var httpContent = new System.Net.Http.ByteArrayContent(processHistoryZipArchive);
 
         httpContent.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/zip");
+
         httpContent.Headers.ContentDisposition =
             new System.Net.Http.Headers.ContentDispositionHeaderValue("attachment") { FileName = processHistoryComponentHashBase16 + ".zip" };
 
@@ -231,7 +245,7 @@ public class RunServer
 
         Console.WriteLine(
             "Server response: " + httpResponse.StatusCode + "\n" +
-             httpResponse.Content.ReadAsStringAsync().Result);
+            httpResponse.Content.ReadAsStringAsync().Result);
     }
 
     public static (IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> files, string lastCompositionLogRecordHashBase16) ReadFilesForRestoreProcessFromAdminInterface(
@@ -240,44 +254,45 @@ public class RunServer
     {
         using var sourceHttpClient = new System.Net.Http.HttpClient { BaseAddress = new Uri(sourceAdminInterface) };
 
-        sourceHttpClient.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue(
-            "Basic",
-            Convert.ToBase64String(Encoding.UTF8.GetBytes(Configuration.BasicAuthenticationForAdmin(sourceAdminPassword))));
+        sourceHttpClient.DefaultRequestHeaders.Authorization =
+            new System.Net.Http.Headers.AuthenticationHeaderValue(
+                "Basic",
+                Convert.ToBase64String(
+                    Encoding.UTF8.GetBytes(Configuration.BasicAuthenticationForAdmin(sourceAdminPassword))));
 
-        var processHistoryFileStoreRemoteReader = new DelegatingFileStoreReader
-        (
-            ListFilesInDirectoryDelegate: directoryPath =>
-            {
-                var httpRequestPath =
-                    StartupAdminInterface.PathApiProcessHistoryFileStoreListFilesInDirectory + "/" +
-                    string.Join("/", directoryPath);
+        var processHistoryFileStoreRemoteReader =
+            new DelegatingFileStoreReader(
+                ListFilesInDirectoryDelegate: directoryPath =>
+                {
+                    var httpRequestPath =
+                        StartupAdminInterface.PathApiProcessHistoryFileStoreListFilesInDirectory + "/" +
+                        string.Join("/", directoryPath);
 
-                var response = sourceHttpClient.GetAsync(httpRequestPath).Result;
+                    var response = sourceHttpClient.GetAsync(httpRequestPath).Result;
 
-                if (!response.IsSuccessStatusCode)
-                    throw new Exception("Unexpected response status code: " + (int)response.StatusCode + " (" + response.StatusCode + ").");
+                    if (!response.IsSuccessStatusCode)
+                        throw new Exception("Unexpected response status code: " + (int)response.StatusCode + " (" + response.StatusCode + ").");
 
-                return
-                    response.Content.ReadAsStringAsync().Result.Split('\n', StringSplitOptions.RemoveEmptyEntries)
-                    .Select(path => path.Split('/').ToImmutableList());
-            },
-            GetFileContentDelegate: filePath =>
-            {
-                var httpRequestPath =
-                    StartupAdminInterface.PathApiProcessHistoryFileStoreGetFileContent + "/" +
-                    string.Join("/", filePath);
+                    return
+                        response.Content.ReadAsStringAsync().Result.Split('\n', StringSplitOptions.RemoveEmptyEntries)
+                        .Select(path => path.Split('/').ToImmutableList());
+                },
+                GetFileContentDelegate: filePath =>
+                {
+                    var httpRequestPath =
+                        StartupAdminInterface.PathApiProcessHistoryFileStoreGetFileContent + "/" +
+                        string.Join("/", filePath);
 
-                var response = sourceHttpClient.GetAsync(httpRequestPath).Result;
+                    var response = sourceHttpClient.GetAsync(httpRequestPath).Result;
 
-                if (response.StatusCode is System.Net.HttpStatusCode.NotFound)
-                    return null;
+                    if (response.StatusCode is System.Net.HttpStatusCode.NotFound)
+                        return null;
 
-                if (!response.IsSuccessStatusCode)
-                    throw new Exception("Unexpected response status code: " + (int)response.StatusCode + " (" + response.StatusCode + ").");
+                    if (!response.IsSuccessStatusCode)
+                        throw new Exception("Unexpected response status code: " + (int)response.StatusCode + " (" + response.StatusCode + ").");
 
-                return response.Content.ReadAsByteArrayAsync().Result;
-            }
-        );
+                    return response.Content.ReadAsByteArrayAsync().Result;
+                });
 
         return PersistentProcessLive.GetFilesForRestoreProcess(processHistoryFileStoreRemoteReader);
     }

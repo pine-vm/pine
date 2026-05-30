@@ -86,6 +86,7 @@ public static class StaticExpressionExtension
                 {
                     yield return list.Items[i];
                 }
+
                 yield break;
 
             case StaticExpression<TFunctionName>.Conditional conditional:
@@ -199,8 +200,8 @@ public static class StaticExpressionExtension
     /// </remarks>
     public static (StaticExpression<TFunctionName> expr, bool referencesOriginalEnv)
         TransformStaticExpressionWithOptionalReplacement<TFunctionName>(
-            Func<StaticExpression<TFunctionName>, StaticExpression<TFunctionName>?> findReplacement,
-            StaticExpression<TFunctionName> expression)
+        Func<StaticExpression<TFunctionName>, StaticExpression<TFunctionName>?> findReplacement,
+        StaticExpression<TFunctionName> expression)
     {
         if (findReplacement(expression) is { } fromReplacement)
             return (fromReplacement, false);
@@ -250,12 +251,11 @@ public static class StaticExpressionExtension
                             findReplacement,
                             conditional.FalseBranch);
 
-                    return (
-                        StaticExpression<TFunctionName>.ConditionalInstance(
+                    return
+                        (StaticExpression<TFunctionName>.ConditionalInstance(
                             conditionTransform.expr,
                             falseBranchTransform.expr,
-                            trueBranchTransform.expr
-                        ),
+                            trueBranchTransform.expr),
                         conditionTransform.referencesOriginalEnv ||
                         falseBranchTransform.referencesOriginalEnv ||
                         trueBranchTransform.referencesOriginalEnv);
@@ -268,11 +268,10 @@ public static class StaticExpressionExtension
                             findReplacement,
                             kernelApp.Input);
 
-                    return (
-                        StaticExpression<TFunctionName>.KernelApplicationInstance(
+                    return
+                        (StaticExpression<TFunctionName>.KernelApplicationInstance(
                             kernelApp.Function,
-                            argumentTransform.expr
-                        ),
+                            argumentTransform.expr),
                         argumentTransform.referencesOriginalEnv);
                 }
 
@@ -283,11 +282,10 @@ public static class StaticExpressionExtension
                             findReplacement,
                             functionApp.Arguments);
 
-                    return (
-                        StaticExpression<TFunctionName>.FunctionApplicationInstance(
+                    return
+                        (StaticExpression<TFunctionName>.FunctionApplicationInstance(
                             functionApp.FunctionName,
-                            argumentsTransform.expr
-                        ),
+                            argumentsTransform.expr),
                         argumentsTransform.referencesOriginalEnv);
                 }
 
@@ -303,11 +301,10 @@ public static class StaticExpressionExtension
                             findReplacement,
                             crashing.EnvironmentExpr);
 
-                    return (
-                        new StaticExpression<TFunctionName>.CrashingParseAndEval(
+                    return
+                        (new StaticExpression<TFunctionName>.CrashingParseAndEval(
                             encodedTransform.expr,
-                            envTransform.expr
-                        ),
+                            envTransform.expr),
                         encodedTransform.referencesOriginalEnv || envTransform.referencesOriginalEnv);
                 }
         }
@@ -462,8 +459,11 @@ public static class StaticExpressionExtension
                         StaticExpression<TFunctionName>.KernelApplicationInstance(
                             nameof(KernelFunction.skip),
                             StaticExpression<TFunctionName>.ListInstance(
-                                [StaticExpression<TFunctionName>.LiteralInstance(IntegerEncoding.EncodeSignedInteger(offset)),
-                                 current])));
+                                [
+                                StaticExpression<TFunctionName>.LiteralInstance(
+                                    IntegerEncoding.EncodeSignedInteger(offset)),
+                                current
+                                ])));
             }
         }
 
@@ -654,9 +654,10 @@ public static class StaticExpressionExtension
             StaticExpression<TFunctionName>.EnvironmentInstance) is { } exprPath &&
             IntPathEqualityComparer.Instance.Equals(exprPath, paramPath))
         {
-            return new ConcatComposition<TFunctionName>(
-                PrependedItems: [],
-                AppendedItems: []);
+            return
+                new ConcatComposition<TFunctionName>(
+                    PrependedItems: [],
+                    AppendedItems: []);
         }
 
         if (expr is StaticExpression<TFunctionName>.KernelApplication kernelApp &&
@@ -703,9 +704,10 @@ public static class StaticExpressionExtension
                         .Select(ConcatItem<TFunctionName>.Unconditional)
                         .ToArray();
 
-                    return new ConcatComposition<TFunctionName>(
-                        PrependedItems: [.. itemsPrependedWrapped, .. itemMatch.PrependedItems],
-                        AppendedItems: [.. itemMatch.AppendedItems, .. itemsAppendedWrapped]);
+                    return
+                        new ConcatComposition<TFunctionName>(
+                            PrependedItems: [.. itemsPrependedWrapped, .. itemMatch.PrependedItems],
+                            AppendedItems: [.. itemMatch.AppendedItems, .. itemsAppendedWrapped]);
                 }
             }
         }
@@ -722,24 +724,27 @@ public static class StaticExpressionExtension
             {
                 var middlePrepended =
                     trueMatch.PrependedItems
-                    .Select(item => ConcatItem<TFunctionName>.Conditional(
-                        condition,
-                        conditionNegated,
-                        item))
+                    .Select(
+                        item => ConcatItem<TFunctionName>.Conditional(
+                            condition,
+                            conditionNegated,
+                            item))
                     .ToArray();
 
                 var middleAppended =
                     trueMatch.AppendedItems
-                    .Select(item => ConcatItem<TFunctionName>.Conditional(
-                        condition,
-                        conditionNegated,
-                        item))
+                    .Select(
+                        item => ConcatItem<TFunctionName>.Conditional(
+                            condition,
+                            conditionNegated,
+                            item))
                     .ToArray();
 
-                return new ConcatComposition<TFunctionName>(
-                    PrependedItems:
+                return
+                    new ConcatComposition<TFunctionName>(
+                        PrependedItems:
                         [.. middlePrepended, .. falseMatch.PrependedItems],
-                    AppendedItems:
+                        AppendedItems:
                         [.. falseMatch.AppendedItems, .. middleAppended]);
             }
 
@@ -759,12 +764,13 @@ public static class StaticExpressionExtension
                 TryParseParamPathAsPartOfConcatTree(conditional.TrueBranch, paramPath) is { } trueMatch)
             {
                 if (falseMatch.PrependedItems.SequenceEqual(trueMatch.PrependedItems) &&
-                   falseMatch.AppendedItems.SequenceEqual(trueMatch.AppendedItems))
+                    falseMatch.AppendedItems.SequenceEqual(trueMatch.AppendedItems))
                 {
-                    return new ConcatComposition<TFunctionName>(
-                        PrependedItems:
+                    return
+                        new ConcatComposition<TFunctionName>(
+                            PrependedItems:
                             falseMatch.PrependedItems,
-                        AppendedItems:
+                            AppendedItems:
                             falseMatch.AppendedItems);
                 }
 
@@ -879,7 +885,8 @@ public static class StaticExpressionExtension
                 return false;
 
             case StaticExpression<TFunctionName>.Conditional cond:
-                return MentionsEnvPath(cond.Condition, path)
+                return
+                    MentionsEnvPath(cond.Condition, path)
                     || MentionsEnvPath(cond.TrueBranch, path)
                     || MentionsEnvPath(cond.FalseBranch, path);
 

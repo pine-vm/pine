@@ -111,7 +111,7 @@ public static class FileTreeExtensions
         IEnumerable<(IImmutableList<string> filePath, ReadOnlyMemory<byte> fileContent)> filesBeforeSorting) =>
         ToFlatDictionaryWithPathComparer(
             filesBeforeSorting
-                .Select(file => ((IReadOnlyList<string>)file.filePath, file.fileContent)).ToImmutableList());
+            .Select(file => ((IReadOnlyList<string>)file.filePath, file.fileContent)).ToImmutableList());
 
     /// <summary>
     /// Builds a dictionary from a sequence of files (path, content) using a path comparer. Paths are provided as read-only lists.

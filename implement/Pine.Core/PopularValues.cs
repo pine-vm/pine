@@ -34,7 +34,7 @@ public static class PopularValues
         select new string([(char)c1, (char)c2]);
 
     private static IEnumerable<string> PopularStringsSource =>
-    [
+        [
         new string(' ', 4),
         new string(' ', 8),
         new string(' ', 12),
@@ -715,8 +715,7 @@ public static class PopularValues
         "RuntimeInformationRecord",
         "runtimeIdentifier",
         "osPlatform",
-
-    ];
+        ];
 
     public static IEnumerable<ElmValue> PopularElmValuesSource()
     {

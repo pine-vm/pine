@@ -31,6 +31,7 @@ public static class PineValueHashTree
 
     // Pre-encode ASCII representations for small counts to avoid per-call allocations.
     private const uint PreencodedCountMax = 1000u;
+
     private static readonly ReadOnlyMemory<byte>[] s_preencodedCounts = CreatePreencodedCounts();
 
     private static ReadOnlyMemory<byte>[] CreatePreencodedCounts()
@@ -341,10 +342,11 @@ public static class PineValueHashTree
             rootSerializationInitialized = true;
         }
 
-        return new HashComputationResult(
-            rootHash,
-            rootSerializationInitialized ? rootSerialization : ReadOnlyMemory<byte>.Empty,
-            rootDependencies);
+        return
+            new HashComputationResult(
+                rootHash,
+                rootSerializationInitialized ? rootSerialization : ReadOnlyMemory<byte>.Empty,
+                rootDependencies);
     }
 
     private static ReadOnlyMemory<byte> SerializeBlobValue(PineValue.BlobValue blobValue)
@@ -411,8 +413,10 @@ public static class PineValueHashTree
 
     private static ReadOnlyMemory<byte> CountEncoding(uint count) =>
         count < s_preencodedCounts.Length
-            ? s_preencodedCounts[(int)count]
-            : System.Text.Encoding.ASCII.GetBytes(count.ToString());
+        ?
+        s_preencodedCounts[(int)count]
+        :
+        System.Text.Encoding.ASCII.GetBytes(count.ToString());
 
     /// <summary>
     /// Deserializes a value from its canonical hash-tree serialization, using the provided lookup to load list elements by hash.

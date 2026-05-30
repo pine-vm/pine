@@ -68,15 +68,15 @@ public static class Testing
                     string.Join(
                         "\n",
                         [
-                            "Failed in chunk " + chunkIndex + " of " + expectedChunks.Count,
-                                "Chunks differ at char index " + firstDifferentCharIndex + ":",
-                                "↓ (actual)",
-                                responseSlice,
-                                "<vs>",
-                                expectedSlice,
-                                "↑ (expected)",
-                                "Text following previous checked chunk is:",
-                                remainingText,
+                        "Failed in chunk " + chunkIndex + " of " + expectedChunks.Count,
+                        "Chunks differ at char index " + firstDifferentCharIndex + ":",
+                        "↓ (actual)",
+                        responseSlice,
+                        "<vs>",
+                        expectedSlice,
+                        "↑ (expected)",
+                        "Text following previous checked chunk is:",
+                        remainingText,
                         ]);
             }
 

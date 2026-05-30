@@ -159,6 +159,7 @@ public record StaticFunctionInterface
                     {
                         stack.Push(list.Items[i]);
                     }
+
                     break;
 
                 case Expression.ParseAndEval parseAndEvaluate:

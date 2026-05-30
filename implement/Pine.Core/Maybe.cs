@@ -87,7 +87,9 @@ public abstract record Maybe<JustT>
         this switch
         {
             Just just => just.Value,
-            _ => buildDefault()
+
+            _ =>
+            buildDefault()
         };
 }
 
@@ -101,8 +103,10 @@ public static class Maybe
     /// </summary>
     public static Maybe<ClassJustT> NothingFromNull<ClassJustT>(ClassJustT? maybeNull)
         where ClassJustT : class =>
-        maybeNull is { } notNull ?
-        Maybe<ClassJustT>.just(notNull) :
+        maybeNull is { } notNull
+        ?
+        Maybe<ClassJustT>.just(notNull)
+        :
         Maybe<ClassJustT>.nothing();
 
     /// <summary>
@@ -110,7 +114,9 @@ public static class Maybe
     /// </summary>
     public static Maybe<StructJustT> NothingFromNull<StructJustT>(StructJustT? maybeNull)
         where StructJustT : struct =>
-        maybeNull is { } notNull ?
-        Maybe<StructJustT>.just(notNull) :
+        maybeNull is { } notNull
+        ?
+        Maybe<StructJustT>.just(notNull)
+        :
         Maybe<StructJustT>.nothing();
 }

@@ -15,8 +15,10 @@ public class BytesConversions
     {
         using var compressedStream = new System.IO.MemoryStream();
 
-        using var compressStream = new System.IO.Compression.GZipStream(
-            compressedStream, System.IO.Compression.CompressionMode.Compress);
+        using var compressStream =
+            new System.IO.Compression.GZipStream(
+                compressedStream,
+                System.IO.Compression.CompressionMode.Compress);
 
         compressStream.Write(original.Span);
         compressStream.Flush();
@@ -30,8 +32,10 @@ public class BytesConversions
     /// <returns></returns>
     public static ReadOnlyMemory<byte> DecompressGzip(ReadOnlyMemory<byte> compressed)
     {
-        using var decompressStream = new System.IO.Compression.GZipStream(
-            new System.IO.MemoryStream(compressed.ToArray()), System.IO.Compression.CompressionMode.Decompress);
+        using var decompressStream =
+            new System.IO.Compression.GZipStream(
+                new System.IO.MemoryStream(compressed.ToArray()),
+                System.IO.Compression.CompressionMode.Decompress);
 
         using var decompressedStream = new System.IO.MemoryStream();
 
@@ -47,8 +51,10 @@ public class BytesConversions
     {
         using var deflatedStream = new System.IO.MemoryStream();
 
-        using var compressor = new System.IO.Compression.DeflateStream(
-            deflatedStream, System.IO.Compression.CompressionMode.Compress);
+        using var compressor =
+            new System.IO.Compression.DeflateStream(
+                deflatedStream,
+                System.IO.Compression.CompressionMode.Compress);
 
         compressor.Write(input.Span);
 
@@ -64,8 +70,10 @@ public class BytesConversions
     {
         using var inflatedStream = new System.IO.MemoryStream();
 
-        using var deflateStream = new System.IO.Compression.DeflateStream(
-            new System.IO.MemoryStream(input.ToArray()), System.IO.Compression.CompressionMode.Decompress);
+        using var deflateStream =
+            new System.IO.Compression.DeflateStream(
+                new System.IO.MemoryStream(input.ToArray()),
+                System.IO.Compression.CompressionMode.Decompress);
 
         deflateStream.CopyTo(inflatedStream);
 

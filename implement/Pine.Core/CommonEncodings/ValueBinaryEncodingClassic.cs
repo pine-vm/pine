@@ -404,13 +404,15 @@ public static class ValueBinaryEncodingClassic
     {
         try
         {
-            return DecodeSequence32(sourceBytes)
+            return
+                DecodeSequence32(sourceBytes)
                 .Last().declValue;
         }
         catch
         {
             // Fall back to 64-bit format for backward compatibility
-            return DecodeSequence64(sourceBytes)
+            return
+                DecodeSequence64(sourceBytes)
                 .Last().declValue;
         }
     }
@@ -510,13 +512,15 @@ public static class ValueBinaryEncodingClassic
             sourceBytes.Slice(start: sourceBytesOffset + 12, length: (int)bytesCount).CopyTo(bytes);
 
             var paddingBytesCount =
-                 (bytesCount % 4) switch
-                 {
-                     1 => 3,
-                     2 => 2,
-                     3 => 1,
-                     _ => 0
-                 };
+                (bytesCount % 4) switch
+                {
+                    1 => 3,
+                    2 => 2,
+                    3 => 1,
+
+                    _ =>
+                    0
+                };
 
             return (PineValue.Blob(bytes), offset: 12 + (int)bytesCount + paddingBytesCount);
         }
@@ -616,13 +620,15 @@ public static class ValueBinaryEncodingClassic
             sourceBytes.Slice(start: sourceBytesOffset + 8, length: bytesCount).CopyTo(bytes);
 
             var paddingBytesCount =
-                 (bytesCount % 4) switch
-                 {
-                     1 => 3,
-                     2 => 2,
-                     3 => 1,
-                     _ => 0
-                 };
+                (bytesCount % 4) switch
+                {
+                    1 => 3,
+                    2 => 2,
+                    3 => 1,
+
+                    _ =>
+                    0
+                };
 
             return (PineValue.Blob(bytes), offset: 8 + bytesCount + paddingBytesCount);
         }

@@ -186,6 +186,7 @@ public abstract record FileTree : IEquatable<FileTree>
                     {
                         stack.Push((path.Add(name), component));
                     }
+
                     break;
 
                 default:
@@ -471,11 +472,12 @@ public abstract record FileTree : IEquatable<FileTree>
             new DirectoryNode(
                 tree.Items
                 .Where(treeNode => pathFilter([.. currentPrefix ?? [], treeNode.name]))
-                .Select(treeNode => (treeNode.name,
-                FilterNodesByPath(
-                    treeNode.component,
-                    pathFilter,
-                    currentPrefix: [.. currentPrefix ?? [], treeNode.name])))
+                .Select(
+                    treeNode => (treeNode.name,
+                    FilterNodesByPath(
+                        treeNode.component,
+                        pathFilter,
+                        currentPrefix: [.. currentPrefix ?? [], treeNode.name])))
                 .ToImmutableList()),
 
             _ =>
@@ -539,7 +541,8 @@ public abstract record FileTree : IEquatable<FileTree>
 
             DirectoryNode tree =>
             new DirectoryNode(
-                tree.Items.Order(TreeEntryDefaultComparer).Select(child => (child.name, Sort(child.component))).ToImmutableList()),
+                tree.Items
+                .Order(TreeEntryDefaultComparer).Select(child => (child.name, Sort(child.component))).ToImmutableList()),
 
             _ =>
             throw new NotImplementedException(
@@ -596,15 +599,15 @@ public abstract record FileTree : IEquatable<FileTree>
     public static FileTree FromSetOfFilesWithCommonFilePath(
         IEnumerable<(string path, ReadOnlyMemory<byte> fileContent)> filesWithPath) =>
         FromSetOfFiles(
-            filesWithPath.Select(fileWithPath =>
-            {
-                var pathElements =
-                    fileWithPath.path.Split("/").SelectMany(pathElement => pathElement.Split(@"\"))
+            filesWithPath.Select(
+                fileWithPath =>
+                {
+                    var pathElements =
+                        fileWithPath.path.Split("/").SelectMany(pathElement => pathElement.Split(@"\"))
                         .ToImmutableList();
 
-                return (path: (IReadOnlyList<string>)pathElements, fileWithPath.fileContent);
-            })
-        );
+                    return (path: (IReadOnlyList<string>)pathElements, fileWithPath.fileContent);
+                }));
 
     /// <summary>
     /// Builds a <see cref="FileTree"/> from a sequence of files where each file has a path represented as a list of strings.
@@ -627,7 +630,8 @@ public abstract record FileTree : IEquatable<FileTree>
         where PathT : IReadOnlyList<string>
         =>
         FromSetOfFilesWithStringPath(
-            filesWithPath.Select(pathAndFileContent =>
+            filesWithPath.Select(
+                pathAndFileContent =>
                 (path: pathAndFileContent.Key, fileContent: pathAndFileContent.Value)));
 
     /// <summary>
@@ -642,10 +646,12 @@ public abstract record FileTree : IEquatable<FileTree>
     {
         ArgumentNullException.ThrowIfNull(filesWithPath);
 
-        return filesWithPath.Aggregate(
-            seed: EmptyTree,
-            func: (tree, filePathAndContent) =>
-                tree.SetNodeAtPathSorted(filePathAndContent.path,
+        return
+            filesWithPath.Aggregate(
+                seed: EmptyTree,
+                func: (tree, filePathAndContent) =>
+                tree.SetNodeAtPathSorted(
+                    filePathAndContent.path,
                     File(filePathAndContent.fileContent)));
     }
 }

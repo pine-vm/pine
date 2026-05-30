@@ -140,9 +140,11 @@ public static class ValueEncodingFlatDeterministic
                     case 1:
                         WriteAndCount(s_paddingBytes_3.Span);
                         break;
+
                     case 2:
                         WriteAndCount(s_paddingBytes_2.Span);
                         break;
+
                     case 3:
                         WriteAndCount(s_paddingBytes_1.Span);
                         break;

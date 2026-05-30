@@ -530,7 +530,8 @@ public static class FunctionValueBuilder
 
         var invocationExpr =
             new Expression.ParseAndEval(
-                encoded: Expression.LiteralInstance(ExpressionEncoding.EncodeExpressionAsValue(innerExpression, encodeExprCache)),
+                encoded:
+                Expression.LiteralInstance(ExpressionEncoding.EncodeExpressionAsValue(innerExpression, encodeExprCache)),
                 environment: invocationEnv);
 
         return ExpressionEncoding.EncodeExpressionAsValue(invocationExpr, encodeExprCache);
@@ -552,7 +553,8 @@ public static class FunctionValueBuilder
 
         var invocationExpr =
             new Expression.ParseAndEval(
-                encoded: Expression.LiteralInstance(ExpressionEncoding.EncodeExpressionAsValue(innerExpression, encodeExprCache)),
+                encoded:
+                Expression.LiteralInstance(ExpressionEncoding.EncodeExpressionAsValue(innerExpression, encodeExprCache)),
                 environment: invocationEnv);
 
         return ExpressionEncoding.EncodeExpressionAsValue(invocationExpr, encodeExprCache);
@@ -629,7 +631,8 @@ public static class FunctionValueBuilder
         // ParseAndEval(innerExpr, invocationEnv)
         return
             new Expression.ParseAndEval(
-                encoded: Expression.LiteralInstance(ExpressionEncoding.EncodeExpressionAsValue(innerExpression, encodeExprCache)),
+                encoded:
+                Expression.LiteralInstance(ExpressionEncoding.EncodeExpressionAsValue(innerExpression, encodeExprCache)),
                 environment: invocationEnv);
     }
 

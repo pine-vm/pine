@@ -1,5 +1,5 @@
-using System.Collections.Generic;
 using System;
+using System.Collections.Generic;
 using System.Linq;
 
 namespace Pine.Core.CommonEncodings;
@@ -66,7 +66,8 @@ public static class ExpressionEncoding
         Expression expression,
         Func<Expression, PineValue.ListValue> encodeSubexpression)
     {
-        if ((ReusedInstances.Instance.ExpressionEncodings?.TryGetValue(expression, out var encoded) ?? false) && encoded is not null)
+        if ((ReusedInstances.Instance.ExpressionEncodings?.TryGetValue(expression, out var encoded) ?? false) &&
+            encoded is not null)
             return encoded;
 
         return expression switch
@@ -95,7 +96,8 @@ public static class ExpressionEncoding
             EncodeChoiceTypeVariantAsPineValue(
                 "StringTag",
                 PineValue.List(
-                    [StringEncoding.ValueFromString(stringTag.Tag),
+                    [
+                    StringEncoding.ValueFromString(stringTag.Tag),
                     encodeSubexpression(stringTag.Tagged)
                     ])),
 
@@ -263,7 +265,8 @@ public static class ExpressionEncoding
     private static PineValue.ListValue EncodeParseAndEval(
         Expression.ParseAndEval parseAndEval,
         Func<Expression, PineValue.ListValue> encodeSubexpression) =>
-        EncodeChoiceTypeVariantAsPineValue("ParseAndEval",
+        EncodeChoiceTypeVariantAsPineValue(
+            "ParseAndEval",
             PineValue.List(
                 [
                 encodeSubexpression(parseAndEval.Encoded),
@@ -421,10 +424,11 @@ public static class ExpressionEncoding
                 "Unexpected result type: " + parseTrueBranchResult.GetType().FullName);
         }
 
-        return Expression.ConditionalInstance(
-            condition: condition,
-            falseBranch: falseBranch,
-            trueBranch: trueBranch);
+        return
+            Expression.ConditionalInstance(
+                condition: condition,
+                falseBranch: falseBranch,
+                trueBranch: trueBranch);
     }
 
     private static Result<string, Expression> ParseStringTag(
@@ -509,7 +513,8 @@ public static class ExpressionEncoding
                                     (Result<string, Record>)err.Value,
 
                                     Result<string, FieldC>.Ok fieldCDecoded =>
-                                    Result<string, Record>.ok(compose(fieldADecoded.Value, fieldBDecoded.Value, fieldCDecoded.Value)),
+                                    Result<string, Record>.ok(
+                                        compose(fieldADecoded.Value, fieldBDecoded.Value, fieldCDecoded.Value)),
 
                                     var other =>
                                     throw new NotImplementedException("Unexpected result type: " + other.GetType().FullName)
@@ -584,11 +589,14 @@ public static class ExpressionEncoding
     private static PineValue.ListValue EncodeRecordToPineValue(
         params (string fieldName, PineValue fieldValue)[] fields) =>
         PineValue.List(
-            [..fields.Select(field => PineValue.List(
-                [
+            [
+            ..fields.Select(
+                field => PineValue.List(
+                    [
                     StringEncoding.ValueFromString(field.fieldName),
                     field.fieldValue
-                ]))]);
+                    ]))
+            ]);
 
 
     private static Result<string, IReadOnlyDictionary<string, PineValue>> ParseRecordFromPineValue(PineValue value)
@@ -620,8 +628,8 @@ public static class ExpressionEncoding
     private static PineValue.ListValue EncodeChoiceTypeVariantAsPineValue(string tagName, PineValue tagArguments) =>
         PineValue.List(
             [
-                StringEncoding.ValueFromString(tagName),
-                tagArguments,
+            StringEncoding.ValueFromString(tagName),
+            tagArguments,
             ]);
 
     private static Result<string, T> ParseChoiceFromPineValue<T>(

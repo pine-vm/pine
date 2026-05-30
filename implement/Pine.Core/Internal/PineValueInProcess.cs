@@ -85,10 +85,11 @@ public class PineValueInProcess
             }
         }
 
-        return new PineValueInProcess
-        {
-            _evaluated = evaluated,
-        };
+        return
+            new PineValueInProcess
+            {
+                _evaluated = evaluated,
+            };
     }
 
     /// <summary>
@@ -106,10 +107,11 @@ public class PineValueInProcess
             return EmptyList;
         }
 
-        return new PineValueInProcess
-        {
-            _list = list,
-        };
+        return
+            new PineValueInProcess
+            {
+                _list = list,
+            };
     }
 
     /// <summary>
@@ -126,10 +128,11 @@ public class PineValueInProcess
         PineValueInProcess tag,
         IReadOnlyList<PineValueInProcess> tagArgs)
     {
-        return new PineValueInProcess
-        {
-            _tagged = (tag, tagArgs)
-        };
+        return
+            new PineValueInProcess
+            {
+                _tagged = (tag, tagArgs)
+            };
     }
 
     /// <summary>
@@ -139,10 +142,11 @@ public class PineValueInProcess
     /// <returns>A new <see cref="PineValueInProcess"/> representing the integer.</returns>
     public static PineValueInProcess CreateInteger(BigInteger integer)
     {
-        return new PineValueInProcess
-        {
-            _integer = integer,
-        };
+        return
+            new PineValueInProcess
+            {
+                _integer = integer,
+            };
     }
 
     /// <summary>
@@ -366,10 +370,11 @@ public class PineValueInProcess
 
         if (source._sliceBuilder is { } sliceBuilder)
         {
-            return new PineValueInProcess
-            {
-                _sliceBuilder = sliceBuilder.Skip(skipCount),
-            };
+            return
+                new PineValueInProcess
+                {
+                    _sliceBuilder = sliceBuilder.Skip(skipCount),
+                };
         }
 
         if (source._tagged is { } tagged)
@@ -408,10 +413,11 @@ public class PineValueInProcess
 
         var evaluated = source.Evaluate();
 
-        return new PineValueInProcess
-        {
-            _sliceBuilder = ImmutableSliceBuilder.Create(evaluated).Skip(skipCount),
-        };
+        return
+            new PineValueInProcess
+            {
+                _sliceBuilder = ImmutableSliceBuilder.Create(evaluated).Skip(skipCount),
+            };
     }
 
     /// <summary>
@@ -429,10 +435,11 @@ public class PineValueInProcess
 
         if (source._sliceBuilder is { } sliceBuilder)
         {
-            return new PineValueInProcess
-            {
-                _sliceBuilder = sliceBuilder.Take(takeCount),
-            };
+            return
+                new PineValueInProcess
+                {
+                    _sliceBuilder = sliceBuilder.Take(takeCount),
+                };
         }
 
         if (source._tagged is { } tagged)
@@ -477,10 +484,11 @@ public class PineValueInProcess
 
         var evaluated = source.Evaluate();
 
-        return new PineValueInProcess
-        {
-            _sliceBuilder = ImmutableSliceBuilder.Create(evaluated).Take(takeCount),
-        };
+        return
+            new PineValueInProcess
+            {
+                _sliceBuilder = ImmutableSliceBuilder.Create(evaluated).Take(takeCount),
+            };
     }
 
     /// <summary>
@@ -493,18 +501,20 @@ public class PineValueInProcess
     {
         if (source._sliceBuilder is { } sliceBuilder)
         {
-            return new PineValueInProcess
-            {
-                _sliceBuilder = sliceBuilder.TakeLast(takeCount),
-            };
+            return
+                new PineValueInProcess
+                {
+                    _sliceBuilder = sliceBuilder.TakeLast(takeCount),
+                };
         }
 
         var evaluated = source.Evaluate();
 
-        return new PineValueInProcess
-        {
-            _sliceBuilder = ImmutableSliceBuilder.Create(evaluated).TakeLast(takeCount),
-        };
+        return
+            new PineValueInProcess
+            {
+                _sliceBuilder = ImmutableSliceBuilder.Create(evaluated).TakeLast(takeCount),
+            };
     }
 
     /// <summary>
@@ -535,10 +545,11 @@ public class PineValueInProcess
                 return left;
             }
 
-            return new PineValueInProcess
-            {
-                _concatBuilder = new ImmutableConcatBuilder.Node([leftConcatBuilder, rightConcatBuilder])
-            };
+            return
+                new PineValueInProcess
+                {
+                    _concatBuilder = new ImmutableConcatBuilder.Node([leftConcatBuilder, rightConcatBuilder])
+                };
         }
 
         if (left._concatBuilder is { } leftOnlyConcatBuilder)
@@ -550,10 +561,11 @@ public class PineValueInProcess
 
             var rightEvaluated = right.Evaluate();
 
-            return new PineValueInProcess
-            {
-                _concatBuilder = leftOnlyConcatBuilder.AppendItems([rightEvaluated]),
-            };
+            return
+                new PineValueInProcess
+                {
+                    _concatBuilder = leftOnlyConcatBuilder.AppendItems([rightEvaluated]),
+                };
         }
 
         if (right._concatBuilder is { } rightOnlyConcatBuilder)
@@ -565,10 +577,11 @@ public class PineValueInProcess
 
             var leftEvaluated = left.Evaluate();
 
-            return new PineValueInProcess
-            {
-                _concatBuilder = rightOnlyConcatBuilder.PrependItems([leftEvaluated]),
-            };
+            return
+                new PineValueInProcess
+                {
+                    _concatBuilder = rightOnlyConcatBuilder.PrependItems([leftEvaluated]),
+                };
         }
 
         if (AreEqual(left, PineValue.EmptyList))
@@ -584,10 +597,11 @@ public class PineValueInProcess
         var leftEval = left.Evaluate();
         var rightEval = right.Evaluate();
 
-        return new PineValueInProcess
-        {
-            _concatBuilder = new ImmutableConcatBuilder.Leaf(new PineValue[] { leftEval, rightEval })
-        };
+        return
+            new PineValueInProcess
+            {
+                _concatBuilder = new ImmutableConcatBuilder.Leaf(new PineValue[] { leftEval, rightEval })
+            };
     }
 
     /// <summary>
@@ -800,7 +814,9 @@ public class PineValueInProcess
         return eval.Equals(pineValue);
     }
 
-    private static bool AreListItemsEqual(IReadOnlyList<PineValueInProcess> left, IReadOnlyList<PineValueInProcess> right)
+    private static bool AreListItemsEqual(
+        IReadOnlyList<PineValueInProcess> left,
+        IReadOnlyList<PineValueInProcess> right)
     {
         if (ReferenceEquals(left, right))
         {
@@ -877,9 +893,10 @@ public class PineValueInProcess
         {
             if (current._evaluated is { } currentMaterialized)
             {
-                return PineValueExtension.ValueFromPathOrNull(
-                    currentMaterialized,
-                    path[i..]);
+                return
+                    PineValueExtension.ValueFromPathOrNull(
+                        currentMaterialized,
+                        path[i..]);
             }
 
             current = current.GetElementAt(path[i]);

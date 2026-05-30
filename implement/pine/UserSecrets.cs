@@ -16,7 +16,8 @@ public static class UserSecrets
     public static void StorePasswordForSite(string site, string password)
     {
         FileStore.SetFileContent(
-            ImmutableList.Create(System.Web.HttpUtility.UrlEncode(site.TrimEnd('/'))), Encoding.UTF8.GetBytes(password));
+            ImmutableList.Create(System.Web.HttpUtility.UrlEncode(site.TrimEnd('/'))),
+            Encoding.UTF8.GetBytes(password));
     }
 
     public static string? LoadPasswordForSite(string site)

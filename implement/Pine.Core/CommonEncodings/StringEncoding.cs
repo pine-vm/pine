@@ -213,8 +213,9 @@ public static class StringEncoding
         {
             if (list.Items.Span[index] is not PineValue.BlobValue blobValue)
             {
-                return Result<string, string>.err(
-                    "failed decoding char as integer at [" + index + "]: Not a blob");
+                return
+                    Result<string, string>.err(
+                        "failed decoding char as integer at [" + index + "]: Not a blob");
             }
 
             var charInteger = IntegerEncoding.ParseUnsignedInteger(blobValue.Bytes.Span);

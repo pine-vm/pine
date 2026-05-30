@@ -26,21 +26,24 @@ public class PublicAppState(
         ILogger logger,
         IReadOnlyList<string> publicWebHostUrls)
     {
-        appBuilder.Services.AddLogging(logging =>
-        {
-            logging.AddConsole();
-            logging.AddDebug();
-        });
+        appBuilder.Services.AddLogging(
+            logging =>
+            {
+                logging.AddConsole();
+                logging.AddDebug();
+            });
 
         var webHostBuilder =
             appBuilder.WebHost
-            .ConfigureKestrel(kestrelOptions =>
-            {
-            })
-            .ConfigureServices(services =>
-            {
-                ConfigureServices(serverAndElmAppConfig, services, logger);
-            })
+            .ConfigureKestrel(
+                kestrelOptions =>
+                {
+                })
+            .ConfigureServices(
+                services =>
+                {
+                    ConfigureServices(serverAndElmAppConfig, services, logger);
+                })
             .UseUrls([.. publicWebHostUrls])
             .WithSettingDateTimeOffsetDelegate(getDateTimeOffset);
 
@@ -48,11 +51,12 @@ public class PublicAppState(
 
         app.UseResponseCompression();
 
-        app.Lifetime.ApplicationStopping.Register(() =>
-        {
-            ApplicationStoppingCancellationTokenSource.Cancel();
-            app.Logger?.LogInformation("Public app noticed ApplicationStopping.");
-        });
+        app.Lifetime.ApplicationStopping.Register(
+            () =>
+            {
+                ApplicationStoppingCancellationTokenSource.Cancel();
+                app.Logger?.LogInformation("Public app noticed ApplicationStopping.");
+            });
 
         app.Run(HandleRequestAsync);
 
@@ -64,10 +68,11 @@ public class PublicAppState(
         IServiceCollection services,
         ILogger logger)
     {
-        services.AddResponseCompression(options =>
-        {
-            options.EnableForHttps = true;
-        });
+        services.AddResponseCompression(
+            options =>
+            {
+                options.EnableForHttps = true;
+            });
 
         Asp.ConfigureServices(services);
     }

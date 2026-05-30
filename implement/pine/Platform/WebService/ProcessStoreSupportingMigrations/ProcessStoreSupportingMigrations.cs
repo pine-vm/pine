@@ -44,29 +44,28 @@ public interface IProcessStoreReader
             new ConcurrentDictionary<IImmutableList<string>, ReadOnlyMemory<byte>>(
                 comparer: EnumerableExtensions.EqualityComparer<IImmutableList<string>>());
 
-        var fileStoreWriter = new DelegatingFileStoreWriter
-        (
-            SetFileContentDelegate:
-            pathAndFileContent =>
-            projectedFiles[pathAndFileContent.path] = pathAndFileContent.fileContent,
+        var fileStoreWriter =
+            new DelegatingFileStoreWriter(
+                SetFileContentDelegate:
+                pathAndFileContent =>
+                projectedFiles[pathAndFileContent.path] = pathAndFileContent.fileContent,
 
-            AppendFileContentDelegate:
-            pathAndFileContent =>
-            {
-                if (!projectedFiles.TryGetValue(pathAndFileContent.path, out var fileContentBefore))
+                AppendFileContentDelegate:
+                pathAndFileContent =>
                 {
-                    fileContentBefore =
-                    originalFileStore.GetFileContent(pathAndFileContent.path) ??
-                    ReadOnlyMemory<byte>.Empty;
-                }
+                    if (!projectedFiles.TryGetValue(pathAndFileContent.path, out var fileContentBefore))
+                    {
+                        fileContentBefore =
+                            originalFileStore.GetFileContent(pathAndFileContent.path) ??
+                            ReadOnlyMemory<byte>.Empty;
+                    }
 
-                projectedFiles[pathAndFileContent.path] =
-                BytesConversions.Concat(fileContentBefore.Span, pathAndFileContent.fileContent.Span);
-            },
+                    projectedFiles[pathAndFileContent.path] =
+                        BytesConversions.Concat(fileContentBefore.Span, pathAndFileContent.fileContent.Span);
+                },
 
-            DeleteFileDelegate:
-            _ => throw new Exception("Unexpected operation delete file.")
-        );
+                DeleteFileDelegate:
+                _ => throw new Exception("Unexpected operation delete file."));
 
         var processStoreWriter =
             new ProcessStoreWriterInFileStore(
@@ -77,44 +76,46 @@ public interface IProcessStoreReader
 
         processStoreWriter.AppendCompositionLogRecord(compositionLogEvent);
 
-        var projectedFileStoreReader = new DelegatingFileStoreReader
-        (
-            GetFileContentDelegate: filePath =>
-            {
-                if (projectedFiles.TryGetValue(filePath, out var projectFileContent))
-                    return projectFileContent;
+        var projectedFileStoreReader =
+            new DelegatingFileStoreReader(
+                GetFileContentDelegate: filePath =>
+                {
+                    if (projectedFiles.TryGetValue(filePath, out var projectFileContent))
+                        return projectFileContent;
 
-                return originalFileStore.GetFileContent(filePath);
-            },
-            ListFilesInDirectoryDelegate: directoryPath =>
-            {
-                var fromProjectedFiles =
-                    projectedFiles.Keys
-                    .SelectWhereNotNull(projectedFilePath =>
-                        projectedFilePath.Take(directoryPath.Count).SequenceEqual(directoryPath) ?
-                        projectedFilePath.RemoveRange(0, directoryPath.Count)
-                        :
-                        null);
+                    return originalFileStore.GetFileContent(filePath);
+                },
+                ListFilesInDirectoryDelegate: directoryPath =>
+                {
+                    var fromProjectedFiles =
+                        projectedFiles.Keys
+                        .SelectWhereNotNull(
+                            projectedFilePath =>
+                            projectedFilePath.Take(directoryPath.Count).SequenceEqual(directoryPath)
+                            ?
+                            projectedFilePath.RemoveRange(0, directoryPath.Count)
+                            :
+                            null);
 
-                return
-                    originalFileStore.ListFilesInDirectory(directoryPath).Concat(fromProjectedFiles)
-                    .Distinct(EnumerableExtensions.EqualityComparer<IImmutableList<string>>());
-            }
-        );
+                    return
+                        originalFileStore.ListFilesInDirectory(directoryPath).Concat(fromProjectedFiles)
+                        .Distinct(EnumerableExtensions.EqualityComparer<IImmutableList<string>>());
+                });
 
-        return new FileStoreReaderProjectionResult(
-            ProjectedFiles: projectedFiles.Select(filePathAndContent => (filePathAndContent.Key, filePathAndContent.Value)),
-            ProjectedReader: projectedFileStoreReader);
+        return
+            new FileStoreReaderProjectionResult(
+                ProjectedFiles:
+                projectedFiles.Select(filePathAndContent => (filePathAndContent.Key, filePathAndContent.Value)),
+                ProjectedReader: projectedFileStoreReader);
     }
 
     public static IProcessStoreReader EmptyProcessStoreReader()
     {
-        return new DelegatingProcessStoreReader
-        (
-            LoadComponentDelegate: _ => null,
-            LoadProvisionalReductionDelegate: _ => null,
-            EnumerateSerializedCompositionLogRecordsReverseDelegate: () => []
-        );
+        return
+            new DelegatingProcessStoreReader(
+                LoadComponentDelegate: _ => null,
+                LoadProvisionalReductionDelegate: _ => null,
+                EnumerateSerializedCompositionLogRecordsReverseDelegate: () => []);
     }
 }
 
@@ -138,7 +139,8 @@ public record DelegatingProcessStoreWriter(
     Func<PineValue, (ReadOnlyMemory<byte> hash, string hashBase16)> StoreComponentDelegate,
     Action<ProvisionalReductionRecordInFile> StoreProvisionalReductionDelegate) : IProcessStoreWriter
 {
-    public (ReadOnlyMemory<byte> recordHash, string recordHashBase16) AppendCompositionLogRecord(CompositionLogRecordInFile.CompositionEvent compositionEvent) =>
+    public (ReadOnlyMemory<byte> recordHash, string recordHashBase16) AppendCompositionLogRecord(
+        CompositionLogRecordInFile.CompositionEvent compositionEvent) =>
         AppendCompositionLogRecordDelegate(compositionEvent);
 
     public (ReadOnlyMemory<byte> hash, string hashBase16) StoreComponent(PineValue component) =>
@@ -211,10 +213,11 @@ public class ProcessStoreInFileStore
 {
     protected static readonly ReadOnlyMemory<byte> compositionLogEntryDelimiter = "\n"u8.ToArray();
 
-    public static JsonSerializerOptions RecordSerializationSettings => new()
-    {
-        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
-    };
+    public static JsonSerializerOptions RecordSerializationSettings =>
+        new()
+        {
+            DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
+        };
 
     protected static ImmutableList<string> CompositionHeadHashFilePath =>
         ["composition-log-head-hash"];
@@ -422,7 +425,8 @@ public class ProcessStoreReaderInFileStore(
         catch (Exception e)
         {
             throw new Exception(
-                "Failed to read reduction from file '" + string.Join("/", filePath) + "' (" + fileContent.Value.Length + " bytes)",
+                "Failed to read reduction from file '" + string.Join("/", filePath) + "' (" + fileContent.Value.Length +
+                " bytes)",
                 e);
         }
     }
@@ -447,18 +451,19 @@ public class ProcessStoreReaderInFileStore(
 
         var sequenceBeforeConsideringRevertEvent =
             compositionLogFilesReversed
-            .SelectMany(filePath =>
-            {
-                var fileContent = CompositionLogLiteralFileStore.GetFileContent(filePath);
+            .SelectMany(
+                filePath =>
+                {
+                    var fileContent = CompositionLogLiteralFileStore.GetFileContent(filePath);
 
-                if (fileContent is null)
-                    return ImmutableList<(IImmutableList<string>, ReadOnlyMemory<byte>)>.Empty;
+                    if (fileContent is null)
+                        return ImmutableList<(IImmutableList<string>, ReadOnlyMemory<byte>)>.Empty;
 
-                return
-                    SplitFileContentIntoCompositionLogRecords(fileContent.Value)
-                    .Select(record => (filePath, record))
-                    .Reverse();
-            });
+                    return
+                        SplitFileContentIntoCompositionLogRecords(fileContent.Value)
+                        .Select(record => (filePath, record))
+                        .Reverse();
+                });
 
         string? revertToHashBase16 = null;
 
@@ -491,7 +496,8 @@ public class ProcessStoreReaderInFileStore(
     /// <summary>
     /// Drop content after the last occurrence of delimiter sequence to account for the possible partial write of the last composition record.
     /// </summary>
-    private static IEnumerable<ReadOnlyMemory<byte>> SplitFileContentIntoCompositionLogRecords(ReadOnlyMemory<byte> fileContent)
+    private static IEnumerable<ReadOnlyMemory<byte>> SplitFileContentIntoCompositionLogRecords(
+        ReadOnlyMemory<byte> fileContent)
     {
         var recordBegin = 0;
 
@@ -578,7 +584,8 @@ public class ProcessStoreWriterInFileStore : ProcessStoreInFileStore, IProcessSt
 
     private readonly bool skipWritingComponentSecondTime;
 
-    private readonly ConcurrentDictionary<PineValue, (ReadOnlyMemory<byte> hash, string hashBase16)> componentsWritten = new();
+    private readonly ConcurrentDictionary<PineValue, (ReadOnlyMemory<byte> hash, string hashBase16)> componentsWritten =
+        new();
 
     private readonly ConcurrentDictionary<string, object?> componentsWrittenHash = new();
 
@@ -611,11 +618,10 @@ public class ProcessStoreWriterInFileStore : ProcessStoreInFileStore, IProcessSt
     {
         lock (appendLock)
         {
-            var compositionLogRecordStructure = new CompositionLogRecordInFile
-            (
-                parentHashBase16: lastCompositionRecord?.hashBase16,
-                compositionEvent: compositionEvent
-            );
+            var compositionLogRecordStructure =
+                new CompositionLogRecordInFile(
+                    parentHashBase16: lastCompositionRecord?.hashBase16,
+                    compositionEvent: compositionEvent);
 
             var dateTime = getTimeForCompositionLogBatch();
 

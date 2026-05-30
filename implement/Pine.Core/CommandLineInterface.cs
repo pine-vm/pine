@@ -50,7 +50,7 @@ public class CommandLineInterface
         if (integer < 0)
         {
             neg = true;
-            remainder = (ulong)-integer;      // avoid costly Math.Abs on long.MinValue
+            remainder = (ulong)-integer; // avoid costly Math.Abs on long.MinValue
         }
 
         var pos = buffer.Length;
@@ -68,9 +68,11 @@ public class CommandLineInterface
             remainder /= 10;
             digitInGroup++;
 
-        } while (remainder is not 0);
+        }
+        while (remainder is not 0);
 
-        if (neg) buffer[--pos] = '-';
+        if (neg)
+            buffer[--pos] = '-';
 
         return new string(buffer[pos..]);
     }

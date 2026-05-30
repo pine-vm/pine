@@ -1,7 +1,7 @@
+using Pine;
 using System;
 using System.Collections.Immutable;
 using System.Linq;
-using Pine;
 
 namespace ElmTime.Test;
 
@@ -27,10 +27,11 @@ public class SelfTest
 
     public static int RunWebGitCloneTest()
     {
-        var expectedFilesNamesAndHashes = new[]
-        {
-            (fileName: "README.md", fileHash: "e80817b2aa00350dff8f00207083b3b21b0726166dd695475be512ce86507238"),
-        };
+        var expectedFilesNamesAndHashes =
+            new[]
+            {
+                (fileName: "README.md", fileHash: "e80817b2aa00350dff8f00207083b3b21b0726166dd695475be512ce86507238"),
+            };
 
         var loadFromGithubResult =
             LoadFromGitHubOrGitLab.LoadFromUrl(
@@ -39,19 +40,20 @@ public class SelfTest
 
         var loadedFilesNamesAndContents =
             loadFromGithubResult.tree.EnumerateFilesTransitive()
-                .Select(blobPathAndContent => (
-                    fileName: string.Join("/", blobPathAndContent.path),
-                    fileContent: blobPathAndContent.fileContent))
-                .ToImmutableArray();
+            .Select(
+                blobPathAndContent => (fileName: string.Join("/", blobPathAndContent.path),
+                fileContent: blobPathAndContent.fileContent))
+            .ToImmutableArray();
 
         var loadedFilesNamesAndHashes =
             loadedFilesNamesAndContents
-                .Select(fileNameAndContent =>
-                    (fileNameAndContent.fileName,
-                        fileHash:
+            .Select(
+                fileNameAndContent =>
+                (fileNameAndContent.fileName,
+                fileHash:
                         Convert.ToHexStringLower(
-                            System.Security.Cryptography.SHA256.HashData(fileNameAndContent.fileContent.Span))))
-                .ToImmutableArray();
+                    System.Security.Cryptography.SHA256.HashData(fileNameAndContent.fileContent.Span))))
+            .ToImmutableArray();
 
         foreach (var expectedFileNameAndHash in expectedFilesNamesAndHashes)
         {
@@ -81,7 +83,8 @@ public class SelfTest
                 publicAppUrls: ["http://localhost:" + serverHttpPort],
                 deletePreviousProcess: false,
                 copyProcess: null,
-                deployApp: "https://github.com/pine-vm/pine/tree/fd7f2100bff563538d1447064decde8b2a3bd07b/implement/example-apps/minimal-backend-hello-world");
+                deployApp:
+                "https://github.com/pine-vm/pine/tree/fd7f2100bff563538d1447064decde8b2a3bd07b/implement/example-apps/minimal-backend-hello-world");
 
         webHost.StartAsync().Wait();
 

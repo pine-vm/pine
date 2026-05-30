@@ -1,9 +1,9 @@
 using System;
 using System.Collections.Generic;
+using System.Formats.Tar;
 using System.IO;
 using System.IO.Compression;
 using System.Linq;
-using System.Formats.Tar;
 
 namespace Pine.Core.Bundle;
 
@@ -31,10 +31,11 @@ public static class TarGZipArchive
                 var fileContent = file.Value;
 
                 // Create a regular file entry and attach content stream
-                var entry = new PaxTarEntry(TarEntryType.RegularFile, filePath)
-                {
-                    DataStream = new MemoryStream(fileContent.ToArray(), writable: false)
-                };
+                var entry =
+                    new PaxTarEntry(TarEntryType.RegularFile, filePath)
+                    {
+                        DataStream = new MemoryStream(fileContent.ToArray(), writable: false)
+                    };
 
                 tarWriter.WriteEntry(entry);
             }
@@ -44,6 +45,7 @@ public static class TarGZipArchive
 
         // Compress with GZip
         using var compressedStream = new MemoryStream();
+
         using (var gzip = new GZipStream(compressedStream, CompressionLevel.Optimal, leaveOpen: true))
         {
             tarStream.CopyTo(gzip);
@@ -76,15 +78,18 @@ public static class TarGZipArchive
         using (var tarReader = new TarReader(decompressedTarStream))
         {
             TarEntry? entry;
+
             while ((entry = tarReader.GetNextEntry()) != null)
             {
                 // Only process regular file entries. Zero-length regular files may have null DataStream.
                 if (entry.EntryType is not (TarEntryType.RegularFile or TarEntryType.V7RegularFile))
                     continue;
 
-                var pathSegments = entry.Name.Replace('\\', '/').Split('/', StringSplitOptions.RemoveEmptyEntries).ToList();
+                var pathSegments =
+                    entry.Name.Replace('\\', '/').Split('/', StringSplitOptions.RemoveEmptyEntries).ToList();
 
                 using var contentStream = new MemoryStream();
+
                 if (entry.DataStream is not null)
                 {
                     entry.DataStream.CopyTo(contentStream);

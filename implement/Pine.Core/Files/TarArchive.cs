@@ -40,17 +40,18 @@ public static class TarArchive
         var treeEntries =
             entries
             .Where(tarEntry => !tarEntry.IsDirectory)
-            .Select(tarEntry =>
-            {
-                using var memoryStream = new MemoryStream();
-                using var tarEntryStream = tarEntry.OpenEntryStream();
+            .Select(
+                tarEntry =>
+                {
+                    using var memoryStream = new MemoryStream();
+                    using var tarEntryStream = tarEntry.OpenEntryStream();
 
-                tarEntryStream.CopyTo(memoryStream);
+                    tarEntryStream.CopyTo(memoryStream);
 
-                var componentBytes = memoryStream.ToArray();
+                    var componentBytes = memoryStream.ToArray();
 
-                return (name: tarEntry.Key, component: FileTree.File(componentBytes));
-            }).ToImmutableList();
+                    return (name: tarEntry.Key, component: FileTree.File(componentBytes));
+                }).ToImmutableList();
 
         return FileTree.SortedDirectory(treeEntries);
     }

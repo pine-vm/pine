@@ -1,18 +1,19 @@
+using Pine.Core;
+using Pine.Core.DotNet;
+using Pine.Core.Json;
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
 using System.Text;
 using System.Text.Json;
-using Pine.Core;
-using Pine.Core.DotNet;
-using Pine.Core.Json;
 
 namespace Pine.PineVM;
 
 public class PopularExpression
 {
-    static readonly JsonSerializerOptions jsonSerializerOptions = EncodePineExpressionAsJson.BuildJsonSerializerOptions();
+    static readonly JsonSerializerOptions jsonSerializerOptions =
+        EncodePineExpressionAsJson.BuildJsonSerializerOptions();
 
     public static IImmutableDictionary<string, Expression> BuildPopularExpressionDictionary()
     {
@@ -36,9 +37,10 @@ public class PopularExpression
 
                         var exprName = nextFile.Key[0][..^5];
 
-                        return aggregate.SetItem(
-                            exprName,
-                            Expression.EnsureReuseInstanceGeneral(expression));
+                        return
+                            aggregate.SetItem(
+                                exprName,
+                                Expression.EnsureReuseInstanceGeneral(expression));
                     }
 
                     return aggregate;

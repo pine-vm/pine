@@ -242,6 +242,7 @@ public class ElmTimeJsonAdapter
                 FunctionRecord.ParseFunctionRecordTagged(
                     decodeValueFunctionValue,
                     parseCache);
+
             {
                 if (parseDecodeValueFunctionResult.IsErrOrNull() is { } err)
                 {
@@ -318,6 +319,7 @@ public class ElmTimeJsonAdapter
                 FunctionRecord.ParseFunctionRecordTagged(
                     jsonEncodeFunctionValue,
                     parseCache);
+
             {
                 if (parseJsonEncodeFunctionResult.IsErrOrNull() is { } err)
                 {
@@ -519,6 +521,7 @@ public class ElmTimeJsonAdapter
                 FunctionRecord.ParseFunctionRecordTagged(
                     exposedFunctionHandlerValue,
                     parseCache);
+
             {
                 if (parseHandlerResult.IsErrOrNull() is { } err)
                 {
@@ -854,6 +857,7 @@ public class ElmTimeJsonAdapter
                     pineVM,
                     Migrate,
                     [previousAppState]);
+
             {
                 if (applyResult.IsErrOrNull() is { } err)
                 {

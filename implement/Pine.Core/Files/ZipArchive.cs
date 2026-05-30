@@ -115,7 +115,8 @@ public static class ZipArchive
     /// <param name="zipArchive">A read-only memory buffer containing the ZIP archive data. Must represent a valid ZIP file format.</param>
     /// <returns>An enumerable collection of tuples, each containing the entry name and its content as a read-only memory buffer.
     /// The collection is empty if the archive contains no entries.</returns>
-    public static IEnumerable<(string name, ReadOnlyMemory<byte> content)> EntriesFromZipArchive(ReadOnlyMemory<byte> zipArchive) =>
+    public static IEnumerable<(string name, ReadOnlyMemory<byte> content)> EntriesFromZipArchive(
+        ReadOnlyMemory<byte> zipArchive) =>
         EntriesFromZipArchive(zipArchive: zipArchive, includeEntry: _ => true);
 
     /// <summary>

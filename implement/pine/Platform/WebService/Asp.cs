@@ -44,13 +44,12 @@ public static class Asp
 
         var httpRequestBody = await CopyRequestBodyAsync(httpRequest);
 
-        return new Pine.Elm.Platform.WebServiceInterface.HttpRequestProperties
-        (
-            Method: httpRequest.Method,
-            Uri: httpRequest.GetDisplayUrl(),
-            Body: httpRequestBody,
-            Headers: httpHeaders
-        );
+        return
+            new Pine.Elm.Platform.WebServiceInterface.HttpRequestProperties(
+                Method: httpRequest.Method,
+                Uri: httpRequest.GetDisplayUrl(),
+                Body: httpRequestBody,
+                Headers: httpHeaders);
     }
 
     public static async Task SendHttpResponseAsync(

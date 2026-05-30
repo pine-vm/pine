@@ -54,10 +54,11 @@ public class EmptyProcessStoreReader : IProcessStoreReader
 
 public class ProcessStoreInFileStore(IFileStore fileStore)
 {
-    public static JsonSerializerOptions RecordSerializationSettings => new()
-    {
-        DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull
-    };
+    public static JsonSerializerOptions RecordSerializationSettings =>
+        new()
+        {
+            DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull
+        };
 
     protected static readonly JsonSerializerOptions recordSerializationSettings = RecordSerializationSettings;
 
@@ -65,13 +66,18 @@ public class ProcessStoreInFileStore(IFileStore fileStore)
         string ReducedCompositionHashBase16,
         ValueInFile ReducedValue);
 
-    protected IFileStoreReader compositionFileStoreReader => ((IFileStoreReader)fileStore).ForSubdirectory("composition");
-    protected IFileStoreWriter compositionFileStoreWriter => ((IFileStoreWriter)fileStore).ForSubdirectory("composition");
+    protected IFileStoreReader compositionFileStoreReader =>
+        ((IFileStoreReader)fileStore).ForSubdirectory("composition");
+
+    protected IFileStoreWriter compositionFileStoreWriter =>
+        ((IFileStoreWriter)fileStore).ForSubdirectory("composition");
 
     protected IFileStoreReader reductionFileStoreReader => ((IFileStoreReader)fileStore).ForSubdirectory("reduction");
+
     protected IFileStoreWriter reductionFileStoreWriter => ((IFileStoreWriter)fileStore).ForSubdirectory("reduction");
 
-    protected static IEnumerable<IImmutableList<string>> CompositionLogFileOrder(IEnumerable<IImmutableList<string>> logFilesNames) =>
+    protected static IEnumerable<IImmutableList<string>> CompositionLogFileOrder(
+        IEnumerable<IImmutableList<string>> logFilesNames) =>
         logFilesNames.OrderBy(filePath => string.Join("", filePath));
 
     public IEnumerable<IImmutableList<string>> EnumerateCompositionsLogFilesPaths() =>
@@ -84,7 +90,8 @@ public class ProcessStoreReaderInFileStore(IFileStore fileStore)
 {
     public IEnumerable<byte[]> EnumerateSerializedCompositionsRecordsReverse() =>
         EnumerateCompositionsLogFilesPaths().Reverse()
-        .SelectMany(compositionFilePath =>
+        .SelectMany(
+            compositionFilePath =>
             {
                 var fileContent = compositionFileStoreReader.GetFileContent(compositionFilePath)!;
 
@@ -126,16 +133,16 @@ public class ProcessStoreReaderInFileStore(IFileStore fileStore)
             if (reducedCompositionHashBase16 != reductionRecordFromFile.ReducedCompositionHashBase16)
                 throw new Exception("Unexpected content in file " + string.Join("/", filePath) + ", composition hash does not match.");
 
-            return new ReductionRecord
-            (
-                ReducedCompositionHash: reducedCompositionHash,
-                ReducedValueLiteralString: reductionRecordFromFile.ReducedValue?.LiteralString
-            );
+            return
+                new ReductionRecord(
+                    ReducedCompositionHash: reducedCompositionHash,
+                    ReducedValueLiteralString: reductionRecordFromFile.ReducedValue?.LiteralString);
         }
         catch (Exception e)
         {
             throw new Exception(
-                "Failed to read reduction from file '" + string.Join("/", filePath) + "' (" + fileContent.Value.Length + " bytes)",
+                "Failed to read reduction from file '" + string.Join("/", filePath) + "' (" + fileContent.Value.Length +
+                " bytes)",
                 e);
         }
     }
@@ -150,7 +157,8 @@ public class ProcessStoreWriterInFileStore(
     Func<IImmutableList<string>> getCompositionLogRequestedNextFilePath)
     : ProcessStoreInFileStore(fileStore), IProcessStoreWriter
 {
-    private Func<IImmutableList<string>> getCompositionLogRequestedNextFilePath = getCompositionLogRequestedNextFilePath;
+    private Func<IImmutableList<string>> getCompositionLogRequestedNextFilePath =
+        getCompositionLogRequestedNextFilePath;
 
     private readonly System.Threading.Lock appendSerializedCompositionRecordLock = new();
 
@@ -160,7 +168,8 @@ public class ProcessStoreWriterInFileStore(
     {
         lock (appendSerializedCompositionRecordLock)
         {
-            var lastOrDefaultPath = appendSerializedCompositionRecordLastFilePath ?? ImmutableList.Create("composition");
+            var lastOrDefaultPath =
+                appendSerializedCompositionRecordLastFilePath ?? ImmutableList.Create("composition");
 
             var compositionLogRequestedFilePathInDirectory =
                 getCompositionLogRequestedNextFilePath?.Invoke() ?? lastOrDefaultPath;
@@ -191,20 +200,20 @@ public class ProcessStoreWriterInFileStore(
 
     public void StoreReduction(ReductionRecord record)
     {
-        var recordInFile = new ReductionRecordInFile
-        (
-            ReducedCompositionHashBase16:
-            Convert.ToHexStringLower(record.ReducedCompositionHash),
+        var recordInFile =
+            new ReductionRecordInFile(
+                ReducedCompositionHashBase16:
+                Convert.ToHexStringLower(record.ReducedCompositionHash),
 
-            ReducedValue:
-            new ValueInFile(LiteralString: record.ReducedValueLiteralString)
-        );
+                ReducedValue:
+                new ValueInFile(LiteralString: record.ReducedValueLiteralString));
 
         var fileName = recordInFile.ReducedCompositionHashBase16;
 
         var filePath = ImmutableList.Create(fileName);
 
         reductionFileStoreWriter.SetFileContent(
-            filePath, Encoding.UTF8.GetBytes(JsonSerializer.Serialize(recordInFile, recordSerializationSettings)));
+            filePath,
+            Encoding.UTF8.GetBytes(JsonSerializer.Serialize(recordInFile, recordSerializationSettings)));
     }
 }
