@@ -201,9 +201,19 @@ public partial class ElmSyntaxInterpreter
         /// <summary>
         /// The application resolved to a user-defined function. The interpreter will bind
         /// the function's argument patterns to the call's arguments and then evaluate the body.
+        /// <para>
+        /// <paramref name="ResolvedName"/> optionally carries the full module-qualified name of the
+        /// declaration the application resolved to. When present, the interpreter uses it as the
+        /// "current top-level" while evaluating the body, so that <em>unqualified</em> references
+        /// inside the body (e.g. constructors or sibling helpers of the same module) resolve against
+        /// the resolved declaration's own module rather than the — possibly unqualified — name that
+        /// appeared at the call site. When <c>null</c>, the call site's
+        /// <see cref="Application.FunctionName"/> is used (legacy behaviour).
+        /// </para>
         /// </summary>
         public sealed record ContinueWithFunction(
-            SyntaxModel.FunctionImplementation Function)
+            SyntaxModel.FunctionImplementation Function,
+            DeclQualifiedName? ResolvedName = null)
             : ApplicationResolution;
     }
 
@@ -2018,6 +2028,12 @@ public partial class ElmSyntaxInterpreter
                     var expectedArity = functionImpl.Arguments.Count;
                     var providedCount = application.Arguments.Count;
 
+                    // The top-level scope to evaluate the body under. Prefer the resolved
+                    // declaration's own module-qualified name so that unqualified references inside
+                    // the body resolve against that module; fall back to the call-site name.
+                    var bodyTopLevel =
+                        continueWithFunction.ResolvedName ?? application.FunctionName;
+
                     // Under-application: build a closure value capturing the arguments supplied
                     // so far. Top-level user-defined functions don't lexically close over the
                     // call site's local bindings — their bodies only reference module-scope
@@ -2036,7 +2052,7 @@ public partial class ElmSyntaxInterpreter
                                     ArgumentsAlreadyCollected: [.. application.Arguments],
                                     CapturedBindings:
                                     ImmutableDictionary<string, ElmValue>.Empty,
-                                    CapturedTopLevel: application.FunctionName));
+                                    CapturedTopLevel: bodyTopLevel));
                     }
 
                     // Over-application: split the argument list at the declared arity. The first
@@ -2085,7 +2101,7 @@ public partial class ElmSyntaxInterpreter
 
                     var innerContext =
                         new ApplicationContext(
-                            CurrentTopLevel: application.FunctionName,
+                            CurrentTopLevel: bodyTopLevel,
                             LocalBindings: bindings);
 
                     if (extraArgs is not null)
@@ -3628,20 +3644,71 @@ public partial class ElmSyntaxInterpreter
     /// top-level function declarations yield <see cref="ApplicationResolution.ContinueWithFunction"/>,
     /// record type alias constructors and choice type tag constructors with full application yield
     /// <see cref="ApplicationResolution.Resolved"/>. Returns <c>null</c> when no declaration matches.
+    /// <para>
+    /// An <em>unqualified</em> reference (empty <see cref="DeclQualifiedName.Namespaces"/>) is resolved
+    /// with a preference for the caller's own module: the declaration whose namespaces equal the
+    /// calling context's module (<see cref="Application.Context"/>'s <c>CurrentTopLevel.Namespaces</c>)
+    /// is tried first, and only if no same-module declaration matches does resolution fall back to a
+    /// module-agnostic search over every declaration. This matters for lambda-lifted helpers, which
+    /// the compiler emits as unqualified call references (for example <c>map2__lifted__lambda1</c>)
+    /// from their home module's body: several modules can define a helper with the same name but
+    /// different behaviour (e.g. <c>ParserFast</c> and <c>Parser.Advanced</c> each define
+    /// <c>map2__lifted__lambda1</c> whose body matches a <c>Good</c> constructor of different arity).
+    /// Without the same-module preference a call would resolve to whichever module's helper appears
+    /// first in dictionary iteration order, producing spurious "Case expression did not match any
+    /// arm" failures when a value built by one module's constructor reaches the other module's helper.
+    /// </para>
     /// </summary>
     public static ApplicationResolution? UserDefinedResolver(
         Application application,
         IReadOnlyDictionary<DeclQualifiedName, SyntaxModel.Declaration> declarations)
     {
+        var requestedNamespaces = application.FunctionName.Namespaces;
+
+        // For an unqualified reference, first restrict resolution to the caller's own module so
+        // that a lambda-lifted (or otherwise same-named) helper resolves to the home-module
+        // declaration rather than a colliding one in another module. Fall back to the
+        // module-agnostic search only when the same-module pass finds nothing.
+        if (requestedNamespaces.Count is 0)
+        {
+            var callerNamespaces = application.Context.CurrentTopLevel.Namespaces;
+
+            if (callerNamespaces.Count is not 0)
+            {
+                var sameModuleResolution =
+                    ResolveAgainstDeclarations(application, declarations, callerNamespaces);
+
+                if (sameModuleResolution is not null)
+                    return sameModuleResolution;
+            }
+        }
+
+        return ResolveAgainstDeclarations(application, declarations, requiredNamespaces: null);
+    }
+
+    /// <summary>
+    /// Core matching loop for <see cref="UserDefinedResolver"/>. When
+    /// <paramref name="requiredNamespaces"/> is non-null, only declarations whose namespaces equal
+    /// it are considered (used both for qualified references and for the same-module preference pass
+    /// of unqualified references). When it is null, every declaration is considered (module-agnostic
+    /// fallback).
+    /// </summary>
+    private static ApplicationResolution? ResolveAgainstDeclarations(
+        Application application,
+        IReadOnlyDictionary<DeclQualifiedName, SyntaxModel.Declaration> declarations,
+        IReadOnlyList<string>? requiredNamespaces)
+    {
         var requestedName = application.FunctionName.DeclName;
         var requestedNamespaces = application.FunctionName.Namespaces;
 
+        // A qualified reference must always match the declaration's namespaces exactly.
+        var effectiveRequiredNamespaces =
+            requestedNamespaces.Count is not 0 ? requestedNamespaces : requiredNamespaces;
+
         foreach (var (declName, declaration) in declarations)
         {
-            // An unqualified reference (empty Namespaces) matches any declaration with the same DeclName;
-            // a qualified reference must match the declaration's namespaces exactly.
-            if (requestedNamespaces.Count is not 0
-                && !NamespacesEqual(requestedNamespaces, declName.Namespaces))
+            if (effectiveRequiredNamespaces is not null
+                && !NamespacesEqual(effectiveRequiredNamespaces, declName.Namespaces))
             {
                 continue;
             }
@@ -3653,7 +3720,8 @@ public partial class ElmSyntaxInterpreter
 
                     return
                         new ApplicationResolution.ContinueWithFunction(
-                            functionDeclaration.Function.Declaration.Value);
+                            functionDeclaration.Function.Declaration.Value,
+                            ResolvedName: declName);
 
                 case SyntaxModel.Declaration.AliasDeclaration aliasDeclaration
                 when aliasDeclaration.TypeAlias.Name.Value == requestedName:
