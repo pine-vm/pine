@@ -12,86 +12,22 @@ using SyntaxTypes = Pine.Core.Elm.ElmSyntax.Stil4mElmSyntax7;
 namespace Pine.Core.Elm.ElmCompilerInDotnet;
 
 /// <summary>
-/// See the file 'explore-early-instantiation-stage.md' for design notes.
+/// Transformations of Elm syntax, for optimizing downstream runtime efficiency of interpreted and compiled code.
+/// This includes specialization of higher-order functions and inlining of small functions and plain values.
+/// 
+/// TODO: Link new section in spec
 /// </summary>
-public partial class Inlining
+public partial class ElmSyntaxOptimization
 {
 
 
-    /// <summary>
-    /// Configuration for the inlining pass, modelled as a product type with three
-    /// independent properties:
-    /// <list type="bullet">
-    ///   <item><description><see cref="IncludeHigherOrder"/> — enable higher-order specialization
-    ///     (inline applications that supply functions as arguments).</description></item>
-    ///   <item><description><see cref="IncludePlainValues"/> — enable plain-value inlining
-    ///     (substitute references to zero-parameter declarations whose body is safe to inline).</description></item>
-    ///   <item><description><see cref="SmallFunctions"/> — when non-<see langword="null"/>, enable
-    ///     size-based inlining of small non-recursive functions, parameterised by the thresholds
-    ///     in <see cref="SmallFunctionsConfig"/>. <see langword="null"/> disables small-function inlining.</description></item>
-    /// </list>
-    /// The named static instances <see cref="OnlyFunctions"/>, <see cref="SmallFunctionsAndPlainValues"/>
-    /// and <see cref="SpecializationAndSmallFunctions"/> map the previous
-    /// closed-hierarchy variants onto this product type so call sites and tests
-    /// can remain unchanged.
-    /// </summary>
-    public sealed record Config(
-        bool IncludeHigherOrder,
-        bool IncludePlainValues,
-        SmallFunctionsConfig? SmallFunctions)
-    {
-        /// <summary>
-        /// Attempt inlining only for function applications which supply functions as arguments.
-        /// </summary>
-        public static readonly Config OnlyFunctions =
-            new(IncludeHigherOrder: true, IncludePlainValues: false, SmallFunctions: null);
-
-        /// <summary>
-        /// Inline small non-recursive functions AND plain values (zero-parameter declarations
-        /// with simple bodies). Runs AFTER higher-order inlining and lambda lifting to avoid
-        /// cascading: at this stage the AST is stable and size-based substitution cannot expose
-        /// new higher-order patterns. See docs/2026-04-10-cascading-inlining-bug.md.
-        /// </summary>
-        public static readonly Config SmallFunctionsAndPlainValues =
-            new(IncludeHigherOrder: false, IncludePlainValues: true, SmallFunctions: SmallFunctionsConfig.Default);
-
-        /// <summary>
-        /// Combined config: perform higher-order specialization AND size-based inlining of
-        /// small non-recursive functions / plain values in a single pass. This is useful
-        /// when the AST is processed in one shot (e.g. inside a single optimization phase)
-        /// and ensures that small predicate-like functions passed as arguments to recursive
-        /// higher-order functions get both eliminated as higher-order parameters
-        /// (via specialization) and inlined into the resulting first-order body.
-        /// </summary>
-        public static readonly Config SpecializationAndSmallFunctions =
-            new(IncludeHigherOrder: true, IncludePlainValues: true, SmallFunctions: SmallFunctionsConfig.Default);
-    }
-
-    /// <summary>
-    /// Thresholds and per-call-site policy for size-based inlining of small non-recursive functions.
-    /// A function body is eligible for unconditional inlining only if its expression-node count
-    /// is less than or equal to <see cref="MaxBodyNodeCount"/> AND it satisfies the additional
-    /// hardcoded restrictions enforced inside the small-function inlining check (see
-    /// <see cref="Inlining"/> for details).
-    /// </summary>
-    /// <param name="MaxBodyNodeCount">
-    /// Maximum number of expression nodes in a function body for it to be considered "small" and
-    /// eligible for unconditional inlining at every call site.
-    /// </param>
-    public sealed record SmallFunctionsConfig(int MaxBodyNodeCount)
-    {
-        /// <summary>
-        /// Default thresholds used by <see cref="Config.SmallFunctionsAndPlainValues"/> and
-        /// <see cref="Config.SpecializationAndSmallFunctions"/>. Mirrors the previous file-scoped
-        /// <c>MaxSmallFunctionBodySize</c> constant.
-        /// </summary>
-        public static readonly SmallFunctionsConfig Default = new(MaxBodyNodeCount: 24);
-    }
+    // Config, SmallFunctionsConfig, and RewriteConfig records live in the sibling
+    // partial-class file `ElmSyntaxOptimization.Config.cs`.
 
     /// <summary>
     /// Represents a function declaration with its containing module for inlining purposes.
     /// </summary>
-    private record FunctionInfo(
+    internal record FunctionInfo(
         ModuleName ModuleName,
         SyntaxTypes.FunctionStruct Function,
         bool IsRecursive);
@@ -103,13 +39,6 @@ public partial class Inlining
     private record SingleChoiceConstructorInfo(
         SyntaxTypes.QualifiedNameRef ConstructorName,
         int FieldCount);
-
-    private enum PipelineStage
-    {
-        Combined,
-        SpecializationOnly,
-        InliningOnly,
-    }
 
     private record ModuleResolutionContext(
         ImmutableDictionary<DeclQualifiedName, FunctionInfo> FunctionsByQualifiedName,
@@ -125,9 +54,10 @@ public partial class Inlining
         Config Config,
         ImmutableHashSet<DeclQualifiedName> InliningStack,
         SpecializationCatalog SpecializationCatalog,
-        PipelineStage Stage,
+        RewriteConfig RewriteConfig,
         ImmutableHashSet<string> LocalNames = default!,
-        ImmutableHashSet<string> ModuleLevelNames = default!)
+        ImmutableHashSet<string> ModuleLevelNames = default!,
+        ImmutableDictionary<string, SyntaxTypes.Expression> LetRhsByName = default!)
     {
         /// <summary>
         /// Names of local variables currently in scope (from let bindings, function parameters,
@@ -142,6 +72,18 @@ public partial class Inlining
         /// against top-level declarations.
         /// </summary>
         public ImmutableHashSet<string> ModuleLevelNames { get; init; } = ModuleLevelNames ?? [];
+
+        /// <summary>
+        /// Map from let-bound local name to its RHS expression for the specific
+        /// <c>let (Wrapper localName) = &lt;rhs&gt; in ...</c> single-tag newtype
+        /// destructuring shape. Used by the specialization-discovery walker to
+        /// look through one layer of let binding when classifying a tuple element
+        /// or higher-order argument that is a bare local reference (see plan in
+        /// <c>explore/internal-analysis/2026-05-19-monomorphizing-expressionAfterOpeningSquareBracket-lifted-lambda3.md</c>
+        /// §4 Step 1+2). The walker rebuilds shadowed entries at every binder.
+        /// </summary>
+        public ImmutableDictionary<string, SyntaxTypes.Expression> LetRhsByName { get; init; } =
+            LetRhsByName ?? [];
     }
 
 
@@ -162,35 +104,35 @@ public partial class Inlining
 
 
     /// <summary>
-    /// Default maximum number of optimization rounds for
-    /// <see cref="Inline(ImmutableDictionary{DeclQualifiedName, SyntaxTypes.Declaration}, Config)"/>.
+    /// Default number of optimization rounds for
+    /// <see cref="OptimizeRounds(OptimizedElmSyntaxDeclarations, Config)"/>.
     /// </summary>
-    public const int DefaultMaxOptimizationRounds = 3;
+    public const int DefaultOptimizationRounds = 4;
 
     /// <summary>
     /// Runs the combined specialization-and-inlining pipeline with the
-    /// <see cref="DefaultMaxOptimizationRounds"/> limit, repeating transformations
+    /// <see cref="DefaultOptimizationRounds"/> limit, repeating transformations
     /// until the declaration dictionary converges (structural equality) or the limit is reached.
     /// </summary>
-    public static Result<string, ImmutableDictionary<DeclQualifiedName, SyntaxTypes.Declaration>> Inline(
-        ImmutableDictionary<DeclQualifiedName, SyntaxTypes.Declaration> declarations,
+    public static Result<string, OptimizedElmSyntaxDeclarations> OptimizeRounds(
+        OptimizedElmSyntaxDeclarations declarations,
         Config config) =>
-        Inline(declarations, config, maxRounds: DefaultMaxOptimizationRounds);
+        OptimizeRounds(declarations, config, rounds: DefaultOptimizationRounds);
 
     /// <summary>
-    /// Runs the combined specialization-and-inlining pipeline up to <paramref name="maxRounds"/>
-    /// times, stopping early when the declaration dictionary no longer changes (structural equality).
+    /// Runs the combined specialization-and-inlining pipeline up to <paramref name="rounds"/>
+    /// times, stopping early in case of convergence.
     /// </summary>
-    public static Result<string, ImmutableDictionary<DeclQualifiedName, SyntaxTypes.Declaration>> Inline(
-        ImmutableDictionary<DeclQualifiedName, SyntaxTypes.Declaration> declarations,
+    public static Result<string, OptimizedElmSyntaxDeclarations> OptimizeRounds(
+        OptimizedElmSyntaxDeclarations declarations,
         Config config,
-        int maxRounds)
+        int rounds)
     {
         var current = declarations;
 
-        for (var round = 0; round < maxRounds; round++)
+        for (var round = 0; round < rounds; round++)
         {
-            var result = RewriteModules(current, config, PipelineStage.Combined);
+            var result = SpecializeAndInlineDeclarations(current, config, RewriteConfig.Combined);
 
             if (result.IsErrOrNull() is { } err)
                 return err;
@@ -199,8 +141,7 @@ public partial class Inlining
                 throw new NotImplementedException("Unexpected result type");
 
             // Structural equality: if the output matches the input the pipeline has converged.
-            if (next.Count == current.Count &&
-                next.All(kvp => current.TryGetValue(kvp.Key, out var prev) && prev.Equals(kvp.Value)))
+            if (next.Equals(current))
             {
                 return next;
             }
@@ -211,20 +152,85 @@ public partial class Inlining
         return current;
     }
 
-    internal static Result<string, ImmutableDictionary<DeclQualifiedName, SyntaxTypes.Declaration>> RunSpecializationStage(
-        ImmutableDictionary<DeclQualifiedName, SyntaxTypes.Declaration> declarations,
+    /// <summary>
+    /// Run only the specialization rewrite stage: collect higher-order specialization
+    /// opportunities and emit the corresponding <c>__specialized__N</c> sibling
+    /// declarations, without performing classic inlining at call sites. Because this
+    /// stage can emit new declarations, the method name includes "Specialize".
+    /// Convenience wrapper for
+    /// <see cref="SpecializeAndInlineDeclarations(OptimizedElmSyntaxDeclarations, Config, RewriteConfig)"/>
+    /// with <see cref="RewriteConfig.SpecializationOnly"/>.
+    /// </summary>
+    public static Result<string, OptimizedElmSyntaxDeclarations> SpecializeDeclarations(
+        OptimizedElmSyntaxDeclarations declarations,
         Config config) =>
-        RewriteModules(declarations, config, PipelineStage.SpecializationOnly);
+        SpecializeAndInlineDeclarations(declarations, config, RewriteConfig.SpecializationOnly);
 
-    internal static Result<string, ImmutableDictionary<DeclQualifiedName, SyntaxTypes.Declaration>> RunInliningStage(
-        ImmutableDictionary<DeclQualifiedName, SyntaxTypes.Declaration> declarations,
+    /// <summary>
+    /// Run a single combined specialization+inlining round. This is the entry point
+    /// used by the inlining phases of the compiler pipeline. Because this can both
+    /// add new specialized sibling declarations and substitute callee bodies at
+    /// call sites, the name includes "Specialize" and "Inline".
+    /// <para>
+    /// Phase 2 of the production pipeline runs as Combined (not InliningOnly).
+    /// See explore/internal-analysis/2026-05-16-skipWhileWithoutLinebreakHelp-alpha-regression.md
+    /// §5.4 for the rationale: running classic inlining without specialization
+    /// creates a temporal gap where a recursive higher-order call newly exposed
+    /// by Phase 2's wrapper inlining cannot be redirected to its pre-existing
+    /// <c>__specialized__N</c> sibling (TrySpecializeRecursiveCall is gated by
+    /// EnablesSpecialization, which is false in InliningOnly). Routing Phase 2
+    /// through Combined closes the gap by enabling both spec collection and
+    /// call-site rewriting within the same call.
+    /// </para>
+    /// </summary>
+    public static Result<string, OptimizedElmSyntaxDeclarations> SpecializeAndInlineDeclarationsCombined(
+        OptimizedElmSyntaxDeclarations declarations,
         Config config) =>
-        RewriteModules(declarations, config, PipelineStage.InliningOnly);
+        SpecializeAndInlineDeclarations(declarations, config, RewriteConfig.Combined);
 
-    private static Result<string, ImmutableDictionary<DeclQualifiedName, SyntaxTypes.Declaration>> RewriteModules(
-        ImmutableDictionary<DeclQualifiedName, SyntaxTypes.Declaration> declarations,
+    /// <summary>
+    /// Workhorse of the specialization+inlining pipeline: in one pass it (a)
+    /// collects specialization opportunities and emits the resulting
+    /// <c>__specialized__N</c> sibling declarations, (b) substitutes selected
+    /// callee bodies at call sites, (c) lifts any lambdas / local functions
+    /// introduced during the rewrite, (d) optionally strips wrapper-return
+    /// patterns (emitting <c>__stripped</c> sibling declarations) and applies
+    /// wrap/unwrap cancellation. Because this method can ADD new top-level
+    /// declarations, its name includes "Specialize" (per the project convention
+    /// that "Rewrite" is reserved for non-adding transforms).
+    /// <para>
+    /// Whether the trailing wrap/unwrap cancellation runs is gated on
+    /// <see cref="Config.WrapUnwrapCancellationEnabled"/>. The wrapper-return
+    /// stripping + cancellation block as a whole is also gated on
+    /// <c>config.SmallFunctions is null</c> — see
+    /// <c>explore/internal-analysis/2026-05-15-s1-cancel-parser-newtype-wrap-unwrap.md</c>
+    /// section 5 for why those passes must not run under size-based inlining.
+    /// </para>
+    /// </summary>
+    public static Result<string, OptimizedElmSyntaxDeclarations> SpecializeAndInlineDeclarations(
+        OptimizedElmSyntaxDeclarations declarations,
         Config config,
-        PipelineStage stage)
+        RewriteConfig rewriteConfig) =>
+        SpecializeAndInlineDeclarations(declarations, config, rewriteConfig, StageToggles.Default);
+
+    /// <summary>
+    /// Extended overload of
+    /// <see cref="SpecializeAndInlineDeclarations(OptimizedElmSyntaxDeclarations, Config, RewriteConfig)"/>
+    /// that accepts a <see cref="StageToggles"/> record selecting which post-passes run
+    /// after the specialization+inlining rewrite. Intended for debugging investigations
+    /// (e.g. bisecting which sub-stage in a given round introduces an incorrect rewrite):
+    /// callers can ask for the raw inliner output, then drive
+    /// <see cref="LambdaLifting.LiftLambdas(OptimizedElmSyntaxDeclarations)"/>,
+    /// <see cref="ApplicationNormalization.NormalizeApplicationsInDeclarationDictionary"/>,
+    /// and the WRS / WUC passes manually in their own test code. The defaults on
+    /// <see cref="StageToggles.Default"/> reproduce the production behaviour of the
+    /// three-argument overload, so existing callers are unaffected.
+    /// </summary>
+    public static Result<string, OptimizedElmSyntaxDeclarations> SpecializeAndInlineDeclarations(
+        OptimizedElmSyntaxDeclarations declarations,
+        Config config,
+        RewriteConfig rewriteConfig,
+        StageToggles stageToggles)
     {
         // Build a dictionary of all function declarations
         var functionsByQualifiedName = BuildFunctionDictionary(declarations);
@@ -251,14 +257,17 @@ public partial class Inlining
                 config,
                 [],
                 SpecializationCatalog: SpecializationCatalog.Empty,
-                Stage: stage);
+                RewriteConfig: rewriteConfig);
 
         var collectedSpecializations =
             CollectSpecializationsFromDeclarations(declarations, collectionContext);
 
         // --- Naming: Deduplicate and assign deterministic names ---
-        var existingDeclNames = declarations.Keys.Select(k => k.DeclName).ToHashSet();
-        var catalog = BuildCatalogFromCollectedSpecializations(collectedSpecializations, existingDeclNames);
+        // Deduplication includes filtering out specializations already present
+        // in `declarations.FunctionDeclarations[*].Specializations` so that we
+        // never re-emit a fresh `__specialized__N` name for a specialization
+        // the input already carries.
+        var catalog = BuildCatalogFromCollectedSpecializations(collectedSpecializations, declarations);
 
         // --- Pass 2: Rewrite using the catalog ---
         var rewriteContext =
@@ -267,27 +276,37 @@ public partial class Inlining
                 config,
                 [],
                 SpecializationCatalog: catalog,
-                Stage: stage);
+                RewriteConfig: rewriteConfig);
 
-        // Group declarations by module for per-module processing
+        // Group declarations by module for per-module processing, iterating
+        // the structured form directly so we never materialise a global
+        // flat dictionary in this method.
         var declsByModule =
-            declarations
-            .GroupBy(
-                kvp => kvp.Key.Namespaces,
+            new Dictionary<ModuleName, ImmutableDictionary<DeclQualifiedName, SyntaxTypes.Declaration>.Builder>(
                 EnumerableExtensions.EqualityComparer<ModuleName>());
+
+        foreach (var entry in declarations.EnumerateAllDeclarations())
+        {
+            if (!declsByModule.TryGetValue(entry.Key.Namespaces, out var moduleBuilder))
+            {
+                moduleBuilder =
+                    ImmutableDictionary.CreateBuilder<DeclQualifiedName, SyntaxTypes.Declaration>();
+
+                declsByModule[entry.Key.Namespaces] = moduleBuilder;
+            }
+
+            moduleBuilder[entry.Key] = entry.Value;
+        }
 
         var resultBuilder =
             ImmutableDictionary.CreateBuilder<DeclQualifiedName, SyntaxTypes.Declaration>();
 
-        foreach (var moduleGroup in declsByModule)
+        foreach (var (moduleName, moduleBuilder) in declsByModule)
         {
-            var moduleName = moduleGroup.Key;
-
             var moduleContext =
                 rewriteContext with { Resolution = rewriteContext.Resolution with { CurrentModuleName = moduleName } };
 
-            var moduleDecls =
-                moduleGroup.ToImmutableDictionary(kvp => kvp.Key, kvp => kvp.Value);
+            var moduleDecls = moduleBuilder.ToImmutable();
 
             var inlinedModuleDecls = InlineDeclarations(moduleDecls, moduleName, moduleContext);
 
@@ -297,10 +316,18 @@ public partial class Inlining
             }
         }
 
+        // Lift inlining output into the structured model so subsequent
+        // rewrite passes can each take and return
+        // OptimizedElmSyntaxDeclarations.
+        var current =
+            OptimizedElmSyntaxDeclarations.FromFlatDictionary(resultBuilder.ToImmutable());
+
         // Lambda lifting: lift any lambdas or local functions introduced during
         // inlining/specialization so that the output is free of disallowed nodes.
-        var beforeLambdaLifting = resultBuilder.ToImmutable();
-        var afterLambdaLifting = LambdaLifting.LiftLambdas(beforeLambdaLifting);
+        if (stageToggles.LambdaLiftingEnabled)
+        {
+            current = LambdaLifting.LiftLambdas(current);
+        }
 
         // Normalize all Application nodes so no Application has another
         // Application as its head. Substitution-based rewrites elsewhere
@@ -311,86 +338,98 @@ public partial class Inlining
         // instead of taking the direct-call fast path. Flattening here
         // reshapes those into single saturated Applications without
         // changing observable behavior.
-        var normalized = NormalizeApplicationsInDeclarationDictionary(afterLambdaLifting);
+        if (stageToggles.NormalizeApplicationsEnabled)
+        {
+            current = NormalizeApplicationsInDeclarationDictionary(current);
+        }
 
-        return normalized;
+        // D2 Step 2 (WrapperReturnStripping) + S1 (WrapUnwrapCancellation):
+        // both passes are gated on Phases 1 + 2 (config.SmallFunctions is null) only —
+        // running them under Phase 3 size-based inlining can cause its small-function
+        // inliner to re-inline a __stripped sibling back into a forwarding body, undoing
+        // the strip. See
+        // explore/internal-analysis/2026-05-15-s1-cancel-parser-newtype-wrap-unwrap.md
+        // section 5 for the placement rationale.
+        if (config.SmallFunctions is null && stageToggles.WrapperReturnStrippingEnabled)
+        {
+            var newtypeRegistry = NewtypeWrapperAnalysis.BuildNewtypeRegistry(current);
+
+            if (!newtypeRegistry.IsEmpty)
+            {
+                var stripPlans =
+                    WrapperReturnStripping.BuildStripPlans(current, newtypeRegistry);
+
+                current = WrapperReturnStripping.RewriteDeclarationDictionary(current);
+
+                var siblingsByOriginal =
+                    stripPlans.ToImmutableDictionary(
+                        kvp => kvp.Key,
+                        kvp => kvp.Value.ToGeneratedSiblingDecl());
+
+                if (config.WrapUnwrapCancellationEnabled)
+                {
+                    current =
+                        WrapUnwrapCancellation.RewriteDeclarationDictionary(
+                            current,
+                            siblingsByOriginal);
+                }
+            }
+        }
+
+        return current;
     }
 
     /// <summary>
-    /// Returns a copy of <paramref name="declarations"/> where every
-    /// expression body has been rewritten with
-    /// <see cref="ElmSyntaxTransformations.FlattenAllNestedApplicationHeads"/>
-    /// so that no <see cref="SyntaxTypes.Expression.Application"/> in the
-    /// output has another <see cref="SyntaxTypes.Expression.Application"/>
-    /// as its head. See the helper's documentation for why this matters
-    /// for code-emission performance.
+    /// Apply only the wrap/unwrap cancellation rewrite pass (Shapes A/B
+    /// literal cancellation; no specialization, no inlining, no
+    /// wrapper-return stripping). This is a pure rewrite that never adds
+    /// new declarations — hence the verb "Apply" rather than "Specialize".
+    /// Gated on <see cref="Config.WrapUnwrapCancellationEnabled"/>: when
+    /// disabled the input is returned unchanged.
+    /// <para>
+    /// This is the recommended entry point for unit tests and other
+    /// call sites that want only the wrap/unwrap cancellation behaviour
+    /// without running the rest of the optimization pipeline.
+    /// </para>
     /// </summary>
-    public static ImmutableDictionary<DeclQualifiedName, SyntaxTypes.Declaration>
-        NormalizeApplicationsInDeclarationDictionary(
-        ImmutableDictionary<DeclQualifiedName, SyntaxTypes.Declaration> declarations)
+    public static OptimizedElmSyntaxDeclarations ApplyWrapUnwrapCancellation(
+        OptimizedElmSyntaxDeclarations declarations,
+        Config config)
     {
-        var builder = ImmutableDictionary.CreateBuilder<DeclQualifiedName, SyntaxTypes.Declaration>();
+        if (!config.WrapUnwrapCancellationEnabled)
+            return declarations;
 
-        foreach (var (key, decl) in declarations)
-        {
-            builder[key] = NormalizeApplicationsInDeclaration(decl);
-        }
-
-        return builder.ToImmutable();
+        return WrapUnwrapCancellation.RewriteDeclarationDictionary(declarations);
     }
 
-    private static SyntaxTypes.Declaration NormalizeApplicationsInDeclaration(
-        SyntaxTypes.Declaration decl)
+    /// <summary>
+    /// Apply only the wrap/unwrap cancellation rewrite pass with an
+    /// explicit sibling-decl registry — enables sibling-aware Shape A'/B'
+    /// cancellations in addition to the always-on literal-wrap Shapes A/B.
+    /// Like the no-sibling overload, this is a pure rewrite that never
+    /// adds new declarations. Gated on
+    /// <see cref="Config.WrapUnwrapCancellationEnabled"/>.
+    /// </summary>
+    internal static OptimizedElmSyntaxDeclarations ApplyWrapUnwrapCancellation(
+        OptimizedElmSyntaxDeclarations declarations,
+        Config config,
+        ImmutableDictionary<DeclQualifiedName, GeneratedSiblingDecl> siblingsByOriginal)
     {
-        return decl switch
-        {
-            SyntaxTypes.Declaration.FunctionDeclaration funcDecl =>
-            new SyntaxTypes.Declaration.FunctionDeclaration(
-                NormalizeApplicationsInFunction(funcDecl.Function)),
+        if (!config.WrapUnwrapCancellationEnabled)
+            return declarations;
 
-            // Type/alias/port/infix declarations contain no expression bodies
-            // that can host nested Application form.
-            SyntaxTypes.Declaration.CustomTypeDeclaration or
-            SyntaxTypes.Declaration.AliasDeclaration or
-            SyntaxTypes.Declaration.PortDeclaration or
-            SyntaxTypes.Declaration.InfixDeclaration =>
-            decl,
-
-            _ =>
-            throw new NotImplementedException(
-                "NormalizeApplicationsInDeclaration does not handle declaration variant: " +
-                decl.GetType().Name)
-        };
+        return WrapUnwrapCancellation.RewriteDeclarationDictionary(declarations, siblingsByOriginal);
     }
 
-    private static SyntaxTypes.FunctionStruct NormalizeApplicationsInFunction(
-        SyntaxTypes.FunctionStruct function)
-    {
-        var declValue = function.Declaration.Value;
-
-        var rewrittenBody =
-            ElmSyntaxTransformations.FlattenAllNestedApplicationHeads(declValue.Expression);
-
-        return
-            function with
-            {
-                Declaration =
-                function.Declaration with
-                {
-                    Value =
-                    declValue with
-                    {
-                        Expression = rewrittenBody
-                    }
-                }
-            };
-    }
+    // NormalizeApplicationsInDeclarationDictionary / NormalizeApplicationsInDeclaration /
+    // NormalizeApplicationsInFunction live in the sibling partial-class file
+    // `ApplicationNormalization.cs`.
 
     private static bool EnablesSpecialization(InliningContext context) =>
-        context.Stage is PipelineStage.Combined or PipelineStage.SpecializationOnly;
+        context.RewriteConfig.SpecializationEnabled;
 
     private static bool EnablesClassicInlining(InliningContext context) =>
-        context.Stage is PipelineStage.Combined or PipelineStage.InliningOnly;
+        context.RewriteConfig.InliningEnabled;
 
     /// <summary>
     /// Looks up the pre-assigned specialized name from the catalog for a given function
@@ -437,9 +476,52 @@ public partial class Inlining
         return null;
     }
 
-    private static ImmutableDictionary<DeclQualifiedName, FunctionInfo> MarkRecursiveFunctions(
+    internal static ImmutableDictionary<DeclQualifiedName, FunctionInfo> MarkRecursiveFunctions(
         ImmutableDictionary<DeclQualifiedName, FunctionInfo> functions)
     {
+        // Phase 1: walk each function body exactly once and collect the set of
+        // direct top-level function references (restricted to nodes that exist
+        // in `functions`). This avoids the previous O(V * E) blow-up where
+        // CollectFunctionReferences was re-invoked for every node visited
+        // during the recursion check of every function.
+        var directRefs =
+            new Dictionary<DeclQualifiedName, HashSet<DeclQualifiedName>>(functions.Count);
+
+        foreach (var kvp in functions)
+        {
+            var funcKey = kvp.Key;
+            var funcInfo = kvp.Value;
+
+            var refs = new HashSet<DeclQualifiedName>();
+
+            foreach (var r in CollectFunctionReferences(funcInfo.Function.Declaration.Value.Expression.Value))
+            {
+                // Restrict to edges into the function set; references to
+                // values / constructors / built-ins are irrelevant for the
+                // recursive-call analysis.
+                if (functions.ContainsKey(r))
+                {
+                    refs.Add(r);
+                }
+                else if (r.Equals(funcKey))
+                {
+                    // Defensive: keep self-edges even if the dictionary lookup
+                    // didn't include the function itself (shouldn't happen, but
+                    // preserves the previous semantics of direct-self detection).
+                    refs.Add(r);
+                }
+            }
+
+            directRefs[funcKey] = refs;
+        }
+
+        // Phase 2: a function is recursive iff it can reach itself in the
+        // direct-call graph. Equivalent: it has a self-loop, OR it belongs to
+        // a strongly-connected component of size > 1. Compute SCCs once with
+        // Tarjan's algorithm — O(V + E) — and mark every node in any non-
+        // trivial SCC, plus any node with a self-edge, as recursive.
+        var recursive = ComputeRecursiveNodes(directRefs);
+
         var builder = functions.ToBuilder();
 
         foreach (var kvp in functions)
@@ -447,56 +529,130 @@ public partial class Inlining
             var funcKey = kvp.Key;
             var funcInfo = kvp.Value;
 
-            // Check if this function is recursive (directly or indirectly references itself)
-            var isRecursive =
-                IsRecursiveFunction(
-                    funcKey,
-                    funcInfo.Function,
-                    functions,
-                    []);
-
-            builder[funcKey] = funcInfo with { IsRecursive = isRecursive };
+            builder[funcKey] = funcInfo with { IsRecursive = recursive.Contains(funcKey) };
         }
 
         return builder.ToImmutable();
     }
 
-    private static bool IsRecursiveFunction(
-        DeclQualifiedName funcKey,
-        SyntaxTypes.FunctionStruct func,
-        ImmutableDictionary<DeclQualifiedName, FunctionInfo> allFunctions,
-        ImmutableHashSet<DeclQualifiedName> visited)
+    /// <summary>
+    /// Given a directed graph (adjacency map: node → out-neighbours, restricted
+    /// to nodes that are themselves keys of <paramref name="graph"/>), returns
+    /// the set of nodes that can reach themselves through one or more edges.
+    /// That is exactly: nodes with a self-loop ∪ nodes that belong to a
+    /// strongly-connected component of size &gt; 1.
+    ///
+    /// Uses Tarjan's SCC algorithm with an explicit work stack (no recursion)
+    /// so deep call graphs cannot blow the .NET runtime stack.
+    /// Time and space complexity are O(V + E).
+    /// </summary>
+    private static HashSet<DeclQualifiedName> ComputeRecursiveNodes(
+        Dictionary<DeclQualifiedName, HashSet<DeclQualifiedName>> graph)
     {
-        // Collect all function references in the function body
-        var references = CollectFunctionReferences(func.Declaration.Value.Expression.Value);
+        var index = 0;
+        var indices = new Dictionary<DeclQualifiedName, int>(graph.Count);
+        var lowlink = new Dictionary<DeclQualifiedName, int>(graph.Count);
+        var onStack = new HashSet<DeclQualifiedName>();
+        var sccStack = new Stack<DeclQualifiedName>();
+        var recursive = new HashSet<DeclQualifiedName>();
 
-        foreach (var refKey in references)
+        // Pre-mark all self-loops; these are recursive regardless of SCC size.
+        foreach (var kvp in graph)
         {
-            // Check if this reference is the function itself (direct recursion)
-            if (refKey.Equals(funcKey))
+            if (kvp.Value.Contains(kvp.Key))
             {
-                return true;
+                recursive.Add(kvp.Key);
             }
+        }
 
-            // Check if we've already visited this function in the current path (indirect recursion)
-            if (visited.Contains(refKey))
+        // Iterative Tarjan using an explicit frame stack to support deep graphs.
+        var work = new Stack<(DeclQualifiedName Node, IEnumerator<DeclQualifiedName> Iter)>();
+
+        foreach (var startNode in graph.Keys)
+        {
+            if (indices.ContainsKey(startNode))
+                continue;
+
+            // strongconnect(startNode)
+            indices[startNode] = index;
+            lowlink[startNode] = index;
+            index++;
+            sccStack.Push(startNode);
+            onStack.Add(startNode);
+            work.Push((startNode, graph[startNode].GetEnumerator()));
+
+            while (work.Count > 0)
             {
-                continue; // Skip to avoid infinite loop in analysis, but this doesn't indicate funcKey is recursive
-            }
+                var frame = work.Peek();
+                var v = frame.Node;
+                var iter = frame.Iter;
 
-            // Check if referenced function eventually calls back to this function (indirect recursion)
-            if (allFunctions.TryGetValue(refKey, out var refFuncInfo))
-            {
-                var newVisited = visited.Add(refKey);
-
-                if (IsRecursiveFunction(funcKey, refFuncInfo.Function, allFunctions, newVisited))
+                if (iter.MoveNext())
                 {
-                    return true;
+                    var w = iter.Current;
+
+                    if (!graph.ContainsKey(w))
+                    {
+                        // Out-of-graph edge (shouldn't occur — we restricted the
+                        // adjacency lists above — but guard defensively).
+                        continue;
+                    }
+
+                    if (!indices.ContainsKey(w))
+                    {
+                        indices[w] = index;
+                        lowlink[w] = index;
+                        index++;
+                        sccStack.Push(w);
+                        onStack.Add(w);
+                        work.Push((w, graph[w].GetEnumerator()));
+                    }
+                    else if (onStack.Contains(w))
+                    {
+                        if (indices[w] < lowlink[v])
+                            lowlink[v] = indices[w];
+                    }
+                }
+                else
+                {
+                    // All successors of v explored — pop frame and possibly emit an SCC.
+                    work.Pop();
+
+                    if (lowlink[v] == indices[v])
+                    {
+                        // Root of an SCC; pop nodes until v.
+                        var component = new List<DeclQualifiedName>();
+                        DeclQualifiedName w;
+
+                        do
+                        {
+                            w = sccStack.Pop();
+                            onStack.Remove(w);
+                            component.Add(w);
+                        }
+                        while (!w.Equals(v));
+
+                        if (component.Count > 1)
+                        {
+                            foreach (var n in component)
+                                recursive.Add(n);
+                        }
+                        // (size-1 SCCs only contribute via the self-loop pre-pass.)
+                    }
+
+                    // Propagate lowlink to parent frame.
+                    if (work.Count > 0)
+                    {
+                        var parent = work.Peek().Node;
+
+                        if (lowlink[v] < lowlink[parent])
+                            lowlink[parent] = lowlink[v];
+                    }
                 }
             }
         }
 
-        return false;
+        return recursive;
     }
 
     private static IEnumerable<DeclQualifiedName> CollectFunctionReferences(
@@ -515,13 +671,17 @@ public partial class Inlining
                 results.Add(new DeclQualifiedName(funcOrValue.ModuleName, funcOrValue.Name));
             }
 
-            SyntaxTypes.SyntaxAnalysis.EnqueueChildExpressions(current, worklist);
+            SyntaxTypes.SyntaxAnalysis.ForEachChildExpression(current, worklist.Push);
         }
 
         return results;
     }
 
-    private static ImmutableDictionary<DeclQualifiedName, FunctionInfo> BuildFunctionDictionary(
+    internal static ImmutableDictionary<DeclQualifiedName, FunctionInfo> BuildFunctionDictionary(
+        OptimizedElmSyntaxDeclarations declarations) =>
+        BuildFunctionDictionary(declarations.RenderAsFlatDictionary());
+
+    internal static ImmutableDictionary<DeclQualifiedName, FunctionInfo> BuildFunctionDictionary(
         ImmutableDictionary<DeclQualifiedName, SyntaxTypes.Declaration> declarations)
     {
         var builder =
@@ -543,6 +703,10 @@ public partial class Inlining
     /// to its <see cref="SingleChoiceConstructorInfo"/>. This replaces the former syntactic
     /// body-scanning heuristic with a definitive type-based check.
     /// </summary>
+    private static ImmutableDictionary<SyntaxTypes.QualifiedNameRef, SingleChoiceConstructorInfo> BuildSingleChoiceConstructors(
+        OptimizedElmSyntaxDeclarations declarations) =>
+        BuildSingleChoiceConstructors(declarations.RenderAsFlatDictionary());
+
     private static ImmutableDictionary<SyntaxTypes.QualifiedNameRef, SingleChoiceConstructorInfo> BuildSingleChoiceConstructors(
         ImmutableDictionary<DeclQualifiedName, SyntaxTypes.Declaration> declarations)
     {
@@ -577,6 +741,10 @@ public partial class Inlining
     /// <see cref="TypeInference.BuildFunctionSignaturesMap"/>. This enables type-aware
     /// function detection in <see cref="IsFunctionExpression"/>.
     /// </summary>
+    private static ImmutableDictionary<string, TypeInference.InferredType> BuildFunctionSignatures(
+        OptimizedElmSyntaxDeclarations declarations) =>
+        BuildFunctionSignatures(declarations.RenderAsFlatDictionary());
+
     private static ImmutableDictionary<string, TypeInference.InferredType> BuildFunctionSignatures(
         ImmutableDictionary<DeclQualifiedName, SyntaxTypes.Declaration> declarations)
     {
@@ -731,110 +899,6 @@ public partial class Inlining
     }
 
     /// <summary>
-    /// Asserts that a declaration has no naming clashes (let-bindings or case-pattern variables
-    /// shadowing module-level names). Throws an exception with detailed diagnostics if clashes
-    /// are found, to crash early and pinpoint which declaration and stage introduced the problem.
-    /// </summary>
-    private static void AssertNoNamingClashesInDeclaration(
-        DeclQualifiedName qualifiedName,
-        SyntaxTypes.Declaration declaration,
-        ImmutableHashSet<string> moduleLevelNames,
-        string stage)
-    {
-        var (errors, shadowings) =
-            NamingErrorDetection.DetectNamingErrorsInDeclaration(declaration, moduleLevelNames);
-
-        if (errors.Count is 0 && shadowings.Count is 0)
-            return;
-
-        var clashDetails =
-            errors
-            .OfType<CanonicalizationError.NamingClash>()
-            .Select(
-                c =>
-                {
-                    var shadowInfo =
-                        c.ShadowedRange is { } sr
-                        ?
-                        $" (shadowing decl at {sr.Start.Row}:{sr.Start.Column})"
-                        :
-                        "";
-
-                    return $"{c.Name}@{c.Range.Start.Row}:{c.Range.Start.Column}{shadowInfo}";
-                })
-            .ToList();
-
-        var clashNames =
-            errors
-            .OfType<CanonicalizationError.NamingClash>()
-            .Select(c => c.Name)
-            .Distinct()
-            .OrderBy(n => n)
-            .ToList();
-
-        var shadowNames = shadowings.Keys.OrderBy(n => n).ToList();
-
-        var details = new System.Text.StringBuilder();
-        details.Append("Naming clash in '");
-        details.Append(qualifiedName.FullName);
-        details.Append("' after ");
-        details.Append(stage);
-
-        if (clashNames.Count > 0)
-        {
-            details.Append(" — clashes: ");
-            details.Append(string.Join(", ", clashNames));
-        }
-
-        if (clashDetails.Count > 0)
-        {
-            details.Append(" — clash details: [");
-            details.Append(string.Join("; ", clashDetails));
-            details.Append(']');
-        }
-
-        if (shadowNames.Count > 0)
-        {
-            details.Append(" — shadowings: ");
-            details.Append(string.Join(", ", shadowNames));
-        }
-
-        details.Append(" — moduleLevelNames(");
-        details.Append(moduleLevelNames.Count);
-        details.Append(")");
-
-        foreach (var name in clashNames.Concat(shadowNames).Distinct())
-        {
-            details.Append(" contains '");
-            details.Append(name);
-            details.Append("': ");
-            details.Append(moduleLevelNames.Contains(name));
-        }
-
-        // Print abbreviated declaration structure for diagnosis
-        if (declaration is SyntaxTypes.Declaration.FunctionDeclaration funcDecl)
-        {
-            var funcImpl = funcDecl.Function.Declaration.Value;
-            details.Append(" — params: [");
-            details.Append(string.Join(", ", funcImpl.Arguments.Select(a => a.Value.ToString())));
-            details.Append("]");
-
-            // Find the specific let/case binding that clashes
-            var allBindingNames = new HashSet<string>();
-            CollectAllBindingNames(funcImpl.Expression.Value, allBindingNames);
-
-            var clashingBindings =
-                allBindingNames.Intersect(clashNames.Concat(shadowNames).ToHashSet()).OrderBy(n => n);
-
-            details.Append(" — body bindings that clash: [");
-            details.Append(string.Join(", ", clashingBindings));
-            details.Append("]");
-        }
-
-        throw new InvalidOperationException(details.ToString());
-    }
-
-    /// <summary>
     /// Collects all binding names (let-functions, let-destructuring, case patterns, lambda params)
     /// in an expression tree for diagnostic purposes.
     /// </summary>
@@ -956,6 +1020,67 @@ public partial class Inlining
     private static ImmutableHashSet<string> NamesToAvoidForFreshBindings(
         InliningContext context) =>
         context.LocalNames.Union(context.ModuleLevelNames);
+
+    /// <summary>
+    /// Builds the full set of names that fresh bindings introduced by the inliner
+    /// must avoid colliding with. This is
+    ///   (outer scope ∪ module-level names) ∪ ⋃ FV(inlinedArg_i)
+    /// — the union of <see cref="NamesToAvoidForFreshBindings(InliningContext)"/>
+    /// with the free variables of every expression that will be substituted into
+    /// the callee body.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Including <c>FV(inlinedArg_i)</c> is the safety condition that prevents
+    /// substitution-capture: when an inlined argument's free reference (e.g. an
+    /// outer accumulator named <c>s</c>) is substituted into the callee body, any
+    /// callee binding (e.g. a partial-application lambda parameter named <c>s</c>)
+    /// that would have been alpha-renamed to a name still occurring free in the
+    /// argument must instead be renamed to a name that does NOT occur free in
+    /// any argument.
+    /// </para>
+    /// <para>
+    /// This is recommendation #2 from
+    /// <c>explore/internal-analysis/2026-05-19-loop-int-list-regression-findings.md</c>:
+    /// centralizing this construction in one place ensures every inliner site that
+    /// introduces fresh bindings uses the same (correct) avoidance set, instead of
+    /// each computing it independently and risking one of them forgetting the
+    /// FV-of-args contribution.
+    /// </para>
+    /// </remarks>
+    private static IReadOnlySet<string> NamesToAvoidForFreshBindingsIncludingArgFreeVars(
+        InliningContext context,
+        IReadOnlyList<Node<SyntaxTypes.Expression>> inlinedArgs)
+    {
+        var outerNamesToAvoid = NamesToAvoidForFreshBindings(context);
+
+        HashSet<string>? augmented = null;
+        IReadOnlySet<string> namesToAvoid = outerNamesToAvoid;
+
+        foreach (var inlinedArg in inlinedArgs)
+        {
+            var argFreeVars =
+                SyntaxTypes.SyntaxAnalysis.CollectRemainingFreeVariables(inlinedArg.Value);
+
+            foreach (var freeVar in argFreeVars)
+            {
+                if (namesToAvoid.Contains(freeVar))
+                    continue;
+
+                if (augmented is null)
+                {
+                    // Copy on first write so we don't mutate the shared
+                    // outer-scope set returned by NamesToAvoidForFreshBindings.
+                    augmented = [.. namesToAvoid];
+                    namesToAvoid = augmented;
+                }
+
+                augmented.Add(freeVar);
+            }
+        }
+
+        return namesToAvoid;
+    }
 
 
     private static Node<SyntaxTypes.Declaration> SimplifyGeneratedDeclaration(
@@ -1692,6 +1817,21 @@ public partial class Inlining
                             newDecls.AddRange(singleChoiceResult.GeneratedDeclarations);
                             return new InliningResult(singleChoiceResult.Expression, newDecls.ToImmutable());
                         }
+
+                        // Non-recursive TupleUnwrap-driven HO specialization
+                        // (PR D of explore/internal-analysis/2026-05-19-monomorphizing-expressionAfterOpeningSquareBracket-lifted-lambda3.md).
+                        // Materializes a sibling whose tuple-pattern parameter
+                        // is destructured into per-leaf direct references.
+                        if (!funcInfo.IsRecursive &&
+                            TrySpecializeNonRecursiveTupleUnwrapCall(
+                                funcInfo,
+                                funcImpl,
+                                appArgs,
+                                context) is { } tupleUnwrapResult)
+                        {
+                            newDecls.AddRange(tupleUnwrapResult.GeneratedDeclarations);
+                            return new InliningResult(tupleUnwrapResult.Expression, newDecls.ToImmutable());
+                        }
                     }
 
                     // Wrapper-with-captured-function partial-application specialization.
@@ -1739,6 +1879,20 @@ public partial class Inlining
                         newDecls.AddRange(singleChoiceResult2.GeneratedDeclarations);
                         return new InliningResult(singleChoiceResult2.Expression, newDecls.ToImmutable());
                     }
+
+                    // Non-recursive TupleUnwrap-driven HO specialization, also
+                    // wired here for the EnablesClassicInlining branch so it
+                    // fires regardless of which inliner-mode flag is set.
+                    if (!funcInfo.IsRecursive &&
+                        TrySpecializeNonRecursiveTupleUnwrapCall(
+                            funcInfo,
+                            funcImpl,
+                            appArgs,
+                            context) is { } tupleUnwrapResult2)
+                    {
+                        newDecls.AddRange(tupleUnwrapResult2.GeneratedDeclarations);
+                        return new InliningResult(tupleUnwrapResult2.Expression, newDecls.ToImmutable());
+                    }
                 }
 
                 // Skip if we're already in the process of inlining this function (prevents infinite recursion)
@@ -1766,7 +1920,7 @@ public partial class Inlining
                 var isSmallEnough =
                     !shouldInlineHigherOrder &&
                     !shouldInlineWrapperPartial &&
-                    IsSmallEnoughToInline(funcImpl.Expression, funcInfo.ModuleName, context);
+                    IsSmallEnoughToInline(funcImpl.Expression, context);
 
                 if (shouldInlineHigherOrder || shouldInlineWrapperPartial || isSmallEnough)
                 {
@@ -1821,13 +1975,6 @@ public partial class Inlining
         IReadOnlyList<Node<SyntaxTypes.Expression>> args,
         InliningContext context)
     {
-        var namesToAvoid = NamesToAvoidForFreshBindings(context);
-
-        if (namesToAvoid.Count > 0)
-        {
-            lambda = ElmSyntaxTransformations.RenameBindingsAvoidingCapture(lambda, namesToAvoid);
-        }
-
         var newDecls = ImmutableList.CreateBuilder<Node<SyntaxTypes.Declaration>>();
 
         var consumedArgs = Math.Min(lambda.Arguments.Count, args.Count);
@@ -1838,6 +1985,20 @@ public partial class Inlining
             var (inlinedArg, argDecls) = InlineExpression(args[i], context);
             newDecls.AddRange(argDecls);
             consumedInlinedArgs.Add(inlinedArg);
+        }
+
+        // Capture-avoiding rename of the lambda's bindings. The names-to-avoid
+        // set must include every free variable of the inlined arguments, not
+        // just outer-scope/module-level names — otherwise a lambda parameter
+        // whose spelling happens to match a free reference inside a
+        // substituted-in argument would capture that reference. See the
+        // matching fix in InlineFunctionCallCore.
+        var namesToAvoid =
+            NamesToAvoidForFreshBindingsIncludingArgFreeVars(context, consumedInlinedArgs);
+
+        if (namesToAvoid.Count > 0)
+        {
+            lambda = ElmSyntaxTransformations.RenameBindingsAvoidingCapture(lambda, namesToAvoid);
         }
 
         var body =
@@ -1953,7 +2114,6 @@ public partial class Inlining
     /// </summary>
     private static bool IsSmallEnoughToInline(
         Node<SyntaxTypes.Expression> funcBody,
-        ModuleName calleeModuleName,
         InliningContext context)
     {
         // Size-based small-function inlining is enabled only when the config carries a
@@ -1974,12 +2134,72 @@ public partial class Inlining
             return false;
         }
 
-        if (SyntaxTypes.SyntaxAnalysis.CountExpressionNodes(funcBody.Value) > smallConfig.MaxBodyNodeCount)
+        if (CalleeBodyHasMultiArmCase(funcBody.Value))
         {
             return false;
         }
 
+        var nodeCount = 0;
+
+        foreach (var node in SyntaxTypes.SyntaxAnalysis.EnumerateDescendantsNodes(funcBody.Value).Prepend(funcBody.Value))
+        {
+            nodeCount++;
+
+            if (nodeCount > smallConfig.MaxBodyNodeCount)
+            {
+                return false;
+            }
+        }
+
         return true;
+    }
+
+    /// <summary>
+    /// Returns <see langword="true"/> if <paramref name="body"/> contains a
+    /// <see cref="SyntaxTypes.Expression.CaseExpression"/> with more than one case arm
+    /// (i.e. a multi-arm <c>case</c> dispatch).
+    /// <para>
+    /// This is the shared callee-level eligibility predicate used by every inliner
+    /// pathway that performs **literal AST inlining** of a callee body
+    /// (<see cref="IsSmallEnoughToInline"/>,
+    /// <see cref="ShouldInlinePartialApplicationWithCapturedFunction"/>, and the
+    /// VarPattern + IsFunctionBearingExpression + BodyUnwrapsParameterAsConstructor
+    /// per-arg heuristic inside <see cref="ShouldInline"/>).
+    /// Inlining such a callee at every call site duplicates the multi-arm dispatch
+    /// into each caller, defeating the original intent of the
+    /// <see cref="IsSmallEnoughToInline"/> rule. See
+    /// <c>explore/internal-analysis/2026-05-21-inlining-bypasses-small-enough-case-arm-rule.md</c>
+    /// for the motivating defect.
+    /// </para>
+    /// <para>
+    /// Inside <see cref="ShouldInline"/> the gate is applied **only** to the
+    /// VarPattern + Application heuristic — the lambda-shaped-arg, constructor-pattern
+    /// + function-bearing-arg, and data-flow (<see cref="HigherOrderParameterAnalysis"/>)
+    /// checks remain unguarded so genuine higher-order callees such as
+    /// <c>List.map</c> still inline when their function-typed parameter receives a
+    /// lambda or named function-reference.
+    /// </para>
+    /// <para>
+    /// The specialization-sibling-emission pathways
+    /// (<see cref="TrySpecializeSingleChoiceTagCall"/>,
+    /// <see cref="TrySpecializeNonRecursiveTupleUnwrapCall"/>,
+    /// <see cref="TrySpecializeRecursiveCall"/>,
+    /// <see cref="TrySpecializeMutualRecursiveGroup"/>)
+    /// are deliberately exempt: they emit a single new sibling declaration carrying
+    /// the multi-arm <c>case</c> intact, and rewrite the call to reference it.
+    /// </para>
+    /// </summary>
+    private static bool CalleeBodyHasMultiArmCase(SyntaxTypes.Expression body)
+    {
+        foreach (var node in SyntaxTypes.SyntaxAnalysis.EnumerateDescendantsNodes(body).Prepend(body))
+        {
+            if (node is SyntaxTypes.Expression.CaseExpression caseExpr && caseExpr.CaseBlock.Cases.Count > 1)
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /// <summary>
@@ -2015,7 +2235,7 @@ public partial class Inlining
                 }
             }
 
-            SyntaxTypes.SyntaxAnalysis.EnqueueChildExpressions(current, worklist);
+            SyntaxTypes.SyntaxAnalysis.ForEachChildExpression(current, worklist.Push);
         }
 
         return false;
@@ -2092,6 +2312,15 @@ public partial class Inlining
         if (!context.Config.IncludeHigherOrder)
             return false;
 
+        // Don't duplicate a multi-arm case dispatch across every call site —
+        // see <see cref="CalleeBodyHasMultiArmCase"/> and the analysis doc
+        // explore/internal-analysis/2026-05-21-inlining-bypasses-small-enough-case-arm-rule.md.
+        // This is the pathway that previously inlined <c>Rope.prependTo</c>
+        // (and similar 2-arm-case helpers like <c>Rope.filledPrependTo</c>) into
+        // larger parser bodies via partial-application capture.
+        if (CalleeBodyHasMultiArmCase(funcImpl.Expression.Value))
+            return false;
+
         var funcParams = funcImpl.Arguments;
 
         // Only fires for partial applications. Full and over-applications are handled by
@@ -2104,19 +2333,163 @@ public partial class Inlining
 
         for (var i = 0; i < appArgs.Count; i++)
         {
-            if (funcParams[i].Value is not SyntaxTypes.Pattern.VarPattern varPattern)
-                continue;
-
-            if (!IsFunctionExpression(appArgs[i].Value, context))
-                continue;
-
-            if (BodyForwardsParameterToRecursiveCallArgument(
-                funcImpl.Expression.Value,
-                varPattern.Name,
-                context))
+            if (funcParams[i].Value is SyntaxTypes.Pattern.VarPattern varPattern)
             {
-                return true;
+                if (!IsFunctionExpression(appArgs[i].Value, context))
+                    continue;
+
+                if (BodyForwardsParameterToRecursiveCallArgument(
+                    funcImpl.Expression.Value,
+                    varPattern.Name,
+                    context))
+                {
+                    return true;
+                }
+
+                // §7.6-adjacent extension (planning doc
+                // 2026-05-18-expand-elm-syntax-optimizations-for-higher-order-parameter-elimination.md):
+                // for a non-recursive callee whose body is bounded in size,
+                // also fire when the captured-function parameter is
+                // *directly applied* in the body — i.e. the parameter is a
+                // higher-order parameter in the
+                // <see cref="HigherOrderParameterAnalysis"/> sense. Inlining
+                // the wrapper here substitutes the literal-function arg
+                // into the body, and after re-lifting the resulting
+                // lambda the surviving HO parameter is gone in the
+                // specialised variant.
+                // <para>
+                // This is the route by which fixture E's
+                // <c>Test.lazy__lifted__lambda1 Test.rec2</c> (and the
+                // <c>rec1</c> mirror) gets eliminated: substituting
+                // <c>thunk := Test.rec2</c> into
+                // <c>let (Parser parse) = thunk () in parse s</c> yields
+                // <c>let (Parser parse) = Test.rec2 () in parse s</c>,
+                // which subsequent size-based inlining + WUC reduce to
+                // <c>Test.rec2__stripped () s</c>.
+                // </para>
+                // <para>
+                // Gated on a hard body-size cap (40 AST nodes) — the
+                // dominant production wrappers (<c>lazy__lifted__lambda1</c>
+                // at ~10 nodes, <c>oneOf2__lifted__lambda1</c> at ~14)
+                // are well under this; long-bodied higher-order helpers
+                // are excluded to keep specialization counts bounded.
+                // </para>
+                // <para>
+                // <b>Perf tradeoff (documented for review):</b> this
+                // broadened gate fires on the canonical
+                // <c>lazy</c>/<c>oneOf2</c>/<c>map</c>/<c>andThen</c>-shaped
+                // parser combinators in real <c>ParserFast</c> code,
+                // not just in the focused fixture E synthetic. The
+                // <c>ElmParserExpressionTests</c> perf-counter
+                // snapshots shift accordingly:
+                // <c>InvocationCount</c> drops 20–30%
+                // (e.g. <c>54 → 41</c> for <c>Expression_int_literal</c>),
+                // but <c>BuildListCount</c> rises 50–70%
+                // (<c>100 → 170</c> for the same fixture) because each
+                // specialised sibling allocates a fresh closure
+                // environment at runtime. Net <c>InstructionCount</c>
+                // impact is mixed — see updated snapshots in
+                // <c>ElmParserExpressionTests</c>.
+                // </para>
+                if (SyntaxTypes.SyntaxAnalysis.CountExpressionNodes(funcImpl.Expression.Value) <= 40 &&
+                    BodyAppliesParameterDirectly(
+                        funcImpl.Expression.Value,
+                        varPattern.Name))
+                {
+                    return true;
+                }
+
+                continue;
             }
+
+            // Tuple-pattern parameter destructured into var-bound names
+            // (e.g. lambda-lifted bodies of the form
+            // <c>oneOf2__lifted__lambda1 ( pA, pB ) s = …</c>): when
+            // the corresponding arg is a literal <c>TupledExpression</c>
+            // whose elements are themselves function-typed expressions
+            // and at least one tuple-bound name is applied directly in
+            // the body, inlining the wrapper substitutes each tuple
+            // element for the corresponding bound name via the
+            // matched-tuple path in <c>InlineFunctionCallCore</c>.
+            // After re-lifting, the surviving HO findings on the
+            // tuple-bound names are gone in the specialised variant.
+            // Same body-size and HO-application gates as the
+            // var-pattern branch above. Tuple-of-functions parameters
+            // are rare in real code; this branch primarily fires on
+            // <c>WrapperReturnStripping</c>-generated
+            // <c>__stripped</c> bodies (fixture E shape).
+            if (SyntaxTypes.SyntaxAnalysis.UnwrapParenthesized(funcParams[i].Value)
+                    is SyntaxTypes.Pattern.TuplePattern tuplePattern
+                && SyntaxTypes.SyntaxAnalysis.UnwrapParenthesized(appArgs[i].Value)
+                    is SyntaxTypes.Expression.TupledExpression tupleArg
+                && tuplePattern.Elements.Count == tupleArg.Elements.Count
+                && SyntaxTypes.SyntaxAnalysis.CountExpressionNodes(funcImpl.Expression.Value) <= 40)
+            {
+                var anyTupleElemIsFunctionAndAppliedInBody = false;
+
+                for (var j = 0; j < tuplePattern.Elements.Count; j++)
+                {
+                    if (tuplePattern.Elements[j].Value is not SyntaxTypes.Pattern.VarPattern elemVar)
+                        continue;
+
+                    if (!IsFunctionExpression(tupleArg.Elements[j].Value, context))
+                        continue;
+
+                    if (BodyAppliesParameterDirectly(
+                        funcImpl.Expression.Value,
+                        elemVar.Name))
+                    {
+                        anyTupleElemIsFunctionAndAppliedInBody = true;
+                        break;
+                    }
+                }
+
+                if (anyTupleElemIsFunctionAndAppliedInBody)
+                    return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Returns true iff <paramref name="expr"/> contains an
+    /// <see cref="SyntaxTypes.Expression.Application"/> whose head
+    /// (after peeling parens) is a bare local reference to
+    /// <paramref name="paramName"/>. Used by the §7.6-adjacent
+    /// extension of <see cref="ShouldInlinePartialApplicationWithCapturedFunction"/>
+    /// to recognise that a parameter is higher-order
+    /// (function-typed, applied as a function inside the body).
+    /// Scope-naïve by design — re-binding the same name in a nested
+    /// scope would produce a false positive, but
+    /// <see cref="LambdaLifting"/> guarantees lifted bodies don't
+    /// re-bind their parameters, which is the only call shape this
+    /// gate is intended to fire on.
+    /// </summary>
+    private static bool BodyAppliesParameterDirectly(
+        SyntaxTypes.Expression expr,
+        string paramName)
+    {
+        var stack = new Stack<SyntaxTypes.Expression>();
+        stack.Push(expr);
+
+        while (stack.Count > 0)
+        {
+            var current = stack.Pop();
+
+            if (current is SyntaxTypes.Expression.Application app && app.Arguments.Count >= 2)
+            {
+                var head = SyntaxTypes.SyntaxAnalysis.UnwrapParenthesized(app.Arguments[0].Value);
+
+                if (head is SyntaxTypes.Expression.FunctionOrValue headRef &&
+                    headRef.ModuleName.Count is 0 &&
+                    string.Equals(headRef.Name, paramName, StringComparison.Ordinal))
+                {
+                    return true;
+                }
+            }
+
+            SyntaxTypes.SyntaxAnalysis.ForEachChildExpression(current, stack.Push);
         }
 
         return false;
@@ -2163,7 +2536,7 @@ public partial class Inlining
                 }
             }
 
-            SyntaxTypes.SyntaxAnalysis.EnqueueChildExpressions(current, stack);
+            SyntaxTypes.SyntaxAnalysis.ForEachChildExpression(current, stack.Push);
         }
 
         return false;
@@ -2255,9 +2628,43 @@ public partial class Inlining
                 return true;
             }
 
+            // The VarPattern + IsFunctionBearingExpression + BodyUnwrapsParameterAsConstructor
+            // heuristic treats an Application-shaped argument supplied to a case-matched
+            // parameter as "function-bearing enough" to justify inlining. That heuristic was
+            // intended for genuinely higher-order helpers but, because Application is the
+            // most common syntactic shape for any value-producing expression, it also fires
+            // for purely data-consuming callees such as Rope.prependTo (its body
+            // case-matches `left`, and pipelines like `commentsBefore |> Rope.prependTo …`
+            // supply Application-shaped arguments). For callees whose body contains a
+            // multi-arm `case` we must not perform that literal body inlining — it
+            // duplicates the dispatch at every call site, defeating the original case-arm
+            // rule from <see cref="IsSmallEnoughToInline"/>. See
+            // <c>explore/internal-analysis/2026-05-21-inlining-bypasses-small-enough-case-arm-rule.md</c>.
+            // The lambda-shaped arg, constructor-pattern arg, and data-flow checks below
+            // remain unguarded so genuine higher-order callees (e.g. List.map) still inline.
             if (param is SyntaxTypes.Pattern.VarPattern varPattern &&
                 IsFunctionBearingExpression(arg, context) &&
-                ElmSyntaxTransformations.BodyUnwrapsParameterAsConstructor(funcBody, varPattern.Name))
+                ElmSyntaxTransformations.BodyUnwrapsParameterAsConstructor(funcBody, varPattern.Name) &&
+                !CalleeBodyHasMultiArmCase(funcBody.Value))
+            {
+                return true;
+            }
+
+            // Callee-driven detection (data-flow): if any name introduced by
+            // this parameter pattern flows — through any chain of let-bindings,
+            // lambdas, case branches, etc. — into the function position of at
+            // least one Application in the callee body, the callee is
+            // higher-order in this parameter regardless of the call-site
+            // argument's syntactic shape and regardless of whether the
+            // parameter pattern is a bare variable, a constructor pattern, a
+            // tuple/record pattern, or any other pattern that introduces names.
+            // Example: `Helpers.apply f x = f x` (var pattern) and
+            // `runParser (Parser p) input = p input` (constructor pattern with
+            // an inner var) both qualify. See <see cref="HigherOrderParameterAnalysis"/>
+            // / <see cref="ElmExpressionDataFlow"/> for the underlying analysis.
+            if (HigherOrderParameterAnalysis
+                .FindHigherOrderNamesIntroducedByParameter(param, funcBody.Value)
+                .Count > 0)
             {
                 return true;
             }
@@ -2468,14 +2875,36 @@ public partial class Inlining
         InliningContext context,
         bool recursivelyInlineBody)
     {
-        var namesToAvoid = NamesToAvoidForFreshBindings(context);
-
         // Build cross-module qualification context when the callee is from a different module.
         // This is passed to RenameBindingsAvoidingCapture so that local-renaming and module-level
         // qualification happen in a single pass. Combining them avoids an ordering conflict:
         // renaming can change local bindings, so a subsequent separate qualification pass
         // wouldn't know which names were originally local vs. module-level references.
         var crossModuleQualification = BuildCrossModuleQualification(calleeModuleName, context);
+
+        var newDecls = ImmutableList.CreateBuilder<Node<SyntaxTypes.Declaration>>();
+
+        // First, recursively inline the arguments (using the original context,
+        // before we add the function parameter names to scope). These must be
+        // inlined BEFORE we rename the callee's bindings, because the rename
+        // must additionally avoid any free variable that appears in the
+        // substituted-in argument expressions — otherwise a callee binding
+        // whose spelling matches a free variable in an argument would capture
+        // that reference after substitution, producing wrong code.
+        var inlinedArgs = new List<Node<SyntaxTypes.Expression>>(args.Count);
+
+        foreach (var arg in args)
+        {
+            var (inlinedArg, argDecls) = InlineExpression(arg, context);
+            newDecls.AddRange(argDecls);
+            inlinedArgs.Add(inlinedArg);
+        }
+
+        // Names that any fresh binding the inliner introduces must avoid:
+        //   (outer scope ∪ module-level) ∪ ⋃ FV(inlinedArg_i)
+        // Centralized helper — see NamesToAvoidForFreshBindingsIncludingArgFreeVars.
+        var namesToAvoid =
+            NamesToAvoidForFreshBindingsIncludingArgFreeVars(context, inlinedArgs);
 
         if (namesToAvoid.Count > 0 || crossModuleQualification is not null)
         {
@@ -2486,21 +2915,8 @@ public partial class Inlining
                     crossModuleQualification);
         }
 
-        var newDecls = ImmutableList.CreateBuilder<Node<SyntaxTypes.Declaration>>();
-
         var funcParams = funcImpl.Arguments;
         var funcBody = funcImpl.Expression;
-
-        // First, recursively inline the arguments (using the original context,
-        // before we add the function parameter names to scope)
-        var inlinedArgs = new List<Node<SyntaxTypes.Expression>>(args.Count);
-
-        foreach (var arg in args)
-        {
-            var (inlinedArg, argDecls) = InlineExpression(arg, context);
-            newDecls.AddRange(argDecls);
-            inlinedArgs.Add(inlinedArg);
-        }
 
         // Collect all binding names introduced by the function parameters.
         // These must be added to the context so that nested inlining (of the body)
@@ -2982,6 +3398,298 @@ nextParam:;
             new SyntaxTypes.Expression.Application([.. callArgs]);
 
         return new InliningResult(callExpr, [newDecl]);
+    }
+
+    /// <summary>
+    /// Materializes a specialized sibling for a non-recursive higher-order
+    /// callee whose catalog entry contains at least one
+    /// <see cref="ParameterSpecialization.TupleUnwrap"/>, and rewrites the
+    /// call site to invoke the sibling with only the non-specialized
+    /// arguments. Returns null when the call site doesn't match any catalog
+    /// entry or when the entry uses a parameter-spec kind this path doesn't
+    /// support.
+    /// <para>
+    /// Implements the emission half of Step 4 + Step 5 of
+    /// <c>explore/internal-analysis/2026-05-19-monomorphizing-expressionAfterOpeningSquareBracket-lifted-lambda3.md</c>.
+    /// Discovery is in
+    /// <c>ElmSyntaxOptimizationSpecializationCollection.TryBuildTupleUnwrapForArgument</c>.
+    /// </para>
+    /// </summary>
+    private static InliningResult? TrySpecializeNonRecursiveTupleUnwrapCall(
+        FunctionInfo funcInfo,
+        SyntaxTypes.FunctionImplementation funcImpl,
+        IReadOnlyList<Node<SyntaxTypes.Expression>> appArgs,
+        InliningContext context)
+    {
+        if (funcInfo.IsRecursive)
+            return null;
+
+        if (appArgs.Count < funcImpl.Arguments.Count)
+            return null;
+
+        if (!context.SpecializationCatalog.SpecializationsByFunction.TryGetValue(
+                new DeclQualifiedName(funcInfo.ModuleName, funcImpl.Name.Value),
+                out var availableSpecializations))
+        {
+            return null;
+        }
+
+        // Pre-resolve bare-local references through context.LetRhsByName for
+        // tuple-shaped arguments so the existing
+        // ParameterSpecialization.ArgumentMatchesSpecialization tuple matcher
+        // (which does only a paren-peel + one optional let-newtype-wrap peel
+        // per element, not a global let-binding lookup) can pair up tuple
+        // elements like `pA` with the catalog's
+        // TupleUnwrap[ConcreteFunctionValue(parseDouble), ...] entries.
+        // This is the emission-side counterpart of the discovery-side
+        // ClassifyArgument(arg, letRhsByName) overload introduced by PR C.
+        var matchingArgs = ResolveArgsForSpecializationLookup(appArgs, context);
+
+        var bestSpecialization =
+            SpecializationCatalog.FindBestSpecialization(
+                availableSpecializations,
+                [.. matchingArgs.Select(a => a.Value)]);
+
+        if (bestSpecialization is null)
+            return null;
+
+        var paramSpecs = bestSpecialization.Specialization.ParameterSpecializations;
+
+        if (!paramSpecs.Values.Any(p => p is ParameterSpecialization.TupleUnwrap))
+            return null;
+
+        // All param-spec kinds in this entry must be substitutable to a single
+        // concrete callable expression at each leaf.
+        foreach (var (idx, spec) in paramSpecs)
+        {
+            if (idx >= funcImpl.Arguments.Count)
+                return null;
+
+            var paramPatternUnwrapped =
+                SyntaxTypes.SyntaxAnalysis.UnwrapParenthesized(funcImpl.Arguments[idx].Value);
+
+            if (spec is ParameterSpecialization.TupleUnwrap)
+            {
+                if (paramPatternUnwrapped is not SyntaxTypes.Pattern.TuplePattern)
+                    return null;
+            }
+            else if (spec is ParameterSpecialization.ConcreteFunctionValue
+                or ParameterSpecialization.ConcreteLambdaValue
+                or ParameterSpecialization.ConcreteRecordAccessFunctionValue)
+            {
+                if (paramPatternUnwrapped is not SyntaxTypes.Pattern.VarPattern)
+                    return null;
+            }
+            else
+            {
+                return null;
+            }
+        }
+
+        var specializedName = bestSpecialization.SpecializedFunctionName;
+        var specializedModuleName = context.Resolution.CurrentModuleName ?? funcInfo.ModuleName;
+
+        // Build substitutions and remaining parameter list.
+        var substitutions = new Dictionary<string, Node<SyntaxTypes.Expression>>();
+        var remainingParams = new List<Node<SyntaxTypes.Pattern>>();
+
+        for (var i = 0; i < funcImpl.Arguments.Count; i++)
+        {
+            if (!paramSpecs.TryGetValue(i, out var spec))
+            {
+                remainingParams.Add(funcImpl.Arguments[i]);
+                continue;
+            }
+
+            var paramPatternUnwrapped =
+                SyntaxTypes.SyntaxAnalysis.UnwrapParenthesized(funcImpl.Arguments[i].Value);
+
+            if (spec is ParameterSpecialization.TupleUnwrap tupleUnwrap)
+            {
+                var tuplePattern = (SyntaxTypes.Pattern.TuplePattern)paramPatternUnwrapped;
+
+                if (tuplePattern.Elements.Count != tupleUnwrap.ElementSpecializations.Length)
+                    return null;
+
+                for (var j = 0; j < tuplePattern.Elements.Count; j++)
+                {
+                    var elemPattern =
+                        SyntaxTypes.SyntaxAnalysis.UnwrapParenthesized(tuplePattern.Elements[j].Value);
+
+                    if (elemPattern is not SyntaxTypes.Pattern.VarPattern elemVar)
+                        return null;
+
+                    var replacement = BuildReplacementForFunctionSpec(tupleUnwrap.ElementSpecializations[j]);
+
+                    if (replacement is null)
+                        return null;
+
+                    substitutions[elemVar.Name] =
+                        new Node<SyntaxTypes.Expression>(ElmSyntaxTransformations.s_zeroRange, replacement);
+                }
+            }
+            else if (paramPatternUnwrapped is SyntaxTypes.Pattern.VarPattern vp)
+            {
+                var replacement = BuildReplacementForFunctionSpec(spec);
+
+                if (replacement is null)
+                    return null;
+
+                substitutions[vp.Name] =
+                    new Node<SyntaxTypes.Expression>(ElmSyntaxTransformations.s_zeroRange, replacement);
+            }
+            else
+            {
+                return null;
+            }
+        }
+
+        var substitutedBody =
+            ElmSyntaxTransformations.SubstituteInExpression(funcImpl.Expression, substitutions);
+
+        var qualifiedBody =
+            QualifyLiftedHelperReferencesFromCalleeModule(
+                substitutedBody,
+                funcInfo.ModuleName,
+                context);
+
+        var specializedImpl =
+            new SyntaxTypes.FunctionImplementation(
+                Name: new Node<string>(ElmSyntaxTransformations.s_zeroRange, specializedName),
+                Arguments: [.. remainingParams],
+                Expression: qualifiedBody);
+
+        var specializedFunc =
+            new SyntaxTypes.FunctionStruct(
+                Documentation: null,
+                Signature: null,
+                Declaration:
+                new Node<SyntaxTypes.FunctionImplementation>(ElmSyntaxTransformations.s_zeroRange, specializedImpl));
+
+        var newDecl =
+            new Node<SyntaxTypes.Declaration>(
+                ElmSyntaxTransformations.s_zeroRange,
+                new SyntaxTypes.Declaration.FunctionDeclaration(specializedFunc));
+
+        // Build the call to the specialized sibling: head + remaining args + any over-applied args.
+        var callArgs =
+            new List<Node<SyntaxTypes.Expression>>
+            {
+                new(
+                    ElmSyntaxTransformations.s_zeroRange,
+                    new SyntaxTypes.Expression.FunctionOrValue(specializedModuleName, specializedName))
+            };
+
+        for (var i = 0; i < appArgs.Count; i++)
+        {
+            if (i < funcImpl.Arguments.Count && paramSpecs.ContainsKey(i))
+                continue;
+
+            callArgs.Add(appArgs[i]);
+        }
+
+        var callExpr =
+            callArgs.Count is 1
+            ?
+            callArgs[0].Value
+            :
+            new SyntaxTypes.Expression.Application([.. callArgs]);
+
+        return new InliningResult(callExpr, [newDecl]);
+    }
+
+    /// <summary>
+    /// Builds a single concrete callable expression from a parameter
+    /// specialization that classifies a known function value. Returns null
+    /// for kinds outside the supported set (e.g. nested
+    /// <see cref="ParameterSpecialization.TupleUnwrap"/>, which would
+    /// require its own emission path).
+    /// </summary>
+    private static SyntaxTypes.Expression? BuildReplacementForFunctionSpec(
+        ParameterSpecialization spec)
+    {
+        return spec switch
+        {
+            ParameterSpecialization.ConcreteFunctionValue cfv =>
+            new SyntaxTypes.Expression.FunctionOrValue(
+                cfv.FunctionQualifiedName.Namespaces,
+                cfv.FunctionQualifiedName.DeclName),
+
+            ParameterSpecialization.ConcreteLambdaValue clv =>
+            new SyntaxTypes.Expression.LambdaExpression(clv.Lambda),
+
+            ParameterSpecialization.ConcreteRecordAccessFunctionValue craf =>
+            new SyntaxTypes.Expression.RecordAccessFunction(craf.FunctionName),
+
+            _ =>
+            null
+        };
+    }
+
+    /// <summary>
+    /// Returns a parallel list of call-site arguments suitable for catalog
+    /// lookup via <see cref="SpecializationCatalog.FindBestSpecialization"/>.
+    /// For tuple-shaped arguments whose elements are bare local references
+    /// present in <see cref="InliningContext.LetRhsByName"/>, the references
+    /// are substituted by their resolved RHS expressions; non-tuple arguments
+    /// and unrecognized elements are passed through unchanged.
+    /// </summary>
+    private static IReadOnlyList<Node<SyntaxTypes.Expression>> ResolveArgsForSpecializationLookup(
+        IReadOnlyList<Node<SyntaxTypes.Expression>> appArgs,
+        InliningContext context)
+    {
+        if (context.LetRhsByName.IsEmpty)
+            return appArgs;
+
+        var result = new List<Node<SyntaxTypes.Expression>>(appArgs.Count);
+
+        foreach (var arg in appArgs)
+        {
+            var unwrapped = arg.Value;
+
+            while (unwrapped is SyntaxTypes.Expression.ParenthesizedExpression paren)
+                unwrapped = paren.Expression.Value;
+
+            if (unwrapped is SyntaxTypes.Expression.TupledExpression tupled)
+            {
+                var anyResolved = false;
+                var newElements = new List<Node<SyntaxTypes.Expression>>(tupled.Elements.Count);
+
+                foreach (var elem in tupled.Elements)
+                {
+                    var elemUnwrapped = elem.Value;
+
+                    while (elemUnwrapped is SyntaxTypes.Expression.ParenthesizedExpression elemParen)
+                        elemUnwrapped = elemParen.Expression.Value;
+
+                    if (elemUnwrapped is SyntaxTypes.Expression.FunctionOrValue fov &&
+                        fov.ModuleName.Count is 0 &&
+                        context.LetRhsByName.TryGetValue(fov.Name, out var resolvedRhs))
+                    {
+                        newElements.Add(new Node<SyntaxTypes.Expression>(elem.Range, resolvedRhs));
+                        anyResolved = true;
+                    }
+                    else
+                    {
+                        newElements.Add(elem);
+                    }
+                }
+
+                if (anyResolved)
+                {
+                    result.Add(
+                        new Node<SyntaxTypes.Expression>(
+                            arg.Range,
+                            new SyntaxTypes.Expression.TupledExpression([.. newElements])));
+
+                    continue;
+                }
+            }
+
+            result.Add(arg);
+        }
+
+        return result;
     }
 
     private static void CollectDirectFieldSubstitutions(
@@ -3629,18 +4337,16 @@ nextParam:;
         // When we substitute invariant parameters with concrete argument expressions,
         // those expressions may reference local variables from the call site that are
         // not in scope at the module level. We capture these as extra parameters.
-        var freeVarsInBody =
-            SyntaxTypes.SyntaxAnalysis.CollectRemainingFreeVariables(qualifiedBody.Value)
-            .Except(SyntaxTypes.SyntaxAnalysis.CollectNamesBoundByPatterns(remainingParams))
+        var remainingParamNames =
+            remainingParams
+            .SelectMany(p => ElmSyntaxTransformations.CollectPatternNames(p.Value))
             .ToHashSet();
 
-        // Remove names that are in scope at the module level (function names, constructors, etc.)
-        freeVarsInBody.ExceptWith(context.ModuleLevelNames);
-
-        // Also remove names from other modules' declarations that are known
-        // (these would be resolved via qualified references during compilation).
-        // Additionally remove the specialized function's own name (recursive reference).
-        freeVarsInBody.Remove(specializedName);
+        var freeVarsInBody =
+            SyntaxTypes.SyntaxAnalysis.CollectRemainingFreeVariables(qualifiedBody.Value)
+            .Except(remainingParamNames)
+            .Except(context.ModuleLevelNames)
+            .Remove(specializedName);
 
         var capturedVariables = freeVarsInBody.OrderBy(v => v).ToList();
 
@@ -3845,13 +4551,16 @@ nextParam:;
             .ToImmutableArray();
 
         // Detect free variables introduced by substitution (same logic as TrySpecializeRecursiveCall).
-        var freeVarsInBody =
-            SyntaxTypes.SyntaxAnalysis.CollectRemainingFreeVariables(qualifiedBody.Value)
-            .Except(SyntaxTypes.SyntaxAnalysis.CollectNamesBoundByPatterns(remainingParameters))
+        var remainingParameterNames =
+            remainingParameters
+            .SelectMany(p => ElmSyntaxTransformations.CollectPatternNames(p.Value))
             .ToHashSet();
 
-        freeVarsInBody.ExceptWith(context.ModuleLevelNames);
-        freeVarsInBody.Remove(specializedName);
+        var freeVarsInBody =
+            SyntaxTypes.SyntaxAnalysis.CollectRemainingFreeVariables(qualifiedBody.Value)
+            .Except(remainingParameterNames)
+            .Except(context.ModuleLevelNames)
+            .Remove(specializedName);
 
         var capturedVariables = freeVarsInBody.OrderBy(v => v).ToList();
 
@@ -3988,7 +4697,7 @@ nextParam:;
                 }
             }
 
-            SyntaxTypes.SyntaxAnalysis.EnqueueChildExpressions(expr, worklist);
+            SyntaxTypes.SyntaxAnalysis.ForEachChildExpression(expr, worklist.Push);
         }
 
         return true;
@@ -4050,7 +4759,7 @@ nextParam:;
                 continue;
 
             // Size check
-            if (SyntaxTypes.SyntaxAnalysis.CountExpressionNodes(refBody) > 2000)
+            if (SyntaxTypes.SyntaxAnalysis.CountExpressionNodes(refBody, 2001) > 2000)
                 continue;
 
             candidates.Add(refFunc);
@@ -4682,25 +5391,18 @@ nextParam:;
         ModuleName calleeModuleName,
         InliningContext context)
     {
-        var expr = exprNode.Value;
+        var resolution = context.Resolution;
 
-        var qualifiedExpr =
-            expr switch
-            {
-                SyntaxTypes.Expression.FunctionOrValue funcOrValue when funcOrValue.ModuleName.Count is 0 &&
-                    (funcOrValue.Name.Contains("__lifted__", StringComparison.Ordinal) ||
-                    funcOrValue.Name.Contains("__specialized__", StringComparison.Ordinal)) &&
-                    context.Resolution.FunctionsByQualifiedName.ContainsKey(
-                        new DeclQualifiedName(calleeModuleName, funcOrValue.Name)) =>
-                new SyntaxTypes.Expression.FunctionOrValue(calleeModuleName, funcOrValue.Name),
-
-                _ =>
-                ElmSyntaxTransformations.MapChildExpressions(
-                    expr,
-                    child => QualifyLiftedHelperReferencesFromCalleeModule(child, calleeModuleName, context))
-            };
-
-        return new Node<SyntaxTypes.Expression>(exprNode.Range, qualifiedExpr);
+        return
+            ReferenceQualifier.Qualify(
+                exprNode,
+                calleeModuleName,
+                name =>
+                (name.Contains(GeneratedNameSuffixes.Lifted, StringComparison.Ordinal) ||
+                name.Contains(GeneratedNameSuffixes.Specialized, StringComparison.Ordinal)) &&
+                resolution.FunctionsByQualifiedName.ContainsKey(
+                    new DeclQualifiedName(calleeModuleName, name)),
+                trackLocalScope: false);
     }
 
 
@@ -4890,6 +5592,31 @@ nextParam:;
             context with { LocalNames = context.LocalNames.Union(letBoundNames) }
             :
             context;
+
+        // Extend LetRhsByName so the non-recursive HO emission path
+        // (TrySpecializeNonRecursiveTupleUnwrapCall) can resolve bare-local
+        // references in tuple-argument elements through the surrounding
+        // newtype destructurings of shape `let (Wrapper name) = <rhs>`.
+        // Mirrors the discovery-walker extension in
+        // ElmSyntaxOptimizationSpecializationCollection.CollectSpecializationsFromExpression.
+        var extendedLetRhs =
+            RemoveShadowedFromLetRhs(
+                bodyContext.LetRhsByName,
+                letBoundNames);
+
+        foreach (var declNode in inlinedDecls)
+        {
+            if (declNode.Value is SyntaxTypes.Expression.LetDeclaration.LetDestructuring letDestrForCtx &&
+                TryExtractLetNewtypeBindingName(letDestrForCtx) is { } innerVarName)
+            {
+                extendedLetRhs = extendedLetRhs.SetItem(innerVarName, letDestrForCtx.Expression.Value);
+            }
+        }
+
+        if (!ReferenceEquals(extendedLetRhs, bodyContext.LetRhsByName))
+        {
+            bodyContext = bodyContext with { LetRhsByName = extendedLetRhs };
+        }
 
         var (inlinedBody, bodyDecls) = InlineExpression(body, bodyContext);
         newDecls.AddRange(bodyDecls);

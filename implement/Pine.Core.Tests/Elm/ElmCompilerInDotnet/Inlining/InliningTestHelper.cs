@@ -7,7 +7,6 @@ using System.Linq;
 
 namespace Pine.Core.Tests.Elm.ElmCompilerInDotnet.Inlining;
 
-using Inlining = Core.Elm.ElmCompilerInDotnet.Inlining;
 using Stil4mElmSyntax7 = Core.Elm.ElmSyntax.Stil4mElmSyntax7;
 
 public class InliningTestHelper
@@ -332,7 +331,7 @@ public class InliningTestHelper
     public static Stil4mElmSyntax7.File CanonicalizeAndInlineAndGetSingleModule(
         IReadOnlyList<string> elmModulesTexts,
         IReadOnlyList<string> moduleName,
-        Inlining.Config config)
+        ElmSyntaxOptimization.Config config)
     {
         var parsedModules =
             elmModulesTexts
@@ -363,8 +362,9 @@ public class InliningTestHelper
         var flatDecls = ElmCompiler.FlattenModulesToDeclarationDictionary(orderedModules);
 
         var inlinedDecls =
-            Inlining.Inline(flatDecls, config)
-            .Extract(err => throw new System.Exception("Failed inlining: " + err));
+            ElmSyntaxOptimization.OptimizeRounds(OptimizedElmSyntaxDeclarations.FromFlatDictionary(flatDecls), config)
+            .Extract(err => throw new System.Exception("Failed inlining: " + err))
+            .RenderAsFlatDictionary();
 
         var inlinedModules = ElmCompiler.ReconstructModulesFromFlatDict(inlinedDecls, orderedModules);
 
@@ -377,7 +377,7 @@ public class InliningTestHelper
     public static Stil4mElmSyntax7.File CanonicalizeAndOptimizeAndGetSingleModule(
         IReadOnlyList<string> elmModulesTexts,
         IReadOnlyList<string> moduleName,
-        Inlining.Config config)
+        ElmSyntaxOptimization.Config config)
     {
         var parsedModules =
             elmModulesTexts
@@ -412,12 +412,15 @@ public class InliningTestHelper
         var flatDecls = ElmCompiler.FlattenModulesToDeclarationDictionary(canonicalizedOrderedModules);
 
         var specializedDecls =
-            ElmSyntaxSpecialization.Apply(flatDecls, config)
+            ElmSyntaxOptimization.SpecializeDeclarations(
+                OptimizedElmSyntaxDeclarations.FromFlatDictionary(flatDecls),
+                config)
             .Extract(err => throw new System.Exception("Failed specialization: " + err));
 
         var inlinedDecls =
-            ElmSyntaxInlining.Apply(specializedDecls, config)
-            .Extract(err => throw new System.Exception("Failed inlining stage: " + err));
+            ElmSyntaxOptimization.SpecializeAndInlineDeclarationsCombined(specializedDecls, config)
+            .Extract(err => throw new System.Exception("Failed inlining stage: " + err))
+            .RenderAsFlatDictionary();
 
         var liftedDecls = LambdaLifting.LiftLambdas(inlinedDecls);
 
@@ -436,7 +439,7 @@ public class InliningTestHelper
     public static Stil4mElmSyntax7.File CanonicalizeAndInlineAndLowerOperatorsAndGetSingleModule(
         IReadOnlyList<string> elmModulesTexts,
         IReadOnlyList<string> moduleName,
-        Inlining.Config config)
+        ElmSyntaxOptimization.Config config)
     {
         var parsedModules =
             elmModulesTexts
@@ -471,8 +474,9 @@ public class InliningTestHelper
         var flatDecls = ElmCompiler.FlattenModulesToDeclarationDictionary(orderedCanonicalizedModules);
 
         var inlinedDecls =
-            Inlining.Inline(flatDecls, config)
-            .Extract(err => throw new System.Exception("Failed inlining: " + err));
+            ElmSyntaxOptimization.OptimizeRounds(OptimizedElmSyntaxDeclarations.FromFlatDictionary(flatDecls), config)
+            .Extract(err => throw new System.Exception("Failed inlining: " + err))
+            .RenderAsFlatDictionary();
 
         var loweredDecls =
             BuiltinOperatorLowering.Apply(inlinedDecls)

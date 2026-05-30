@@ -115,8 +115,7 @@ public class Base64PrecompiledLeavesEffectivenessTests
                 var compiledEnv =
                     ElmCompiler.CompileInteractiveEnvironment(
                         treeWithTest,
-                        rootFilePaths: rootFilePaths,
-                        disableInlining: false)
+                        rootFilePaths: rootFilePaths)
                     .Map(r => r.compiledEnvValue)
                     .Extract(err => throw new Exception("Failed compiling: " + err));
 
@@ -136,7 +135,7 @@ public class Base64PrecompiledLeavesEffectivenessTests
     /// Builds an intermediate VM with all optimizations disabled (for repeatable
     /// profiling). When <paramref name="enableDefaultPrecompiledLeaves"/> is
     /// <see langword="true"/>, the VM registers the default precompiled leaves from
-    /// <see cref="Core.IntermediateVM.SetupVM.DefaultPrecompiledLeaves"/> (which include
+    /// <see cref="IntermediateVM.SetupVM.DefaultPrecompiledLeaves"/> (which include
     /// the Base64 conversion leaves under test); otherwise it runs with an empty
     /// precompiled-leaves dictionary.
     /// </summary>
@@ -155,7 +154,7 @@ public class Base64PrecompiledLeavesEffectivenessTests
             precompiledLeaves:
                 enableDefaultPrecompiledLeaves
                 ?
-                Core.IntermediateVM.SetupVM.DefaultPrecompiledLeaves
+                IntermediateVM.SetupVM.DefaultPrecompiledLeaves
                 :
                 ImmutableDictionary<PineValue, Func<PineValue, PineValue?>>.Empty,
             reportEnterPrecompiledLeaf: null,

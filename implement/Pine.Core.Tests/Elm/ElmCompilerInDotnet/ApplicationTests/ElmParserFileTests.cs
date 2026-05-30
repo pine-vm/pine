@@ -182,8 +182,7 @@ public class ElmParserFileTests
                 var compiledEnv =
                     ElmCompiler.CompileInteractiveEnvironment(
                         treeWithTest,
-                        rootFilePaths: rootFilePaths,
-                        disableInlining: false)
+                        rootFilePaths: rootFilePaths)
                     .Map(r => r.compiledEnvValue)
                     .Extract(err => throw new Exception("Failed compiling: " + err));
 
@@ -227,10 +226,10 @@ public class ElmParserFileTests
 
         result.counts.Should().Be(
             """
-            InvocationCount: 1_029
-            BuildListCount: 3_614
+            InvocationCount: 330
+            BuildListCount: 801
             LoopIterationCount: 0
-            InstructionCount: 27_540
+            InstructionCount: 11_009
             """);
     }
 
@@ -245,10 +244,10 @@ public class ElmParserFileTests
 
         result.counts.Should().Be(
             """
-            InvocationCount: 1_529
-            BuildListCount: 4_624
+            InvocationCount: 784
+            BuildListCount: 1_721
             LoopIterationCount: 0
-            InstructionCount: 40_562
+            InstructionCount: 29_867
             """);
     }
 

@@ -258,8 +258,7 @@ public class Base64FunctionTests
                 var compiledEnv =
                     ElmCompiler.CompileInteractiveEnvironment(
                         treeWithTest,
-                        rootFilePaths: rootFilePaths,
-                        disableInlining: true)
+                        rootFilePaths: rootFilePaths)
                     .Map(r => r.compiledEnvValue)
                     .Extract(err => throw new Exception("Failed compiling: " + err));
 

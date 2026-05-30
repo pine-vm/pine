@@ -46,9 +46,7 @@ public class RecordDestructureLetBindingRegressionTests
         var compiledEnv =
             ElmCompiler.CompileInteractiveEnvironment(
                 tree,
-                rootFilePaths: [["M.elm"]],
-                disableInlining: true,
-                maxOptimizationRounds: 1)
+                rootFilePaths: [["M.elm"]])
             .Map(r => r.compiledEnvValue)
             .Extract(err => throw new Exception("Failed compiling: " + err));
 

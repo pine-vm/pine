@@ -4,7 +4,7 @@ using Xunit;
 
 namespace Pine.Core.Tests.Elm.ElmCompilerInDotnet.Inlining;
 
-using Inlining = Core.Elm.ElmCompilerInDotnet.Inlining;
+using ElmSyntaxOptimization = Core.Elm.ElmCompilerInDotnet.ElmSyntaxOptimization;
 
 /// <summary>
 /// Tests for higher-order function specialization in the inlining stage.
@@ -23,7 +23,7 @@ public class InliningHigherOrderTests
     private static string InlineAndRenderSingleModule(
         string elmModuleText,
         IReadOnlyList<string> moduleName,
-        Inlining.Config config)
+        ElmSyntaxOptimization.Config config)
     {
         var appModule =
             InliningTestHelper.CanonicalizeAndInlineAndGetSingleModule(
@@ -42,7 +42,7 @@ public class InliningHigherOrderTests
     private static string InlineAndRenderModule(
         IReadOnlyList<string> elmModulesTexts,
         IReadOnlyList<string> moduleName,
-        Inlining.Config config)
+        ElmSyntaxOptimization.Config config)
     {
         var appModule =
             InliningTestHelper.CanonicalizeAndInlineAndGetSingleModule(
@@ -140,7 +140,7 @@ public class InliningHigherOrderTests
             InlineAndRenderModule(
                 [helpersModuleText, appModuleText],
                 ["App"],
-                Inlining.Config.OnlyFunctions);
+                ElmSyntaxOptimization.Config.OnlyFunctions);
 
         rendered.Trim().Should().Be(
             expectedAppModuleText.Trim());
@@ -257,7 +257,7 @@ public class InliningHigherOrderTests
             InlineAndRenderModule(
                 [helpersModuleText, appModuleText],
                 ["App"],
-                Inlining.Config.OnlyFunctions);
+                ElmSyntaxOptimization.Config.OnlyFunctions);
 
         rendered.Trim().Should().Be(
             expectedAppModuleText.Trim());
@@ -325,7 +325,7 @@ public class InliningHigherOrderTests
             InlineAndRenderSingleModule(
                 appModuleText,
                 ["App"],
-                Inlining.Config.OnlyFunctions);
+                ElmSyntaxOptimization.Config.OnlyFunctions);
 
         rendered.Trim().Should().Be(
             expectedAppModuleText.Trim());
@@ -450,7 +450,7 @@ public class InliningHigherOrderTests
             InlineAndRenderModule(
                 [helpersModuleText, appModuleText],
                 ["App"],
-                Inlining.Config.OnlyFunctions);
+                ElmSyntaxOptimization.Config.OnlyFunctions);
 
         rendered.Trim().Should().Be(
             expectedAppModuleText.Trim());
@@ -547,7 +547,7 @@ public class InliningHigherOrderTests
             InlineAndRenderModule(
                 [helpersModuleText, appModuleText],
                 ["App"],
-                Inlining.Config.OnlyFunctions);
+                ElmSyntaxOptimization.Config.OnlyFunctions);
 
         rendered.Trim().Should().Be(
             expectedAppModuleText.Trim());
@@ -638,7 +638,7 @@ public class InliningHigherOrderTests
             InlineAndRenderModule(
                 [helpersModuleText, appModuleText],
                 ["App"],
-                Inlining.Config.OnlyFunctions);
+                ElmSyntaxOptimization.Config.OnlyFunctions);
 
         rendered.Trim().Should().Be(
             expectedAppModuleText.Trim());
@@ -713,7 +713,7 @@ public class InliningHigherOrderTests
             InlineAndRenderModule(
                 [helpersModuleText, appModuleText],
                 ["App"],
-                Inlining.Config.OnlyFunctions);
+                ElmSyntaxOptimization.Config.OnlyFunctions);
 
         rendered.Trim().Should().Be(
             expectedAppModuleText.Trim());
@@ -803,7 +803,7 @@ public class InliningHigherOrderTests
             InlineAndRenderModule(
                 [helpersModuleText, appModuleText],
                 ["App"],
-                Inlining.Config.OnlyFunctions);
+                ElmSyntaxOptimization.Config.OnlyFunctions);
 
         rendered.Trim().Should().Be(
             expectedAppModuleText.Trim());
@@ -905,7 +905,7 @@ public class InliningHigherOrderTests
             InlineAndRenderModule(
                 [helpersModuleText, appModuleText],
                 ["App"],
-                Inlining.Config.OnlyFunctions);
+                ElmSyntaxOptimization.Config.OnlyFunctions);
 
         rendered.Trim().Should().Be(
             expectedAppModuleText.Trim());

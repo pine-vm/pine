@@ -460,8 +460,7 @@ public class DictCompilerSupportTests
                 var compiledEnv =
                     ElmCompiler.CompileInteractiveEnvironment(
                         kernelModulesTree,
-                        rootFilePaths: rootFilePaths,
-                        disableInlining: false)
+                        rootFilePaths: rootFilePaths)
                     .Map(r => r.compiledEnvValue)
                     .Extract(err => throw new Exception("Failed compiling Dict: " + err));
 

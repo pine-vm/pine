@@ -151,8 +151,7 @@ public class CompilationWithIncompleteModules
         var compiledEnv =
             ElmCompiler.CompileInteractiveEnvironment(
                 appCodeTree,
-                rootFilePaths: rootFilePaths,
-                disableInlining: false)
+                rootFilePaths: rootFilePaths)
             .Map(r => r.compiledEnvValue)
             .Extract(err => throw new Exception(err));
 

@@ -3,7 +3,7 @@ using Xunit;
 
 namespace Pine.Core.Tests.Elm.ElmCompilerInDotnet.Inlining;
 
-using Inlining = Core.Elm.ElmCompilerInDotnet.Inlining;
+using ElmSyntaxOptimization = Core.Elm.ElmCompilerInDotnet.ElmSyntaxOptimization;
 
 public class InliningRecursiveCrossModuleTests
 {
@@ -69,7 +69,7 @@ public class InliningRecursiveCrossModuleTests
                 appModuleText,
                 ],
                 ["App"],
-                Inlining.Config.OnlyFunctions);
+                ElmSyntaxOptimization.Config.OnlyFunctions);
 
         var rendered =
             InliningTestHelper.RenderModuleForSnapshotTests(appModule);

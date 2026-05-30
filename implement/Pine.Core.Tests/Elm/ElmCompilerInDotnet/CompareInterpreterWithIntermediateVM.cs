@@ -111,7 +111,9 @@ public sealed class CompareInterpreterWithIntermediateVM
         FileTree appCodeTree,
         IReadOnlyList<IReadOnlyList<string>> rootFilePaths,
         IReadOnlyList<DeclQualifiedName> entryPoints,
-        int maxOptimizationRounds)
+        int maxOptimizationRounds,
+        bool runSpecializationBeforeLambdaLifting = false,
+        bool inlineLetDestructureThunks = false)
     {
         if (entryPoints is null || entryPoints.Count is 0)
         {
@@ -124,8 +126,11 @@ public sealed class CompareInterpreterWithIntermediateVM
             ElmCompiler.CompileInteractiveEnvironment(
                 appCodeTree,
                 rootFilePaths: rootFilePaths,
-                disableInlining: false,
-                maxOptimizationRounds: maxOptimizationRounds)
+                syntaxOptimization:
+                    new ElmSyntaxOptimizationConfig.SyntaxOptimizationEnabled(
+                        MaxOptimizationRounds: maxOptimizationRounds,
+                        RunSpecializationBeforeLambdaLifting: runSpecializationBeforeLambdaLifting,
+                        InlineLetDestructureThunks: inlineLetDestructureThunks))
             .Extract(
                 err => throw new Exception(
                     "CompareInterpreterWithIntermediateVM: failed compiling: " + err));
@@ -479,7 +484,7 @@ public sealed class CompareInterpreterWithIntermediateVM
     private static IReadOnlyDictionary<DeclQualifiedName, SyntaxModel.Declaration>
         BuildInterpreterDeclarations(
         FileTree appCodeTree,
-        CompilationPipelineStageResults pipelineStageResults)
+        CompilationPipelineStageResults<DefaultLoweredResults> pipelineStageResults)
     {
         var declarations = new Dictionary<DeclQualifiedName, SyntaxModel.Declaration>();
 

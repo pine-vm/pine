@@ -4,14 +4,14 @@ using Xunit;
 
 namespace Pine.Core.Tests.Elm.ElmCompilerInDotnet.Inlining;
 
-using Inlining = Core.Elm.ElmCompilerInDotnet.Inlining;
+using ElmSyntaxOptimization = Core.Elm.ElmCompilerInDotnet.ElmSyntaxOptimization;
 
 public class InliningPipelineTests
 {
     private static string InlineAndRenderSingleModule(
         string elmModuleText,
         IReadOnlyList<string> moduleName,
-        Inlining.Config config)
+        ElmSyntaxOptimization.Config config)
     {
         var appModule =
             InliningTestHelper.CanonicalizeAndInlineAndGetSingleModule(
@@ -48,7 +48,7 @@ public class InliningPipelineTests
             InlineAndRenderSingleModule(
                 elmModuleText,
                 ["App"],
-                Inlining.Config.OnlyFunctions);
+                ElmSyntaxOptimization.Config.OnlyFunctions);
 
         var expectedElmModuleText =
             """"
@@ -92,7 +92,7 @@ public class InliningPipelineTests
             InlineAndRenderSingleModule(
                 elmModuleText,
                 ["App"],
-                Inlining.Config.OnlyFunctions);
+                ElmSyntaxOptimization.Config.OnlyFunctions);
 
         var expectedElmModuleText =
             """"
@@ -138,7 +138,7 @@ public class InliningPipelineTests
             InlineAndRenderSingleModule(
                 elmModuleText,
                 ["App"],
-                Inlining.Config.OnlyFunctions);
+                ElmSyntaxOptimization.Config.OnlyFunctions);
 
         var expectedElmModuleText =
             """"
@@ -182,7 +182,7 @@ public class InliningPipelineTests
             InlineAndRenderSingleModule(
                 elmModuleText,
                 ["App"],
-                Inlining.Config.OnlyFunctions);
+                ElmSyntaxOptimization.Config.OnlyFunctions);
 
         var expectedElmModuleText =
             """"
@@ -231,7 +231,7 @@ public class InliningPipelineTests
             InlineAndRenderSingleModule(
                 elmModuleText,
                 ["App"],
-                Inlining.Config.OnlyFunctions);
+                ElmSyntaxOptimization.Config.OnlyFunctions);
 
         var expectedElmModuleText =
             """"
@@ -283,7 +283,7 @@ public class InliningPipelineTests
             InlineAndRenderSingleModule(
                 elmModuleText,
                 ["App"],
-                Inlining.Config.OnlyFunctions);
+                ElmSyntaxOptimization.Config.OnlyFunctions);
 
         var expectedElmModuleText =
             """"

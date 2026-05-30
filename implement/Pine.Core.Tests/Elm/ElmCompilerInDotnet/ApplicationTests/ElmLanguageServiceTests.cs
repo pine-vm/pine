@@ -94,7 +94,7 @@ public class ElmLanguageServiceTests
     /// Parameters control how aggressively the optimization pipeline is applied —
     /// see <see cref="ElmCompiler.CompileInteractiveEnvironment(FileTree, IReadOnlyList{IReadOnlyList{string}}, bool, int, bool, IReadOnlyList{DeclQualifiedName})"/>.
     /// When <paramref name="maxOptimizationRounds"/> is <c>null</c>, the call
-    /// inherits the API default (<see cref="ElmCompiler.MaxOptimizationRoundsDefault"/>),
+    /// inherits the API default (<see cref="ElmCompiler.OptimizationRoundsDefault"/>),
     /// matching the configuration used by the productive
     /// <c>LanguageServiceCompilation.CompileLanguageServiceEnv</c> path.
     /// </summary>
@@ -157,19 +157,26 @@ public class ElmLanguageServiceTests
             .Select(b => (IReadOnlyList<string>)b.path)
             .ToList();
 
-        var compiledEnv =
-            (maxOptimizationRounds is { } rounds
+        var syntaxOptimization =
+            disableInlining
             ?
-            ElmCompiler.CompileInteractiveEnvironment(
-                treeWithTest,
-                rootFilePaths: rootFilePaths,
-                disableInlining: disableInlining,
-                maxOptimizationRounds: rounds)
+            (ElmSyntaxOptimizationConfig)new ElmSyntaxOptimizationConfig.SyntaxOptimizationDisabled()
             :
+            maxOptimizationRounds is { } rounds
+            ?
+            new ElmSyntaxOptimizationConfig.SyntaxOptimizationEnabled(
+                MaxOptimizationRounds: rounds,
+                InlineLetDestructureThunks: true)
+            :
+            new ElmSyntaxOptimizationConfig.SyntaxOptimizationEnabled(
+                RunSpecializationBeforeLambdaLifting: true,
+                InlineLetDestructureThunks: true);
+
+        var compiledEnv =
             ElmCompiler.CompileInteractiveEnvironment(
                 treeWithTest,
                 rootFilePaths: rootFilePaths,
-                disableInlining: disableInlining))
+                syntaxOptimization: syntaxOptimization)
             .Map(r => r.compiledEnvValue)
             .Extract(err => throw new Exception("Failed compiling: " + err));
 
@@ -482,25 +489,25 @@ public class ElmLanguageServiceTests
             PerformanceCounters.Aggregate(
                 reports.Select(r => r.Counters));
 
-        PerformanceCountersFormatting.FormatCounts(aggregateCounters).Should().Be(
-            """
-            InvocationCount: 12_680
-            BuildListCount: 78_888
-            LoopIterationCount: 0
-            InstructionCount: 374_719
-            """);
-
         var aggregateInvocationCounts =
             InvocationCountReport.Aggregate(invocationCountReports);
 
+        PerformanceCountersFormatting.FormatCounts(aggregateCounters).Should().Be(
+            """
+            InvocationCount: 8_580
+            BuildListCount: 27_170
+            LoopIterationCount: 0
+            InstructionCount: 322_496
+            """);
+
         InvocationCountReportFormatting.FormatCounts(aggregateInvocationCounts).Should().Be(
             """
-            CompiledExpressionCount: 461
-            InvocationCountTotal: 12_683
-            InvocationCountAverage: 28
+            CompiledExpressionCount: 262
+            InvocationCountTotal: 8_583
+            InvocationCountAverage: 33
             InvocationCountPercentile10: 2
-            InvocationCountMedian: 7
-            InvocationCountPercentile90: 69
+            InvocationCountMedian: 4
+            InvocationCountPercentile90: 74
             """);
     }
 

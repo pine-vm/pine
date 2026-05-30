@@ -95,7 +95,11 @@ public class PipelineStageSnapshotTests
 
         // --- Assert specialized stage ---
         var specializedProvider =
-            SnapshotTestFormat.FilterDeclarationsByModuleName(pipelineStageResults.Specialized!, ["Provider"]);
+            SnapshotTestFormat.FilterDeclarationsByModuleName(
+                pipelineStageResults.Lowered.Specialized!.RenderAsFlatDictionary(),
+                [
+                "Provider"
+                ]);
 
         SnapshotTestFormat.RenderQualifiedDeclarations(
             specializedProvider,
@@ -110,7 +114,11 @@ public class PipelineStageSnapshotTests
             """);
 
         var specializedConsumer =
-            SnapshotTestFormat.FilterDeclarationsByModuleName(pipelineStageResults.Specialized!, ["Consumer"]);
+            SnapshotTestFormat.FilterDeclarationsByModuleName(
+                pipelineStageResults.Lowered.Specialized!.RenderAsFlatDictionary(),
+                [
+                "Consumer"
+                ]);
 
         SnapshotTestFormat.RenderQualifiedDeclarations(
             specializedConsumer,
@@ -125,17 +133,19 @@ public class PipelineStageSnapshotTests
 
             Consumer.result : Basics.Int -> Basics.Int
             Consumer.result n =
-                Basics.add
-                    (Basics.add
+                Consumer.increment
+                    (Consumer.increment
                         n
-                        1
                     )
-                    1
             """);
 
         // --- Assert inlined stage ---
         var inlinedProvider =
-            SnapshotTestFormat.FilterDeclarationsByModuleName(pipelineStageResults.Inlined!, ["Provider"]);
+            SnapshotTestFormat.FilterDeclarationsByModuleName(
+                pipelineStageResults.Lowered.Specialized!.RenderAsFlatDictionary(),
+                [
+                "Provider"
+                ]);
 
         SnapshotTestFormat.RenderQualifiedDeclarations(inlinedProvider, SnapshotTestFormat.DeclarationSortOrder.NameAsc)
             .Should().Be(
@@ -148,11 +158,17 @@ public class PipelineStageSnapshotTests
                     )
             """);
 
-        // After inlining, the Consumer module's 'result' function has the body
-        // of applyTwice inlined: instead of calling Provider.applyTwice, the body
-        // is expanded to two nested calls to Consumer.increment.
+        // After higher-order inlining (post-loop, before the trailing size-based pass),
+        // Provider.applyTwice has been inlined into Consumer.result, but Consumer.increment
+        // is NOT yet inlined: size-based inlining now runs once after the convergence loop,
+        // so its effect is visible only in CompilationPipelineStageResults.SizeBasedInlined
+        // and downstream snapshots (ModulesForCompilation).
         var inlinedConsumer =
-            SnapshotTestFormat.FilterDeclarationsByModuleName(pipelineStageResults.Inlined!, ["Consumer"]);
+            SnapshotTestFormat.FilterDeclarationsByModuleName(
+                pipelineStageResults.Lowered.Specialized!.RenderAsFlatDictionary(),
+                [
+                "Consumer"
+                ]);
 
         SnapshotTestFormat.RenderQualifiedDeclarations(inlinedConsumer, SnapshotTestFormat.DeclarationSortOrder.NameAsc)
             .Should().Be(
@@ -166,12 +182,10 @@ public class PipelineStageSnapshotTests
 
             Consumer.result : Basics.Int -> Basics.Int
             Consumer.result n =
-                Basics.add
-                    (Basics.add
+                Consumer.increment
+                    (Consumer.increment
                         n
-                        1
                     )
-                    1
             """);
 
         // --- Assert ModulesForCompilation (final stage after operator lowering) ---
@@ -236,16 +250,15 @@ public class PipelineStageSnapshotTests
                 disableInlining: true);
 
         // When inlining is disabled, optimization pipeline stages should be null
-        pipelineStageResults.Specialized.Should().BeNull();
-        pipelineStageResults.Inlined.Should().BeNull();
+        pipelineStageResults.Lowered.Specialized.Should().BeNull();
 
         // But canonicalized and lambda-lifted should still be present
         pipelineStageResults.Canonicalized.Should().NotBeEmpty();
-        pipelineStageResults.LambdaLifted.Should().NotBeEmpty();
+        pipelineStageResults.Lowered.LambdaLifted.Should().NotBeEmpty();
 
         // ModulesForCompilation should equal LambdaLifted when inlining is disabled
         pipelineStageResults.ModulesForCompilation.Should()
-            .HaveCount(pipelineStageResults.LambdaLifted.Count);
+            .HaveCount(pipelineStageResults.Lowered.LambdaLifted.Count);
     }
 
     [Fact]
@@ -312,7 +325,11 @@ public class PipelineStageSnapshotTests
 
         // --- Assert specialized stage ---
         var specializedModuleA =
-            SnapshotTestFormat.FilterDeclarationsByModuleName(pipelineStageResults.Specialized!, ["ModuleA"]);
+            SnapshotTestFormat.FilterDeclarationsByModuleName(
+                pipelineStageResults.Lowered.Specialized!.RenderAsFlatDictionary(),
+                [
+                "ModuleA"
+                ]);
 
         SnapshotTestFormat.RenderQualifiedDeclarations(
             specializedModuleA,
@@ -326,7 +343,11 @@ public class PipelineStageSnapshotTests
             """);
 
         var specializedModuleB =
-            SnapshotTestFormat.FilterDeclarationsByModuleName(pipelineStageResults.Specialized!, ["ModuleB"]);
+            SnapshotTestFormat.FilterDeclarationsByModuleName(
+                pipelineStageResults.Lowered.Specialized!.RenderAsFlatDictionary(),
+                [
+                "ModuleB"
+                ]);
 
         SnapshotTestFormat.RenderQualifiedDeclarations(
             specializedModuleB,
@@ -334,14 +355,17 @@ public class PipelineStageSnapshotTests
             """
             ModuleB.combined : Basics.Int -> Basics.Int
             ModuleB.combined x =
-                Basics.add
+                ModuleA.helper
                     x
-                    1
             """);
 
         // --- Assert inlined stage ---
         var inlinedModuleA =
-            SnapshotTestFormat.FilterDeclarationsByModuleName(pipelineStageResults.Inlined!, ["ModuleA"]);
+            SnapshotTestFormat.FilterDeclarationsByModuleName(
+                pipelineStageResults.Lowered.Specialized!.RenderAsFlatDictionary(),
+                [
+                "ModuleA"
+                ]);
 
         SnapshotTestFormat.RenderQualifiedDeclarations(inlinedModuleA, SnapshotTestFormat.DeclarationSortOrder.NameAsc)
             .Should().Be(
@@ -354,16 +378,19 @@ public class PipelineStageSnapshotTests
             """);
 
         var inlinedModuleB =
-            SnapshotTestFormat.FilterDeclarationsByModuleName(pipelineStageResults.Inlined!, ["ModuleB"]);
+            SnapshotTestFormat.FilterDeclarationsByModuleName(
+                pipelineStageResults.Lowered.Specialized!.RenderAsFlatDictionary(),
+                [
+                "ModuleB"
+                ]);
 
         SnapshotTestFormat.RenderQualifiedDeclarations(inlinedModuleB, SnapshotTestFormat.DeclarationSortOrder.NameAsc)
             .Should().Be(
             """
             ModuleB.combined : Basics.Int -> Basics.Int
             ModuleB.combined x =
-                Basics.add
+                ModuleA.helper
                     x
-                    1
             """);
 
         // --- Assert final stage (after operator lowering) ---

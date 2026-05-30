@@ -450,8 +450,7 @@ public class KernelBytesFunctionTests
                 var compiledEnv =
                     ElmCompiler.CompileInteractiveEnvironment(
                         treeWithTest,
-                        rootFilePaths: rootFilePaths,
-                        disableInlining: false)
+                        rootFilePaths: rootFilePaths)
                     .Map(r => r.compiledEnvValue)
                     .Extract(err => throw new Exception("Failed compiling: " + err));
 

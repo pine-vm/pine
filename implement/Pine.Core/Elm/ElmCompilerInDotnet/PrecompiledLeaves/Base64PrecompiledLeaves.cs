@@ -96,8 +96,7 @@ public static class Base64PrecompiledLeaves
         var compiledEnv =
             ElmCompiler.CompileInteractiveEnvironment(
                 treeWithBase64,
-                rootFilePaths: rootFilePaths,
-                disableInlining: false)
+                rootFilePaths: rootFilePaths)
             .Map(r => r.compiledEnvValue)
             .Extract(
                 err => throw new Exception("Failed compiling Base64 modules to derive leaf info: " + err));

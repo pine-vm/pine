@@ -404,8 +404,7 @@ public class ParserFastTests
                 var compiledEnv =
                     ElmCompiler.CompileInteractiveEnvironment(
                         treeWithTest,
-                        rootFilePaths: rootFilePaths,
-                        disableInlining: false)
+                        rootFilePaths: rootFilePaths)
                     .Map(r => r.compiledEnvValue)
                     .Extract(err => throw new Exception("Failed compiling: " + err));
 
@@ -468,7 +467,7 @@ public class ParserFastTests
                             ["ParserFastTestModule"],
                             "testWithoutLinebreak_alpha"),
                         ],
-                        maxOptimizationRounds: ElmCompiler.MaxOptimizationRoundsDefault);
+                        maxOptimizationRounds: ElmCompiler.OptimizationRoundsDefault);
             });
 
     /// <summary>
@@ -578,10 +577,10 @@ public class ParserFastTests
 
         PerformanceCountersFormatting.FormatCounts(report).Should().Be(
             """
-            InvocationCount: 5
-            BuildListCount: 6
+            InvocationCount: 0
+            BuildListCount: 0
             LoopIterationCount: 0
-            InstructionCount: 218
+            InstructionCount: 2
             """);
     }
 
@@ -598,10 +597,10 @@ public class ParserFastTests
 
         PerformanceCountersFormatting.FormatCounts(report).Should().Be(
             """
-            InvocationCount: 5
-            BuildListCount: 6
+            InvocationCount: 0
+            BuildListCount: 0
             LoopIterationCount: 0
-            InstructionCount: 183
+            InstructionCount: 2
             """);
     }
 
@@ -618,10 +617,10 @@ public class ParserFastTests
 
         PerformanceCountersFormatting.FormatCounts(report).Should().Be(
             """
-            InvocationCount: 9
-            BuildListCount: 17
+            InvocationCount: 6
+            BuildListCount: 10
             LoopIterationCount: 0
-            InstructionCount: 258
+            InstructionCount: 219
             """);
     }
 
@@ -755,16 +754,12 @@ public class ParserFastTests
 
             var renderedTestEntry = RenderDeclByName("testWithoutLinebreak_alpha");
             var renderedHelperSpecialized = RenderDeclByName("skipWhileWithoutLinebreakHelp__specialized__1");
-            var renderedNewLifted = RenderDeclByName("testWithoutLinebreak_alpha__lifted__lambda2");
 
             renderedTestEntry.Should().Be(
                 ExpectedPostOpt_testWithoutLinebreak_alpha);
 
             renderedHelperSpecialized.Should().Be(
                 ExpectedPostOpt_skipWhileWithoutLinebreakHelp__specialized__1);
-
-            renderedNewLifted.Should().Be(
-                ExpectedPostOpt_testWithoutLinebreak_alpha__lifted__lambda2);
         }
 
         var (value1, report1, invocations1) =
@@ -783,18 +778,18 @@ public class ParserFastTests
 
         PerformanceCountersFormatting.FormatCounts(report1).Should().Be(
             """
-            InvocationCount: 26
-            BuildListCount: 27
+            InvocationCount: 20
+            BuildListCount: 21
             LoopIterationCount: 0
-            InstructionCount: 869
+            InstructionCount: 602
             """);
 
         PerformanceCountersFormatting.FormatCounts(report2).Should().Be(
             """
-            InvocationCount: 52
-            BuildListCount: 53
+            InvocationCount: 46
+            BuildListCount: 47
             LoopIterationCount: 0
-            InstructionCount: 1_675
+            InstructionCount: 1_408
             """);
     }
 
@@ -815,20 +810,13 @@ public class ParserFastTests
     private const string ExpectedInterpreterInvocationLog_testWithoutLinebreak_alpha_abc =
         """
         direct testWithoutLinebreak_alpha [ "abc" ]
-        direct ParserFastTestModule.testWithoutLinebreak_alpha__lifted__lambda1 [  ]
-        direct ParserFastTestModule.testWithoutLinebreak_alpha__lifted__lambda2 [  ]
-        direct ParserFastTestModule.map__lifted__lambda1__specialized__1 [ (<function>, <function>), [ <pine_blob 12 bytes>, 0, 1, 1, 1 ] ]
-        direct ParserFastTestModule.PState [ <pine_blob 12 bytes>, 0, 1, 1, 1 ]
-        fnvalue ParserFastTestModule.testWithoutLinebreak_alpha__lifted__lambda2 [ PState (<pine_blob 12 bytes>) 0 1 1 1 ]
-        direct ParserFastTestModule.skipWhileWithoutLinebreakHelp__specialized__2 [ 0, 1, 1, <pine_blob 12 bytes>, 1 ]
-        direct ParserFastTestModule.skipWhileWithoutLinebreakHelp__specialized__2 [ 4, 1, 2, <pine_blob 12 bytes>, 1 ]
-        direct ParserFastTestModule.skipWhileWithoutLinebreakHelp__specialized__2 [ 8, 1, 3, <pine_blob 12 bytes>, 1 ]
-        direct ParserFastTestModule.skipWhileWithoutLinebreakHelp__specialized__2 [ 12, 1, 4, <pine_blob 12 bytes>, 1 ]
+        direct ParserFastTestModule.skipWhileWithoutLinebreakHelp__specialized__1 [ 0, 1, 1, <pine_blob 12 bytes>, 1 ]
+        direct ParserFastTestModule.skipWhileWithoutLinebreakHelp__specialized__1 [ 4, 1, 2, <pine_blob 12 bytes>, 1 ]
+        direct ParserFastTestModule.skipWhileWithoutLinebreakHelp__specialized__1 [ 8, 1, 3, <pine_blob 12 bytes>, 1 ]
+        direct ParserFastTestModule.skipWhileWithoutLinebreakHelp__specialized__1 [ 12, 1, 4, <pine_blob 12 bytes>, 1 ]
         direct ParserFastTestModule.PState [ <pine_blob 12 bytes>, 12, 1, 1, 4 ]
         direct ParserFastTestModule.String [ <pine_blob 12 bytes> ]
         direct ParserFastTestModule.Good [ "abc", PState (<pine_blob 12 bytes>) 12 1 1 4 ]
-        fnvalue ParserFastTestModule.testWithoutLinebreak_alpha__lifted__lambda1 [ "abc" ]
-        direct ParserFastTestModule.Good [ 3, PState (<pine_blob 12 bytes>) 12 1 1 4 ]
         direct Result.Ok [ 3 ]
         """;
 
@@ -853,15 +841,57 @@ public class ParserFastTests
                     (ParserFastTestModule.String srcBytes) =
                         input
                 in
-                case ParserFastTestModule.map__lifted__lambda1__specialized__1 ( ParserFastTestModule.testWithoutLinebreak_alpha__lifted__lambda1, ParserFastTestModule.testWithoutLinebreak_alpha__lifted__lambda2 ) ( srcBytes, 0, 1, 1, 1 ) of
-                    ParserFastTestModule.Good value (ParserFastTestModule.PState finalSrc finalOffset _ finalRow finalCol) ->
+                case
+                    let
+                        s0OffsetInt : Basics.Int
+                        s0OffsetInt =
+                            0
+
+                        s1 : ParserFastTestModule.State
+                        s1 =
+                            ParserFastTestModule.skipWhileWithoutLinebreakHelp__specialized__1 0 1 1 srcBytes 1
+
+                        (ParserFastTestModule.PState _ s1Offset _ _ _) =
+                            s1
+
+                        s1OffsetInt : Basics.Int
+                        s1OffsetInt =
+                            s1Offset
+
+                        sliceBytesLength : Basics.Int
+                        sliceBytesLength =
+                            Pine_kernel.int_add [ s1OffsetInt, Pine_kernel.int_mul [ -1, s0OffsetInt ] ]
+
+                        sliceBytes : Basics.Int
+                        sliceBytes =
+                            Pine_kernel.take [ sliceBytesLength, Pine_kernel.skip [ s0OffsetInt, srcBytes ] ]
+                    in
+                    ParserFastTestModule.Good (ParserFastTestModule.String sliceBytes) s1
+                of
+                    ParserFastTestModule.Good a s1 ->
+                        let
+                            value =
+                                (let
+                                    (ParserFastTestModule.String bytes) =
+                                        a
+                                 in
+                                 Pine_kernel.concat [ Pine_kernel.take [ 1, 0 ], Pine_kernel.bit_shift_right [ 2, Pine_kernel.skip [ 1, Pine_kernel.length bytes ] ] ]
+                                )
+
+                            (ParserFastTestModule.PState finalSrc finalOffset _ finalRow finalCol) =
+                                s1
+                        in
                         if Pine_kernel.equal [ finalOffset, Pine_kernel.length srcBytes ] then
                             Result.Ok value
 
                         else
                             Result.Err [ { row = finalRow, col = finalCol } ]
 
-                    ParserFastTestModule.Bad _ deadEnds ->
+                    ParserFastTestModule.Bad committed x ->
+                        let
+                            deadEnds =
+                                x
+                        in
                         Result.Err []
             of
                 Result.Ok v ->
@@ -869,61 +899,6 @@ public class ParserFastTests
 
                 Result.Err _ ->
                     -1
-        """;
-
-    /// <summary>
-    /// Post-optimization rendering of the new lifted lambda introduced by the
-    /// wrapper-with-captured-function specialization. The body is the original
-    /// <c>whileWithoutLinebreak__lifted__lambda1</c> body with <c>isGood</c>
-    /// substituted away — there is no <c>isGood</c> parameter, and the recursive call
-    /// goes directly to the first-order
-    /// <c>skipWhileWithoutLinebreakHelp__specialized__1</c>.
-    /// </summary>
-    private const string ExpectedPostOpt_testWithoutLinebreak_alpha__lifted__lambda2 =
-        """
-        ParserFastTestModule.testWithoutLinebreak_alpha__lifted__lambda2 (ParserFastTestModule.PState s0SrcBytes s0Offset s0Indent s0Row s0Col) =
-            let
-                s0OffsetInt : Basics.Int
-                s0OffsetInt =
-                    s0Offset
-
-                s1 : ParserFastTestModule.State
-                s1 =
-                    ParserFastTestModule.skipWhileWithoutLinebreakHelp__specialized__2
-                        s0Offset
-                        s0Row
-                        s0Col
-                        s0SrcBytes
-                        s0Indent
-
-                (ParserFastTestModule.PState _ s1Offset _ _ _) =
-                    s1
-
-                s1OffsetInt : Basics.Int
-                s1OffsetInt =
-                    s1Offset
-
-                sliceBytesLength : Basics.Int
-                sliceBytesLength =
-                    Pine_kernel.int_add
-                        [ s1OffsetInt
-                        , Pine_kernel.int_mul
-                            [ -1, s0OffsetInt ]
-                        ]
-
-                sliceBytes : Basics.Int
-                sliceBytes =
-                    Pine_kernel.take
-                        [ sliceBytesLength
-                        , Pine_kernel.skip
-                            [ s0OffsetInt, s0SrcBytes ]
-                        ]
-            in
-            ParserFastTestModule.Good
-                (ParserFastTestModule.String
-                    sliceBytes
-                )
-                s1
         """;
 
     /// <summary>

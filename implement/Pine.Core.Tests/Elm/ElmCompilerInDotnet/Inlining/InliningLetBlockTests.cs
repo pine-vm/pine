@@ -4,7 +4,7 @@ using Xunit;
 
 namespace Pine.Core.Tests.Elm.ElmCompilerInDotnet.Inlining;
 
-using Inlining = Core.Elm.ElmCompilerInDotnet.Inlining;
+using ElmSyntaxOptimization = Core.Elm.ElmCompilerInDotnet.ElmSyntaxOptimization;
 
 /// <summary>
 /// Tests that transformations in ApplyOptimizationPipelineWithStageResults work correctly
@@ -24,7 +24,7 @@ public class InliningLetBlockTests
     private static string InlineAndRenderSingleModule(
         string elmModuleText,
         IReadOnlyList<string> moduleName,
-        Inlining.Config config)
+        ElmSyntaxOptimization.Config config)
     {
         var appModule =
             InliningTestHelper.CanonicalizeAndInlineAndGetSingleModule(
@@ -41,7 +41,7 @@ public class InliningLetBlockTests
     private static string OptimizeAndRenderSingleModule(
         string elmModuleText,
         IReadOnlyList<string> moduleName,
-        Inlining.Config config)
+        ElmSyntaxOptimization.Config config)
     {
         var appModule =
             InliningTestHelper.CanonicalizeAndOptimizeAndGetSingleModule(
@@ -83,7 +83,7 @@ public class InliningLetBlockTests
             InlineAndRenderSingleModule(
                 elmModuleText,
                 ["App"],
-                Inlining.Config.OnlyFunctions);
+                ElmSyntaxOptimization.Config.OnlyFunctions);
 
         rendered.Trim().Should().Be(
             """"
@@ -126,7 +126,7 @@ public class InliningLetBlockTests
             InlineAndRenderSingleModule(
                 elmModuleText,
                 ["App"],
-                Inlining.Config.OnlyFunctions);
+                ElmSyntaxOptimization.Config.OnlyFunctions);
 
         rendered.Trim().Should().Be(
             """"
@@ -173,7 +173,7 @@ public class InliningLetBlockTests
             InlineAndRenderSingleModule(
                 elmModuleText,
                 ["App"],
-                Inlining.Config.OnlyFunctions);
+                ElmSyntaxOptimization.Config.OnlyFunctions);
 
         rendered.Trim().Should().Be(
             """"
@@ -217,7 +217,7 @@ public class InliningLetBlockTests
             InlineAndRenderSingleModule(
                 elmModuleText,
                 ["App"],
-                Inlining.Config.OnlyFunctions);
+                ElmSyntaxOptimization.Config.OnlyFunctions);
 
         rendered.Trim().Should().Be(
             """"
@@ -269,7 +269,7 @@ public class InliningLetBlockTests
             InlineAndRenderSingleModule(
                 elmModuleText,
                 ["App"],
-                Inlining.Config.OnlyFunctions);
+                ElmSyntaxOptimization.Config.OnlyFunctions);
 
         rendered.Trim().Should().Be(
             """"
@@ -324,7 +324,7 @@ public class InliningLetBlockTests
             InlineAndRenderSingleModule(
                 elmModuleText,
                 ["App"],
-                Inlining.Config.OnlyFunctions);
+                ElmSyntaxOptimization.Config.OnlyFunctions);
 
         rendered.Trim().Should().Be(
             """"
@@ -392,7 +392,7 @@ public class InliningLetBlockTests
             InlineAndRenderSingleModule(
                 elmModuleText,
                 ["App"],
-                Inlining.Config.OnlyFunctions);
+                ElmSyntaxOptimization.Config.OnlyFunctions);
 
         rendered.Trim().Should().Be(
             """"
@@ -460,7 +460,7 @@ public class InliningLetBlockTests
             OptimizeAndRenderSingleModule(
                 elmModuleText,
                 ["App"],
-                Inlining.Config.OnlyFunctions);
+                ElmSyntaxOptimization.Config.OnlyFunctions);
 
         rendered.Trim().Should().Be(
             """"
@@ -505,7 +505,7 @@ public class InliningLetBlockTests
             OptimizeAndRenderSingleModule(
                 elmModuleText,
                 ["App"],
-                Inlining.Config.OnlyFunctions);
+                ElmSyntaxOptimization.Config.OnlyFunctions);
 
         rendered.Trim().Should().Be(
             """"
@@ -557,7 +557,7 @@ public class InliningLetBlockTests
             OptimizeAndRenderSingleModule(
                 elmModuleText,
                 ["App"],
-                Inlining.Config.OnlyFunctions);
+                ElmSyntaxOptimization.Config.OnlyFunctions);
 
         rendered.Trim().Should().Be(
             """"
@@ -645,13 +645,13 @@ public class InliningLetBlockTests
             InlineAndRenderSingleModule(
                 naturalOrderModule,
                 ["App"],
-                Inlining.Config.OnlyFunctions);
+                ElmSyntaxOptimization.Config.OnlyFunctions);
 
         var reverseRendered =
             InlineAndRenderSingleModule(
                 reverseOrderModule,
                 ["App"],
-                Inlining.Config.OnlyFunctions);
+                ElmSyntaxOptimization.Config.OnlyFunctions);
 
         naturalRendered.Trim().Should().Be(
             """"
@@ -737,13 +737,13 @@ public class InliningLetBlockTests
             InlineAndRenderSingleModule(
                 naturalOrderModule,
                 ["App"],
-                Inlining.Config.OnlyFunctions);
+                ElmSyntaxOptimization.Config.OnlyFunctions);
 
         var reverseRendered =
             InlineAndRenderSingleModule(
                 reverseOrderModule,
                 ["App"],
-                Inlining.Config.OnlyFunctions);
+                ElmSyntaxOptimization.Config.OnlyFunctions);
 
         naturalRendered.Trim().Should().Be(
             """"
@@ -847,13 +847,13 @@ public class InliningLetBlockTests
             InlineAndRenderSingleModule(
                 evenFirstModule,
                 ["App"],
-                Inlining.Config.OnlyFunctions);
+                ElmSyntaxOptimization.Config.OnlyFunctions);
 
         var oddFirstRendered =
             InlineAndRenderSingleModule(
                 oddFirstModule,
                 ["App"],
-                Inlining.Config.OnlyFunctions);
+                ElmSyntaxOptimization.Config.OnlyFunctions);
 
         evenFirstRendered.Trim().Should().Be(
             """"

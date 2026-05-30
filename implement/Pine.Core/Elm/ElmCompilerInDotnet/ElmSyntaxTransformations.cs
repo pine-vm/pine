@@ -2049,7 +2049,7 @@ internal static class ElmSyntaxTransformations
 
             foreach (var decl in letDeclarations)
             {
-                IReadOnlyList<string> introduced =
+                ModuleName introduced =
                     decl.Value switch
                     {
                         SyntaxTypes.Expression.LetDeclaration.LetFunction letFunc =>

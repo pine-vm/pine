@@ -100,11 +100,32 @@ public class ElmCompilerTestHelper
     }
 
     /// <summary>
+    /// Maps the legacy <c>disableInlining</c> boolean (and optional optimization-round
+    /// count) used throughout the tests onto the
+    /// <see cref="ElmSyntaxOptimizationConfig"/> choice type now accepted by the
+    /// compiler API. When inlining is enabled, the let-destructure-thunk inlining
+    /// cleanup is turned on to match the historical default of
+    /// <see cref="ElmCompiler.CompileInteractiveEnvironment"/>.
+    /// </summary>
+    public static ElmSyntaxOptimizationConfig SyntaxOptimizationFromDisableInlining(
+        bool disableInlining,
+        int? maxOptimizationRounds = null) =>
+        disableInlining
+        ?
+        new ElmSyntaxOptimizationConfig.SyntaxOptimizationDisabled()
+        :
+        ElmCompiler.SyntaxOptimizationConfigDefault
+        with
+        {
+            MaxOptimizationRounds = maxOptimizationRounds ?? ElmCompiler.SyntaxOptimizationConfigDefault.MaxOptimizationRounds
+        };
+
+    /// <summary>
     /// Compiles Elm modules and returns the parsed environment together with intermediate pipeline stage results.
     /// The <see cref="CompilationPipelineStageResults"/> contain the Elm syntax trees after each compiler stage
     /// (canonicalization, specialization, inlining, etc.), enabling inspection and debugging of the pipeline.
     /// </summary>
-    public static (ElmInteractiveEnvironment.ParsedInteractiveEnvironment parsedEnv, CompilationPipelineStageResults pipelineStageResults)
+    public static (ElmInteractiveEnvironment.ParsedInteractiveEnvironment parsedEnv, CompilationPipelineStageResults<DefaultLoweredResults> pipelineStageResults)
         CompileElmModules(
         IReadOnlyList<string> elmModulesTexts,
         bool disableInlining,
@@ -122,19 +143,11 @@ public class ElmCompilerTestHelper
             .ToList();
 
         var (compiledEnv, pipelineStageResults) =
-            maxOptimizationRounds is { } rounds
-            ?
             ElmCompiler.CompileInteractiveEnvironment(
                 appCodeTree,
                 rootFilePaths: rootFilePaths,
-                disableInlining: disableInlining,
-                maxOptimizationRounds: rounds)
-            .Extract(err => throw new Exception(err))
-            :
-            ElmCompiler.CompileInteractiveEnvironment(
-                appCodeTree,
-                rootFilePaths: rootFilePaths,
-                disableInlining: disableInlining)
+                syntaxOptimization:
+                    SyntaxOptimizationFromDisableInlining(disableInlining, maxOptimizationRounds))
             .Extract(err => throw new Exception(err));
 
         var parsedEnv =
@@ -169,7 +182,7 @@ public class ElmCompilerTestHelper
             };
     }
 
-    public static (ElmInteractiveEnvironment.ParsedInteractiveEnvironment parsedEnv, StaticProgram<DeclQualifiedName> staticProgram, CompilationPipelineStageResults pipelineStageResults)
+    public static (ElmInteractiveEnvironment.ParsedInteractiveEnvironment parsedEnv, StaticProgram<DeclQualifiedName> staticProgram, CompilationPipelineStageResults<DefaultLoweredResults> pipelineStageResults)
         StaticProgramFromElmModules(
         IReadOnlyList<string> elmModulesTexts,
         bool disableInlining,
@@ -187,7 +200,7 @@ public class ElmCompilerTestHelper
                 parseCache);
     }
 
-    public static (ElmInteractiveEnvironment.ParsedInteractiveEnvironment parsedEnv, StaticProgram<DeclQualifiedName> staticProgram, CompilationPipelineStageResults pipelineStageResults)
+    public static (ElmInteractiveEnvironment.ParsedInteractiveEnvironment parsedEnv, StaticProgram<DeclQualifiedName> staticProgram, CompilationPipelineStageResults<DefaultLoweredResults> pipelineStageResults)
         StaticProgramFromTestCase(
         TestCase testCase,
         bool disableInlining,
@@ -206,7 +219,8 @@ public class ElmCompilerTestHelper
             ElmCompiler.CompileInteractiveEnvironment(
                 appCodeTree,
                 rootFilePaths: rootFilePaths,
-                disableInlining: disableInlining)
+                syntaxOptimization:
+                    SyntaxOptimizationFromDisableInlining(disableInlining))
             .Extract(err => throw new Exception(err));
 
         var parsedEnv =

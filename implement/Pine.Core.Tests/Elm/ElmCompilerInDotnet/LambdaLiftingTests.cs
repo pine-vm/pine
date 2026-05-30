@@ -3,7 +3,10 @@ using Pine.Core.Elm.ElmCompilerInDotnet;
 using Pine.Core.Elm.ElmSyntax;
 using Pine.Core.Elm.ElmSyntax.Stil4mElmSyntax7;
 using System;
+using System.Linq;
 using Xunit;
+
+using SyntaxTypesNs = Pine.Core.Elm.ElmSyntax.Stil4mElmSyntax7;
 
 namespace Pine.Core.Tests.Elm.ElmCompilerInDotnet;
 
@@ -647,4 +650,226 @@ public class LambdaLiftingTests
         var result = LiftAndFormat(inputModuleText);
         result.Trim().Should().Be(expectedOutputModuleText.Trim());
     }
+
+    /// <summary>
+    /// Smallest possible reproduction of the constructor-application
+    /// lambda shape: a function with a single <c>NamedPattern</c>
+    /// parameter (<c>(Wrap g)</c>) whose body wraps a lambda inside a
+    /// tagged constructor application (<c>Wrap (\x -&gt; g x)</c>),
+    /// where the lambda captures the named-pattern binding <c>g</c>.
+    /// <para>
+    /// This sibling of
+    /// <see cref="Lambda_in_constructor_application_arg_with_named_pattern_param_capture"/>
+    /// is kept as a snapshot-style test so future readers can see the
+    /// exact lifted shape <see cref="LambdaLifting"/> currently
+    /// produces for this canonical Elm idiom. The single-capture case
+    /// uses a plain parameter, matching the convention exercised by
+    /// <see cref="Simplest_closure_single_capture_in_let_function"/>.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void Lambda_in_constructor_application_arg_with_single_named_pattern_param_capture()
+    {
+        var inputModuleText =
+            """"
+            module Test exposing (..)
+
+
+            type Wrap a
+                = Wrap a
+
+
+            applyWrapped : Wrap Int -> Wrap Int
+            applyWrapped (Wrap g) =
+                Wrap ((\x -> x + g) 1)
+            """";
+
+        // Lifted shape: the lambda becomes a top-level helper that
+        // takes the captured `g` as its first parameter and the
+        // original lambda parameter `x` as the second; the lambda site
+        // is rewritten to a partial application of that helper, leaving
+        // no residual LambdaExpression in the body of `applyWrapped`.
+        var expectedOutputModuleText =
+            """"
+            module Test exposing (..)
+
+
+            type Wrap a
+                = Wrap a
+
+
+            applyWrapped : Wrap Int -> Wrap Int
+            applyWrapped (Wrap g) =
+                Wrap ((applyWrapped__lifted__lambda1 g) 1)
+
+
+            applyWrapped__lifted__lambda1 g x =
+                x + g
+            """";
+
+        var result = LiftAndFormat(inputModuleText);
+        result.Trim().Should().Be(expectedOutputModuleText.Trim());
+    }
+
+    /// <summary>
+    /// Regression test for a defect first observed when lowering
+    /// <c>Parser.Advanced.map2</c> via the experimental
+    /// <c>SpecializingFirstPipeline</c> followed by a trailing
+    /// <see cref="LambdaLifting.LiftLambdas(SyntaxTypes.File)"/> pass:
+    /// the Pine emission backend fails with
+    /// <c>Unsupported expression type: LambdaExpression</c> because the
+    /// lambda inside the constructor application is left un-lifted.
+    /// <para>
+    /// Minimal reproduction faithful to the <c>map2</c> shape: a
+    /// function with multiple <c>NamedPattern</c> parameters whose body
+    /// wraps a lambda inside a tagged constructor application. The
+    /// lambda captures bindings introduced by the named-pattern
+    /// parameters and references one of them as an Application head
+    /// inside a nested case expression. The lift must produce a
+    /// top-level helper that takes the captured bindings (alphabetised,
+    /// in a tuple parameter when more than one) and replace the lambda
+    /// site with a partial application of that helper, leaving no
+    /// residual <c>LambdaExpression</c> in the rewritten body.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void Lambda_in_constructor_application_arg_with_named_pattern_param_capture()
+    {
+        var inputModuleText =
+            """"
+            module Parser.Advanced exposing (..)
+
+
+            type Parser context problem value
+                = Parser (State context -> PStep context problem value)
+
+
+            type State context
+                = State String Int
+
+
+            type PStep context problem value
+                = Good Bool value (State context)
+                | Bad Bool (Bag context problem)
+
+
+            type Bag context problem
+                = Empty
+
+
+            map2 : (a -> b -> value) -> Parser c x a -> Parser c x b -> Parser c x value
+            map2 func (Parser parseA) (Parser parseB) =
+                Parser
+                    (\s0 ->
+                        case parseA s0 of
+                            Bad p x ->
+                                Bad p x
+
+                            Good p1 a s1 ->
+                                case parseB s1 of
+                                    Bad p2 x ->
+                                        Bad (p1 || p2) x
+
+                                    Good p2 b s2 ->
+                                        Good (p1 || p2) (func a b) s2
+                    )
+            """";
+
+        // The test deliberately only asserts the absence of a residual
+        // LambdaExpression and the presence of a generated lifted helper
+        // referencing the captured bindings as parameters. Re-anchoring
+        // on the precise formatter output would couple this regression
+        // test to unrelated formatting decisions; the substantive
+        // invariant — "lambda lifting eliminates the lambda" — is the
+        // one this test guards.
+        var parsedModule = ParseModuleText(inputModuleText);
+
+        var liftedModule = LambdaLifting.LiftLambdas(parsedModule);
+
+        // No declaration in the rewritten module may still contain a
+        // LambdaExpression node anywhere in its body — that is the
+        // invariant the Pine emission backend requires.
+        foreach (var declNode in liftedModule.Declarations)
+        {
+            if (declNode.Value is Declaration.FunctionDeclaration funcDecl)
+            {
+                var declName = funcDecl.Function.Declaration.Value.Name.Value;
+
+                ExpressionContainsLambda(funcDecl.Function.Declaration.Value.Expression.Value)
+                    .Should().BeFalse(
+                    because: "lambda lifting must eliminate every LambdaExpression in '" + declName + "'");
+            }
+        }
+
+        // A lifted helper for map2 must have been emitted and must
+        // mention the captured `func` binding (sanity check that the
+        // capture wiring runs).
+        liftedModule.Declarations
+            .Select(d => d.Value)
+            .OfType<Declaration.FunctionDeclaration>()
+            .Any(fd => fd.Function.Declaration.Value.Name.Value.StartsWith("map2__lifted__"))
+            .Should().BeTrue(
+            because: "lambda lifting must emit a top-level helper for the lambda originally living inside map2's body");
+    }
+
+    private static bool ExpressionContainsLambda(SyntaxTypesNs.Expression expr) =>
+        expr switch
+        {
+            SyntaxTypesNs.Expression.LambdaExpression => true,
+
+            SyntaxTypesNs.Expression.Application app =>
+            app.Arguments.Any(a => ExpressionContainsLambda(a.Value)),
+
+            SyntaxTypesNs.Expression.OperatorApplication op =>
+            ExpressionContainsLambda(op.Left.Value) || ExpressionContainsLambda(op.Right.Value),
+
+            SyntaxTypesNs.Expression.IfBlock ib =>
+            ExpressionContainsLambda(ib.Condition.Value)
+            || ExpressionContainsLambda(ib.ThenBlock.Value)
+            || ExpressionContainsLambda(ib.ElseBlock.Value),
+
+            SyntaxTypesNs.Expression.CaseExpression ce =>
+            ExpressionContainsLambda(ce.CaseBlock.Expression.Value)
+            || ce.CaseBlock.Cases.Any(c => ExpressionContainsLambda(c.Expression.Value)),
+
+            SyntaxTypesNs.Expression.LetExpression le =>
+            ExpressionContainsLambda(le.Value.Expression.Value)
+            || le.Value.Declarations.Any(
+                d =>
+                d.Value switch
+                {
+                    SyntaxTypesNs.Expression.LetDeclaration.LetFunction lf =>
+                    ExpressionContainsLambda(lf.Function.Declaration.Value.Expression.Value),
+
+                    SyntaxTypesNs.Expression.LetDeclaration.LetDestructuring ld =>
+                    ExpressionContainsLambda(ld.Expression.Value),
+
+                    _ =>
+                    false,
+                }),
+
+            SyntaxTypesNs.Expression.TupledExpression t =>
+            t.Elements.Any(x => ExpressionContainsLambda(x.Value)),
+
+            SyntaxTypesNs.Expression.ListExpr l =>
+            l.Elements.Any(x => ExpressionContainsLambda(x.Value)),
+
+            SyntaxTypesNs.Expression.ParenthesizedExpression p =>
+            ExpressionContainsLambda(p.Expression.Value),
+
+            SyntaxTypesNs.Expression.Negation n =>
+            ExpressionContainsLambda(n.Expression.Value),
+
+            SyntaxTypesNs.Expression.RecordAccess ra =>
+            ExpressionContainsLambda(ra.Record.Value),
+
+            // The remaining expression shapes (record literals,
+            // record updates, leaf nodes such as integers/literals,
+            // PrefixOperator, etc.) cannot themselves contain a
+            // LambdaExpression that is reachable for the lifting
+            // contract this test exercises, so we treat them as
+            // lambda-free.
+            _ =>
+            false,
+        };
 }

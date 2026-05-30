@@ -77,6 +77,18 @@ public static class LambdaLifting
     }
 
     /// <summary>
+    /// <see cref="OptimizedElmSyntaxDeclarations"/>-flavoured overload of
+    /// <see cref="LiftLambdas(ImmutableDictionary{DeclQualifiedName, SyntaxTypes.Declaration})"/>.
+    /// Renders the structured input to a flat dictionary, runs the lift, and
+    /// re-buckets the result via
+    /// <see cref="OptimizedElmSyntaxDeclarations.FromFlatDictionary"/>.
+    /// </summary>
+    public static OptimizedElmSyntaxDeclarations LiftLambdas(
+        OptimizedElmSyntaxDeclarations declarations) =>
+        OptimizedElmSyntaxDeclarations.FromFlatDictionary(
+            LiftLambdas(declarations.RenderAsFlatDictionary()));
+
+    /// <summary>
     /// Performs lambda lifting on a flat declaration dictionary.
     /// Transforms closures into top-level functions with explicit captured parameters.
     /// Declarations are processed in deterministic order (sorted by <see cref="DeclQualifiedName"/>).
@@ -95,13 +107,62 @@ public static class LambdaLifting
             new Dictionary<IReadOnlyList<string>, HashSet<string>>(
                 EnumerableExtensions.EqualityComparer<IReadOnlyList<string>>());
 
+        // Per-module shared fingerprint maps used by LiftLambda to
+        // detect structurally-equivalent lifted decls already present
+        // in the input (or freshly emitted earlier during this pass)
+        // and reuse their names instead of emitting duplicates.
+        // Seeded below from input function declarations.
+        var existingFingerprintByModule =
+            new Dictionary<IReadOnlyList<string>, Dictionary<string, DeclQualifiedName>>(
+                EnumerableExtensions.EqualityComparer<IReadOnlyList<string>>());
+
+        // Iterate in deterministic order so that "first occurrence wins"
+        // below picks the same representative across runs. The raw
+        // ImmutableDictionary enumeration order is hash-bucket order,
+        // which is not stable across processes; without the explicit
+        // sort, structurally-equivalent decls from different host
+        // declarations would non-deterministically swap which one gets
+        // to keep its original name (e.g.
+        // sequenceEndForbidden__lifted__lambda2 ↔
+        // sequenceEndMandatory__stripped__lifted__lambda2). See
+        // explore/internal-analysis/2026-05-18-non-deterministic-ordering-in-optimization-pipeline.md.
+        foreach (var (key, decl) in declarations.OrderBy(kvp => kvp.Key))
+        {
+            if (decl is not SyntaxTypes.Declaration.FunctionDeclaration funcDecl)
+                continue;
+
+            if (!existingFingerprintByModule.TryGetValue(key.Namespaces, out var mapForModule))
+            {
+                mapForModule = new Dictionary<string, DeclQualifiedName>(StringComparer.Ordinal);
+                existingFingerprintByModule[key.Namespaces] = mapForModule;
+            }
+
+            var fp = DeclarationDeduplication.GetStructuralFingerprint(funcDecl, key.Namespaces);
+
+            // First occurrence of a fingerprint wins. With the
+            // OrderBy(kvp => kvp.Key) above, this matches the
+            // lex-by-qualified-name order LiftLambdasInFunction uses
+            // to drive emission a few lines down.
+            mapForModule.TryAdd(fp, key);
+        }
+
         // Process declarations in deterministic order for stable lifted-function naming.
         foreach (var (key, decl) in declarations.OrderBy(kvp => kvp.Key))
         {
             if (decl is SyntaxTypes.Declaration.FunctionDeclaration funcDecl)
             {
+                if (!existingFingerprintByModule.TryGetValue(key.Namespaces, out var mapForModule))
+                {
+                    mapForModule = new Dictionary<string, DeclQualifiedName>(StringComparer.Ordinal);
+                    existingFingerprintByModule[key.Namespaces] = mapForModule;
+                }
+
                 var (transformedDecl, liftedFunctions) =
-                    LiftLambdasInFunction(funcDecl, nextLiftedIdentifierByFunctionName);
+                    LiftLambdasInFunction(
+                        funcDecl,
+                        nextLiftedIdentifierByFunctionName,
+                        existingFingerprintToName: mapForModule,
+                        moduleNamespaces: key.Namespaces);
 
                 resultBuilder[key] = transformedDecl;
 
@@ -148,7 +209,11 @@ public static class LambdaLifting
                 var impl = funcDecl.Function.Declaration.Value;
 
                 var qualifiedExpr =
-                    QualifyLiftedReferences(impl.Expression, key.Namespaces, liftedNamesInModule);
+                    ReferenceQualifier.Qualify(
+                        impl.Expression,
+                        key.Namespaces,
+                        liftedNamesInModule.Contains,
+                        trackLocalScope: false);
 
                 if (ReferenceEquals(qualifiedExpr, impl.Expression))
                     continue;
@@ -196,37 +261,6 @@ public static class LambdaLifting
     }
 
     /// <summary>
-    /// Qualifies unqualified references to lifted functions with their module name.
-    /// </summary>
-    private static Node<SyntaxTypes.Expression> QualifyLiftedReferences(
-        Node<SyntaxTypes.Expression> exprNode,
-        IReadOnlyList<string> moduleName,
-        IReadOnlyCollection<string> liftedNames)
-    {
-        var expr = exprNode.Value;
-
-        if (expr is SyntaxTypes.Expression.FunctionOrValue funcOrValue &&
-            funcOrValue.ModuleName.Count is 0 &&
-            liftedNames.Contains(funcOrValue.Name))
-        {
-            return
-                new Node<SyntaxTypes.Expression>(
-                    exprNode.Range,
-                    new SyntaxTypes.Expression.FunctionOrValue(moduleName, funcOrValue.Name));
-        }
-
-        var mapped =
-            ElmSyntaxTransformations.MapChildExpressions(
-                expr,
-                child => QualifyLiftedReferences(child, moduleName, liftedNames));
-
-        if (ReferenceEquals(mapped, expr))
-            return exprNode;
-
-        return new Node<SyntaxTypes.Expression>(exprNode.Range, mapped);
-    }
-
-    /// <summary>
     /// Transforms a single function declaration by lifting its lambdas.
     /// Returns the transformed declaration and a list of newly-created lifted function declarations.
     /// </summary>
@@ -235,7 +269,9 @@ public static class LambdaLifting
         IReadOnlyList<Node<SyntaxTypes.Declaration>> LiftedFunctions)
         LiftLambdasInFunction(
         SyntaxTypes.Declaration.FunctionDeclaration funcDecl,
-        IReadOnlyDictionary<string, int> nextLiftedIdentifierByFunctionName)
+        IReadOnlyDictionary<string, int> nextLiftedIdentifierByFunctionName,
+        Dictionary<string, DeclQualifiedName>? existingFingerprintToName = null,
+        IReadOnlyList<string>? moduleNamespaces = null)
     {
         var functionName = funcDecl.Function.Declaration.Value.Name.Value;
 
@@ -248,7 +284,9 @@ public static class LambdaLifting
                 ?
                 nextIdentifier - 1
                 :
-                0);
+                0,
+                ExistingFingerprintToName: existingFingerprintToName,
+                ModuleNamespaces: moduleNamespaces);
 
         // Collect parameter names as bound variables
         var paramNames = CollectPatternNames(funcDecl.Function.Declaration.Value.Arguments);
@@ -315,11 +353,39 @@ public static class LambdaLifting
         return nextLiftedIdentifierByFunctionName;
     }
 
+    /// <summary>
+    /// Inverse of the lifted-name producers in
+    /// <c>TransformLambdaExpression</c> / <c>TransformLetExpression</c>:
+    /// given a top-level function name, attempts to recover the
+    /// <c>(containingFunctionName, identifier)</c> pair that produced
+    /// it.
+    /// <para>
+    /// Used by <see cref="BuildNextLiftedIdentifierByFunctionName"/>
+    /// to re-derive the next-available lambda counter for each
+    /// containing function so that a re-invocation of
+    /// <see cref="LiftLambdas(ImmutableDictionary{DeclQualifiedName, SyntaxTypes.Declaration})"/>
+    /// on a dictionary that already contains previously-lifted decls
+    /// does not collide with their suffixes.
+    /// </para>
+    /// <para>
+    /// All suffix literals are sourced from
+    /// <see cref="GeneratedNameSuffixes"/> (cf.
+    /// <c>2026-05-18-eliminate-higher-order-parameters-in-focused-tests.md</c>
+    /// §11.6 / §11.7) so future suffix changes need only touch one
+    /// place.
+    /// </para>
+    /// <para>
+    /// Future work (§11.7): replace this string-parsing approach by
+    /// threading the per-containing-function counter through the
+    /// pipeline's iteration state so the producer no longer needs to
+    /// re-derive it on every <see cref="LiftLambdas"/> invocation.
+    /// </para>
+    /// </summary>
     private static (string containingFunctionName, int identifier)? TryParseExistingLiftedIdentifier(
         string functionName)
     {
         var liftedMarkerIndex =
-            functionName.IndexOf("__lifted__", StringComparison.Ordinal);
+            functionName.IndexOf(GeneratedNameSuffixes.Lifted, StringComparison.Ordinal);
 
         if (liftedMarkerIndex < 0)
         {
@@ -327,10 +393,10 @@ public static class LambdaLifting
         }
 
         var containingFunctionName = functionName[..liftedMarkerIndex];
-        var suffix = functionName[(liftedMarkerIndex + "__lifted__".Length)..];
+        var suffix = functionName[(liftedMarkerIndex + GeneratedNameSuffixes.Lifted.Length)..];
 
-        if (suffix.StartsWith("lambda", StringComparison.Ordinal) &&
-            int.TryParse(suffix["lambda".Length..], out var lambdaIdentifier))
+        if (suffix.StartsWith(GeneratedNameSuffixes.LiftedLambdaPrefix, StringComparison.Ordinal) &&
+            int.TryParse(suffix[GeneratedNameSuffixes.LiftedLambdaPrefix.Length..], out var lambdaIdentifier))
         {
             return (containingFunctionName, lambdaIdentifier);
         }
@@ -352,11 +418,27 @@ public static class LambdaLifting
 
     /// <summary>
     /// Context for lambda lifting, tracking the containing function name, bound variables, and lambda counter.
+    ///
+    /// <para>
+    /// <see cref="ExistingFingerprintToName"/> is a mutable, shared lookup from
+    /// the structural fingerprint of a previously-emitted top-level
+    /// declaration (existing input or freshly lifted during the current
+    /// pass) to its qualified name. Producers consult this map before
+    /// adding a new lifted decl: when a structurally-equivalent decl
+    /// already exists, the producer reuses the existing name and
+    /// suppresses the new emission, avoiding accumulating
+    /// <c>__lifted__lambdaN</c> duplicates across repeated lambda-lifting
+    /// invocations. Passing <c>null</c> disables the check (used by the
+    /// per-module overload that has no access to the surrounding flat
+    /// dictionary).
+    /// </para>
     /// </summary>
     private record LiftingContext(
         string ContainingFunctionName,
         ImmutableHashSet<string> BoundVariables,
-        int LambdaCounter = 0)
+        int LambdaCounter = 0,
+        Dictionary<string, DeclQualifiedName>? ExistingFingerprintToName = null,
+        IReadOnlyList<string>? ModuleNamespaces = null)
     {
         public LiftingContext(string containingFunctionName)
             : this(containingFunctionName, [], 0)
@@ -474,10 +556,15 @@ public static class LambdaLifting
             .OrderBy(v => v)
             .ToList();
 
-        // Generate unique name for the lifted function
+        // Generate provisional name for the lifted function. The lambda
+        // counter is advanced unconditionally so that ID sequences
+        // remain monotonic across the pass even when an already-emitted
+        // sibling is reused below (we trade a small amount of ID skip
+        // for fingerprint-equivalent suppression of duplicates).
         var (newContext, lambdaId) = context.NextLambdaId();
 
-        var liftedFunctionName = $"{context.ContainingFunctionName}__lifted__lambda{lambdaId}";
+        var liftedFunctionName =
+            $"{context.ContainingFunctionName}{GeneratedNameSuffixes.Lifted}{GeneratedNameSuffixes.LiftedLambdaPrefix}{lambdaId}";
 
         // Transform the lambda body with updated context
         var lambdaBodyContext = newContext.WithBoundVariables(lambdaParamNames);
@@ -485,7 +572,7 @@ public static class LambdaLifting
         var (transformedBody, finalContext) =
             TransformExpressionInner(lambda.Expression, lambdaBodyContext, liftedFunctions);
 
-        // Create the lifted function
+        // Create the proposed lifted function
         var liftedFuncDecl =
             CreateLiftedFunction(
                 liftedFunctionName,
@@ -494,12 +581,69 @@ public static class LambdaLifting
                 transformedBody,
                 exprNode.Range);
 
-        liftedFunctions.Add(liftedFuncDecl);
+        // Check whether a structurally-equivalent top-level declaration
+        // already exists (either in the input declaration dictionary or
+        // emitted earlier during this same lambda-lifting pass). If so,
+        // reuse the existing name rather than emit a fresh
+        // <c>__lifted__lambdaN</c> duplicate. This removes the need for
+        // a downstream <see cref="DeclarationDeduplication"/> pass to
+        // collapse the redundant siblings produced by repeated lift
+        // invocations (e.g. when size-based inlining re-inlines a
+        // previously-lifted wrapper and the next lift round would
+        // otherwise emit a structurally-identical sibling).
+        var existingFingerprintMap = finalContext.ExistingFingerprintToName;
+        var moduleNamespaces = finalContext.ModuleNamespaces;
 
-        // Create the replacement expression (reference to lifted function with captured args)
+        var reuseName = (string?)null;
+
+        if (existingFingerprintMap is not null &&
+            moduleNamespaces is not null &&
+            liftedFuncDecl.Value is SyntaxTypes.Declaration.FunctionDeclaration proposedFuncDecl)
+        {
+            var fingerprint =
+                DeclarationDeduplication.GetStructuralFingerprint(
+                    proposedFuncDecl,
+                    moduleNamespaces);
+
+            if (existingFingerprintMap.TryGetValue(fingerprint, out var existingName) &&
+                EnumerableExtensions.EqualityComparer<IReadOnlyList<string>>()
+                .Equals(existingName.Namespaces, moduleNamespaces))
+            {
+                reuseName = existingName.DeclName;
+            }
+            else
+            {
+                // Record this newly-emitted lifted decl in the
+                // fingerprint map so subsequent lifts (within the same
+                // pass) of structurally-equivalent lambdas reuse it.
+                existingFingerprintMap[fingerprint] =
+                    new DeclQualifiedName(moduleNamespaces, liftedFunctionName);
+            }
+        }
+
+        var effectiveLiftedName = reuseName ?? liftedFunctionName;
+
+        if (reuseName is null)
+        {
+            liftedFunctions.Add(liftedFuncDecl);
+        }
+
+        // Create the replacement expression (reference to lifted function with captured args).
+        // When reusing an existing decl, emit a fully-qualified reference directly because the
+        // post-pass that qualifies unqualified lifted-references only covers names in
+        // newLiftedNamesByModule (i.e. fresh emissions). Reused names already-existed in the
+        // input dictionary and would otherwise stay unqualified.
         var replacementExpr =
+            reuseName is not null && moduleNamespaces is not null
+            ?
             CreateLiftedFunctionCall(
-                liftedFunctionName,
+                effectiveLiftedName,
+                freeVariables,
+                exprNode.Range,
+                moduleNamespaces)
+            :
+            CreateLiftedFunctionCall(
+                effectiveLiftedName,
                 freeVariables,
                 exprNode.Range);
 
@@ -558,7 +702,10 @@ public static class LambdaLifting
                 {
                     var (updatedCtx, uniqueId) = currentContext.NextLambdaId();
                     currentContext = updatedCtx;
-                    var liftedFunctionName = $"{context.ContainingFunctionName}__lifted__{bindingName}_{uniqueId}";
+
+                    var liftedFunctionName =
+                        $"{context.ContainingFunctionName}{GeneratedNameSuffixes.Lifted}{bindingName}_{uniqueId}";
+
                     localFunctionLiftedNames[bindingName] = liftedFunctionName;
                 }
             }
@@ -1241,10 +1388,22 @@ public static class LambdaLifting
     private static Node<SyntaxTypes.Expression> CreateLiftedFunctionCall(
         string functionName,
         IReadOnlyList<string> capturedVariables,
-        Range range)
+        Range range) =>
+        CreateLiftedFunctionCall(functionName, capturedVariables, range, moduleNamespaces: null);
+
+    private static Node<SyntaxTypes.Expression> CreateLiftedFunctionCall(
+        string functionName,
+        IReadOnlyList<string> capturedVariables,
+        Range range,
+        IReadOnlyList<string>? moduleNamespaces)
     {
-        // Reference to the lifted function
-        var funcRef = new SyntaxTypes.Expression.FunctionOrValue([], functionName);
+        // Reference to the lifted function. When moduleNamespaces is supplied, emit a fully-qualified
+        // reference (used at reuse sites where the post-pass qualification step would not otherwise
+        // cover the name); otherwise emit an unqualified reference relying on the post-pass.
+        var funcRef =
+            new SyntaxTypes.Expression.FunctionOrValue(
+                moduleNamespaces ?? [],
+                functionName);
 
         var funcRefNode = new Node<SyntaxTypes.Expression>(range, funcRef);
 

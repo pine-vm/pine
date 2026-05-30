@@ -3,7 +3,7 @@ using Xunit;
 
 namespace Pine.Core.Tests.Elm.ElmCompilerInDotnet.Inlining;
 
-using Inlining = Core.Elm.ElmCompilerInDotnet.Inlining;
+using ElmSyntaxOptimization = Core.Elm.ElmCompilerInDotnet.ElmSyntaxOptimization;
 
 public class InliningCrossModuleTests
 {
@@ -141,7 +141,7 @@ public class InliningCrossModuleTests
                 appModuleText,
                 ],
                 ["App"],
-                Inlining.Config.OnlyFunctions);
+                ElmSyntaxOptimization.Config.OnlyFunctions);
 
         var rendered =
             InliningTestHelper.RenderModuleForSnapshotTests(appModule);
@@ -192,9 +192,12 @@ public class InliningCrossModuleTests
 
             App.followedBySymbol__specialized__2 _ =
                 ParserFast.Parser
-                    (ParserFast.followedBySymbol__lifted__lambda1
-                        App.charLiteral__lifted__lambda1
-                    )
+                    App.followedBySymbol__specialized__2__lifted__lambda1
+
+
+            App.followedBySymbol__specialized__2__lifted__lambda1 () =
+                App.charLiteral__lifted__lambda1
+                    ()
             """.Trim());
     }
 
@@ -489,7 +492,7 @@ public class InliningCrossModuleTests
                 s_moduleCharText
                 ],
                 ["Elm", "Parser", "Tokens"],
-                Inlining.Config.OnlyFunctions);
+                ElmSyntaxOptimization.Config.OnlyFunctions);
 
         var rendered =
             InliningTestHelper.RenderModuleForSnapshotTests(tokensModule);
@@ -734,7 +737,7 @@ public class InliningCrossModuleTests
                 s_moduleCharText
                 ],
                 ["Elm", "Parser", "Declarations"],
-                Inlining.Config.OnlyFunctions);
+                ElmSyntaxOptimization.Config.OnlyFunctions);
 
         var rendered =
             InliningTestHelper.RenderModuleForSnapshotTests(declarationsModule);
@@ -988,7 +991,7 @@ public class InliningCrossModuleTests
                 s_moduleCharText
                 ],
                 ["Elm", "Parser", "Declarations"],
-                Inlining.Config.OnlyFunctions);
+                ElmSyntaxOptimization.Config.OnlyFunctions);
 
         var rendered =
             InliningTestHelper.RenderModuleForSnapshotTests(declarationsModule);
@@ -1293,10 +1296,11 @@ public class InliningCrossModuleTests
                 expressionModuleText,
                 ],
                 ["Elm", "Parser", "Expression"],
-                Inlining.Config.OnlyFunctions);
+                ElmSyntaxOptimization.Config.OnlyFunctions);
 
         var rendered =
             InliningTestHelper.RenderModuleForSnapshotTests(expressionModule);
+
 
         var expectedExpressionModuleText =
             """"
@@ -1306,79 +1310,117 @@ public class InliningCrossModuleTests
 
             Elm.Parser.Expression.charLiteralExpression : ParserFast.Parser (ParserWithComments.WithComments (Elm.Syntax.Node.Node Elm.Parser.Expression.Expression))
             Elm.Parser.Expression.charLiteralExpression =
-                ParserFast.symbolFollowedBy
-                    "'"
-                    (let
-                        ((ParserFast.String strBytes) as str) =
-                            "'"
-                     in
-                     let
-                        strBytesLength : Int
-                        strBytesLength =
-                            Pine_kernel.length
-                                strBytes
+                ParserFast.Parser
+                    (ParserFast.symbolFollowedBy__stripped
+                        "'"
+                        (let
+                            ((ParserFast.String strBytes) as str) =
+                                "'"
+                         in
+                         let
+                            strBytesLength : Int
+                            strBytesLength =
+                                Pine_kernel.length
+                                    strBytes
 
-                        strLength : Int
-                        strLength =
-                            Pine_kernel.concat
-                                [ Pine_kernel.take
-                                    [ 1, 0 ]
-                                , Pine_kernel.bit_shift_right
-                                    [ 2
-                                    , Pine_kernel.skip
-                                        [ 1, strBytesLength ]
+                            strLength : Int
+                            strLength =
+                                Pine_kernel.concat
+                                    [ Pine_kernel.take
+                                        [ 1, 0 ]
+                                    , Pine_kernel.bit_shift_right
+                                        [ 2
+                                        , Pine_kernel.skip
+                                            [ 1, strBytesLength ]
+                                        ]
                                     ]
-                                ]
-                     in
-                     ParserFast.Parser
-                        (ParserFast.followedBySymbol__lifted__lambda1
-                            ( (Elm.Parser.Expression.oneOf2MapWithStartRowColumnAndEndRowColumn__specialized__1__lifted__lambda1
-                                ( (ParserFast.symbolFollowedByParser
-                                    "\\"
-                                    (Elm.Parser.Tokens.escapedCharValueMap
-                                        Basics.identity
+                         in
+                         ParserFast.Parser
+                            (ParserFast.followedBySymbol__lifted__lambda1
+                                ( Elm.Parser.Expression.oneOf2MapWithStartRowColumnAndEndRowColumn__specialized__1__lifted__lambda1
+                                    ( (Elm.Parser.Expression.symbolFollowedBy__stripped__specialized__1
+                                        "\\"
+                                        (let
+                                            (ParserFast.Parser attempt0) =
+                                                (ParserFast.symbol
+                                                    "'"
+                                                    (Basics.identity
+                                                        '\''
+                                                    )
+                                                )
+
+                                            (ParserFast.Parser attempt1) =
+                                                (ParserFast.symbol
+                                                    "\""
+                                                    (Basics.identity
+                                                        '"'
+                                                    )
+                                                )
+
+                                            (ParserFast.Parser attempt2) =
+                                                (ParserFast.symbol
+                                                    "n"
+                                                    (Basics.identity
+                                                        '\n'
+                                                    )
+                                                )
+
+                                            (ParserFast.Parser attempt3) =
+                                                (ParserFast.symbol
+                                                    "t"
+                                                    (Basics.identity
+                                                        '\t'
+                                                    )
+                                                )
+
+                                            (ParserFast.Parser attempt4) =
+                                                (ParserFast.symbol
+                                                    "r"
+                                                    (Basics.identity
+                                                        '\u{000D}'
+                                                    )
+                                                )
+
+                                            (ParserFast.Parser attempt5) =
+                                                (ParserFast.symbol
+                                                    "\\"
+                                                    (Basics.identity
+                                                        '\\'
+                                                    )
+                                                )
+                                         in
+                                         Elm.Parser.Tokens.escapedCharValueMap__lifted__lambda2
+                                            ( attempt0
+                                            , attempt1
+                                            , attempt2
+                                            , attempt3
+                                            , attempt4
+                                            , attempt5
+                                            , ParserFast.symbolFollowedBy__stripped
+                                                "u{"
+                                                (Elm.Parser.Tokens.followedBySymbol__specialized__1
+                                                    "}"
+                                                    (Elm.Parser.Tokens.escapedCharValueMap__lifted__lambda1
+                                                        Basics.identity
+                                                    )
+                                                )
+                                            )
+                                        )
+                                      )
+                                    , Elm.Parser.Expression.charLiteralExpression__lifted__lambda1
+                                    , Elm.Parser.Expression.charLiteralExpression__lifted__lambda1
                                     )
-                                  )
-                                , Elm.Parser.Expression.charLiteralExpression__lifted__lambda1
-                                , Elm.Parser.Expression.charLiteralExpression__lifted__lambda2
+                                , str
+                                , strBytes
+                                , strBytesLength
+                                , strLength
                                 )
-                              )
-                            , str
-                            , strBytes
-                            , strBytesLength
-                            , strLength
                             )
                         )
                     )
 
 
             Elm.Parser.Expression.charLiteralExpression__lifted__lambda1 startRow startColumn char endRow endColumn =
-                ParserWithComments.WithComments
-                    Rope.empty
-                    (Elm.Syntax.Node.Node
-                        { start =
-                            { row = startRow
-                            , column =
-                                Pine_builtin.int_add
-                                    [ startColumn
-                                    , Pine_builtin.int_mul
-                                        [ -1, 1 ]
-                                    ]
-                            }
-                        , end =
-                            { row = endRow
-                            , column =
-                                Pine_builtin.int_add
-                                    [ endColumn, 1 ]
-                            }
-                        }
-                        (Elm.Parser.Expression.CharLiteral
-                            char
-                        )
-                    )
-
-
-            Elm.Parser.Expression.charLiteralExpression__lifted__lambda2 startRow startColumn char endRow endColumn =
                 ParserWithComments.WithComments
                     Rope.empty
                     (Elm.Syntax.Node.Node
@@ -1508,16 +1550,34 @@ public class InliningCrossModuleTests
                                                 secondX
                                                 []
                                             )
+
+
+            Elm.Parser.Expression.oneOf2MapWithStartRowColumnAndEndRowColumn__specialized__1__specialized__1 firstToChoice attemptFirst secondToChoice =
+                ParserFast.Parser
+                    (Elm.Parser.Expression.oneOf2MapWithStartRowColumnAndEndRowColumn__specialized__1__specialized__1__stripped
+                        firstToChoice
+                        attemptFirst
+                        secondToChoice
+                    )
+
+
+            Elm.Parser.Expression.oneOf2MapWithStartRowColumnAndEndRowColumn__specialized__1__specialized__1__stripped firstToChoice attemptFirst secondToChoice =
+                Elm.Parser.Expression.oneOf2MapWithStartRowColumnAndEndRowColumn__specialized__1__lifted__lambda1
+                    ( attemptFirst, firstToChoice, secondToChoice )
+
+
+            Elm.Parser.Expression.symbolFollowedBy__stripped__specialized__1 str parseNext__field__1 =
+                ParserFast.symbolFollowedByParser
+                    str
+                    (ParserFast.Parser
+                        parseNext__field__1
+                    )
             """";
 
         rendered.Trim().Should().Be(
             expectedExpressionModuleText.Trim());
     }
 
-    /// <summary>
-    /// Tests <c>multiRecordAccess</c> from Expression.elm with all its verbatim dependencies.
-    /// This provides a representative scenario for specialization and inlining stages.
-    /// </summary>
     [Fact]
     public void Expression_multiRecordAccess()
     {
@@ -1654,7 +1714,7 @@ public class InliningCrossModuleTests
                 expressionModuleText,
                 ],
                 ["Elm", "Parser", "Expression"],
-                Inlining.Config.OnlyFunctions);
+                ElmSyntaxOptimization.Config.OnlyFunctions);
 
         var rendered =
             InliningTestHelper.RenderModuleForSnapshotTests(expressionModule);
@@ -1721,12 +1781,7 @@ public class InliningCrossModuleTests
                             Pine_kernel.take [ strBytesLength, Pine_kernel.skip [ sOffsetInt, sSrcBytes ] ]
                     in
                     if Pine_kernel.equal [ strBytes, strSliceBytes ] then
-                        case parseNext (ParserFast.PState sSrcBytes (Pine_builtin.int_add [ sOffsetInt, strBytesLength ]) sIndent sRow (Pine_builtin.int_add [ sColInt, strLength ])) of
-                            (ParserFast.Good _ _) as good ->
-                                good
-
-                            ParserFast.Bad _ x ->
-                                ParserFast.Bad Basics.True x
+                        ParserFast.pStepCommit (parseNext (ParserFast.PState sSrcBytes (Pine_builtin.int_add [ sOffsetInt, strBytesLength ]) sIndent sRow (Pine_builtin.int_add [ sColInt, strLength ])))
 
                     else
                         ParserFast.Bad Basics.False (ParserFast.ExpectingSymbol sRow sCol str)

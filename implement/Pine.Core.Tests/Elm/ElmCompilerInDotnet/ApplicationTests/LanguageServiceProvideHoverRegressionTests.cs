@@ -166,8 +166,7 @@ public class LanguageServiceProvideHoverRegressionTests
             ElmCompiler.CompileInteractiveEnvironment(
                 treeWithTest,
                 rootFilePaths: rootFilePaths,
-                disableInlining: true,
-                maxOptimizationRounds: 1)
+                syntaxOptimization: new ElmSyntaxOptimizationConfig.SyntaxOptimizationEnabled())
             .Map(r => r.compiledEnvValue)
             .Extract(err => throw new Exception("Failed compiling: " + err));
 
@@ -181,7 +180,13 @@ public class LanguageServiceProvideHoverRegressionTests
         .First(m => m.moduleName is "Probe")
         .moduleContent.FunctionDeclarations[name];
 
-    private static PineValue Apply(string name, PineValue[] args)
+    private static PineValue Apply(string name, PineValue[] args) =>
+        Apply(name, args, ElmCompilerTestHelper.DefaultTestEvaluationConfig);
+
+    private static PineValue Apply(
+        string name,
+        PineValue[] args,
+        Core.Interpreter.IntermediateVM.PineVM.EvaluationConfig config)
     {
         var fr =
             FunctionRecord.ParseFunctionRecordTagged(GetFunc(name), new PineVMParseCache())
@@ -195,7 +200,7 @@ public class LanguageServiceProvideHoverRegressionTests
             s_vm.EvaluateExpressionOnCustomStack(
                 ev.expression,
                 ev.environment,
-                config: ElmCompilerTestHelper.DefaultTestEvaluationConfig)
+                config: config)
             .Extract(err => throw new Exception("Failed eval for '" + name + "': " + err))
             .ReturnValue.Evaluate();
     }

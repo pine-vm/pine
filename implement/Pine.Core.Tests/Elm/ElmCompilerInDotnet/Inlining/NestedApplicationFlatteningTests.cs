@@ -7,8 +7,6 @@ using SyntaxTypes = Pine.Core.Elm.ElmSyntax.Stil4mElmSyntax7;
 
 namespace Pine.Core.Tests.Elm.ElmCompilerInDotnet.Inlining;
 
-using Inlining = Core.Elm.ElmCompilerInDotnet.Inlining;
-
 /// <summary>
 /// Coverage for nested-Application flattening — a normalization step
 /// the optimization pipeline owes its consumers (the pipeline that
@@ -20,7 +18,7 @@ using Inlining = Core.Elm.ElmCompilerInDotnet.Inlining;
 /// a flat list from source like <c>f a b c</c>. However, several
 /// transformations that <em>build</em> an Application from pieces
 /// (most notably the pipe-operator desugaring inside
-/// <see cref="Inlining.InlineApplication"/>, but also any substitution
+/// <see cref="ElmSyntaxOptimization.InlineApplication"/>, but also any substitution
 /// that replaces a function reference by an Application-typed expression)
 /// can produce nested form
 /// <c>Application[Application[h, a], b]</c> when the head provided to
@@ -252,7 +250,7 @@ public class NestedApplicationFlatteningTests
             InliningTestHelper.CanonicalizeAndInlineAndGetSingleModule(
                 [elmModuleText],
                 ["App"],
-                Inlining.Config.OnlyFunctions);
+                ElmSyntaxOptimization.Config.OnlyFunctions);
 
         var nestedHeadCount = CountNestedApplicationHeads(module);
 
@@ -304,7 +302,7 @@ public class NestedApplicationFlatteningTests
             InliningTestHelper.CanonicalizeAndInlineAndGetSingleModule(
                 [elmModuleText],
                 ["App"],
-                Inlining.Config.OnlyFunctions);
+                ElmSyntaxOptimization.Config.OnlyFunctions);
 
         var nestedHeadCount = CountNestedApplicationHeads(module);
 
@@ -358,7 +356,7 @@ public class NestedApplicationFlatteningTests
             InliningTestHelper.CanonicalizeAndInlineAndGetSingleModule(
                 [elmModuleText],
                 ["App"],
-                Inlining.Config.OnlyFunctions);
+                ElmSyntaxOptimization.Config.OnlyFunctions);
 
         var nestedHeadCount = CountNestedApplicationHeads(module);
 
@@ -406,7 +404,7 @@ public class NestedApplicationFlatteningTests
             InliningTestHelper.CanonicalizeAndInlineAndGetSingleModule(
                 [elmModuleText],
                 ["App"],
-                Inlining.Config.OnlyFunctions);
+                ElmSyntaxOptimization.Config.OnlyFunctions);
 
         var nestedHeadCount = CountNestedApplicationHeads(module);
 

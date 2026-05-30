@@ -161,9 +161,7 @@ public class LanguageServiceCompileToPineVMRegressionTests
         var compiledEnv =
             ElmCompiler.CompileInteractiveEnvironment(
                 treeWithTest,
-                rootFilePaths: rootFilePaths,
-                disableInlining: true,
-                maxOptimizationRounds: 1)
+                rootFilePaths: rootFilePaths)
             .Map(r => r.compiledEnvValue)
             .Extract(err => throw new Exception("Failed compiling: " + err));
 

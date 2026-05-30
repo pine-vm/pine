@@ -86,8 +86,7 @@ public class PrecompiledLeavesEffectivenessTests
                 var compiledEnv =
                     ElmCompiler.CompileInteractiveEnvironment(
                         treeWithTest,
-                        rootFilePaths: rootFilePaths,
-                        disableInlining: false)
+                        rootFilePaths: rootFilePaths)
                     .Map(r => r.compiledEnvValue)
                     .Extract(err => throw new Exception("Failed compiling: " + err));
 
@@ -144,7 +143,7 @@ public class PrecompiledLeavesEffectivenessTests
     /// <summary>
     /// Aggregate of the per-area precompiled-leaf dictionaries available from
     /// inside the <c>Pine.Core</c> project, exposed via
-    /// <see cref="Core.IntermediateVM.SetupVM.DefaultPrecompiledLeaves"/>.
+    /// <see cref="IntermediateVM.SetupVM.DefaultPrecompiledLeaves"/>.
     /// </summary>
     private static IReadOnlyDictionary<PineValue, Func<PineValue, PineValue?>> DefaultPrecompiledLeaves =>
         IntermediateVM.SetupVM.DefaultPrecompiledLeaves;
