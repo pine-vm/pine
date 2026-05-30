@@ -909,6 +909,39 @@ public class CoreBasics
     }
 
     /// <summary>
+    /// The inner body expression of <see cref="Compare_FunctionValue"/>, i.e. the expression
+    /// that the intermediate VM dispatches to via <c>ParseAndEval</c> at the innermost level
+    /// of the curried application of <c>Basics.compare</c>.
+    /// <para>
+    /// The expression assumes the runtime environment shape <c>[envFunctions, arg0, arg1]</c>
+    /// with <c>envFunctions = []</c>. This shape is the natural one produced by
+    /// <see cref="BinaryFunctionValue"/>.
+    /// </para>
+    /// <para>
+    /// Useful as a precompiled leaf key for short-cutting <c>Basics.compare</c> evaluation;
+    /// see the precompiled-leaves dictionary in
+    /// <c>CoreBasicsPrecompiledLeaves</c>.
+    /// </para>
+    /// </summary>
+    public static Expression Compare_InnerBodyExpression()
+    {
+        return
+            Internal_Compare(
+                BuiltinHelpers.BuildPathToParameter(0),
+                BuiltinHelpers.BuildPathToParameter(1));
+    }
+
+    /// <summary>
+    /// Pine value encoding of <see cref="Compare_InnerBodyExpression"/>; suitable as a key
+    /// in the precompiled-leaves dictionary.
+    /// </summary>
+    public static PineValue Compare_InnerBodyEncodedValue =>
+        s_compareInnerBodyEncodedValue.Value;
+
+    private static readonly System.Lazy<PineValue> s_compareInnerBodyEncodedValue =
+        new(() => ExpressionEncoding.EncodeExpressionAsValue(Compare_InnerBodyExpression()));
+
+    /// <summary>
     /// (&lt;) : comparable -> comparable -> Bool
     /// <para>
     /// <see href="https://package.elm-lang.org/packages/elm/core/latest/Basics#(&lt;)"/>
@@ -3387,6 +3420,35 @@ public class CoreBasics
                 falseBranch: s_orderGT);
     }
 
+    private static readonly Expression s_compareInnerBodyEncodedLiteral =
+        Expression.LiteralInstance(Compare_InnerBodyEncodedValue);
+
+    private static readonly Expression s_envFunctionsEmptyListLiteral =
+        Expression.LiteralInstance(PineValue.EmptyList);
+
+    /// <summary>
+    /// Builds an expression that invokes <c>Basics.compare</c> via a single
+    /// <see cref="Expression.ParseAndEval"/> targeting <see cref="Compare_InnerBodyEncodedValue"/>.
+    /// <para>
+    /// Using <see cref="Expression.ParseAndEval"/> (rather than inlining
+    /// <see cref="Internal_Compare"/>) lets the intermediate VM intercept the call via a
+    /// precompiled leaf registered under <see cref="Compare_InnerBodyEncodedValue"/>
+    /// (see <c>CoreBasicsPrecompiledLeaves</c>). The wrapper environment shape
+    /// <c>[envFunctions = [], arg0, arg1]</c> matches the natural shape produced by
+    /// <see cref="BinaryFunctionValue"/>.
+    /// </para>
+    /// </summary>
+    private static Expression InvokeCompareViaWrapper(Expression left, Expression right)
+    {
+        var invocationEnv =
+            Expression.ListInstance([s_envFunctionsEmptyListLiteral, left, right]);
+
+        return
+            new Expression.ParseAndEval(
+                encoded: s_compareInnerBodyEncodedLiteral,
+                environment: invocationEnv);
+    }
+
     private static Expression Internal_Lt(
         Expression left,
         Expression right)
@@ -3397,7 +3459,7 @@ public class CoreBasics
             Pine_kernel.equal [ compare a b, LT ]
         */
 
-        var compareResult = Internal_Compare(left, right);
+        var compareResult = InvokeCompareViaWrapper(left, right);
 
         return
             Expression.ConditionalInstance(
