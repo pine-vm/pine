@@ -708,8 +708,14 @@ public abstract record ElmValue
         }
 
         /// <inheritdoc/>
-        public override int GetHashCode() =>
-            Value.GetHashCode();
+        public override int GetHashCode()
+        {
+            var hashCode = new HashCode();
+
+            hashCode.AddBytes(Value.Span);
+
+            return hashCode.ToHashCode();
+        }
     }
 
     /// <summary>
