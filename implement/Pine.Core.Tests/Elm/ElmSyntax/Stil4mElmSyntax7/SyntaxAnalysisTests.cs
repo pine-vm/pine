@@ -1009,12 +1009,12 @@ public class SyntaxAnalysisTests
         var body = func.Expression.Value;
 
         // Unwrap parens around the case body.
-        while (body is Pine.Core.Elm.ElmSyntax.Stil4mElmSyntax7.Expression.ParenthesizedExpression paren)
+        while (body is Core.Elm.ElmSyntax.Stil4mElmSyntax7.Expression.ParenthesizedExpression paren)
         {
             body = paren.Expression.Value;
         }
 
-        var caseExpr = (Pine.Core.Elm.ElmSyntax.Stil4mElmSyntax7.Expression.CaseExpression)body;
+        var caseExpr = (Core.Elm.ElmSyntax.Stil4mElmSyntax7.Expression.CaseExpression)body;
         var firstArm = caseExpr.CaseBlock.Cases[0];
 
         var actual =

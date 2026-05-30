@@ -15,11 +15,11 @@ namespace Pine.IntegrationTests;
 /// <para>
 /// Root cause (see
 /// <c>explore/2026-05-30.integration-tests-never-terminating-precompiled-leaves-regression.md</c>):
-/// the central intermediate-VM factory <see cref="global::Pine.IntermediateVM.SetupVM.Create"/>
+/// the central intermediate-VM factory <see cref="IntermediateVM.SetupVM.Create"/>
 /// stopped sourcing its default precompiled-leaves dictionary from the bundled,
-/// prebuilt dictionary (<see cref="global::Pine.Core.Bundle.BundledPineToDotnet"/>, embedded
+/// prebuilt dictionary (<see cref="Core.Bundle.BundledPineToDotnet"/>, embedded
 /// <c>pine-default-leaves.dll</c>) and instead uses
-/// <see cref="global::Pine.IntermediateVM.SetupVM.DefaultPrecompiledLeaves"/>, which only
+/// <see cref="IntermediateVM.SetupVM.DefaultPrecompiledLeaves"/>, which only
 /// contains the two newly added leaves. With ~144 hot-path .NET short-circuits gone,
 /// the intermediate VM interprets the full recursive Pine expression graphs of those
 /// functions, which makes the heavyweight integration tests never finish.
@@ -34,7 +34,7 @@ public class PrecompiledLeavesRegressionTests
     private static IReadOnlyDictionary<PineValue, Func<PineValue, PineValue?>> BundledLeaves()
     {
         var bundled =
-            global::Pine.Core.Bundle.BundledPineToDotnet.LoadBundledTask.Result;
+            Core.Bundle.BundledPineToDotnet.LoadBundledTask.Result;
 
         bundled.Should().NotBeNull(
             because: "the integration tests rely on the bundled precompiled-leaves assembly being loadable");
@@ -64,7 +64,7 @@ public class PrecompiledLeavesRegressionTests
 
     /// <summary>
     /// Guards the union fix: the dictionary that
-    /// <see cref="global::Pine.IntermediateVM.SetupVM.Create"/> runs with by default now
+    /// <see cref="IntermediateVM.SetupVM.Create"/> runs with by default now
     /// keeps (at least) all of the bundled leaves, in addition to the new per-area leaves.
     /// </summary>
     [Fact]
@@ -73,7 +73,7 @@ public class PrecompiledLeavesRegressionTests
         var bundled = BundledLeaves();
 
         var defaultLeaves =
-            global::Pine.IntermediateVM.SetupVM.DefaultPrecompiledLeaves;
+            IntermediateVM.SetupVM.DefaultPrecompiledLeaves;
 
         var bundledKeysLost =
             bundled.Keys.Count(k => !defaultLeaves.ContainsKey(k));

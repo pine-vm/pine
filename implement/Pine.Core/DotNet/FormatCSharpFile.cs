@@ -3312,7 +3312,7 @@ public static class FormatCSharpFile
                 var rightSideHasMultiLineRawString = false;
 
                 {
-                    SyntaxNode? cur = node.Parent;
+                    var cur = node.Parent;
 
                     while (cur is InvocationExpressionSyntax or MemberAccessExpressionSyntax)
                     {

@@ -50,7 +50,7 @@ public class ValueEncodingFlatDeterministicTests
                     largeComponent),
                 largeComponent);
 
-        using var compositionAlfaEncodedBytes = new System.IO.MemoryStream();
+        using var compositionAlfaEncodedBytes = new MemoryStream();
 
         ValueEncodingFlatDeterministic.Encode(compositionAlfaEncodedBytes, compositionAlfa);
 
@@ -61,7 +61,7 @@ public class ValueEncodingFlatDeterministicTests
         var reproducedAlfa =
             ValueEncodingFlatDeterministic.DecodeRoot(compositionAlfaEncodedBytes.ToArray());
 
-        using var compositionBetaEncodedBytes = new System.IO.MemoryStream();
+        using var compositionBetaEncodedBytes = new MemoryStream();
 
         ValueEncodingFlatDeterministic.Encode(compositionBetaEncodedBytes, compositionBeta);
 
@@ -153,7 +153,7 @@ public class ValueEncodingFlatDeterministicTests
 
             try
             {
-                using var encodedStream = new System.IO.MemoryStream();
+                using var encodedStream = new MemoryStream();
 
                 ValueEncodingFlatDeterministic.Encode(encodedStream, testCase);
 
@@ -164,9 +164,9 @@ public class ValueEncodingFlatDeterministicTests
 
                 decoded.Should().Be(testCase);
             }
-            catch (System.Exception ex)
+            catch (Exception ex)
             {
-                throw new System.Exception(
+                throw new Exception(
                     "Failed for test case [" + i + "] (" + testCase + ")",
                     innerException: ex);
             }
