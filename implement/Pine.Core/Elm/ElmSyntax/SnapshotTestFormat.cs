@@ -83,13 +83,20 @@ public class SnapshotTestFormat
     private static Node<FunctionImplementation> FormatFunctionImplementation(
         Node<FunctionImplementation> implNode)
     {
+        // Insert the parentheses the Elm grammar requires (and flatten the
+        // redundant function-position parentheses elm-format normalises away)
+        // so synthetic expression trees — which frequently omit them — render
+        // to text that reparses to the same tree and indents consistently.
+        var parenthesized =
+            ApplicationParenthesesNormalization.NormalizeExpression(implNode.Value.Expression);
+
         return
             implNode with
             {
                 Value =
                 implNode.Value with
                 {
-                    Expression = FormatExpression(implNode.Value.Expression)
+                    Expression = FormatExpression(parenthesized)
                 }
             };
     }
