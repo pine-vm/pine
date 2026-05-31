@@ -1776,8 +1776,7 @@ public class CSharpFormatTests
             """"
             int[] alfa =
                 [
-                1,
-                2,
+                1, 2,
                 3
                 ];
 
@@ -1822,9 +1821,9 @@ public class CSharpFormatTests
                     [expectedInCompilerKey] =
                     PineValue.List(
                         [
-                        .. source.ValuesExpectedInCompilerBlobs
-                        .Cast<PineValue>(),
-                        .. source.ValuesExpectedInCompilerLists
+                            .. source.ValuesExpectedInCompilerBlobs
+                            .Cast<PineValue>(),
+                            .. source.ValuesExpectedInCompilerLists
                         ])
                 };
 
@@ -4470,11 +4469,11 @@ public class CSharpFormatTests
             return
                 new ElmValue.ElmRecord(
                     [
-                    ("name",
-                    ElmValue.StringInstance(exposedType.Name)),
+                        ("name",
+                        ElmValue.StringInstance(exposedType.Name)),
 
-                    ("open",
-                    EncodeMaybe(EncodeRange, exposedType.Open)),
+                        ("open",
+                        EncodeMaybe(EncodeRange, exposedType.Open)),
                     ]);
             """";
 
@@ -4722,11 +4721,11 @@ public class CSharpFormatTests
                                 OfTokenLocation: caseExpr.CaseBlock.OfTokenLocation,
                                 Cases:
                                 [
-                                .. caseExpr.CaseBlock.Cases.Select(
-                                    c => c with
-                                    {
-                                        Expression = FormatExpression(c.Expression)
-                                    })
+                                    .. caseExpr.CaseBlock.Cases.Select(
+                                        c => c with
+                                        {
+                                            Expression = FormatExpression(c.Expression)
+                                        })
                                 ])),
 
                         ExpressionSyntax.FunctionOrValue funcOrVal =>
@@ -5189,14 +5188,14 @@ public class CSharpFormatTests
             var scenario =
                 TestCase.DefaultAppWithoutPackages(
                     [
-                    """"
-                    module Test exposing (..)
+                        """"
+                        module Test exposing (..)
 
 
-                    alfa =
-                        41
+                        alfa =
+                            41
 
-                    """",
+                        """",
                     ]);
             """""";
 
@@ -5221,8 +5220,8 @@ public class CSharpFormatTests
             var (finalResult, _) =
                 ElmCompilerTestHelper.CreateFunctionValueInvocationDelegate(firstApplied.returnValue, parseCache)(
                     [
-                    StringEncoding.ValueFromString("middle"),
-                    IntegerEncoding.EncodeSignedInteger(30)
+                        StringEncoding.ValueFromString("middle"),
+                        IntegerEncoding.EncodeSignedInteger(30)
                     ]);
             """";
 
@@ -6248,6 +6247,119 @@ public class CSharpFormatTests
                 // Neither g nor h reference an outer name as a function — only
                 // each other. Both are bound by the let. No outer flow reported.
                 expectedFlows: []);
+            """";
+
+        AssertFormattedSyntax(input, input, scriptMode: true);
+    }
+
+    [Fact]
+    public void Preserve_collection_items_grouped_and_with_interspersed_single_line_comments()
+    {
+        var input =
+            """"
+            encoded.Should().Equal(
+            [
+                0, 0, 0, 1, // tag = TagBlob
+                0, 0, 0, 0, // length = 0
+            ]);
+            """";
+
+        AssertFormattedSyntax(input, input, scriptMode: true);
+    }
+
+    [Fact]
+    public void Preserve_collection_items_grouped_with_multiple_on_line()
+    {
+        var input =
+            """"
+            class Test
+            {
+                public static IReadOnlyList<string> KnownDeclarationNames { get; } =
+                    [
+                        "add", "sub", "mul",
+                        "idiv", "modBy", "remainderBy",
+                        "eq", "neq", "compare",
+                        "lt", "gt", "le", "ge",
+                        "not", "negate",
+                        "abs", "clamp",
+                        "min", "max",
+                        "identity",
+                        "always",
+                        "append",
+                        "apL", "apR",
+                    ];
+            }
+            """";
+
+        AssertFormattedSyntax(input, input, scriptMode: true);
+    }
+
+    [Fact]
+    public void Preserve_foreach_pipeline_member_invocation_indent()
+    {
+        var input =
+            """"
+            foreach (var entry in allFindings
+                .OrderBy(kvp => kvp.Key))
+            {
+            }
+            """";
+
+        AssertFormattedSyntax(input, input, scriptMode: true);
+    }
+
+    [Fact]
+    public void Preserve_if_condition_pipeline_member_invocation_indent()
+    {
+        var input =
+            """"
+            if (entryPointFilePath.Count >= absSourceDir.Count &&
+                entryPointFilePath
+                .Take(absSourceDir.Count)
+                .SequenceEqual(absSourceDir))
+            {
+                // The entry point sits in one of the source-directories recognized by this elm.json
+                return true;
+            }
+            """";
+
+        AssertFormattedSyntax(input, input, scriptMode: true);
+    }
+
+    [Fact]
+    public void Preserve_property_getter_implicit_object_creation_on_separate_line()
+    {
+        var input =
+            """"
+            public record ElmAppInterfaceConfig(IReadOnlyList<string> CompilationRootFilePath)            
+            {
+                public static ElmAppInterfaceConfig Default =>
+                    new(CompilationRootFilePath: ["src", "Backend", "Main.elm"]);
+            }
+            """";
+
+        AssertFormattedSyntax(input, input, scriptMode: true);
+    }
+
+    [Fact]
+    public void Preserve_case_pattern_switch_label_when_clause_indent_on_separate_line()
+    {
+        var input =
+            """"
+            switch (expression)
+            {
+                case Expression.FunctionOrValue fov
+                when fov.Name.Length > 0 && char.IsUpper(fov.Name[0]):
+                    return new QualifiedNameRef(fov.ModuleName, fov.Name);
+
+                case Expression.Application app
+                when app.Arguments.Count > 0
+                && UnwrapParenthesized(app.Arguments[0].Value) is Expression.FunctionOrValue headFov
+                && headFov.Name.Length > 0
+                && char.IsUpper(headFov.Name[0]):
+
+                    return new QualifiedNameRef(headFov.ModuleName, headFov.Name);
+            }
             """";
 
         AssertFormattedSyntax(input, input, scriptMode: true);

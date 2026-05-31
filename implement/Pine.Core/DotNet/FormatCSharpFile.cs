@@ -1877,7 +1877,14 @@ public static class FormatCSharpFile
                     var singleLineWidth =
                         ctx.IndentLevel * IndentSize + ("case " + patternText + " when " + condText + ":").Length;
 
-                    if (singleLineWidth > MaximumLineLength)
+                    // Preserve a user-introduced line break between the pattern and the
+                    // `when` clause: if the `when` keyword was on its own line in the
+                    // source, keep it there regardless of line length.
+                    var whenOriginallyOnNewLine =
+                        cp.WhenClause is { } origWc &&
+                        LineOf(origWc.WhenKeyword) > EndLineOf(cp.Pattern);
+
+                    if (singleLineWidth > MaximumLineLength || whenOriginallyOnNewLine)
                     {
                         // Break when to a new line. Use the unformatted condition text
                         // here because FormatNode would see the original (long-line)
@@ -1958,11 +1965,15 @@ public static class FormatCSharpFile
 
             var minBreaks = origBreaks >= 2 ? 2 : 1;
 
-            // When the formatted label spans multiple lines (e.g., when clause
-            // was broken to a new line), add a blank line before the statements.
+            // When the formatter itself broke the label across multiple lines
+            // (e.g. a `when` clause that was on a single line in the source got
+            // broken to a new line because it exceeded the line length), add a
+            // blank line before the statements. When the label already spanned
+            // multiple lines in the source, preserve the original spacing instead.
             var lastFmtLabel = labels[^1];
+            var lastLabelMultiLineInSource = SpansMultipleLines(node.Labels[^1]);
 
-            if (SpansMultipleLines(lastFmtLabel) && minBreaks < 2)
+            if (SpansMultipleLines(lastFmtLabel) && !lastLabelMultiLineInSource && minBreaks < 2)
                 minBreaks = 2;
 
             // Count leading line breaks BEFORE the first non-whitespace content
@@ -2357,11 +2368,50 @@ public static class FormatCSharpFile
         var argIndent = ctx.IndentLevel + 1;
         var args = new List<SyntaxNode>();
 
+        // Source column of the call/expression that owns this argument list, used to
+        // detect collection-expression arguments whose opening bracket the author
+        // aligned with the call itself (a "hugging" layout, e.g. a statement-level
+        // `Foo(\n[\n...]);` where `[` sits at the same column as `Foo`).
+        var callFirstToken = node.Parent?.GetFirstToken();
+
+        var callColumn =
+            callFirstToken is { } cft
+            ?
+            cft.GetLocation().GetLineSpan().StartLinePosition.Character
+            :
+            ctx.IndentLevel * IndentSize;
+
+        var callLevel = callColumn / IndentSize;
+
         for (var i = 0; i < node.Arguments.Count; i++)
         {
             var a = node.Arguments[i];
             var origLeading = a.GetLeadingTrivia();
-            var fmtExpr = (ExpressionSyntax)FormatNode(a.Expression, argIndent);
+
+            // For a collection-expression argument whose opening bracket the author
+            // placed on its own line and aligned exactly with the call (same source
+            // column), preserve that bracket position relative to the call instead of
+            // forcing the standard one-level argument indent (e.g. `Foo(\n[\n...]);`).
+            var effectiveArgIndent = argIndent;
+
+            if (node.Arguments.Count is 1 &&
+                a.Expression is CollectionExpressionSyntax collArg &&
+                LineOf(collArg.OpenBracketToken) != LineOf(collArg.CloseBracketToken) &&
+                node.Parent is { } callOwner &&
+                LineOf(collArg.OpenBracketToken) != LineOf(callOwner.GetFirstToken()))
+            {
+                var bracketColumn =
+                    collArg.OpenBracketToken.GetLocation().GetLineSpan().StartLinePosition.Character;
+
+                if (bracketColumn == callColumn)
+                {
+                    var bracketLevel = bracketColumn / IndentSize;
+
+                    effectiveArgIndent = ctx.IndentLevel + Math.Max(0, bracketLevel - callLevel);
+                }
+            }
+
+            var fmtExpr = (ExpressionSyntax)FormatNode(a.Expression, effectiveArgIndent);
             a = a.WithExpression(fmtExpr);
 
             // Preserve blank lines between arguments by counting original breaks.
@@ -2382,12 +2432,15 @@ public static class FormatCSharpFile
                 }
             }
 
-            a = a.WithLeadingTrivia(EnsureLeadingBreaks(origLeading, minBreaks, argIndent));
+            a = a.WithLeadingTrivia(EnsureLeadingBreaks(origLeading, minBreaks, effectiveArgIndent));
             a = a.WithTrailingTrivia(StripWhitespace(a.GetTrailingTrivia()));
             // Re-indent multiline raw string literals so their content and closing
             // delimiter line up with the new argument indent (token text is otherwise
-            // opaque to leading-trivia changes).
-            a = ReindentRawStringLiterals(a, argIndent);
+            // opaque to leading-trivia changes). Collection-expression arguments are
+            // skipped here because they already re-indent their own element raw string
+            // literals relative to each element's (possibly deeper) indentation.
+            if (a is not ArgumentSyntax { Expression: CollectionExpressionSyntax })
+                a = ReindentRawStringLiterals(a, effectiveArgIndent);
 
             // For named arguments, normalize the expression's indent when it starts
             // on a new line after the colon.
@@ -2688,7 +2741,12 @@ public static class FormatCSharpFile
             .WithElements(SyntaxFactory.SeparatedList(elems.Cast<CollectionElementSyntax>(), seps));
     }
 
-    /// <summary>Formats a collection expression across multiple lines, one element per line.</summary>
+    /// <summary>
+    /// Formats a collection expression across multiple lines. The original line
+    /// grouping of elements is preserved (elements that shared a line in the source
+    /// stay grouped), as is the indentation of each element relative to the opening
+    /// bracket.
+    /// </summary>
     private static CollectionExpressionSyntax FormatCollectionMultiLine(
         CollectionExpressionSyntax node,
         FormatContext ctx)
@@ -2696,17 +2754,48 @@ public static class FormatCSharpFile
         var elems = new List<SyntaxNode>();
         var origSeps = node.Elements.GetSeparators().ToList();
 
+        var openBracketLevel =
+            node.OpenBracketToken.GetLocation().GetLineSpan().StartLinePosition.Character / IndentSize;
+
+        // Only preserve the author's original element grouping and indentation when
+        // the collection was already laid out across multiple lines in the source.
+        // A single-line collection that is being broken solely because it exceeds the
+        // maximum line length is normalized to one element per line at the standard
+        // indent.
+        var sourceMultiLine =
+            LineOf(node.OpenBracketToken) != LineOf(node.CloseBracketToken);
+
         for (var i = 0; i < node.Elements.Count; i++)
         {
             var e = node.Elements[i];
             var origLeading = e.GetLeadingTrivia();
 
+            // Preserve the original element grouping: an element that shared a line
+            // with the previous element in the source stays on the same line.
+            var sameLineAsPrev =
+                sourceMultiLine &&
+                i > 0 &&
+                LineOf(node.Elements[i].GetFirstToken()) == EndLineOf(node.Elements[i - 1]);
+
+            // Preserve the indentation of each element relative to the opening
+            // bracket (e.g. some collections indent items one level deeper than the
+            // bracket, others align them with it).
+            var elemLevel =
+                node.Elements[i].GetFirstToken().GetLocation().GetLineSpan().StartLinePosition.Character / IndentSize;
+
+            var elemIndent =
+                sourceMultiLine
+                ?
+                ctx.IndentLevel + Math.Max(0, elemLevel - openBracketLevel)
+                :
+                ctx.IndentLevel;
+
             if (e is ExpressionElementSyntax ee)
-                e = ee.WithExpression((ExpressionSyntax)FormatNode(ee.Expression, ctx));
+                e = ee.WithExpression((ExpressionSyntax)FormatNode(ee.Expression, elemIndent));
 
             else if (e is SpreadElementSyntax se)
             {
-                var fmtExpr = (ExpressionSyntax)FormatNode(se.Expression, ctx);
+                var fmtExpr = (ExpressionSyntax)FormatNode(se.Expression, elemIndent);
 
                 // If the spread operator and expression are split across lines,
                 // join them so ..expr stays on the same line.
@@ -2724,38 +2813,58 @@ public static class FormatCSharpFile
                 }
             }
 
-            // Preserve blank lines between elements and around comments by
-            // walking the original trivia and emitting one line break per
-            // gap (max one blank line). Unlike EnsureLeadingBreaks, this
-            // preserves the *position* of blank lines around comments rather
-            // than collapsing them all before the first comment.
-            var sepTrailingBreaksForGap =
-                (i > 0 && i - 1 < origSeps.Count)
-                ?
-                CountLineBreaks(origSeps[i - 1].TrailingTrivia)
-                :
-                0;
+            if (sameLineAsPrev)
+            {
+                // Grouped with the previous element on the same line: a single space
+                // separates this element from the preceding comma.
+                e = e.WithLeadingTrivia(s_space);
+            }
+            else
+            {
+                // Preserve blank lines between elements and around comments by
+                // walking the original trivia and emitting one line break per
+                // gap (max one blank line). Unlike EnsureLeadingBreaks, this
+                // preserves the *position* of blank lines around comments rather
+                // than collapsing them all before the first comment.
+                var sepTrailingBreaksForGap =
+                    (i > 0 && i - 1 < origSeps.Count)
+                    ?
+                    CountLineBreaks(origSeps[i - 1].TrailingTrivia)
+                    :
+                    0;
 
-            e =
-                e.WithLeadingTrivia(
-                    RebuildLeadingTriviaPreservingBlanks(
-                        origLeading,
-                        sepTrailingBreaksForGap,
-                        ctx.IndentLevel));
+                e =
+                    e.WithLeadingTrivia(
+                        RebuildLeadingTriviaPreservingBlanks(
+                            origLeading,
+                            sepTrailingBreaksForGap,
+                            elemIndent));
+            }
 
             var trailingTrivia =
                 EnsureSpaceBeforeComments(
                     StripWhitespace(node.Elements[i].GetTrailingTrivia()));
 
             e = e.WithTrailingTrivia(trailingTrivia);
-            e = ReindentRawStringLiterals(e, ctx.IndentLevel);
+            e = ReindentRawStringLiterals(e, elemIndent);
             elems.Add(e);
         }
 
         var seps = RebuildSeparators(origSeps, node.Elements.Count - 1);
 
         if (origSeps.Count >= node.Elements.Count)
-            seps.Add(SyntaxFactory.Token(SyntaxKind.CommaToken).WithLeadingTrivia().WithTrailingTrivia());
+        {
+            // Preserve any trailing comment attached to the final (trailing) comma,
+            // e.g. `0, 0, // length = 0`.
+            var lastSepTrailingComment =
+                EnsureSpaceBeforeComments(
+                    StripWhitespace(origSeps[node.Elements.Count - 1].TrailingTrivia));
+
+            seps.Add(
+                SyntaxFactory.Token(SyntaxKind.CommaToken)
+                .WithLeadingTrivia()
+                .WithTrailingTrivia(lastSepTrailingComment));
+        }
 
         var close = node.CloseBracketToken.WithLeadingTrivia(s_lineFeed, Indent(ctx.IndentLevel));
 
@@ -3625,9 +3734,23 @@ public static class FormatCSharpFile
         if (chainTop.Parent is ExpressionStatementSyntax or IfStatementSyntax)
             return ctx.IndentLevel + 1;
 
+        // The source expression of a foreach statement: the chain continuation
+        // aligns one level deeper than the foreach when the chain head sits inline
+        // after `in`; if the head was placed on its own line, align with the head
+        // (which the parent already positioned at ctx.IndentLevel).
+        if (chainTop.Parent is ForEachStatementSyntax forEachParent &&
+            forEachParent.Expression == chainTop)
+        {
+            var headOnOwnLine = LineOf(chainTop.GetFirstToken()) > LineOf(forEachParent.InKeyword);
+            return headOnOwnLine ? ctx.IndentLevel : ctx.IndentLevel + 1;
+        }
+
         // Also recognize chains that appear inside an `if` condition wrapped in
-        // binary/parenthesized/prefix-unary expressions (e.g. `if (chain.Count > 0)`):
-        // the chain continuation should still align one level deeper than the `if`.
+        // binary/parenthesized/prefix-unary expressions (e.g. `if (chain.Count > 0)`).
+        // Align the continuation with the chain head: when the head sits inline
+        // (e.g. `if (chain`), indent one level deeper; when the head was placed on
+        // its own line (e.g. the right operand of a multi-line `&&`), align with the
+        // head's own indent level which the parent already set to ctx.IndentLevel.
         var ancestor = chainTop.Parent;
 
         while (ancestor is BinaryExpressionSyntax or ParenthesizedExpressionSyntax or
@@ -3636,8 +3759,11 @@ public static class FormatCSharpFile
             ancestor = ancestor.Parent;
         }
 
-        if (ancestor is IfStatementSyntax)
-            return ctx.IndentLevel + 1;
+        if (ancestor is IfStatementSyntax ifAncestor)
+        {
+            var headOnOwnLine = LineOf(chainTop.GetFirstToken()) > LineOf(ifAncestor.IfKeyword);
+            return headOnOwnLine ? ctx.IndentLevel : ctx.IndentLevel + 1;
+        }
 
         return ctx.IndentLevel;
     }
