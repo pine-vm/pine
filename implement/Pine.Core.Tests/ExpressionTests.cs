@@ -72,6 +72,44 @@ public class ExpressionTests
             new Expression.StringTag(
                 "test",
                 Expression.ListInstance([Expression.EnvironmentInstance])),
+
+            // ParseAndEval nested inside a List subexpression.
+            Expression.ListInstance(
+                [
+                Expression.LiteralInstance(PineValue.EmptyList),
+                new Expression.ParseAndEval(
+                    Expression.EnvironmentInstance,
+                    Expression.EnvironmentInstance),
+                ]),
+
+            // ParseAndEval nested in the input of a KernelApplication.
+            Expression.KernelApplicationInstance(
+                "function",
+                new Expression.ParseAndEval(
+                    Expression.LiteralInstance(PineValue.EmptyList),
+                    Expression.EnvironmentInstance)),
+
+            // ParseAndEval nested in a branch of a Conditional.
+            Expression.ConditionalInstance(
+                Expression.ListInstance([]),
+                Expression.ListInstance([]),
+                new Expression.ParseAndEval(
+                    Expression.EnvironmentInstance,
+                    Expression.LiteralInstance(PineValue.EmptyList))),
+
+            // ParseAndEval nested inside a StringTag.
+            new Expression.StringTag(
+                "test",
+                new Expression.ParseAndEval(
+                    Expression.EnvironmentInstance,
+                    Expression.EnvironmentInstance)),
+
+            // ParseAndEval with another ParseAndEval nested in its parts.
+            new Expression.ParseAndEval(
+                new Expression.ParseAndEval(
+                    Expression.EnvironmentInstance,
+                    Expression.LiteralInstance(PineValue.EmptyList)),
+                Expression.EnvironmentInstance),
             ];
 
         foreach (var testCase in testCases)
@@ -88,8 +126,12 @@ public class ExpressionTests
             var anyNodeIsEnvironment =
                 rootAndSubexpressions.OfType<Expression.Environment>().Any();
 
+            var anyNodeIsParseAndEval =
+                rootAndSubexpressions.OfType<Expression.ParseAndEval>().Any();
+
             testCase.SubexpressionCount.Should().Be(subexpressions.Count);
             testCase.ReferencesEnvironment.Should().Be(anyNodeIsEnvironment);
+            testCase.ContainsParseAndEval.Should().Be(anyNodeIsParseAndEval);
         }
     }
 }

@@ -30,6 +30,17 @@ public abstract record Expression
     public abstract bool ReferencesEnvironment { get; }
 
     /// <summary>
+    /// True if the expression itself or any of its subexpressions is of type <see cref="ParseAndEval"/>.
+    /// <para>
+    /// An expression for which this is <c>false</c> evaluates in a single bounded pass (a finite
+    /// expression tree of kernel functions, conditionals, lists and environment accesses, all of
+    /// which terminate), so it can be evaluated directly without compiling it to an intermediate
+    /// representation and without risking unbounded recursion.
+    /// </para>
+    /// </summary>
+    public abstract bool ContainsParseAndEval { get; }
+
+    /// <summary>
     /// Instance of the <see cref="Environment"/> expression type.
     /// </summary>
     public static readonly Expression EnvironmentInstance = new Environment();
@@ -164,6 +175,11 @@ public abstract record Expression
         /// </summary>
         public override bool ReferencesEnvironment { get; } = false;
 
+        /// <summary>
+        /// Always returns false, as a <see cref="Literal"/> expression does not contain any subexpressions.
+        /// </summary>
+        public override bool ContainsParseAndEval { get; } = false;
+
         /// <inheritdoc/>
         public override string ToString()
         {
@@ -204,6 +220,9 @@ public abstract record Expression
         /// <inheritdoc/>
         public override bool ReferencesEnvironment { get; } = false;
 
+        /// <inheritdoc/>
+        public override bool ContainsParseAndEval { get; } = false;
+
         /// <summary>
         /// The list of subexpressions.
         /// </summary>
@@ -229,6 +248,9 @@ public abstract record Expression
 
                 if (Items[i].ReferencesEnvironment)
                     ReferencesEnvironment = true;
+
+                if (Items[i].ContainsParseAndEval)
+                    ContainsParseAndEval = true;
             }
         }
 
@@ -367,6 +389,11 @@ public abstract record Expression
         public override bool ReferencesEnvironment { get; }
 
         /// <summary>
+        /// Always returns true, as this expression is itself a <see cref="ParseAndEval"/>.
+        /// </summary>
+        public override bool ContainsParseAndEval { get; } = true;
+
+        /// <summary>
         /// Creates a new instance of a Parse-and-Eval expression.
         /// </summary>
         public ParseAndEval(
@@ -434,6 +461,9 @@ public abstract record Expression
         /// <inheritdoc/>
         public override bool ReferencesEnvironment { get; }
 
+        /// <inheritdoc/>
+        public override bool ContainsParseAndEval { get; }
+
         /// <summary>
         /// Creates a new instance of a kernel application.
         /// </summary>
@@ -450,6 +480,7 @@ public abstract record Expression
 
             SubexpressionCount = input.SubexpressionCount + 1;
             ReferencesEnvironment = input.ReferencesEnvironment;
+            ContainsParseAndEval = input.ContainsParseAndEval;
         }
 
         /// <inheritdoc/>
@@ -503,6 +534,9 @@ public abstract record Expression
         /// <inheritdoc/>
         public override bool ReferencesEnvironment { get; }
 
+        /// <inheritdoc/>
+        public override bool ContainsParseAndEval { get; }
+
         internal Conditional(
             Expression condition,
             Expression falseBranch,
@@ -531,6 +565,11 @@ public abstract record Expression
                 Condition.ReferencesEnvironment ||
                 FalseBranch.ReferencesEnvironment ||
                 TrueBranch.ReferencesEnvironment;
+
+            ContainsParseAndEval =
+                Condition.ContainsParseAndEval ||
+                FalseBranch.ContainsParseAndEval ||
+                TrueBranch.ContainsParseAndEval;
         }
 
         /// <inheritdoc/>
@@ -612,6 +651,9 @@ public abstract record Expression
 
         /// <inheritdoc/>
         public override bool ReferencesEnvironment { get; } = true;
+
+        /// <inheritdoc/>
+        public override bool ContainsParseAndEval { get; } = false;
     }
 
     /// <summary>
@@ -638,6 +680,9 @@ public abstract record Expression
         /// <inheritdoc/>
         public override bool ReferencesEnvironment { get; }
 
+        /// <inheritdoc/>
+        public override bool ContainsParseAndEval { get; }
+
         internal readonly int SlimHashCode;
 
         /// <summary>
@@ -652,6 +697,7 @@ public abstract record Expression
 
             SubexpressionCount = tagged.SubexpressionCount + 1;
             ReferencesEnvironment = tagged.ReferencesEnvironment;
+            ContainsParseAndEval = tagged.ContainsParseAndEval;
 
             SlimHashCode = HashCode.Combine(tag, tagged);
         }
