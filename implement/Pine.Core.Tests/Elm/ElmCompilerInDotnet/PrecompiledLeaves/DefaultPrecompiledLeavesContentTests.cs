@@ -32,10 +32,11 @@ public class DefaultPrecompiledLeavesContentTests
             IntermediateVM.SetupVM.DefaultPrecompiledLeaves;
 
         aggregate.Count.Should().Be(
-            4,
+            6,
             because:
             "the Pine.Core aggregate contributes the Basics.compare and Dict.get kernel " +
-            "leaves plus the two Base64 conversion leaves (Base64.Encode.toBytes and " +
+            "leaves, the two record runtime leaves (record access and record update), " +
+            "plus the two Base64 conversion leaves (Base64.Encode.toBytes and " +
             "Base64.Decode.fromBytes)");
 
         aggregate.Keys.Should().Contain(
@@ -45,6 +46,14 @@ public class DefaultPrecompiledLeavesContentTests
         aggregate.Keys.Should().Contain(
             CoreDictPrecompiledLeaves.DictGetLeafKey,
             because: "the aggregate must expose the Dict.get leaf");
+
+        aggregate.Keys.Should().Contain(
+            CoreRecordPrecompiledLeaves.RecordAccessLeafKey,
+            because: "the aggregate must expose the record access leaf");
+
+        aggregate.Keys.Should().Contain(
+            CoreRecordPrecompiledLeaves.RecordUpdateLeafKey,
+            because: "the aggregate must expose the record update leaf");
 
         aggregate.Keys.Should().Contain(
             IntermediateVM.SetupVM.Base64ConversionPrecompiledLeaves.Keys,
@@ -61,13 +70,14 @@ public class DefaultPrecompiledLeavesContentTests
             new HashSet<PineValue>(
                 IntermediateVM.SetupVM.BasicsComparePrecompiledLeaves.Keys
                 .Concat(IntermediateVM.SetupVM.DictGetPrecompiledLeaves.Keys)
+                .Concat(IntermediateVM.SetupVM.RecordAccessAndUpdatePrecompiledLeaves.Keys)
                 .Concat(IntermediateVM.SetupVM.Base64ConversionPrecompiledLeaves.Keys));
 
         aggregate.Keys.Should().BeEquivalentTo(
             perAreaKeys,
             because:
             "the aggregate must be exactly the union of the per-area precompiled-leaf " +
-            "dictionaries it advertises (BasicsCompare + DictGet + Base64Conversion)");
+            "dictionaries it advertises (BasicsCompare + DictGet + RecordAccessAndUpdate + Base64Conversion)");
     }
 
     [Fact]
@@ -79,11 +89,17 @@ public class DefaultPrecompiledLeavesContentTests
         IntermediateVM.SetupVM.DictGetPrecompiledLeaves.Count
             .Should().Be(1, because: "the Dict.get area currently exposes a single leaf");
 
+        IntermediateVM.SetupVM.RecordAccessAndUpdatePrecompiledLeaves.Count
+            .Should().Be(
+            2,
+            because:
+            "the record runtime area exposes the record access and record update leaves");
+
         IntermediateVM.SetupVM.Base64ConversionPrecompiledLeaves.Count
             .Should().Be(
-                2,
-                because:
-                "the Base64 conversion area exposes the Base64.Encode.toBytes and " +
-                "Base64.Decode.fromBytes leaves");
+            2,
+            because:
+            "the Base64 conversion area exposes the Base64.Encode.toBytes and " +
+            "Base64.Decode.fromBytes leaves");
     }
 }

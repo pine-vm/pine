@@ -37,6 +37,17 @@ public static class SetupVM
         CoreDictPrecompiledLeaves.DefaultLeaves;
 
     /// <summary>
+    /// Precompiled-leaf entries contributed by <see cref="CoreRecordPrecompiledLeaves"/>
+    /// (short-circuit implementations of the runtime record access and record update
+    /// functions). Exposed so that consumers building their own intermediate VM via
+    /// <see cref="Interpreter.IntermediateVM.PineVM.CreateCustom"/> can pick the individual leaf packages they
+    /// want to register without pulling in the full <see cref="DefaultPrecompiledLeaves"/>
+    /// aggregate.
+    /// </summary>
+    public static IReadOnlyDictionary<PineValue, Func<PineValue, PineValue?>> RecordAccessAndUpdatePrecompiledLeaves =>
+        CoreRecordPrecompiledLeaves.DefaultLeaves;
+
+    /// <summary>
     /// Precompiled-leaf entries contributed by <see cref="Base64PrecompiledLeaves"/>
     /// (short-circuit implementations of <c>Base64.Encode.toBytes</c> and
     /// <c>Base64.Decode.fromBytes</c>). Exposed so that consumers building their own
@@ -51,6 +62,7 @@ public static class SetupVM
     /// <summary>
     /// Aggregate of the per-area precompiled-leaf dictionaries
     /// (<see cref="BasicsComparePrecompiledLeaves"/>, <see cref="DictGetPrecompiledLeaves"/>,
+    /// <see cref="RecordAccessAndUpdatePrecompiledLeaves"/>,
     /// <see cref="Base64ConversionPrecompiledLeaves"/>)
     /// available from inside the <c>Pine.Core</c> project. The counterpart in
     /// the <c>pine</c> project layers additional bundle-derived entries on top
@@ -75,6 +87,14 @@ public static class SetupVM
         // Entries already present (e.g. from earlier leaf packages) take
         // precedence over later contributions for the same key.
         foreach (var entry in DictGetPrecompiledLeaves)
+        {
+            if (!merged.ContainsKey(entry.Key))
+            {
+                merged[entry.Key] = entry.Value;
+            }
+        }
+
+        foreach (var entry in RecordAccessAndUpdatePrecompiledLeaves)
         {
             if (!merged.ContainsKey(entry.Key))
             {
