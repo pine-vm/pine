@@ -158,7 +158,14 @@ public class PineValueInProcess
         return boolean ? KernelTrueValue : KernelFalseValue;
     }
 
-    private PineValueInProcess()
+    /// <summary>
+    /// Parameterless constructor. Marked <see langword="protected"/> so that specialized
+    /// in-process representations (for example interpreter closures that are not backed by a
+    /// concrete <see cref="PineValue"/>) can derive from this type while the standard factory
+    /// methods (<see cref="Create(PineValue)"/>, <see cref="CreateList(IReadOnlyList{PineValueInProcess})"/>, …)
+    /// remain the only way to construct ordinary values.
+    /// </summary>
+    protected PineValueInProcess()
     {
     }
 
@@ -170,6 +177,29 @@ public class PineValueInProcess
     /// </remarks>
     /// <returns>The cached <see cref="PineValue"/> or null if not yet evaluated.</returns>
     public PineValue? EvaluatedOrNull => _evaluated;
+
+    /// <summary>
+    /// Exposes the in-process child items of a value that is represented as a lazily constructed
+    /// list (<see cref="CreateList"/>) or tagged value (<see cref="CreateTagged"/>), without forcing
+    /// evaluation. A tagged value is exposed in its canonical two-element <c>[tag, tagArgs]</c> shape.
+    /// </summary>
+    /// <remarks>
+    /// Returns <c>null</c> for values that are not represented as an unevaluated list/tagged structure
+    /// (blobs, integers, slice/concat builders, or already-evaluated values). Such values are fully
+    /// concrete and therefore cannot embed specialized child instances (for example interpreter
+    /// closures) that lack a concrete <see cref="PineValue"/> encoding.
+    /// </remarks>
+    /// <returns>The in-process child items, or <c>null</c> when the value is not an unevaluated list/tagged structure.</returns>
+    public IReadOnlyList<PineValueInProcess>? UnevaluatedStructuralItemsOrNull()
+    {
+        if (_list is not null)
+            return _list;
+
+        if (_tagged is { } tagged)
+            return [tagged.tag, CreateList(tagged.tagArgs)];
+
+        return null;
+    }
 
     /// <summary>
     /// Materializes this instance into a concrete <see cref="PineValue"/>.

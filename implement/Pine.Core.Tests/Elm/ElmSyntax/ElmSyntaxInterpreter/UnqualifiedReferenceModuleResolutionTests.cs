@@ -138,7 +138,7 @@ public class UnqualifiedReferenceModuleResolutionTests
         var callerContext =
             new ElmInterpreter.ApplicationContext(
                 CurrentTopLevel: new DeclQualifiedName(["P"], "entry"),
-                LocalBindings: System.Collections.Immutable.ImmutableDictionary<string, ElmValue>.Empty);
+                LocalBindings: System.Collections.Immutable.ImmutableDictionary<string, Pine.Core.Internal.PineValueInProcess>.Empty);
 
         var application =
             new ElmInterpreter.Application(
