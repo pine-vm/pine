@@ -689,11 +689,8 @@ public sealed class CompareInterpreterWithIntermediateVM
                 ElmValue.ElmFunction.SourceRef.Declared declared =>
                 declared.Name.FullName,
 
-                ElmValue.ElmFunction.SourceRef.Lambda lambda =>
-                "<lambda@"
-                + lambda.LambdaStruct.BackslashLocation.Row
-                + ":" + lambda.LambdaStruct.BackslashLocation.Column
-                + ">",
+                ElmValue.ElmFunction.SourceRef.Lambda =>
+                "<lambda>",
 
                 _ =>
                 "<closure: " + closure.Source.GetType().Name + ">",

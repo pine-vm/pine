@@ -892,15 +892,15 @@ public abstract record ElmValue
             /// </summary>
             public sealed record Declared(
                 CodeAnalysis.DeclQualifiedName Name,
-                ElmSyntax.SyntaxModel.FunctionImplementation Implementation)
+                ElmSyntax.ElmSyntaxAbstract.FunctionImplementation Implementation)
                 : SourceRef;
 
             /// <summary>
             /// An anonymous lambda expression. Stack traces and the infinite-recursion detector
-            /// use a synthetic name derived from <see cref="ElmSyntax.SyntaxModel.LambdaStruct.BackslashLocation"/>.
+            /// use a fixed synthetic name (the abstract syntax model carries no source location).
             /// </summary>
             public sealed record Lambda(
-                ElmSyntax.SyntaxModel.LambdaStruct LambdaStruct)
+                ElmSyntax.ElmSyntaxAbstract.Expression.LambdaExpression LambdaExpression)
                 : SourceRef;
         }
 

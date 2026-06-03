@@ -4,7 +4,6 @@ using System.Collections.Frozen;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
-using System.Numerics;
 
 namespace Pine.Core.Elm.ElmSyntax;
 
@@ -213,7 +212,7 @@ public partial class ElmSyntaxInterpreter
         /// </para>
         /// </summary>
         public sealed record ContinueWithFunction(
-            SyntaxModel.FunctionImplementation Function,
+            ElmSyntaxAbstract.FunctionImplementation Function,
             DeclQualifiedName? ResolvedName = null)
             : ApplicationResolution;
     }
@@ -277,7 +276,7 @@ public partial class ElmSyntaxInterpreter
 
         return
             RunTrampolineAsResult(
-                initialExpression: rootExpression,
+                initialExpression: ElmSyntaxAbstract.ConvertFromConcrete.FromExpression(rootExpression),
                 initialEnv: context,
                 initialApplication: null,
                 resolveApplication: resolveApplication,
@@ -506,7 +505,7 @@ public partial class ElmSyntaxInterpreter
 
         var result =
             RunTrampolineAsResult(
-                initialExpression: rootExpression,
+                initialExpression: ElmSyntaxAbstract.ConvertFromConcrete.FromExpression(rootExpression),
                 initialEnv: rootContext,
                 initialApplication: null,
                 resolveApplication: combined,
@@ -567,7 +566,7 @@ public partial class ElmSyntaxInterpreter
 
         var result =
             RunTrampolineAsResult(
-                initialExpression: rootExpression,
+                initialExpression: ElmSyntaxAbstract.ConvertFromConcrete.FromExpression(rootExpression),
                 initialEnv: rootContext,
                 initialApplication: null,
                 resolveApplication: combined,
@@ -717,15 +716,15 @@ public partial class ElmSyntaxInterpreter
         /// filled by the currently-returned value.
         /// </summary>
         public sealed record BuildList(
-            IReadOnlyList<SyntaxModel.Node<SyntaxModel.Expression>> Elements,
+            IReadOnlyList<ElmSyntaxAbstract.Expression> Elements,
             int NextIndex,
             PineValueInProcess[] Accumulated,
             ApplicationContext Env) : Kont;
 
         /// <summary>After evaluating the condition of an if-expression, pick a branch.</summary>
         public sealed record IfBranch(
-            SyntaxModel.Node<SyntaxModel.Expression> ThenBranch,
-            SyntaxModel.Node<SyntaxModel.Expression> ElseBranch,
+            ElmSyntaxAbstract.Expression ThenBranch,
+            ElmSyntaxAbstract.Expression ElseBranch,
             ApplicationContext Env) : Kont;
 
         /// <summary>
@@ -734,7 +733,7 @@ public partial class ElmSyntaxInterpreter
         /// is the one the currently-returned value is for.
         /// </summary>
         public sealed record BuildRecord(
-            IReadOnlyList<SyntaxModel.RecordExprField> Fields,
+            IReadOnlyList<ElmSyntaxAbstract.RecordSetter> Fields,
             int NextIndex,
             (string FieldName, PineValueInProcess Value)[] Accumulated,
             ApplicationContext Env) : Kont;
@@ -745,8 +744,8 @@ public partial class ElmSyntaxInterpreter
         /// When all arguments are collected, the application is resolved.
         /// </summary>
         public sealed record BuildArgs(
-            SyntaxModel.Expression.FunctionOrValue FunctionOrValue,
-            IReadOnlyList<SyntaxModel.Node<SyntaxModel.Expression>> Arguments,
+            ElmSyntaxAbstract.Expression.FunctionOrValue FunctionOrValue,
+            IReadOnlyList<ElmSyntaxAbstract.Expression> Arguments,
             int NextIndex,
             PineValueInProcess[] Accumulated,
             ApplicationContext Env) : Kont;
@@ -761,8 +760,8 @@ public partial class ElmSyntaxInterpreter
         /// to perform the application once the function value is in hand.
         /// </summary>
         public sealed record BuildArgsForValue(
-            SyntaxModel.Node<SyntaxModel.Expression> FunctionExpr,
-            IReadOnlyList<SyntaxModel.Node<SyntaxModel.Expression>> Arguments,
+            ElmSyntaxAbstract.Expression FunctionExpr,
+            IReadOnlyList<ElmSyntaxAbstract.Expression> Arguments,
             int NextIndex,
             PineValueInProcess[] Accumulated,
             ApplicationContext Env) : Kont;
@@ -796,10 +795,10 @@ public partial class ElmSyntaxInterpreter
         /// </summary>
         public sealed record LetBindFunction(
             string BindingName,
-            IReadOnlyList<SyntaxModel.Node<SyntaxModel.Expression.LetDeclaration>> Remaining,
+            IReadOnlyList<ElmSyntaxAbstract.LetDeclaration> Remaining,
             int NextIndex,
             Dictionary<string, PineValueInProcess> Extended,
-            SyntaxModel.Node<SyntaxModel.Expression> Body,
+            ElmSyntaxAbstract.Expression Body,
             ApplicationContext Outer) : Kont;
 
         /// <summary>
@@ -807,11 +806,11 @@ public partial class ElmSyntaxInterpreter
         /// declaration, bind the pattern to the returned value, then continue.
         /// </summary>
         public sealed record LetBindDestructure(
-            SyntaxModel.Pattern Pattern,
-            IReadOnlyList<SyntaxModel.Node<SyntaxModel.Expression.LetDeclaration>> Remaining,
+            ElmSyntaxAbstract.Pattern Pattern,
+            IReadOnlyList<ElmSyntaxAbstract.LetDeclaration> Remaining,
             int NextIndex,
             Dictionary<string, PineValueInProcess> Extended,
-            SyntaxModel.Node<SyntaxModel.Expression> Body,
+            ElmSyntaxAbstract.Expression Body,
             ApplicationContext Outer) : Kont;
 
         /// <summary>
@@ -845,7 +844,7 @@ public partial class ElmSyntaxInterpreter
         /// returned value. If no arm matches, a runtime error is raised.
         /// </summary>
         public sealed record MatchCase(
-            IReadOnlyList<SyntaxModel.Case> Cases,
+            IReadOnlyList<ElmSyntaxAbstract.Case> Cases,
             ApplicationContext Env) : Kont;
 
         /// <summary>
@@ -868,7 +867,7 @@ public partial class ElmSyntaxInterpreter
         /// </summary>
         public sealed record BuildRecordUpdate(
             ElmValue.ElmRecord? OriginalRecord,
-            IReadOnlyList<SyntaxModel.RecordExprField> Fields,
+            IReadOnlyList<ElmSyntaxAbstract.RecordSetter> Fields,
             int NextIndex,
             (string FieldName, PineValueInProcess Value)[] Accumulated,
             ApplicationContext Env) : Kont;
@@ -889,7 +888,7 @@ public partial class ElmSyntaxInterpreter
     /// propagates unchanged.
     /// </summary>
     private static Result<ElmInterpretationError, ElmValue> RunTrampolineAsResult(
-        SyntaxModel.Expression? initialExpression,
+        ElmSyntaxAbstract.Expression? initialExpression,
         ApplicationContext initialEnv,
         Application? initialApplication,
         System.Func<Application, ApplicationResolution> resolveApplication,
@@ -915,7 +914,7 @@ public partial class ElmSyntaxInterpreter
     }
 
     private static PineValueInProcess RunTrampoline(
-        SyntaxModel.Expression? initialExpression,
+        ElmSyntaxAbstract.Expression? initialExpression,
         ApplicationContext initialEnv,
         Application? initialApplication,
         System.Func<Application, ApplicationResolution> resolveApplication,
@@ -927,7 +926,7 @@ public partial class ElmSyntaxInterpreter
 
         // Either: (currentExpr, currentEnv) is the next thing to evaluate ("Eval" mode),
         // or currentValue holds the value about to be returned to the top kont ("Return" mode).
-        SyntaxModel.Expression? currentExpr;
+        ElmSyntaxAbstract.Expression? currentExpr;
         ApplicationContext currentEnv;
         PineValueInProcess? currentValue = null;
 
@@ -978,38 +977,34 @@ public partial class ElmSyntaxInterpreter
 
                 switch (currentExpr)
                 {
-                    case SyntaxModel.Expression.UnitExpr:
+                    case ElmSyntaxAbstract.Expression.UnitExpr:
                         currentValue = PineValueInProcess.EmptyList;
                         currentExpr = null;
                         break;
 
-                    case SyntaxModel.Expression.Literal literal:
+                    case ElmSyntaxAbstract.Expression.StringLiteral literal:
                         currentValue = ToProcess(ElmValue.StringInstance(literal.Value));
                         currentExpr = null;
                         break;
 
-                    case SyntaxModel.Expression.CharLiteral charLiteral:
+                    case ElmSyntaxAbstract.Expression.CharLiteral charLiteral:
                         currentValue = ToProcess(ElmValue.CharInstance(charLiteral.Value));
                         currentExpr = null;
                         break;
 
-                    case SyntaxModel.Expression.Integer integer:
-                        currentValue = MakeInteger(ParseIntegerLiteral(integer.LiteralText));
+                    case ElmSyntaxAbstract.Expression.Integer integer:
+                        currentValue = PineValueInProcess.Create(integer.ValueAsPineValue);
                         currentExpr = null;
                         break;
 
-                    case SyntaxModel.Expression.ParenthesizedExpression parenthesized:
-                        currentExpr = parenthesized.Expression.Value;
-                        break;
-
-                    case SyntaxModel.Expression.Negation negation:
+                    case ElmSyntaxAbstract.Expression.Negation negation:
                         kstack.Push(new Kont.Negate());
-                        currentExpr = negation.Expression.Value;
+                        currentExpr = negation.Expression;
                         break;
 
-                    case SyntaxModel.Expression.ListExpr listExpr:
+                    case ElmSyntaxAbstract.Expression.ListExpr listExpr:
                         {
-                            var nodes = listExpr.Elements.Nodes.ToList();
+                            var nodes = listExpr.Elements;
 
                             if (nodes.Count is 0)
                             {
@@ -1027,13 +1022,13 @@ public partial class ElmSyntaxInterpreter
                                     Accumulated: accumulated,
                                     Env: currentEnv));
 
-                            currentExpr = nodes[0].Value;
+                            currentExpr = nodes[0];
                             break;
                         }
 
-                    case SyntaxModel.Expression.TupledExpression tupledExpression:
+                    case ElmSyntaxAbstract.Expression.TupledExpression tupledExpression:
                         {
-                            var nodes = tupledExpression.Elements.Nodes.ToList();
+                            var nodes = tupledExpression.Elements;
 
                             if (nodes.Count is 0)
                             {
@@ -1051,23 +1046,23 @@ public partial class ElmSyntaxInterpreter
                                     Accumulated: accumulated,
                                     Env: currentEnv));
 
-                            currentExpr = nodes[0].Value;
+                            currentExpr = nodes[0];
                             break;
                         }
 
-                    case SyntaxModel.Expression.IfBlock ifBlock:
+                    case ElmSyntaxAbstract.Expression.IfBlock ifBlock:
                         kstack.Push(
                             new Kont.IfBranch(
                                 ThenBranch: ifBlock.ThenBlock,
                                 ElseBranch: ifBlock.ElseBlock,
                                 Env: currentEnv));
 
-                        currentExpr = ifBlock.Condition.Value;
+                        currentExpr = ifBlock.Condition;
                         break;
 
-                    case SyntaxModel.Expression.RecordExpr recordExpr:
+                    case ElmSyntaxAbstract.Expression.RecordExpr recordExpr:
                         {
-                            var fields = recordExpr.Fields.Nodes.ToList();
+                            var fields = recordExpr.Fields;
 
                             if (fields.Count is 0)
                             {
@@ -1085,11 +1080,11 @@ public partial class ElmSyntaxInterpreter
                                     Accumulated: accumulated,
                                     Env: currentEnv));
 
-                            currentExpr = fields[0].ValueExpr.Value;
+                            currentExpr = fields[0].Value;
                             break;
                         }
 
-                    case SyntaxModel.Expression.FunctionOrValue functionOrValue:
+                    case ElmSyntaxAbstract.Expression.FunctionOrValue functionOrValue:
                         {
                             // Bare name lookup. If it resolves to a local binding, return it directly;
                             // otherwise it's a nullary application which is handled by the same path
@@ -1127,9 +1122,9 @@ public partial class ElmSyntaxInterpreter
                             break;
                         }
 
-                    case SyntaxModel.Expression.Application application:
+                    case ElmSyntaxAbstract.Expression.Application application:
                         {
-                            var functionExpression = UnwrapParentheses(application.Function.Value);
+                            var functionExpression = application.Function;
 
                             var args = application.Arguments;
 
@@ -1146,7 +1141,7 @@ public partial class ElmSyntaxInterpreter
 
                             var accumulated = new PineValueInProcess[args.Count];
 
-                            if (functionExpression is SyntaxModel.Expression.FunctionOrValue fnOrVal)
+                            if (functionExpression is ElmSyntaxAbstract.Expression.FunctionOrValue fnOrVal)
                             {
                                 kstack.Push(
                                     new Kont.BuildArgs(
@@ -1164,30 +1159,28 @@ public partial class ElmSyntaxInterpreter
                                 // then evaluate the function expression and apply its value.
                                 kstack.Push(
                                     new Kont.BuildArgsForValue(
-                                        FunctionExpr: application.Function,
+                                        FunctionExpr: functionExpression,
                                         Arguments: args,
                                         NextIndex: 0,
                                         Accumulated: accumulated,
                                         Env: currentEnv));
                             }
 
-                            currentExpr = args[0].Value;
+                            currentExpr = args[0];
                             break;
                         }
 
-                    case SyntaxModel.Expression.LambdaExpression lambdaExpression:
+                    case ElmSyntaxAbstract.Expression.LambdaExpression lambdaExpression:
                         {
                             // A lambda evaluates to a closure value capturing the current local
                             // bindings (so any free variables in the body resolve to their values
                             // at the moment the lambda was reached, not at the moment the closure
                             // is finally invoked) and the surrounding top-level declaration name
                             // (so post-invocation stack traces remain coherent).
-                            var lambda = lambdaExpression.Lambda;
-
                             currentValue =
                                 new ElmClosureInProcess(
-                                    source: new ElmValue.ElmFunction.SourceRef.Lambda(lambda),
-                                    parameterCount: lambda.Arguments.Count,
+                                    source: new ElmValue.ElmFunction.SourceRef.Lambda(lambdaExpression),
+                                    parameterCount: lambdaExpression.Arguments.Count,
                                     argumentsAlreadyCollected: [],
                                     capturedBindings: SnapshotBindings(currentEnv.LocalBindings),
                                     capturedTopLevel: currentEnv.CurrentTopLevel);
@@ -1196,9 +1189,9 @@ public partial class ElmSyntaxInterpreter
                             break;
                         }
 
-                    case SyntaxModel.Expression.LetExpression letExpression:
+                    case ElmSyntaxAbstract.Expression.LetExpression letExpression:
                         {
-                            var decls = letExpression.Value.Declarations;
+                            var decls = letExpression.Declarations;
                             var extended = new Dictionary<string, PineValueInProcess>(currentEnv.LocalBindings);
 
                             if (decls.Count is 0)
@@ -1208,7 +1201,7 @@ public partial class ElmSyntaxInterpreter
                                         CurrentTopLevel: currentEnv.CurrentTopLevel,
                                         LocalBindings: extended);
 
-                                currentExpr = letExpression.Value.Expression.Value;
+                                currentExpr = letExpression.Expression;
                                 break;
                             }
 
@@ -1233,7 +1226,7 @@ public partial class ElmSyntaxInterpreter
                                         CurrentTopLevel: currentEnv.CurrentTopLevel,
                                         LocalBindings: extended);
 
-                                currentExpr = letExpression.Value.Expression.Value;
+                                currentExpr = letExpression.Expression;
                                 break;
                             }
 
@@ -1243,60 +1236,55 @@ public partial class ElmSyntaxInterpreter
                                     decls: sortedNonFunctionDecls,
                                     nextIndex: 0,
                                     extended: extended,
-                                    body: letExpression.Value.Expression,
+                                    body: letExpression.Expression,
                                     outerEnv: currentEnv,
                                     kstack: kstack);
 
                             break;
                         }
 
-                    case SyntaxModel.Expression.CaseExpression caseExpression:
+                    case ElmSyntaxAbstract.Expression.CaseExpression caseExpression:
                         kstack.Push(
                             new Kont.MatchCase(
-                                Cases: caseExpression.CaseBlock.Cases,
+                                Cases: caseExpression.Cases,
                                 Env: currentEnv));
 
-                        currentExpr = caseExpression.CaseBlock.Expression.Value;
+                        currentExpr = caseExpression.Expression;
                         break;
 
-                    case SyntaxModel.Expression.RecordAccess recordAccess:
+                    case ElmSyntaxAbstract.Expression.RecordAccess recordAccess:
                         {
                             // Push a continuation that, once the record-position expression
                             // produces a value, looks up the requested field on it.
                             kstack.Push(
                                 new Kont.AccessRecordField(
-                                    FieldName: recordAccess.FieldName.Value));
+                                    FieldName: recordAccess.FieldName));
 
-                            currentExpr = recordAccess.Record.Value;
+                            currentExpr = recordAccess.Record;
                             break;
                         }
 
-                    case SyntaxModel.Expression.RecordAccessFunction recordAccessFunction:
+                    case ElmSyntaxAbstract.Expression.RecordAccessFunction recordAccessFunction:
                         {
                             // A record-access function literal `.field` evaluates to a
                             // single-parameter closure `\r -> r.field`. We synthesise that
                             // closure as a lambda whose body is a RecordAccess node, so the
                             // existing closure-application machinery handles invocation.
-                            // The parser includes the leading dot in FunctionName; strip it
-                            // to obtain the bare field name.
-                            var fieldName = recordAccessFunction.FunctionName;
-
-                            if (fieldName.Length > 0 && fieldName[0] is '.')
-                                fieldName = fieldName[1..];
-
+                            // The abstract model already stores the bare field name (without
+                            // the leading dot).
                             currentValue =
                                 ToProcess(
                                     MakeRecordAccessClosure(
-                                        fieldName: fieldName,
+                                        fieldName: recordAccessFunction.FieldName,
                                         capturedTopLevel: currentEnv.CurrentTopLevel));
 
                             currentExpr = null;
                             break;
                         }
 
-                    case SyntaxModel.Expression.RecordUpdateExpression recordUpdate:
+                    case ElmSyntaxAbstract.Expression.RecordUpdateExpression recordUpdate:
                         {
-                            var fields = recordUpdate.Fields.Nodes.ToList();
+                            var fields = recordUpdate.Fields;
 
                             if (fields.Count is 0)
                             {
@@ -1310,9 +1298,9 @@ public partial class ElmSyntaxInterpreter
                             // First evaluate the record name as a bare FunctionOrValue so the
                             // existing local-binding / top-level lookup machinery applies.
                             var recordNameExpr =
-                                new SyntaxModel.Expression.FunctionOrValue(
+                                new ElmSyntaxAbstract.Expression.FunctionOrValue(
                                     ModuleName: [],
-                                    Name: recordUpdate.RecordName.Value);
+                                    Name: recordUpdate.RecordName);
 
                             kstack.Push(
                                 new Kont.BuildRecordUpdate(
@@ -1326,7 +1314,7 @@ public partial class ElmSyntaxInterpreter
                             break;
                         }
 
-                    case SyntaxModel.Expression.OperatorApplication operatorApplication:
+                    case ElmSyntaxAbstract.Expression.OperatorApplication operatorApplication:
                         {
                             // Translate the operator into the corresponding source-defined
                             // function call. Look up the operator symbol in the
@@ -1334,7 +1322,7 @@ public partial class ElmSyntaxInterpreter
                             // declarations — we deliberately do NOT consult any hard-coded
                             // table here, so the actual implementation referenced by the
                             // infix declaration is what runs.
-                            var opSymbol = operatorApplication.Operator.Value;
+                            var opSymbol = operatorApplication.Operator;
 
                             if (infixOperators is null
                                 || !infixOperators.TryGetValue(opSymbol, out var opFunctionName))
@@ -1344,24 +1332,20 @@ public partial class ElmSyntaxInterpreter
                                     kstack);
                             }
 
-                            var operatorRange = operatorApplication.Operator.Range;
-
-                            var functionRefNode =
-                                new SyntaxModel.Node<SyntaxModel.Expression>(
-                                    Range: operatorRange,
-                                    Value: new SyntaxModel.Expression.FunctionOrValue(
-                                        ModuleName: opFunctionName.Namespaces,
-                                        Name: opFunctionName.DeclName));
+                            var functionRef =
+                                new ElmSyntaxAbstract.Expression.FunctionOrValue(
+                                    ModuleName: opFunctionName.Namespaces,
+                                    Name: opFunctionName.DeclName);
 
                             currentExpr =
-                                new SyntaxModel.Expression.Application(
-                                    Function: functionRefNode,
+                                new ElmSyntaxAbstract.Expression.Application(
+                                    Function: functionRef,
                                     Arguments: [operatorApplication.Left, operatorApplication.Right]);
 
                             break;
                         }
 
-                    case SyntaxModel.Expression.PrefixOperator prefixOperator:
+                    case ElmSyntaxAbstract.Expression.PrefixOperator prefixOperator:
                         {
                             // The `(<op>)` prefix form denotes the function value referenced
                             // by the operator's infix declaration. Re-route it through the
@@ -1379,7 +1363,7 @@ public partial class ElmSyntaxInterpreter
                             }
 
                             currentExpr =
-                                new SyntaxModel.Expression.FunctionOrValue(
+                                new ElmSyntaxAbstract.Expression.FunctionOrValue(
                                     ModuleName: opFunctionName.Namespaces,
                                     Name: opFunctionName.DeclName);
 
@@ -1437,7 +1421,7 @@ public partial class ElmSyntaxInterpreter
                             }
 
                             kstack.Push(buildList with { NextIndex = next });
-                            currentExpr = buildList.Elements[next].Value;
+                            currentExpr = buildList.Elements[next];
                             currentEnv = buildList.Env;
                             currentValue = null;
                             break;
@@ -1450,9 +1434,9 @@ public partial class ElmSyntaxInterpreter
                             currentExpr =
                                 conditionIsTrue
                                 ?
-                                ifBranch.ThenBranch.Value
+                                ifBranch.ThenBranch
                                 :
-                                ifBranch.ElseBranch.Value;
+                                ifBranch.ElseBranch;
 
                             currentEnv = ifBranch.Env;
                             currentValue = null;
@@ -1461,7 +1445,7 @@ public partial class ElmSyntaxInterpreter
 
                     case Kont.BuildRecord buildRecord:
                         {
-                            var fieldName = buildRecord.Fields[buildRecord.NextIndex].FieldName.Value;
+                            var fieldName = buildRecord.Fields[buildRecord.NextIndex].FieldName;
                             buildRecord.Accumulated[buildRecord.NextIndex] = (fieldName, value);
 
                             var next = buildRecord.NextIndex + 1;
@@ -1473,7 +1457,7 @@ public partial class ElmSyntaxInterpreter
                             }
 
                             kstack.Push(buildRecord with { NextIndex = next });
-                            currentExpr = buildRecord.Fields[next].ValueExpr.Value;
+                            currentExpr = buildRecord.Fields[next].Value;
                             currentEnv = buildRecord.Env;
                             currentValue = null;
                             break;
@@ -1487,7 +1471,7 @@ public partial class ElmSyntaxInterpreter
                             if (next < buildArgs.Arguments.Count)
                             {
                                 kstack.Push(buildArgs with { NextIndex = next });
-                                currentExpr = buildArgs.Arguments[next].Value;
+                                currentExpr = buildArgs.Arguments[next];
                                 currentEnv = buildArgs.Env;
                                 currentValue = null;
                                 break;
@@ -1567,7 +1551,7 @@ public partial class ElmSyntaxInterpreter
                             if (next < buildArgsForValue.Arguments.Count)
                             {
                                 kstack.Push(buildArgsForValue with { NextIndex = next });
-                                currentExpr = buildArgsForValue.Arguments[next].Value;
+                                currentExpr = buildArgsForValue.Arguments[next];
                                 currentEnv = buildArgsForValue.Env;
                                 currentValue = null;
                                 break;
@@ -1580,7 +1564,7 @@ public partial class ElmSyntaxInterpreter
                                     Arguments: buildArgsForValue.Accumulated,
                                     Env: buildArgsForValue.Env));
 
-                            currentExpr = buildArgsForValue.FunctionExpr.Value;
+                            currentExpr = buildArgsForValue.FunctionExpr;
                             currentEnv = buildArgsForValue.Env;
                             currentValue = null;
                             break;
@@ -1711,7 +1695,7 @@ public partial class ElmSyntaxInterpreter
                             {
                                 var newBindings = new Dictionary<string, ElmValue>();
 
-                                if (TryMatchPattern(caseNode.Pattern.Value, scrutineeElm, newBindings))
+                                if (TryMatchPattern(caseNode.Pattern, scrutineeElm, newBindings))
                                 {
                                     var extendedEnv =
                                         new Dictionary<string, PineValueInProcess>(
@@ -1727,7 +1711,7 @@ public partial class ElmSyntaxInterpreter
                                             CurrentTopLevel: matchCase.Env.CurrentTopLevel,
                                             LocalBindings: extendedEnv);
 
-                                    currentExpr = caseNode.Expression.Value;
+                                    currentExpr = caseNode.Expression;
                                     currentValue = null;
                                     matched = true;
                                     break;
@@ -1798,14 +1782,14 @@ public partial class ElmSyntaxInterpreter
                                         NextIndex = 0,
                                     });
 
-                                currentExpr = buildRecordUpdate.Fields[0].ValueExpr.Value;
+                                currentExpr = buildRecordUpdate.Fields[0].Value;
                                 currentEnv = buildRecordUpdate.Env;
                                 currentValue = null;
                                 break;
                             }
 
                             var fieldName =
-                                buildRecordUpdate.Fields[buildRecordUpdate.NextIndex].FieldName.Value;
+                                buildRecordUpdate.Fields[buildRecordUpdate.NextIndex].FieldName;
 
                             buildRecordUpdate.Accumulated[buildRecordUpdate.NextIndex] =
                                 (fieldName, value);
@@ -1817,7 +1801,7 @@ public partial class ElmSyntaxInterpreter
                                 kstack.Push(buildRecordUpdate with { NextIndex = nextIndex });
 
                                 currentExpr =
-                                    buildRecordUpdate.Fields[nextIndex].ValueExpr.Value;
+                                    buildRecordUpdate.Fields[nextIndex].Value;
 
                                 currentEnv = buildRecordUpdate.Env;
                                 currentValue = null;
@@ -1890,7 +1874,7 @@ public partial class ElmSyntaxInterpreter
         public sealed record ResolvedValue(PineValueInProcess Value) : ApplyCallOutcome;
 
         public sealed record ContinueEvaluating(
-            SyntaxModel.Expression Expression,
+            ElmSyntaxAbstract.Expression Expression,
             ApplicationContext Env) : ApplyCallOutcome;
     }
 
@@ -1989,7 +1973,7 @@ public partial class ElmSyntaxInterpreter
     }
 
     private static ApplyCallOutcome ApplyFunctionOrValue(
-        SyntaxModel.Expression.FunctionOrValue functionOrValue,
+        ElmSyntaxAbstract.Expression.FunctionOrValue functionOrValue,
         IReadOnlyList<PineValueInProcess> arguments,
         ApplicationContext env,
         System.Func<Application, ApplicationResolution> resolveApplication,
@@ -2109,7 +2093,7 @@ public partial class ElmSyntaxInterpreter
                         try
                         {
                             BindPattern(
-                                functionImpl.Arguments[i].Value,
+                                functionImpl.Arguments[i],
                                 saturatingArgs[i],
                                 bindings);
                         }
@@ -2164,7 +2148,7 @@ public partial class ElmSyntaxInterpreter
 
                     return
                         new ApplyCallOutcome.ContinueEvaluating(
-                            Expression: functionImpl.Expression.Value,
+                            Expression: functionImpl.Expression,
                             Env: innerContext);
                 }
 
@@ -2280,8 +2264,8 @@ public partial class ElmSyntaxInterpreter
         // Bind parameter patterns according to the closure's source.
         var bodyBindings = new Dictionary<string, PineValueInProcess>(closure.CapturedBindings);
 
-        IReadOnlyList<SyntaxModel.Node<SyntaxModel.Pattern>> parameterPatterns;
-        SyntaxModel.Expression bodyExpression;
+        IReadOnlyList<ElmSyntaxAbstract.Pattern> parameterPatterns;
+        ElmSyntaxAbstract.Expression bodyExpression;
         DeclQualifiedName callFrameName;
         object callFrameSourceIdentity;
 
@@ -2289,16 +2273,16 @@ public partial class ElmSyntaxInterpreter
         {
             case ElmValue.ElmFunction.SourceRef.Declared declared:
                 parameterPatterns = declared.Implementation.Arguments;
-                bodyExpression = declared.Implementation.Expression.Value;
+                bodyExpression = declared.Implementation.Expression;
                 callFrameName = declared.Name;
                 callFrameSourceIdentity = declared.Implementation;
                 break;
 
             case ElmValue.ElmFunction.SourceRef.Lambda lambdaSource:
-                parameterPatterns = lambdaSource.LambdaStruct.Arguments;
-                bodyExpression = lambdaSource.LambdaStruct.Expression.Value;
-                callFrameName = SyntheticLambdaName(lambdaSource.LambdaStruct);
-                callFrameSourceIdentity = lambdaSource.LambdaStruct;
+                parameterPatterns = lambdaSource.LambdaExpression.Arguments;
+                bodyExpression = lambdaSource.LambdaExpression.Expression;
+                callFrameName = SyntheticLambdaName(lambdaSource.LambdaExpression);
+                callFrameSourceIdentity = lambdaSource.LambdaExpression;
                 break;
 
             default:
@@ -2313,7 +2297,7 @@ public partial class ElmSyntaxInterpreter
                 var patternBindings = new Dictionary<string, ElmValue>();
 
                 BindPattern(
-                    parameterPatterns[i].Value,
+                    parameterPatterns[i],
                     ToElm(saturatingArgs[i]),
                     patternBindings);
 
@@ -2359,20 +2343,21 @@ public partial class ElmSyntaxInterpreter
     }
 
     /// <summary>
-    /// Builds a synthetic <see cref="DeclQualifiedName"/> for a lambda's <see cref="Kont.CallFrame"/>
-    /// using the lambda's <see cref="SyntaxModel.LambdaStruct.BackslashLocation"/>. The name has no
-    /// namespace; its <see cref="DeclQualifiedName.DeclName"/> is shaped like
-    /// <c>&lt;lambda@row:col&gt;</c> so stack traces remain readable and the infinite-recursion
-    /// detector can still find a cycle of repeated (name, args) pairs.
+    /// Builds a synthetic <see cref="DeclQualifiedName"/> for a lambda's <see cref="Kont.CallFrame"/>.
+    /// The abstract syntax model carries no source location, so a fixed namespace-less
+    /// <c>&lt;lambda&gt;</c> name is used. Stack traces remain readable, and the
+    /// infinite-recursion detector relies on reference identity of the lambda AST node rather
+    /// than this name, so the fixed name does not cause false positives.
     /// </summary>
-    private static DeclQualifiedName SyntheticLambdaName(SyntaxModel.LambdaStruct lambda)
+    private static DeclQualifiedName SyntheticLambdaName(
+        ElmSyntaxAbstract.Expression.LambdaExpression lambda)
     {
-        var loc = lambda.BackslashLocation;
+        _ = lambda;
 
         return
             new DeclQualifiedName(
                 Namespaces: [],
-                DeclName: "<lambda@" + loc.Row + ":" + loc.Column + ">");
+                DeclName: "<lambda>");
     }
 
     /// <summary>
@@ -2483,11 +2468,11 @@ public partial class ElmSyntaxInterpreter
     /// <c>LetFunction</c> bindings have already been materialised as closures in
     /// <paramref name="extended"/> by that helper and are not present in <paramref name="decls"/>.
     /// </remarks>
-    private static (SyntaxModel.Expression Expr, ApplicationContext Env) BeginNextLetDecl(
-        IReadOnlyList<SyntaxModel.Node<SyntaxModel.Expression.LetDeclaration>> decls,
+    private static (ElmSyntaxAbstract.Expression Expr, ApplicationContext Env) BeginNextLetDecl(
+        IReadOnlyList<ElmSyntaxAbstract.LetDeclaration> decls,
         int nextIndex,
         Dictionary<string, PineValueInProcess> extended,
-        SyntaxModel.Node<SyntaxModel.Expression> body,
+        ElmSyntaxAbstract.Expression body,
         ApplicationContext outerEnv,
         Stack<Kont> kstack)
     {
@@ -2495,11 +2480,11 @@ public partial class ElmSyntaxInterpreter
         {
             var declNode = decls[nextIndex];
 
-            switch (declNode.Value)
+            switch (declNode)
             {
-                case SyntaxModel.Expression.LetDeclaration.LetFunction letFunction:
+                case ElmSyntaxAbstract.LetDeclaration.LetFunction letFunction:
                     {
-                        var functionImpl = letFunction.Function.Declaration.Value;
+                        var functionImpl = letFunction.Function.Declaration;
 
                         // Parameterised LetFunction bindings should have been pre-built as
                         // closures in `extended` by PrepareLetGroupAndSortNonFunctionDecls.
@@ -2520,17 +2505,17 @@ public partial class ElmSyntaxInterpreter
 
                         kstack.Push(
                             new Kont.LetBindFunction(
-                                BindingName: functionImpl.Name.Value,
+                                BindingName: functionImpl.Name,
                                 Remaining: decls,
                                 NextIndex: nextIndex,
                                 Extended: extended,
                                 Body: body,
                                 Outer: outerEnv));
 
-                        return (functionImpl.Expression.Value, innerEnv);
+                        return (functionImpl.Expression, innerEnv);
                     }
 
-                case SyntaxModel.Expression.LetDeclaration.LetDestructuring letDestructuring:
+                case ElmSyntaxAbstract.LetDeclaration.LetDestructuring letDestructuring:
                     {
                         var innerEnv =
                             new ApplicationContext(
@@ -2539,19 +2524,19 @@ public partial class ElmSyntaxInterpreter
 
                         kstack.Push(
                             new Kont.LetBindDestructure(
-                                Pattern: letDestructuring.Pattern.Value,
+                                Pattern: letDestructuring.Pattern,
                                 Remaining: decls,
                                 NextIndex: nextIndex,
                                 Extended: extended,
                                 Body: body,
                                 Outer: outerEnv));
 
-                        return (letDestructuring.Expression.Value, innerEnv);
+                        return (letDestructuring.Expression, innerEnv);
                     }
 
                 default:
                     throw new System.NotImplementedException(
-                        "Let declaration type not implemented: " + declNode.Value.GetType().FullName);
+                        "Let declaration type not implemented: " + declNode.GetType().FullName);
             }
         }
 
@@ -2561,7 +2546,7 @@ public partial class ElmSyntaxInterpreter
                 CurrentTopLevel: outerEnv.CurrentTopLevel,
                 LocalBindings: extended);
 
-        return (body.Value, bodyEnv);
+        return (body, bodyEnv);
     }
 
     /// <summary>
@@ -2586,9 +2571,9 @@ public partial class ElmSyntaxInterpreter
     ///   </item>
     /// </list>
     /// </summary>
-    private static IReadOnlyList<SyntaxModel.Node<SyntaxModel.Expression.LetDeclaration>>
+    private static IReadOnlyList<ElmSyntaxAbstract.LetDeclaration>
         PrepareLetGroupAndSortNonFunctionDecls(
-        IReadOnlyList<SyntaxModel.Node<SyntaxModel.Expression.LetDeclaration>> decls,
+        IReadOnlyList<ElmSyntaxAbstract.LetDeclaration> decls,
         Dictionary<string, PineValueInProcess> extended,
         DeclQualifiedName outerTopLevel,
         Stack<Kont> kstack)
@@ -2601,14 +2586,14 @@ public partial class ElmSyntaxInterpreter
         {
             var introduced = new HashSet<string>();
 
-            switch (decls[i].Value)
+            switch (decls[i])
             {
-                case SyntaxModel.Expression.LetDeclaration.LetFunction letFunction:
-                    introduced.Add(letFunction.Function.Declaration.Value.Name.Value);
+                case ElmSyntaxAbstract.LetDeclaration.LetFunction letFunction:
+                    introduced.Add(letFunction.Function.Declaration.Name);
                     break;
 
-                case SyntaxModel.Expression.LetDeclaration.LetDestructuring letDestructuring:
-                    CollectPatternNames(letDestructuring.Pattern.Value, introduced);
+                case ElmSyntaxAbstract.LetDeclaration.LetDestructuring letDestructuring:
+                    CollectPatternNames(letDestructuring.Pattern, introduced);
                     break;
             }
 
@@ -2623,18 +2608,18 @@ public partial class ElmSyntaxInterpreter
         // Pre-build closures for every parameterised LetFunction. These do not participate
         // in the dependency analysis below; their bodies are not evaluated here.
         var nonFunctionDecls =
-            new List<SyntaxModel.Node<SyntaxModel.Expression.LetDeclaration>>(decls.Count);
+            new List<ElmSyntaxAbstract.LetDeclaration>(decls.Count);
 
         var nonFunctionIntroduced = new List<HashSet<string>>(decls.Count);
 
         for (var i = 0; i < decls.Count; i++)
         {
-            if (decls[i].Value is SyntaxModel.Expression.LetDeclaration.LetFunction letFunction
-                && letFunction.Function.Declaration.Value.Arguments.Count is not 0)
+            if (decls[i] is ElmSyntaxAbstract.LetDeclaration.LetFunction letFunction
+                && letFunction.Function.Declaration.Arguments.Count is not 0)
             {
-                var functionImpl = letFunction.Function.Declaration.Value;
+                var functionImpl = letFunction.Function.Declaration;
 
-                var bindingName = functionImpl.Name.Value;
+                var bindingName = functionImpl.Name;
 
                 // Synthesise a DeclQualifiedName for the closure so over-application,
                 // stack traces, and the infinite-recursion detector all surface a useful
@@ -2692,18 +2677,18 @@ public partial class ElmSyntaxInterpreter
             var freeNames = new HashSet<string>();
 
             var rhs =
-                nonFunctionDecls[i].Value switch
+                nonFunctionDecls[i] switch
                 {
-                    SyntaxModel.Expression.LetDeclaration.LetFunction lf =>
-                    lf.Function.Declaration.Value.Expression.Value,
+                    ElmSyntaxAbstract.LetDeclaration.LetFunction lf =>
+                    lf.Function.Declaration.Expression,
 
-                    SyntaxModel.Expression.LetDeclaration.LetDestructuring ld =>
-                    ld.Expression.Value,
+                    ElmSyntaxAbstract.LetDeclaration.LetDestructuring ld =>
+                    ld.Expression,
 
                     _ =>
                     throw new System.InvalidOperationException(
                         "Unexpected let declaration shape in non-function decl list: "
-                        + nonFunctionDecls[i].Value.GetType().FullName),
+                        + nonFunctionDecls[i].GetType().FullName),
                 };
 
             CollectFreeNames(rhs, shadowed: [], free: freeNames);
@@ -2730,7 +2715,7 @@ public partial class ElmSyntaxInterpreter
         var state = new byte[nonFunctionDecls.Count];
 
         var sorted =
-            new List<SyntaxModel.Node<SyntaxModel.Expression.LetDeclaration>>(nonFunctionDecls.Count);
+            new List<ElmSyntaxAbstract.LetDeclaration>(nonFunctionDecls.Count);
 
         // Iterative DFS to avoid blowing the .NET call stack for large let groups.
         var dfsStack = new Stack<(int node, IEnumerator<int> deps)>();
@@ -2822,59 +2807,54 @@ public partial class ElmSyntaxInterpreter
     /// Collects the names introduced by an Elm pattern into <paramref name="sink"/>.
     /// </summary>
     private static void CollectPatternNames(
-        SyntaxModel.Pattern pattern,
+        ElmSyntaxAbstract.Pattern pattern,
         HashSet<string> sink)
     {
         switch (pattern)
         {
-            case SyntaxModel.Pattern.VarPattern varPattern:
+            case ElmSyntaxAbstract.Pattern.VarPattern varPattern:
                 sink.Add(varPattern.Name);
                 break;
 
-            case SyntaxModel.Pattern.AllPattern:
-            case SyntaxModel.Pattern.UnitPattern:
-            case SyntaxModel.Pattern.CharPattern:
-            case SyntaxModel.Pattern.StringPattern:
-            case SyntaxModel.Pattern.IntPattern:
-            case SyntaxModel.Pattern.HexPattern:
-            case SyntaxModel.Pattern.FloatPattern:
+            case ElmSyntaxAbstract.Pattern.AllPattern:
+            case ElmSyntaxAbstract.Pattern.UnitPattern:
+            case ElmSyntaxAbstract.Pattern.CharPattern:
+            case ElmSyntaxAbstract.Pattern.StringPattern:
+            case ElmSyntaxAbstract.Pattern.IntPattern:
+            case ElmSyntaxAbstract.Pattern.FloatPattern:
                 break;
 
-            case SyntaxModel.Pattern.ParenthesizedPattern parenthesized:
-                CollectPatternNames(parenthesized.Pattern.Value, sink);
+            case ElmSyntaxAbstract.Pattern.AsPattern asPattern:
+                CollectPatternNames(asPattern.Pattern, sink);
+                sink.Add(asPattern.Name);
                 break;
 
-            case SyntaxModel.Pattern.AsPattern asPattern:
-                CollectPatternNames(asPattern.Pattern.Value, sink);
-                sink.Add(asPattern.Name.Value);
-                break;
-
-            case SyntaxModel.Pattern.TuplePattern tuplePattern:
-                foreach (var element in tuplePattern.Elements.Nodes)
-                    CollectPatternNames(element.Value, sink);
+            case ElmSyntaxAbstract.Pattern.TuplePattern tuplePattern:
+                foreach (var element in tuplePattern.Elements)
+                    CollectPatternNames(element, sink);
 
                 break;
 
-            case SyntaxModel.Pattern.RecordPattern recordPattern:
-                foreach (var field in recordPattern.Fields.Nodes)
-                    sink.Add(field.Value);
+            case ElmSyntaxAbstract.Pattern.RecordPattern recordPattern:
+                foreach (var field in recordPattern.Fields)
+                    sink.Add(field);
 
                 break;
 
-            case SyntaxModel.Pattern.UnConsPattern unCons:
-                CollectPatternNames(unCons.Head.Value, sink);
-                CollectPatternNames(unCons.Tail.Value, sink);
+            case ElmSyntaxAbstract.Pattern.UnConsPattern unCons:
+                CollectPatternNames(unCons.Head, sink);
+                CollectPatternNames(unCons.Tail, sink);
                 break;
 
-            case SyntaxModel.Pattern.ListPattern listPattern:
-                foreach (var element in listPattern.Elements.Nodes)
-                    CollectPatternNames(element.Value, sink);
+            case ElmSyntaxAbstract.Pattern.ListPattern listPattern:
+                foreach (var element in listPattern.Elements)
+                    CollectPatternNames(element, sink);
 
                 break;
 
-            case SyntaxModel.Pattern.NamedPattern namedPattern:
+            case ElmSyntaxAbstract.Pattern.NamedPattern namedPattern:
                 foreach (var argument in namedPattern.Arguments)
-                    CollectPatternNames(argument.Value, sink);
+                    CollectPatternNames(argument, sink);
 
                 break;
 
@@ -2900,55 +2880,51 @@ public partial class ElmSyntaxInterpreter
     /// — but it must never miss a name that <em>is</em> referenced.
     /// </remarks>
     private static void CollectFreeNames(
-        SyntaxModel.Expression expression,
+        ElmSyntaxAbstract.Expression expression,
         HashSet<string> shadowed,
         HashSet<string> free)
     {
         switch (expression)
         {
-            case SyntaxModel.Expression.UnitExpr:
-            case SyntaxModel.Expression.Literal:
-            case SyntaxModel.Expression.CharLiteral:
-            case SyntaxModel.Expression.Integer:
-            case SyntaxModel.Expression.Floatable:
-            case SyntaxModel.Expression.PrefixOperator:
-            case SyntaxModel.Expression.RecordAccessFunction:
-            case SyntaxModel.Expression.GLSLExpression:
+            case ElmSyntaxAbstract.Expression.UnitExpr:
+            case ElmSyntaxAbstract.Expression.StringLiteral:
+            case ElmSyntaxAbstract.Expression.CharLiteral:
+            case ElmSyntaxAbstract.Expression.Integer:
+            case ElmSyntaxAbstract.Expression.Floatable:
+            case ElmSyntaxAbstract.Expression.PrefixOperator:
+            case ElmSyntaxAbstract.Expression.RecordAccessFunction:
+            case ElmSyntaxAbstract.Expression.GLSLExpression:
                 break;
 
-            case SyntaxModel.Expression.Negation negation:
-                CollectFreeNames(negation.Expression.Value, shadowed, free);
+            case ElmSyntaxAbstract.Expression.Negation negation:
+                CollectFreeNames(negation.Expression, shadowed, free);
                 break;
 
-            case SyntaxModel.Expression.ListExpr listExpr:
-                foreach (var element in listExpr.Elements.Nodes)
-                    CollectFreeNames(element.Value, shadowed, free);
-
-                break;
-
-            case SyntaxModel.Expression.TupledExpression tupledExpression:
-                foreach (var element in tupledExpression.Elements.Nodes)
-                    CollectFreeNames(element.Value, shadowed, free);
+            case ElmSyntaxAbstract.Expression.ListExpr listExpr:
+                foreach (var element in listExpr.Elements)
+                    CollectFreeNames(element, shadowed, free);
 
                 break;
 
-            case SyntaxModel.Expression.ParenthesizedExpression parenthesized:
-                CollectFreeNames(parenthesized.Expression.Value, shadowed, free);
-                break;
-
-            case SyntaxModel.Expression.IfBlock ifBlock:
-                CollectFreeNames(ifBlock.Condition.Value, shadowed, free);
-                CollectFreeNames(ifBlock.ThenBlock.Value, shadowed, free);
-                CollectFreeNames(ifBlock.ElseBlock.Value, shadowed, free);
-                break;
-
-            case SyntaxModel.Expression.RecordExpr recordExpr:
-                foreach (var field in recordExpr.Fields.Nodes)
-                    CollectFreeNames(field.ValueExpr.Value, shadowed, free);
+            case ElmSyntaxAbstract.Expression.TupledExpression tupledExpression:
+                foreach (var element in tupledExpression.Elements)
+                    CollectFreeNames(element, shadowed, free);
 
                 break;
 
-            case SyntaxModel.Expression.FunctionOrValue functionOrValue:
+            case ElmSyntaxAbstract.Expression.IfBlock ifBlock:
+                CollectFreeNames(ifBlock.Condition, shadowed, free);
+                CollectFreeNames(ifBlock.ThenBlock, shadowed, free);
+                CollectFreeNames(ifBlock.ElseBlock, shadowed, free);
+                break;
+
+            case ElmSyntaxAbstract.Expression.RecordExpr recordExpr:
+                foreach (var field in recordExpr.Fields)
+                    CollectFreeNames(field.Value, shadowed, free);
+
+                break;
+
+            case ElmSyntaxAbstract.Expression.FunctionOrValue functionOrValue:
                 if (functionOrValue.ModuleName.Count is 0
                     && !shadowed.Contains(functionOrValue.Name))
                 {
@@ -2957,109 +2933,109 @@ public partial class ElmSyntaxInterpreter
 
                 break;
 
-            case SyntaxModel.Expression.Application application:
-                CollectFreeNames(application.Function.Value, shadowed, free);
+            case ElmSyntaxAbstract.Expression.Application application:
+                CollectFreeNames(application.Function, shadowed, free);
 
                 foreach (var argument in application.Arguments)
-                    CollectFreeNames(argument.Value, shadowed, free);
+                    CollectFreeNames(argument, shadowed, free);
 
                 break;
 
-            case SyntaxModel.Expression.OperatorApplication operatorApplication:
+            case ElmSyntaxAbstract.Expression.OperatorApplication operatorApplication:
 
                 // The operator itself resolves through the infix-operator map to a
                 // top-level declaration, never to a let-group binding, so it is not
                 // a candidate for the local-shadowing analysis.
-                CollectFreeNames(operatorApplication.Left.Value, shadowed, free);
-                CollectFreeNames(operatorApplication.Right.Value, shadowed, free);
+                CollectFreeNames(operatorApplication.Left, shadowed, free);
+                CollectFreeNames(operatorApplication.Right, shadowed, free);
                 break;
 
-            case SyntaxModel.Expression.LambdaExpression lambdaExpression:
+            case ElmSyntaxAbstract.Expression.LambdaExpression lambdaExpression:
                 {
                     var inner = new HashSet<string>(shadowed);
 
-                    foreach (var arg in lambdaExpression.Lambda.Arguments)
-                        CollectPatternNames(arg.Value, inner);
+                    foreach (var arg in lambdaExpression.Arguments)
+                        CollectPatternNames(arg, inner);
 
-                    CollectFreeNames(lambdaExpression.Lambda.Expression.Value, inner, free);
+                    CollectFreeNames(lambdaExpression.Expression, inner, free);
                     break;
                 }
 
-            case SyntaxModel.Expression.CaseExpression caseExpression:
+            case ElmSyntaxAbstract.Expression.CaseExpression caseExpression:
                 {
-                    CollectFreeNames(caseExpression.CaseBlock.Expression.Value, shadowed, free);
+                    CollectFreeNames(caseExpression.Expression, shadowed, free);
 
-                    foreach (var caseNode in caseExpression.CaseBlock.Cases)
+                    foreach (var caseNode in caseExpression.Cases)
                     {
                         var inner = new HashSet<string>(shadowed);
-                        CollectPatternNames(caseNode.Pattern.Value, inner);
-                        CollectFreeNames(caseNode.Expression.Value, inner, free);
+                        CollectPatternNames(caseNode.Pattern, inner);
+                        CollectFreeNames(caseNode.Expression, inner, free);
                     }
 
                     break;
                 }
 
-            case SyntaxModel.Expression.LetExpression letExpression:
+            case ElmSyntaxAbstract.Expression.LetExpression letExpression:
                 {
                     // Names introduced by the nested let block shadow the outer scope
                     // for the purposes of free-name analysis (whether they are
                     // function bindings or value bindings).
                     var inner = new HashSet<string>(shadowed);
 
-                    foreach (var declNode in letExpression.Value.Declarations)
+                    foreach (var declNode in letExpression.Declarations)
                     {
-                        switch (declNode.Value)
+                        switch (declNode)
                         {
-                            case SyntaxModel.Expression.LetDeclaration.LetFunction nestedLet:
-                                inner.Add(nestedLet.Function.Declaration.Value.Name.Value);
+                            case ElmSyntaxAbstract.LetDeclaration.LetFunction nestedLet:
+                                inner.Add(nestedLet.Function.Declaration.Name);
                                 break;
 
-                            case SyntaxModel.Expression.LetDeclaration.LetDestructuring nestedDestr:
-                                CollectPatternNames(nestedDestr.Pattern.Value, inner);
+                            case ElmSyntaxAbstract.LetDeclaration.LetDestructuring nestedDestr:
+                                CollectPatternNames(nestedDestr.Pattern, inner);
                                 break;
                         }
                     }
 
-                    foreach (var declNode in letExpression.Value.Declarations)
+                    foreach (var declNode in letExpression.Declarations)
                     {
-                        switch (declNode.Value)
+                        switch (declNode)
                         {
-                            case SyntaxModel.Expression.LetDeclaration.LetFunction nestedLet:
+                            case ElmSyntaxAbstract.LetDeclaration.LetFunction nestedLet:
                                 {
                                     // The function's own arguments shadow further inside its body.
                                     var bodyShadowed = new HashSet<string>(inner);
 
-                                    foreach (var arg in nestedLet.Function.Declaration.Value.Arguments)
-                                        CollectPatternNames(arg.Value, bodyShadowed);
+                                    foreach (var arg in nestedLet.Function.Declaration.Arguments)
+                                        CollectPatternNames(arg, bodyShadowed);
 
                                     CollectFreeNames(
-                                        nestedLet.Function.Declaration.Value.Expression.Value,
+                                        nestedLet.Function.Declaration.Expression,
                                         bodyShadowed,
                                         free);
 
                                     break;
                                 }
 
-                            case SyntaxModel.Expression.LetDeclaration.LetDestructuring nestedDestr:
-                                CollectFreeNames(nestedDestr.Expression.Value, inner, free);
+                            case ElmSyntaxAbstract.LetDeclaration.LetDestructuring nestedDestr:
+                                CollectFreeNames(nestedDestr.Expression, inner, free);
                                 break;
                         }
                     }
 
-                    CollectFreeNames(letExpression.Value.Expression.Value, inner, free);
+                    CollectFreeNames(letExpression.Expression, inner, free);
                     break;
                 }
 
-            case SyntaxModel.Expression.RecordAccess recordAccess:
-                CollectFreeNames(recordAccess.Record.Value, shadowed, free);
+            case ElmSyntaxAbstract.Expression.RecordAccess recordAccess:
+                CollectFreeNames(recordAccess.Record, shadowed, free);
                 break;
 
-            case SyntaxModel.Expression.RecordUpdateExpression recordUpdate:
-                if (!shadowed.Contains(recordUpdate.RecordName.Value))
-                    free.Add(recordUpdate.RecordName.Value);
+            case ElmSyntaxAbstract.Expression.RecordUpdateExpression recordUpdate:
+                if (!shadowed.Contains(recordUpdate.RecordName))
+                    free.Add(recordUpdate.RecordName);
 
-                foreach (var field in recordUpdate.Fields.Nodes)
-                    CollectFreeNames(field.ValueExpr.Value, shadowed, free);
+                foreach (var field in recordUpdate.Fields)
+                    CollectFreeNames(field.Value, shadowed, free);
 
                 break;
 
@@ -3127,49 +3103,43 @@ public partial class ElmSyntaxInterpreter
     /// scrutinee's shape.
     /// </summary>
     private static bool TryMatchPattern(
-        SyntaxModel.Pattern pattern,
+        ElmSyntaxAbstract.Pattern pattern,
         ElmValue value,
         IDictionary<string, ElmValue> bindings)
     {
         switch (pattern)
         {
-            case SyntaxModel.Pattern.AllPattern:
+            case ElmSyntaxAbstract.Pattern.AllPattern:
                 return true;
 
-            case SyntaxModel.Pattern.VarPattern varPattern:
+            case ElmSyntaxAbstract.Pattern.VarPattern varPattern:
                 bindings[varPattern.Name] = value;
                 return true;
 
-            case SyntaxModel.Pattern.UnitPattern:
+            case ElmSyntaxAbstract.Pattern.UnitPattern:
 
                 // The unit value is represented as an empty Elm list.
                 return value is ElmValue.ElmList unitList && unitList.Items.Count is 0;
 
-            case SyntaxModel.Pattern.ParenthesizedPattern parenthesized:
-                return TryMatchPattern(parenthesized.Pattern.Value, value, bindings);
-
-            case SyntaxModel.Pattern.AsPattern asPattern:
+            case ElmSyntaxAbstract.Pattern.AsPattern asPattern:
                 {
-                    if (!TryMatchPattern(asPattern.Pattern.Value, value, bindings))
+                    if (!TryMatchPattern(asPattern.Pattern, value, bindings))
                         return false;
 
-                    bindings[asPattern.Name.Value] = value;
+                    bindings[asPattern.Name] = value;
                     return true;
                 }
 
-            case SyntaxModel.Pattern.CharPattern charPattern:
+            case ElmSyntaxAbstract.Pattern.CharPattern charPattern:
                 return value is ElmValue.ElmChar elmChar && elmChar.Value == charPattern.Value;
 
-            case SyntaxModel.Pattern.StringPattern stringPattern:
+            case ElmSyntaxAbstract.Pattern.StringPattern stringPattern:
                 return value is ElmValue.ElmString elmString && elmString.Value == stringPattern.Value;
 
-            case SyntaxModel.Pattern.IntPattern intPattern:
+            case ElmSyntaxAbstract.Pattern.IntPattern intPattern:
                 return value is ElmValue.ElmInteger elmInt && elmInt.Value == intPattern.Value;
 
-            case SyntaxModel.Pattern.HexPattern hexPattern:
-                return value is ElmValue.ElmInteger elmHex && elmHex.Value == hexPattern.Value;
-
-            case SyntaxModel.Pattern.TuplePattern tuplePattern:
+            case ElmSyntaxAbstract.Pattern.TuplePattern tuplePattern:
                 {
                     if (value is not ElmValue.ElmList tupleList)
                         return false;
@@ -3181,21 +3151,20 @@ public partial class ElmSyntaxInterpreter
 
                     for (var i = 0; i < elementPatterns.Count; i++)
                     {
-                        if (!TryMatchPattern(elementPatterns[i].Value, tupleList.Items[i], bindings))
+                        if (!TryMatchPattern(elementPatterns[i], tupleList.Items[i], bindings))
                             return false;
                     }
 
                     return true;
                 }
 
-            case SyntaxModel.Pattern.RecordPattern recordPattern:
+            case ElmSyntaxAbstract.Pattern.RecordPattern recordPattern:
                 {
                     if (value is not ElmValue.ElmRecord recordValue)
                         return false;
 
-                    foreach (var fieldNameNode in recordPattern.Fields.Nodes)
+                    foreach (var fieldName in recordPattern.Fields)
                     {
-                        var fieldName = fieldNameNode.Value;
                         var fieldValue = recordValue[fieldName];
 
                         if (fieldValue is null)
@@ -3207,7 +3176,7 @@ public partial class ElmSyntaxInterpreter
                     return true;
                 }
 
-            case SyntaxModel.Pattern.UnConsPattern unConsPattern:
+            case ElmSyntaxAbstract.Pattern.UnConsPattern unConsPattern:
                 {
                     if (value is not ElmValue.ElmList consList)
                         return false;
@@ -3223,13 +3192,13 @@ public partial class ElmSyntaxInterpreter
 
                     var tail = ElmValue.ListInstance(tailItems);
 
-                    if (!TryMatchPattern(unConsPattern.Head.Value, head, bindings))
+                    if (!TryMatchPattern(unConsPattern.Head, head, bindings))
                         return false;
 
-                    return TryMatchPattern(unConsPattern.Tail.Value, tail, bindings);
+                    return TryMatchPattern(unConsPattern.Tail, tail, bindings);
                 }
 
-            case SyntaxModel.Pattern.ListPattern listPattern:
+            case ElmSyntaxAbstract.Pattern.ListPattern listPattern:
                 {
                     if (value is not ElmValue.ElmList listValue)
                         return false;
@@ -3241,14 +3210,14 @@ public partial class ElmSyntaxInterpreter
 
                     for (var i = 0; i < elementPatterns.Count; i++)
                     {
-                        if (!TryMatchPattern(elementPatterns[i].Value, listValue.Items[i], bindings))
+                        if (!TryMatchPattern(elementPatterns[i], listValue.Items[i], bindings))
                             return false;
                     }
 
                     return true;
                 }
 
-            case SyntaxModel.Pattern.NamedPattern namedPattern:
+            case ElmSyntaxAbstract.Pattern.NamedPattern namedPattern:
                 {
                     // Special case: the production `Basics.elm` represents the primitive
                     // `String` and `Elm_Float` types as ordinary tagged values, but the
@@ -3270,7 +3239,7 @@ public partial class ElmSyntaxInterpreter
 
                     for (var i = 0; i < namedPattern.Arguments.Count; i++)
                     {
-                        if (!TryMatchPattern(namedPattern.Arguments[i].Value, tagValue.Arguments[i], bindings))
+                        if (!TryMatchPattern(namedPattern.Arguments[i], tagValue.Arguments[i], bindings))
                             return false;
                     }
 
@@ -3284,32 +3253,28 @@ public partial class ElmSyntaxInterpreter
     }
 
     private static void BindPattern(
-        SyntaxModel.Pattern pattern,
+        ElmSyntaxAbstract.Pattern pattern,
         ElmValue value,
         IDictionary<string, ElmValue> bindings)
     {
         switch (pattern)
         {
-            case SyntaxModel.Pattern.VarPattern varPattern:
+            case ElmSyntaxAbstract.Pattern.VarPattern varPattern:
                 bindings[varPattern.Name] = value;
                 break;
 
-            case SyntaxModel.Pattern.AllPattern:
+            case ElmSyntaxAbstract.Pattern.AllPattern:
                 break;
 
-            case SyntaxModel.Pattern.UnitPattern:
+            case ElmSyntaxAbstract.Pattern.UnitPattern:
                 break;
 
-            case SyntaxModel.Pattern.ParenthesizedPattern parenthesized:
-                BindPattern(parenthesized.Pattern.Value, value, bindings);
+            case ElmSyntaxAbstract.Pattern.AsPattern asPattern:
+                BindPattern(asPattern.Pattern, value, bindings);
+                bindings[asPattern.Name] = value;
                 break;
 
-            case SyntaxModel.Pattern.AsPattern asPattern:
-                BindPattern(asPattern.Pattern.Value, value, bindings);
-                bindings[asPattern.Name.Value] = value;
-                break;
-
-            case SyntaxModel.Pattern.TuplePattern tuplePattern:
+            case ElmSyntaxAbstract.Pattern.TuplePattern tuplePattern:
                 {
                     if (value is not ElmValue.ElmList tupleList)
                     {
@@ -3331,13 +3296,13 @@ public partial class ElmSyntaxInterpreter
 
                     for (var i = 0; i < elementPatterns.Count; i++)
                     {
-                        BindPattern(elementPatterns[i].Value, tupleList.Items[i], bindings);
+                        BindPattern(elementPatterns[i], tupleList.Items[i], bindings);
                     }
 
                     break;
                 }
 
-            case SyntaxModel.Pattern.RecordPattern recordPattern:
+            case ElmSyntaxAbstract.Pattern.RecordPattern recordPattern:
                 {
                     if (value is not ElmValue.ElmRecord recordValue)
                     {
@@ -3346,9 +3311,8 @@ public partial class ElmSyntaxInterpreter
                             + value.GetType().FullName + ".");
                     }
 
-                    foreach (var fieldNameNode in recordPattern.Fields.Nodes)
+                    foreach (var fieldName in recordPattern.Fields)
                     {
-                        var fieldName = fieldNameNode.Value;
                         var fieldValue = recordValue[fieldName];
 
                         if (fieldValue is null)
@@ -3365,7 +3329,7 @@ public partial class ElmSyntaxInterpreter
                     break;
                 }
 
-            case SyntaxModel.Pattern.NamedPattern namedPattern:
+            case ElmSyntaxAbstract.Pattern.NamedPattern namedPattern:
                 {
                     // See the parallel branch in <see cref="TryMatchPattern"/> for context.
                     if (TryBindPrimitiveTagShape(namedPattern, value, bindings))
@@ -3402,7 +3366,7 @@ public partial class ElmSyntaxInterpreter
 
                     for (var i = 0; i < namedPattern.Arguments.Count; i++)
                     {
-                        BindPattern(namedPattern.Arguments[i].Value, tagValue.Arguments[i], bindings);
+                        BindPattern(namedPattern.Arguments[i], tagValue.Arguments[i], bindings);
                     }
 
                     break;
@@ -3427,7 +3391,7 @@ public partial class ElmSyntaxInterpreter
     /// (in which case the caller should continue with normal tag-based matching).
     /// </returns>
     private static bool? TryMatchPrimitiveTagShape(
-        SyntaxModel.Pattern.NamedPattern namedPattern,
+        ElmSyntaxAbstract.Pattern.NamedPattern namedPattern,
         ElmValue value,
         IDictionary<string, ElmValue> bindings)
     {
@@ -3447,7 +3411,7 @@ public partial class ElmSyntaxInterpreter
                     var blobBytes = CommonEncodings.StringEncoding.BlobValueFromString(elmString.Value).Bytes;
                     var inner = new ElmValue.ElmPineBlob(blobBytes);
 
-                    return TryMatchPattern(namedPattern.Arguments[0].Value, inner, bindings);
+                    return TryMatchPattern(namedPattern.Arguments[0], inner, bindings);
                 }
 
             case "Elm_Float":
@@ -3459,7 +3423,7 @@ public partial class ElmSyntaxInterpreter
                         return false;
 
                     if (!TryMatchPattern(
-                            namedPattern.Arguments[0].Value,
+                            namedPattern.Arguments[0],
                             ElmValue.Integer(elmFloat.Numerator),
                             bindings))
                     {
@@ -3468,7 +3432,7 @@ public partial class ElmSyntaxInterpreter
 
                     return
                         TryMatchPattern(
-                            namedPattern.Arguments[1].Value,
+                            namedPattern.Arguments[1],
                             ElmValue.Integer(elmFloat.Denominator),
                             bindings);
                 }
@@ -3485,7 +3449,7 @@ public partial class ElmSyntaxInterpreter
     /// tag-based binding logic.
     /// </summary>
     private static bool TryBindPrimitiveTagShape(
-        SyntaxModel.Pattern.NamedPattern namedPattern,
+        ElmSyntaxAbstract.Pattern.NamedPattern namedPattern,
         ElmValue value,
         IDictionary<string, ElmValue> bindings)
     {
@@ -3503,7 +3467,7 @@ public partial class ElmSyntaxInterpreter
                     var blobBytes = CommonEncodings.StringEncoding.BlobValueFromString(elmString.Value).Bytes;
 
                     BindPattern(
-                        namedPattern.Arguments[0].Value,
+                        namedPattern.Arguments[0],
                         new ElmValue.ElmPineBlob(blobBytes),
                         bindings);
 
@@ -3520,12 +3484,12 @@ public partial class ElmSyntaxInterpreter
                     }
 
                     BindPattern(
-                        namedPattern.Arguments[0].Value,
+                        namedPattern.Arguments[0],
                         ElmValue.Integer(elmFloat.Numerator),
                         bindings);
 
                     BindPattern(
-                        namedPattern.Arguments[1].Value,
+                        namedPattern.Arguments[1],
                         ElmValue.Integer(elmFloat.Denominator),
                         bindings);
 
@@ -3537,48 +3501,6 @@ public partial class ElmSyntaxInterpreter
         }
     }
 
-    private static SyntaxModel.Expression UnwrapParentheses(SyntaxModel.Expression expression)
-    {
-        while (expression is SyntaxModel.Expression.ParenthesizedExpression parenthesized)
-        {
-            expression = parenthesized.Expression.Value;
-        }
-
-        return expression;
-    }
-
-    private static BigInteger ParseIntegerLiteral(string literalText)
-    {
-        var trimmed = literalText.Trim();
-
-        var negative = trimmed.StartsWith('-');
-
-        var absolute = negative ? trimmed[1..] : trimmed;
-
-        BigInteger magnitude;
-
-        if (absolute.StartsWith("0x", System.StringComparison.OrdinalIgnoreCase))
-        {
-            // Prepend '0' to the hex digits so BigInteger does not interpret a leading high-bit as sign.
-            var hexDigits = "0" + absolute[2..];
-
-            magnitude =
-                BigInteger.Parse(
-                    hexDigits,
-                    System.Globalization.NumberStyles.HexNumber,
-                    System.Globalization.CultureInfo.InvariantCulture);
-        }
-        else
-        {
-            magnitude =
-                BigInteger.Parse(
-                    absolute,
-                    System.Globalization.NumberStyles.Integer,
-                    System.Globalization.CultureInfo.InvariantCulture);
-        }
-
-        return negative ? -magnitude : magnitude;
-    }
 
     private static ElmValue MakeElmRecord(IReadOnlyList<(string FieldName, ElmValue Value)> fields)
     {
@@ -3696,7 +3618,44 @@ public partial class ElmSyntaxInterpreter
     /// </summary>
     public static ApplicationResolution? UserDefinedResolver(
         Application application,
-        IReadOnlyDictionary<DeclQualifiedName, SyntaxModel.Declaration> declarations)
+        IReadOnlyDictionary<DeclQualifiedName, SyntaxModel.Declaration> declarations) =>
+        UserDefinedResolver(application, GetOrConvertDeclarations(declarations));
+
+    /// <summary>
+    /// Caches the conversion of a concrete declaration dictionary to its abstract
+    /// (<see cref="ElmSyntaxAbstract.Declaration"/>) representation. The cache is keyed on the
+    /// concrete dictionary instance so that repeated resolver invocations during a single
+    /// interpretation reuse the <em>same</em> abstract <see cref="ElmSyntaxAbstract.FunctionImplementation"/>
+    /// instances. This is required for the interpreter's recursion detection, which compares call
+    /// frame source identities by reference.
+    /// </summary>
+    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<
+        IReadOnlyDictionary<DeclQualifiedName, SyntaxModel.Declaration>,
+        IReadOnlyDictionary<DeclQualifiedName, ElmSyntaxAbstract.Declaration>>
+        s_abstractDeclarationsCache =
+        [];
+
+    private static IReadOnlyDictionary<DeclQualifiedName, ElmSyntaxAbstract.Declaration> GetOrConvertDeclarations(
+        IReadOnlyDictionary<DeclQualifiedName, SyntaxModel.Declaration> declarations) =>
+        s_abstractDeclarationsCache.GetValue(
+            declarations,
+            static concrete =>
+            {
+                var converted =
+                    new Dictionary<DeclQualifiedName, ElmSyntaxAbstract.Declaration>(concrete.Count);
+
+                foreach (var (name, declaration) in concrete)
+                {
+                    converted[name] = ElmSyntaxAbstract.ConvertFromConcrete.FromDeclaration(declaration);
+                }
+
+                return converted;
+            });
+
+    /// <inheritdoc cref="UserDefinedResolver(Application, IReadOnlyDictionary{DeclQualifiedName, SyntaxModel.Declaration})"/>
+    public static ApplicationResolution? UserDefinedResolver(
+        Application application,
+        IReadOnlyDictionary<DeclQualifiedName, ElmSyntaxAbstract.Declaration> declarations)
     {
         var requestedNamespaces = application.FunctionName.Namespaces;
 
@@ -3730,7 +3689,7 @@ public partial class ElmSyntaxInterpreter
     /// </summary>
     private static ApplicationResolution? ResolveAgainstDeclarations(
         Application application,
-        IReadOnlyDictionary<DeclQualifiedName, SyntaxModel.Declaration> declarations,
+        IReadOnlyDictionary<DeclQualifiedName, ElmSyntaxAbstract.Declaration> declarations,
         IReadOnlyList<string>? requiredNamespaces)
     {
         var requestedName = application.FunctionName.DeclName;
@@ -3750,24 +3709,24 @@ public partial class ElmSyntaxInterpreter
 
             switch (declaration)
             {
-                case SyntaxModel.Declaration.FunctionDeclaration functionDeclaration
-                when functionDeclaration.Function.Declaration.Value.Name.Value == requestedName:
+                case ElmSyntaxAbstract.Declaration.FunctionDeclaration functionDeclaration
+                when functionDeclaration.Function.Declaration.Name == requestedName:
 
                     return
                         new ApplicationResolution.ContinueWithFunction(
-                            functionDeclaration.Function.Declaration.Value,
+                            functionDeclaration.Function.Declaration,
                             ResolvedName: declName);
 
-                case SyntaxModel.Declaration.AliasDeclaration aliasDeclaration
-                when aliasDeclaration.TypeAlias.Name.Value == requestedName:
+                case ElmSyntaxAbstract.Declaration.AliasDeclaration aliasDeclaration
+                when aliasDeclaration.TypeAlias.Name == requestedName:
 
                     {
-                        if (aliasDeclaration.TypeAlias.TypeAnnotation.Value
-                            is SyntaxModel.TypeAnnotation.Record recordAnnotation)
+                        if (aliasDeclaration.TypeAlias.TypeAnnotation
+                            is ElmSyntaxAbstract.TypeAnnotation.Record recordAnnotation)
                         {
                             var fieldNames =
-                                recordAnnotation.RecordDefinition.Fields.Nodes
-                                .Select(field => field.Value.FieldName.Value)
+                                recordAnnotation.RecordDefinition.Fields
+                                .Select(field => field.FieldName)
                                 .ToList();
 
                             if (fieldNames.Count == application.Arguments.Count)
@@ -3799,14 +3758,14 @@ public partial class ElmSyntaxInterpreter
                         break;
                     }
 
-                case SyntaxModel.Declaration.ChoiceTypeDeclaration choiceTypeDeclaration:
+                case ElmSyntaxAbstract.Declaration.ChoiceTypeDeclaration choiceTypeDeclaration:
                     {
-                        foreach (var (_, constructorNode) in choiceTypeDeclaration.TypeDeclaration.Constructors)
+                        foreach (var constructor in choiceTypeDeclaration.TypeDeclaration.Constructors)
                         {
-                            if (constructorNode.Value.Name.Value != requestedName)
+                            if (constructor.Name != requestedName)
                                 continue;
 
-                            var ctorArity = constructorNode.Value.Arguments.Count;
+                            var ctorArity = constructor.Arguments.Count;
 
                             if (ctorArity == application.Arguments.Count)
                             {
@@ -3847,45 +3806,34 @@ public partial class ElmSyntaxInterpreter
         int arity,
         IReadOnlyList<ElmValue> alreadyCollected)
     {
-        var defaultLocation = new SyntaxModel.Location(0, 0);
-        var defaultRange = new SyntaxModel.Range(defaultLocation, defaultLocation);
-
-        var parameterPatterns = new SyntaxModel.Node<SyntaxModel.Pattern>[arity];
-        var argumentRefs = new SyntaxModel.Node<SyntaxModel.Expression>[arity];
+        var parameterPatterns = new ElmSyntaxAbstract.Pattern[arity];
+        var argumentRefs = new ElmSyntaxAbstract.Expression[arity];
 
         for (var i = 0; i < arity; i++)
         {
             var paramName = "__ctor_arg_" + i;
 
             parameterPatterns[i] =
-                new SyntaxModel.Node<SyntaxModel.Pattern>(
-                    defaultRange,
-                    new SyntaxModel.Pattern.VarPattern(paramName));
+                new ElmSyntaxAbstract.Pattern.VarPattern(paramName);
 
             argumentRefs[i] =
-                new SyntaxModel.Node<SyntaxModel.Expression>(
-                    defaultRange,
-                    new SyntaxModel.Expression.FunctionOrValue(
-                        ModuleName: [],
-                        Name: paramName));
+                new ElmSyntaxAbstract.Expression.FunctionOrValue(
+                    ModuleName: [],
+                    Name: paramName);
         }
 
         var body =
-            new SyntaxModel.Expression.Application(
+            new ElmSyntaxAbstract.Expression.Application(
                 Function:
-                new SyntaxModel.Node<SyntaxModel.Expression>(
-                    defaultRange,
-                    new SyntaxModel.Expression.FunctionOrValue(
-                        ModuleName: qualifiedName.Namespaces,
-                        Name: qualifiedName.DeclName)),
+                new ElmSyntaxAbstract.Expression.FunctionOrValue(
+                    ModuleName: qualifiedName.Namespaces,
+                    Name: qualifiedName.DeclName),
                 Arguments: argumentRefs);
 
         var lambda =
-            new SyntaxModel.LambdaStruct(
-                BackslashLocation: defaultLocation,
+            new ElmSyntaxAbstract.Expression.LambdaExpression(
                 Arguments: parameterPatterns,
-                ArrowLocation: defaultLocation,
-                Expression: new SyntaxModel.Node<SyntaxModel.Expression>(defaultRange, body));
+                Expression: body);
 
         return
             new ElmValue.ElmFunction(
@@ -3899,41 +3847,35 @@ public partial class ElmSyntaxInterpreter
     /// <summary>
     /// Builds an <see cref="ElmValue.ElmFunction"/> closure for a record-access function literal
     /// (<c>.field</c>): the synthesised lambda takes a single record argument and returns the
-    /// requested field's value via a <see cref="SyntaxModel.Expression.RecordAccess"/> node.
+    /// requested field's value via a <see cref="ElmSyntaxAbstract.Expression.RecordAccess"/> node.
     /// </summary>
     private static ElmValue.ElmFunction MakeRecordAccessClosure(
         string fieldName,
         DeclQualifiedName capturedTopLevel)
     {
-        var defaultLocation = new SyntaxModel.Location(0, 0);
-        var defaultRange = new SyntaxModel.Range(defaultLocation, defaultLocation);
-
-        const string paramName = "__record_access_arg";
+        const string ParamName = "__record_access_arg";
 
         var parameterPatterns =
-            new SyntaxModel.Node<SyntaxModel.Pattern>[]
+            new ElmSyntaxAbstract.Pattern[]
             {
-                new(defaultRange, new SyntaxModel.Pattern.VarPattern(paramName)),
+                new ElmSyntaxAbstract.Pattern.VarPattern(ParamName),
             };
 
         var recordRef =
-            new SyntaxModel.Node<SyntaxModel.Expression>(
-                defaultRange,
-                new SyntaxModel.Expression.FunctionOrValue(
-                    ModuleName: [],
-                    Name: paramName));
+            new ElmSyntaxAbstract.Expression.FunctionOrValue(
+                ModuleName: [],
+                Name: ParamName);
 
         var body =
-            new SyntaxModel.Expression.RecordAccess(
+            new ElmSyntaxAbstract.Expression.RecordAccess(
                 Record: recordRef,
-                FieldName: new SyntaxModel.Node<string>(defaultRange, fieldName));
+                FieldName: fieldName,
+                FieldNameValue: CommonEncodings.StringEncoding.ValueFromString(fieldName));
 
         var lambda =
-            new SyntaxModel.LambdaStruct(
-                BackslashLocation: defaultLocation,
+            new ElmSyntaxAbstract.Expression.LambdaExpression(
                 Arguments: parameterPatterns,
-                ArrowLocation: defaultLocation,
-                Expression: new SyntaxModel.Node<SyntaxModel.Expression>(defaultRange, body));
+                Expression: body);
 
         return
             new ElmValue.ElmFunction(

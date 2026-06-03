@@ -153,11 +153,11 @@ public class UnqualifiedReferenceModuleResolutionTests
 
         // P.helper has a single non-tuple parameter pattern per argument; Q.helper differs only in
         // its body. Assert we got P.helper by checking its body builds a 2-argument Good.
-        var body = continueWith.Function.Expression.Value;
+        var body = continueWith.Function.Expression;
 
-        var application2 = body.Should().BeOfType<SyntaxTypes.Expression.Application>().Subject;
+        var application2 = body.Should().BeOfType<Pine.Core.Elm.ElmSyntax.ElmSyntaxAbstract.Expression.Application>().Subject;
 
-        var head = application2.Function.Value.Should().BeOfType<SyntaxTypes.Expression.FunctionOrValue>().Subject;
+        var head = application2.Function.Should().BeOfType<Pine.Core.Elm.ElmSyntax.ElmSyntaxAbstract.Expression.FunctionOrValue>().Subject;
 
         head.Name.Should().Be("Good");
 

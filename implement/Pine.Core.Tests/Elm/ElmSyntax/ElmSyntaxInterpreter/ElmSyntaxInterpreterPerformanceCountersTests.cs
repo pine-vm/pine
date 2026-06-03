@@ -155,7 +155,7 @@ public class ElmSyntaxInterpreterPerformanceCountersTests
 
         snapshot.Should().Be(
             """
-            InstructionLoopCount: 412
+            InstructionLoopCount: 401
             DirectFunctionApplicationCount: 43
             FunctionValueApplicationCount: 10
             PineBuiltinInvocationCount: 21
@@ -176,7 +176,7 @@ public class ElmSyntaxInterpreterPerformanceCountersTests
 
         snapshot.Should().Be(
             """
-            InstructionLoopCount: 274
+            InstructionLoopCount: 264
             DirectFunctionApplicationCount: 22
             FunctionValueApplicationCount: 10
             PineBuiltinInvocationCount: 10
@@ -203,7 +203,7 @@ public class ElmSyntaxInterpreterPerformanceCountersTests
 
         snapshot.Should().Be(
             """
-            InstructionLoopCount: 1_262
+            InstructionLoopCount: 1_261
             DirectFunctionApplicationCount: 161
             FunctionValueApplicationCount: 10
             PineBuiltinInvocationCount: 80
@@ -226,7 +226,7 @@ public class ElmSyntaxInterpreterPerformanceCountersTests
         // recursive calls and predicate checks are performed in both cases.
         snapshot.Should().Be(
             """
-            InstructionLoopCount: 1_152
+            InstructionLoopCount: 1_151
             DirectFunctionApplicationCount: 151
             FunctionValueApplicationCount: 5
             PineBuiltinInvocationCount: 75
