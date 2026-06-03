@@ -311,13 +311,13 @@ public static class ConvertFromConcrete
         expression switch
         {
             SyntaxModel.Expression.UnitExpr =>
-            new Expression.UnitExpr(),
+            Expression.UnitExpr.Instance,
 
             SyntaxModel.Expression.Literal literal =>
-            new Expression.StringLiteral(literal.Value),
+            Expression.StringLiteral.Create(literal.Value),
 
             SyntaxModel.Expression.CharLiteral charLiteral =>
-            new Expression.CharLiteral(charLiteral.Value),
+            Expression.CharLiteral.Create(charLiteral.Value),
 
             SyntaxModel.Expression.Integer integer =>
             MakeInteger(ParseIntegerLiteral(integer.LiteralText)),

@@ -60,12 +60,12 @@ public class ModelTests
     public void String_literal_equality()
     {
         AssertValueEqual(
-            new Expression.StringLiteral("alfa\nbeta"),
-            new Expression.StringLiteral("alfa\nbeta"));
+            Expression.StringLiteral.Create("alfa\nbeta"),
+            Expression.StringLiteral.Create("alfa\nbeta"));
 
         AssertNotEqual(
-            new Expression.StringLiteral("alfa"),
-            new Expression.StringLiteral("beta"));
+            Expression.StringLiteral.Create("alfa"),
+            Expression.StringLiteral.Create("beta"));
     }
 
     [Fact]
@@ -496,8 +496,8 @@ public class ModelTests
     [Fact]
     public void Distinct_expression_cases_are_not_equal()
     {
-        AssertNotEqual(new Expression.UnitExpr(), new Expression.StringLiteral(""));
-        AssertNotEqual(IntExpr(1), new Expression.StringLiteral("1"));
-        AssertNotEqual(new Expression.CharLiteral(65), IntExpr(65));
+        AssertNotEqual(new Expression.UnitExpr(), Expression.StringLiteral.Create(""));
+        AssertNotEqual(IntExpr(1), Expression.StringLiteral.Create("1"));
+        AssertNotEqual(Expression.CharLiteral.Create(65), IntExpr(65));
     }
 }

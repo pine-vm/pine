@@ -1027,17 +1027,39 @@ public abstract record Expression
 {
     /// <summary>Expression producing unit.</summary>
     public sealed record UnitExpr
-        : Expression;
+        : Expression
+    {
+        /// <summary>
+        /// The singleton instance of <see cref="UnitExpr"/>, since it has no state and all instances are equal.
+        /// </summary>
+        public static readonly UnitExpr Instance = new();
+    }
 
     /// <summary>String literal expression, with escape sequences already applied.</summary>
     public sealed record StringLiteral(
-        string Value)
-        : Expression;
+        string Value,
+        PineValue ValueAsPineValue)
+        : Expression
+    {
+        /// <summary>
+        /// Creates a <see cref="StringLiteral"/>, precomputing <see cref="ValueAsPineValue"/> from the string literal value.
+        /// </summary>
+        public static StringLiteral Create(string value) =>
+            new(value, ElmValueEncoding.StringAsPineValue(value));
+    }
 
     /// <summary>Character literal expression (Unicode code point).</summary>
     public sealed record CharLiteral(
-        int Value)
-        : Expression;
+        int Value,
+        PineValue ValueAsPineValue)
+        : Expression
+    {
+        /// <summary>
+        /// Creates a <see cref="CharLiteral"/>, precomputing <see cref="ValueAsPineValue"/> from the character literal value.
+        /// </summary>
+        public static CharLiteral Create(int value) =>
+            new(value, ElmValueEncoding.ElmCharAsPineValue(value));
+    }
 
     /// <summary>
     /// Integer literal expression, normalized to its numeric value.
