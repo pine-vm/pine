@@ -23,7 +23,8 @@ public record LanguageServerRpcTarget(
     public static IJsonRpcMessageFormatter JsonRpcMessageFormatterDefault() =>
         new SystemTextJsonFormatter()
         {
-            JsonSerializerOptions = new System.Text.Json.JsonSerializerOptions
+            JsonSerializerOptions =
+            new System.Text.Json.JsonSerializerOptions
             {
                 PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase,
 
@@ -57,17 +58,19 @@ public record LanguageServerRpcTarget(
             }
             else
             {
-                var task = Task.Delay(TimeSpan.FromSeconds(1)).ContinueWith(_ =>
-                {
-                    Log("Sending requests on initialize after delay");
+                var task =
+                    Task.Delay(TimeSpan.FromSeconds(1)).ContinueWith(
+                        _ =>
+                        {
+                            Log("Sending requests on initialize after delay");
 
-                    foreach (var request in requests)
-                    {
-                        Log($"Sending request on initialize: {request.Key}");
+                            foreach (var request in requests)
+                            {
+                                Log($"Sending request on initialize: {request.Key}");
 
-                        jsonRpc.InvokeWithParameterObjectAsync(request.Key, request.Value);
-                    }
-                });
+                                jsonRpc.InvokeWithParameterObjectAsync(request.Key, request.Value);
+                            }
+                        });
             }
         }
 
@@ -223,12 +226,11 @@ public record LanguageServerRpcTarget(
             return;
         }
 
-        var parameters = new PublishDiagnosticsParams
-        (
-            Uri: documentUri,
-            Diagnostics: diagnostics,
-            Version: null
-        );
+        var parameters =
+            new PublishDiagnosticsParams(
+                Uri: documentUri,
+                Diagnostics: diagnostics,
+                Version: null);
 
         Log($"Publishing {diagnostics.Count} diagnostics for {documentUri}");
 

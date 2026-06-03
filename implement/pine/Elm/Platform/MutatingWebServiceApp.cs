@@ -36,7 +36,8 @@ public class MutatingWebServiceApp
 
     public ElmTime.ElmTimeJsonAdapter.Parsed JsonAdapter => _appConfig.JsonAdapter;
 
-    private readonly ConcurrentDictionary<string, WebServiceInterface.Command.RespondToHttpRequest> _httpResponses = new();
+    private readonly ConcurrentDictionary<string, WebServiceInterface.Command.RespondToHttpRequest> _httpResponses =
+        new();
 
     private readonly ConcurrentQueue<WebServiceInterface.Command> _commands = new();
 
@@ -198,23 +199,24 @@ public class MutatingWebServiceApp
         System.Threading.CancellationToken cancellationToken = default)
     {
         return
-            await System.Threading.Tasks.Task.Run(async () =>
-            {
-                EventHttpRequest(httpRequest);
-
-                while (true)
+            await System.Threading.Tasks.Task.Run(
+                async () =>
                 {
-                    cancellationToken.ThrowIfCancellationRequested();
+                    EventHttpRequest(httpRequest);
 
-                    if (_httpResponses.TryRemove(
-                        httpRequest.HttpRequestId,
-                        out var httpResponse))
+                    while (true)
                     {
-                        return httpResponse.Respond.Response;
-                    }
+                        cancellationToken.ThrowIfCancellationRequested();
 
-                    await System.Threading.Tasks.Task.Delay(TimeSpan.FromMilliseconds(100));
-                }
-            });
+                        if (_httpResponses.TryRemove(
+                            httpRequest.HttpRequestId,
+                            out var httpResponse))
+                        {
+                            return httpResponse.Respond.Response;
+                        }
+
+                        await System.Threading.Tasks.Task.Delay(TimeSpan.FromMilliseconds(100));
+                    }
+                });
     }
 }

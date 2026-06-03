@@ -41,37 +41,42 @@ public class ElmFormatCommand
     {
         var command = new Command("elm-format", "Format Elm module files.");
 
-        var pathsArgument = new Argument<string[]>("paths")
-        {
-            Description = "Paths to Elm files or directories to format",
-            Arity = ArgumentArity.OneOrMore
-        };
+        var pathsArgument =
+            new Argument<string[]>("paths")
+            {
+                Description = "Paths to Elm files or directories to format",
+                Arity = ArgumentArity.OneOrMore
+            };
 
-        var yesOption = new Option<bool>("--yes")
-        {
-            Description = "Overwrite files without prompting for confirmation"
-        };
+        var yesOption =
+            new Option<bool>("--yes")
+            {
+                Description = "Overwrite files without prompting for confirmation"
+            };
 
-        var verifyNoChangesOption = new Option<bool>("--verify-no-changes")
-        {
-            Description = "Check if all Elm modules are already formatted (for CI/automated reviews)"
-        };
+        var verifyNoChangesOption =
+            new Option<bool>("--verify-no-changes")
+            {
+                Description = "Check if all Elm modules are already formatted (for CI/automated reviews)"
+            };
 
         command.Add(pathsArgument);
         command.Add(yesOption);
         command.Add(verifyNoChangesOption);
 
-        command.SetAction((parseResult) =>
-        {
-            var paths = parseResult.GetValue(pathsArgument);
-            var yes = parseResult.GetValue(yesOption);
-            var verifyNoChanges = parseResult.GetValue(verifyNoChangesOption);
+        command.SetAction(
+            (parseResult) =>
+            {
+                var paths = parseResult.GetValue(pathsArgument);
+                var yes = parseResult.GetValue(yesOption);
+                var verifyNoChanges = parseResult.GetValue(verifyNoChangesOption);
 
-            return ElmFormatCommandExecute(
-                paths: paths!,
-                skipPrompt: yes,
-                verifyNoChanges: verifyNoChanges);
-        });
+                return
+                    ElmFormatCommandExecute(
+                        paths: paths!,
+                        skipPrompt: yes,
+                        verifyNoChanges: verifyNoChanges);
+            });
 
         return command;
     }
@@ -142,41 +147,43 @@ public class ElmFormatCommand
         var needsFormatting = new ConcurrentBag<(string path, string formattedContent)>();
         var parseErrors = new ConcurrentBag<(string path, string error)>();
 
-        Parallel.ForEach(elmFiles, (filePath) =>
-        {
-            try
+        Parallel.ForEach(
+            elmFiles,
+            (filePath) =>
             {
-                var originalContent = File.ReadAllText(filePath);
-
-                var formatResult = ElmFormat.FormatModuleText(originalContent);
-
-                if (formatResult.IsErrOrNull() is { } formatErr)
+                try
                 {
-                    parseErrors.Add((filePath, formatErr));
-                    return;
-                }
+                    var originalContent = File.ReadAllText(filePath);
 
-                if (formatResult.IsOkOrNull() is not { } rendered)
-                {
-                    parseErrors.Add((filePath, "Unexpected format result type"));
-                    return;
-                }
+                    var formatResult = ElmFormat.FormatModuleText(originalContent);
 
-                // Check if content changed
-                if (originalContent == rendered)
-                {
-                    alreadyFormatted.Add(filePath);
+                    if (formatResult.IsErrOrNull() is { } formatErr)
+                    {
+                        parseErrors.Add((filePath, formatErr));
+                        return;
+                    }
+
+                    if (formatResult.IsOkOrNull() is not { } rendered)
+                    {
+                        parseErrors.Add((filePath, "Unexpected format result type"));
+                        return;
+                    }
+
+                    // Check if content changed
+                    if (originalContent == rendered)
+                    {
+                        alreadyFormatted.Add(filePath);
+                    }
+                    else
+                    {
+                        needsFormatting.Add((filePath, rendered));
+                    }
                 }
-                else
+                catch (Exception ex)
                 {
-                    needsFormatting.Add((filePath, rendered));
+                    parseErrors.Add((filePath, ex.Message));
                 }
-            }
-            catch (Exception ex)
-            {
-                parseErrors.Add((filePath, ex.Message));
-            }
-        });
+            });
 
         // Sort collections for consistent output
         var sortedAlreadyFormatted =
@@ -348,6 +355,7 @@ public class ElmFormatCommand
         int width)
     {
         var sb = new StringBuilder();
+
         RenderOverviewHeader(
             line => sb.Append(line + "\n"),
             totalFiles,
@@ -356,6 +364,7 @@ public class ElmFormatCommand
             parseErrorCount,
             verifyMode,
             width);
+
         return sb.ToString();
     }
 
@@ -425,6 +434,7 @@ public class ElmFormatCommand
     {
         if (text.Length >= width)
             return text[..width];
+
         var totalPadding = width - text.Length;
         // Use floor division for left padding (slightly less), ceiling for right (slightly more)
         var leftPadding = totalPadding / 2;
@@ -439,6 +449,7 @@ public class ElmFormatCommand
     {
         if (text.Length >= width)
             return text[..width];
+
         return text + new string(' ', width - text.Length);
     }
 
@@ -500,6 +511,7 @@ public class ElmFormatCommand
                 writeLine($"✗ {filePath}");
                 writeLine($"  Error: {parseError.ErrorText}");
             }
+
             writeLine("");
         }
     }
@@ -568,7 +580,8 @@ public class ElmFormatCommand
         if (showGrouped && filesList.Count >= MinFilesForDetailedOverview)
         {
             // Group by directory for better navigation
-            var groupedByDir = filesList
+            var groupedByDir =
+                filesList
                 .GroupBy(f => Path.GetDirectoryName(f.Key) ?? "")
                 .OrderBy(g => g.Key, StringComparer.Ordinal);
 

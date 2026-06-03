@@ -11,7 +11,6 @@ namespace Pine.Core.CodeAnalysis;
 
 using StaticExpressionGen = StaticExpression<StaticFunctionIdentifier>;
 
-
 /// <summary>
 /// Helpers to analyze Pine <see cref="Expression"/> trees with respect to their relationship to the environment.
 /// </summary>
@@ -83,7 +82,8 @@ public class CodeAnalysis
          * instead of exiting when parsing of one of the given roots fails.
          * */
 
-        Dictionary<StaticFunctionIdentifier, (Expression origExpr, StaticExpressionGen body)> lessSpecializedInterfaces = [];
+        Dictionary<StaticFunctionIdentifier, (Expression origExpr, StaticExpressionGen body)> lessSpecializedInterfaces =
+            [];
 
         HashSet<StaticFunctionIdentifier> rootsIds = [];
 
@@ -250,10 +250,10 @@ public class CodeAnalysis
             .ToFrozenDictionary(
                 keySelector: entry => entry.Key,
                 elementSelector: entry =>
-                    new StaticProgramFunctionMetadata(
-                        entry.Value.origExpr,
-                        entry.Value.interf,
-                        entry.Value.EnvClass));
+                new StaticProgramFunctionMetadata(
+                    entry.Value.origExpr,
+                    entry.Value.interf,
+                    entry.Value.EnvClass));
 
         var program = new StaticProgram<DeclQualifiedName>(EntryPoint: null, programBodies);
 
@@ -341,7 +341,8 @@ public class CodeAnalysis
         {
             var current = queue.Dequeue();
 
-            if (observedSetInitial.Any(entry => entry.origExpr == current.expr && entry.constraint.Equals(current.envValueClass)))
+            if (observedSetInitial.Any(
+                entry => entry.origExpr == current.expr && entry.constraint.Equals(current.envValueClass)))
                 continue;
 
             var currentExprInlined =
@@ -435,24 +436,25 @@ public class CodeAnalysis
 
         var observedSet =
             observedSetInitial
-            .Select(entry =>
-            {
+            .Select(
+                entry =>
+                {
 
-                /*
-                * 2025-09-14:
-                * So far, the mapped value class can contain items that are not used to decode program code.
-                * Therefore we filter out all items that do not encode epressions.
-                * This is not precise, since there could be superfluous expression items as well.
-                * For proper filtering, we probably need to track which items are actually used in the inlined expression.
-                * TODO: Find a more precise way to determine which items are relevant.
-                * */
+                    /*
+                    * 2025-09-14:
+                    * So far, the mapped value class can contain items that are not used to decode program code.
+                    * Therefore we filter out all items that do not encode epressions.
+                    * This is not precise, since there could be superfluous expression items as well.
+                    * For proper filtering, we probably need to track which items are actually used in the inlined expression.
+                    * TODO: Find a more precise way to determine which items are relevant.
+                    * */
 
-                var constraint =
-                    FilterClassRemovingAllNonExpressions(entry.constraint, parseCache);
+                    var constraint =
+                        FilterClassRemovingAllNonExpressions(entry.constraint, parseCache);
 
-                return
-                (entry.origExpr, entry.inlinedExpr, constraint);
-            })
+                    return
+                        (entry.origExpr, entry.inlinedExpr, constraint);
+                })
             .DistinctBy(entry => (entry.origExpr, entry.constraint))
             .ToArray();
 
@@ -528,9 +530,10 @@ public class CodeAnalysis
 
         var rootId =
             genFunctions.Keys
-            .Single(c =>
-            c.EncodedExpr.Equals(rootExprValue) &&
-            c.EnvClass.SatisfiedByConstraint(rootEnvValueClass));
+            .Single(
+                c =>
+                c.EncodedExpr.Equals(rootExprValue) &&
+                c.EnvClass.SatisfiedByConstraint(rootEnvValueClass));
 
         return new ParsedFromSingleRoot(rootId, genFunctions);
     }
@@ -617,82 +620,82 @@ public class CodeAnalysis
 
         var reducedExpression =
             ReducePineExpression.TransformPineExpressionWithOptionalReplacement(
-            findReplacement:
-            expr =>
-            {
-                if (expr is not Expression.ParseAndEval parseAndEval)
+                findReplacement:
+                expr =>
                 {
-                    return null;
-                }
+                    if (expr is not Expression.ParseAndEval parseAndEval)
+                    {
+                        return null;
+                    }
 
-                if (parseAndEval.Encoded.ReferencesEnvironment)
-                {
-                    // Cannot inline parse&eval expressions that reference the environment.
-                    return null;
-                }
+                    if (parseAndEval.Encoded.ReferencesEnvironment)
+                    {
+                        // Cannot inline parse&eval expressions that reference the environment.
+                        return null;
+                    }
 
-                var parseIndependentResult = ParseIndependentParseAndEvalExpression(parseAndEval, parseCache);
+                    var parseIndependentResult = ParseIndependentParseAndEvalExpression(parseAndEval, parseCache);
 
-                if (parseIndependentResult.IsOkOrNullable() is not { } childExprAndValue)
-                {
-                    // Cannot inline parse&eval expressions that cannot be parsed independently.
-                    return null;
-                }
+                    if (parseIndependentResult.IsOkOrNullable() is not { } childExprAndValue)
+                    {
+                        // Cannot inline parse&eval expressions that cannot be parsed independently.
+                        return null;
+                    }
 
-                var (childExprValue, childExpr) = childExprAndValue;
+                    var (childExprValue, childExpr) = childExprAndValue;
 
-                var childEnvValueClass = PineValueClass.MapValueClass(envValueClass, parseAndEval.Environment);
+                    var childEnvValueClass = PineValueClass.MapValueClass(envValueClass, parseAndEval.Environment);
 
-                if (childEnvValueClass is null)
-                {
-                    return null;
-                }
+                    if (childEnvValueClass is null)
+                    {
+                        return null;
+                    }
 
-                if (alreadyInlined.Contains(childExpr))
-                {
-                    // Prevent infinite recursion on self-referential parse&eval expressions.
+                    if (alreadyInlined.Contains(childExpr))
+                    {
+                        // Prevent infinite recursion on self-referential parse&eval expressions.
 
-                    skippedForRecursion.Add(childExpr);
+                        skippedForRecursion.Add(childExpr);
 
-                    return null;
-                }
+                        return null;
+                    }
 
-                var inlinedExpr =
-                    ReducePineExpression.TransformPineExpressionWithOptionalReplacement(
-                        findReplacement:
-                        descendant =>
-                        {
-                            if (descendant is Expression.Environment)
+                    var inlinedExpr =
+                        ReducePineExpression.TransformPineExpressionWithOptionalReplacement(
+                            findReplacement:
+                            descendant =>
                             {
-                                return parseAndEval.Environment;
-                            }
+                                if (descendant is Expression.Environment)
+                                {
+                                    return parseAndEval.Environment;
+                                }
 
-                            return null;
-                        },
-                        childExpr).expr;
+                                return null;
+                            },
+                            childExpr).expr;
 
-                var inlinedExprReduced =
-                    ReducePineExpression.ReduceExpressionBottomUp(
-                        inlinedExpr,
-                        parseCache);
+                    var inlinedExprReduced =
+                        ReducePineExpression.ReduceExpressionBottomUp(
+                            inlinedExpr,
+                            parseCache);
 
-                var recursionResult =
-                    InlineParseAndEvalUsingLiteralFunctionRecursive(
-                        expression: inlinedExprReduced,
-                        envValueClass: childEnvValueClass,
-                        parseCache: parseCache,
-                        alreadyInlined: alreadyInlined.Add(childExpr));
+                    var recursionResult =
+                        InlineParseAndEvalUsingLiteralFunctionRecursive(
+                            expression: inlinedExprReduced,
+                            envValueClass: childEnvValueClass,
+                            parseCache: parseCache,
+                            alreadyInlined: alreadyInlined.Add(childExpr));
 
-                if (recursionResult.skippedForRecursion.Contains(childExpr))
-                {
-                    return null;
-                }
+                    if (recursionResult.skippedForRecursion.Contains(childExpr))
+                    {
+                        return null;
+                    }
 
-                skippedForRecursion.UnionWith(recursionResult.skippedForRecursion);
+                    skippedForRecursion.UnionWith(recursionResult.skippedForRecursion);
 
-                return recursionResult.expr;
-            },
-            expression).expr;
+                    return recursionResult.expr;
+                },
+                expression).expr;
 
         return
             (reducedExpression, skippedForRecursion.ToImmutableHashSet());
@@ -766,9 +769,10 @@ public class CodeAnalysis
 
             if (ParseAndEvalCrashingAlways(parseAndEval, parseCache))
             {
-                return new StaticExpressionGen.CrashingParseAndEval(
-                    encodedExpr,
-                    envExpr);
+                return
+                    new StaticExpressionGen.CrashingParseAndEval(
+                        encodedExpr,
+                        envExpr);
             }
 
             var childExprValueResult =
@@ -1134,31 +1138,32 @@ public class CodeAnalysis
                 kvp =>
                 {
                     var bodyInlined =
-                    StaticExpressionExtension.TransformStaticExpressionWithOptionalReplacement(
-                        findReplacement: node =>
-                        {
-                            if (node is StaticExpression<FunctionIdentifier>.FunctionApplication app)
+                        StaticExpressionExtension.TransformStaticExpressionWithOptionalReplacement(
+                            findReplacement: node =>
                             {
-                                if (FunctionIsRecursive(app.FunctionName))
+                                if (node is StaticExpression<FunctionIdentifier>.FunctionApplication app)
                                 {
-                                    // Do not inline recursive functions
-                                    return null;
+                                    if (FunctionIsRecursive(app.FunctionName))
+                                    {
+                                        // Do not inline recursive functions
+                                        return null;
+                                    }
+
+                                    var callee = namedFunctionsBeforeInline[app.FunctionName];
+
+                                    if (callee is StaticExpression<FunctionIdentifier>.FunctionApplication calleeApp &&
+                                        calleeApp.Arguments == StaticExpression<FunctionIdentifier>.EnvironmentInstance)
+                                    {
+                                        return
+                                            StaticExpression<FunctionIdentifier>.FunctionApplicationInstance(
+                                                functionName: calleeApp.FunctionName,
+                                                arguments: app.Arguments);
+                                    }
                                 }
 
-                                var callee = namedFunctionsBeforeInline[app.FunctionName];
-
-                                if (callee is StaticExpression<FunctionIdentifier>.FunctionApplication calleeApp &&
-                                calleeApp.Arguments == StaticExpression<FunctionIdentifier>.EnvironmentInstance)
-                                {
-                                    return
-                                    StaticExpression<FunctionIdentifier>.FunctionApplicationInstance(
-                                        functionName: calleeApp.FunctionName,
-                                        arguments: app.Arguments);
-                                }
-                            }
-                            return null;
-                        },
-                        expression: kvp.Value).expr;
+                                return null;
+                            },
+                            expression: kvp.Value).expr;
 
                     return bodyInlined;
                 });
@@ -1301,15 +1306,17 @@ public class CodeAnalysis
             StaticExpression<FunctionIdentifier> functionBody)
         {
             return
-                ReplaceEnvPathsInBody(functionBody, path =>
-                {
-                    if (IsPathOrPrefixUsed(currentFunctionName, path, stack: []))
+                ReplaceEnvPathsInBody(
+                    functionBody,
+                    path =>
                     {
-                        return null;
-                    }
+                        if (IsPathOrPrefixUsed(currentFunctionName, path, stack: []))
+                        {
+                            return null;
+                        }
 
-                    return StaticExpression<FunctionIdentifier>.LiteralInstance(PineValue.EmptyList);
-                });
+                        return StaticExpression<FunctionIdentifier>.LiteralInstance(PineValue.EmptyList);
+                    });
         }
 
         return
@@ -1440,9 +1447,9 @@ public class CodeAnalysis
                 findReplacement: node =>
                 {
                     var path =
-                    StaticExpressionExtension.TryParseAsPathToExpression(
-                        node,
-                        StaticExpression<TFuncId>.EnvironmentInstance);
+                        StaticExpressionExtension.TryParseAsPathToExpression(
+                            node,
+                            StaticExpression<TFuncId>.EnvironmentInstance);
 
                     if (path is null)
                         return null;
@@ -1498,6 +1505,7 @@ public class CodeAnalysis
 
         return ValueFromPathInValue(listValue.Items.Span[path[0]], path[1..]);
     }
+
     /// <summary>
     /// Returns a mapping for the given expression if it corresponds to a path from the environment root,
     /// otherwise returns <c>null</c>.
@@ -1881,15 +1889,15 @@ public class CodeAnalysis
         switch (template)
         {
             case Expression.Literal litT
-                when actual is Expression.Literal litA:
+            when actual is Expression.Literal litA:
                 return litT.Value.Equals(litA.Value);
 
             case Expression.Environment
-                when actual is Expression.Environment:
+            when actual is Expression.Environment:
                 return true;
 
             case Expression.List listT
-                when actual is Expression.List listA:
+            when actual is Expression.List listA:
                 if (listT.Items.Count != listA.Items.Count)
                 {
                     return false;
@@ -1918,7 +1926,7 @@ public class CodeAnalysis
             // structurally equivalent to a List of literals when matching against a List
             // template, so such call sites still recognize the consolidated form.
             case Expression.List listT2
-                when actual is Expression.Literal litA2 &&
+            when actual is Expression.Literal litA2 &&
                     litA2.Value is PineValue.ListValue listValueA &&
                     listT2.Items.Count == listValueA.Items.Length:
 
@@ -1939,7 +1947,7 @@ public class CodeAnalysis
                 return true;
 
             case Expression.KernelApplication kT
-                when actual is Expression.KernelApplication kA:
+            when actual is Expression.KernelApplication kA:
                 if (kT.Function != kA.Function)
                 {
                     return false;
@@ -1948,20 +1956,20 @@ public class CodeAnalysis
                 return TryMatchExpressionTemplateInternal(kT.Input, kA.Input, placeholders, bindings);
 
             case Expression.ParseAndEval peT
-                when actual is Expression.ParseAndEval peA:
+            when actual is Expression.ParseAndEval peA:
                 return
                     TryMatchExpressionTemplateInternal(peT.Encoded, peA.Encoded, placeholders, bindings) &&
                     TryMatchExpressionTemplateInternal(peT.Environment, peA.Environment, placeholders, bindings);
 
             case Expression.Conditional cT
-                when actual is Expression.Conditional cA:
+            when actual is Expression.Conditional cA:
                 return
                     TryMatchExpressionTemplateInternal(cT.Condition, cA.Condition, placeholders, bindings) &&
                     TryMatchExpressionTemplateInternal(cT.TrueBranch, cA.TrueBranch, placeholders, bindings) &&
                     TryMatchExpressionTemplateInternal(cT.FalseBranch, cA.FalseBranch, placeholders, bindings);
 
             case Expression.StringTag tT
-                when actual is Expression.StringTag tA:
+            when actual is Expression.StringTag tA:
                 return
                     tT.Tag == tA.Tag &&
                     TryMatchExpressionTemplateInternal(tT.Tagged, tA.Tagged, placeholders, bindings);

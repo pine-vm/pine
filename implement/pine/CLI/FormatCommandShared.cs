@@ -284,7 +284,9 @@ public static class FormatCommandShared
             "║" + PadRight(FormatLine("  Total files scanned:", totalFiles, null, NumberEndColumn), innerWidth) + "║");
 
         Console.WriteLine(
-            "║" + PadRight(FormatLine("  Already formatted:", alreadyFormattedCount, "  ✓", NumberEndColumn), innerWidth) + "║");
+            "║" +
+            PadRight(FormatLine("  Already formatted:", alreadyFormattedCount, "  ✓", NumberEndColumn), innerWidth) +
+            "║");
 
         Console.WriteLine(
             "║" +
@@ -299,7 +301,8 @@ public static class FormatCommandShared
         if (parseErrorCount > 0)
         {
             Console.WriteLine(
-                "║" + PadRight(FormatLine("  Syntax errors:", parseErrorCount, "  ✗", NumberEndColumn), innerWidth) + "║");
+                "║" + PadRight(FormatLine("  Syntax errors:", parseErrorCount, "  ✗", NumberEndColumn), innerWidth) +
+                "║");
         }
 
         Console.WriteLine("╚" + new string('═', innerWidth) + "╝");

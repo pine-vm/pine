@@ -7,28 +7,30 @@ namespace Pine.Elm019;
 
 public static class ElmMakeRunner
 {
-    private readonly static Lazy<string> executableFilePathCached = new(() =>
-    {
-        /*
-         * For now, we assume that the file stays the same for the lifetime of the current process.
-         * This approach will break if the persistent cache is cleared while the current process is running.
-         * We could make this more robust by checking if the file at the path still exists, and re-downloading if it doesn't.
-         * */
+    private readonly static Lazy<string> s_executableFilePathCached =
+        new(
+            () =>
+            {
+                /*
+                 * For now, we assume that the file stays the same for the lifetime of the current process.
+                 * This approach will break if the persistent cache is cleared while the current process is running.
+                 * We could make this more robust by checking if the file at the path still exists, and re-downloading if it doesn't.
+                 * */
 
-        var executableFile =
-            BlobLibrary.LoadFileForCurrentOs(ElmTime.Elm019.Elm019Binaries.ElmExecutableFileByOs)
-            ??
-            throw new Exception("Failed to load elm executable file");
+                var executableFile =
+                    BlobLibrary.LoadFileForCurrentOs(ElmTime.Elm019.Elm019Binaries.ElmExecutableFileByOs)
+                    ??
+                    throw new Exception("Failed to load elm executable file");
 
-        if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
-        {
-            System.IO.File.SetUnixFileMode(
-                executableFile.cacheFilePath,
-                ExecutableFile.UnixFileModeForExecutableFile);
-        }
+                if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+                {
+                    System.IO.File.SetUnixFileMode(
+                        executableFile.cacheFilePath,
+                        ExecutableFile.UnixFileModeForExecutableFile);
+                }
 
-        return executableFile.cacheFilePath;
-    });
+                return executableFile.cacheFilePath;
+            });
 
     public static async Task<ExecutableFile.ProcessOutput> ElmMakeAsync(
         string workingDirectoryAbsolute,
@@ -37,21 +39,23 @@ public static class ElmMakeRunner
         var arguments =
             string.Join(" ", ["make", pathToFileWithElmEntryPoint, "--report=json  --output=/dev/null"]);
 
-        var executableFilePath = executableFilePathCached.Value;
+        var executableFilePath = s_executableFilePathCached.Value;
 
-        var process = new System.Diagnostics.Process
-        {
-            StartInfo = new System.Diagnostics.ProcessStartInfo
+        var process =
+            new System.Diagnostics.Process
             {
-                WorkingDirectory = workingDirectoryAbsolute,
-                FileName = executableFilePath,
-                Arguments = arguments,
-                UseShellExecute = false,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                CreateNoWindow = true,
-            },
-        };
+                StartInfo =
+                new System.Diagnostics.ProcessStartInfo
+                {
+                    WorkingDirectory = workingDirectoryAbsolute,
+                    FileName = executableFilePath,
+                    Arguments = arguments,
+                    UseShellExecute = false,
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    CreateNoWindow = true,
+                },
+            };
 
 
         //  Avoid elm make failing on `getAppUserDataDirectory`.
@@ -88,32 +92,34 @@ public static class ElmMakeRunner
         var stderrTcs = new TaskCompletionSource<bool>();
 
         // Event handler for standard output
-        process.OutputDataReceived += (sender, e) =>
-        {
-            if (e.Data is null)
+        process.OutputDataReceived +=
+            (sender, e) =>
             {
-                // No more output
-                stdoutTcs.TrySetResult(true);
-            }
-            else
-            {
-                standardOutputBuilder.AppendLine(e.Data);
-            }
-        };
+                if (e.Data is null)
+                {
+                    // No more output
+                    stdoutTcs.TrySetResult(true);
+                }
+                else
+                {
+                    standardOutputBuilder.AppendLine(e.Data);
+                }
+            };
 
         // Event handler for standard error
-        process.ErrorDataReceived += (sender, e) =>
-        {
-            if (e.Data is null)
+        process.ErrorDataReceived +=
+            (sender, e) =>
             {
-                // No more error output
-                stderrTcs.TrySetResult(true);
-            }
-            else
-            {
-                standardErrorBuilder.AppendLine(e.Data);
-            }
-        };
+                if (e.Data is null)
+                {
+                    // No more error output
+                    stderrTcs.TrySetResult(true);
+                }
+                else
+                {
+                    standardErrorBuilder.AppendLine(e.Data);
+                }
+            };
 
         // Start the process and begin asynchronous reads
         if (!process.Start())
@@ -134,9 +140,10 @@ public static class ElmMakeRunner
         var exitCode = process.ExitCode;
         process.Close();
 
-        return new ExecutableFile.ProcessOutput(
-            StandardError: standardErrorBuilder.ToString(),
-            StandardOutput: standardOutputBuilder.ToString(),
-            ExitCode: exitCode);
+        return
+            new ExecutableFile.ProcessOutput(
+                StandardError: standardErrorBuilder.ToString(),
+                StandardOutput: standardOutputBuilder.ToString(),
+                ExitCode: exitCode);
     }
 }

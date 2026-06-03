@@ -40,10 +40,15 @@ type CompletionItemKind
 public abstract record CompletionItemKind
 {
     public record ConstructorCompletionItemKind : CompletionItemKind;
+
     public record EnumCompletionItemKind : CompletionItemKind;
+
     public record EnumMemberCompletionItemKind : CompletionItemKind;
+
     public record FunctionCompletionItemKind : CompletionItemKind;
+
     public record ModuleCompletionItemKind : CompletionItemKind;
+
     public record StructCompletionItemKind : CompletionItemKind;
 }
 
@@ -83,8 +88,7 @@ public static class CompletionItemEncoding
 
         if (decodeElmValueResult.IsOkOrNull() is not { } elmValue)
         {
-            throw new System.NotImplementedException
-                ("Unexpected result type: " + decodeElmValueResult.GetType());
+            throw new System.NotImplementedException("Unexpected result type: " + decodeElmValueResult.GetType());
         }
 
         return Decode(elmValue);
@@ -132,8 +136,7 @@ public static class CompletionItemEncoding
 
         if (decodeKindResult.IsOkOrNull() is not { } kind)
         {
-            throw new System.NotImplementedException
-                ("Unexpected result type: " + decodeKindResult.GetType());
+            throw new System.NotImplementedException("Unexpected result type: " + decodeKindResult.GetType());
         }
 
         if (record["documentation"] is not { } documentationValue)
@@ -160,11 +163,12 @@ public static class CompletionItemEncoding
             return "Expected field 'insertText' to be a string, got: " + insertTextValue.GetType();
         }
 
-        return new MonacoCompletionItem(
-            labelString.Value,
-            kind,
-            documentationString.Value,
-            insertTextString.Value);
+        return
+            new MonacoCompletionItem(
+                labelString.Value,
+                kind,
+                documentationString.Value,
+                insertTextString.Value);
     }
 
     public static Result<string, CompletionItemKind> DecodeCompletionItemKind(ElmValue elmValue)
@@ -207,6 +211,7 @@ public static class CompletionItemEncoding
         return "Unexpected tag name: " + tag.TagName;
     }
 }
+
 public static class MonacoRangeEncoding
 {
     public static Result<string, MonacoRange> Decode(PineValue pineValue)
@@ -220,8 +225,7 @@ public static class MonacoRangeEncoding
 
         if (decodeElmValueResult.IsOkOrNull() is not { } elmValue)
         {
-            throw new System.NotImplementedException
-                ("Unexpected result type: " + decodeElmValueResult.GetType());
+            throw new System.NotImplementedException("Unexpected result type: " + decodeElmValueResult.GetType());
         }
 
         return Decode(elmValue);
@@ -288,10 +292,11 @@ public static class MonacoRangeEncoding
             return "Expected field 'endColumn' to be an integer, got: " + endColumnValue.GetType();
         }
 
-        return new MonacoRange(
-            (int)startLineNumberInteger.Value,
-            (int)startColumnInteger.Value,
-            (int)endLineNumberInteger.Value,
-            (int)endColumnInteger.Value);
+        return
+            new MonacoRange(
+                (int)startLineNumberInteger.Value,
+                (int)startColumnInteger.Value,
+                (int)endLineNumberInteger.Value,
+                (int)endColumnInteger.Value);
     }
 }

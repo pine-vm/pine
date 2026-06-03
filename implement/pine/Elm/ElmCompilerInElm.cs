@@ -18,33 +18,37 @@ namespace Pine.Elm;
 
 public class ElmCompilerInElm
 {
-    private static readonly ConcurrentDictionary<FileTree, Task<Result<string, ElmCompilerInElm>>> s_buildCompilerFromSource = new();
+    private static readonly ConcurrentDictionary<FileTree, Task<Result<string, ElmCompilerInElm>>> s_buildCompilerFromSource =
+        new();
 
     static public readonly Lazy<FileTree> ElmCoreAndKernelModuleFilesDefault =
-        new(() =>
-        Core.Elm.ElmInElm.BundledFiles.ElmKernelModulesDefault.Value);
+        new(
+            () =>
+            Core.Elm.ElmInElm.BundledFiles.ElmKernelModulesDefault.Value);
 
     static public readonly Lazy<IReadOnlyDictionary<IReadOnlyList<string>, string>> ElmCoreAndKernelModulesByName =
-        new(() =>
-        ElmCoreAndKernelModuleFilesDefault.Value
-        .EnumerateFilesTransitive()
-        .Where(blob => blob.path.Last().EndsWith(".elm", StringComparison.OrdinalIgnoreCase))
-        .ToDictionary(
-            blobAtPath =>
-            Core.Elm.ElmSyntax.ElmModule.ParseModuleName(Encoding.UTF8.GetString(blobAtPath.fileContent.Span))
-            .Extract(err => throw new Exception(err)),
+        new(
+            () =>
+            ElmCoreAndKernelModuleFilesDefault.Value
+            .EnumerateFilesTransitive()
+            .Where(blob => blob.path.Last().EndsWith(".elm", StringComparison.OrdinalIgnoreCase))
+            .ToDictionary(
+                blobAtPath =>
+                Core.Elm.ElmSyntax.ElmModule.ParseModuleName(Encoding.UTF8.GetString(blobAtPath.fileContent.Span))
+                .Extract(err => throw new Exception(err)),
 
-            blobAtPath =>
-            Encoding.UTF8.GetString(blobAtPath.fileContent.Span),
+                blobAtPath =>
+                Encoding.UTF8.GetString(blobAtPath.fileContent.Span),
 
-            comparer:
-            EnumerableExtensions.EqualityComparer<IReadOnlyList<string>>()));
+                comparer:
+                EnumerableExtensions.EqualityComparer<IReadOnlyList<string>>()));
 
     static public readonly Lazy<FileTree> CompilerSourceFilesDefault =
-        new(() => ElmCompilerFileTreeFromBundledFileTree(Core.Elm.ElmInElm.BundledFiles.CompilerSourceContainerFilesDefault.Value));
+        new(
+            () => ElmCompilerFileTreeFromBundledFileTree(Core.Elm.ElmInElm.BundledFiles.CompilerSourceContainerFilesDefault.Value));
 
     public static IReadOnlyList<string> CompilerPackageSources =>
-    [
+        [
         /*
          * Maybe.Extra is used in the overall app but not in the Elm compiler.
          * 
@@ -113,10 +117,11 @@ public class ElmCompilerInElm
     public static Task<Result<string, ElmCompilerInElm>> GetElmCompilerAsync(
         FileTree compilerSourceFiles)
     {
-        return s_buildCompilerFromSource.GetOrAdd(
-            compilerSourceFiles,
-            valueFactory:
-            compilerSourceFiles => Task.Run(() => BuildCompilerFromSourceFiles(compilerSourceFiles)));
+        return
+            s_buildCompilerFromSource.GetOrAdd(
+                compilerSourceFiles,
+                valueFactory:
+                compilerSourceFiles => Task.Run(() => BuildCompilerFromSourceFiles(compilerSourceFiles)));
     }
 
     /// <summary>
@@ -137,10 +142,11 @@ public class ElmCompilerInElm
                 rootFilePaths: DefaultCompilerTreeRootModuleFilePaths,
                 skipLowering: true,
                 overrideElmCompiler: overrideElmCompiler)
-            .AndThen(compiledEnv =>
-            {
-                return ElmCompilerFromEnvValue(compiledEnv);
-            });
+            .AndThen(
+                compiledEnv =>
+                {
+                    return ElmCompilerFromEnvValue(compiledEnv);
+                });
     }
 
     public static FileTree ElmCompilerFileTreeFromBundledFileTree(
@@ -171,8 +177,10 @@ public class ElmCompilerInElm
         var compilerPackageSourcesFiles =
             compilerPackageSourcesTrees
             .SelectMany(tree => tree.tree.EnumerateFilesTransitive())
-            .Where(blobAtPath =>
-            blobAtPath.path.First() == "src" && blobAtPath.path.Last().EndsWith(".elm", StringComparison.OrdinalIgnoreCase));
+            .Where(
+                blobAtPath =>
+                blobAtPath.path.First() == "src" &&
+                blobAtPath.path.Last().EndsWith(".elm", StringComparison.OrdinalIgnoreCase));
 
         var compilerAppCodeSourceFiles =
             bundledFileTree.EnumerateFilesTransitive()
@@ -296,8 +304,7 @@ public class ElmCompilerInElm
                 ElmTime.ElmAppCompilation.AsCompletelyLoweredElmApp(
                     FileTreeExtensions.ToFlatDictionaryWithPathComparer(appCodeTree),
                     workingDirectoryRelative: [],
-                    ElmTime.ElmAppInterfaceConfig.Default
-                    with
+                    ElmTime.ElmAppInterfaceConfig.Default with
                     {
                         CompilationRootFilePath = rootFilePaths.Single()
                     });
@@ -489,18 +496,19 @@ public class ElmCompilerInElm
             }
         }
 
-        return new ElmCompilerInElm(
-            compiledEnv,
-            compileParsedInteractiveSubmission:
-            compileParsedInteractiveSubmission.functionRecord,
-            expandElmInteractiveEnvironmentWithModules:
-            expandElmInteractiveEnvironmentWithModules.functionRecord,
-            parseElmModuleSyntax:
-            parseToFile.functionRecord,
-            parseInteractiveSubmission:
-            parseInteractiveSubmission,
-            languageServiceInterface:
-            languageServiceInterface);
+        return
+            new ElmCompilerInElm(
+                compiledEnv,
+                compileParsedInteractiveSubmission:
+                compileParsedInteractiveSubmission.functionRecord,
+                expandElmInteractiveEnvironmentWithModules:
+                expandElmInteractiveEnvironmentWithModules.functionRecord,
+                parseElmModuleSyntax:
+                parseToFile.functionRecord,
+                parseInteractiveSubmission:
+                parseInteractiveSubmission,
+                languageServiceInterface:
+                languageServiceInterface);
     }
 
     public Result<string, PineValue> ParseElmModuleText(
@@ -530,10 +538,10 @@ public class ElmCompilerInElm
                 errValue =>
                 Result<string, PineValue>.err(
                     "Failed to parse Elm module text: 'Err': " +
-                        ElmValueEncoding.PineValueAsElmValue(errValue, null, null)
-                        .Unpack(
-                            fromErr: err => "Failed to parse as Elm value: " + err,
-                            fromOk: elmValue => ElmValue.RenderAsElmExpression(elmValue).expressionString)),
+                    ElmValueEncoding.PineValueAsElmValue(errValue, null, null)
+                    .Unpack(
+                        fromErr: err => "Failed to parse as Elm value: " + err,
+                        fromOk: elmValue => ElmValue.RenderAsElmExpression(elmValue).expressionString)),
                 ok:
                 okValue => okValue,
                 invalid:
@@ -567,10 +575,10 @@ public class ElmCompilerInElm
                 errValue =>
                 Result<string, PineValue>.err(
                     "Failed to parse submission text: 'Err': " +
-                        ElmValueEncoding.PineValueAsElmValue(errValue, null, null)
-                        .Unpack(
-                            fromErr: err => "Failed to parse as Elm value: " + err,
-                            fromOk: elmValue => ElmValue.RenderAsElmExpression(elmValue).expressionString)),
+                    ElmValueEncoding.PineValueAsElmValue(errValue, null, null)
+                    .Unpack(
+                        fromErr: err => "Failed to parse as Elm value: " + err,
+                        fromOk: elmValue => ElmValue.RenderAsElmExpression(elmValue).expressionString)),
                 ok:
                 okValue => okValue,
                 invalid:
@@ -613,7 +621,8 @@ public class ElmCompilerInElm
 
         if (filePath.EndsWith(".gzip", StringComparison.OrdinalIgnoreCase))
         {
-            decompressedStream = new System.IO.Compression.GZipStream(sourceFile, System.IO.Compression.CompressionMode.Decompress);
+            decompressedStream =
+                new System.IO.Compression.GZipStream(sourceFile, System.IO.Compression.CompressionMode.Decompress);
         }
 
         using var stream = new System.IO.MemoryStream();

@@ -159,26 +159,29 @@ public class VolatileProcessHost(
             .Cast<System.Runtime.InteropServices.OSPlatform?>()
             .FirstOrDefault()?.ToString();
 
-        return new WebServiceInterface.RuntimeInformationRecord(
-            RuntimeIdentifier:
-            System.Runtime.InteropServices.RuntimeInformation.RuntimeIdentifier,
-            OsPlatform:
-            osPlatform);
+        return
+            new WebServiceInterface.RuntimeInformationRecord(
+                RuntimeIdentifier:
+                System.Runtime.InteropServices.RuntimeInformation.RuntimeIdentifier,
+                OsPlatform:
+                osPlatform);
     }
 
     private static Task<TaskResult> CreateTaskAsync(
         FunctionRecordValueAndParsed updateFunction,
         Func<PineValue> responseDelegate)
     {
-        return Task.Run(
-            () =>
-            {
-                var responseValue = responseDelegate();
+        return
+            Task.Run(
+                () =>
+                {
+                    var responseValue = responseDelegate();
 
-                return new TaskResult(
-                    UpdateFunction: updateFunction,
-                    ResponseValue: responseValue);
-            });
+                    return
+                        new TaskResult(
+                            UpdateFunction: updateFunction,
+                            ResponseValue: responseValue);
+                });
     }
 
     public PineValue PerformProcessTaskCreateVolatileProcessAndEncode(
@@ -211,8 +214,9 @@ public class VolatileProcessHost(
         }
         catch (Exception createVolatileProcessException)
         {
-            return new WebServiceInterface.CreateVolatileProcessErrorStruct(
-                ExceptionToString: createVolatileProcessException.ToString());
+            return
+                new WebServiceInterface.CreateVolatileProcessErrorStruct(
+                    ExceptionToString: createVolatileProcessException.ToString());
         }
     }
 
@@ -380,6 +384,7 @@ public class VolatileProcessHost(
                 new WebServiceInterface.RequestToVolatileProcessError.RequestToVolatileProcessOtherError(
                     "Process is not a native process");
         }
+
         try
         {
             var read = volatileProcessNative.ReadAll();
@@ -424,10 +429,12 @@ public class VolatileProcessHost(
     {
         await
             Task.WhenAll(
-                _volatileProcesses.Select(kvp =>
-                Task.Run(() =>
-                {
-                    (kvp.Value as IDisposable)?.Dispose();
-                })));
+            _volatileProcesses.Select(
+                kvp =>
+                Task.Run(
+                    () =>
+                    {
+                        (kvp.Value as IDisposable)?.Dispose();
+                    })));
     }
 }

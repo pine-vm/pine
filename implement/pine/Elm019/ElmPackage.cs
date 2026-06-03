@@ -58,7 +58,10 @@ public class ElmPackage
                     moduleText,
                     new ParsedModule(
                         ModuleName: moduleName,
-                        ImportedModulesNames: [.. Core.Elm.ElmSyntax.ElmModule.ParseModuleImportedModulesNames(moduleText)]));
+                        ImportedModulesNames:
+                        [
+                        .. Core.Elm.ElmSyntax.ElmModule.ParseModuleImportedModulesNames(moduleText)
+                        ]));
             }
             catch (Exception)
             {

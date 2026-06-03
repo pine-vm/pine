@@ -38,6 +38,7 @@ public static class SetupVM
         new(() => Core.Bundle.BundledPineToDotnet.LoadBundledTask.Result?.BuildDictionary());
 
     private static IReadOnlyDictionary<PineValue, Func<PineValue, PineValue?>>? s_aggregateCacheValue;
+
     private static IReadOnlyDictionary<PineValue, Func<PineValue, PineValue?>>? s_aggregateCacheBundleSource;
 
     private static IReadOnlyDictionary<PineValue, Func<PineValue, PineValue?>> BuildAggregatePrecompiledLeaves()

@@ -49,8 +49,11 @@ public class ElmTestRsReportJsonEntryFailureReasonDataJsonConverter :
         {
             var equalityReader = reader;
 
-            var asEquality = new ElmTestRsReportJsonEntryFailureReasonData(
-                Equality: System.Text.Json.JsonSerializer.Deserialize<ElmTestRsReportJsonEntryFailureReasonDataEquality>(ref equalityReader));
+            var asEquality =
+                new ElmTestRsReportJsonEntryFailureReasonData(
+                    Equality:
+                    System.Text.Json.JsonSerializer.Deserialize<ElmTestRsReportJsonEntryFailureReasonDataEquality>(
+                        ref equalityReader));
 
             reader = equalityReader;
 
@@ -58,8 +61,9 @@ public class ElmTestRsReportJsonEntryFailureReasonDataJsonConverter :
         }
         catch { }
 
-        return new ElmTestRsReportJsonEntryFailureReasonData(
-            String: System.Text.Json.JsonSerializer.Deserialize<string>(ref reader));
+        return
+            new ElmTestRsReportJsonEntryFailureReasonData(
+                String: System.Text.Json.JsonSerializer.Deserialize<string>(ref reader));
     }
 
     public override void Write(
@@ -135,17 +139,18 @@ public class ElmTestRs
 
         var executeElmTestResult =
             ExecutableFile.ExecuteFileWithArguments(
-            environmentFilesNotExecutable: elmProjectFiles,
-            executableFile: elmTestExecutableFile.Value,
-            arguments: "--compiler=./" + elmExecutableFileName + "  --deno  --report=json",
-            environmentStrings: null,
-            workingDirectoryRelative: null,
-            environmentFilesExecutable: environmentFilesExecutable,
-            environmentPathExecutableFiles: environmentPathExecutableFiles);
+                environmentFilesNotExecutable: elmProjectFiles,
+                executableFile: elmTestExecutableFile.Value,
+                arguments: "--compiler=./" + elmExecutableFileName + "  --deno  --report=json",
+                environmentStrings: null,
+                workingDirectoryRelative: null,
+                environmentFilesExecutable: environmentFilesExecutable,
+                environmentPathExecutableFiles: environmentPathExecutableFiles);
 
-        return new(
-            executeElmTestResult.processOutput,
-            ParseProcessOutput(executeElmTestResult.processOutput));
+        return
+            new(
+                executeElmTestResult.processOutput,
+                ParseProcessOutput(executeElmTestResult.processOutput));
     }
 
     public static Result<string, IReadOnlyList<(string rawLine, ElmTestRsReportJsonEntry parsedLine)>> ParseProcessOutput(
@@ -215,11 +220,12 @@ public class ElmTestRs
         {
             return
                 ([
-                    (string.Join("\n",
-                    "Running " + @event.testCount + " tests. To reproduce these results later,"
-                    , "run elm-test-rs with --seed " + @event.initialSeed + " and --fuzz " + @event.fuzzRuns),
+                    (string.Join(
+                        "\n",
+                        "Running " + @event.testCount + " tests. To reproduce these results later,",
+                        "run elm-test-rs with --seed " + @event.initialSeed + " and --fuzz " + @event.fuzzRuns),
                     ElmTestRsConsoleOutputColor.DefaultColor)
-                    ],
+                ],
                 overallSuccess: null);
         }
 
@@ -228,7 +234,8 @@ public class ElmTestRs
             var overallSuccess = @event.failed == 0;
 
             var overallSuccessText =
-                overallSuccess ?
+                overallSuccess
+                ?
                 ("\nTEST RUN PASSED\n\n", ElmTestRsConsoleOutputColor.GreenColor)
                 :
                 ("\nTEST RUN FAILED\n\n", ElmTestRsConsoleOutputColor.RedColor);
@@ -236,11 +243,13 @@ public class ElmTestRs
             return
                 ([
                     overallSuccessText,
-                    (string.Join("\n",
-                    "Duration: " + string.Format("{0:#,##0}", @event.duration) + " ms",
-                    "Passed:   " + @event.passed,
-                    "Failed:   " + @event.failed),
-                    ElmTestRsConsoleOutputColor.DefaultColor)],
+                    (string.Join(
+                        "\n",
+                        "Duration: " + string.Format("{0:#,##0}", @event.duration) + " ms",
+                        "Passed:   " + @event.passed,
+                        "Failed:   " + @event.failed),
+                    ElmTestRsConsoleOutputColor.DefaultColor)
+                ],
                 overallSuccess);
         }
 
@@ -253,15 +262,20 @@ public class ElmTestRs
             @event.status is not "pass")
         {
             var textsFromLabels =
-                (@event.labels ?? []).SkipLast(1).Select(label => ("\n↓ " + label, ElmTestRsConsoleOutputColor.DefaultColor))
-                .Concat((@event.labels ?? []).TakeLast(1).Select(label => ("\n✗ " + label, ElmTestRsConsoleOutputColor.RedColor)))
+                (@event.labels ?? []).SkipLast(1)
+                .Select(label => ("\n↓ " + label, ElmTestRsConsoleOutputColor.DefaultColor))
+                .Concat(
+                    (@event.labels ?? []).TakeLast(1).Select(
+                        label => ("\n✗ " + label, ElmTestRsConsoleOutputColor.RedColor)))
                 .ToImmutableList();
 
-            static IReadOnlyList<string> RenderFailureReasonData(ElmTestRsReportJsonEntryFailureReasonData failureReasonData)
+            static IReadOnlyList<string> RenderFailureReasonData(
+                ElmTestRsReportJsonEntryFailureReasonData failureReasonData)
             {
                 if (failureReasonData.Equality is not null)
                 {
-                    return [
+                    return
+                        [
                         "",
                         failureReasonData.Equality.actual,
                         "╷",
@@ -269,7 +283,7 @@ public class ElmTestRs
                         "╵",
                         failureReasonData.Equality.expected,
                         ""
-                    ];
+                        ];
                 }
 
                 if (failureReasonData.String is { } failureReasonDataString)
@@ -286,9 +300,13 @@ public class ElmTestRs
                 .ToImmutableList();
 
             return
-                ([.. textsFromLabels
-                , .. textsFromFailures
-                .Select(textFromFailure => ("\n    " + textFromFailure, ElmTestRsConsoleOutputColor.DefaultColor))], null);
+                ([
+                .. textsFromLabels,
+                .. textsFromFailures
+                .Select(
+                    textFromFailure => ("\n    " + textFromFailure, ElmTestRsConsoleOutputColor.DefaultColor))
+                ],
+                null);
         }
 
         return ([], null);

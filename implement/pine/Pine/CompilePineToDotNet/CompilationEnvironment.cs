@@ -62,13 +62,16 @@ public record FunctionCompilationEnv(
         IReadOnlyList<Expression> expressions)
     {
         return
-            [..expressions
-                .SelectMany<Expression, (Expression subExpr, IReadOnlyList<int> path)>(subExpr =>
+            [
+            ..expressions
+            .SelectMany<Expression, (Expression subExpr, IReadOnlyList<int> path)>(
+                subExpr =>
                 CodeAnalysis.TryParseExprAsPathInEnv(subExpr) is { } subExprPath
                 ?
                 [(subExpr, subExprPath)]
                 :
-                [])];
+                [])
+            ];
     }
 
     static IReadOnlyList<IReadOnlyList<int>> GetPathsCommonPrefixes(IReadOnlyList<IReadOnlyList<int>> paths)
@@ -78,9 +81,11 @@ public record FunctionCompilationEnv(
             otherPath.Count < path.Count && otherPath.SequenceEqual(path.Take(otherPath.Count)));
 
         return
-            [..paths
+            [
+            ..paths
             .Where(keepPath)
-            .Distinct(IntPathEqualityComparer.Instance)];
+            .Distinct(IntPathEqualityComparer.Instance)
+            ];
     }
 }
 
@@ -179,13 +184,16 @@ public record ExprFunctionCompilationInterface(
         IReadOnlyList<Expression> expressions)
     {
         return
-            [..expressions
-                .SelectMany<Expression, (Expression subExpr, IReadOnlyList<int> path)>(subExpr =>
+            [
+            ..expressions
+            .SelectMany<Expression, (Expression subExpr, IReadOnlyList<int> path)>(
+                subExpr =>
                 CodeAnalysis.TryParseExprAsPathInEnv(subExpr) is { } subExprPath
                 ?
                 [(subExpr, subExprPath)]
                 :
-                [])];
+                [])
+            ];
     }
 
     static IReadOnlyList<IReadOnlyList<int>> GetPathsCommonPrefixes(IReadOnlyList<IReadOnlyList<int>> paths)
@@ -195,9 +203,11 @@ public record ExprFunctionCompilationInterface(
             otherPath.Count < path.Count && otherPath.SequenceEqual(path.Take(otherPath.Count)));
 
         return
-            [..paths
+            [
+            ..paths
             .Where(keepPath)
-            .Distinct(IntPathEqualityComparer.Instance)];
+            .Distinct(IntPathEqualityComparer.Instance)
+            ];
     }
 
 
@@ -209,8 +219,10 @@ public record ExprFunctionCompilationInterface(
     public IReadOnlyList<Expression> ComposeArgumentsExpressionsForInvocation(
         Expression parentEnvExpr,
         PineVMParseCache parseCache) =>
-        [..EnvItemsParamNames
-            .Select(pathAndParamName =>
+        [
+        ..EnvItemsParamNames
+        .Select(
+            pathAndParamName =>
             /*
              * Instead of using the generic expression reduction here, we could also specialize the building
              * of the expression for the given path, to apply the reduction earlier.
@@ -221,7 +233,7 @@ public record ExprFunctionCompilationInterface(
                     compositionExpr: parentEnvExpr,
                     path: pathAndParamName.path),
                 parseCache))
-            ];
+        ];
 
     public static ExprResolvedInFunction? TryResolveExpressionInFunction(
         ExprFunctionCompilationInterface functionInterface,
@@ -283,9 +295,10 @@ public record CompilationUnitEnv(
         return
             DefaultInterface.Equals(other.DefaultInterface) &&
             AvailableExpr.Count == other.AvailableExpr.Count &&
-            AvailableExpr.All(pair =>
-            other.AvailableExpr.TryGetValue(pair.Key, out var otherValue) &&
-            pair.Value.Equals(otherValue));
+            AvailableExpr.All(
+                pair =>
+                other.AvailableExpr.TryGetValue(pair.Key, out var otherValue) &&
+                pair.Value.Equals(otherValue));
     }
 
     override public int GetHashCode()
@@ -335,9 +348,10 @@ public record CompilationUnitEnvExprEntry(
         return
             GenericReprInterface.Equals(other.GenericReprInterface) &&
             AvailableSpecialized.Count == other.AvailableSpecialized.Count &&
-            AvailableSpecialized.All(pair =>
-            other.AvailableSpecialized.TryGetValue(pair.Key, out var otherValue) &&
-            pair.Value.Equals(otherValue));
+            AvailableSpecialized.All(
+                pair =>
+                other.AvailableSpecialized.TryGetValue(pair.Key, out var otherValue) &&
+                pair.Value.Equals(otherValue));
     }
 
     override public int GetHashCode()
@@ -385,7 +399,8 @@ public record ExpressionCompilationEnvironment(
     public ImmutableDictionary<Expression, LetBinding> EnumerateSelfLetBindingsTransitive() =>
         CompiledExpression.Union(
             LetBindings
-            .Select(binding =>
-            binding.Value.Expression.EnumerateLetBindingsTransitive()
-            .SetItem(binding.Key, binding.Value)));
+            .Select(
+                binding =>
+                binding.Value.Expression.EnumerateLetBindingsTransitive()
+                .SetItem(binding.Key, binding.Value)));
 }

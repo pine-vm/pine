@@ -1,14 +1,15 @@
-using Interface = Pine.Elm.LanguageServiceInterface;
 using Pine.Core;
-using Pine.Core.Elm.ElmSyntax;
 using Pine.Core.Elm.Elm019;
+using Pine.Core.Elm.ElmSyntax;
 using Pine.Core.Files;
 using Pine.Core.LanguageServerProtocol;
 using Pine.Elm019;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
-using System.Linq;
 using System.Collections.Immutable;
+using System.Linq;
+
+using Interface = Pine.Elm.LanguageServiceInterface;
 
 namespace Pine.Elm;
 
@@ -31,9 +32,11 @@ public class LanguageServer(
     /*
      * TODO: Use the version identifier from elm.json as scope.
      * */
-    private readonly ConcurrentDictionary<Interface.ElmPackageVersion019Identifer, string> elmJsonDirectDependencies = new();
+    private readonly ConcurrentDictionary<Interface.ElmPackageVersion019Identifer, string> elmJsonDirectDependencies =
+        new();
 
-    private readonly ConcurrentDictionary<Interface.ElmPackageVersion019Identifer, string> elmJsonDirectDependenciesLoaded = new();
+    private readonly ConcurrentDictionary<Interface.ElmPackageVersion019Identifer, string> elmJsonDirectDependenciesLoaded =
+        new();
 
     private class WorkspaceState(
         IReadOnlyList<WorkspaceFolder> workspaceFolders,
@@ -108,43 +111,44 @@ public class LanguageServer(
             requests.AddRange(RegisterFileWatchers());
         }
 
-        var response = new InitializeResult
-        (
-            Capabilities: new ServerCapabilities
-            {
-                TextDocumentSync =
-                new TextDocumentSyncOptions(
-                    Change: TextDocumentSyncKind.Full,
-                    WillSave: null,
-                    WillSaveWaitUntil: null,
-                    Save: new SaveOptions(IncludeText: true)),
-
-                DocumentFormattingProvider = true,
-                HoverProvider = true,
-
-                CompletionProvider =
-                new CompletionOptions(
-                    TriggerCharacters: [".", " "],
-                    AllCommitCharacters: null,
-                    ResolveProvider: null),
-
-                DefinitionProvider = true,
-
-                DocumentSymbolProvider = true,
-
-                ReferencesProvider = true,
-
-                RenameProvider = true,
-
-                Workspace = new ServerCapabilitiesWorkspace
+        var response =
+            new InitializeResult(
+                Capabilities: new ServerCapabilities
                 {
-                    WorkspaceFolders = new WorkspaceFoldersServerCapabilities(Supported: true, ChangeNotifications: true),
-                }
-            },
-            ServerInfo: new ParticipentInfo(
-                Name: "Pine language server",
-                Version: ElmTime.Program.AppVersionId)
-        );
+                    TextDocumentSync =
+                    new TextDocumentSyncOptions(
+                        Change: TextDocumentSyncKind.Full,
+                        WillSave: null,
+                        WillSaveWaitUntil: null,
+                        Save: new SaveOptions(IncludeText: true)),
+
+                    DocumentFormattingProvider = true,
+                    HoverProvider = true,
+
+                    CompletionProvider =
+                    new CompletionOptions(
+                        TriggerCharacters: [".", " "],
+                        AllCommitCharacters: null,
+                        ResolveProvider: null),
+
+                    DefinitionProvider = true,
+
+                    DocumentSymbolProvider = true,
+
+                    ReferencesProvider = true,
+
+                    RenameProvider = true,
+
+                    Workspace =
+                    new ServerCapabilitiesWorkspace
+                    {
+                        WorkspaceFolders =
+                        new WorkspaceFoldersServerCapabilities(Supported: true, ChangeNotifications: true),
+                    }
+                },
+                ServerInfo: new ParticipentInfo(
+                    Name: "Pine language server",
+                    Version: ElmTime.Program.AppVersionId));
 
         System.Threading.Tasks.Task.Run(() => InitializeWorkspaceState(initializeParams));
 
@@ -155,28 +159,21 @@ public class LanguageServer(
     {
         Log("Registering file watchers...");
 
-        var registrationParams = new RegistrationParams
-        (
-            Registrations:
-            [
-                new Registration
-                (
-                    Id : "workspace/didChangeWatchedFiles",
-                    Method : "workspace/didChangeWatchedFiles",
-                    RegisterOptions : new DidChangeWatchedFilesRegistrationOptions
-                    (
-                        Watchers:
-                        [
-                            new FileSystemWatcher
-                            (
-                                GlobPattern : "**/*.elm",
-                                Kind : WatchKind.Create | WatchKind.Change | WatchKind.Delete
-                            )
-                        ]
-                    )
-                )
-            ]
-        );
+        var registrationParams =
+            new RegistrationParams(
+                Registrations:
+                [
+                    new Registration(
+                        Id : "workspace/didChangeWatchedFiles",
+                        Method : "workspace/didChangeWatchedFiles",
+                        RegisterOptions : new DidChangeWatchedFilesRegistrationOptions(
+                            Watchers:
+                            [
+                                new FileSystemWatcher(
+                                    GlobPattern : "**/*.elm",
+                                    Kind : WatchKind.Create | WatchKind.Change | WatchKind.Delete)
+                            ]))
+                ]);
 
         return
             [
@@ -219,17 +216,19 @@ public class LanguageServer(
             }
         }
 
-        _languageServiceStateTask = System.Threading.Tasks.Task.Run(() =>
-        {
-            var initResult = WorkspaceState.Init(workspaceFolders);
+        _languageServiceStateTask =
+            System.Threading.Tasks.Task.Run(
+                () =>
+                {
+                    var initResult = WorkspaceState.Init(workspaceFolders);
 
-            if (initResult.IsErrOrNull() is { } err)
-            {
-                Log("Failed initializing language service state: " + err);
-            }
+                    if (initResult.IsErrOrNull() is { } err)
+                    {
+                        Log("Failed initializing language service state: " + err);
+                    }
 
-            return initResult;
-        });
+                    return initResult;
+                });
 
         var taskResult = _languageServiceStateTask.Result;
 
@@ -282,7 +281,8 @@ public class LanguageServer(
                             "Read file " + filePath + " with " +
                             CommandLineInterface.FormatIntegerForDisplay(fileContent.Length) +
                             " chars in " +
-                            CommandLineInterface.FormatIntegerForDisplay((int)fileClock.Elapsed.TotalMilliseconds) + " ms");
+                            CommandLineInterface.FormatIntegerForDisplay((int)fileClock.Elapsed.TotalMilliseconds) +
+                            " ms");
 
                         fileClock.Restart();
 
@@ -298,7 +298,8 @@ public class LanguageServer(
 
                         Log(
                             "Processed file " + filePath + " in language service in " +
-                            CommandLineInterface.FormatIntegerForDisplay((int)fileClock.Elapsed.TotalMilliseconds) + " ms");
+                            CommandLineInterface.FormatIntegerForDisplay((int)fileClock.Elapsed.TotalMilliseconds) +
+                            " ms");
 
                         if (fileName.EndsWith(".elm", System.StringComparison.InvariantCultureIgnoreCase))
                         {
@@ -336,16 +337,24 @@ public class LanguageServer(
 
     public void Workspace_didChangeWorkspaceFolders(WorkspaceFoldersChangeEvent workspaceFoldersChangeEvent)
     {
-        Log("Workspace_didChangeWorkspaceFolders (added " +
-            workspaceFoldersChangeEvent.Added.Count + " and removed " + workspaceFoldersChangeEvent.Removed.Count + ")");
+        Log(
+            "Workspace_didChangeWorkspaceFolders (added " +
+            workspaceFoldersChangeEvent.Added.Count +
+            " and removed " +
+            workspaceFoldersChangeEvent.Removed.Count +
+            ")");
 
         IReadOnlyList<WorkspaceFolder> newWorkspaceFolders =
-            [..workspaceFolders
-            .Where(prevFolder => !workspaceFoldersChangeEvent.Removed.Any(removedFolder => removedFolder.Uri == prevFolder.Uri)),
+            [
+            ..workspaceFolders
+            .Where(
+                prevFolder =>
+                !workspaceFoldersChangeEvent.Removed.Any(removedFolder => removedFolder.Uri == prevFolder.Uri)),
             ..workspaceFoldersChangeEvent.Added
             ];
 
-        Log("Workspace_didChangeWorkspaceFolders: new workspace folders count: " +
+        Log(
+            "Workspace_didChangeWorkspaceFolders: new workspace folders count: " +
             newWorkspaceFolders.Count + " (" +
             string.Join(", ", newWorkspaceFolders.Select(wf => wf.Uri)));
 
@@ -410,7 +419,8 @@ public class LanguageServer(
 
         _clientTextDocumentContents.TryRemove(decodedUri, out var _);
 
-        Log("TextDocument_didClose: " + decodedUri +
+        Log(
+            "TextDocument_didClose: " + decodedUri +
             " (" + _clientTextDocumentContents.Count + " open remaining)");
     }
 
@@ -418,9 +428,9 @@ public class LanguageServer(
     {
         var changes =
             changesBeforeDecode
-            .Select(change =>
-                change
-                with
+            .Select(
+                change =>
+                change with
                 {
                     Uri = DocumentUriCleaned(change.Uri)
                 })
@@ -587,10 +597,16 @@ public class LanguageServer(
                 }
 
                 var elmModuleFiles =
-                    System.IO.Directory.GetFiles(packageVersionDirectory, "*.elm", System.IO.SearchOption.AllDirectories);
+                    System.IO.Directory.GetFiles(
+                        packageVersionDirectory,
+                        "*.elm",
+                        System.IO.SearchOption.AllDirectories);
 
                 var elmJsonFiles =
-                    System.IO.Directory.GetFiles(packageVersionDirectory, "elm.json", System.IO.SearchOption.AllDirectories);
+                    System.IO.Directory.GetFiles(
+                        packageVersionDirectory,
+                        "elm.json",
+                        System.IO.SearchOption.AllDirectories);
 
                 Log(
                     "Package: " + packageName + " version " + packageVersion +
@@ -730,7 +746,9 @@ public class LanguageServer(
             {
                 Log(
                     "Loaded package: " + dependency.Key + " " + dependency.Value +
-                    " in " + CommandLineInterface.FormatIntegerForDisplay((int)clock.Elapsed.TotalMilliseconds) + " ms");
+                    " in " +
+                    CommandLineInterface.FormatIntegerForDisplay((int)clock.Elapsed.TotalMilliseconds) +
+                    " ms");
             }
             else
             {
@@ -843,7 +861,8 @@ public class LanguageServer(
 
                     binaryClock.Stop();
 
-                    Log("Completed elm-format (via AVH4 binary) on " + textDocument.Uri + " in " +
+                    Log(
+                        "Completed elm-format (via AVH4 binary) on " + textDocument.Uri + " in " +
                         CommandLineInterface.FormatIntegerForDisplay((int)binaryClock.Elapsed.TotalMilliseconds)
                         + " ms");
 
@@ -876,7 +895,8 @@ public class LanguageServer(
 
                     formatClock.Stop();
 
-                    Log("Completed elm-format on " + textDocument.Uri + " in " +
+                    Log(
+                        "Completed elm-format on " + textDocument.Uri + " in " +
                         CommandLineInterface.FormatIntegerForDisplay((int)formatClock.Elapsed.TotalMilliseconds)
                         + " ms");
 
@@ -931,11 +951,10 @@ public class LanguageServer(
             CommandLineInterface.FormatIntegerForDisplay(clock.ElapsedMilliseconds) + " ms, returning " +
             hoverStringsOk.Count + " items");
 
-        return new Hover
-        (
-            Contents: hoverStringsOk,
-            Range: null
-        );
+        return
+            new Hover(
+                Contents: hoverStringsOk,
+                Range: null);
     }
 
     public CompletionItem[] TextDocument_completion(
@@ -980,19 +999,21 @@ public class LanguageServer(
             completionItemsOk.Count + " items");
 
         return
-            [..completionItemsOk
-            .Select(monacoCompletionItem =>
-            new CompletionItem(
-                Label: monacoCompletionItem.Label,
-                SortText: null,
-                FilterText: null,
-                InsertText: monacoCompletionItem.InsertText,
-                TextEditText: null,
-                Detail: null,
-                Documentation: monacoCompletionItem.Documentation,
-                Preselect: null,
-                Deprecated: null,
-                CommitCharacters: null))
+            [
+            ..completionItemsOk
+            .Select(
+                monacoCompletionItem =>
+                new CompletionItem(
+                    Label: monacoCompletionItem.Label,
+                    SortText: null,
+                    FilterText: null,
+                    InsertText: monacoCompletionItem.InsertText,
+                    TextEditText: null,
+                    Detail: null,
+                    Documentation: monacoCompletionItem.Documentation,
+                    Preselect: null,
+                    Deprecated: null,
+                    CommitCharacters: null))
             ];
     }
 
@@ -1156,32 +1177,37 @@ public class LanguageServer(
 
         static DocumentSymbol MapDocumentSymbol(Interface.DocumentSymbolStruct documentSymbol)
         {
-            return new DocumentSymbol(
-                Name: documentSymbol.Name,
-                Detail: null,
-                Kind: MapSymbolKind(documentSymbol.Kind),
-                Range: new Range(
-                    Start: new Position(
-                        Line: (uint)documentSymbol.Range.StartLineNumber - 1,
-                        Character: (uint)documentSymbol.Range.StartColumn - 1),
-                    End: new Position(
-                        Line: (uint)documentSymbol.Range.EndLineNumber - 1,
-                        Character: (uint)documentSymbol.Range.EndColumn - 1)),
-                SelectionRange: new Range(
-                    Start: new Position(
-                        Line: (uint)documentSymbol.SelectionRange.StartLineNumber - 1,
-                        Character: (uint)documentSymbol.SelectionRange.StartColumn - 1),
-                    End: new Position(
-                        Line: (uint)documentSymbol.SelectionRange.EndLineNumber - 1,
-                        Character: (uint)documentSymbol.SelectionRange.EndColumn - 1)),
-                Children:
-                [..documentSymbol.Children
-                    .Select(cn => MapDocumentSymbol(cn.Struct))]);
+            return
+                new DocumentSymbol(
+                    Name: documentSymbol.Name,
+                    Detail: null,
+                    Kind: MapSymbolKind(documentSymbol.Kind),
+                    Range: new Range(
+                        Start: new Position(
+                            Line: (uint)documentSymbol.Range.StartLineNumber - 1,
+                            Character: (uint)documentSymbol.Range.StartColumn - 1),
+                        End: new Position(
+                            Line: (uint)documentSymbol.Range.EndLineNumber - 1,
+                            Character: (uint)documentSymbol.Range.EndColumn - 1)),
+                    SelectionRange: new Range(
+                        Start: new Position(
+                            Line: (uint)documentSymbol.SelectionRange.StartLineNumber - 1,
+                            Character: (uint)documentSymbol.SelectionRange.StartColumn - 1),
+                        End: new Position(
+                            Line: (uint)documentSymbol.SelectionRange.EndLineNumber - 1,
+                            Character: (uint)documentSymbol.SelectionRange.EndColumn - 1)),
+                    Children:
+                    [
+                    ..documentSymbol.Children
+                    .Select(cn => MapDocumentSymbol(cn.Struct))
+                    ]);
         }
 
         return
-            [..documentSymbolsOk
-            .Select(ds => MapDocumentSymbol(ds.Struct))];
+            [
+            ..documentSymbolsOk
+            .Select(ds => MapDocumentSymbol(ds.Struct))
+            ];
     }
 
     public IReadOnlyList<Location> TextDocument_references(
@@ -1199,6 +1225,7 @@ public class LanguageServer(
                     InterfaceFileLocationFromUri(textDocumentUri),
                     PositionLineNumber: (int)positionParams.Position.Line + 1,
                     PositionColumn: (int)positionParams.Position.Character + 1));
+
         {
             if (provideReferenceResult.IsErrOrNull() is { } err)
             {
@@ -1283,26 +1310,28 @@ public class LanguageServer(
 
         var documentChanges =
             provideRenameOk.Edits
-            .Select(documentEdit =>
-            {
-                var editsInDocument =
-                    documentEdit.Edits
-                    .Select(edit =>
-                        new TextEdit(
-                            Range: new Range(
-                                Start: new Position(
-                                    Line: (uint)edit.Range.StartLineNumber - 1,
-                                    Character: (uint)edit.Range.StartColumn - 1),
-                                End: new Position(
-                                    Line: (uint)edit.Range.EndLineNumber - 1,
-                                    Character: (uint)edit.Range.EndColumn - 1)),
-                            NewText: edit.NewText));
+            .Select(
+                documentEdit =>
+                {
+                    var editsInDocument =
+                        documentEdit.Edits
+                        .Select(
+                            edit =>
+                            new TextEdit(
+                                Range: new Range(
+                                    Start: new Position(
+                                        Line: (uint)edit.Range.StartLineNumber - 1,
+                                        Character: (uint)edit.Range.StartColumn - 1),
+                                    End: new Position(
+                                        Line: (uint)edit.Range.EndLineNumber - 1,
+                                        Character: (uint)edit.Range.EndColumn - 1)),
+                                NewText: edit.NewText));
 
-                return
-                new TextDocumentEdit(
-                    new OptionalVersionedTextDocumentIdentifier(documentEdit.FilePath, Version: null),
-                    [.. editsInDocument]);
-            })
+                    return
+                        new TextDocumentEdit(
+                            new OptionalVersionedTextDocumentIdentifier(documentEdit.FilePath, Version: null),
+                            [.. editsInDocument]);
+                })
             .ToImmutableArray();
 
         return new WorkspaceEdit(documentChanges);
@@ -1324,6 +1353,7 @@ public class LanguageServer(
         }
 
         var localPathResult = DocumentUriAsLocalPath(textDocumentUri);
+
         {
             if (localPathResult.IsErrOrNull() is { } err)
             {
@@ -1366,7 +1396,8 @@ public class LanguageServer(
                 pathToFileWithElmEntryPoint: localPath)
             .Result;
 
-        Log("Completed elm make for " + textDocumentUri + " in " +
+        Log(
+            "Completed elm make for " + textDocumentUri + " in " +
             CommandLineInterface.FormatIntegerForDisplay(clock.ElapsedMilliseconds) + " ms");
 
         Log("elm make exit code: " + elmMakeOutput.ExitCode);
@@ -1423,8 +1454,10 @@ public class LanguageServer(
                 Log("Elm make errors for " + path + ": " + pathErrors.Length);
 
                 IReadOnlyList<Diagnostic> diagnostics =
-                    [..pathErrors
-                    .Select(problem =>
+                    [
+                    ..pathErrors
+                    .Select(
+                        problem =>
                         new Diagnostic(
                             Range: new Range(
                                 Start: new Position(
@@ -1546,7 +1579,7 @@ public class LanguageServer(
 
     public Result<string, IReadOnlyList<MonacoEditor.MonacoCompletionItem>>
         ProvideCompletionItems(
-            Interface.ProvideCompletionItemsRequestStruct provideCompletionItemsRequest)
+        Interface.ProvideCompletionItemsRequestStruct provideCompletionItemsRequest)
     {
         var genericRequestResult =
             HandleRequest(
@@ -1569,13 +1602,14 @@ public class LanguageServer(
                 "Unexpected request result type: " + requestOk.GetType());
         }
 
-        return Result<string, IReadOnlyList<MonacoEditor.MonacoCompletionItem>>.ok(
-            provideCompletionItemsResponse.CompletionItems);
+        return
+            Result<string, IReadOnlyList<MonacoEditor.MonacoCompletionItem>>.ok(
+                provideCompletionItemsResponse.CompletionItems);
     }
 
     public Result<string, IReadOnlyList<Interface.LocationInFile>>
         ProvideDefinition(
-            Interface.ProvideHoverRequestStruct provideDefinitionRequest)
+        Interface.ProvideHoverRequestStruct provideDefinitionRequest)
     {
         var genericRequestResult =
             HandleRequest(
@@ -1656,8 +1690,9 @@ public class LanguageServer(
                 "Unexpected request result type: " + requestOk.GetType());
         }
 
-        return Result<string, IReadOnlyList<Interface.LocationInFile>>.ok(
-            provideReferenceResponse.Locations);
+        return
+            Result<string, IReadOnlyList<Interface.LocationInFile>>.ok(
+                provideReferenceResponse.Locations);
     }
 
     public Result<string, Interface.WorkspaceEdit> TextDocumentRenameRequest(
@@ -1684,8 +1719,9 @@ public class LanguageServer(
                 "Unexpected request result type: " + requestOk.GetType());
         }
 
-        return Result<string, Interface.WorkspaceEdit>.ok(
-            renameResponse.WorkspaceEdit);
+        return
+            Result<string, Interface.WorkspaceEdit>.ok(
+                renameResponse.WorkspaceEdit);
     }
 
     public Result<string, Interface.Response> HandleRequest(
@@ -1717,28 +1753,29 @@ public class LanguageServer(
     {
         return
             locations
-            .SelectMany(location =>
-            {
-                var uri = FindMatchingUri(location.FileLocation);
-
-                if (uri is null)
+            .SelectMany(
+                location =>
                 {
-                    return noMatchingUri(location.FileLocation);
-                }
+                    var uri = FindMatchingUri(location.FileLocation);
 
-                return
-                    [
-                    new Location(
-                        uri,
-                        new Range(
-                            Start: new Position(
-                                Line: (uint)location.Range.StartLineNumber - 1,
-                                Character: (uint)location.Range.StartColumn - 1),
-                            End: new Position(
-                                Line: (uint)location.Range.EndLineNumber - 1,
-                                Character: (uint)location.Range.EndColumn - 1)))
-                    ];
-            });
+                    if (uri is null)
+                    {
+                        return noMatchingUri(location.FileLocation);
+                    }
+
+                    return
+                        [
+                        new Location(
+                            uri,
+                            new Range(
+                                Start: new Position(
+                                    Line: (uint)location.Range.StartLineNumber - 1,
+                                    Character: (uint)location.Range.StartColumn - 1),
+                                End: new Position(
+                                    Line: (uint)location.Range.EndLineNumber - 1,
+                                    Character: (uint)location.Range.EndColumn - 1)))
+                        ];
+                });
     }
 
     public Interface.FileLocation InterfaceFileLocationFromUri(string documentUri)
@@ -1755,9 +1792,10 @@ public class LanguageServer(
 
                 var modulePathItems = modulePathFlat.Split('/');
 
-                return new Interface.FileLocation.ElmPackageFileLocation(
-                    elmPackageVersionIdentifer,
-                    ModulePath: modulePathItems);
+                return
+                    new Interface.FileLocation.ElmPackageFileLocation(
+                        elmPackageVersionIdentifer,
+                        ModulePath: modulePathItems);
             }
         }
 
@@ -1815,7 +1853,9 @@ public class LanguageServer(
          * Therefore we need to decode before handing to System.Uri
          * */
         if (System.Uri.TryCreate(
-            System.Uri.UnescapeDataString(documentUri), System.UriKind.Absolute, out var uriAbsolute))
+            System.Uri.UnescapeDataString(documentUri),
+            System.UriKind.Absolute,
+            out var uriAbsolute))
         {
             if (uriAbsolute.Scheme is not "file")
             {
@@ -1932,11 +1972,12 @@ public class LanguageServer(
 
         var minLength =
             originalLines.Count < newLines.Count
-            ? originalLines.Count
-            : newLines.Count;
+            ?
+            originalLines.Count
+            :
+            newLines.Count;
 
-        while (
-            commonPrefixLength < minLength &&
+        while (commonPrefixLength < minLength &&
             originalLines[commonPrefixLength] == newLines[commonPrefixLength])
         {
             commonPrefixLength++;
@@ -1949,12 +1990,14 @@ public class LanguageServer(
 
         var maxSuffixLength =
             remainingOriginal < remainingNew
-            ? remainingOriginal
-            : remainingNew;
+            ?
+            remainingOriginal
+            :
+            remainingNew;
 
         while (commonSuffixLength < maxSuffixLength &&
-               originalLines[originalLines.Count - 1 - commonSuffixLength] ==
-               newLines[newLines.Count - 1 - commonSuffixLength])
+            originalLines[originalLines.Count - 1 - commonSuffixLength] ==
+            newLines[newLines.Count - 1 - commonSuffixLength])
         {
             commonSuffixLength++;
         }
@@ -1973,9 +2016,10 @@ public class LanguageServer(
             var lastExistingLine = originalLines.Count - 1;
             var lastExistingLineLength = lastExistingLine >= 0 ? originalLines[lastExistingLine].Length : 0;
 
-            var range = new Range(
-                Start: new Position(Line: (uint)lastExistingLine, Character: (uint)lastExistingLineLength),
-                End: new Position(Line: (uint)lastExistingLine, Character: (uint)lastExistingLineLength));
+            var range =
+                new Range(
+                    Start: new Position(Line: (uint)lastExistingLine, Character: (uint)lastExistingLineLength),
+                    End: new Position(Line: (uint)lastExistingLine, Character: (uint)lastExistingLineLength));
 
             var replacementText = "\n" + string.Join("\n", replacementLines);
 
@@ -1990,9 +2034,10 @@ public class LanguageServer(
             var lastDeletedLine = originalLines.Count - 1;
             var lastDeletedLineLength = originalLines[lastDeletedLine].Length;
 
-            var range = new Range(
-                Start: new Position(Line: (uint)lastKeptLine, Character: (uint)lastKeptLineLength),
-                End: new Position(Line: (uint)lastDeletedLine, Character: (uint)lastDeletedLineLength));
+            var range =
+                new Range(
+                    Start: new Position(Line: (uint)lastKeptLine, Character: (uint)lastKeptLineLength),
+                    End: new Position(Line: (uint)lastDeletedLine, Character: (uint)lastDeletedLineLength));
 
             return [new TextEdit(Range: range, NewText: "")];
         }
@@ -2009,9 +2054,10 @@ public class LanguageServer(
                 var insertLine = firstChangedLine - 1;
                 var insertChar = originalLines[insertLine].Length;
 
-                var range = new Range(
-                    Start: new Position(Line: (uint)insertLine, Character: (uint)insertChar),
-                    End: new Position(Line: (uint)insertLine, Character: (uint)insertChar));
+                var range =
+                    new Range(
+                        Start: new Position(Line: (uint)insertLine, Character: (uint)insertChar),
+                        End: new Position(Line: (uint)insertLine, Character: (uint)insertChar));
 
                 var replacementText = "\n" + string.Join("\n", replacementLines);
 
@@ -2020,9 +2066,10 @@ public class LanguageServer(
             else if (firstChangedLine == 0 && replacementLines.Count > 0)
             {
                 // Insert at the beginning
-                var range = new Range(
-                    Start: new Position(Line: 0, Character: 0),
-                    End: new Position(Line: 0, Character: 0));
+                var range =
+                    new Range(
+                        Start: new Position(Line: 0, Character: 0),
+                        End: new Position(Line: 0, Character: 0));
 
                 var replacementText = string.Join("\n", replacementLines) + "\n";
 
@@ -2033,7 +2080,8 @@ public class LanguageServer(
             return [];
         }
 
-        if (firstChangedLine < originalLines.Count && newLines.Count < originalLines.Count && replacementLines.Count is 0)
+        if (firstChangedLine < originalLines.Count && newLines.Count < originalLines.Count &&
+            replacementLines.Count is 0)
         {
             // Pure deletion in the middle - we need to delete some lines without replacement
             // The range should include the newline that creates the line to be deleted
@@ -2042,9 +2090,10 @@ public class LanguageServer(
             var endLine = lastChangedLineInOriginal;
             var endChar = originalLines[endLine].Length;
 
-            var range = new Range(
-                Start: new Position(Line: (uint)startLine, Character: (uint)startChar),
-                End: new Position(Line: (uint)endLine, Character: (uint)endChar));
+            var range =
+                new Range(
+                    Start: new Position(Line: (uint)startLine, Character: (uint)startChar),
+                    End: new Position(Line: (uint)endLine, Character: (uint)endChar));
 
             var replacementText = string.Join("\n", replacementLines);
 
@@ -2053,9 +2102,12 @@ public class LanguageServer(
 
         {
             // Normal replacement case
-            var range = new Range(
-                Start: new Position(Line: (uint)firstChangedLine, Character: 0),
-                End: new Position(Line: (uint)lastChangedLineInOriginal, Character: (uint)originalLines[lastChangedLineInOriginal].Length));
+            var range =
+                new Range(
+                    Start: new Position(Line: (uint)firstChangedLine, Character: 0),
+                    End: new Position(
+                        Line: (uint)lastChangedLineInOriginal,
+                        Character: (uint)originalLines[lastChangedLineInOriginal].Length));
 
             var replacementText = string.Join("\n", replacementLines);
 

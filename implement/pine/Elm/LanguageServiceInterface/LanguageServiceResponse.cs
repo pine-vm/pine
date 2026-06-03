@@ -213,8 +213,7 @@ public static class ResponseEncoding
 
         if (elmValueResult.IsOkOrNull() is not { } elmValue)
         {
-            throw new System.NotImplementedException
-                ("Unexpected result type: " + elmValueResult.GetType());
+            throw new System.NotImplementedException("Unexpected result type: " + elmValueResult.GetType());
         }
 
         if (elmValue is not ElmValue.ElmTag responseTag)
@@ -299,8 +298,7 @@ public static class ResponseEncoding
 
                 if (completionItemResult.IsOkOrNull() is not { } completionItem)
                 {
-                    throw new System.NotImplementedException
-                        ("Unexpected result type: " + completionItemResult.GetType());
+                    throw new System.NotImplementedException("Unexpected result type: " + completionItemResult.GetType());
                 }
 
                 completionItems[i] = completionItem;
@@ -320,6 +318,7 @@ public static class ResponseEncoding
 
             var locationsResult =
                 DecodeLocationInFileList(responseTag.Arguments[0]);
+
             {
                 if (locationsResult.IsErrOrNull() is { } err)
                 {
@@ -329,8 +328,7 @@ public static class ResponseEncoding
 
             if (locationsResult.IsOkOrNull() is not { } locations)
             {
-                throw new System.NotImplementedException
-                    ("Unexpected result type: " + locationsResult.GetType());
+                throw new System.NotImplementedException("Unexpected result type: " + locationsResult.GetType());
             }
 
             return new Response.ProvideDefinitionResponse(locations);
@@ -368,8 +366,7 @@ public static class ResponseEncoding
 
                 if (symbolResult.IsOkOrNull() is not { } symbol)
                 {
-                    throw new System.NotImplementedException
-                        ("Unexpected result type: " + symbolResult.GetType());
+                    throw new System.NotImplementedException("Unexpected result type: " + symbolResult.GetType());
                 }
 
                 symbols[i] = symbol;
@@ -389,6 +386,7 @@ public static class ResponseEncoding
 
             var locationsResult =
                 DecodeLocationInFileList(responseTag.Arguments[0]);
+
             {
                 if (locationsResult.IsErrOrNull() is { } err)
                 {
@@ -398,8 +396,7 @@ public static class ResponseEncoding
 
             if (locationsResult.IsOkOrNull() is not { } locations)
             {
-                throw new System.NotImplementedException
-                    ("Unexpected result type: " + locationsResult.GetType());
+                throw new System.NotImplementedException("Unexpected result type: " + locationsResult.GetType());
             }
 
             return new Response.TextDocumentReferencesResponse(locations);
@@ -416,6 +413,7 @@ public static class ResponseEncoding
 
             var workspaceEditResult =
                 WorkspaceEditEncoding.Decode(responseTag.Arguments[0]);
+
             {
                 if (workspaceEditResult.IsErrOrNull() is { } err)
                 {
@@ -425,8 +423,7 @@ public static class ResponseEncoding
 
             if (workspaceEditResult.IsOkOrNull() is not { } workspaceEdit)
             {
-                throw new System.NotImplementedException
-                    ("Unexpected result type: " + workspaceEditResult.GetType());
+                throw new System.NotImplementedException("Unexpected result type: " + workspaceEditResult.GetType());
             }
 
             return new Response.TextDocumentRenameResponse(workspaceEdit);
@@ -461,8 +458,7 @@ public static class ResponseEncoding
 
             if (locationResult.IsOkOrNull() is not { } location)
             {
-                throw new System.NotImplementedException
-                    ("Unexpected result type: " + locationResult.GetType());
+                throw new System.NotImplementedException("Unexpected result type: " + locationResult.GetType());
             }
 
             locations[i] = location;
@@ -487,8 +483,7 @@ public static class LocationInFileEncoding
 
         if (decodeElmValueResult.IsOkOrNull() is not { } elmValue)
         {
-            throw new System.NotImplementedException
-                ("Unexpected result type: " + decodeElmValueResult.GetType());
+            throw new System.NotImplementedException("Unexpected result type: " + decodeElmValueResult.GetType());
         }
 
         return Decode(elmValue);
@@ -524,8 +519,7 @@ public static class LocationInFileEncoding
 
         if (fileLocationDecodeResult.IsOkOrNull() is not { } fileLocation)
         {
-            throw new System.NotImplementedException
-                ("Unexpected result type: " + fileLocationDecodeResult.GetType());
+            throw new System.NotImplementedException("Unexpected result type: " + fileLocationDecodeResult.GetType());
         }
 
         if (record["range"] is not { } rangeValue)
@@ -545,8 +539,7 @@ public static class LocationInFileEncoding
 
         if (rangeDecodeResult.IsOkOrNull() is not { } range)
         {
-            throw new System.NotImplementedException
-                ("Unexpected result type: " + rangeDecodeResult.GetType());
+            throw new System.NotImplementedException("Unexpected result type: " + rangeDecodeResult.GetType());
         }
 
         return new LocationInFile(fileLocation, range);
@@ -561,6 +554,7 @@ public static class DocumentSymbolEncoding
         {
             return "Expected Elm tag, got: " + elmValue.GetType();
         }
+
         if (tag.TagName is "DocumentSymbol")
         {
             if (tag.Arguments.Count is not 1)
@@ -569,14 +563,17 @@ public static class DocumentSymbolEncoding
                     "Unexpected tag arguments count: " +
                     tag.Arguments.Count;
             }
+
             if (tag.Arguments[0] is not ElmValue.ElmRecord record)
             {
                 return
                     "Unexpected tag argument type: " +
                     tag.Arguments[0].GetType();
             }
+
             return DecodeDocumentSymbolStruct(record);
         }
+
         return "Unexpected tag name: " + tag.TagName;
     }
 
@@ -612,6 +609,7 @@ public static class DocumentSymbolEncoding
         }
 
         var decodeKindResult = SymbolKindEncoding.Decode(kindValue);
+
         {
             if (decodeKindResult.IsErrOrNull() is { } err)
             {
@@ -621,8 +619,7 @@ public static class DocumentSymbolEncoding
 
         if (decodeKindResult.IsOkOrNullable() is not { } kind)
         {
-            throw new System.NotImplementedException
-                ("Unexpected result type: " + decodeKindResult.GetType());
+            throw new System.NotImplementedException("Unexpected result type: " + decodeKindResult.GetType());
         }
 
         if (record["range"] is not { } rangeValue)
@@ -634,6 +631,7 @@ public static class DocumentSymbolEncoding
 
         var rangeDecodeResult =
             MonacoEditor.MonacoRangeEncoding.Decode(rangeValue);
+
         {
             if (rangeDecodeResult.IsErrOrNull() is { } rangeDecodeErr)
             {
@@ -643,8 +641,7 @@ public static class DocumentSymbolEncoding
 
         if (rangeDecodeResult.IsOkOrNull() is not { } range)
         {
-            throw new System.NotImplementedException
-                ("Unexpected result type: " + rangeDecodeResult.GetType());
+            throw new System.NotImplementedException("Unexpected result type: " + rangeDecodeResult.GetType());
         }
 
         if (record["selectionRange"] is not { } selectionRangeValue)
@@ -656,6 +653,7 @@ public static class DocumentSymbolEncoding
 
         var selectionRangeDecodeResult =
             MonacoEditor.MonacoRangeEncoding.Decode(selectionRangeValue);
+
         {
             if (selectionRangeDecodeResult.IsErrOrNull() is { } selectionRangeDecodeErr)
             {
@@ -665,8 +663,7 @@ public static class DocumentSymbolEncoding
 
         if (selectionRangeDecodeResult.IsOkOrNull() is not { } selectionRange)
         {
-            throw new System.NotImplementedException
-                ("Unexpected result type: " + selectionRangeDecodeResult.GetType());
+            throw new System.NotImplementedException("Unexpected result type: " + selectionRangeDecodeResult.GetType());
         }
 
         if (record["children"] is not { } childrenValue)
@@ -686,6 +683,7 @@ public static class DocumentSymbolEncoding
         for (var i = 0; i < childrenList.Items.Count; i++)
         {
             var childResult = Decode(childrenList.Items[i]);
+
             {
                 if (childResult.IsErrOrNull() is { } err)
                 {
@@ -695,18 +693,20 @@ public static class DocumentSymbolEncoding
 
             if (childResult.IsOkOrNull() is not { } child)
             {
-                throw new System.NotImplementedException
-                    ("Unexpected result type: " + childResult.GetType());
+                throw new System.NotImplementedException("Unexpected result type: " + childResult.GetType());
             }
+
             children[i] = child;
         }
 
-        return new DocumentSymbol(new DocumentSymbolStruct(
-            nameString.Value,
-            kind,
-            range,
-            selectionRange,
-            children));
+        return
+            new DocumentSymbol(
+                new DocumentSymbolStruct(
+                    nameString.Value,
+                    kind,
+                    range,
+                    selectionRange,
+                    children));
     }
 }
 
@@ -739,6 +739,7 @@ public static class SymbolKindEncoding
                     "Unexpected tag arguments count: " +
                     tag.Arguments.Count;
             }
+
             return SymbolKind.Module;
         }
 
@@ -750,6 +751,7 @@ public static class SymbolKindEncoding
                     "Unexpected tag arguments count: " +
                     tag.Arguments.Count;
             }
+
             return SymbolKind.Namespace;
         }
 
@@ -761,6 +763,7 @@ public static class SymbolKindEncoding
                     "Unexpected tag arguments count: " +
                     tag.Arguments.Count;
             }
+
             return SymbolKind.Package;
         }
 
@@ -772,6 +775,7 @@ public static class SymbolKindEncoding
                     "Unexpected tag arguments count: " +
                     tag.Arguments.Count;
             }
+
             return SymbolKind.Class;
         }
 
@@ -783,6 +787,7 @@ public static class SymbolKindEncoding
                     "Unexpected tag arguments count: " +
                     tag.Arguments.Count;
             }
+
             return SymbolKind.Enum;
         }
 
@@ -794,6 +799,7 @@ public static class SymbolKindEncoding
                     "Unexpected tag arguments count: " +
                     tag.Arguments.Count;
             }
+
             return SymbolKind.Interface;
         }
 
@@ -805,6 +811,7 @@ public static class SymbolKindEncoding
                     "Unexpected tag arguments count: " +
                     tag.Arguments.Count;
             }
+
             return SymbolKind.Function;
         }
 
@@ -816,6 +823,7 @@ public static class SymbolKindEncoding
                     "Unexpected tag arguments count: " +
                     tag.Arguments.Count;
             }
+
             return SymbolKind.Constant;
         }
 
@@ -827,6 +835,7 @@ public static class SymbolKindEncoding
                     "Unexpected tag arguments count: " +
                     tag.Arguments.Count;
             }
+
             return SymbolKind.String;
         }
 
@@ -838,6 +847,7 @@ public static class SymbolKindEncoding
                     "Unexpected tag arguments count: " +
                     tag.Arguments.Count;
             }
+
             return SymbolKind.Number;
         }
 
@@ -849,6 +859,7 @@ public static class SymbolKindEncoding
                     "Unexpected tag arguments count: " +
                     tag.Arguments.Count;
             }
+
             return SymbolKind.Boolean;
         }
 
@@ -860,6 +871,7 @@ public static class SymbolKindEncoding
                     "Unexpected tag arguments count: " +
                     tag.Arguments.Count;
             }
+
             return SymbolKind.Array;
         }
 
@@ -871,6 +883,7 @@ public static class SymbolKindEncoding
                     "Unexpected tag arguments count: " +
                     tag.Arguments.Count;
             }
+
             return SymbolKind.EnumMember;
         }
 
@@ -882,6 +895,7 @@ public static class SymbolKindEncoding
                     "Unexpected tag arguments count: " +
                     tag.Arguments.Count;
             }
+
             return SymbolKind.Struct;
         }
 
@@ -897,11 +911,14 @@ public static class WorkspaceEditEncoding
         {
             return "Expected Elm list, got: " + elmValue.GetType();
         }
+
         var textDocumentEdits = new TextDocumentEdit[list.Items.Count];
+
         for (var i = 0; i < list.Items.Count; i++)
         {
             var textDocumentEditResult =
                 TextDocumentEditEncoding.Decode(list.Items[i]);
+
             {
                 if (textDocumentEditResult.IsErrOrNull() is { } err)
                 {
@@ -911,12 +928,12 @@ public static class WorkspaceEditEncoding
 
             if (textDocumentEditResult.IsOkOrNull() is not { } textDocumentEdit)
             {
-                throw new System.NotImplementedException
-                    ("Unexpected result type: " + textDocumentEditResult.GetType());
+                throw new System.NotImplementedException("Unexpected result type: " + textDocumentEditResult.GetType());
             }
 
             textDocumentEdits[i] = textDocumentEdit;
         }
+
         return new WorkspaceEdit(textDocumentEdits);
     }
 }
@@ -964,16 +981,17 @@ public static class TextDocumentEditEncoding
         for (var i = 0; i < editsListValue.Items.Count; i++)
         {
             var textEditResult = TextEditEncoding.Decode(editsListValue.Items[i]);
+
             {
                 if (textEditResult.IsErrOrNull() is { } err)
                 {
                     return "Failed decoding text edit at index [" + i + "]: " + err;
                 }
             }
+
             if (textEditResult.IsOkOrNull() is not { } textEdit)
             {
-                throw new System.NotImplementedException
-                    ("Unexpected result type: " + textEditResult.GetType());
+                throw new System.NotImplementedException("Unexpected result type: " + textEditResult.GetType());
             }
 
             textEdits[i] = textEdit;
@@ -1016,8 +1034,7 @@ public static class TextEditEncoding
 
         if (rangeDecodeResult.IsOkOrNull() is not { } range)
         {
-            throw new System.NotImplementedException
-                ("Unexpected result type: " + rangeDecodeResult.GetType());
+            throw new System.NotImplementedException("Unexpected result type: " + rangeDecodeResult.GetType());
         }
 
         if (record["newText"] is not { } newTextValue)
@@ -1043,17 +1060,17 @@ public static class FileLocationEncoding
         return fileLocation switch
         {
             FileLocation.WorkspaceFileLocation workspaceFileLocation =>
-                ElmValue.TagInstance(
-                    "WorkspaceFileLocation",
-                    [ElmValue.StringInstance(workspaceFileLocation.FilePath)]),
+            ElmValue.TagInstance(
+                "WorkspaceFileLocation",
+                [ElmValue.StringInstance(workspaceFileLocation.FilePath)]),
 
             FileLocation.ElmPackageFileLocation elmPackageFileLocation =>
-                ElmValue.TagInstance(
-                    "ElmPackageFileLocation",
-                    [
-                        ElmPackageVersionIdentiferEncoding.Encode(elmPackageFileLocation.ElmPackageVersionIdentifer),
-                        ElmValue.ListInstance([..elmPackageFileLocation.ModulePath.Select(ElmValue.StringInstance)])
-                    ]),
+            ElmValue.TagInstance(
+                "ElmPackageFileLocation",
+                [
+                ElmPackageVersionIdentiferEncoding.Encode(elmPackageFileLocation.ElmPackageVersionIdentifer),
+                ElmValue.ListInstance([..elmPackageFileLocation.ModulePath.Select(ElmValue.StringInstance)])
+                ]),
 
             _ =>
             throw new System.NotImplementedException("Unexpected file location type: " + fileLocation.GetType())
@@ -1082,6 +1099,7 @@ public static class FileLocationEncoding
                     "Unexpected tag argument type: " +
                     tag.Arguments[0].GetType();
             }
+
             return new FileLocation.WorkspaceFileLocation(filePathString.Value);
         }
 
@@ -1106,8 +1124,7 @@ public static class FileLocationEncoding
 
             if (elmPackageVersionIdentiferResult.IsOkOrNull() is not { } elmPackageVersionIdentifer)
             {
-                throw new System.NotImplementedException
-                    ("Unexpected result type: " + elmPackageVersionIdentiferResult.GetType());
+                throw new System.NotImplementedException("Unexpected result type: " + elmPackageVersionIdentiferResult.GetType());
             }
 
             if (tag.Arguments[1] is not ElmValue.ElmList modulePathList)
@@ -1127,6 +1144,7 @@ public static class FileLocationEncoding
                         "Unexpected tag argument type: " +
                         modulePathList.Items[i].GetType();
                 }
+
                 modulePath[i] = modulePathString.Value;
             }
 
@@ -1141,12 +1159,13 @@ public static class ElmPackageVersionIdentiferEncoding
 {
     public static ElmValue Encode(ElmPackageVersion019Identifer elmPackageVersionIdentifer)
     {
-        return ElmValue.TagInstance(
-            "ElmPackageVersion019Identifer",
-            [
-                ElmValue.StringInstance(elmPackageVersionIdentifer.PackageName),
-                ElmValue.StringInstance(elmPackageVersionIdentifer.VersionTag)
-            ]);
+        return
+            ElmValue.TagInstance(
+                "ElmPackageVersion019Identifer",
+                [
+                    ElmValue.StringInstance(elmPackageVersionIdentifer.PackageName),
+                    ElmValue.StringInstance(elmPackageVersionIdentifer.VersionTag)
+                ]);
     }
 
     public static Result<string, ElmPackageVersion019Identifer> Decode(ElmValue elmValue)
@@ -1179,9 +1198,10 @@ public static class ElmPackageVersionIdentiferEncoding
                     tag.Arguments[1].GetType();
             }
 
-            return new ElmPackageVersion019Identifer(
-                PackageName: packageNameString.Value,
-                VersionTag: versionTagString.Value);
+            return
+                new ElmPackageVersion019Identifer(
+                    PackageName: packageNameString.Value,
+                    VersionTag: versionTagString.Value);
         }
 
         return "Unexpected tag name: " + tag.TagName;

@@ -3,11 +3,11 @@ using Pine.Core;
 using Pine.Core.CodeAnalysis;
 using Pine.Core.CommonEncodings;
 using Pine.Core.Elm;
+using Pine.Core.Files;
 using Pine.Core.PineVM;
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using Pine.Core.Files;
 
 namespace Pine.Elm.Platform;
 
@@ -289,10 +289,11 @@ type alias LoadDependencyStruct =
                     just: ParsePosixTimeIsPastSubscription,
                     invalid: err => throw new Exception("Failed parsing posixTimeIsPast: " + err));
 
-            return new Subscriptions(
-                HttpRequest:
-                FunctionRecordValueAndParsed.ParseOrThrow(httpRequestFieldValue, s_parseCache),
-                PosixTimeIsPast: posixTimeIsPastSubscription);
+            return
+                new Subscriptions(
+                    HttpRequest:
+                    FunctionRecordValueAndParsed.ParseOrThrow(httpRequestFieldValue, s_parseCache),
+                    PosixTimeIsPast: posixTimeIsPastSubscription);
         }
 
         public static PosixTimeIsPastSubscription ParsePosixTimeIsPastSubscription(
@@ -332,9 +333,10 @@ type alias LoadDependencyStruct =
                 throw new Exception("Expected posixTimeIsPast function to have one parameter.");
             }
 
-            return new PosixTimeIsPastSubscription(
-                MinimumPosixTimeMilli: (long)minimumPosixTimeMilli,
-                Update: updateFunctionRecord);
+            return
+                new PosixTimeIsPastSubscription(
+                    MinimumPosixTimeMilli: (long)minimumPosixTimeMilli,
+                    Update: updateFunctionRecord);
         }
 
         public static ApplyUpdateReport<Command>
@@ -627,9 +629,12 @@ type alias LoadDependencyStruct =
         var asElmValue =
             new ElmValue.ElmRecord(
                 [
-                ("clientAddress", requestContext.ClientAddress is null
-                    ? ElmValue.TagInstance("Nothing", [])
-                    : ElmValue.TagInstance("Just", [ElmValue.StringInstance(requestContext.ClientAddress)]))
+                ("clientAddress",
+                requestContext.ClientAddress is null
+                ?
+                ElmValue.TagInstance("Nothing", [])
+                :
+                ElmValue.TagInstance("Just", [ElmValue.StringInstance(requestContext.ClientAddress)]))
                 ]);
 
         return asElmValue;
@@ -642,11 +647,15 @@ type alias LoadDependencyStruct =
                 [
                 ("method", ElmValue.StringInstance(request.Method)),
                 ("uri", ElmValue.StringInstance(request.Uri)),
-                ("body", request.Body is { } body
-                    ? ElmValue.TagInstance("Just", [new ElmValue.ElmBytes(body)])
-                    : ElmValue.TagInstance("Nothing", [])),
+                ("body",
+                request.Body is { } body
+                ?
+                ElmValue.TagInstance("Just", [new ElmValue.ElmBytes(body)])
+                :
+                ElmValue.TagInstance("Nothing", [])),
                 ("headers", new ElmValue.ElmList([.. request.Headers.Select(EncodeHttpHeader)]))
                 ]);
+
         return asElmValue;
     }
 
@@ -689,9 +698,12 @@ type alias LoadDependencyStruct =
             new ElmValue.ElmRecord(
                 [
                 ("runtimeIdentifier", ElmValue.StringInstance(record.RuntimeIdentifier)),
-                ("osPlatform", record.OsPlatform is null
-                    ? ElmValue.TagInstance("Nothing", [])
-                    : ElmValue.TagInstance("Just", [ElmValue.StringInstance(record.OsPlatform)]))
+                ("osPlatform",
+                record.OsPlatform is null
+                ?
+                ElmValue.TagInstance("Nothing", [])
+                :
+                ElmValue.TagInstance("Just", [ElmValue.StringInstance(record.OsPlatform)]))
                 ]);
 
         return ElmValueEncoding.ElmValueAsPineValue_2025(asElmValue);
@@ -708,10 +720,10 @@ type alias LoadDependencyStruct =
             return result switch
             {
                 Result<ErrT, OkT>.Err err =>
-                    ("Err", encodeErr(err.Value)),
+                ("Err", encodeErr(err.Value)),
 
                 Result<ErrT, OkT>.Ok ok =>
-                    ("Ok", encodeOk(ok.Value)),
+                ("Ok", encodeOk(ok.Value)),
 
                 _ =>
                 throw new NotImplementedException("Unexpected result type: " + result)
@@ -781,16 +793,16 @@ type alias LoadDependencyStruct =
         return error switch
         {
             RequestToVolatileProcessError.ProcessNotFound =>
-                ElmValueEncoding.ElmValueAsPineValue_2025(
-                    ElmValue.TagInstance(nameof(RequestToVolatileProcessError.ProcessNotFound), [])),
+            ElmValueEncoding.ElmValueAsPineValue_2025(
+                ElmValue.TagInstance(nameof(RequestToVolatileProcessError.ProcessNotFound), [])),
 
             RequestToVolatileProcessError.RequestToVolatileProcessOtherError otherError =>
-                ElmValueEncoding.ElmValueAsPineValue_2025(
-                    ElmValue.TagInstance(
-                        nameof(RequestToVolatileProcessError.RequestToVolatileProcessOtherError),
-                        [
-                            ElmValue.StringInstance(otherError.Error)
-                        ])),
+            ElmValueEncoding.ElmValueAsPineValue_2025(
+                ElmValue.TagInstance(
+                    nameof(RequestToVolatileProcessError.RequestToVolatileProcessOtherError),
+                    [
+                    ElmValue.StringInstance(otherError.Error)
+                    ])),
 
             _ =>
             throw new NotImplementedException(
@@ -804,13 +816,19 @@ type alias LoadDependencyStruct =
         var asElmValue =
             new ElmValue.ElmRecord(
                 [
-                ("exceptionToString", complete.ExceptionToString is null
-                    ? ElmValue.TagInstance("Nothing", [])
-                    : ElmValue.TagInstance("Just", [ElmValue.StringInstance(complete.ExceptionToString)])),
+                ("exceptionToString",
+                complete.ExceptionToString is null
+                ?
+                ElmValue.TagInstance("Nothing", [])
+                :
+                ElmValue.TagInstance("Just", [ElmValue.StringInstance(complete.ExceptionToString)])),
 
-                ("returnValueToString", complete.ReturnValueToString is null
-                    ? ElmValue.TagInstance("Nothing", [])
-                    : ElmValue.TagInstance("Just", [ElmValue.StringInstance(complete.ReturnValueToString)])),
+                ("returnValueToString",
+                complete.ReturnValueToString is null
+                ?
+                ElmValue.TagInstance("Nothing", [])
+                :
+                ElmValue.TagInstance("Just", [ElmValue.StringInstance(complete.ReturnValueToString)])),
 
                 ("durationInMilliseconds", ElmValue.Integer(complete.DurationInMilliseconds))
                 ]);
@@ -836,9 +854,12 @@ type alias LoadDependencyStruct =
                 [
                 ("stdOutBytes", new ElmValue.ElmBytes(complete.StdOut)),
                 ("stdErrBytes", new ElmValue.ElmBytes(complete.StdErr)),
-                ("exitCode", complete.ExitCode is null
-                    ? ElmValue.TagInstance("Nothing", [])
-                    : ElmValue.TagInstance("Just", [ElmValue.Integer(complete.ExitCode.Value)]))
+                ("exitCode",
+                complete.ExitCode is null
+                ?
+                ElmValue.TagInstance("Nothing", [])
+                :
+                ElmValue.TagInstance("Just", [ElmValue.Integer(complete.ExitCode.Value)]))
                 ]);
 
         return ElmValueEncoding.ElmValueAsPineValue_2025(asElmValue);
@@ -931,7 +952,8 @@ type alias LoadDependencyStruct =
 
         if (tag.tagName is nameof(Command.RespondToHttpRequest))
         {
-            var parsedRespondToHttpRequest = ParseRespondToHttpRequestStruct(tag.tagArguments.Span[0], elmCompilerCache);
+            var parsedRespondToHttpRequest =
+                ParseRespondToHttpRequestStruct(tag.tagArguments.Span[0], elmCompilerCache);
 
             {
                 if (parsedRespondToHttpRequest.IsErrOrNull() is { } err)
@@ -1033,6 +1055,7 @@ type alias LoadDependencyStruct =
                     tag.tagArguments.Span[0],
                     elmCompilerCache,
                     parseCache);
+
             {
                 if (parsedRequestToVolatileProcess.IsErrOrNull() is { } err)
                 {
@@ -1227,8 +1250,8 @@ type alias LoadDependencyStruct =
 
     public static Result<string, CreateVolatileProcessNativeRequestStruct>
         ParseCreateVolatileProcessNativeRequestStruct(
-            PineValue pineValue,
-            ElmCompilerCache elmCompilerCache)
+        PineValue pineValue,
+        ElmCompilerCache elmCompilerCache)
     {
         var asElmValueResult =
             elmCompilerCache.PineValueDecodedAsElmValue(pineValue);
@@ -1329,10 +1352,11 @@ type alias LoadDependencyStruct =
             environmentVariables[i] = environmentVariable;
         }
 
-        return new CreateVolatileProcessNativeRequestStruct(
-            executableFile,
-            argumentsString.Value,
-            environmentVariables);
+        return
+            new CreateVolatileProcessNativeRequestStruct(
+                executableFile,
+                argumentsString.Value,
+                environmentVariables);
     }
 
     public static Result<string, LoadDependencyStruct>
@@ -1386,15 +1410,16 @@ type alias LoadDependencyStruct =
             hintUrls[i] = hintUrlString.Value;
         }
 
-        return new LoadDependencyStruct(
-            hashSha256Base16String.Value,
-            hintUrls);
+        return
+            new LoadDependencyStruct(
+                hashSha256Base16String.Value,
+                hintUrls);
     }
 
     public static Result<string, ProcessEnvironmentVariableStruct>
         ParseProcessEnvironmentVariableStruct(
-            ElmValue elmValue,
-            ElmCompilerCache elmCompilerCache)
+        ElmValue elmValue,
+        ElmCompilerCache elmCompilerCache)
     {
         if (elmValue is not ElmValue.ElmRecord elmRecordValue)
         {
@@ -1430,9 +1455,10 @@ type alias LoadDependencyStruct =
             return "Unexpected type in value: " + valueValue;
         }
 
-        return new ProcessEnvironmentVariableStruct(
-            keyString.Value,
-            valueString.Value);
+        return
+            new ProcessEnvironmentVariableStruct(
+                keyString.Value,
+                valueString.Value);
     }
 
     public static Result<string, RespondToHttpRequestStruct> ParseRespondToHttpRequestStruct(
@@ -1441,6 +1467,7 @@ type alias LoadDependencyStruct =
     {
         var asElmValueResult =
             elmCompilerCache.PineValueDecodedAsElmValue(pineValue);
+
         {
             if (asElmValueResult.IsErrOrNull() is { } err)
             {
@@ -1498,9 +1525,10 @@ type alias LoadDependencyStruct =
                 "Unexpected return type: " + parsedResponse);
         }
 
-        return new RespondToHttpRequestStruct(
-            httpRequestIdString.Value,
-            response);
+        return
+            new RespondToHttpRequestStruct(
+                httpRequestIdString.Value,
+                response);
     }
 
     public static Result<string, HttpResponse> ParseHttpResponse(
@@ -1581,6 +1609,7 @@ type alias LoadDependencyStruct =
             var headerValue = headersToAddList.Items[i];
 
             var parsedHeader = ParseHttpHeader(headerValue, elmCompilerCache);
+
             {
                 if (parsedHeader.IsErrOrNull() is { } err)
                 {
@@ -1597,10 +1626,11 @@ type alias LoadDependencyStruct =
             headersToAdd[i] = header;
         }
 
-        return new HttpResponse(
-            (int)statusCodeInt.Value,
-            body,
-            headersToAdd);
+        return
+            new HttpResponse(
+                (int)statusCodeInt.Value,
+                body,
+                headersToAdd);
     }
 
     public static Result<string, HttpHeader> ParseHttpHeader(
@@ -1692,6 +1722,7 @@ type alias LoadDependencyStruct =
 
         var programCodeAsElmValue =
             elmCompilerCache.PineValueDecodedAsElmValue(programCodeValue.fieldValue);
+
         {
             if (programCodeAsElmValue.IsErrOrNull() is { } err)
             {
@@ -1722,9 +1753,10 @@ type alias LoadDependencyStruct =
                 updateValue.fieldValue,
                 parseCache);
 
-        return new CreateVolatileProcessStruct(
-            programCodeString.Value,
-            parsedUpdate);
+        return
+            new CreateVolatileProcessStruct(
+                programCodeString.Value,
+                parsedUpdate);
     }
 
     public static Result<string, RequestToVolatileProcessStruct> ParseRequestToVolatileProcessStruct(
@@ -1761,6 +1793,7 @@ type alias LoadDependencyStruct =
 
         var processIdAsElmValue =
             elmCompilerCache.PineValueDecodedAsElmValue(processIdValue.fieldValue);
+
         {
             if (processIdAsElmValue.IsErrOrNull() is { } err)
             {
@@ -1788,6 +1821,7 @@ type alias LoadDependencyStruct =
 
         var requestAsElmValue =
             elmCompilerCache.PineValueDecodedAsElmValue(requestValue.fieldValue);
+
         {
             if (requestAsElmValue.IsErrOrNull() is { } err)
             {
@@ -1818,10 +1852,11 @@ type alias LoadDependencyStruct =
                 updateValue.fieldValue,
                 parseCache);
 
-        return new RequestToVolatileProcessStruct(
-            processIdString.Value,
-            requestString.Value,
-            Update: parsedUpdate);
+        return
+            new RequestToVolatileProcessStruct(
+                processIdString.Value,
+                requestString.Value,
+                Update: parsedUpdate);
     }
 
     public static Result<string, WriteToVolatileProcessNativeStdInStruct> ParseWriteToVolatileProcessNativeStdInStruct(
@@ -1858,6 +1893,7 @@ type alias LoadDependencyStruct =
 
         var processIdAsElmValue =
             elmCompilerCache.PineValueDecodedAsElmValue(processIdValue.fieldValue);
+
         {
             if (processIdAsElmValue.IsErrOrNull() is { } err)
             {
@@ -1886,6 +1922,7 @@ type alias LoadDependencyStruct =
 
         var stdInAsElmValue =
             elmCompilerCache.PineValueDecodedAsElmValue(stdInBytesValue.fieldValue);
+
         {
             if (stdInAsElmValue.IsErrOrNull() is { } err)
             {
@@ -1916,10 +1953,11 @@ type alias LoadDependencyStruct =
                 updateValue.fieldValue,
                 parseCache);
 
-        return new WriteToVolatileProcessNativeStdInStruct(
-            processIdString.Value,
-            stdInBytes.Value,
-            parsedUpdate);
+        return
+            new WriteToVolatileProcessNativeStdInStruct(
+                processIdString.Value,
+                stdInBytes.Value,
+                parsedUpdate);
     }
 
     public static Result<string, ReadAllFromVolatileProcessNativeStruct> ParseReadAllFromVolatileProcessNativeStruct(
@@ -1956,6 +1994,7 @@ type alias LoadDependencyStruct =
 
         var processIdAsElmValue =
             elmCompilerCache.PineValueDecodedAsElmValue(processIdValue.fieldValue);
+
         {
             if (processIdAsElmValue.IsErrOrNull() is { } err)
             {
@@ -1986,15 +2025,16 @@ type alias LoadDependencyStruct =
                 updateValue.fieldValue,
                 parseCache);
 
-        return new ReadAllFromVolatileProcessNativeStruct(
-            processIdString.Value,
-            parsedUpdate);
+        return
+            new ReadAllFromVolatileProcessNativeStruct(
+                processIdString.Value,
+                parsedUpdate);
     }
 
     public static Result<string, Result<RequestToVolatileProcessError, RequestToVolatileProcessComplete>>
         ParseRequestToVolatileProcessResult(
-            PineValue pineValue,
-            ElmCompilerCache elmCompilerCache)
+        PineValue pineValue,
+        ElmCompilerCache elmCompilerCache)
     {
         return
             ElmValueInterop.ParseElmResultValue(
@@ -2026,17 +2066,20 @@ type alias LoadDependencyStruct =
                 okValue =>
                 {
                     var parsedOk = ParseRequestToVolatileProcessComplete(okValue, elmCompilerCache);
+
                     {
                         if (parsedOk.IsErrOrNull() is { } err)
                         {
                             return "Failed to parse ok: " + err;
                         }
                     }
+
                     if (parsedOk.IsOkOrNull() is not { } ok)
                     {
                         throw new NotImplementedException(
                             "Unexpected return type: " + parsedOk);
                     }
+
                     return Result<RequestToVolatileProcessError, RequestToVolatileProcessComplete>.ok(ok);
                 },
 
@@ -2160,6 +2203,7 @@ type alias LoadDependencyStruct =
             {
                 return "Unexpected number of arguments in Just: " + maybeReturnValueToStringTag.Arguments.Count;
             }
+
             if (maybeReturnValueToStringTag.Arguments[0] is not ElmValue.ElmString elmStringValue)
             {
                 return "Unexpected argument type in Just: " + maybeReturnValueToStringTag.Arguments[0];
@@ -2186,13 +2230,15 @@ type alias LoadDependencyStruct =
 
         var durationInMilliseconds = durationInMillisecondsInt.Value;
 
-        return new RequestToVolatileProcessComplete(
-            exceptionToString,
-            returnValueToString,
-            (int)durationInMilliseconds);
+        return
+            new RequestToVolatileProcessComplete(
+                exceptionToString,
+                returnValueToString,
+                (int)durationInMilliseconds);
     }
 
     private static readonly ElmCompilerCache s_elmCompilerCache = new();
+
     private static readonly PineVMParseCache s_parseCache = new();
 
     public static WebServiceConfig ConfigFromSourceFilesAndEntryFileName(
@@ -2218,8 +2264,7 @@ type alias LoadDependencyStruct =
             ElmAppCompilation.AsCompletelyLoweredElmApp(
                 FileTreeExtensions.ToFlatDictionaryWithPathComparer(sourceFiles),
                 workingDirectoryRelative: [],
-                ElmAppInterfaceConfig.Default
-                with
+                ElmAppInterfaceConfig.Default with
                 {
                     CompilationRootFilePath = entryFileName
                 });
@@ -2354,9 +2399,10 @@ type alias LoadDependencyStruct =
             .ParseFunctionRecordTagged(subscriptionsField, s_parseCache)
             .Extract(err => throw new Exception("Failed parsing subscriptions function: " + err));
 
-        return new WebServiceConfig(
-            Init: initResult,
-            Subscriptions: subscriptionsFunctionRecord,
-            jsonAdapter);
+        return
+            new WebServiceConfig(
+                Init: initResult,
+                Subscriptions: subscriptionsFunctionRecord,
+                jsonAdapter);
     }
 }

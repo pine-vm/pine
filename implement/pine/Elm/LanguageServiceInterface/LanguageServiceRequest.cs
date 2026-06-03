@@ -119,81 +119,81 @@ public static class RequestEncoding
         return request switch
         {
             Request.AddWorkspaceFileRequest addFileRequest =>
-                ElmValueEncoding.TagAsPineValue(
-                    "AddWorkspaceFileRequest",
-                    [
-                        ElmValueEncoding.StringAsPineValue(addFileRequest.FilePath),
-                        Encode(addFileRequest.Blob)
-                    ]),
+            ElmValueEncoding.TagAsPineValue(
+                "AddWorkspaceFileRequest",
+                [
+                ElmValueEncoding.StringAsPineValue(addFileRequest.FilePath),
+                Encode(addFileRequest.Blob)
+                ]),
 
             Request.DeleteWorkspaceFileRequest deleteFileRequest =>
-                ElmValueEncoding.TagAsPineValue(
-                    "DeleteWorkspaceFileRequest",
-                    [
-                        ElmValueEncoding.StringAsPineValue(deleteFileRequest.FilePath),
-                    ]),
+            ElmValueEncoding.TagAsPineValue(
+                "DeleteWorkspaceFileRequest",
+                [
+                ElmValueEncoding.StringAsPineValue(deleteFileRequest.FilePath),
+                ]),
 
             Request.AddElmPackageVersionRequest addElmPackageRequest =>
-                ElmValueEncoding.TagAsPineValue(
-                    "AddElmPackageVersionRequest",
+            ElmValueEncoding.TagAsPineValue(
+                "AddElmPackageVersionRequest",
+                [
+                ElmValueEncoding.ElmValueAsPineValue(
+                    ElmPackageVersionIdentiferEncoding.Encode(addElmPackageRequest.ElmPackageVersionIdentifer)),
+
+                PineValue.List(
+                [
+                ..addElmPackageRequest.ModulePathsAndBlobs.Select(
+                    modulePathAndBlob =>
+                    PineValue.List(
                     [
-                        ElmValueEncoding.ElmValueAsPineValue(
-                            ElmPackageVersionIdentiferEncoding.Encode(addElmPackageRequest.ElmPackageVersionIdentifer)),
-
-                        PineValue.List(
-                            [..addElmPackageRequest.ModulePathsAndBlobs.Select(
-                                modulePathAndBlob =>
-                                PineValue.List(
-                                    [
-                                    PineValue.List(
-                                        [..modulePathAndBlob.ModulePath.Select(ElmValueEncoding.StringAsPineValue)]),
-                                    Encode(modulePathAndBlob.Blob)
-                                    ]))
-                            ])
-
-                    ]),
+                    PineValue.List(
+                        [..modulePathAndBlob.ModulePath.Select(ElmValueEncoding.StringAsPineValue)]),
+                    Encode(modulePathAndBlob.Blob)
+                    ]))
+                ])
+                ]),
 
             Request.ProvideHoverRequest provideHoverRequest =>
-                ElmValueEncoding.TagAsPineValue(
-                    "ProvideHoverRequest",
-                    [
-                        Encode(provideHoverRequest.Request)
-                    ]),
+            ElmValueEncoding.TagAsPineValue(
+                "ProvideHoverRequest",
+                [
+                Encode(provideHoverRequest.Request)
+                ]),
 
             Request.ProvideCompletionItemsRequest provideCompletionItemsRequest =>
-                ElmValueEncoding.TagAsPineValue(
-                    "ProvideCompletionItemsRequest",
-                    [
-                        Encode(provideCompletionItemsRequest.Request)
-                    ]),
+            ElmValueEncoding.TagAsPineValue(
+                "ProvideCompletionItemsRequest",
+                [
+                Encode(provideCompletionItemsRequest.Request)
+                ]),
 
             Request.ProvideDefinitionRequest provideDefinitionRequest =>
-                ElmValueEncoding.TagAsPineValue(
-                    "ProvideDefinitionRequest",
-                    [
-                        Encode(provideDefinitionRequest.Request)
-                    ]),
+            ElmValueEncoding.TagAsPineValue(
+                "ProvideDefinitionRequest",
+                [
+                Encode(provideDefinitionRequest.Request)
+                ]),
 
             Request.TextDocumentSymbolRequest textDocumentSymbolRequest =>
-                ElmValueEncoding.TagAsPineValue(
-                    "TextDocumentSymbolRequest",
-                    [
-                        ElmValueEncoding.StringAsPineValue(textDocumentSymbolRequest.FilePath)
-                    ]),
+            ElmValueEncoding.TagAsPineValue(
+                "TextDocumentSymbolRequest",
+                [
+                ElmValueEncoding.StringAsPineValue(textDocumentSymbolRequest.FilePath)
+                ]),
 
             Request.TextDocumentReferencesRequest textDocumentReferenceRequest =>
-                ElmValueEncoding.TagAsPineValue(
-                    "TextDocumentReferencesRequest",
-                    [
-                        Encode(textDocumentReferenceRequest.Request)
-                    ]),
+            ElmValueEncoding.TagAsPineValue(
+                "TextDocumentReferencesRequest",
+                [
+                Encode(textDocumentReferenceRequest.Request)
+                ]),
 
             Request.TextDocumentRenameRequest textDocumentRenameRequest =>
-                ElmValueEncoding.TagAsPineValue(
-                    "TextDocumentRenameRequest",
-                    [
-                        Encode(textDocumentRenameRequest.Request)
-                    ]),
+            ElmValueEncoding.TagAsPineValue(
+                "TextDocumentRenameRequest",
+                [
+                Encode(textDocumentRenameRequest.Request)
+                ]),
 
             _ =>
             throw new System.NotImplementedException(
@@ -210,13 +210,12 @@ public static class RequestEncoding
                         ("asBase64",
                         ElmValue.StringInstance(fileTreeBlobNode.AsBase64)),
                         ("asText",
-                            fileTreeBlobNode.AsText is { } asText
-                            ?
-                            ElmValue.TagInstance("Just", [ElmValue.StringInstance(asText)])
-                            :
-                            ElmValue.TagInstance("Nothing", [])
-                            )
-                        ]));
+                        fileTreeBlobNode.AsText is { } asText
+                        ?
+                        ElmValue.TagInstance("Just", [ElmValue.StringInstance(asText)])
+                        :
+                        ElmValue.TagInstance("Nothing", []))
+                    ]));
     }
 
     public static PineValue Encode(ProvideHoverRequestStruct provideHoverRequest)
