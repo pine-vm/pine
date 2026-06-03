@@ -263,7 +263,7 @@ header =
         logoElement =
             Element.link
                 [ Element.pointer ]
-                { url = "https://pine-vm.org"
+                { url = "https://pine.build"
                 , label =
                     [ [ PineLogo.pineLogoSvg
                             { strokeThicknessMikro = 30 }

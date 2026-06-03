@@ -3,7 +3,7 @@ module Platform.CommandLineApp exposing (..)
 {-| This module contains the types describing the command-line app configuration.
 To build a command-line app in Elm, copy this module file into your project and add a declaration with the name `runRoot` using the type `CommandLineAppConfig` to an Elm module.
 
-For the latest version of the documentation, see <https://pine-vm.org>
+For the latest version of the documentation, see <https://pine.build>
 
 -}
 

@@ -26,6 +26,7 @@ jobs:
         package.elm-lang.org,
         crl3.digicert.com,
         ocsp.digicert.com,
+        pine.build,
         pine-vm.org,
         www.microsoft.com,
         learn.microsoft.com,

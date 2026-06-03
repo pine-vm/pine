@@ -13,7 +13,7 @@ Pine is a free, open-source, cross-platform Elm runtime environment that lets de
 
 ## Getting Started
 
-Download the pre-built Pine binary for your platform at <https://pine-vm.org/download>, or on the [releases page](https://github.com/pine-vm/pine/releases) on GitHub.
+Download the pre-built Pine binary for your platform at <https://pine.build/download>, or on the [releases page](https://github.com/pine-vm/pine/releases) on GitHub.
 
 The `pine` executable file integrates all functionality to build apps and operate web services.
 

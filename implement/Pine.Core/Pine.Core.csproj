@@ -14,7 +14,7 @@
     <Description>Elm DevTools and runtime</Description>
     <PackageTags>Functional;Elm;Runtime;Compiler;VM;DBMS</PackageTags>
     <RepositoryUrl>https://github.com/pine-vm/pine.git</RepositoryUrl>
-    <PackageProjectUrl>https://pine-vm.org</PackageProjectUrl>
+    <PackageProjectUrl>https://pine.build</PackageProjectUrl>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <Authors>Michael Rätzel</Authors>
     <PackageLicenseFile>License.txt</PackageLicenseFile>
