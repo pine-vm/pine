@@ -625,21 +625,15 @@ public static class LambdaLiftingValidator
 /// when one or more invariant violations are detected on the post-lifting
 /// module.
 /// </summary>
-public class LambdaLiftingValidationException : Exception
+/// <remarks>
+/// Creates a new exception carrying the supplied <paramref name="violations"/>.
+/// </remarks>
+public class LambdaLiftingValidationException(IReadOnlyList<string> violations) : Exception(BuildMessage(violations))
 {
     /// <summary>
     /// The list of detected violations. Always non-empty.
     /// </summary>
-    public IReadOnlyList<string> Violations { get; }
-
-    /// <summary>
-    /// Creates a new exception carrying the supplied <paramref name="violations"/>.
-    /// </summary>
-    public LambdaLiftingValidationException(IReadOnlyList<string> violations)
-        : base(BuildMessage(violations))
-    {
-        Violations = violations;
-    }
+    public IReadOnlyList<string> Violations { get; } = violations;
 
     private static string BuildMessage(IReadOnlyList<string> violations) =>
         "LambdaLifting validator detected " +

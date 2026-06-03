@@ -23,31 +23,22 @@ public partial class ElmSyntaxInterpreter
     /// collected arguments and captured bindings as <see cref="PineValueInProcess"/>.
     /// </para>
     /// </summary>
-    internal sealed class ElmClosureInProcess : PineValueInProcess
+    internal sealed class ElmClosureInProcess(
+        ElmValue.ElmFunction.SourceRef source,
+        int parameterCount,
+        IReadOnlyList<PineValueInProcess> argumentsAlreadyCollected,
+        IReadOnlyDictionary<string, PineValueInProcess> capturedBindings,
+        DeclQualifiedName capturedTopLevel) : PineValueInProcess
     {
-        public ElmValue.ElmFunction.SourceRef Source { get; }
+        public ElmValue.ElmFunction.SourceRef Source { get; } = source;
 
-        public int ParameterCount { get; }
+        public int ParameterCount { get; } = parameterCount;
 
-        public IReadOnlyList<PineValueInProcess> ArgumentsAlreadyCollected { get; }
+        public IReadOnlyList<PineValueInProcess> ArgumentsAlreadyCollected { get; } = argumentsAlreadyCollected;
 
-        public IReadOnlyDictionary<string, PineValueInProcess> CapturedBindings { get; }
+        public IReadOnlyDictionary<string, PineValueInProcess> CapturedBindings { get; } = capturedBindings;
 
-        public DeclQualifiedName CapturedTopLevel { get; }
-
-        public ElmClosureInProcess(
-            ElmValue.ElmFunction.SourceRef source,
-            int parameterCount,
-            IReadOnlyList<PineValueInProcess> argumentsAlreadyCollected,
-            IReadOnlyDictionary<string, PineValueInProcess> capturedBindings,
-            DeclQualifiedName capturedTopLevel)
-        {
-            Source = source;
-            ParameterCount = parameterCount;
-            ArgumentsAlreadyCollected = argumentsAlreadyCollected;
-            CapturedBindings = capturedBindings;
-            CapturedTopLevel = capturedTopLevel;
-        }
+        public DeclQualifiedName CapturedTopLevel { get; } = capturedTopLevel;
 
         public ElmClosureInProcess With(
             IReadOnlyList<PineValueInProcess> argumentsAlreadyCollected) =>
@@ -66,14 +57,9 @@ public partial class ElmSyntaxInterpreter
     /// <see cref="ElmValue"/> is retained verbatim and recovered at the boundary via
     /// <see cref="ToElm(PineValueInProcess)"/>.
     /// </summary>
-    internal sealed class ElmValueBox : PineValueInProcess
+    internal sealed class ElmValueBox(ElmValue value) : PineValueInProcess
     {
-        public ElmValue Value { get; }
-
-        public ElmValueBox(ElmValue value)
-        {
-            Value = value;
-        }
+        public ElmValue Value { get; } = value;
     }
 
     /// <summary>

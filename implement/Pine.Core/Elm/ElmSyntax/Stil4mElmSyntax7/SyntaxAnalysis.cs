@@ -1214,7 +1214,7 @@ public static class SyntaxAnalysis
         switch (expression)
         {
             case Expression.FunctionOrValue fov
-                when fov.Name.Length > 0 && char.IsUpper(fov.Name[0]):
+            when fov.Name.Length > 0 && char.IsUpper(fov.Name[0]):
                 return new QualifiedNameRef(fov.ModuleName, fov.Name);
 
             case Expression.Application app

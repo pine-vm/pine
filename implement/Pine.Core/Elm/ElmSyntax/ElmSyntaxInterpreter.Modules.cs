@@ -196,7 +196,7 @@ public partial class ElmSyntaxInterpreter
 
         SyntaxModel.File? canonicalizedRootContextFile = null;
 
-        foreach (var (moduleNameKey, (canonicalizedFile, _errors, _shadowings)) in canonicalized)
+        foreach (var (moduleNameKey, (canonicalizedFile, errors, shadowings)) in canonicalized)
         {
             var fullModuleFile = Stil4mToFull.Convert(canonicalizedFile);
 
