@@ -30,18 +30,27 @@ public enum LinebreakStyle
 public class Rendering
 {
     /// <summary>
-    /// Detects the linebreak style used in the given text.
-    /// Returns LF if no CRLF is found (default style), otherwise returns CRLF.
+    /// Detects the linebreak style used in the given text by examining the first occurrence of a line ending.
+    /// Returns null if no linebreaks are found, indicating that the text is a single line.
+    /// If "\r\n" is encountered before any standalone "\n" (or is the first line breaking sequence), it returns <see cref="LinebreakStyle.CRLF"/>.
+    /// If a standalone "\n" is encountered first, it returns <see cref="LinebreakStyle.LF"/>.
     /// </summary>
-    public static LinebreakStyle DetectLinebreakStyle(string text)
+    public static LinebreakStyle? DetectLinebreakStyle(string text)
     {
-        // Check for CRLF first since it contains LF
-        if (text.Contains("\r\n"))
+        var firstCRLF = text.IndexOf("\r\n", StringComparison.Ordinal);
+        var firstLF = text.IndexOf('\n', StringComparison.Ordinal);
+
+        if (firstCRLF >= 0 && (firstLF < 0 || firstCRLF < firstLF))
         {
             return LinebreakStyle.CRLF;
         }
 
-        return LinebreakStyle.LF;
+        if (firstLF >= 0)
+        {
+            return LinebreakStyle.LF;
+        }
+
+        return null;
     }
 
     /// <summary>

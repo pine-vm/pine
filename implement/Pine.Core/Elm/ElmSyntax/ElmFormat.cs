@@ -17,7 +17,8 @@ public static class ElmFormat
     public static Result<string, string> FormatModuleText(string moduleText)
     {
         // Detect linebreak style from original content and use it for rendering
-        var linebreakStyle = Rendering.DetectLinebreakStyle(moduleText);
+        var linebreakStyle =
+            Rendering.DetectLinebreakStyle(moduleText) ?? LinebreakStyle.LF;
 
         return FormatModuleText(moduleText, linebreakStyle);
     }

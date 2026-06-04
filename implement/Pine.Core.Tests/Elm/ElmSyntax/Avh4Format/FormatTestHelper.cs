@@ -24,7 +24,8 @@ public class FormatTestHelper
             .Extract(err => throw new Exception($"Parsing failed: {err}"));
 
         // Detect linebreak style from input and use it for output
-        var linebreakStyle = Rendering.DetectLinebreakStyle(input);
+        var linebreakStyle =
+            Rendering.DetectLinebreakStyle(input) ?? LinebreakStyle.LF;
 
         return Avh4Format.FormatToString(parsed, linebreakStyle);
     }
