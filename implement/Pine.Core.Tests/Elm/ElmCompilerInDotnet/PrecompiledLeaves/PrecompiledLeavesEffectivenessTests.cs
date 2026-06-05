@@ -413,7 +413,7 @@ public class PrecompiledLeavesEffectivenessTests
     /// the runtime record-access function emitted for a row-polymorphic record parameter.
     /// The wrapper <c>accessField record = record.m</c> has an open record type, so the
     /// compiler emits the runtime field-lookup fallback
-    /// (<see cref="Core.Elm.ElmCompilerInDotnet.RecordRuntime.PineFunctionForRecordAccessAsValue"/>)
+    /// (<see cref="RecordRuntime.PineFunctionForRecordAccessAsValue"/>)
     /// instead of a static index-based access. Exercised on the 2 × 2 matrix:
     /// <list type="bullet">
     /// <item><description>
@@ -508,7 +508,7 @@ public class PrecompiledLeavesEffectivenessTests
     /// targeting the runtime record-update function. The wrapper
     /// <c>updateField record = { record | m = 999 }</c> has an open record type, so the
     /// compiler emits the runtime field-update fallback
-    /// (<see cref="Core.Elm.ElmCompilerInDotnet.RecordRuntime.PineFunctionForRecordUpdateAsValue"/>)
+    /// (<see cref="RecordRuntime.PineFunctionForRecordUpdateAsValue"/>)
     /// which walks every field pair to reconstruct the record. Exercised on the 2 × 2 matrix:
     /// <list type="bullet">
     /// <item><description>

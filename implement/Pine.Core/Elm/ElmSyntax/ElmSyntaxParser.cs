@@ -3209,7 +3209,7 @@ public class ElmSyntaxParser
                     // would parse `Good`'s record argument with the inner `if`'s
                     // column as indentMin and fail to consume it.
                     var ifBranchIndentMin =
-                        System.Math.Min(indentMin, firstIdentifierToken.Range.Start.Column);
+                        Math.Min(indentMin, firstIdentifierToken.Range.Start.Column);
 
                     ConsumeAllTrivia();
 

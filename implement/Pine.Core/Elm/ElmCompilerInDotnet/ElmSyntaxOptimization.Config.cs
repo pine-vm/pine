@@ -127,7 +127,7 @@ public partial class ElmSyntaxOptimization
     /// </param>
     /// <param name="NormalizeApplicationsEnabled">
     /// When <see langword="true"/>, run
-    /// <see cref="ElmSyntaxOptimization.NormalizeApplicationsInDeclarationDictionary(OptimizedElmSyntaxDeclarations)"/>
+    /// <see cref="NormalizeApplicationsInDeclarationDictionary(OptimizedElmSyntaxDeclarations)"/>
     /// after lambda lifting. Disable to inspect nested-curried application chains
     /// produced by substitution-based rewrites.
     /// </param>
