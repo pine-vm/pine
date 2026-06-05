@@ -15,6 +15,7 @@ using System.Text;
 using Stil4mToFull = Pine.Core.Elm.ElmSyntax.Stil4mElmSyntax7.ToFullSyntaxModel;
 using SyntaxModel = Pine.Core.Elm.ElmSyntax.SyntaxModel;
 using Stil4mElmSyntax7 = Pine.Core.Elm.ElmSyntax.Stil4mElmSyntax7;
+using Pine.Core.Internal;
 
 namespace Pine.Core.Tests.Elm.ElmCompilerInDotnet;
 
@@ -343,7 +344,7 @@ public sealed class CompareInterpreterWithIntermediateVM
         // ------------------ Equality assertion ------------------
 
         var vmRendered = ElmValue.RenderAsElmExpression(vmResultElm).expressionString;
-        var interpRendered = ElmValue.RenderAsElmExpression(interpValue).expressionString;
+        var interpRendered = ElmSyntaxInterpreter.RenderAsElmExpression(interpValue).expressionString;
 
         // Render both via the same formatter and compare. Comparing rendered strings (rather than
         // Equals on ElmValue directly) keeps the assertion message readable on a mismatch and
@@ -357,7 +358,7 @@ public sealed class CompareInterpreterWithIntermediateVM
 
         return
             new EvalReport(
-                Value: interpValue,
+                Value: ElmSyntaxInterpreter.ToElm(interpValue),
                 VmCounters: vmCounters,
                 InterpreterCounters: interpCounters,
                 ApplicationLog: entries);
@@ -465,7 +466,7 @@ public sealed class CompareInterpreterWithIntermediateVM
     /// without the framework having to mirror the AST→value conversion for every literal kind.
     /// </summary>
     private ElmValue EvaluateArgumentExpression(SyntaxModel.Expression argumentExpression) =>
-        ElmSyntaxInterpreter.Interpret(argumentExpression, _interpreterDeclarations)
+        ElmSyntaxInterpreter.InterpretAsElmValue(argumentExpression, _interpreterDeclarations)
         .Extract(
             err => throw new Exception(
                 "CompareInterpreterWithIntermediateVM: failed evaluating argument expression as ElmValue: "
@@ -660,43 +661,17 @@ public sealed class CompareInterpreterWithIntermediateVM
             + " " + RenderArgumentList(direct.Application.Arguments),
 
             ApplicationLogEntry.FunctionValue funcValue =>
-            "fnvalue " + RenderFunctionIdentity(funcValue.Function)
+            "fnvalue " + ElmSyntaxInterpreter.RenderAsElmExpression(funcValue.Function)
             + " " + RenderArgumentList(funcValue.NewArguments),
 
             _ =>
             "<unknown application log entry: " + entry.GetType().FullName + ">",
         };
 
-    private static string RenderArgumentList(IReadOnlyList<ElmValue> arguments) =>
+    private static string RenderArgumentList(IReadOnlyList<PineValueInProcess> arguments) =>
         "[ "
         + string.Join(
             ", ",
-            arguments.Select(arg => ElmValue.RenderAsElmExpression(arg).expressionString))
+            arguments.Select(arg => ElmSyntaxInterpreter.RenderAsElmExpression(arg).expressionString))
         + " ]";
-
-    /// <summary>
-    /// Renders the identity of a function value (closure) in the trace. For closures derived
-    /// from a top-level declaration, this is the declaration's qualified name; for lambdas it
-    /// is the synthetic <c>&lt;lambda@row:col&gt;</c>-style name; otherwise it falls back to the
-    /// rendered Elm-expression form (which for a closure is typically <c>&lt;fn&gt;</c>).
-    /// </summary>
-    private static string RenderFunctionIdentity(ElmValue functionValue)
-    {
-        if (functionValue is ElmValue.ElmFunction closure)
-        {
-            return closure.Source switch
-            {
-                ElmValue.ElmFunction.SourceRef.Declared declared =>
-                declared.Name.FullName,
-
-                ElmValue.ElmFunction.SourceRef.Lambda =>
-                "<lambda>",
-
-                _ =>
-                "<closure: " + closure.Source.GetType().Name + ">",
-            };
-        }
-
-        return ElmValue.RenderAsElmExpression(functionValue).expressionString;
-    }
 }

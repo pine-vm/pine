@@ -26,7 +26,7 @@ public class CaseBlockTests
     /// and renders the resulting value back to its Elm-expression form.
     /// </summary>
     private static string Evaluate(string elmModuleText, string expression) =>
-        ElmValue.RenderAsElmExpression(
+        ElmInterpreter.RenderAsElmExpression(
             InterpreterTestHelper.EvaluateInModuleOrCrash(expression, elmModuleText))
         .expressionString;
 

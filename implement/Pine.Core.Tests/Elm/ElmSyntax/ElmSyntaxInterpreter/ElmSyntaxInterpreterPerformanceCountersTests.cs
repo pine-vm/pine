@@ -1,6 +1,5 @@
 using AwesomeAssertions;
 using Pine.Core.CodeAnalysis;
-using Pine.Core.Elm;
 using Pine.Core.Elm.ElmInElm;
 using Pine.Core.Elm.ElmSyntax;
 using System;
@@ -117,7 +116,7 @@ public class ElmSyntaxInterpreterPerformanceCountersTests
             result.Extract(err => throw new Exception(err.ToString()));
 
         return
-            (ElmValue.RenderAsElmExpression(value).expressionString,
+            (ElmInterpreter.RenderAsElmExpression(value).expressionString,
             ElmSyntaxInterpreterPerformanceCountersFormatting.FormatCounts(counters));
     }
 

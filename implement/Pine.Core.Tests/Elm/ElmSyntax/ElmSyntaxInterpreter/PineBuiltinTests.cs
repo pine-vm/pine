@@ -44,14 +44,14 @@ public class PineBuiltinTests
         InterpreterTestHelper.ParseDeclarationsRemovingModuleNames(ElmModuleText);
 
     private static ElmValue Evaluate(string expression) =>
-        ElmInterpreter.ParseAndInterpret(expression, s_declarations)
+        ElmInterpreter.ParseAndInterpretAsElmValue(expression, s_declarations)
         .Extract(err => throw new System.Exception(err.ToString()));
 
     private static string EvaluateRendered(string expression) =>
         ElmValue.RenderAsElmExpression(Evaluate(expression)).expressionString;
 
     private static ElmValue Invoke(string functionName, params ElmValue[] arguments) =>
-        ElmInterpreter.Interpret(
+        ElmInterpreter.InterpretAsElmValue(
             new DeclQualifiedName([], functionName),
             arguments,
             s_declarations)

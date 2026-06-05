@@ -21,7 +21,7 @@ public class FunctionApplicationFullTests
                 Pine_builtin.int_mul [ x, 2 ]
             """;
 
-        InterpreterTestHelper.EvaluateInModuleOrCrash("double 21", elmModuleText)
+        InterpreterTestHelper.EvaluateInModuleOrCrashAsElmValue("double 21", elmModuleText)
             .Should().Be(ElmValue.Integer(42));
     }
 
@@ -37,7 +37,7 @@ public class FunctionApplicationFullTests
                 Pine_builtin.int_add [ a, b ]
             """;
 
-        InterpreterTestHelper.EvaluateInModuleOrCrash("add 13 29", elmModuleText)
+        InterpreterTestHelper.EvaluateInModuleOrCrashAsElmValue("add 13 29", elmModuleText)
             .Should().Be(ElmValue.Integer(42));
     }
 
@@ -57,7 +57,7 @@ public class FunctionApplicationFullTests
                 Pine_builtin.int_mul [ x, 3 ]
             """;
 
-        InterpreterTestHelper.EvaluateInModuleOrCrash("add (triple 4) (triple 2)", elmModuleText)
+        InterpreterTestHelper.EvaluateInModuleOrCrashAsElmValue("add (triple 4) (triple 2)", elmModuleText)
             .Should().Be(ElmValue.Integer(18));
     }
 }

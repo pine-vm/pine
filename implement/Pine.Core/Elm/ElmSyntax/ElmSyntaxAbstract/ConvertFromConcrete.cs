@@ -1,4 +1,4 @@
-using Pine.Core.PopularEncodings;
+using Pine.Core.CommonEncodings;
 using System.Linq;
 using System.Numerics;
 
@@ -157,7 +157,7 @@ public static class ConvertFromConcrete
             [.. typeStruct.Constructors.Select(constructor => FromValueConstructor(constructor.Constructor.Value))]);
 
     private static ValueConstructor FromValueConstructor(SyntaxModel.ValueConstructor valueConstructor) =>
-        new(
+        ValueConstructor.Create(
             valueConstructor.Name.Value,
             [.. valueConstructor.Arguments.Select(argument => FromTypeAnnotation(argument.Value))]);
 
@@ -206,7 +206,7 @@ public static class ConvertFromConcrete
             [.. recordDefinition.Fields.Nodes.Select(node => FromRecordField(node.Value))]);
 
     private static RecordField FromRecordField(SyntaxModel.RecordField recordField) =>
-        new(
+        RecordField.Create(
             recordField.FieldName.Value,
             FromTypeAnnotation(recordField.FieldType.Value));
 
@@ -267,7 +267,7 @@ public static class ConvertFromConcrete
                 [.. tuplePattern.Elements.Nodes.Select(node => FromPattern(node.Value))]),
 
             SyntaxModel.Pattern.RecordPattern recordPattern =>
-            new Pattern.RecordPattern(
+            Pattern.RecordPattern.Create(
                 [.. recordPattern.Fields.Nodes.Select(node => node.Value)]),
 
             SyntaxModel.Pattern.UnConsPattern unConsPattern =>
@@ -379,8 +379,10 @@ public static class ConvertFromConcrete
                 FromExpression(letExpression.Value.Expression.Value)),
 
             SyntaxModel.Expression.RecordExpr recordExpr =>
-            new Expression.RecordExpr(
-                [.. recordExpr.Fields.Nodes.Select(FromRecordSetter)]),
+            Expression.RecordExpr.CreateSorted(
+                [
+                .. recordExpr.Fields.Nodes.Select(field => (field.FieldName.Value, FromExpression(field.ValueExpr.Value)))
+                ]),
 
             SyntaxModel.Expression.RecordAccess recordAccess =>
             new Expression.RecordAccess(
@@ -392,9 +394,12 @@ public static class ConvertFromConcrete
             MakeRecordAccessFunction(recordAccessFunction.FunctionName),
 
             SyntaxModel.Expression.RecordUpdateExpression recordUpdateExpression =>
-            new Expression.RecordUpdateExpression(
+            Expression.RecordUpdateExpression.CreateSorted(
                 recordUpdateExpression.RecordName.Value,
-                [.. recordUpdateExpression.Fields.Nodes.Select(FromRecordSetter)]),
+                [
+                .. recordUpdateExpression.Fields.Nodes.Select(
+                    field => (field.FieldName.Value, FromExpression(field.ValueExpr.Value)))
+                ]),
 
             SyntaxModel.Expression.GLSLExpression glslExpression =>
             new Expression.GLSLExpression(glslExpression.ShaderCode),
@@ -430,12 +435,6 @@ public static class ConvertFromConcrete
                 fieldName,
                 StringEncoding.ValueFromString(fieldName));
     }
-
-    private static RecordSetter FromRecordSetter(SyntaxModel.RecordExprField field) =>
-        new(
-            field.FieldName.Value,
-            StringEncoding.ValueFromString(field.FieldName.Value),
-            FromExpression(field.ValueExpr.Value));
 
     private static Case FromCase(SyntaxModel.Case caseItem) =>
         new(

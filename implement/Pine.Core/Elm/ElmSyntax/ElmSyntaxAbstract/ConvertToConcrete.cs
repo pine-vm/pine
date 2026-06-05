@@ -342,7 +342,7 @@ public static class ConvertToConcrete
             Pattern.RecordPattern recordPattern =>
             new SyntaxModel.Pattern.RecordPattern(
                 ToSeparatedList(
-                    [.. recordPattern.Fields.Select(Node)])),
+                    [.. recordPattern.Fields.Select(field => Node(field.FieldName))])),
 
             Pattern.UnConsPattern unConsPattern =>
             new SyntaxModel.Pattern.UnConsPattern(

@@ -35,7 +35,7 @@ public class FunctionApplicationPartialTests
     /// and renders the resulting value back to its Elm-expression form.
     /// </summary>
     private static string Evaluate(string elmModuleText, string expression) =>
-        ElmValue.RenderAsElmExpression(
+        Core.Elm.ElmSyntax.ElmSyntaxInterpreter.RenderAsElmExpression(
             InterpreterTestHelper.EvaluateInModuleOrCrash(expression, elmModuleText))
         .expressionString;
 
@@ -102,7 +102,7 @@ public class FunctionApplicationPartialTests
 
     /// <summary>
     /// A partially applied function escapes as a value and is rendered via
-    /// <see cref="ElmValue.RenderAsElmExpression(ElmValue)"/> as <c>&lt;function&gt;</c>.
+    /// <see cref="ElmValue.RenderAsElmExpression(ElmValue)"/> as <c>&lt;closure(declared:add)&gt;</c>.
     /// </summary>
     [Fact]
     public void Partially_applied_function_renders_as_function_when_returned()
@@ -117,7 +117,7 @@ public class FunctionApplicationPartialTests
             """;
 
         Evaluate(elmModuleText, "add 7")
-            .Should().Be("<function>");
+            .Should().Be("<closure(declared:add)>");
     }
 
     /// <summary>
@@ -135,8 +135,9 @@ public class FunctionApplicationPartialTests
                 Pine_builtin.int_add [ a, b ]
             """;
 
-        Evaluate(elmModuleText, "add")
-            .Should().Be("<function>");
+        var evaluatedAsExpr = Evaluate(elmModuleText, "add");
+
+        evaluatedAsExpr.Should().Be("<closure(declared:add)>");
     }
 
     /// <summary>

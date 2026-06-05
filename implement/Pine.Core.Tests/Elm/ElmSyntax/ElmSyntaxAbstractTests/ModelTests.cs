@@ -1,6 +1,6 @@
 using AwesomeAssertions;
+using Pine.Core.CommonEncodings;
 using Pine.Core.Elm.ElmSyntax.ElmSyntaxAbstract;
-using Pine.Core.PopularEncodings;
 using System.Numerics;
 using Xunit;
 
@@ -333,12 +333,12 @@ public class ModelTests
             new Pattern.TuplePattern([new Pattern.VarPattern("a"), new Pattern.VarPattern("b")]));
 
         AssertValueEqual(
-            new Pattern.RecordPattern(["a", "b"]),
-            new Pattern.RecordPattern(["a", "b"]));
+            Pattern.RecordPattern.Create(["a", "b"]),
+            Pattern.RecordPattern.Create(["a", "b"]));
 
         AssertNotEqual(
-            new Pattern.RecordPattern(["a", "b"]),
-            new Pattern.RecordPattern(["a", "c"]));
+            Pattern.RecordPattern.Create(["a", "b"]),
+            Pattern.RecordPattern.Create(["a", "c"]));
 
         AssertValueEqual(
             new Pattern.UnConsPattern(new Pattern.VarPattern("h"), new Pattern.VarPattern("t")),
@@ -391,9 +391,9 @@ public class ModelTests
 
         AssertValueEqual(
             new TypeAnnotation.Record(
-                new RecordDefinition([new RecordField("x", new TypeAnnotation.GenericType("a"))])),
+                new RecordDefinition([RecordField.Create("x", new TypeAnnotation.GenericType("a"))])),
             new TypeAnnotation.Record(
-                new RecordDefinition([new RecordField("x", new TypeAnnotation.GenericType("a"))])));
+                new RecordDefinition([RecordField.Create("x", new TypeAnnotation.GenericType("a"))])));
     }
 
     [Fact]
@@ -417,12 +417,12 @@ public class ModelTests
                 new TypeStruct(
                     "T",
                     ["a"],
-                    [new ValueConstructor("Ctor", [new TypeAnnotation.GenericType("a")])])),
+                    [ValueConstructor.Create("Ctor", [new TypeAnnotation.GenericType("a")])])),
             new Declaration.ChoiceTypeDeclaration(
                 new TypeStruct(
                     "T",
                     ["a"],
-                    [new ValueConstructor("Ctor", [new TypeAnnotation.GenericType("a")])])));
+                    [ValueConstructor.Create("Ctor", [new TypeAnnotation.GenericType("a")])])));
     }
 
     [Fact]

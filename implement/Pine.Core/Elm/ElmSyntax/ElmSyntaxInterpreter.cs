@@ -1,4 +1,6 @@
+using Microsoft.CodeAnalysis;
 using Pine.Core.CodeAnalysis;
+using Pine.Core.CommonEncodings;
 using Pine.Core.Internal;
 using System.Collections.Frozen;
 using System.Collections.Generic;
@@ -15,7 +17,7 @@ namespace Pine.Core.Elm.ElmSyntax;
 /// </summary>
 public sealed record ElmCallStackFrame(
     DeclQualifiedName FunctionName,
-    IReadOnlyList<ElmValue> Arguments)
+    IReadOnlyList<PineValueInProcess> Arguments)
 {
     /// <inheritdoc/>
     public bool Equals(ElmCallStackFrame? other)
@@ -31,7 +33,7 @@ public sealed record ElmCallStackFrame(
 
         for (var i = 0; i < Arguments.Count; i++)
         {
-            if (!Arguments[i].Equals(other.Arguments[i]))
+            if (!ElmSyntaxInterpreter.ValuesEqualInProcess(Arguments[i], other.Arguments[i]))
                 return false;
         }
 
@@ -41,13 +43,12 @@ public sealed record ElmCallStackFrame(
     /// <inheritdoc/>
     public override int GetHashCode()
     {
+        // The in-process arguments have no structural hash that is consistent with
+        // ValuesEqualInProcess (PineValueInProcess uses reference identity), so the argument
+        // count is the strongest structural component that keeps equal frames in the same bucket.
         var hash = new System.HashCode();
         hash.Add(FunctionName);
-
-        foreach (var argument in Arguments)
-        {
-            hash.Add(argument);
-        }
+        hash.Add(Arguments.Count);
 
         return hash.ToHashCode();
     }
@@ -66,7 +67,7 @@ public sealed record ElmCallStackFrame(
 
         foreach (var argument in Arguments)
         {
-            var (rendered, needsParens) = ElmValue.RenderAsElmExpression(argument);
+            var (rendered, needsParens) = ElmSyntaxInterpreter.RenderArgumentForError(argument);
 
             sb.Append(' ');
 
@@ -83,7 +84,7 @@ public sealed record ElmCallStackFrame(
 
 /// <summary>
 /// Structured representation of a runtime error raised while interpreting Elm code.
-/// Returned on the error branch of every <see cref="ElmSyntaxInterpreter.Interpret(SyntaxModel.Expression, IReadOnlyDictionary{DeclQualifiedName, SyntaxModel.Declaration})"/>
+/// Returned on the error branch of every <see cref="ElmSyntaxInterpreter.InterpretAsElmValue(SyntaxModel.Expression, IReadOnlyDictionary{DeclQualifiedName, SyntaxModel.Declaration})"/>
 /// overload. Carries the Elm call stack (<see cref="CallStack"/>) that was active at the moment
 /// of failure, innermost first. Built-ins such as <c>Debug.todo</c> surface errors of this kind,
 /// as do pattern-match failures, tag-arity mismatches, and detected infinite-recursion cycles.
@@ -176,7 +177,7 @@ public partial class ElmSyntaxInterpreter
     /// </summary>
     public record Application(
         DeclQualifiedName FunctionName,
-        IReadOnlyList<ElmValue> Arguments,
+        ImmutableList<PineValueInProcess> Arguments,
         ApplicationContext Context);
 
     /// <summary>
@@ -195,7 +196,7 @@ public partial class ElmSyntaxInterpreter
     public abstract record ApplicationResolution
     {
         /// <summary>A fully-resolved Elm value.</summary>
-        public sealed record Resolved(ElmValue Value)
+        public sealed record Resolved(PineValueInProcess Value)
             : ApplicationResolution;
 
         /// <summary>
@@ -227,7 +228,34 @@ public partial class ElmSyntaxInterpreter
     /// or an <see cref="ElmInterpretationError"/> describing the runtime failure (with its Elm
     /// call stack) on the error branch.
     /// </returns>
-    public static Result<ElmInterpretationError, ElmValue> Interpret(
+    public static Result<ElmInterpretationError, ElmValue> InterpretAsElmValue(
+        SyntaxModel.Expression rootExpression,
+        IReadOnlyDictionary<DeclQualifiedName, SyntaxModel.Declaration> declarations)
+    {
+        var combined =
+            CombineResolvers(
+                [
+                PineBuiltinResolver,
+                app => UserDefinedResolver(app, declarations),
+                ]);
+
+        var valueInProcess =
+            Interpret(rootExpression, combined, BuildInfixOperatorMap(declarations));
+
+        return valueInProcess.Map(ToElm);
+    }
+
+    /// <summary>
+    /// Interprets <paramref name="rootExpression"/> using a resolver that combines
+    /// <see cref="PineBuiltinResolver(Application)"/> with <see cref="UserDefinedResolver(Application, IReadOnlyDictionary{DeclQualifiedName, SyntaxModel.Declaration})"/>
+    /// backed by the supplied <paramref name="declarations"/>.
+    /// </summary>
+    /// <returns>
+    /// A <see cref="Result{ErrT, OkT}"/> containing the evaluated <see cref="PineValueInProcess"/> on success,
+    /// or an <see cref="ElmInterpretationError"/> describing the runtime failure (with its Elm
+    /// call stack) on the error branch.
+    /// </returns>
+    public static Result<ElmInterpretationError, PineValueInProcess> Interpret(
         SyntaxModel.Expression rootExpression,
         IReadOnlyDictionary<DeclQualifiedName, SyntaxModel.Declaration> declarations)
     {
@@ -251,7 +279,7 @@ public partial class ElmSyntaxInterpreter
     /// or an <see cref="ElmInterpretationError"/> describing the runtime failure (with its Elm
     /// call stack) on the error branch.
     /// </returns>
-    public static Result<ElmInterpretationError, ElmValue> Interpret(
+    public static Result<ElmInterpretationError, PineValueInProcess> Interpret(
         SyntaxModel.Expression rootExpression,
         System.Func<Application, ApplicationResolution> resolveApplication) =>
         Interpret(rootExpression, resolveApplication, infixOperators: null);
@@ -264,7 +292,7 @@ public partial class ElmSyntaxInterpreter
     /// applications. This lets the interpreter dispatch operators through the user-defined
     /// <c>infix</c> declarations from the Elm source code rather than a hard-coded table.
     /// </summary>
-    public static Result<ElmInterpretationError, ElmValue> Interpret(
+    public static Result<ElmInterpretationError, PineValueInProcess> Interpret(
         SyntaxModel.Expression rootExpression,
         System.Func<Application, ApplicationResolution> resolveApplication,
         IReadOnlyDictionary<string, DeclQualifiedName>? infixOperators)
@@ -294,9 +322,42 @@ public partial class ElmSyntaxInterpreter
     /// or an <see cref="ElmInterpretationError"/> describing the runtime failure (with its Elm
     /// call stack) on the error branch.
     /// </returns>
-    public static Result<ElmInterpretationError, ElmValue> Interpret(
+    public static Result<ElmInterpretationError, ElmValue> InterpretAsElmValue(
         DeclQualifiedName functionName,
         IReadOnlyList<ElmValue> arguments,
+        IReadOnlyDictionary<DeclQualifiedName, SyntaxModel.Declaration> declarations)
+    {
+        var combined =
+            CombineResolvers(
+                [
+                PineBuiltinResolver,
+                app => UserDefinedResolver(app, declarations),
+                ]);
+
+        var argumentsInProcess =
+            arguments.Select(ToProcess)
+            .ToImmutableList();
+
+        var valueInProcessResult =
+            Interpret(functionName, argumentsInProcess, combined, BuildInfixOperatorMap(declarations));
+
+        return valueInProcessResult.Map(ToElm);
+    }
+
+    /// <summary>
+    /// Invokes the function identified by <paramref name="functionName"/> with the given
+    /// <paramref name="arguments"/>, resolving against the supplied <paramref name="declarations"/>
+    /// via the combined <see cref="PineBuiltinResolver(Application)"/> /
+    /// <see cref="UserDefinedResolver(Application, IReadOnlyDictionary{DeclQualifiedName, SyntaxModel.Declaration})"/> resolver.
+    /// </summary>
+    /// <returns>
+    /// A <see cref="Result{ErrT, OkT}"/> containing the evaluated <see cref="ElmValue"/> on success,
+    /// or an <see cref="ElmInterpretationError"/> describing the runtime failure (with its Elm
+    /// call stack) on the error branch.
+    /// </returns>
+    public static Result<ElmInterpretationError, PineValueInProcess> Interpret(
+        DeclQualifiedName functionName,
+        IReadOnlyList<PineValueInProcess> arguments,
         IReadOnlyDictionary<DeclQualifiedName, SyntaxModel.Declaration> declarations)
     {
         var combined =
@@ -319,20 +380,20 @@ public partial class ElmSyntaxInterpreter
     /// or an <see cref="ElmInterpretationError"/> describing the runtime failure (with its Elm
     /// call stack) on the error branch.
     /// </returns>
-    public static Result<ElmInterpretationError, ElmValue> Interpret(
+    public static Result<ElmInterpretationError, PineValueInProcess> Interpret(
         DeclQualifiedName functionName,
-        IReadOnlyList<ElmValue> arguments,
+        IReadOnlyList<PineValueInProcess> arguments,
         System.Func<Application, ApplicationResolution> resolveApplication) =>
         Interpret(functionName, arguments, resolveApplication, infixOperators: null);
 
     /// <summary>
-    /// As <see cref="Interpret(DeclQualifiedName, IReadOnlyList{ElmValue}, System.Func{Application, ApplicationResolution})"/>,
+    /// As <see cref="Interpret(DeclQualifiedName, IReadOnlyList{PineValueInProcess}, System.Func{Application, ApplicationResolution})"/>,
     /// but additionally consults <paramref name="infixOperators"/> for source-defined infix
     /// operator dispatch.
     /// </summary>
-    public static Result<ElmInterpretationError, ElmValue> Interpret(
+    public static Result<ElmInterpretationError, PineValueInProcess> Interpret(
         DeclQualifiedName functionName,
-        IReadOnlyList<ElmValue> arguments,
+        IReadOnlyList<PineValueInProcess> arguments,
         System.Func<Application, ApplicationResolution> resolveApplication,
         IReadOnlyDictionary<string, DeclQualifiedName>? infixOperators)
     {
@@ -344,7 +405,7 @@ public partial class ElmSyntaxInterpreter
         var application =
             new Application(
                 FunctionName: functionName,
-                Arguments: arguments,
+                Arguments: [.. arguments],
                 Context: rootContext);
 
         return
@@ -367,7 +428,38 @@ public partial class ElmSyntaxInterpreter
     /// or an <see cref="ElmInterpretationError"/> describing either a parse failure (with an empty
     /// call stack) or a runtime interpretation failure on the error branch.
     /// </returns>
-    public static Result<ElmInterpretationError, ElmValue> ParseAndInterpret(
+    public static Result<ElmInterpretationError, ElmValue> ParseAndInterpretAsElmValue(
+        string rootExpressionText,
+        IReadOnlyDictionary<DeclQualifiedName, SyntaxModel.Declaration> declarations)
+    {
+        var parseResult = ParseRootExpression(rootExpressionText);
+
+        if (parseResult.IsErrOrNull() is { } parseErr)
+        {
+            return new ElmInterpretationError(parseErr, []);
+        }
+
+        if (parseResult.IsOkOrNull() is not { } rootExpression)
+        {
+            throw new System.NotImplementedException(
+                "Unexpected parse result type: " + parseResult.GetType().FullName);
+        }
+
+        return InterpretAsElmValue(rootExpression, declarations);
+    }
+
+    /// <summary>
+    /// Parses <paramref name="rootExpressionText"/> as an Elm expression and interprets it
+    /// against the supplied <paramref name="declarations"/> via the combined
+    /// <see cref="PineBuiltinResolver(Application)"/> /
+    /// <see cref="UserDefinedResolver(Application, IReadOnlyDictionary{DeclQualifiedName, SyntaxModel.Declaration})"/> resolver.
+    /// </summary>
+    /// <returns>
+    /// A <see cref="Result{ErrT, OkT}"/> containing the evaluated <see cref="ElmValue"/> on success,
+    /// or an <see cref="ElmInterpretationError"/> describing either a parse failure (with an empty
+    /// call stack) or a runtime interpretation failure on the error branch.
+    /// </returns>
+    public static Result<ElmInterpretationError, PineValueInProcess> ParseAndInterpret(
         string rootExpressionText,
         IReadOnlyDictionary<DeclQualifiedName, SyntaxModel.Declaration> declarations)
     {
@@ -414,7 +506,7 @@ public partial class ElmSyntaxInterpreter
     }
 
     /// <summary>
-    /// As <see cref="Interpret(DeclQualifiedName, IReadOnlyList{ElmValue}, IReadOnlyDictionary{DeclQualifiedName, SyntaxModel.Declaration})"/>,
+    /// As <see cref="Interpret(DeclQualifiedName, IReadOnlyList{PineValueInProcess}, IReadOnlyDictionary{DeclQualifiedName, SyntaxModel.Declaration})"/>,
     /// but additionally returns an <see cref="ElmSyntaxInterpreterPerformanceCounters"/>
     /// snapshot describing how much work the interpreter performed (trampoline iterations,
     /// direct vs function-value applications, Pine_builtin invocations).
@@ -424,7 +516,7 @@ public partial class ElmSyntaxInterpreter
     /// counters snapshot. Counters are populated even when the interpretation result is
     /// an error, reflecting the work performed up to the point of failure.
     /// </returns>
-    public static (Result<ElmInterpretationError, ElmValue> Result, ElmSyntaxInterpreterPerformanceCounters Counters)
+    public static (Result<ElmInterpretationError, PineValueInProcess> Result, ElmSyntaxInterpreterPerformanceCounters Counters)
         InterpretWithCounters(
         DeclQualifiedName functionName,
         IReadOnlyList<ElmValue> arguments,
@@ -444,10 +536,13 @@ public partial class ElmSyntaxInterpreter
                 CurrentTopLevel: functionName,
                 LocalBindings: ImmutableDictionary<string, PineValueInProcess>.Empty);
 
+        var argumentsInProcess =
+            arguments.Select(ToProcess).ToImmutableList();
+
         var application =
             new Application(
                 FunctionName: functionName,
-                Arguments: arguments,
+                Arguments: argumentsInProcess,
                 Context: rootContext);
 
         var result =
@@ -471,7 +566,7 @@ public partial class ElmSyntaxInterpreter
     /// A tuple of the usual interpretation <see cref="Result{ErrT, OkT}"/> and the
     /// counters snapshot. Parse failures yield zero counters because the trampoline never ran.
     /// </returns>
-    public static (Result<ElmInterpretationError, ElmValue> Result, ElmSyntaxInterpreterPerformanceCounters Counters)
+    public static (Result<ElmInterpretationError, PineValueInProcess> Result, ElmSyntaxInterpreterPerformanceCounters Counters)
         ParseAndInterpretWithCounters(
         string rootExpressionText,
         IReadOnlyDictionary<DeclQualifiedName, SyntaxModel.Declaration> declarations)
@@ -531,7 +626,7 @@ public partial class ElmSyntaxInterpreter
     /// dispatches. Tests typically supply <c>list.Add</c> here to capture a trace they
     /// can later search or render.
     /// </param>
-    public static (Result<ElmInterpretationError, ElmValue> Result, ElmSyntaxInterpreterPerformanceCounters Counters)
+    public static (Result<ElmInterpretationError, PineValueInProcess> Result, ElmSyntaxInterpreterPerformanceCounters Counters)
         ParseAndInterpretWithCounters(
         string rootExpressionText,
         IReadOnlyDictionary<DeclQualifiedName, SyntaxModel.Declaration> declarations,
@@ -581,10 +676,10 @@ public partial class ElmSyntaxInterpreter
     /// but additionally invokes <paramref name="onApplication"/> on every direct or
     /// function-value function application observed by the interpreter.
     /// </summary>
-    public static (Result<ElmInterpretationError, ElmValue> Result, ElmSyntaxInterpreterPerformanceCounters Counters)
+    public static (Result<ElmInterpretationError, PineValueInProcess> Result, ElmSyntaxInterpreterPerformanceCounters Counters)
         InterpretWithCounters(
         DeclQualifiedName functionName,
-        IReadOnlyList<ElmValue> arguments,
+        ImmutableList<PineValueInProcess> arguments,
         IReadOnlyDictionary<DeclQualifiedName, SyntaxModel.Declaration> declarations,
         System.Action<ApplicationLogEntry> onApplication)
     {
@@ -735,7 +830,7 @@ public partial class ElmSyntaxInterpreter
         public sealed record BuildRecord(
             IReadOnlyList<ElmSyntaxAbstract.RecordSetter> Fields,
             int NextIndex,
-            (string FieldName, PineValueInProcess Value)[] Accumulated,
+            (string FieldName, PineValue FieldNameValue, PineValueInProcess Value)[] Accumulated,
             ApplicationContext Env) : Kont;
 
         /// <summary>
@@ -768,7 +863,7 @@ public partial class ElmSyntaxInterpreter
 
         /// <summary>
         /// After evaluating the function expression for a <see cref="BuildArgsForValue"/>
-        /// application, apply the returned value (which must be an <see cref="ElmValue.ElmFunction"/>)
+        /// application, apply the returned value (which must be an <see cref="ElmClosureInProcess"/>)
         /// to the previously-collected arguments.
         /// </summary>
         public sealed record ApplyEvaluatedFunction(
@@ -778,7 +873,7 @@ public partial class ElmSyntaxInterpreter
         /// <summary>
         /// Inserted under a <see cref="CallFrame"/> when a function is over-applied: the call has
         /// been saturated at <see cref="CallFrame.Arguments"/> and once its body returns a value
-        /// (which must itself be an <see cref="ElmValue.ElmFunction"/>) the <see cref="ExtraArgs"/>
+        /// (which must itself be an <see cref="ElmClosureInProcess"/>) the <see cref="ExtraArgs"/>
         /// will be applied to it. Surfaces as the unifying mechanism for both
         /// <c>(f x) y z</c>-style chained applications and the case where a single application
         /// node's argument list spans the outer function's parameters and the inner closure's
@@ -853,7 +948,8 @@ public partial class ElmSyntaxInterpreter
         /// value (which must be an <see cref="ElmValue.ElmRecord"/>).
         /// </summary>
         public sealed record AccessRecordField(
-            string FieldName) : Kont;
+            string FieldName,
+            PineValue FieldNameValue) : Kont;
 
         /// <summary>
         /// Building a record-update expression <c>{ record | f1 = e1, f2 = e2 }</c>.
@@ -866,10 +962,10 @@ public partial class ElmSyntaxInterpreter
         /// for the original record).
         /// </summary>
         public sealed record BuildRecordUpdate(
-            ElmValue.ElmRecord? OriginalRecord,
+            PineValueInProcess? OriginalRecord,
             IReadOnlyList<ElmSyntaxAbstract.RecordSetter> Fields,
             int NextIndex,
-            (string FieldName, PineValueInProcess Value)[] Accumulated,
+            (string FieldName, PineValue FieldNameValue, PineValueInProcess FieldValue)[] Accumulated,
             ApplicationContext Env) : Kont;
     }
 
@@ -877,7 +973,7 @@ public partial class ElmSyntaxInterpreter
     /// Entry point of the trampoline. At most one of <paramref name="initialExpression"/>
     /// and <paramref name="initialApplication"/> is non-null:
     /// expression-evaluation starts from <paramref name="initialExpression"/>; direct-call
-    /// entry points (<see cref="Interpret(DeclQualifiedName, IReadOnlyList{ElmValue}, System.Func{Application, ApplicationResolution})"/>)
+    /// entry points (<see cref="Interpret(DeclQualifiedName, IReadOnlyList{PineValueInProcess}, System.Func{Application, ApplicationResolution})"/>)
     /// start by resolving <paramref name="initialApplication"/>.
     ///
     /// <see cref="RunTrampolineAsResult"/> wraps this as the boundary between the trampoline's
@@ -887,7 +983,7 @@ public partial class ElmSyntaxInterpreter
     /// <see cref="System.NotImplementedException"/> for a genuine interpreter feature gap)
     /// propagates unchanged.
     /// </summary>
-    private static Result<ElmInterpretationError, ElmValue> RunTrampolineAsResult(
+    private static Result<ElmInterpretationError, PineValueInProcess> RunTrampolineAsResult(
         ElmSyntaxAbstract.Expression? initialExpression,
         ApplicationContext initialEnv,
         Application? initialApplication,
@@ -897,15 +993,16 @@ public partial class ElmSyntaxInterpreter
     {
         try
         {
-            return
-                ToElm(
-                    RunTrampoline(
-                        initialExpression: initialExpression,
-                        initialEnv: initialEnv,
-                        initialApplication: initialApplication,
-                        resolveApplication: resolveApplication,
-                        infixOperators: infixOperators,
-                        invocationLogger: invocationLogger));
+            var valueInProcess =
+                RunTrampoline(
+                    initialExpression: initialExpression,
+                    initialEnv: initialEnv,
+                    initialApplication: initialApplication,
+                    resolveApplication: resolveApplication,
+                    infixOperators: infixOperators,
+                    invocationLogger: invocationLogger);
+
+            return valueInProcess;
         }
         catch (ElmInterpretationException interpretationException)
         {
@@ -983,12 +1080,12 @@ public partial class ElmSyntaxInterpreter
                         break;
 
                     case ElmSyntaxAbstract.Expression.StringLiteral literal:
-                        currentValue = ToProcess(ElmValue.StringInstance(literal.Value));
+                        currentValue = PineValueInProcess.Create(literal.ValueAsPineValue);
                         currentExpr = null;
                         break;
 
                     case ElmSyntaxAbstract.Expression.CharLiteral charLiteral:
-                        currentValue = ToProcess(ElmValue.CharInstance(charLiteral.Value));
+                        currentValue = PineValueInProcess.Create(charLiteral.ValueAsPineValue);
                         currentExpr = null;
                         break;
 
@@ -1066,12 +1163,12 @@ public partial class ElmSyntaxInterpreter
 
                             if (fields.Count is 0)
                             {
-                                currentValue = ToProcess(MakeElmRecord([]));
+                                currentValue = BuildRecordValue([]);
                                 currentExpr = null;
                                 break;
                             }
 
-                            var accumulated = new (string, PineValueInProcess)[fields.Count];
+                            var accumulated = new (string FieldName, PineValue FieldNameValue, PineValueInProcess FieldValue)[fields.Count];
 
                             kstack.Push(
                                 new Kont.BuildRecord(
@@ -1179,7 +1276,7 @@ public partial class ElmSyntaxInterpreter
                             // (so post-invocation stack traces remain coherent).
                             currentValue =
                                 new ElmClosureInProcess(
-                                    source: new ElmValue.ElmFunction.SourceRef.Lambda(lambdaExpression),
+                                    source: new ElmClosureInProcess.SourceRef.Lambda(lambdaExpression),
                                     parameterCount: lambdaExpression.Arguments.Count,
                                     argumentsAlreadyCollected: [],
                                     capturedBindings: SnapshotBindings(currentEnv.LocalBindings),
@@ -1258,7 +1355,8 @@ public partial class ElmSyntaxInterpreter
                             // produces a value, looks up the requested field on it.
                             kstack.Push(
                                 new Kont.AccessRecordField(
-                                    FieldName: recordAccess.FieldName));
+                                    FieldName: recordAccess.FieldName,
+                                    FieldNameValue: recordAccess.FieldNameValue));
 
                             currentExpr = recordAccess.Record;
                             break;
@@ -1266,17 +1364,7 @@ public partial class ElmSyntaxInterpreter
 
                     case ElmSyntaxAbstract.Expression.RecordAccessFunction recordAccessFunction:
                         {
-                            // A record-access function literal `.field` evaluates to a
-                            // single-parameter closure `\r -> r.field`. We synthesise that
-                            // closure as a lambda whose body is a RecordAccess node, so the
-                            // existing closure-application machinery handles invocation.
-                            // The abstract model already stores the bare field name (without
-                            // the leading dot).
-                            currentValue =
-                                ToProcess(
-                                    MakeRecordAccessClosure(
-                                        fieldName: recordAccessFunction.FieldName,
-                                        capturedTopLevel: currentEnv.CurrentTopLevel));
+                            currentValue = ElmRecordAccessChainInProcess.CreateFromFieldNames(new[] { recordAccessFunction.FieldName });
 
                             currentExpr = null;
                             break;
@@ -1293,7 +1381,7 @@ public partial class ElmSyntaxInterpreter
                                     kstack);
                             }
 
-                            var accumulated = new (string, PineValueInProcess)[fields.Count];
+                            var accumulated = new (string, PineValue, PineValueInProcess)[fields.Count];
 
                             // First evaluate the record name as a bare FunctionOrValue so the
                             // existing local-binding / top-level lookup machinery applies.
@@ -1405,7 +1493,7 @@ public partial class ElmSyntaxInterpreter
 
                             throw MakeRuntimeError(
                                 "Negation is only implemented for integer values, got "
-                                + RenderValueForError(value),
+                                + RenderArgumentForError(value).rendered,
                                 kstack);
                         }
 
@@ -1445,8 +1533,15 @@ public partial class ElmSyntaxInterpreter
 
                     case Kont.BuildRecord buildRecord:
                         {
+                            /*
+                             * The record expressions in the Elm syntax model must already come sorted,
+                             * so we dont sort the fields here.
+                             * */
+
                             var fieldName = buildRecord.Fields[buildRecord.NextIndex].FieldName;
-                            buildRecord.Accumulated[buildRecord.NextIndex] = (fieldName, value);
+                            var fieldNameValue = buildRecord.Fields[buildRecord.NextIndex].FieldNameValue;
+
+                            buildRecord.Accumulated[buildRecord.NextIndex] = (fieldName, fieldNameValue, value);
 
                             var next = buildRecord.NextIndex + 1;
 
@@ -1520,7 +1615,7 @@ public partial class ElmSyntaxInterpreter
                             var outcome =
                                 ApplyFunctionOrValue(
                                     functionOrValue: buildArgs.FunctionOrValue,
-                                    arguments: buildArgs.Accumulated,
+                                    arguments: [.. buildArgs.Accumulated],
                                     env: buildArgs.Env,
                                     resolveApplication: resolveApplication,
                                     kstack: kstack,
@@ -1649,16 +1744,16 @@ public partial class ElmSyntaxInterpreter
                         {
                             try
                             {
-                                var patternBindings = new Dictionary<string, ElmValue>();
+                                var patternBindings = new Dictionary<string, PineValueInProcess>();
 
                                 BindPattern(
                                     letBindDestructure.Pattern,
-                                    ToElm(value),
+                                    value,
                                     patternBindings);
 
                                 foreach (var (boundName, boundValue) in patternBindings)
                                 {
-                                    letBindDestructure.Extended[boundName] = ToProcess(boundValue);
+                                    letBindDestructure.Extended[boundName] = boundValue;
                                 }
                             }
                             catch (System.Exception ex) when (ex is not ElmInterpretationException)
@@ -1689,13 +1784,11 @@ public partial class ElmSyntaxInterpreter
                         {
                             var matched = false;
 
-                            var scrutineeElm = ToElm(value);
-
                             foreach (var caseNode in matchCase.Cases)
                             {
-                                var newBindings = new Dictionary<string, ElmValue>();
+                                var newBindings = new Dictionary<string, PineValueInProcess>();
 
-                                if (TryMatchPattern(caseNode.Pattern, scrutineeElm, newBindings))
+                                if (TryMatchPattern(caseNode.Pattern, value, newBindings))
                                 {
                                     var extendedEnv =
                                         new Dictionary<string, PineValueInProcess>(
@@ -1703,7 +1796,7 @@ public partial class ElmSyntaxInterpreter
 
                                     foreach (var (boundName, boundValue) in newBindings)
                                     {
-                                        extendedEnv[boundName] = ToProcess(boundValue);
+                                        extendedEnv[boundName] = boundValue;
                                     }
 
                                     currentEnv =
@@ -1721,7 +1814,7 @@ public partial class ElmSyntaxInterpreter
                             if (!matched)
                             {
                                 var renderedValue =
-                                    ElmValue.RenderAsElmExpression(scrutineeElm).expressionString;
+                                    RenderArgumentForError(value).rendered;
 
                                 throw MakeRuntimeError(
                                     "Case expression did not match any arm.\nScrutinee value: "
@@ -1734,43 +1827,38 @@ public partial class ElmSyntaxInterpreter
 
                     case Kont.AccessRecordField accessRecordField:
                         {
-                            if (ToElm(value) is not ElmValue.ElmRecord recordValue)
+                            try
                             {
-                                var renderedValue =
-                                    RenderValueForError(value);
+                                var patternBindings = new Dictionary<string, PineValueInProcess>();
 
-                                throw MakeRuntimeError(
-                                    "Record-access expression expects a record value, got: "
-                                    + renderedValue,
-                                    kstack);
+                                var fieldValue =
+                                    RecordAccess(
+                                        value,
+                                        fieldName: accessRecordField.FieldName,
+                                        fieldNameValue: accessRecordField.FieldNameValue);
+
+                                currentValue = fieldValue;
                             }
-
-                            var fieldValue = recordValue[accessRecordField.FieldName];
-
-                            if (fieldValue is null)
+                            catch (System.Exception ex) when (ex is not ElmInterpretationException)
                             {
-                                throw MakeRuntimeError(
-                                    "Record does not contain a field named '"
-                                    + accessRecordField.FieldName + "'.",
-                                    kstack);
+                                throw MakeRuntimeError(ex.Message, kstack, ex);
                             }
-
-                            currentValue = ToProcess(fieldValue);
-                            break;
                         }
+                        break;
 
                     case Kont.BuildRecordUpdate buildRecordUpdate:
                         {
                             if (buildRecordUpdate.NextIndex < 0)
                             {
                                 // Just received the original record value.
-                                if (ToElm(value) is not ElmValue.ElmRecord originalRecord)
+
+                                if (!PineValueInProcess.AreEqual(value.GetElementAt(0), ElmValue.ElmRecordTypeTagNameAsValue))
                                 {
                                     var renderedValue =
-                                        RenderValueForError(value);
+                                        RenderArgumentForError(value).rendered;
 
                                     throw MakeRuntimeError(
-                                        "Record-update expression expects a record value, got: "
+                                        "Expected a record value to update, but got something else.\nValue: "
                                         + renderedValue,
                                         kstack);
                                 }
@@ -1778,7 +1866,7 @@ public partial class ElmSyntaxInterpreter
                                 kstack.Push(
                                     buildRecordUpdate with
                                     {
-                                        OriginalRecord = originalRecord,
+                                        OriginalRecord = value,
                                         NextIndex = 0,
                                     });
 
@@ -1791,8 +1879,11 @@ public partial class ElmSyntaxInterpreter
                             var fieldName =
                                 buildRecordUpdate.Fields[buildRecordUpdate.NextIndex].FieldName;
 
+                            var fieldNameValue =
+                                buildRecordUpdate.Fields[buildRecordUpdate.NextIndex].FieldNameValue;
+
                             buildRecordUpdate.Accumulated[buildRecordUpdate.NextIndex] =
-                                (fieldName, value);
+                                (fieldName, fieldNameValue, value);
 
                             var nextIndex = buildRecordUpdate.NextIndex + 1;
 
@@ -1813,45 +1904,53 @@ public partial class ElmSyntaxInterpreter
                             // Elm record-update preserves the original field order (which
                             // for Elm records produced by this interpreter is alphabetical)
                             // and requires every updated field name to exist on the record.
-                            var original = buildRecordUpdate.OriginalRecord!;
 
-                            var updates =
-                                new Dictionary<string, ElmValue>(buildRecordUpdate.Accumulated.Length);
-
-                            foreach (var (updateFieldName, updateValue) in buildRecordUpdate.Accumulated)
+                            if (buildRecordUpdate.OriginalRecord is not { } originalRecord)
                             {
-                                updates[updateFieldName] = ToElm(updateValue);
+                                throw MakeRuntimeError(
+                                    "Internal error: original record value was not set in BuildRecordUpdate continuation.",
+                                    kstack);
                             }
 
-                            // Verify every update target field exists on the original record.
-                            foreach (var updateFieldName in updates.Keys)
+                            var newListItems = new PineValueInProcess[originalRecord.GetLength()];
+
+                            var fieldCount = (newListItems.Length - 1) / 2;
+
+                            for (var i = 0; i < newListItems.Length; i++)
                             {
-                                if (original[updateFieldName] is null)
+                                newListItems[i] = originalRecord.GetElementAt(i);
+                            }
+
+                            for (var i = 0; i < buildRecordUpdate.Accumulated.Length; i++)
+                            {
+                                var (updateFieldName, updateFieldNameValue, updateValue) = buildRecordUpdate.Accumulated[i];
+
+                                int? fieldIndex = null;
+
+                                for (var j = 0; j < fieldCount; j++)
                                 {
+                                    if (PineValueInProcess.AreEqual(originalRecord.GetElementAt(1 + 2 * j), updateFieldNameValue))
+                                    {
+                                        fieldIndex = j;
+                                        break;
+                                    }
+                                }
+
+                                if (fieldIndex is null)
+                                {
+                                    var renderedRecord =
+                                        RenderArgumentForError(originalRecord).rendered;
+
                                     throw MakeRuntimeError(
-                                        "Record-update references field '"
-                                        + updateFieldName
-                                        + "' which is not present on the record.",
+                                        "Cannot update field \"" + updateFieldName + "\" because it does not exist on the record.\nRecord value: "
+                                        + renderedRecord,
                                         kstack);
                                 }
+
+                                newListItems[1 + 2 * fieldIndex.Value + 1] = updateValue;
                             }
 
-                            var newFields =
-                                new (string FieldName, ElmValue Value)[original.Fields.Count];
-
-                            for (var i = 0; i < original.Fields.Count; i++)
-                            {
-                                var origField = original.Fields[i];
-
-                                newFields[i] =
-                                    updates.TryGetValue(origField.FieldName, out var newValue)
-                                    ?
-                                    (origField.FieldName, newValue)
-                                    :
-                                    origField;
-                            }
-
-                            currentValue = ToProcess(new ElmValue.ElmRecord(newFields));
+                            currentValue = PineValueInProcess.CreateList(newListItems);
                             break;
                         }
 
@@ -1871,11 +1970,13 @@ public partial class ElmSyntaxInterpreter
     /// </summary>
     private abstract record ApplyCallOutcome
     {
-        public sealed record ResolvedValue(PineValueInProcess Value) : ApplyCallOutcome;
+        public sealed record ResolvedValue(PineValueInProcess Value)
+            : ApplyCallOutcome;
 
         public sealed record ContinueEvaluating(
             ElmSyntaxAbstract.Expression Expression,
-            ApplicationContext Env) : ApplyCallOutcome;
+            ApplicationContext Env)
+            : ApplyCallOutcome;
     }
 
     /// <summary>
@@ -1959,8 +2060,8 @@ public partial class ElmSyntaxInterpreter
         }
 
         public void OnFunctionValueApplication(
-            ElmValue functionValue,
-            IReadOnlyList<ElmValue> newArguments)
+            PineValueInProcess functionValue,
+            IReadOnlyList<PineValueInProcess> newArguments)
         {
             _functionValueApplicationCount++;
             _onApplication?.Invoke(new ApplicationLogEntry.FunctionValue(functionValue, newArguments));
@@ -1974,7 +2075,7 @@ public partial class ElmSyntaxInterpreter
 
     private static ApplyCallOutcome ApplyFunctionOrValue(
         ElmSyntaxAbstract.Expression.FunctionOrValue functionOrValue,
-        IReadOnlyList<PineValueInProcess> arguments,
+        ImmutableList<PineValueInProcess> arguments,
         ApplicationContext env,
         System.Func<Application, ApplicationResolution> resolveApplication,
         Stack<Kont> kstack,
@@ -1986,7 +2087,7 @@ public partial class ElmSyntaxInterpreter
                 new DeclQualifiedName(
                     Namespaces: [.. functionOrValue.ModuleName],
                     DeclName: functionOrValue.Name),
-                Arguments: ToElmList(arguments),
+                Arguments: arguments,
                 Context: env);
 
         invocationLogger.OnDirectFunctionApplication(application);
@@ -2023,7 +2124,7 @@ public partial class ElmSyntaxInterpreter
         switch (resolution)
         {
             case ApplicationResolution.Resolved resolved:
-                return new ApplyCallOutcome.ResolvedValue(ToProcess(resolved.Value));
+                return new ApplyCallOutcome.ResolvedValue(resolved.Value);
 
             case ApplicationResolution.ContinueWithFunction continueWithFunction:
                 {
@@ -2044,32 +2145,32 @@ public partial class ElmSyntaxInterpreter
                     // the captured environment is empty.
                     if (providedCount < expectedArity)
                     {
+                        var sourceRef =
+                            new ElmClosureInProcess.SourceRef.Declared(
+                                Name: application.FunctionName,
+                                Implementation: functionImpl);
+
                         return
                             new ApplyCallOutcome.ResolvedValue(
-                                ToProcess(
-                                    new ElmValue.ElmFunction(
-                                        Source:
-                                        new ElmValue.ElmFunction.SourceRef.Declared(
-                                            Name: application.FunctionName,
-                                            Implementation: functionImpl),
-                                        ParameterCount: expectedArity,
-                                        ArgumentsAlreadyCollected: [.. application.Arguments],
-                                        CapturedBindings:
-                                        ImmutableDictionary<string, ElmValue>.Empty,
-                                        CapturedTopLevel: bodyTopLevel)));
+                                new ElmClosureInProcess(
+                                    sourceRef,
+                                    parameterCount: expectedArity,
+                                    argumentsAlreadyCollected: [.. application.Arguments],
+                                    capturedBindings: ImmutableDictionary<string, PineValueInProcess>.Empty,
+                                    capturedTopLevel: bodyTopLevel));
                     }
 
                     // Over-application: split the argument list at the declared arity. The first
                     // `expectedArity` arguments saturate this call; the remaining arguments are
                     // pushed as an AfterCall continuation and applied to whatever value the body
                     // returns (which must itself be a function).
-                    IReadOnlyList<ElmValue> saturatingArgs;
-                    IReadOnlyList<ElmValue>? extraArgs;
+                    IReadOnlyList<PineValueInProcess> saturatingArgs;
+                    IReadOnlyList<PineValueInProcess>? extraArgs;
 
                     if (providedCount > expectedArity)
                     {
-                        var saturating = new ElmValue[expectedArity];
-                        var extra = new ElmValue[providedCount - expectedArity];
+                        var saturating = new PineValueInProcess[expectedArity];
+                        var extra = new PineValueInProcess[providedCount - expectedArity];
 
                         for (var i = 0; i < expectedArity; i++)
                             saturating[i] = application.Arguments[i];
@@ -2086,7 +2187,7 @@ public partial class ElmSyntaxInterpreter
                         extraArgs = null;
                     }
 
-                    var bindings = new Dictionary<string, ElmValue>();
+                    var bindings = new Dictionary<string, PineValueInProcess>();
 
                     for (var i = 0; i < expectedArity; i++)
                     {
@@ -2108,7 +2209,7 @@ public partial class ElmSyntaxInterpreter
 
                     foreach (var (boundName, boundValue) in bindings)
                     {
-                        innerBindings[boundName] = ToProcess(boundValue);
+                        innerBindings[boundName] = boundValue;
                     }
 
                     var innerContext =
@@ -2124,7 +2225,7 @@ public partial class ElmSyntaxInterpreter
                         // arguments.
                         kstack.Push(
                             new Kont.AfterCall(
-                                ExtraArgs: ToProcessList(extraArgs),
+                                ExtraArgs: extraArgs,
                                 Env: application.Context));
                     }
 
@@ -2139,7 +2240,7 @@ public partial class ElmSyntaxInterpreter
                         new Kont.CallFrame(
                             application.FunctionName,
                             functionImpl,
-                            ToProcessList(saturatingArgs)));
+                            saturatingArgs));
 
                     if (invocationLogger.IncrementUserCallDepth() % InfiniteRecursionCheckInterval is 0)
                     {
@@ -2160,7 +2261,7 @@ public partial class ElmSyntaxInterpreter
 
     /// <summary>
     /// Applies <paramref name="functionValue"/> — required to be an
-    /// <see cref="ElmValue.ElmFunction"/> closure — to <paramref name="newArguments"/>. Combines
+    /// <see cref="ElmClosureInProcess"/> closure — to <paramref name="newArguments"/>. Combines
     /// the closure's previously-collected arguments with the new ones and dispatches:
     /// <list type="bullet">
     /// <item><b>Under-application</b> (combined &lt; arity): produces a new closure carrying the
@@ -2184,7 +2285,121 @@ public partial class ElmSyntaxInterpreter
         Stack<Kont> kstack,
         IInvocationLogger invocationLogger)
     {
-        invocationLogger.OnFunctionValueApplication(ToElm(functionValue), ToElmList(newArguments));
+        if (newArguments.Count is 0)
+            return new ApplyCallOutcome.ResolvedValue(functionValue);
+
+        invocationLogger.OnFunctionValueApplication(functionValue, newArguments);
+
+        if (functionValue is ElmRecordAccessChainInProcess recordAccessChain)
+        {
+            if (newArguments.Count is not 1)
+            {
+                throw MakeRuntimeError(
+                    $"Cannot apply {RenderArgumentForError(recordAccessChain).rendered} to {newArguments.Count} argument(s) (expected 1)",
+                    kstack);
+            }
+
+            var currentValue = newArguments[0];
+
+            for (var i = 0; i < recordAccessChain.FieldNames.Length; i++)
+            {
+                try
+                {
+                    var fieldValue =
+                        RecordAccess(
+                            currentValue,
+                            recordAccessChain.FieldNames[i].FieldName,
+                            recordAccessChain.FieldNames[i].FieldNameValue);
+
+                    currentValue = fieldValue;
+                }
+                catch (System.Exception ex) when (ex is not ElmInterpretationException)
+                {
+                    throw MakeRuntimeError(ex.Message, kstack, ex);
+                }
+            }
+
+            return new ApplyCallOutcome.ResolvedValue(currentValue);
+        }
+
+        if (functionValue is ElmChoiceTagConstructorInProcess choiceTagConstructor)
+        {
+            var remainingArgs = choiceTagConstructor.TotalArity - choiceTagConstructor.Arguments.Count;
+
+            if (newArguments.Count > remainingArgs)
+            {
+                throw MakeRuntimeError(
+                    $"Too many arguments provided to choice tag constructor {choiceTagConstructor.TagName}: " +
+                    $"expected {remainingArgs} but got {newArguments.Count}",
+                    kstack);
+            }
+
+            var combinedArgs = choiceTagConstructor.Arguments.AddRange(newArguments);
+
+            remainingArgs = choiceTagConstructor.TotalArity - combinedArgs.Count;
+
+            if (remainingArgs is 0)
+            {
+                var finalValue =
+                    BuildTaggedValue(
+                        PineValueInProcess.Create(StringEncoding.ValueFromString(choiceTagConstructor.TagName)),
+                        combinedArgs);
+
+                return new ApplyCallOutcome.ResolvedValue(finalValue);
+            }
+
+            if (remainingArgs < 0)
+            {
+                throw MakeRuntimeError(
+                    $"Too many arguments provided to choice tag constructor {choiceTagConstructor.TagName}: " +
+                    $"expected {remainingArgs} but got {newArguments.Count}",
+                    kstack);
+            }
+
+            return new ApplyCallOutcome.ResolvedValue(
+                choiceTagConstructor.WithArgumentsApplied(newArguments));
+        }
+
+        if (functionValue is ElmRecordTypeConstructorInProcess recordTypeConstructor)
+        {
+            var remainingArgs = recordTypeConstructor.FieldNames.Length - recordTypeConstructor.Arguments.Count;
+
+            if (newArguments.Count > remainingArgs)
+            {
+                throw MakeRuntimeError(
+                    $"Too many arguments provided to record type constructor {recordTypeConstructor.TypeName}: " +
+                    $"expected {remainingArgs} but got {newArguments.Count}",
+                    kstack);
+            }
+
+            var combinedArgs = recordTypeConstructor.Arguments.AddRange(newArguments);
+
+            remainingArgs = recordTypeConstructor.FieldNames.Length - combinedArgs.Count;
+
+            if (remainingArgs is 0)
+            {
+                var fields =
+                    recordTypeConstructor.FieldNames
+                    .Select((name, i) => (name.FieldName, name.FieldNameValue, combinedArgs[i]))
+                    .OrderBy(f => f.FieldName, System.StringComparer.Ordinal);
+
+                var finalValue =
+                    BuildRecordValue([.. fields]);
+
+                return new ApplyCallOutcome.ResolvedValue(finalValue);
+            }
+
+            if (remainingArgs < 0)
+            {
+                throw MakeRuntimeError(
+                    $"Too many arguments provided to record type constructor {recordTypeConstructor.TypeName}: " +
+                    $"expected {remainingArgs} but got {newArguments.Count}",
+                    kstack);
+            }
+
+            return new ApplyCallOutcome.ResolvedValue(
+                recordTypeConstructor.WithArgumentsApplied(newArguments));
+        }
 
         if (functionValue is not ElmClosureInProcess closure)
         {
@@ -2196,7 +2411,7 @@ public partial class ElmSyntaxInterpreter
             }
 
             var rendered =
-                RenderValueForError(functionValue);
+                RenderArgumentForError(functionValue).rendered;
 
             var nameSuffix =
                 functionRenderForError is null
@@ -2271,14 +2486,14 @@ public partial class ElmSyntaxInterpreter
 
         switch (closure.Source)
         {
-            case ElmValue.ElmFunction.SourceRef.Declared declared:
+            case ElmClosureInProcess.SourceRef.Declared declared:
                 parameterPatterns = declared.Implementation.Arguments;
                 bodyExpression = declared.Implementation.Expression;
                 callFrameName = declared.Name;
                 callFrameSourceIdentity = declared.Implementation;
                 break;
 
-            case ElmValue.ElmFunction.SourceRef.Lambda lambdaSource:
+            case ElmClosureInProcess.SourceRef.Lambda lambdaSource:
                 parameterPatterns = lambdaSource.LambdaExpression.Arguments;
                 bodyExpression = lambdaSource.LambdaExpression.Expression;
                 callFrameName = SyntheticLambdaName(lambdaSource.LambdaExpression);
@@ -2287,23 +2502,23 @@ public partial class ElmSyntaxInterpreter
 
             default:
                 throw new System.NotImplementedException(
-                    "Unknown ElmFunction.SourceRef shape: " + closure.Source.GetType().FullName);
+                    "Unknown ElmClosureInProcess.SourceRef shape: " + closure.Source.GetType().FullName);
         }
 
         for (var i = 0; i < arity; i++)
         {
             try
             {
-                var patternBindings = new Dictionary<string, ElmValue>();
+                var patternBindings = new Dictionary<string, PineValueInProcess>();
 
                 BindPattern(
                     parameterPatterns[i],
-                    ToElm(saturatingArgs[i]),
+                    saturatingArgs[i],
                     patternBindings);
 
                 foreach (var (boundName, boundValue) in patternBindings)
                 {
-                    bodyBindings[boundName] = ToProcess(boundValue);
+                    bodyBindings[boundName] = boundValue;
                 }
             }
             catch (System.Exception ex) when (ex is not ElmInterpretationException)
@@ -2362,7 +2577,7 @@ public partial class ElmSyntaxInterpreter
 
     /// <summary>
     /// Snapshots the local-binding environment as an immutable dictionary suitable for capture
-    /// inside an <see cref="ElmValue.ElmFunction"/> closure. Avoids accidental aliasing of the
+    /// inside an <see cref="ElmClosureInProcess"/> closure. Avoids accidental aliasing of the
     /// caller's mutable <c>Dictionary&lt;string, ElmValue&gt;</c> instances.
     /// </summary>
     private static IReadOnlyDictionary<string, PineValueInProcess> SnapshotBindings(
@@ -2419,7 +2634,7 @@ public partial class ElmSyntaxInterpreter
                 continue;
 
             truncatedStack.Add(
-                new ElmCallStackFrame(callFrame.FunctionName, ToElmList(callFrame.Arguments)));
+                new ElmCallStackFrame(callFrame.FunctionName, callFrame.Arguments));
 
             if (!seenTop)
             {
@@ -2447,7 +2662,7 @@ public partial class ElmSyntaxInterpreter
 
         for (var i = 0; i < left.Count; i++)
         {
-            if (!ValuesEqual(left[i], right[i]))
+            if (!ValuesEqualInProcess(left[i], right[i]))
                 return false;
         }
 
@@ -2554,7 +2769,7 @@ public partial class ElmSyntaxInterpreter
     /// <list type="number">
     ///   <item>
     ///   For every parameterised <see cref="SyntaxModel.Expression.LetDeclaration.LetFunction"/>,
-    ///   immediately materialises an <see cref="ElmValue.ElmFunction"/> closure into
+    ///   immediately materialises an <see cref="ElmClosureInProcess"/> closure into
     ///   <paramref name="extended"/>. The closure captures the same mutable
     ///   <paramref name="extended"/> dictionary used by the rest of the let group; closures
     ///   that are invoked after evaluation of the let group has completed therefore see all
@@ -2634,7 +2849,7 @@ public partial class ElmSyntaxInterpreter
                 extended[bindingName] =
                     new ElmClosureInProcess(
                         source:
-                        new ElmValue.ElmFunction.SourceRef.Declared(
+                        new ElmClosureInProcess.SourceRef.Declared(
                             Name: qualifiedName,
                             Implementation: functionImpl),
                         parameterCount: functionImpl.Arguments.Count,
@@ -2837,7 +3052,7 @@ public partial class ElmSyntaxInterpreter
 
             case ElmSyntaxAbstract.Pattern.RecordPattern recordPattern:
                 foreach (var field in recordPattern.Fields)
-                    sink.Add(field);
+                    sink.Add(field.FieldName);
 
                 break;
 
@@ -3065,7 +3280,7 @@ public partial class ElmSyntaxInterpreter
         {
             if (frame is Kont.CallFrame callFrame)
             {
-                trace.Add(new ElmCallStackFrame(callFrame.FunctionName, ToElmList(callFrame.Arguments)));
+                trace.Add(new ElmCallStackFrame(callFrame.FunctionName, callFrame.Arguments));
             }
         }
 
@@ -3104,8 +3319,8 @@ public partial class ElmSyntaxInterpreter
     /// </summary>
     private static bool TryMatchPattern(
         ElmSyntaxAbstract.Pattern pattern,
-        ElmValue value,
-        IDictionary<string, ElmValue> bindings)
+        PineValueInProcess value,
+        IDictionary<string, PineValueInProcess> bindings)
     {
         switch (pattern)
         {
@@ -3119,7 +3334,7 @@ public partial class ElmSyntaxInterpreter
             case ElmSyntaxAbstract.Pattern.UnitPattern:
 
                 // The unit value is represented as an empty Elm list.
-                return value is ElmValue.ElmList unitList && unitList.Items.Count is 0;
+                return PineValueInProcess.AreEqual(value, PineValueInProcess.EmptyList);
 
             case ElmSyntaxAbstract.Pattern.AsPattern asPattern:
                 {
@@ -3131,27 +3346,24 @@ public partial class ElmSyntaxInterpreter
                 }
 
             case ElmSyntaxAbstract.Pattern.CharPattern charPattern:
-                return value is ElmValue.ElmChar elmChar && elmChar.Value == charPattern.Value;
+                return PineValueInProcess.AreEqual(value, charPattern.ValueAsPineValue);
 
             case ElmSyntaxAbstract.Pattern.StringPattern stringPattern:
-                return value is ElmValue.ElmString elmString && elmString.Value == stringPattern.Value;
+                return PineValueInProcess.AreEqual(value, stringPattern.ValueAsPineValue);
 
             case ElmSyntaxAbstract.Pattern.IntPattern intPattern:
-                return value is ElmValue.ElmInteger elmInt && elmInt.Value == intPattern.Value;
+                return PineValueInProcess.AreEqual(value, intPattern.ValueAsPineValue);
 
             case ElmSyntaxAbstract.Pattern.TuplePattern tuplePattern:
                 {
-                    if (value is not ElmValue.ElmList tupleList)
+                    if (!value.IsList())
                         return false;
 
                     var elementPatterns = tuplePattern.Elements;
 
-                    if (elementPatterns.Count != tupleList.Items.Count)
-                        return false;
-
                     for (var i = 0; i < elementPatterns.Count; i++)
                     {
-                        if (!TryMatchPattern(elementPatterns[i], tupleList.Items[i], bindings))
+                        if (!TryMatchPattern(elementPatterns[i], value.GetElementAt(i), bindings))
                             return false;
                     }
 
@@ -3160,17 +3372,19 @@ public partial class ElmSyntaxInterpreter
 
             case ElmSyntaxAbstract.Pattern.RecordPattern recordPattern:
                 {
-                    if (value is not ElmValue.ElmRecord recordValue)
+                    var firstItem = value.GetElementAt(0);
+
+                    if (!PineValueInProcess.AreEqual(firstItem, s_elmRecordTypeTagNameAsValueInProcess))
                         return false;
 
-                    foreach (var fieldName in recordPattern.Fields)
+                    foreach (var field in recordPattern.Fields)
                     {
-                        var fieldValue = recordValue[fieldName];
+                        var fieldValue = RecordAccess(value, field.FieldName, field.FieldNameValue);
 
                         if (fieldValue is null)
                             return false;
 
-                        bindings[fieldName] = fieldValue;
+                        bindings[field.FieldName] = fieldValue;
                     }
 
                     return true;
@@ -3178,19 +3392,19 @@ public partial class ElmSyntaxInterpreter
 
             case ElmSyntaxAbstract.Pattern.UnConsPattern unConsPattern:
                 {
-                    if (value is not ElmValue.ElmList consList)
+                    if (!value.IsList())
                         return false;
 
-                    if (consList.Items.Count is 0)
+                    if (value.GetLength() is 0)
                         return false;
 
-                    var head = consList.Items[0];
-                    var tailItems = new ElmValue[consList.Items.Count - 1];
+                    var head = value.GetElementAt(0);
+                    var tailItems = new PineValueInProcess[value.GetLength() - 1];
 
-                    for (var i = 1; i < consList.Items.Count; i++)
-                        tailItems[i - 1] = consList.Items[i];
+                    for (var i = 1; i < value.GetLength(); i++)
+                        tailItems[i - 1] = value.GetElementAt(i);
 
-                    var tail = ElmValue.ListInstance(tailItems);
+                    var tail = PineValueInProcess.CreateList(tailItems);
 
                     if (!TryMatchPattern(unConsPattern.Head, head, bindings))
                         return false;
@@ -3200,17 +3414,17 @@ public partial class ElmSyntaxInterpreter
 
             case ElmSyntaxAbstract.Pattern.ListPattern listPattern:
                 {
-                    if (value is not ElmValue.ElmList listValue)
+                    if (!value.IsList())
                         return false;
 
-                    var elementPatterns = listPattern.Elements;
+                    var itemPatterns = listPattern.Elements;
 
-                    if (elementPatterns.Count != listValue.Items.Count)
+                    if (value.GetLength() != itemPatterns.Count)
                         return false;
 
-                    for (var i = 0; i < elementPatterns.Count; i++)
+                    for (var i = 0; i < itemPatterns.Count; i++)
                     {
-                        if (!TryMatchPattern(elementPatterns[i], listValue.Items[i], bindings))
+                        if (!TryMatchPattern(itemPatterns[i], value.GetElementAt(i), bindings))
                             return false;
                     }
 
@@ -3219,27 +3433,41 @@ public partial class ElmSyntaxInterpreter
 
             case ElmSyntaxAbstract.Pattern.NamedPattern namedPattern:
                 {
-                    // Special case: the production `Basics.elm` represents the primitive
-                    // `String` and `Elm_Float` types as ordinary tagged values, but the
-                    // interpreter uses dedicated <see cref="ElmValue.ElmString"/> and
-                    // <see cref="ElmValue.ElmFloat"/> variants. Allow the corresponding
-                    // named patterns to match those variants by mapping back to the
-                    // tag-style representation.
-                    if (TryMatchPrimitiveTagShape(namedPattern, value, bindings) is { } primitiveResult)
-                        return primitiveResult;
+                    if (namedPattern.Name.Name is "True")
+                        return PineValueInProcess.AreEqual(value, PineValueInProcess.KernelTrueValue);
 
-                    if (value is not ElmValue.ElmTag tagValue)
-                        return false;
+                    if (namedPattern.Name.Name is "False")
+                        return PineValueInProcess.AreEqual(value, PineValueInProcess.KernelFalseValue);
 
-                    if (tagValue.TagName != namedPattern.Name.Name)
-                        return false;
+                    var tagEncoded = StringEncoding.ValueFromString(namedPattern.Name.Name);
 
-                    if (namedPattern.Arguments.Count != tagValue.Arguments.Count)
+                    var firstItem = value.GetElementAt(0);
+
+                    if (!PineValueInProcess.AreEqual(firstItem, tagEncoded))
+                    {
                         return false;
+                    }
+
+                    var tagArguments = value.GetElementAt(1);
+
+                    var tagArgumentsLength = tagArguments.GetLength();
+
+                    if (namedPattern.Arguments.Count != tagArgumentsLength)
+                    {
+                        throw new System.InvalidOperationException(
+                            "Named pattern '"
+                            + namedPattern.Name.Name
+                            + "' has "
+                            + namedPattern.Arguments.Count
+                            + " arguments, but tag value has "
+                            + tagArgumentsLength + ".");
+                    }
 
                     for (var i = 0; i < namedPattern.Arguments.Count; i++)
                     {
-                        if (!TryMatchPattern(namedPattern.Arguments[i], tagValue.Arguments[i], bindings))
+                        var argumentValue = tagArguments.GetElementAt(i);
+
+                        if (!TryMatchPattern(namedPattern.Arguments[i], argumentValue, bindings))
                             return false;
                     }
 
@@ -3254,8 +3482,8 @@ public partial class ElmSyntaxInterpreter
 
     private static void BindPattern(
         ElmSyntaxAbstract.Pattern pattern,
-        ElmValue value,
-        IDictionary<string, ElmValue> bindings)
+        PineValueInProcess value,
+        IDictionary<string, PineValueInProcess> bindings)
     {
         switch (pattern)
         {
@@ -3276,54 +3504,65 @@ public partial class ElmSyntaxInterpreter
 
             case ElmSyntaxAbstract.Pattern.TuplePattern tuplePattern:
                 {
-                    if (value is not ElmValue.ElmList tupleList)
+                    var itemPatterns = tuplePattern.Elements;
+
+                    for (var i = 0; i < itemPatterns.Count; i++)
                     {
-                        throw new System.InvalidOperationException(
-                            "Cannot bind tuple pattern to value of type "
-                            + value.GetType().FullName + ".");
+                        var itemValue = value.GetElementAt(i);
+
+                        BindPattern(itemPatterns[i], itemValue, bindings);
                     }
 
-                    var elementPatterns = tuplePattern.Elements;
+                    break;
+                }
 
-                    if (elementPatterns.Count != tupleList.Items.Count)
+            case ElmSyntaxAbstract.Pattern.ListPattern listPattern:
+                {
+                    var itemPatterns = listPattern.Elements;
+                    for (var i = 0; i < itemPatterns.Count; i++)
                     {
-                        throw new System.InvalidOperationException(
-                            "Tuple pattern has "
-                            + elementPatterns.Count
-                            + " elements, but value has "
-                            + tupleList.Items.Count + ".");
+                        var itemValue = value.GetElementAt(i);
+                        BindPattern(itemPatterns[i], itemValue, bindings);
                     }
+                    break;
+                }
 
-                    for (var i = 0; i < elementPatterns.Count; i++)
-                    {
-                        BindPattern(elementPatterns[i], tupleList.Items[i], bindings);
-                    }
+            case ElmSyntaxAbstract.Pattern.UnConsPattern unConsPattern:
+                {
+                    var headValue = value.GetElementAt(0);
+
+                    var tailItems = new PineValueInProcess[value.GetLength() - 1];
+
+                    for (var i = 1; i < value.GetLength(); i++)
+                        tailItems[i - 1] = value.GetElementAt(i);
+
+                    var tailValue = PineValueInProcess.CreateList(tailItems);
+
+                    BindPattern(unConsPattern.Head, headValue, bindings);
+                    BindPattern(unConsPattern.Tail, tailValue, bindings);
 
                     break;
                 }
 
             case ElmSyntaxAbstract.Pattern.RecordPattern recordPattern:
                 {
-                    if (value is not ElmValue.ElmRecord recordValue)
+                    foreach (var field in recordPattern.Fields)
                     {
-                        throw new System.InvalidOperationException(
-                            "Cannot bind record pattern to value of type "
-                            + value.GetType().FullName + ".");
-                    }
-
-                    foreach (var fieldName in recordPattern.Fields)
-                    {
-                        var fieldValue = recordValue[fieldName];
+                        var fieldValue =
+                            RecordAccess(
+                                value,
+                                fieldName: field.FieldName,
+                                fieldNameValue: field.FieldNameValue);
 
                         if (fieldValue is null)
                         {
                             throw new System.InvalidOperationException(
                                 "Record pattern references field '"
-                                + fieldName
+                                + field.FieldName
                                 + "' which is not present on the value.");
                         }
 
-                        bindings[fieldName] = fieldValue;
+                        bindings[field.FieldName] = fieldValue;
                     }
 
                     break;
@@ -3331,11 +3570,17 @@ public partial class ElmSyntaxInterpreter
 
             case ElmSyntaxAbstract.Pattern.NamedPattern namedPattern:
                 {
-                    // See the parallel branch in <see cref="TryMatchPattern"/> for context.
-                    if (TryBindPrimitiveTagShape(namedPattern, value, bindings))
-                        break;
+                    if (namedPattern.Name.Name is "True")
+                        return;
 
-                    if (value is not ElmValue.ElmTag tagValue)
+                    if (namedPattern.Name.Name is "False")
+                        return;
+
+                    var tagEncoded = StringEncoding.ValueFromString(namedPattern.Name.Name);
+
+                    var firstItem = value.GetElementAt(0);
+
+                    if (!PineValueInProcess.AreEqual(firstItem, tagEncoded))
                     {
                         throw new System.InvalidOperationException(
                             "Cannot bind named pattern '"
@@ -3344,16 +3589,11 @@ public partial class ElmSyntaxInterpreter
                             + value.GetType().FullName + ".");
                     }
 
-                    if (tagValue.TagName != namedPattern.Name.Name)
-                    {
-                        throw new System.InvalidOperationException(
-                            "Named pattern expects tag '"
-                            + namedPattern.Name.Name
-                            + "', but value has tag '"
-                            + tagValue.TagName + "'.");
-                    }
+                    var tagArguments = value.GetElementAt(1);
 
-                    if (namedPattern.Arguments.Count != tagValue.Arguments.Count)
+                    var tagArgumentsLength = tagArguments.GetLength();
+
+                    if (namedPattern.Arguments.Count != tagArgumentsLength)
                     {
                         throw new System.InvalidOperationException(
                             "Named pattern '"
@@ -3361,12 +3601,12 @@ public partial class ElmSyntaxInterpreter
                             + "' has "
                             + namedPattern.Arguments.Count
                             + " arguments, but tag value has "
-                            + tagValue.Arguments.Count + ".");
+                            + tagArgumentsLength + ".");
                     }
 
                     for (var i = 0; i < namedPattern.Arguments.Count; i++)
                     {
-                        BindPattern(namedPattern.Arguments[i], tagValue.Arguments[i], bindings);
+                        BindPattern(namedPattern.Arguments[i], tagArguments.GetElementAt(i), bindings);
                     }
 
                     break;
@@ -3376,140 +3616,6 @@ public partial class ElmSyntaxInterpreter
                 throw new System.NotImplementedException(
                     "Binding pattern of type " + pattern.GetType().FullName + " is not implemented.");
         }
-    }
-
-    /// <summary>
-    /// Implements the named-pattern matching shim for the primitive-but-tagged shapes
-    /// (<c>String</c>, <c>Elm_Float</c>) that the bundled <c>Basics.elm</c> exposes as
-    /// ordinary user-level constructors but which the interpreter materializes as the
-    /// dedicated <see cref="ElmValue.ElmString"/> / <see cref="ElmValue.ElmFloat"/>
-    /// variants.
-    /// </summary>
-    /// <returns>
-    /// <c>true</c> on a successful match, <c>false</c> on a definite mismatch, or
-    /// <c>null</c> when the pattern's tag name is not one of the recognised shapes
-    /// (in which case the caller should continue with normal tag-based matching).
-    /// </returns>
-    private static bool? TryMatchPrimitiveTagShape(
-        ElmSyntaxAbstract.Pattern.NamedPattern namedPattern,
-        ElmValue value,
-        IDictionary<string, ElmValue> bindings)
-    {
-        switch (namedPattern.Name.Name)
-        {
-            case "String":
-                {
-                    if (value is not ElmValue.ElmString elmString)
-                        return null;
-
-                    if (namedPattern.Arguments.Count is not 1)
-                        return false;
-
-                    // The Pine representation of a string is a single blob holding the
-                    // UTF-32 code points; expose that blob to the inner pattern so kernel
-                    // calls like `Pine_kernel.skip [ offset, stringA ]` work as expected.
-                    var blobBytes = CommonEncodings.StringEncoding.BlobValueFromString(elmString.Value).Bytes;
-                    var inner = new ElmValue.ElmPineBlob(blobBytes);
-
-                    return TryMatchPattern(namedPattern.Arguments[0], inner, bindings);
-                }
-
-            case "Elm_Float":
-                {
-                    if (value is not ElmValue.ElmFloat elmFloat)
-                        return null;
-
-                    if (namedPattern.Arguments.Count is not 2)
-                        return false;
-
-                    if (!TryMatchPattern(
-                            namedPattern.Arguments[0],
-                            ElmValue.Integer(elmFloat.Numerator),
-                            bindings))
-                    {
-                        return false;
-                    }
-
-                    return
-                        TryMatchPattern(
-                            namedPattern.Arguments[1],
-                            ElmValue.Integer(elmFloat.Denominator),
-                            bindings);
-                }
-
-            default:
-                return null;
-        }
-    }
-
-    /// <summary>
-    /// Companion of <see cref="TryMatchPrimitiveTagShape"/> for the irrefutable
-    /// <see cref="BindPattern"/> path. Returns <c>true</c> when the pattern was
-    /// recognised and bound, in which case the caller must skip its own
-    /// tag-based binding logic.
-    /// </summary>
-    private static bool TryBindPrimitiveTagShape(
-        ElmSyntaxAbstract.Pattern.NamedPattern namedPattern,
-        ElmValue value,
-        IDictionary<string, ElmValue> bindings)
-    {
-        switch (namedPattern.Name.Name)
-        {
-            case "String" when value is ElmValue.ElmString elmString:
-                {
-                    if (namedPattern.Arguments.Count is not 1)
-                    {
-                        throw new System.InvalidOperationException(
-                            "Named pattern 'String' against ElmString expects exactly one argument, but has "
-                            + namedPattern.Arguments.Count + ".");
-                    }
-
-                    var blobBytes = CommonEncodings.StringEncoding.BlobValueFromString(elmString.Value).Bytes;
-
-                    BindPattern(
-                        namedPattern.Arguments[0],
-                        new ElmValue.ElmPineBlob(blobBytes),
-                        bindings);
-
-                    return true;
-                }
-
-            case "Elm_Float" when value is ElmValue.ElmFloat elmFloat:
-                {
-                    if (namedPattern.Arguments.Count is not 2)
-                    {
-                        throw new System.InvalidOperationException(
-                            "Named pattern 'Elm_Float' against ElmFloat expects exactly two arguments, but has "
-                            + namedPattern.Arguments.Count + ".");
-                    }
-
-                    BindPattern(
-                        namedPattern.Arguments[0],
-                        ElmValue.Integer(elmFloat.Numerator),
-                        bindings);
-
-                    BindPattern(
-                        namedPattern.Arguments[1],
-                        ElmValue.Integer(elmFloat.Denominator),
-                        bindings);
-
-                    return true;
-                }
-
-            default:
-                return false;
-        }
-    }
-
-
-    private static ElmValue MakeElmRecord(IReadOnlyList<(string FieldName, ElmValue Value)> fields)
-    {
-        var sorted =
-            fields
-            .OrderBy(field => field.FieldName, System.StringComparer.Ordinal)
-            .ToList();
-
-        return new ElmValue.ElmRecord(sorted);
     }
 
     private static readonly FrozenSet<string> s_pineBuiltinModuleNamesDefault =
@@ -3549,7 +3655,7 @@ public partial class ElmSyntaxInterpreter
 
         if (application.Arguments.Count is 1)
         {
-            kernelInput = ElmValueEncoding.ElmValueAsPineValue(application.Arguments[0]);
+            kernelInput = application.Arguments[0].Evaluate();
         }
         else
         {
@@ -3557,7 +3663,7 @@ public partial class ElmSyntaxInterpreter
 
             for (var i = 0; i < application.Arguments.Count; i++)
             {
-                argumentValues[i] = ElmValueEncoding.ElmValueAsPineValue(application.Arguments[i]);
+                argumentValues[i] = application.Arguments[i].Evaluate();
             }
 
             kernelInput = PineValue.List(argumentValues);
@@ -3565,14 +3671,7 @@ public partial class ElmSyntaxInterpreter
 
         var resultPine = KernelFunction.ApplyKernelFunctionGeneric(functionName, kernelInput);
 
-        var resultElm =
-            ElmValueEncoding.PineValueAsElmValue(resultPine, null, null)
-            .Extract(
-                err =>
-                throw new System.InvalidOperationException(
-                    "Failed decoding kernel function '" + functionName + "' result as Elm value: " + err));
-
-        return new ApplicationResolution.Resolved(resultElm);
+        return new ApplicationResolution.Resolved(PineValueInProcess.Create(resultPine));
     }
 
     /// <summary>
@@ -3681,7 +3780,7 @@ public partial class ElmSyntaxInterpreter
     }
 
     /// <summary>
-    /// Core matching loop for <see cref="UserDefinedResolver"/>. When
+    /// Core matching loop for <see cref="UserDefinedResolver(Application, IReadOnlyDictionary{DeclQualifiedName, ElmSyntaxAbstract.Declaration})"/>. When
     /// <paramref name="requiredNamespaces"/> is non-null, only declarations whose namespaces equal
     /// it are considered (used both for qualified references and for the same-module preference pass
     /// of unqualified references). When it is null, every declaration is considered (module-agnostic
@@ -3726,19 +3825,19 @@ public partial class ElmSyntaxInterpreter
                         {
                             var fieldNames =
                                 recordAnnotation.RecordDefinition.Fields
-                                .Select(field => field.FieldName)
+                                .Select(field => (field.FieldName, field.FieldNameValue))
                                 .ToList();
 
                             if (fieldNames.Count == application.Arguments.Count)
                             {
-                                var fields = new List<(string FieldName, ElmValue Value)>(fieldNames.Count);
+                                var fields = new List<(string FieldName, PineValue FieldNameValue, PineValueInProcess FieldValue)>(fieldNames.Count);
 
                                 for (var i = 0; i < fieldNames.Count; i++)
                                 {
-                                    fields.Add((fieldNames[i], application.Arguments[i]));
+                                    fields.Add((fieldNames[i].FieldName, fieldNames[i].FieldNameValue, application.Arguments[i]));
                                 }
 
-                                return new ApplicationResolution.Resolved(MakeElmRecord(fields));
+                                return new ApplicationResolution.Resolved(BuildRecordValue([.. fields.OrderBy(f => f.FieldName)]));
                             }
 
                             // Partial application of a record-type-alias constructor: synthesise a
@@ -3748,10 +3847,11 @@ public partial class ElmSyntaxInterpreter
                             {
                                 return
                                     new ApplicationResolution.Resolved(
-                                        MakeConstructorClosure(
-                                            qualifiedName: declName,
-                                            arity: fieldNames.Count,
-                                            alreadyCollected: application.Arguments));
+                                        new ElmRecordTypeConstructorInProcess(
+                                            typeName: declName,
+                                            fieldNames: [.. fieldNames],
+                                            arguments: [.. application.Arguments]));
+
                             }
                         }
 
@@ -3769,9 +3869,23 @@ public partial class ElmSyntaxInterpreter
 
                             if (ctorArity == application.Arguments.Count)
                             {
+                                if (ctorArity is 0 && constructor.Name is "True")
+                                {
+                                    return
+                                        new ApplicationResolution.Resolved(
+                                            PineValueInProcess.KernelTrueValue);
+                                }
+
+                                if (ctorArity is 0 && constructor.Name is "False")
+                                {
+                                    return
+                                        new ApplicationResolution.Resolved(
+                                            PineValueInProcess.KernelFalseValue);
+                                }
+
                                 return
                                     new ApplicationResolution.Resolved(
-                                        ElmValue.TagInstanceAsValue(requestedName, application.Arguments));
+                                        BuildTaggedValue(PineValueInProcess.Create(constructor.NameValue), application.Arguments));
                             }
 
                             // Partial application of a choice-type tag constructor.
@@ -3779,10 +3893,11 @@ public partial class ElmSyntaxInterpreter
                             {
                                 return
                                     new ApplicationResolution.Resolved(
-                                        MakeConstructorClosure(
-                                            qualifiedName: declName with { DeclName = requestedName },
-                                            arity: ctorArity,
-                                            alreadyCollected: application.Arguments));
+                                        new ElmChoiceTagConstructorInProcess(
+                                            typeName: declName,
+                                            tagName: constructor.Name,
+                                            totalArity: ctorArity,
+                                            arguments: application.Arguments));
                             }
                         }
 
@@ -3794,96 +3909,79 @@ public partial class ElmSyntaxInterpreter
         return null;
     }
 
-    /// <summary>
-    /// Builds an <see cref="ElmValue.ElmFunction"/> closure for a partially-applied
-    /// type-alias-record or choice-type-tag constructor. The synthesised lambda's body
-    /// re-references the constructor by name with one positional argument per parameter, so
-    /// that when the closure is finally saturated the resolver re-enters with all arguments
-    /// and produces the constructed value.
-    /// </summary>
-    private static ElmValue.ElmFunction MakeConstructorClosure(
-        DeclQualifiedName qualifiedName,
-        int arity,
-        IReadOnlyList<ElmValue> alreadyCollected)
+    private static PineValueInProcess BuildTaggedValue(
+        PineValueInProcess tagValue,
+        IReadOnlyList<PineValueInProcess> arguments)
     {
-        var parameterPatterns = new ElmSyntaxAbstract.Pattern[arity];
-        var argumentRefs = new ElmSyntaxAbstract.Expression[arity];
+        var taggedValue = PineValueInProcess.CreateTagged(tagValue, arguments);
 
-        for (var i = 0; i < arity; i++)
-        {
-            var paramName = "__ctor_arg_" + i;
-
-            parameterPatterns[i] =
-                new ElmSyntaxAbstract.Pattern.VarPattern(paramName);
-
-            argumentRefs[i] =
-                new ElmSyntaxAbstract.Expression.FunctionOrValue(
-                    ModuleName: [],
-                    Name: paramName);
-        }
-
-        var body =
-            new ElmSyntaxAbstract.Expression.Application(
-                Function:
-                new ElmSyntaxAbstract.Expression.FunctionOrValue(
-                    ModuleName: qualifiedName.Namespaces,
-                    Name: qualifiedName.DeclName),
-                Arguments: argumentRefs);
-
-        var lambda =
-            new ElmSyntaxAbstract.Expression.LambdaExpression(
-                Arguments: parameterPatterns,
-                Expression: body);
-
-        return
-            new ElmValue.ElmFunction(
-                Source: new ElmValue.ElmFunction.SourceRef.Lambda(lambda),
-                ParameterCount: arity,
-                ArgumentsAlreadyCollected: [.. alreadyCollected],
-                CapturedBindings: ImmutableDictionary<string, ElmValue>.Empty,
-                CapturedTopLevel: qualifiedName);
+        return taggedValue;
     }
 
     /// <summary>
-    /// Builds an <see cref="ElmValue.ElmFunction"/> closure for a record-access function literal
-    /// (<c>.field</c>): the synthesised lambda takes a single record argument and returns the
-    /// requested field's value via a <see cref="ElmSyntaxAbstract.Expression.RecordAccess"/> node.
+    /// Builds an in-process Elm record value from already-evaluated field values.
     /// </summary>
-    private static ElmValue.ElmFunction MakeRecordAccessClosure(
-        string fieldName,
-        DeclQualifiedName capturedTopLevel)
+    private static PineValueInProcess BuildRecordValue(
+        IReadOnlyList<(string FieldName, PineValue FieldNameValue, PineValueInProcess FieldValue)> fields)
     {
-        const string ParamName = "__record_access_arg";
+        var listItems = new PineValueInProcess[fields.Count * 2 + 1];
 
-        var parameterPatterns =
-            new ElmSyntaxAbstract.Pattern[]
+        listItems[0] = s_elmRecordTypeTagNameAsValueInProcess;
+
+        for (var i = 0; i < fields.Count; i++)
+        {
+            var fieldNameValue = fields[i].FieldNameValue;
+
+            listItems[i * 2 + 1] = PineValueInProcess.Create(fieldNameValue);
+            listItems[i * 2 + 2] = fields[i].FieldValue;
+        }
+
+        return PineValueInProcess.CreateList(listItems);
+    }
+
+    private static PineValueInProcess RecordAccess(
+        PineValueInProcess recordValue,
+        string fieldName,
+        PineValue fieldNameValue)
+    {
+        // List item at index 0 must be the record-type tag.
+
+        var firstListItem = recordValue.GetElementAt(0);
+
+        if (!PineValueInProcess.AreEqual(firstListItem, ElmValue.ElmRecordTypeTagNameAsValue))
+        {
+            var renderedValue =
+                ElmValue.RenderAsElmExpression(ToElm(recordValue)).expressionString;
+
+            throw new System.Exception(
+                "Attempted to access a field on a non-record value.\nValue: "
+                + renderedValue);
+        }
+
+        // Scan field names until we find a match for the field name.
+
+        for (var fieldIndex = 0; true; fieldIndex++)
+        {
+            var fieldStartIndex = 1 + fieldIndex * 2;
+
+            var currentFieldNameValue = recordValue.GetElementAt(fieldStartIndex);
+
+            if (!currentFieldNameValue.IsBlob())
             {
-                new ElmSyntaxAbstract.Pattern.VarPattern(ParamName),
-            };
+                // We've reached the end of the record fields without finding a match.
+                break;
+            }
 
-        var recordRef =
-            new ElmSyntaxAbstract.Expression.FunctionOrValue(
-                ModuleName: [],
-                Name: ParamName);
+            if (PineValueInProcess.AreEqual(currentFieldNameValue, fieldNameValue))
+            {
+                // We found the field name. The field value is the next item in the list.
+                return recordValue.GetElementAt(fieldStartIndex + 1);
+            }
+        }
 
-        var body =
-            new ElmSyntaxAbstract.Expression.RecordAccess(
-                Record: recordRef,
-                FieldName: fieldName,
-                FieldNameValue: CommonEncodings.StringEncoding.ValueFromString(fieldName));
-
-        var lambda =
-            new ElmSyntaxAbstract.Expression.LambdaExpression(
-                Arguments: parameterPatterns,
-                Expression: body);
-
-        return
-            new ElmValue.ElmFunction(
-                Source: new ElmValue.ElmFunction.SourceRef.Lambda(lambda),
-                ParameterCount: 1,
-                ArgumentsAlreadyCollected: [],
-                CapturedBindings: ImmutableDictionary<string, ElmValue>.Empty,
-                CapturedTopLevel: capturedTopLevel);
+        throw new System.Exception(
+            "Record does not contain a field named '"
+            + fieldName + "'.");
     }
 
     private static bool NamespacesEqual(IReadOnlyList<string> left, IReadOnlyList<string> right)

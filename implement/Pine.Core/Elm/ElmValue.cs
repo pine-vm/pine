@@ -508,7 +508,7 @@ public abstract record ElmValue
             }
 
             public override string ToString() =>
-                GetType().Name + " : " + ElmTagAsExpression(TagName, Arguments).expressionString;
+                GetType().Name + " : " + ElmTagAsExpression(TagName, Arguments, DefaultPineBlobRenderer).expressionString;
         }
 
         /// <inheritdoc/>
@@ -856,116 +856,6 @@ public abstract record ElmValue
     }
 
     /// <summary>
-    /// Represents a (possibly partially-applied) Elm function as a first-class runtime value.
-    /// Created when a user-defined function is supplied with fewer arguments than its declared
-    /// arity, when a bare reference to a function with at least one parameter escapes as a
-    /// value, or when a lambda expression is evaluated.
-    /// <para />
-    /// <see cref="Source"/> identifies the underlying callable: either a top-level function
-    /// declaration or an anonymous lambda. <see cref="ParameterCount"/> is the total arity
-    /// expected by that source. <see cref="ArgumentsAlreadyCollected"/> holds the arguments
-    /// supplied so far, with <c>Count</c> strictly less than <see cref="ParameterCount"/>
-    /// (saturated applications never travel as values).
-    /// <see cref="CapturedBindings"/> is a snapshot of the local-binding environment at the
-    /// moment the closure was created; it is restored when the closure is finally invoked, so
-    /// lambdas correctly close over let-bindings and enclosing function parameters.
-    /// <see cref="CapturedTopLevel"/> records the surrounding top-level declaration name so
-    /// that runtime errors raised after the closure is invoked produce coherent stack traces.
-    /// </summary>
-    public record ElmFunction(
-        ElmFunction.SourceRef Source,
-        int ParameterCount,
-        IReadOnlyList<ElmValue> ArgumentsAlreadyCollected,
-        IReadOnlyDictionary<string, ElmValue> CapturedBindings,
-        CodeAnalysis.DeclQualifiedName CapturedTopLevel)
-        : ElmValue
-    {
-        /// <summary>
-        /// Identifies the body that will be evaluated once the closure is fully applied.
-        /// </summary>
-        public abstract record SourceRef
-        {
-            /// <summary>
-            /// A reference to a user-defined function declaration. <see cref="Name"/> is the
-            /// fully-qualified name used for stack-trace rendering and the infinite-recursion
-            /// detector; <see cref="Implementation"/> carries the parameter patterns and body.
-            /// </summary>
-            public sealed record Declared(
-                CodeAnalysis.DeclQualifiedName Name,
-                ElmSyntax.ElmSyntaxAbstract.FunctionImplementation Implementation)
-                : SourceRef;
-
-            /// <summary>
-            /// An anonymous lambda expression. Stack traces and the infinite-recursion detector
-            /// use a fixed synthetic name (the abstract syntax model carries no source location).
-            /// </summary>
-            public sealed record Lambda(
-                ElmSyntax.ElmSyntaxAbstract.Expression.LambdaExpression LambdaExpression)
-                : SourceRef;
-        }
-
-        /// <inheritdoc/>
-        public override int ContainedNodesCount { get; } =
-            ArgumentsAlreadyCollected.Sum(arg => 1 + arg.ContainedNodesCount);
-
-        /// <inheritdoc/>
-        public virtual bool Equals(ElmFunction? other)
-        {
-            if (ReferenceEquals(this, other))
-                return true;
-
-            if (other is null)
-                return false;
-
-            if (!Source.Equals(other.Source))
-                return false;
-
-            if (ParameterCount != other.ParameterCount)
-                return false;
-
-            if (ArgumentsAlreadyCollected.Count != other.ArgumentsAlreadyCollected.Count)
-                return false;
-
-            for (var i = 0; i < ArgumentsAlreadyCollected.Count; i++)
-            {
-                if (!ArgumentsAlreadyCollected[i].Equals(other.ArgumentsAlreadyCollected[i]))
-                    return false;
-            }
-
-            if (!CapturedTopLevel.Equals(other.CapturedTopLevel))
-                return false;
-
-            if (CapturedBindings.Count != other.CapturedBindings.Count)
-                return false;
-
-            foreach (var kvp in CapturedBindings)
-            {
-                if (!other.CapturedBindings.TryGetValue(kvp.Key, out var otherValue))
-                    return false;
-
-                if (!kvp.Value.Equals(otherValue))
-                    return false;
-            }
-
-            return true;
-        }
-
-        /// <inheritdoc/>
-        public override int GetHashCode()
-        {
-            var hash = new HashCode();
-
-            hash.Add(Source);
-            hash.Add(ParameterCount);
-            hash.Add(ArgumentsAlreadyCollected.Count);
-            hash.Add(CapturedTopLevel);
-            hash.Add(CapturedBindings.Count);
-
-            return hash.ToHashCode();
-        }
-    }
-
-    /// <summary>
     /// Default renderer for <see cref="ElmPineBlob"/> values used by
     /// <see cref="RenderAsElmExpression(ElmValue)"/>. Produces a short placeholder of the form
     /// <c>&lt;pine_blob N bytes&gt;</c> describing only the byte count, since there is no
@@ -1008,6 +898,33 @@ public abstract record ElmValue
         ElmValue elmValue,
         Func<ReadOnlyMemory<byte>, string> pineBlobRenderer)
     {
+        return RenderAsElmExpression(elmValue, OverrideRenderFromBlobRenderer(pineBlobRenderer));
+    }
+
+    private static Func<ElmValue, (string expressionString, bool needsParens)?> OverrideRenderFromBlobRenderer(
+        Func<ReadOnlyMemory<byte>, string> pineBlobRenderer) =>
+        elmValue =>
+        {
+            if (elmValue is ElmPineBlob pineBlob)
+            {
+                var rendered = pineBlobRenderer(pineBlob.Value);
+
+                return (rendered, needsParens: rendered.Contains(' '));
+            }
+
+            return null;
+        };
+
+    /// <summary>
+    /// Build a text based on Elm expression syntax.
+    /// </summary>
+    public static (string expressionString, bool needsParens) RenderAsElmExpression(
+        ElmValue elmValue,
+        Func<ElmValue, (string expressionString, bool needsParens)?> overrideRender)
+    {
+        if (overrideRender(elmValue) is { } overrideResult)
+            return (overrideResult.expressionString, overrideResult.needsParens);
+
         return
             elmValue switch
             {
@@ -1027,14 +944,14 @@ public abstract record ElmValue
                 ("(" +
                 string.Join(
                     ", ",
-                    list.Items.Select(item => RenderAsElmExpression(item, pineBlobRenderer).expressionString)) +
+                    list.Items.Select(item => RenderAsElmExpression(item, overrideRender).expressionString)) +
                 ")",
                 needsParens: false)
                 :
                 ("[ " +
                 string.Join(
                     ", ",
-                    list.Items.Select(item => RenderAsElmExpression(item, pineBlobRenderer).expressionString)) +
+                    list.Items.Select(item => RenderAsElmExpression(item, overrideRender).expressionString)) +
                 " ]",
                 needsParens: false),
 
@@ -1051,18 +968,18 @@ public abstract record ElmValue
                     ", ",
                     record.Fields.Select(
                         field =>
-                        field.FieldName + " = " + RenderAsElmExpression(field.Value, pineBlobRenderer).expressionString)) +
+                        field.FieldName + " = " + RenderAsElmExpression(field.Value, overrideRender).expressionString)) +
                 " }",
                 needsParens: false),
 
                 ElmTag tag =>
-                ElmTagAsExpression(tag.TagName, tag.Arguments, pineBlobRenderer),
+                ElmTagAsExpression(tag.TagName, tag.Arguments, overrideRender),
 
                 ElmBytes bytes =>
                 ("<" + bytes.Value.Length + " bytes>", needsParens: false),
 
                 ElmPineBlob blob =>
-                (pineBlobRenderer(blob.Value), needsParens: true),
+                ("<" + blob.Value.Length + " blob_bytes>", needsParens: false),
 
                 ElmFloat elmFloat =>
                 (Convert.ToString(
@@ -1072,9 +989,6 @@ public abstract record ElmValue
 
                 ElmInternal internalValue =>
                 ("<" + internalValue.Value + ">", needsParens: false),
-
-                ElmFunction =>
-                ("<function>", needsParens: false),
 
                 _ =>
                 throw new NotImplementedException(
@@ -1148,36 +1062,37 @@ public abstract record ElmValue
     }
 
     /// <summary>
-    /// Renders an Elm tag as an Elm expression string.
-    /// Handles special cases for Elm's built-in Set and Dict types to render them in a more readable format (e.g., Set.fromList [...], Dict.fromList [...]).
-    /// <para />
-    /// <see cref="ElmPineBlob"/> values nested inside the arguments are rendered using
-    /// <see cref="DefaultPineBlobRenderer"/>. Use the overload
-    /// <see cref="ElmTagAsExpression(string, IReadOnlyList{ElmValue}, Func{ReadOnlyMemory{byte}, string})"/>
-    /// to supply a custom renderer.
-    /// </summary>
-    /// <param name="tagName">The name of the tag.</param>
-    /// <param name="arguments">The arguments of the tag.</param>
-    /// <returns>A tuple containing the Elm expression string and a boolean indicating if parentheses are needed for function application.</returns>
-    public static (string expressionString, bool needsParens) ElmTagAsExpression(
-        string tagName,
-        IReadOnlyList<ElmValue> arguments) =>
-        ElmTagAsExpression(tagName, arguments, DefaultPineBlobRenderer);
-
-    /// <summary>
     /// Renders an Elm tag as an Elm expression string, using the supplied <paramref name="pineBlobRenderer"/>
     /// for any <see cref="ElmPineBlob"/> nodes encountered while rendering the arguments (and any
     /// values nested inside them).
     /// </summary>
-    /// <param name="tagName">The name of the tag.</param>
-    /// <param name="arguments">The arguments of the tag.</param>
-    /// <param name="pineBlobRenderer">Renderer applied to the bytes of every <see cref="ElmPineBlob"/> node.</param>
     public static (string expressionString, bool needsParens) ElmTagAsExpression(
         string tagName,
         IReadOnlyList<ElmValue> arguments,
         Func<ReadOnlyMemory<byte>, string> pineBlobRenderer)
     {
-        string ApplyNeedsParens((string expressionString, bool needsParens) tuple) =>
+        return
+            arguments.Count is 0
+            ?
+            (tagName, needsParens: false)
+            :
+            (tagName + " " +
+            string.Join(
+                " ",
+                arguments.Select(arg => RenderAsElmExpression(arg, OverrideRenderFromBlobRenderer(pineBlobRenderer)).expressionString)),
+            needsParens: true);
+    }
+
+    /// <summary>
+    /// Renders an Elm tag as an Elm expression string, using the supplied <paramref name="overrideRender"/>
+    /// for any nodes encountered while rendering the arguments (and any values nested inside them).
+    /// </summary>
+    public static (string expressionString, bool needsParens) ElmTagAsExpression(
+        string tagName,
+        IReadOnlyList<ElmValue> arguments,
+        Func<ElmValue, (string expressionString, bool needsParens)?> overrideRender)
+    {
+        static string ApplyNeedsParens((string expressionString, bool needsParens) tuple) =>
             tuple.needsParens ? "(" + tuple.expressionString + ")" : tuple.expressionString;
 
         if (tagName is "Set_elm_builtin")
@@ -1197,7 +1112,7 @@ public abstract record ElmValue
                     ("Set.fromList [" +
                     string.Join(
                         ",",
-                        setItems.Select(item => RenderAsElmExpression(item, pineBlobRenderer)).Select(ApplyNeedsParens)) +
+                        setItems.Select(item => RenderAsElmExpression(item, overrideRender)).Select(ApplyNeedsParens)) +
                     "]",
                     needsParens: true);
             }
@@ -1218,7 +1133,7 @@ public abstract record ElmValue
                     (false, ""),
 
                     _ =>
-                    (true, " " + string.Join(" ", arguments.Select(arg => RenderAsElmExpression(arg, pineBlobRenderer)).Select(ApplyNeedsParens)))
+                    (true, " " + string.Join(" ", arguments.Select(arg => RenderAsElmExpression(arg, overrideRender)).Select(ApplyNeedsParens)))
                 };
 
             return (tagName + argumentsString, needsParens);
@@ -1231,8 +1146,8 @@ public abstract record ElmValue
                 dictToList
                 .Select(
                     field =>
-                    "(" + RenderAsElmExpression(field.key, pineBlobRenderer).expressionString + "," +
-                    RenderAsElmExpression(field.value, pineBlobRenderer).expressionString +
+                    "(" + RenderAsElmExpression(field.key, overrideRender).expressionString + "," +
+                    RenderAsElmExpression(field.value, overrideRender).expressionString +
                     ")")) +
             "]",
             needsParens: true);

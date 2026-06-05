@@ -4,6 +4,7 @@ using Pine.Core.Elm;
 using Pine.Core.Elm.ElmSyntax;
 using System;
 using System.Collections.Generic;
+using System.Numerics;
 using Xunit;
 
 using SyntaxTypes = Pine.Core.Elm.ElmSyntax.SyntaxModel;
@@ -118,7 +119,7 @@ public class UnqualifiedReferenceModuleResolutionTests
         // P.entry's body references `helper` unqualified. It must resolve to P.helper (2-arg Good),
         // not Q.helper (3-arg Good), so the value matches P.entry's `Good a s1` case arm.
         var result =
-            ElmInterpreter.Interpret(
+            ElmInterpreter.InterpretAsElmValue(
                 new DeclQualifiedName(["P"], "entry"),
                 [ElmValue.Integer(7), ElmValue.Integer(0)],
                 declarations);
@@ -138,12 +139,12 @@ public class UnqualifiedReferenceModuleResolutionTests
         var callerContext =
             new ElmInterpreter.ApplicationContext(
                 CurrentTopLevel: new DeclQualifiedName(["P"], "entry"),
-                LocalBindings: System.Collections.Immutable.ImmutableDictionary<string, Pine.Core.Internal.PineValueInProcess>.Empty);
+                LocalBindings: System.Collections.Immutable.ImmutableDictionary<string, Core.Internal.PineValueInProcess>.Empty);
 
         var application =
             new ElmInterpreter.Application(
                 FunctionName: new DeclQualifiedName([], "helper"),
-                Arguments: [ElmValue.Integer(7), ElmValue.Integer(0)],
+                Arguments: [IntegerInProcess(7), IntegerInProcess(0)],
                 Context: callerContext);
 
         var resolution = ElmInterpreter.UserDefinedResolver(application, declarations);
@@ -155,13 +156,16 @@ public class UnqualifiedReferenceModuleResolutionTests
         // its body. Assert we got P.helper by checking its body builds a 2-argument Good.
         var body = continueWith.Function.Expression;
 
-        var application2 = body.Should().BeOfType<Pine.Core.Elm.ElmSyntax.ElmSyntaxAbstract.Expression.Application>().Subject;
+        var application2 = body.Should().BeOfType<Core.Elm.ElmSyntax.ElmSyntaxAbstract.Expression.Application>().Subject;
 
-        var head = application2.Function.Should().BeOfType<Pine.Core.Elm.ElmSyntax.ElmSyntaxAbstract.Expression.FunctionOrValue>().Subject;
+        var head = application2.Function.Should().BeOfType<Core.Elm.ElmSyntax.ElmSyntaxAbstract.Expression.FunctionOrValue>().Subject;
 
         head.Name.Should().Be("Good");
 
         // P.helper: `Good v s` -> 2 args. Q.helper: `Good True v s` -> 3 args.
         application2.Arguments.Count.Should().Be(2);
     }
+
+    private static Core.Internal.PineValueInProcess IntegerInProcess(BigInteger integer) =>
+        Core.Internal.PineValueInProcess.Create(Core.CommonEncodings.IntegerEncoding.EncodeSignedInteger(integer));
 }

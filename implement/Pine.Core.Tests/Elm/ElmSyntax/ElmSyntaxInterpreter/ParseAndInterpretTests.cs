@@ -18,7 +18,7 @@ public class ParseAndInterpretTests
     public void ParseAndInterpret_integer_literal_returns_integer_value()
     {
         var result =
-            ElmInterpreter.ParseAndInterpret(
+            ElmInterpreter.ParseAndInterpretAsElmValue(
                 "42",
                 System.Collections
                 .Immutable.ImmutableDictionary<DeclQualifiedName, Core.Elm.ElmSyntax.SyntaxModel.Declaration>.Empty);
@@ -30,7 +30,7 @@ public class ParseAndInterpretTests
     public void ParseAndInterpret_Pine_builtin_application()
     {
         var result =
-            ElmInterpreter.ParseAndInterpret(
+            ElmInterpreter.ParseAndInterpretAsElmValue(
                 "Pine_builtin.int_add [ 3, 4 ]",
                 System.Collections
                 .Immutable.ImmutableDictionary<DeclQualifiedName, Core.Elm.ElmSyntax.SyntaxModel.Declaration>.Empty);
@@ -51,7 +51,7 @@ public class ParseAndInterpretTests
                     Pine_builtin.int_mul [ 6, 7 ]
                 """);
 
-        var result = ElmInterpreter.ParseAndInterpret("answer", declarations);
+        var result = ElmInterpreter.ParseAndInterpretAsElmValue("answer", declarations);
 
         result.Should().Be(Result<Core.Elm.ElmSyntax.ElmInterpretationError, ElmValue>.ok(ElmValue.Integer(42)));
     }
@@ -60,7 +60,7 @@ public class ParseAndInterpretTests
     public void ParseAndInterpret_multi_line_expression_with_let()
     {
         var result =
-            ElmInterpreter.ParseAndInterpret(
+            ElmInterpreter.ParseAndInterpretAsElmValue(
                 """
                 let
                     a =
@@ -81,7 +81,7 @@ public class ParseAndInterpretTests
     public void ParseAndInterpret_invalid_syntax_returns_error()
     {
         var result =
-            ElmInterpreter.ParseAndInterpret(
+            ElmInterpreter.ParseAndInterpretAsElmValue(
                 "let in",
                 System.Collections
                 .Immutable.ImmutableDictionary<DeclQualifiedName, Core.Elm.ElmSyntax.SyntaxModel.Declaration>.Empty);

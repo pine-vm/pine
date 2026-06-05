@@ -258,7 +258,7 @@ public partial class ElmSyntaxInterpreter
                     []);
         }
 
-        return Interpret(rootExpression, declarations);
+        return InterpretAsElmValue(rootExpression, declarations);
     }
 
     /// <summary>

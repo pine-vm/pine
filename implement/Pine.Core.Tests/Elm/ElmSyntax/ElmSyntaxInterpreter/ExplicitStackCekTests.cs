@@ -47,7 +47,7 @@ public class ExplicitStackCekTests
         var mainBody = InterpreterTestHelper.GetFunctionBody(declarations, "main");
 
         var result =
-            ElmInterpreter.Interpret(mainBody, declarations)
+            ElmInterpreter.InterpretAsElmValue(mainBody, declarations)
             .Extract(err => throw new System.Exception(err.ToString()));
 
         result.Should().Be(ElmValue.Integer(100000));
@@ -112,14 +112,13 @@ public class ExplicitStackCekTests
                 "Expected error result, got " + result.GetType().FullName);
 
         error.CallStack
-            .Should().BeEquivalentTo(
+            .Should().Equal(
             new List<ElmCallStackFrame>
             {
-                new(new DeclQualifiedName([], "inner"), [ElmValue.Integer(1)]),
-                new(new DeclQualifiedName([], "middle"), [ElmValue.Integer(1)]),
-                new(new DeclQualifiedName([], "outer"), [ElmValue.Integer(1)]),
-            },
-            options => options.WithStrictOrdering());
+                new(new DeclQualifiedName([], "inner"), [ElmInterpreter.ToProcess(ElmValue.Integer(1))]),
+                new(new DeclQualifiedName([], "middle"), [ElmInterpreter.ToProcess(ElmValue.Integer(1))]),
+                new(new DeclQualifiedName([], "outer"), [ElmInterpreter.ToProcess(ElmValue.Integer(1))]),
+            });
 
         error.ToString().Should().Contain("inner");
         error.ToString().Should().Contain("middle");
@@ -155,7 +154,7 @@ public class ExplicitStackCekTests
 
         var mainBody = InterpreterTestHelper.GetFunctionBody(declarations, "main");
 
-        var result = ElmInterpreter.Interpret(mainBody, declarations);
+        var result = ElmInterpreter.InterpretAsElmValue(mainBody, declarations);
 
         var error =
             result.IsErrOrNull()

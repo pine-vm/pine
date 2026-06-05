@@ -78,7 +78,7 @@ public class CoreBasicsTests
     /// declarations and returns the rendered Elm-expression form of the resulting value.
     /// </summary>
     private static string Evaluate(string expression) =>
-        ElmValue.RenderAsElmExpression(
+        ElmInterpreter.RenderAsElmExpression(
             ElmInterpreter.ParseAndInterpret(expression, s_declarations.Value)
             .Extract(err => throw new Exception(err.ToString())))
         .expressionString;

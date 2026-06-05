@@ -28,7 +28,7 @@ public class PineBuiltinLiteralsTests
         var declarations = InterpreterTestHelper.ParseDeclarationsRemovingModuleNames(elmModuleText);
 
         var result =
-            ElmInterpreter.ParseAndInterpret("main", declarations)
+            ElmInterpreter.ParseAndInterpretAsElmValue("main", declarations)
             .Extract(err => throw new System.Exception(err.ToString()));
 
         result.Should().Be(ElmValue.Integer(7));
@@ -49,7 +49,7 @@ public class PineBuiltinLiteralsTests
         var declarations = InterpreterTestHelper.ParseDeclarationsRemovingModuleNames(elmModuleText);
 
         var result =
-            ElmInterpreter.ParseAndInterpret("main", declarations)
+            ElmInterpreter.ParseAndInterpretAsElmValue("main", declarations)
             .Extract(err => throw new System.Exception(err.ToString()));
 
         result.Should().Be(ElmValue.Integer(-5));
@@ -70,7 +70,7 @@ public class PineBuiltinLiteralsTests
         var declarations = InterpreterTestHelper.ParseDeclarationsRemovingModuleNames(elmModuleText);
 
         var result =
-            ElmInterpreter.ParseAndInterpret("main", declarations)
+            ElmInterpreter.ParseAndInterpretAsElmValue("main", declarations)
             .Extract(err => throw new System.Exception(err.ToString()));
 
         result.Should().Be(ElmValue.Integer(42));
@@ -91,7 +91,7 @@ public class PineBuiltinLiteralsTests
         var declarations = InterpreterTestHelper.ParseDeclarationsRemovingModuleNames(elmModuleText);
 
         var result =
-            ElmInterpreter.ParseAndInterpret("main", declarations)
+            ElmInterpreter.ParseAndInterpretAsElmValue("main", declarations)
             .Extract(err => throw new System.Exception(err.ToString()));
 
         result.Should().Be(ElmValue.Integer(4));

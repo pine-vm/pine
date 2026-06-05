@@ -271,7 +271,7 @@ public class PineValueInProcess
         }
 
         throw new NotImplementedException(
-            "Missing branch in PineValueInProcess.AsEvaluated");
+            "Missing branch in PineValueInProcess.AsEvaluated (" + GetType().Name + ")");
     }
 
     /// <summary>

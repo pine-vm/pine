@@ -16,14 +16,14 @@ public class RecordAccessFunctionTests
     [Fact]
     public void Apply_record_access_function_directly_to_record_literal()
     {
-        InterpreterTestHelper.EvaluateOrCrash(".x { x = 11, y = 22 }")
+        InterpreterTestHelper.EvaluateOrCrashAsElmValue(".x { x = 11, y = 22 }")
             .Should().Be(ElmValue.Integer(11));
     }
 
     [Fact]
     public void Apply_record_access_function_to_let_bound_record()
     {
-        InterpreterTestHelper.EvaluateOrCrash(
+        InterpreterTestHelper.EvaluateOrCrashAsElmValue(
             """
             let
                 point =
@@ -37,7 +37,7 @@ public class RecordAccessFunctionTests
     [Fact]
     public void Bind_record_access_function_in_let_then_apply()
     {
-        InterpreterTestHelper.EvaluateOrCrash(
+        InterpreterTestHelper.EvaluateOrCrashAsElmValue(
             """
             let
                 getX =
@@ -63,7 +63,7 @@ public class RecordAccessFunctionTests
                 { x : Int, y : Int }
             """;
 
-        InterpreterTestHelper.EvaluateInModuleOrCrash(".y (Point 10 20)", elmModuleText)
+        InterpreterTestHelper.EvaluateInModuleOrCrashAsElmValue(".y (Point 10 20)", elmModuleText)
             .Should().Be(ElmValue.Integer(20));
     }
 
@@ -82,10 +82,10 @@ public class RecordAccessFunctionTests
                 accessor record
             """;
 
-        InterpreterTestHelper.EvaluateInModuleOrCrash("getField .x { x = 7, y = 8 }", elmModuleText)
+        InterpreterTestHelper.EvaluateInModuleOrCrashAsElmValue("getField .x { x = 7, y = 8 }", elmModuleText)
             .Should().Be(ElmValue.Integer(7));
 
-        InterpreterTestHelper.EvaluateInModuleOrCrash("getField .x { x = 99 }", elmModuleText)
+        InterpreterTestHelper.EvaluateInModuleOrCrashAsElmValue("getField .x { x = 99 }", elmModuleText)
             .Should().Be(ElmValue.Integer(99));
     }
 
@@ -94,7 +94,7 @@ public class RecordAccessFunctionTests
     {
         // The expression `.inner record |> .value` simulates a chain of two accesses using
         // record-access function literals rather than dotted access syntax.
-        InterpreterTestHelper.EvaluateOrCrash(
+        InterpreterTestHelper.EvaluateOrCrashAsElmValue(
             """
             let
                 outer =
@@ -108,7 +108,7 @@ public class RecordAccessFunctionTests
     [Fact]
     public void Record_access_function_chain_of_three_via_nested_application()
     {
-        InterpreterTestHelper.EvaluateOrCrash(
+        InterpreterTestHelper.EvaluateOrCrashAsElmValue(
             """
             let
                 root =
@@ -143,7 +143,7 @@ public class RecordAccessFunctionTests
                 { level1 : Level1 }
             """;
 
-        InterpreterTestHelper.EvaluateInModuleOrCrash(
+        InterpreterTestHelper.EvaluateInModuleOrCrashAsElmValue(
             ".value (.level3 (.level2 (.level1 (Root (Level1 (Level2 (Level3 88)))))))",
             elmModuleText)
             .Should().Be(ElmValue.Integer(88));
@@ -162,7 +162,7 @@ public class RecordAccessFunctionTests
                 .level3 (.level2 (.level1 record))
             """;
 
-        InterpreterTestHelper.EvaluateInModuleOrCrash(
+        InterpreterTestHelper.EvaluateInModuleOrCrashAsElmValue(
             """
             deepGet { level1 = { level2 = { level3 = 21, extra = 0 }, tag = "a" }, n = 1 }
             """,
@@ -201,7 +201,7 @@ public class RecordAccessFunctionTests
     {
         // Without applying the accessor it should still evaluate to a function value (an
         // ElmFunction). We assert by binding it to a name and then applying it.
-        InterpreterTestHelper.EvaluateOrCrash(
+        InterpreterTestHelper.EvaluateOrCrashAsElmValue(
             """
             let
                 accessor =
@@ -220,7 +220,7 @@ public class RecordAccessFunctionTests
     {
         // Returning a nested record from the first accessor, then applying another accessor
         // on the result, is functionally equivalent to a dotted chain.
-        InterpreterTestHelper.EvaluateOrCrash(
+        InterpreterTestHelper.EvaluateOrCrashAsElmValue(
             """
             let
                 wrapper =

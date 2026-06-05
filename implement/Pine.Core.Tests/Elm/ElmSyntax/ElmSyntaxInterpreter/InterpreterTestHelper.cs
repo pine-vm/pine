@@ -7,6 +7,7 @@ using System.Collections.Immutable;
 
 using SyntaxTypes = Pine.Core.Elm.ElmSyntax.SyntaxModel;
 using ElmInterpreter = Pine.Core.Elm.ElmSyntax.ElmSyntaxInterpreter;
+using PineValueInProcess = Pine.Core.Internal.PineValueInProcess;
 
 namespace Pine.Core.Tests.Elm.ElmSyntax.ElmSyntaxInterpreter;
 
@@ -134,7 +135,7 @@ internal static class InterpreterTestHelper
     /// Returns the interpreter <see cref="Result{ErrT, OkT}"/>; use <see cref="EvaluateOrCrash(string)"/>
     /// when the test only cares about the success value.
     /// </summary>
-    public static Result<ElmInterpretationError, ElmValue> Evaluate(string expression) =>
+    public static Result<ElmInterpretationError, PineValueInProcess> Evaluate(string expression) =>
         ElmInterpreter.ParseAndInterpret(expression, s_emptyDeclarations);
 
     /// <summary>
@@ -143,9 +144,14 @@ internal static class InterpreterTestHelper
     /// runtime error; tests that want to assert the error itself should use the
     /// <see cref="Result{ErrT, OkT}"/>-returning <see cref="Evaluate(string)"/> variant.
     /// </summary>
-    public static ElmValue EvaluateOrCrash(string expression) =>
+    public static PineValueInProcess EvaluateOrCrash(string expression) =>
         Evaluate(expression)
         .Extract(err => throw new Exception(err.ToString()));
+
+    public static ElmValue EvaluateOrCrashAsElmValue(string expression) =>
+        ElmInterpreter.ToElm(
+            Evaluate(expression)
+            .Extract(err => throw new Exception(err.ToString())));
 
     /// <summary>
     /// Parses <paramref name="elmModuleText"/> for its top-level declarations and then parses
@@ -154,7 +160,7 @@ internal static class InterpreterTestHelper
     /// <see cref="EvaluateInModuleOrCrash(string, string)"/> when the test only cares about
     /// the success value.
     /// </summary>
-    public static Result<ElmInterpretationError, ElmValue> EvaluateInModule(
+    public static Result<ElmInterpretationError, PineValueInProcess> EvaluateInModule(
         string expression,
         string elmModuleText) =>
         ElmInterpreter.ParseAndInterpret(expression, ParseDeclarationsRemovingModuleNames(elmModuleText));
@@ -173,11 +179,18 @@ internal static class InterpreterTestHelper
     /// itself should use the <see cref="Result{ErrT, OkT}"/>-returning
     /// <see cref="EvaluateInModule(string, string)"/> variant.
     /// </summary>
-    public static ElmValue EvaluateInModuleOrCrash(
+    public static PineValueInProcess EvaluateInModuleOrCrash(
         string expression,
         string elmModuleText) =>
         EvaluateInModule(expression, elmModuleText)
         .Extract(err => throw new Exception(err.ToString()));
+
+    public static ElmValue EvaluateInModuleOrCrashAsElmValue(
+        string expression,
+        string elmModuleText) =>
+        ElmInterpreter.ToElm(
+            EvaluateInModule(expression, elmModuleText)
+            .Extract(err => throw new Exception(err.ToString())));
 
     /// <summary>
     /// As <see cref="EvaluateOrCrash(string)"/>, but additionally renders the resulting value
@@ -187,7 +200,7 @@ internal static class InterpreterTestHelper
     /// expected value out of nested <see cref="ElmValue"/> factory calls.
     /// </summary>
     public static string EvaluateOrCrashRendered(string expression) =>
-        ElmValue.RenderAsElmExpression(EvaluateOrCrash(expression)).expressionString;
+        ElmInterpreter.RenderAsElmExpression(EvaluateOrCrash(expression)).expressionString;
 
     /// <summary>
     /// As <see cref="EvaluateInModuleOrCrash(string, string)"/>, but additionally renders the
@@ -200,7 +213,7 @@ internal static class InterpreterTestHelper
     public static string EvaluateInModuleOrCrashRendered(
         string expression,
         string elmModuleText) =>
-        ElmValue.RenderAsElmExpression(
+        ElmInterpreter.RenderAsElmExpression(
             EvaluateInModuleOrCrash(expression, elmModuleText))
         .expressionString;
 }

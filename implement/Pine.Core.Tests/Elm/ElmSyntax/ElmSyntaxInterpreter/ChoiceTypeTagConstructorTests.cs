@@ -31,7 +31,7 @@ public class ChoiceTypeTagConstructorTests
                 | Blue
             """;
 
-        InterpreterTestHelper.EvaluateInModuleOrCrash("Green", elmModuleText)
+        InterpreterTestHelper.EvaluateInModuleOrCrashAsElmValue("Green", elmModuleText)
             .Should().Be(ElmValue.TagInstance("Green", []));
     }
 

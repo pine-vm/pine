@@ -1,3 +1,4 @@
+using Pine.Core.Internal;
 using System.Collections.Generic;
 
 namespace Pine.Core.Elm.ElmSyntax;
@@ -43,8 +44,8 @@ public abstract record ApplicationLogEntry
     /// application site, not the arguments previously captured by partial application).
     /// </param>
     public sealed record FunctionValue(
-        ElmValue Function,
-        IReadOnlyList<ElmValue> NewArguments)
+        PineValueInProcess Function,
+        IReadOnlyList<PineValueInProcess> NewArguments)
         : ApplicationLogEntry;
 }
 
@@ -82,8 +83,8 @@ public interface IInvocationLogger
     /// current application site, not the arguments captured by previous partial applications.
     /// </summary>
     void OnFunctionValueApplication(
-        ElmValue functionValue,
-        IReadOnlyList<ElmValue> newArguments);
+        PineValueInProcess functionValue,
+        IReadOnlyList<PineValueInProcess> newArguments);
 
     /// <summary>
     /// Called when an application is resolved to a built-in (<c>Pine_builtin</c> /
@@ -149,8 +150,8 @@ public sealed class RecordingInvocationLogger : IInvocationLogger
 
     /// <inheritdoc/>
     public void OnFunctionValueApplication(
-        ElmValue functionValue,
-        IReadOnlyList<ElmValue> newArguments)
+        PineValueInProcess functionValue,
+        IReadOnlyList<PineValueInProcess> newArguments)
     {
         _functionValueApplicationCount++;
         _entries.Add(new ApplicationLogEntry.FunctionValue(functionValue, newArguments));

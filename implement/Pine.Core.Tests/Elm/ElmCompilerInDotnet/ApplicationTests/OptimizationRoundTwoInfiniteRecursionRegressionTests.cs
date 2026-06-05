@@ -306,7 +306,7 @@ public class OptimizationRoundTwoInfiniteRecursionRegressionTests
             new DeclQualifiedName(["TestModule"], "parseStringLiteral");
 
         var result =
-            ElmSyntaxInterpreter.Interpret(
+            ElmSyntaxInterpreter.InterpretAsElmValue(
                 functionName,
                 [ElmValue.StringInstance("\"hello world\"")],
                 declarations);

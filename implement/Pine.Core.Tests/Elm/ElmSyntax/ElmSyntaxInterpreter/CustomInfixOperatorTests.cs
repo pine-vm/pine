@@ -1,5 +1,4 @@
 using AwesomeAssertions;
-using Pine.Core.Elm;
 using Xunit;
 
 using ElmInterpreter = Pine.Core.Elm.ElmSyntax.ElmSyntaxInterpreter;
@@ -82,7 +81,7 @@ public class CustomInfixOperatorTests
     /// <c>NamedPattern_with_shuffled_order_in_source_code</c>.
     /// </summary>
     private static string Evaluate(string expression) =>
-        ElmValue.RenderAsElmExpression(
+        ElmInterpreter.RenderAsElmExpression(
             InterpreterTestHelper.EvaluateInModuleOrCrash(expression, ModuleText))
         .expressionString;
 

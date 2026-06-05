@@ -19,7 +19,7 @@ public class InfiniteRecursionTests
 
         var mainBody = InterpreterTestHelper.GetFunctionBody(declarations, "main");
 
-        var result = ElmInterpreter.Interpret(mainBody, declarations);
+        var result = ElmInterpreter.InterpretAsElmValue(mainBody, declarations);
 
         var error =
             result.IsErrOrNull()

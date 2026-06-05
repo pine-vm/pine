@@ -44,7 +44,7 @@ public class CoreBitwiseTests
     }
 
     private static ElmValue Invoke(string functionName, params ElmValue[] arguments) =>
-        ElmInterpreter.Interpret(
+        ElmInterpreter.InterpretAsElmValue(
             new DeclQualifiedName([], functionName),
             arguments,
             s_declarations.Value)

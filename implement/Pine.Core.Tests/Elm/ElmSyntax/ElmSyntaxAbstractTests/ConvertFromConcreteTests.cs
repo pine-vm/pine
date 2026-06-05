@@ -1,6 +1,6 @@
 using AwesomeAssertions;
+using Pine.Core.CommonEncodings;
 using Pine.Core.Elm.ElmSyntax;
-using Pine.Core.PopularEncodings;
 using System;
 using System.Numerics;
 using Xunit;
@@ -253,7 +253,7 @@ public class ConvertFromConcreteTests
         var charPattern = converted.Should().BeOfType<Abstract.Pattern.CharPattern>().Subject;
 
         charPattern.Value.Should().Be('a');
-        charPattern.ValueAsPineValue.Should().Be(Pine.Core.Elm.ElmValueEncoding.ElmCharAsPineValue('a'));
+        charPattern.ValueAsPineValue.Should().Be(Core.Elm.ElmValueEncoding.ElmCharAsPineValue('a'));
     }
 
     [Fact]
@@ -265,7 +265,7 @@ public class ConvertFromConcreteTests
         var stringPattern = converted.Should().BeOfType<Abstract.Pattern.StringPattern>().Subject;
 
         stringPattern.Value.Should().Be("hello");
-        stringPattern.ValueAsPineValue.Should().Be(Pine.Core.Elm.ElmValueEncoding.StringAsPineValue("hello"));
+        stringPattern.ValueAsPineValue.Should().Be(Core.Elm.ElmValueEncoding.StringAsPineValue("hello"));
     }
 
     [Fact]

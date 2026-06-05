@@ -18,7 +18,7 @@ public class RecordAccessExpressionTests
     [Fact]
     public void Access_single_field_from_let_bound_record()
     {
-        InterpreterTestHelper.EvaluateOrCrash(
+        InterpreterTestHelper.EvaluateOrCrashAsElmValue(
             """
             let
                 point =
@@ -32,7 +32,7 @@ public class RecordAccessExpressionTests
     [Fact]
     public void Access_other_field_from_let_bound_record()
     {
-        InterpreterTestHelper.EvaluateOrCrash(
+        InterpreterTestHelper.EvaluateOrCrashAsElmValue(
             """
             let
                 point =
@@ -46,7 +46,7 @@ public class RecordAccessExpressionTests
     [Fact]
     public void Access_field_on_record_literal_directly()
     {
-        InterpreterTestHelper.EvaluateOrCrash("({ x = 10, y = 20 }).x")
+        InterpreterTestHelper.EvaluateOrCrashAsElmValue("({ x = 10, y = 20 }).x")
             .Should().Be(ElmValue.Integer(10));
     }
 
@@ -62,7 +62,7 @@ public class RecordAccessExpressionTests
                 { x = 1, y = 2 }
             """;
 
-        InterpreterTestHelper.EvaluateInModuleOrCrash("origin.y", elmModuleText)
+        InterpreterTestHelper.EvaluateInModuleOrCrashAsElmValue("origin.y", elmModuleText)
             .Should().Be(ElmValue.Integer(2));
     }
 
@@ -81,7 +81,7 @@ public class RecordAccessExpressionTests
                 { x : Int, y : Int }
             """;
 
-        InterpreterTestHelper.EvaluateInModuleOrCrash("(Point 10 20).x", elmModuleText)
+        InterpreterTestHelper.EvaluateInModuleOrCrashAsElmValue("(Point 10 20).x", elmModuleText)
             .Should().Be(ElmValue.Integer(10));
     }
 
@@ -98,10 +98,10 @@ public class RecordAccessExpressionTests
             """;
 
         // Point 10 20 binds y = 10, x = 20.
-        InterpreterTestHelper.EvaluateInModuleOrCrash("(Point 10 20).x", elmModuleText)
+        InterpreterTestHelper.EvaluateInModuleOrCrashAsElmValue("(Point 10 20).x", elmModuleText)
             .Should().Be(ElmValue.Integer(20));
 
-        InterpreterTestHelper.EvaluateInModuleOrCrash("(Point 10 20).y", elmModuleText)
+        InterpreterTestHelper.EvaluateInModuleOrCrashAsElmValue("(Point 10 20).y", elmModuleText)
             .Should().Be(ElmValue.Integer(10));
     }
 
@@ -120,17 +120,17 @@ public class RecordAccessExpressionTests
                 r.x
             """;
 
-        InterpreterTestHelper.EvaluateInModuleOrCrash("getX { x = 7, y = 99, z = 100 }", elmModuleText)
+        InterpreterTestHelper.EvaluateInModuleOrCrashAsElmValue("getX { x = 7, y = 99, z = 100 }", elmModuleText)
             .Should().Be(ElmValue.Integer(7));
 
-        InterpreterTestHelper.EvaluateInModuleOrCrash("getX { x = 42 }", elmModuleText)
+        InterpreterTestHelper.EvaluateInModuleOrCrashAsElmValue("getX { x = 42 }", elmModuleText)
             .Should().Be(ElmValue.Integer(42));
     }
 
     [Fact]
     public void Chain_of_two_record_accesses_closed_records()
     {
-        InterpreterTestHelper.EvaluateOrCrash(
+        InterpreterTestHelper.EvaluateOrCrashAsElmValue(
             """
             let
                 outer =
@@ -157,14 +157,14 @@ public class RecordAccessExpressionTests
                 { inner : Inner }
             """;
 
-        InterpreterTestHelper.EvaluateInModuleOrCrash("(Outer (Inner 7)).inner.value", elmModuleText)
+        InterpreterTestHelper.EvaluateInModuleOrCrashAsElmValue("(Outer (Inner 7)).inner.value", elmModuleText)
             .Should().Be(ElmValue.Integer(7));
     }
 
     [Fact]
     public void Chain_of_three_record_accesses_closed_records()
     {
-        InterpreterTestHelper.EvaluateOrCrash(
+        InterpreterTestHelper.EvaluateOrCrashAsElmValue(
             """
             let
                 root =
@@ -199,7 +199,7 @@ public class RecordAccessExpressionTests
                 { level1 : Level1 }
             """;
 
-        InterpreterTestHelper.EvaluateInModuleOrCrash(
+        InterpreterTestHelper.EvaluateInModuleOrCrashAsElmValue(
             "(Root (Level1 (Level2 (Level3 99)))).level1.level2.level3.value",
             elmModuleText)
             .Should().Be(ElmValue.Integer(99));
@@ -220,7 +220,7 @@ public class RecordAccessExpressionTests
                 r.level1.level2.level3
             """;
 
-        InterpreterTestHelper.EvaluateInModuleOrCrash(
+        InterpreterTestHelper.EvaluateInModuleOrCrashAsElmValue(
             """
             deepValue { level1 = { level2 = { level3 = 17, extra = 0 }, info = "x" }, tag = 1 }
             """,
@@ -244,14 +244,14 @@ public class RecordAccessExpressionTests
                 { x = x, y = y }
             """;
 
-        InterpreterTestHelper.EvaluateInModuleOrCrash("(makePoint 5 9).y", elmModuleText)
+        InterpreterTestHelper.EvaluateInModuleOrCrashAsElmValue("(makePoint 5 9).y", elmModuleText)
             .Should().Be(ElmValue.Integer(9));
     }
 
     [Fact]
     public void Access_field_from_if_expression_yielding_record()
     {
-        InterpreterTestHelper.EvaluateOrCrash(
+        InterpreterTestHelper.EvaluateOrCrashAsElmValue(
             """
             let
                 pickedRecord =
@@ -269,7 +269,7 @@ public class RecordAccessExpressionTests
     [Fact]
     public void Access_record_field_holding_string_value()
     {
-        InterpreterTestHelper.EvaluateOrCrash(
+        InterpreterTestHelper.EvaluateOrCrashAsElmValue(
             """
             let
                 user =
@@ -283,7 +283,7 @@ public class RecordAccessExpressionTests
     [Fact]
     public void Access_field_used_in_arithmetic_expression()
     {
-        InterpreterTestHelper.EvaluateOrCrash(
+        InterpreterTestHelper.EvaluateOrCrashAsElmValue(
             """
             let
                 point =

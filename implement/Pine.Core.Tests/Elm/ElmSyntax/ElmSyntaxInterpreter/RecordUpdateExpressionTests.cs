@@ -210,7 +210,7 @@ public class RecordUpdateExpressionTests
     [Fact]
     public void Update_field_with_record_valued_replacement_supports_chained_access()
     {
-        InterpreterTestHelper.EvaluateOrCrash(
+        InterpreterTestHelper.EvaluateOrCrashAsElmValue(
             """
             let
                 outer =

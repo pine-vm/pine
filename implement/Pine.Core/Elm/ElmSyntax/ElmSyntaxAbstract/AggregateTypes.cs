@@ -1,5 +1,7 @@
-using Pine.Core.PopularEncodings;
+using Pine.Core.CommonEncodings;
 using System.Collections.Generic;
+using System.Collections.Immutable;
+using System.Linq;
 using System.Numerics;
 
 using ModuleName = System.Collections.Generic.IReadOnlyList<string>;
@@ -476,9 +478,21 @@ public record TypeStruct(
 /// </summary>
 public record ValueConstructor(
     string Name,
+    PineValue NameValue,
     IReadOnlyList<TypeAnnotation> Arguments)
 {
     private readonly int _slimHashCode = ComputeSlimHashCode(Name, Arguments);
+
+    /// <summary>
+    /// Constructor for a choice type with argument type annotations.
+    /// </summary>
+    public static ValueConstructor Create(
+        string name, IReadOnlyList<TypeAnnotation> arguments)
+    {
+        var nameValue = StringEncoding.ValueFromString(name);
+
+        return new ValueConstructor(name, nameValue, arguments);
+    }
 
     private static int ComputeSlimHashCode(
         string name,
@@ -654,7 +668,22 @@ public record RecordDefinition(
 /// </summary>
 public record RecordField(
     string FieldName,
-    TypeAnnotation FieldType);
+    PineValue FieldNameValue,
+    TypeAnnotation FieldType)
+{
+    /// <summary>
+    /// Single record field definition pairing name with type annotation.
+    /// </summary>
+    /// <param name="fieldName">The name of the field.</param>
+    /// <param name="fieldType">The type annotation of the field.</param>
+    /// <returns>A new <see cref="RecordField"/> instance.</returns>
+    public static RecordField Create(string fieldName, TypeAnnotation fieldType)
+    {
+        var fieldNameValue = StringEncoding.ValueFromString(fieldName);
+
+        return new RecordField(fieldName, fieldNameValue, fieldType);
+    }
+}
 
 /// <summary>
 /// Function declaration parts: optional signature plus implementation.
@@ -837,12 +866,29 @@ public abstract record Pattern
 
     /// <summary>Pattern matching a record with specified fields.</summary>
     public sealed record RecordPattern(
-        ModuleName Fields)
+        ImmutableArray<(string FieldName, PineValue FieldNameValue)> Fields)
         : Pattern
     {
         private readonly int _slimHashCode = ComputeSlimHashCode(Fields);
 
-        private static int ComputeSlimHashCode(ModuleName fields)
+        /// <summary>
+        /// Creates a <see cref="RecordPattern"/> from field names, precomputing the <see cref="PineValue"/> for each field name.
+        /// </summary>
+        public static RecordPattern Create(ModuleName fieldNames)
+        {
+            var fields =
+                ImmutableArray<(string FieldName, PineValue FieldNameValue)>.Empty.ToBuilder();
+
+            for (var i = 0; i < fieldNames.Count; i++)
+            {
+                var fieldName = fieldNames[i];
+                fields.Add((FieldName: fieldName, FieldNameValue: StringEncoding.ValueFromString(fieldName)));
+            }
+
+            return new RecordPattern(fields.ToImmutable());
+        }
+
+        private static int ComputeSlimHashCode(ImmutableArray<(string FieldName, PineValue FieldNameValue)> fields)
         {
             var hashCode = new System.HashCode();
 
@@ -1369,6 +1415,33 @@ public abstract record Expression
     {
         private readonly int _slimHashCode = ComputeSlimHashCode(Fields);
 
+        /// <summary>
+        /// Empty record.
+        /// </summary>
+        public static RecordExpr Empty { get; } = new([]);
+
+        /// <summary>
+        /// Record expressions with fields sorted by name.
+        /// </summary>
+        public static RecordExpr CreateSorted(IReadOnlyList<(string FieldName, Expression FieldExpr)> fields)
+        {
+            if (fields.Count is 0)
+                return Empty;
+
+            var sortedFields =
+                fields
+                .OrderBy(f => f.FieldName, System.StringComparer.Ordinal)
+                .Select(
+                    f =>
+                    new RecordSetter(
+                        f.FieldName,
+                        FieldNameValue: StringEncoding.ValueFromString(f.FieldName),
+                        f.FieldExpr))
+                .ToList();
+
+            return new RecordExpr(sortedFields);
+        }
+
         private static int ComputeSlimHashCode(IReadOnlyList<RecordSetter> fields)
         {
             var hashCode = new System.HashCode();
@@ -1432,6 +1505,27 @@ public abstract record Expression
         : Expression
     {
         private readonly int _slimHashCode = ComputeSlimHashCode(RecordName, Fields);
+
+        /// <summary>
+        /// Record update expression with fields sorted by name.
+        /// </summary>
+        public static RecordUpdateExpression CreateSorted(
+            string recordName,
+            IReadOnlyList<(string FieldName, Expression FieldExpr)> fields)
+        {
+            var sortedFields =
+                fields
+                .OrderBy(f => f.FieldName, System.StringComparer.Ordinal)
+                .Select(
+                    f =>
+                    new RecordSetter(
+                        f.FieldName,
+                        FieldNameValue: StringEncoding.ValueFromString(f.FieldName),
+                        f.FieldExpr))
+                .ToList();
+
+            return new RecordUpdateExpression(recordName, sortedFields);
+        }
 
         private static int ComputeSlimHashCode(
             string recordName,
