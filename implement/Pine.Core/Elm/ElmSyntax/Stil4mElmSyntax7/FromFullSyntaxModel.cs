@@ -28,9 +28,9 @@ public static class FromFullSyntaxModel
              * set the 'IncompleteDeclarations' to empty before invoking this conversion.
              * */
             throw new ParserException(
-                incompleteDeclarationNode.Value.ErrorMessage,
-                lineNumber: incompleteDeclarationNode.Value.ErrorLocation.Row,
-                columnNumber: incompleteDeclarationNode.Value.ErrorLocation.Column);
+                incompleteDeclarationNode.Value.ParseError.Message,
+                lineNumber: incompleteDeclarationNode.Value.ParseError.Location.Row,
+                columnNumber: incompleteDeclarationNode.Value.ParseError.Location.Column);
         }
 
         return

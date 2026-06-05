@@ -33,6 +33,9 @@ public class ParseIncompleteTests
         return ok;
     }
 
+    static string RenderParseError(ElmSyntaxParseError elmSyntaxParseError) =>
+        $"Error at {elmSyntaxParseError.Location.Row}:{elmSyntaxParseError.Location.Column}: {elmSyntaxParseError.Message}";
+
     [Fact]
     public void First_declaration_complete_second_incomplete()
     {
@@ -85,9 +88,59 @@ public class ParseIncompleteTests
 
         // The ErrorLocation should point to where the actual parsing error occurred
         // For "decl_b =", the error occurs after the equals sign when expecting an expression
-        incompleteDecl.Value.ErrorLocation.Row.Should().BeGreaterThanOrEqualTo(8);
+        RenderParseError(incompleteDecl.Value.ParseError).Should().Be(
+            "Error at 8:1: Unfinished definition");
+    }
 
-        // The ErrorMessage should be non-empty
-        incompleteDecl.Value.ErrorMessage.Should().NotBeEmpty();
+    [Fact]
+    public void Produces_syntax_error_unfinished_definition()
+    {
+        var input =
+            """"
+            module Test exposing (..)
+
+
+            decl =
+
+            """";
+
+        var parseFileResult =
+            ElmSyntaxParser.ParseModuleText(input);
+
+        var parseFileOk =
+            parseFileResult
+            .Extract(err => throw new System.Exception(err));
+
+        var incompleteDeclaration =
+            parseFileOk.IncompleteDeclarations.Single();
+
+        RenderParseError(incompleteDeclaration.Value.ParseError).Should().Be(
+            "Error at 4:7: Unfinished definition");
+    }
+
+    [Fact]
+    public void Produces_syntax_error_unfinished_list_after_last_item()
+    {
+        var input =
+            """"
+            module Test exposing (..)
+
+
+            decl = [ 17, 19
+
+            """";
+
+        var parseFileResult =
+            ElmSyntaxParser.ParseModuleText(input);
+
+        var parseFileOk =
+            parseFileResult
+            .Extract(err => throw new System.Exception(err));
+
+        var incompleteDeclaration =
+            parseFileOk.IncompleteDeclarations.Single();
+
+        RenderParseError(incompleteDeclaration.Value.ParseError).Should().Be(
+            "Error at 4:16: Unfinished list");
     }
 }

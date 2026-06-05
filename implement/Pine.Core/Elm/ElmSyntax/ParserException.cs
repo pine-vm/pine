@@ -8,6 +8,8 @@ namespace Pine.Core.Elm.ElmSyntax;
 /// </summary>
 public class ParserException : Exception
 {
+    public string ErrorMessage { get; }
+
     /// <summary>
     /// Gets the line number where the parsing error occurred, or null if not available.
     /// </summary>
@@ -25,6 +27,7 @@ public class ParserException : Exception
     public ParserException(
         string message) : base(message)
     {
+        ErrorMessage = message;
     }
 
     /// <summary>
@@ -37,6 +40,7 @@ public class ParserException : Exception
         string message, Exception innerException)
         : base(message, innerException)
     {
+        ErrorMessage = message;
     }
 
     /// <summary>
@@ -52,6 +56,7 @@ public class ParserException : Exception
         int columnNumber)
         : base($"{message} at {lineNumber}:{columnNumber}")
     {
+        ErrorMessage = message;
         LineNumber = lineNumber;
         ColumnNumber = columnNumber;
     }

@@ -77,10 +77,10 @@ public class FormatIncompleteTests
         incompleteDecl.Range.Start.Should().Be(new Location(4, 1));
 
         // The ErrorLocation should point to where the actual error occurred (somewhere after the comma)
-        incompleteDecl.Value.ErrorLocation.Row.Should().BeGreaterThanOrEqualTo(6);
+        incompleteDecl.Value.ParseError.Location.Row.Should().BeGreaterThanOrEqualTo(6);
 
         // The ErrorMessage should be non-empty
-        incompleteDecl.Value.ErrorMessage.Should().NotBeEmpty();
+        incompleteDecl.Value.ParseError.Message.Should().NotBeEmpty();
     }
 
     [Fact]
@@ -147,9 +147,9 @@ public class FormatIncompleteTests
         // The Range should point to the start of the incomplete type alias declaration "type alias Point =" at row 9
         incompleteDecl.Range.Start.Should().Be(new Location(9, 1));
 
-        incompleteDecl.Value.ErrorLocation.Should().Be(new Location(13, 5));
+        incompleteDecl.Value.ParseError.Location.Should().Be(new Location(13, 5));
 
         // The ErrorMessage should describe the issue unexpected open bracket
-        incompleteDecl.Value.ErrorMessage.Should().Contain("OpenBracket");
+        incompleteDecl.Value.ParseError.Message.Should().Contain("OpenBracket");
     }
 }

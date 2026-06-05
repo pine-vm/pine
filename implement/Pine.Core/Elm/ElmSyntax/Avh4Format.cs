@@ -2708,8 +2708,7 @@ public class Avh4Format
                             new Range(startLoc, endLoc),
                             new IncompleteDeclaration(
                                 originalText,
-                                incompleteDecl.Value.ErrorLocation,
-                                incompleteDecl.Value.ErrorMessage)));
+                                incompleteDecl.Value.ParseError)));
 
                     // Advance context past this incomplete declaration
                     foreach (var ch in originalText)

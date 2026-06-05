@@ -110,12 +110,10 @@ public abstract record SeparatedSyntaxList<TNode>
 /// along with error information to help diagnose the parsing failure.
 /// </summary>
 /// <param name="OriginalText">The original text of the incomplete declaration.</param>
-/// <param name="ErrorLocation">The location where the parsing error occurred.</param>
-/// <param name="ErrorMessage">The error message describing why parsing failed.</param>
+/// <param name="ParseError">The parsing error information.</param>
 public record IncompleteDeclaration(
     string OriginalText,
-    Location ErrorLocation,
-    string ErrorMessage);
+    ElmSyntaxParseError ParseError);
 
 /// <summary>
 /// Elm import statement containing target module name, optional alias and exposing list.

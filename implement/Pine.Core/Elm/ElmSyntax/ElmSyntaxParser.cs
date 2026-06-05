@@ -1259,7 +1259,12 @@ public class ElmSyntaxParser
                         {
                             // Use the location from the parser exception
                             errorLocation = new Location(parserEx.LineNumber.Value, parserEx.ColumnNumber.Value);
-                            errorMessage = ex.Message;
+                            errorMessage = parserEx.ErrorMessage;
+
+                            if (errorMessage is "Unfinished definition" && declarations.Count is not 0)
+                            {
+                                errorLocation = declStartToken.Start;
+                            }
                         }
                         else
                         {
@@ -1306,8 +1311,7 @@ public class ElmSyntaxParser
                                     range,
                                     new IncompleteDeclaration(
                                         incompleteText,
-                                        errorLocation,
-                                        errorMessage)));
+                                        new ElmSyntaxParseError(errorLocation, errorMessage))));
                         }
                     }
 
@@ -2348,8 +2352,28 @@ public class ElmSyntaxParser
 
             ConsumeAllTrivia();
 
-            var expression =
-                ParseExpression(indentMin: functionFirstNameToken.Start.Column + 1);
+            var expressionStartPosition = _current;
+
+            Node<SyntaxTypes.Expression> expression;
+
+            try
+            {
+                expression =
+                    ParseExpression(indentMin: functionFirstNameToken.Start.Column + 1);
+            }
+            catch (Exception) when (IsAtEnd())
+            {
+                var unclosedListEndLocation =
+                    FindUnclosedListEndLocationSince(expressionStartPosition);
+
+                var errorMessage =
+                    unclosedListEndLocation.HasValue ? "Unfinished list" : "Unfinished definition";
+
+                throw new ParserException(
+                    errorMessage,
+                    lineNumber: unclosedListEndLocation?.Row ?? equalToken.End.Row,
+                    columnNumber: unclosedListEndLocation?.Column ?? equalToken.End.Column);
+            }
 
             var functionImpl =
                 new SyntaxTypes.FunctionImplementation(
@@ -2389,6 +2413,46 @@ public class ElmSyntaxParser
                 new Node<SyntaxTypes.Declaration.FunctionDeclaration>(
                     MakeRange(rangeStart, expression.Range.End),
                     declaration);
+        }
+
+        private Location? FindUnclosedListEndLocationSince(int startIndex)
+        {
+            var listDepth = 0;
+            Location? unclosedListEndLocation = null;
+
+            for (var i = startIndex; i < tokens.Length; i++)
+            {
+                var token = tokens.Span[i];
+
+                if (token.Type is TokenType.OpenBracket)
+                {
+                    listDepth++;
+                    unclosedListEndLocation = token.End;
+                    continue;
+                }
+
+                if (token.Type is TokenType.CloseBracket && 0 < listDepth)
+                {
+                    listDepth--;
+
+                    if (listDepth is 0)
+                    {
+                        unclosedListEndLocation = null;
+                    }
+
+                    continue;
+                }
+
+                if (0 < listDepth &&
+                    token.Type is not TokenType.Whitespace &&
+                    token.Type is not TokenType.Newline &&
+                    token.Type is not TokenType.Comment)
+                {
+                    unclosedListEndLocation = token.End;
+                }
+            }
+
+            return unclosedListEndLocation;
         }
 
         private Node<SyntaxTypes.TypeAnnotation> ParseTypeAnnotation(
