@@ -10,7 +10,6 @@ namespace Pine.Core.Elm.ElmSyntax;
 /// <see cref="ElmSyntaxInterpreter.Application"/> identified by
 /// <see cref="CodeAnalysis.DeclQualifiedName"/>) from
 /// <see cref="FunctionValue"/> applications (apply an already-evaluated
-/// <see cref="ElmValue.ElmFunction"/> closure to one or more arguments).
 /// </summary>
 public abstract record ApplicationLogEntry
 {
@@ -33,16 +32,6 @@ public abstract record ApplicationLogEntry
     /// partially-applied top-level function). Corresponds to one increment of
     /// <see cref="ElmSyntaxInterpreterPerformanceCounters.FunctionValueApplicationCount"/>.
     /// </summary>
-    /// <param name="Function">
-    /// The function value being applied. For closures originating from a top-level
-    /// declaration, this is an <see cref="ElmValue.ElmFunction"/> whose
-    /// <see cref="ElmValue.ElmFunction.Source"/> is
-    /// <see cref="ElmValue.ElmFunction.SourceRef.Declared"/>.
-    /// </param>
-    /// <param name="NewArguments">
-    /// The arguments newly supplied to the function value (i.e. the arguments at the
-    /// application site, not the arguments previously captured by partial application).
-    /// </param>
     public sealed record FunctionValue(
         PineValueInProcess Function,
         IReadOnlyList<PineValueInProcess> NewArguments)

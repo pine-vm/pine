@@ -232,12 +232,7 @@ public partial class ElmSyntaxInterpreter
         SyntaxModel.Expression rootExpression,
         IReadOnlyDictionary<DeclQualifiedName, SyntaxModel.Declaration> declarations)
     {
-        var combined =
-            CombineResolvers(
-                [
-                PineBuiltinResolver,
-                app => UserDefinedResolver(app, declarations),
-                ]);
+        var combined = BuildResolvers(declarations);
 
         var valueInProcess =
             Interpret(rootExpression, combined, BuildInfixOperatorMap(declarations));
@@ -259,12 +254,7 @@ public partial class ElmSyntaxInterpreter
         SyntaxModel.Expression rootExpression,
         IReadOnlyDictionary<DeclQualifiedName, SyntaxModel.Declaration> declarations)
     {
-        var combined =
-            CombineResolvers(
-                [
-                PineBuiltinResolver,
-                app => UserDefinedResolver(app, declarations),
-                ]);
+        var combined = BuildResolvers(declarations);
 
         return Interpret(rootExpression, combined, BuildInfixOperatorMap(declarations));
     }
@@ -327,12 +317,7 @@ public partial class ElmSyntaxInterpreter
         IReadOnlyList<ElmValue> arguments,
         IReadOnlyDictionary<DeclQualifiedName, SyntaxModel.Declaration> declarations)
     {
-        var combined =
-            CombineResolvers(
-                [
-                PineBuiltinResolver,
-                app => UserDefinedResolver(app, declarations),
-                ]);
+        var combined = BuildResolvers(declarations);
 
         var argumentsInProcess =
             arguments.Select(ToProcess)
@@ -360,12 +345,7 @@ public partial class ElmSyntaxInterpreter
         IReadOnlyList<PineValueInProcess> arguments,
         IReadOnlyDictionary<DeclQualifiedName, SyntaxModel.Declaration> declarations)
     {
-        var combined =
-            CombineResolvers(
-                [
-                PineBuiltinResolver,
-                app => UserDefinedResolver(app, declarations),
-                ]);
+        var combined = BuildResolvers(declarations);
 
         return Interpret(functionName, arguments, combined, BuildInfixOperatorMap(declarations));
     }
@@ -506,58 +486,6 @@ public partial class ElmSyntaxInterpreter
     }
 
     /// <summary>
-    /// As <see cref="Interpret(DeclQualifiedName, IReadOnlyList{PineValueInProcess}, IReadOnlyDictionary{DeclQualifiedName, SyntaxModel.Declaration})"/>,
-    /// but additionally returns an <see cref="ElmSyntaxInterpreterPerformanceCounters"/>
-    /// snapshot describing how much work the interpreter performed (trampoline iterations,
-    /// direct vs function-value applications, Pine_builtin invocations).
-    /// </summary>
-    /// <returns>
-    /// A tuple of the usual interpretation <see cref="Result{ErrT, OkT}"/> and the
-    /// counters snapshot. Counters are populated even when the interpretation result is
-    /// an error, reflecting the work performed up to the point of failure.
-    /// </returns>
-    public static (Result<ElmInterpretationError, PineValueInProcess> Result, ElmSyntaxInterpreterPerformanceCounters Counters)
-        InterpretWithCounters(
-        DeclQualifiedName functionName,
-        IReadOnlyList<ElmValue> arguments,
-        IReadOnlyDictionary<DeclQualifiedName, SyntaxModel.Declaration> declarations)
-    {
-        var invocationCounter = new InvocationCounter();
-
-        var combined =
-            CombineResolvers(
-                [
-                app => PineBuiltinResolverCounting(app, invocationCounter),
-                app => UserDefinedResolver(app, declarations),
-                ]);
-
-        var rootContext =
-            new ApplicationContext(
-                CurrentTopLevel: functionName,
-                LocalBindings: ImmutableDictionary<string, PineValueInProcess>.Empty);
-
-        var argumentsInProcess =
-            arguments.Select(ToProcess).ToImmutableList();
-
-        var application =
-            new Application(
-                FunctionName: functionName,
-                Arguments: argumentsInProcess,
-                Context: rootContext);
-
-        var result =
-            RunTrampoline(
-                initialExpression: null,
-                initialEnv: rootContext,
-                initialApplication: application,
-                resolveApplication: combined,
-                infixOperators: BuildInfixOperatorMap(declarations),
-                invocationLogger: invocationCounter);
-
-        return (result, invocationCounter.ToReadOnly());
-    }
-
-    /// <summary>
     /// As <see cref="ParseAndInterpret(string, IReadOnlyDictionary{DeclQualifiedName, SyntaxModel.Declaration})"/>,
     /// but additionally returns an <see cref="ElmSyntaxInterpreterPerformanceCounters"/>
     /// snapshot describing how much work the interpreter performed.
@@ -664,50 +592,6 @@ public partial class ElmSyntaxInterpreter
                 initialExpression: ElmSyntaxAbstract.ConvertFromConcrete.FromExpression(rootExpression),
                 initialEnv: rootContext,
                 initialApplication: null,
-                resolveApplication: combined,
-                infixOperators: BuildInfixOperatorMap(declarations),
-                invocationLogger: invocationCounter);
-
-        return (result, invocationCounter.ToReadOnly());
-    }
-
-    /// <summary>
-    /// As <see cref="InterpretWithCounters(DeclQualifiedName, IReadOnlyList{ElmValue}, IReadOnlyDictionary{DeclQualifiedName, SyntaxModel.Declaration})"/>,
-    /// but additionally invokes <paramref name="onApplication"/> on every direct or
-    /// function-value function application observed by the interpreter.
-    /// </summary>
-    public static (Result<ElmInterpretationError, PineValueInProcess> Result, ElmSyntaxInterpreterPerformanceCounters Counters)
-        InterpretWithCounters(
-        DeclQualifiedName functionName,
-        ImmutableList<PineValueInProcess> arguments,
-        IReadOnlyDictionary<DeclQualifiedName, SyntaxModel.Declaration> declarations,
-        System.Action<ApplicationLogEntry> onApplication)
-    {
-        var invocationCounter = new InvocationCounter(onApplication);
-
-        var combined =
-            CombineResolvers(
-                [
-                app => PineBuiltinResolverCounting(app, invocationCounter),
-                app => UserDefinedResolver(app, declarations),
-                ]);
-
-        var rootContext =
-            new ApplicationContext(
-                CurrentTopLevel: functionName,
-                LocalBindings: ImmutableDictionary<string, PineValueInProcess>.Empty);
-
-        var application =
-            new Application(
-                FunctionName: functionName,
-                Arguments: arguments,
-                Context: rootContext);
-
-        var result =
-            RunTrampoline(
-                initialExpression: null,
-                initialEnv: rootContext,
-                initialApplication: application,
                 resolveApplication: combined,
                 infixOperators: BuildInfixOperatorMap(declarations),
                 invocationLogger: invocationCounter);
@@ -3747,6 +3631,24 @@ public partial class ElmSyntaxInterpreter
         Application application) =>
         PineBuiltinResolver(application, s_pineBuiltinModuleNamesDefault);
 
+    public static System.Func<Application, ApplicationResolution?> ApplicationResolver(
+        IReadOnlyDictionary<DeclQualifiedName, System.Func<ImmutableList<PineValueInProcess>, PineValueInProcess>> functionResolvers)
+    {
+        ApplicationResolution? TryResolve(Application application)
+        {
+            if (functionResolvers.TryGetValue(application.FunctionName, out var resolver))
+            {
+                var returnValue = resolver(application.Arguments);
+
+                return new ApplicationResolution.Resolved(returnValue);
+            }
+
+            return null;
+        }
+
+        return TryResolve;
+    }
+
     /// <summary>
     /// Resolver that forwards applications whose module name matches one of the supplied
     /// <paramref name="pineBuiltinPseudoModuleNames"/> to <see cref="KernelFunction.ApplyKernelFunctionGeneric(string, PineValue)"/>.
@@ -4116,6 +4018,22 @@ public partial class ElmSyntaxInterpreter
         }
 
         return true;
+    }
+
+    /// <summary>
+    /// Default resolver for applications of named functions.
+    /// </summary>
+    public static System.Func<Application, ApplicationResolution> BuildResolvers(
+        IReadOnlyDictionary<DeclQualifiedName, SyntaxModel.Declaration> declarations,
+        IReadOnlyDictionary<DeclQualifiedName, System.Func<ImmutableList<PineValueInProcess>, PineValueInProcess>>? customFunctionResolvers = null)
+    {
+        return
+            CombineResolvers(
+                [
+                ApplicationResolver(customFunctionResolvers ?? ImmutableDictionary<DeclQualifiedName, System.Func<ImmutableList<PineValueInProcess>, PineValueInProcess>>.Empty),
+                PineBuiltinResolver,
+                app => UserDefinedResolver(app, declarations)
+                ]);
     }
 
     /// <summary>
