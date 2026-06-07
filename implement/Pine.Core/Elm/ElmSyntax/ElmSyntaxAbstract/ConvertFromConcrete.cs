@@ -316,13 +316,16 @@ public static class ConvertFromConcrete
             SyntaxModel.Expression.Literal literal =>
             Expression.StringLiteral.Create(literal.Value),
 
+            SyntaxModel.Expression.MultilineStringLiteral multiline =>
+            Expression.StringLiteral.Create(multiline.Value),
+
             SyntaxModel.Expression.CharLiteral charLiteral =>
             Expression.CharLiteral.Create(charLiteral.Value),
 
             SyntaxModel.Expression.Integer integer =>
             MakeInteger(ParseIntegerLiteral(integer.LiteralText)),
 
-            SyntaxModel.Expression.Floatable floatable =>
+            SyntaxModel.Expression.FloatLiteral floatable =>
             MakeFloatable(floatable.LiteralText),
 
             SyntaxModel.Expression.Negation negation =>
@@ -412,11 +415,11 @@ public static class ConvertFromConcrete
     private static Expression.Integer MakeInteger(BigInteger value) =>
         new(value, IntegerEncoding.EncodeSignedInteger(value));
 
-    private static Expression.Floatable MakeFloatable(string literalText)
+    private static Expression.FloatLiteral MakeFloatable(string literalText)
     {
         var elmFloat = FloatLiteralConversion.ToElmFloat(literalText);
 
-        return new Expression.Floatable(elmFloat.Numerator, elmFloat.Denominator);
+        return new Expression.FloatLiteral(elmFloat.Numerator, elmFloat.Denominator);
     }
 
     private static Expression.RecordAccessFunction MakeRecordAccessFunction(string functionName)

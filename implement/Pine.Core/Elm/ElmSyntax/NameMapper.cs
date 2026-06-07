@@ -335,7 +335,7 @@ public class NameMapper
 
                 // These expression types don't contain type annotations or expressions to traverse
                 ExpressionSyntax.Integer or ExpressionSyntax.Literal or ExpressionSyntax.CharLiteral or
-                ExpressionSyntax.Floatable or ExpressionSyntax.UnitExpr or
+                ExpressionSyntax.FloatLiteral or ExpressionSyntax.UnitExpr or
                 ExpressionSyntax.FunctionOrValue or ExpressionSyntax.RecordAccessFunction or
                 ExpressionSyntax.PrefixOperator =>
                 exprNode.Value,

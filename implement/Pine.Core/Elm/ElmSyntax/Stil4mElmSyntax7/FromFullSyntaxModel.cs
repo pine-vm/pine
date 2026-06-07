@@ -443,7 +443,10 @@ public static class FromFullSyntaxModel
             new Expression.UnitExpr(),
 
             FullTypes.Expression.Literal literal =>
-            new Expression.Literal(literal.Value, literal.IsTripleQuoted),
+            new Expression.Literal(literal.Value, IsTripleQuoted: false),
+
+            FullTypes.Expression.MultilineStringLiteral multiline =>
+            new Expression.Literal(multiline.Value, IsTripleQuoted: true),
 
             FullTypes.Expression.CharLiteral charLiteral =>
             new Expression.CharLiteral(charLiteral.Value),
@@ -451,7 +454,7 @@ public static class FromFullSyntaxModel
             FullTypes.Expression.Integer integer =>
             ConvertIntegerExpression(integer),
 
-            FullTypes.Expression.Floatable floatable =>
+            FullTypes.Expression.FloatLiteral floatable =>
             new Expression.Floatable(floatable.LiteralText),
 
             FullTypes.Expression.Negation negation =>

@@ -774,22 +774,73 @@ public abstract record Expression
     public sealed record UnitExpr
         : Expression;
 
-    /// <summary>String literal expression.</summary>
+    /// <summary>
+    /// Simple (single-quoted) string literal expression.
+    /// Triple-quoted multiline string literals are represented by <see cref="MultilineStringLiteral"/>.
+    /// </summary>
     public sealed record Literal(
         string Value,
-        /*
-         * Note: Property 'IsTripleQuoted' does not exist in V7 of upstream, planned to be added in V8:
-         * https://github.com/stil4m/elm-syntax/issues/57
-         * https://github.com/stil4m/elm-syntax/commit/25403ee0b4e2f78265f37fd27b0682fe6f89ea71
-         * */
 
         /*
-         * TODO: Consider adding a dedicated variant 'TripleQuotedLiteral' or 'MultilineLiteral' for
-         * the multiline string literals, and modelling the content as list of lines to better support
-         * roundtripping original content.
+         * The original source text of the string literal content (the characters between the opening
+         * and closing quotes, excluding the quotes themselves). Escape sequences such as "\n", "\t"
+         * or "\u{000A}" are preserved verbatim. This enables the renderer to reproduce the varied
+         * character representations found in the source instead of re-encoding the (decoded)
+         * <see cref="Value"/> into a canonical form.
+         * It is null for literals that were not produced from source text (for example synthesized
+         * during lowering), in which case the renderer falls back to encoding <see cref="Value"/>.
          * */
-        bool IsTripleQuoted = false)
+        string? SourceText = null)
         : Expression;
+
+    /// <summary>
+    /// Triple-quoted (multiline) string literal expression.
+    /// </summary>
+    /// <remarks>
+    /// In contrast to <see cref="Literal"/>, the original source representation is modelled as an
+    /// immutable array of lines (<see cref="SourceLines"/>) rather than a single string. The lines
+    /// are the original source text content (between the opening and closing <c>"""</c> delimiters)
+    /// split on physical line endings, with escape sequences preserved verbatim. Storing the content
+    /// already split into lines keeps rendering simple: each line is emitted as-is and the configured
+    /// linebreak style is inserted between lines, avoiding a character-by-character scan.
+    /// <see cref="SourceLines"/> is null for literals that were not produced from source text (for
+    /// example synthesized during lowering), in which case the renderer falls back to encoding the
+    /// decoded <see cref="Value"/>.
+    /// </remarks>
+    public sealed record MultilineStringLiteral(
+        string Value,
+        IReadOnlyList<string>? SourceLines = null)
+        : Expression, System.IEquatable<MultilineStringLiteral>
+    {
+        /// <inheritdoc/>
+        public bool Equals(MultilineStringLiteral? other) =>
+            other is not null &&
+            Value == other.Value &&
+            (SourceLines is null
+            ?
+            other.SourceLines is null
+            :
+            other.SourceLines is not null &&
+            Enumerable.SequenceEqual(SourceLines, other.SourceLines));
+
+        /// <inheritdoc/>
+        public override int GetHashCode()
+        {
+            var hash = new System.HashCode();
+
+            hash.Add(Value);
+
+            if (SourceLines is not null)
+            {
+                foreach (var line in SourceLines)
+                {
+                    hash.Add(line);
+                }
+            }
+
+            return hash.ToHashCode();
+        }
+    }
 
     /// <summary>Character literal expression.</summary>
     public sealed record CharLiteral(
@@ -810,7 +861,7 @@ public abstract record Expression
     /// The original literal string is preserved to enable exact roundtripping of source code.
     /// Use <see cref="FloatLiteralConversion.ToElmFloat(string)"/> to convert to the numeric representation.
     /// </remarks>
-    public sealed record Floatable(
+    public sealed record FloatLiteral(
         string LiteralText)
         : Expression;
 

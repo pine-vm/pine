@@ -411,7 +411,7 @@ public class SetTypeAnnotation
             // Leaf expressions that don't contain nested expressions
             case ExpressionSyntax.FunctionOrValue:
             case ExpressionSyntax.Integer:
-            case ExpressionSyntax.Floatable:
+            case ExpressionSyntax.FloatLiteral:
             case ExpressionSyntax.Literal:
             case ExpressionSyntax.CharLiteral:
             case ExpressionSyntax.UnitExpr:

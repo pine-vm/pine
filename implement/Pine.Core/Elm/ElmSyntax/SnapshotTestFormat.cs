@@ -225,6 +225,9 @@ public class SnapshotTestFormat
                 ExpressionSyntax.Literal literal =>
                 literal,
 
+                ExpressionSyntax.MultilineStringLiteral multiline =>
+                multiline,
+
                 ExpressionSyntax.CharLiteral charLiteral =>
                 charLiteral,
 
@@ -240,7 +243,7 @@ public class SnapshotTestFormat
                 ExpressionSyntax.RecordAccess recordAccess =>
                 recordAccess,
 
-                ExpressionSyntax.Floatable floatable =>
+                ExpressionSyntax.FloatLiteral floatable =>
                 floatable,
 
                 ExpressionSyntax.Negation negation =>

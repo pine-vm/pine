@@ -535,7 +535,7 @@ public class Avh4Format
         expr is ExpressionSyntax.Literal
             or ExpressionSyntax.CharLiteral
             or ExpressionSyntax.Integer
-            or ExpressionSyntax.Floatable
+            or ExpressionSyntax.FloatLiteral
             or ExpressionSyntax.FunctionOrValue
             or ExpressionSyntax.UnitExpr
             or ExpressionSyntax.RecordExpr
@@ -2382,7 +2382,7 @@ public class Avh4Format
 
                 if (trimmed.StartsWith("@docs "))
                 {
-                    var namesStr = trimmed.Substring("@docs ".Length);
+                    var namesStr = trimmed["@docs ".Length..];
 
                     var names =
                         namesStr
@@ -2396,7 +2396,7 @@ public class Avh4Format
                                 // Must have at least 3 chars to have content between parens: "(x)"
                                 if (n.Length > 2 && n.StartsWith("(") && n.EndsWith(")"))
                                 {
-                                    return n.Substring(1, n.Length - 2);
+                                    return n[1..^1];
                                 }
 
                                 return n;
@@ -4241,38 +4241,61 @@ public class Avh4Format
                     return FormattingResult<ExpressionSyntax>.Create(expr, context.Advance(2)); // "()"
 
                 case ExpressionSyntax.Literal literal:
-                    if (literal.IsTripleQuoted)
+                    {
+                        // Use the rendered representation to calculate the correct length
+                        // since the value may contain escaped characters
+                        var renderedLength =
+                            literal.SourceText is { } rawSingle
+                            ?
+                            rawSingle.Length + 2 // surrounding quotes
+                            :
+                            Rendering.RenderStringLiteral(literal.Value).Length;
+
+                        return FormattingResult<ExpressionSyntax>.Create(literal, context.Advance(renderedLength));
+                    }
+
+                case ExpressionSyntax.MultilineStringLiteral multiline:
                     {
                         // For triple-quoted strings, we need to track row changes from embedded newlines
                         // and account for escaped characters that will be longer in the rendered output
                         var afterOpenQuotes = context.Advance(3); // """
                         var literalCtx = afterOpenQuotes;
 
-                        // Use the unified method to process the string content
-                        Rendering.ProcessTripleQuotedStringContent(
-                            literal.Value,
-                            onChar: _ =>
+                        if (multiline.SourceLines is { } sourceLines)
+                        {
+                            // The renderer emits the original source text verbatim, one line per
+                            // element, so track its layout line by line (newlines reset the indent).
+                            for (var lineIndex = 0; lineIndex < sourceLines.Count; lineIndex++)
                             {
-                                literalCtx = literalCtx.Advance(1);
-                            },
-                            onEscapeSequence: escaped =>
-                            {
-                                literalCtx = literalCtx.Advance(escaped.Length);
-                            },
-                            onNewline: () =>
-                            {
-                                literalCtx = literalCtx.ResetIndent().NextRowToIndent();
-                            });
+                                if (lineIndex > 0)
+                                {
+                                    literalCtx = literalCtx.ResetIndent().NextRowToIndent();
+                                }
+
+                                literalCtx = literalCtx.Advance(sourceLines[lineIndex].Length);
+                            }
+                        }
+                        else
+                        {
+                            // Use the unified method to process the string content
+                            Rendering.ProcessTripleQuotedStringContent(
+                                multiline.Value,
+                                onChar: _ =>
+                                {
+                                    literalCtx = literalCtx.Advance(1);
+                                },
+                                onEscapeSequence: escaped =>
+                                {
+                                    literalCtx = literalCtx.Advance(escaped.Length);
+                                },
+                                onNewline: () =>
+                                {
+                                    literalCtx = literalCtx.ResetIndent().NextRowToIndent();
+                                });
+                        }
 
                         var afterCloseQuotes = literalCtx.Advance(3); // """
-                        return FormattingResult<ExpressionSyntax>.Create(literal, afterCloseQuotes);
-                    }
-                    else
-                    {
-                        // Use the rendered representation to calculate the correct length
-                        // since the value may contain escaped characters
-                        var renderedLiteral = Rendering.RenderStringLiteral(literal.Value);
-                        return FormattingResult<ExpressionSyntax>.Create(literal, context.Advance(renderedLiteral.Length));
+                        return FormattingResult<ExpressionSyntax>.Create(multiline, afterCloseQuotes);
                     }
 
                 case ExpressionSyntax.CharLiteral charLit:
@@ -4286,7 +4309,7 @@ public class Avh4Format
                 case ExpressionSyntax.Integer intLit:
                     return FormattingResult<ExpressionSyntax>.Create(intLit, context.Advance(intLit.LiteralText.Length));
 
-                case ExpressionSyntax.Floatable floatLit:
+                case ExpressionSyntax.FloatLiteral floatLit:
                     return
                         FormattingResult<ExpressionSyntax>.Create(
                             floatLit,

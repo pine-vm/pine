@@ -203,7 +203,7 @@ public class FromFullSyntaxModelTests
     [Fact]
     public void Expression_Literal_converts_correctly()
     {
-        var fullExpr = new FullTypes.Expression.Literal("hello", false);
+        var fullExpr = new FullTypes.Expression.Literal("hello");
 
         var result = Core.Elm.ElmSyntax.Stil4mElmSyntax7.FromFullSyntaxModel.Convert(fullExpr);
 
@@ -211,6 +211,20 @@ public class FromFullSyntaxModelTests
         var literal = (Core.Elm.ElmSyntax.Stil4mElmSyntax7.Expression.Literal)result;
         literal.Value.Should().Be("hello");
         literal.IsTripleQuoted.Should().BeFalse();
+    }
+
+    [Fact]
+    public void Expression_MultilineStringLiteral_converts_to_triple_quoted_literal()
+    {
+        var fullExpr =
+            new FullTypes.Expression.MultilineStringLiteral("first\nsecond", SourceLines: ["first", "second"]);
+
+        var result = Core.Elm.ElmSyntax.Stil4mElmSyntax7.FromFullSyntaxModel.Convert(fullExpr);
+
+        result.Should().BeOfType<Core.Elm.ElmSyntax.Stil4mElmSyntax7.Expression.Literal>();
+        var literal = (Core.Elm.ElmSyntax.Stil4mElmSyntax7.Expression.Literal)result;
+        literal.Value.Should().Be("first\nsecond");
+        literal.IsTripleQuoted.Should().BeTrue();
     }
 
     [Fact]

@@ -1,5 +1,6 @@
 using AwesomeAssertions;
 using Pine.Core.CommonEncodings;
+using Pine.Core.Elm;
 using Pine.Core.Elm.ElmSyntax;
 using System;
 using System.Numerics;
@@ -76,9 +77,9 @@ public class ConvertFromConcreteTests
     [Fact]
     public void Float_literal_is_normalized_to_rational()
     {
-        var converted = Abstract.ConvertFromConcrete.FromExpression(new Concrete.Expression.Floatable("1.5"));
+        var converted = Abstract.ConvertFromConcrete.FromExpression(new Concrete.Expression.FloatLiteral("1.5"));
 
-        var floatable = converted.Should().BeOfType<Abstract.Expression.Floatable>().Subject;
+        var floatable = converted.Should().BeOfType<Abstract.Expression.FloatLiteral>().Subject;
 
         floatable.Numerator.Should().Be(new BigInteger(3));
         floatable.Denominator.Should().Be(new BigInteger(2));
@@ -87,9 +88,9 @@ public class ConvertFromConcreteTests
     [Fact]
     public void Float_literal_in_scientific_notation_is_normalized()
     {
-        var converted = Abstract.ConvertFromConcrete.FromExpression(new Concrete.Expression.Floatable("2.0e1"));
+        var converted = Abstract.ConvertFromConcrete.FromExpression(new Concrete.Expression.FloatLiteral("2.0e1"));
 
-        var floatable = converted.Should().BeOfType<Abstract.Expression.Floatable>().Subject;
+        var floatable = converted.Should().BeOfType<Abstract.Expression.FloatLiteral>().Subject;
 
         // 2.0e1 == 20
         ((double)floatable.Numerator / (double)floatable.Denominator).Should().Be(20.0);
@@ -115,6 +116,72 @@ public class ConvertFromConcreteTests
         var stringLiteral = converted.Should().BeOfType<Abstract.Expression.StringLiteral>().Subject;
 
         stringLiteral.Value.Should().Be("ABC");
+    }
+
+    [Fact]
+    public void String_literal_value_is_normalized_and_source_representation_is_dropped()
+    {
+        // The concrete model keeps a (decoded) value alongside the original source representation
+        // (SourceText). ConvertFromConcrete normalizes the literal to its decoded value and drops the
+        // varied source representation, precomputing the encoded Pine value.
+        var concrete =
+            new Concrete.Expression.Literal(
+                Value: "line1\nline2",
+                SourceText: "line1\\nline2");
+
+        var converted = Abstract.ConvertFromConcrete.FromExpression(concrete);
+
+        var stringLiteral = converted.Should().BeOfType<Abstract.Expression.StringLiteral>().Subject;
+
+        stringLiteral.Value.Should().Be("line1\nline2");
+        stringLiteral.ValueAsPineValue.Should().Be(ElmValueEncoding.StringAsPineValue("line1\nline2"));
+
+        // Normalization collapses to the canonical Create result, regardless of source representation.
+        converted.Should().Be(Abstract.Expression.StringLiteral.Create("line1\nline2"));
+    }
+
+    [Fact]
+    public void String_literals_with_different_source_representations_normalize_equally()
+    {
+        // Two concrete literals that decode to the same value but carry different source
+        // representations must normalize to the same abstract string literal.
+        var fromEscape =
+            Abstract.ConvertFromConcrete.FromExpression(
+                new Concrete.Expression.Literal("A", SourceText: "\\u{0041}"));
+
+        var fromLiteral =
+            Abstract.ConvertFromConcrete.FromExpression(
+                new Concrete.Expression.Literal("A", SourceText: "A"));
+
+        fromEscape.Should().Be(fromLiteral);
+        fromEscape.Should().Be(Abstract.Expression.StringLiteral.Create("A"));
+    }
+
+    [Fact]
+    public void Triple_quoted_string_literal_value_is_normalized()
+    {
+        var concrete =
+            new Concrete.Expression.MultilineStringLiteral(
+                Value: "first\nsecond",
+                SourceLines: ["first", "second"]);
+
+        var converted = Abstract.ConvertFromConcrete.FromExpression(concrete);
+
+        var stringLiteral = converted.Should().BeOfType<Abstract.Expression.StringLiteral>().Subject;
+
+        stringLiteral.Value.Should().Be("first\nsecond");
+        stringLiteral.ValueAsPineValue.Should().Be(ElmValueEncoding.StringAsPineValue("first\nsecond"));
+    }
+
+    [Fact]
+    public void String_literal_without_source_representation_is_normalized()
+    {
+        // Literals produced without source text (for example synthesized during lowering) are
+        // normalized from their value alone.
+        var converted =
+            Abstract.ConvertFromConcrete.FromExpression(new Concrete.Expression.Literal("plain"));
+
+        converted.Should().Be(Abstract.Expression.StringLiteral.Create("plain"));
     }
 
     [Fact]

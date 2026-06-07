@@ -733,7 +733,7 @@ public class ReportSyntaxNodesTests
     [Fact]
     public void ReportExpression_on_float_literal_reports_nothing()
     {
-        var expr = new ExpressionSyntax.Floatable("3.14");
+        var expr = new ExpressionSyntax.FloatLiteral("3.14");
 
         var (lambdas, letBlocks, letFunctions) = CollectReportsFromExpression(expr);
 

@@ -48,12 +48,12 @@ public class ModelTests
     public void Floatable_equality_uses_numerator_and_denominator()
     {
         AssertValueEqual(
-            new Expression.Floatable(3, 2),
-            new Expression.Floatable(3, 2));
+            new Expression.FloatLiteral(3, 2),
+            new Expression.FloatLiteral(3, 2));
 
         AssertNotEqual(
-            new Expression.Floatable(3, 2),
-            new Expression.Floatable(3, 4));
+            new Expression.FloatLiteral(3, 2),
+            new Expression.FloatLiteral(3, 4));
     }
 
     [Fact]

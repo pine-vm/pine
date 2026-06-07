@@ -396,8 +396,8 @@ public static class ConvertToConcrete
             Expression.Integer integer =>
             new SyntaxModel.Expression.Integer(IntegerLiteralText(integer.Value)),
 
-            Expression.Floatable floatable =>
-            new SyntaxModel.Expression.Floatable(FloatLiteralText(floatable.Numerator, floatable.Denominator)),
+            Expression.FloatLiteral floatable =>
+            new SyntaxModel.Expression.FloatLiteral(FloatLiteralText(floatable.Numerator, floatable.Denominator)),
 
             Expression.Negation negation =>
             new SyntaxModel.Expression.Negation(Node(ToExpression(negation.Expression))),

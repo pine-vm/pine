@@ -3081,7 +3081,7 @@ public partial class ElmSyntaxInterpreter
             case ElmSyntaxAbstract.Expression.StringLiteral:
             case ElmSyntaxAbstract.Expression.CharLiteral:
             case ElmSyntaxAbstract.Expression.Integer:
-            case ElmSyntaxAbstract.Expression.Floatable:
+            case ElmSyntaxAbstract.Expression.FloatLiteral:
             case ElmSyntaxAbstract.Expression.PrefixOperator:
             case ElmSyntaxAbstract.Expression.RecordAccessFunction:
             case ElmSyntaxAbstract.Expression.GLSLExpression:

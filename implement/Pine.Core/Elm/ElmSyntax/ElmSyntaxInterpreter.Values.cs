@@ -429,19 +429,23 @@ public partial class ElmSyntaxInterpreter
         switch (left)
         {
             case ElmClosureInProcess leftClosure:
-                return right is ElmClosureInProcess rightClosure
+                return
+                    right is ElmClosureInProcess rightClosure
                     && ClosuresEqualInProcess(leftClosure, rightClosure, visiting);
 
             case ElmChoiceTagConstructorInProcess leftTag:
-                return right is ElmChoiceTagConstructorInProcess rightTag
+                return
+                    right is ElmChoiceTagConstructorInProcess rightTag
                     && ChoiceTagConstructorsEqualInProcess(leftTag, rightTag, visiting);
 
             case ElmRecordTypeConstructorInProcess leftCtor:
-                return right is ElmRecordTypeConstructorInProcess rightCtor
+                return
+                    right is ElmRecordTypeConstructorInProcess rightCtor
                     && RecordTypeConstructorsEqualInProcess(leftCtor, rightCtor, visiting);
 
             case ElmRecordAccessChainInProcess leftChain:
-                return right is ElmRecordAccessChainInProcess rightChain
+                return
+                    right is ElmRecordAccessChainInProcess rightChain
                     && FieldNamesEqual(leftChain.FieldNames, rightChain.FieldNames);
 
             default:

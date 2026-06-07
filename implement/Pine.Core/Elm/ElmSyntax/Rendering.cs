@@ -350,6 +350,29 @@ public class Rendering
                     CurrentColumn = 1;
                 });
         }
+
+        /// <summary>
+        /// Appends the original source text of a multiline (triple-quoted) string literal, one line
+        /// per element. The line contents are emitted verbatim (preserving escape sequences such as
+        /// "\n" or "\u{000A}"), and the configured linebreak style is inserted between consecutive
+        /// lines.
+        /// </summary>
+        public void AppendMultilineStringContent(IReadOnlyList<string> lines)
+        {
+            for (var i = 0; i < lines.Count; i++)
+            {
+                if (i > 0)
+                {
+                    AppendNewline();
+
+                    CurrentRow++;
+                    CurrentColumn = 1;
+                }
+
+                // Each line originates from splitting on '\n', so it contains no physical newline.
+                Append(lines[i]);
+            }
+        }
     }
 
     /// <summary>
@@ -1062,18 +1085,39 @@ public class Rendering
 
             case ExpressionSyntax.Literal literal:
 
-                if (literal.IsTripleQuoted)
+                if (literal.SourceText is { } rawLiteralText)
                 {
-                    context.Append("\"\"\"");
-
-                    context.AppendTripleQuotedStringContent(literal.Value);
-
-                    context.Append("\"\"\"");
+                    // Preserve the original source representation of the string literal so that
+                    // formatting round-trips varied character representations (escape sequences,
+                    // unicode escapes, etc.) instead of re-encoding them into a canonical form.
+                    // A single-quoted literal cannot contain a physical newline, so the raw text
+                    // can be emitted directly.
+                    context.Append("\"");
+                    context.Append(rawLiteralText);
+                    context.Append("\"");
                 }
                 else
                 {
                     context.Append($"{RenderStringLiteral(literal.Value)}");
                 }
+
+                break;
+
+            case ExpressionSyntax.MultilineStringLiteral multiline:
+
+                context.Append("\"\"\"");
+
+                if (multiline.SourceLines is { } sourceLines)
+                {
+                    // Preserve the original source representation line by line.
+                    context.AppendMultilineStringContent(sourceLines);
+                }
+                else
+                {
+                    context.AppendTripleQuotedStringContent(multiline.Value);
+                }
+
+                context.Append("\"\"\"");
 
                 break;
 
@@ -1085,7 +1129,7 @@ public class Rendering
                 context.Append(integer.LiteralText);
                 break;
 
-            case ExpressionSyntax.Floatable floatable:
+            case ExpressionSyntax.FloatLiteral floatable:
                 context.Append(floatable.LiteralText);
                 break;
 

@@ -264,7 +264,8 @@ public class ElmSyntaxParser
         TokenType Type,
         string Lexeme,
         Location Start,
-        Location End)
+        Location End,
+        string? RawText = null)
     {
         public Range Range =>
             new(Start, End);
@@ -717,24 +718,32 @@ public class ElmSyntaxParser
                     Advance(); // Consume the first quote
                     Advance(); // Consume the second quote
 
+                    var innerStart = _position;
+
                     var literal = ParseStringLiteral(termination: "\"\"\"");
 
                     if (literal is not null)
                     {
                         Location end = new(_line, _column);
 
-                        return new Token(TokenType.TripleQuotedStringLiteral, literal, start, end);
+                        var rawText = CaptureRawLiteralText(innerStart, terminationLength: 3);
+
+                        return new Token(TokenType.TripleQuotedStringLiteral, literal, start, end, rawText);
                     }
                 }
                 else
                 {
+                    var innerStart = _position;
+
                     var literal = ParseStringLiteral(termination: "\"");
 
                     if (literal is not null)
                     {
                         Location end = new(_line, _column);
 
-                        return new Token(TokenType.StringLiteral, literal, start, end);
+                        var rawText = CaptureRawLiteralText(innerStart, terminationLength: 1);
+
+                        return new Token(TokenType.StringLiteral, literal, start, end, rawText);
                     }
                 }
 
@@ -1082,6 +1091,27 @@ public class ElmSyntaxParser
                     Advance();
                     return new Token(TokenType.Unknown, current.ToString(), start, new Location(_line, _column));
             }
+        }
+
+        /// <summary>
+        /// Captures the original source text of a string literal's content (the characters between
+        /// the opening and closing quotes, excluding the closing termination characters that were
+        /// already consumed by <see cref="ParseStringLiteral"/>). Physical line endings are normalized
+        /// to '\n' to match the file-wide linebreak normalization, while escape sequences are kept
+        /// verbatim so the renderer can reproduce the original representation of characters.
+        /// </summary>
+        private string CaptureRawLiteralText(int innerStart, int terminationLength)
+        {
+            var innerEnd = _position - terminationLength;
+
+            if (innerEnd < innerStart)
+            {
+                innerEnd = innerStart;
+            }
+
+            var raw = _input[innerStart..innerEnd];
+
+            return raw.Replace("\r\n", "\n").Replace("\r", "\n");
         }
 
         private string? ParseStringLiteral(string termination)
@@ -3269,7 +3299,10 @@ public class ElmSyntaxParser
                 var stringLiteral =
                     Consume(TokenType.StringLiteral);
 
-                var literalExpr = new SyntaxTypes.Expression.Literal(stringLiteral.Lexeme, IsTripleQuoted: false);
+                var literalExpr =
+                    new SyntaxTypes.Expression.Literal(
+                        stringLiteral.Lexeme,
+                        SourceText: stringLiteral.RawText);
 
                 return new Node<SyntaxTypes.Expression>(stringLiteral.Range, literalExpr);
             }
@@ -3279,7 +3312,15 @@ public class ElmSyntaxParser
                 var stringLiteral =
                     Consume(TokenType.TripleQuotedStringLiteral);
 
-                var literalExpr = new SyntaxTypes.Expression.Literal(stringLiteral.Lexeme, IsTripleQuoted: true);
+                var literalExpr =
+                    new SyntaxTypes.Expression.MultilineStringLiteral(
+                        stringLiteral.Lexeme,
+                        SourceLines:
+                        stringLiteral.RawText is { } rawText
+                        ?
+                        [.. rawText.Split('\n')]
+                        :
+                        null);
 
                 return new Node<SyntaxTypes.Expression>(stringLiteral.Range, literalExpr);
             }
@@ -3887,7 +3928,7 @@ public class ElmSyntaxParser
             if (expression.Contains('.') || expression.Contains('e') || expression.Contains('E'))
             {
                 // Float number - preserve the original literal string for exact roundtripping
-                return new SyntaxTypes.Expression.Floatable(expression);
+                return new SyntaxTypes.Expression.FloatLiteral(expression);
             }
 
             // Decimal integer - preserve the original literal string

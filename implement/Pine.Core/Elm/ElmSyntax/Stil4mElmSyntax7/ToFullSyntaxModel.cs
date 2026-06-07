@@ -442,7 +442,11 @@ public static class ToFullSyntaxModel
             new FullTypes.Expression.UnitExpr(),
 
             Expression.Literal literal =>
-            new FullTypes.Expression.Literal(literal.Value, literal.IsTripleQuoted),
+            literal.IsTripleQuoted
+            ?
+            new FullTypes.Expression.MultilineStringLiteral(literal.Value)
+            :
+            new FullTypes.Expression.Literal(literal.Value),
 
             Expression.CharLiteral charLiteral =>
             new FullTypes.Expression.CharLiteral(charLiteral.Value),
@@ -454,7 +458,7 @@ public static class ToFullSyntaxModel
             new FullTypes.Expression.Integer(FormatHexLiteral(hex.Value)),
 
             Expression.Floatable floatable =>
-            new FullTypes.Expression.Floatable(floatable.LiteralText),
+            new FullTypes.Expression.FloatLiteral(floatable.LiteralText),
 
             Expression.Negation negation =>
             new FullTypes.Expression.Negation(

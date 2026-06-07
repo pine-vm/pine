@@ -65,9 +65,10 @@ public static class ReportSyntaxNodes
         {
             case Expression.UnitExpr:
             case Expression.Literal:
+            case Expression.MultilineStringLiteral:
             case Expression.CharLiteral:
             case Expression.Integer:
-            case Expression.Floatable:
+            case Expression.FloatLiteral:
             case Expression.FunctionOrValue:
             case Expression.PrefixOperator:
             case Expression.RecordAccessFunction:

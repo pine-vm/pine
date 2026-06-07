@@ -1124,7 +1124,7 @@ public abstract record Expression
     /// <summary>
     /// Floating-point literal expression, normalized to a rational number (numerator over denominator).
     /// </summary>
-    public sealed record Floatable(
+    public sealed record FloatLiteral(
         BigInteger Numerator,
         BigInteger Denominator)
         : Expression;
