@@ -31,7 +31,7 @@ public static class CoreBasicsPrecompiledLeaves
     /// </summary>
     public static PineValueClass CompareLeafEnvClass { get; } =
         PineValueClass.Create(
-            [new KeyValuePair<IReadOnlyList<int>, PineValue>(new[] { 0 }, PineValue.EmptyList)]);
+            [new KeyValuePair<IReadOnlyList<int>, PineValue>([0], PineValue.EmptyList)]);
 
     /// <summary>
     /// Pine value key under which the <c>Basics.compare</c> leaf is registered in the
