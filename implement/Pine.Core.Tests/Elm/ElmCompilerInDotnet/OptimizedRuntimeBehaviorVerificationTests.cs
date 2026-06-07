@@ -25,7 +25,7 @@ public class OptimizedRuntimeBehaviorVerificationTests
 
         OptimizedRuntimeBehaviorVerification.VerifyOptimizedRuntimeBehavior(
             elmModuleTexts: [Source],
-            entryPoints: [new DeclQualifiedName(["Test"], "doubleInt")],
+            entryPoints: [DeclQualifiedName.Create(["Test"], "doubleInt")],
             usages:
             [
             new KeyValuePair<string, string>(
@@ -54,7 +54,7 @@ public class OptimizedRuntimeBehaviorVerificationTests
             () =>
             OptimizedRuntimeBehaviorVerification.VerifyOptimizedRuntimeBehavior(
                 elmModuleTexts: [Source],
-                entryPoints: [new DeclQualifiedName(["Test"], "doubleInt")],
+                entryPoints: [DeclQualifiedName.Create(["Test"], "doubleInt")],
                 usages:
                 [
                 // 2 * 7 = 14, not 99 — this should trip the correctness assertion.

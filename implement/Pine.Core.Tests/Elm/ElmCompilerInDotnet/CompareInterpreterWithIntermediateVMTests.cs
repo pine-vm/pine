@@ -86,10 +86,10 @@ public class CompareInterpreterWithIntermediateVMTests
                 elmModuleTexts: [TestModuleSource],
                 entryPoints:
                 [
-                new DeclQualifiedName(moduleNs, "identityChar"),
-                new DeclQualifiedName(moduleNs, "incrementInt"),
-                new DeclQualifiedName(moduleNs, "sumList"),
-                new DeclQualifiedName(moduleNs, "mapWithLambda"),
+                DeclQualifiedName.Create(moduleNs, "identityChar"),
+                DeclQualifiedName.Create(moduleNs, "incrementInt"),
+                DeclQualifiedName.Create(moduleNs, "sumList"),
+                DeclQualifiedName.Create(moduleNs, "mapWithLambda"),
                 ],
                 maxOptimizationRounds: 1);
     }

@@ -1174,9 +1174,9 @@ public class SnapshotTestFormat
                     continue;
 
                 var qualifiedName =
-                    new DeclQualifiedName(
-                        Namespaces: moduleName,
-                        DeclName: declName);
+                    DeclQualifiedName.Create(
+                        namespaces: moduleName,
+                        declName: declName);
 
                 dict[qualifiedName] = decl.Value;
             }
@@ -1546,9 +1546,9 @@ public class SnapshotTestFormat
                 {
                     return
                         [
-                        new DeclQualifiedName(
-                            Namespaces: fov.ModuleName,
-                            DeclName: fov.Name)
+                        DeclQualifiedName.Create(
+                            namespaces: fov.ModuleName,
+                            declName: fov.Name)
                         ];
                 }
 
@@ -1694,9 +1694,9 @@ public class SnapshotTestFormat
                 {
                     namedRefs =
                         namedRefs.Add(
-                            new DeclQualifiedName(
-                                Namespaces: named.Name.ModuleName,
-                                DeclName: named.Name.Name));
+                            DeclQualifiedName.Create(
+                                namespaces: named.Name.ModuleName,
+                                declName: named.Name.Name));
                 }
 
                 foreach (var arg in named.Arguments)
@@ -1760,9 +1760,9 @@ public class SnapshotTestFormat
                 {
                     typedRefs =
                         typedRefs.Add(
-                            new DeclQualifiedName(
-                                Namespaces: typed.TypeName.Value.ModuleName,
-                                DeclName: typed.TypeName.Value.Name));
+                            DeclQualifiedName.Create(
+                                namespaces: typed.TypeName.Value.ModuleName,
+                                declName: typed.TypeName.Value.Name));
                 }
 
                 foreach (var arg in typed.TypeArguments)

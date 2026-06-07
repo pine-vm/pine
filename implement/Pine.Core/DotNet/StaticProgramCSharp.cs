@@ -119,7 +119,7 @@ public record StaticProgramCSharp(
         {
             if (fnName.Namespaces.Count is 0)
             {
-                return new DeclQualifiedName(GlobalAnonFunctionsClassName.Split('.'), fnName.DeclName);
+                return DeclQualifiedName.Create(GlobalAnonFunctionsClassName.Split('.'), fnName.DeclName);
             }
 
             return fnName;
@@ -138,9 +138,7 @@ public record StaticProgramCSharp(
             if (kvp.Key.Namespaces.Count is not 0)
             {
                 var className =
-                    new DeclQualifiedName(
-                        Namespaces: [.. kvp.Key.Namespaces.SkipLast(1)],
-                        DeclName: kvp.Key.Namespaces[^1]);
+                    DeclQualifiedName.Create([.. kvp.Key.Namespaces.SkipLast(1)], kvp.Key.Namespaces[^1]);
 
                 moduleNames.Add(className);
             }
@@ -224,7 +222,7 @@ public record StaticProgramCSharp(
 
         var globalAnonClassDecl =
             ClassFromDeclarations(
-                className: new DeclQualifiedName([], GlobalAnonFunctionsClassName),
+                className: DeclQualifiedName.Create([], GlobalAnonFunctionsClassName),
                 globalAnonymousFunctions);
 
         return
@@ -314,7 +312,7 @@ public record StaticProgramCSharp(
             mutatedDict
             .ToFrozenDictionary(
                 kvp => kvp.Key,
-                kvp => new DeclQualifiedName([className], kvp.Value));
+                kvp => DeclQualifiedName.Create([className], kvp.Value));
 
         var classDeclaration =
             SyntaxFactory.ClassDeclaration(className)

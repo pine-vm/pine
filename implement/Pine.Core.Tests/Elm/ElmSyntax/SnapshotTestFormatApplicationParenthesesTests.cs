@@ -73,7 +73,7 @@ public class SnapshotTestFormatApplicationParenthesesTests
 
         var rendered =
             SnapshotTestFormat.RenderQualifiedDeclaration(
-                new DeclQualifiedName(["TestModule"], "f"),
+                DeclQualifiedName.Create(["TestModule"], "f"),
                 SyntaxTypes.ToFullSyntaxModel.Convert(declaration));
 
         // Defect 1: the compound `skip [...]` argument of `head` must be
@@ -127,7 +127,7 @@ public class SnapshotTestFormatApplicationParenthesesTests
 
         var rendered =
             SnapshotTestFormat.RenderQualifiedDeclaration(
-                new DeclQualifiedName(["TestModule"], "g"),
+                DeclQualifiedName.Create(["TestModule"], "g"),
                 SyntaxTypes.ToFullSyntaxModel.Convert(declaration));
 
         rendered.Should().NotContain(

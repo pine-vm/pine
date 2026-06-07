@@ -110,9 +110,7 @@ public static class DeclarationDictionaryPruning
                 funcOrValue.ModuleName.Count > 0)
             {
                 var candidate =
-                    new DeclQualifiedName(
-                        Namespaces: funcOrValue.ModuleName,
-                        DeclName: funcOrValue.Name);
+                    DeclQualifiedName.Create(funcOrValue.ModuleName, funcOrValue.Name);
 
                 if (declarations.ContainsKey(candidate))
                     yield return candidate;

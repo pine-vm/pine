@@ -362,10 +362,10 @@ public abstract record ParameterSpecialization
         return unwrapped switch
         {
             SyntaxTypes.Expression.FunctionOrValue fov when fov.ModuleName.Count > 0 =>
-            new ConcreteFunctionValue(new DeclQualifiedName(fov.ModuleName, fov.Name)),
+            new ConcreteFunctionValue(DeclQualifiedName.Create(fov.ModuleName, fov.Name)),
 
             SyntaxTypes.Expression.FunctionOrValue fov when IsKnownStableUnqualifiedFunctionReference(fov.Name) =>
-            new ConcreteFunctionValue(new DeclQualifiedName([], fov.Name)),
+            new ConcreteFunctionValue(DeclQualifiedName.Create([], fov.Name)),
 
             SyntaxTypes.Expression.LambdaExpression lambda =>
             new ConcreteLambdaValue(lambda.Lambda),

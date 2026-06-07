@@ -18,7 +18,7 @@ public class OptimizeAndEmitDictInsertTests
                 includeDeclaration:
                 declName =>
                 {
-                    return declName == new DeclQualifiedName(["Dict"], "insert");
+                    return declName.FullName == "Dict.insert";
                 },
                 parseCache);
 
@@ -30,9 +30,9 @@ public class OptimizeAndEmitDictInsertTests
                 functionMetadata,
                 CodeAnalysisTestHelper.DeclarationSyntaxContext);
 
-        var moduleBasics = asCSharp.ModulesClasses[new DeclQualifiedName([], "Basics")];
+        var moduleBasics = asCSharp.ModulesClasses[DeclQualifiedName.Create([], "Basics")];
 
-        var moduleDict = asCSharp.ModulesClasses[new DeclQualifiedName([], "Dict")];
+        var moduleDict = asCSharp.ModulesClasses[DeclQualifiedName.Create([], "Dict")];
 
         var moduleBasicsCSharpText =
             moduleBasics.RenderToString();

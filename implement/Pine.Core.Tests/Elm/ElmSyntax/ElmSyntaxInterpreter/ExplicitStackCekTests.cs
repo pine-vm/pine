@@ -115,9 +115,9 @@ public class ExplicitStackCekTests
             .Should().Equal(
             new List<ElmCallStackFrame>
             {
-                new(new DeclQualifiedName([], "inner"), [ElmInterpreter.ToProcess(ElmValue.Integer(1))]),
-                new(new DeclQualifiedName([], "middle"), [ElmInterpreter.ToProcess(ElmValue.Integer(1))]),
-                new(new DeclQualifiedName([], "outer"), [ElmInterpreter.ToProcess(ElmValue.Integer(1))]),
+                new(DeclQualifiedName.Create([], "inner"), [ElmInterpreter.ToProcess(ElmValue.Integer(1))]),
+                new(DeclQualifiedName.Create([], "middle"), [ElmInterpreter.ToProcess(ElmValue.Integer(1))]),
+                new(DeclQualifiedName.Create([], "outer"), [ElmInterpreter.ToProcess(ElmValue.Integer(1))]),
             });
 
         error.ToString().Should().Contain("inner");
@@ -163,7 +163,7 @@ public class ExplicitStackCekTests
 
         // "negateString" is the innermost active call, followed by "outer".
         error.CallStack.Should().ContainInOrder(
-            new ElmCallStackFrame(new DeclQualifiedName([], "negateString"), []),
-            new ElmCallStackFrame(new DeclQualifiedName([], "outer"), []));
+            new ElmCallStackFrame(DeclQualifiedName.Create([], "negateString"), []),
+            new ElmCallStackFrame(DeclQualifiedName.Create([], "outer"), []));
     }
 }

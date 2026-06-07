@@ -59,12 +59,12 @@ public class StaticExpressionDeclarationOrderTests
 
         var bar =
             StaticExpression<DeclQualifiedName>.FunctionApplicationInstance(
-                new DeclQualifiedName(["Acme"], "Bar"),
+                DeclQualifiedName.Create(["Acme"], "Bar"),
                 arguments);
 
         var foo =
             StaticExpression<DeclQualifiedName>.FunctionApplicationInstance(
-                new DeclQualifiedName(["Acme"], "Foo"),
+                DeclQualifiedName.Create(["Acme"], "Foo"),
                 arguments);
 
         var ordered =

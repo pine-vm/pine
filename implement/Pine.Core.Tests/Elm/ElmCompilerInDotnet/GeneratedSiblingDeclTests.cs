@@ -29,13 +29,13 @@ public class GeneratedSiblingDeclTests
         ["Test"];
 
     private static readonly DeclQualifiedName s_origName =
-        new(s_module, "f");
+        DeclQualifiedName.Create(s_module, "f");
 
     private static readonly DeclQualifiedName s_siblingName =
-        new(s_module, "f__stripped");
+        DeclQualifiedName.Create(s_module, "f__stripped");
 
     private static readonly DeclQualifiedName s_ctorName =
-        new(s_module, "Wrap");
+        DeclQualifiedName.Create(s_module, "Wrap");
 
     [Fact]
     public void WrapperStripPlan_ToGeneratedSiblingDecl_arity_zero_produces_empty_origin_list()

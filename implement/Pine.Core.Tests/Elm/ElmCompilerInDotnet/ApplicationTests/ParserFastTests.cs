@@ -463,7 +463,7 @@ public class ParserFastTests
                         rootFilePaths: rootFilePaths,
                         entryPoints:
                         [
-                        new DeclQualifiedName(
+                        DeclQualifiedName.Create(
                             ["ParserFastTestModule"],
                             "testWithoutLinebreak_alpha"),
                         ],
@@ -717,7 +717,7 @@ public class ParserFastTests
 
                 return
                     SnapshotTestFormat.RenderQualifiedDeclaration(
-                        new DeclQualifiedName(["ParserFastTestModule"], name),
+                        DeclQualifiedName.Create(["ParserFastTestModule"], name),
                         declNode.Value);
             }
 

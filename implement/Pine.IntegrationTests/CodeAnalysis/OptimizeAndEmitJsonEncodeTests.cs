@@ -370,7 +370,7 @@ public class OptimizeAndEmitJsonEncodeTests
                 CodeAnalysisTestHelper.DeclarationSyntaxContext);
 
         var moduleTest =
-            asCSharp.ModulesClasses[new DeclQualifiedName([], "Test")];
+            asCSharp.ModulesClasses[DeclQualifiedName.Create([], "Test")];
 
         var moduleTestCSharpText =
             moduleTest.RenderToString();

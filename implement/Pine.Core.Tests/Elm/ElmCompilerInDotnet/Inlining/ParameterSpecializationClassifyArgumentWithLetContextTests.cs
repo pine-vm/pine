@@ -41,7 +41,7 @@ public class ParameterSpecializationClassifyArgumentWithLetContextTests
 
         classified.Should().Be(
             new ParameterSpecialization.ConcreteFunctionValue(
-                new DeclQualifiedName(moduleName, "double")));
+                DeclQualifiedName.Create(moduleName, "double")));
     }
 
     [Fact]
@@ -67,7 +67,7 @@ public class ParameterSpecializationClassifyArgumentWithLetContextTests
 
         classified.Should().Be(
             new ParameterSpecialization.ConcreteFunctionValue(
-                new DeclQualifiedName(moduleName, "parseDouble")));
+                DeclQualifiedName.Create(moduleName, "parseDouble")));
     }
 
     [Fact]
@@ -106,7 +106,7 @@ public class ParameterSpecializationClassifyArgumentWithLetContextTests
 
         classified.Should().Be(
             new ParameterSpecialization.ConcreteFunctionValue(
-                new DeclQualifiedName(moduleName, "triple")));
+                DeclQualifiedName.Create(moduleName, "triple")));
     }
 
     [Fact]
@@ -131,7 +131,7 @@ public class ParameterSpecializationClassifyArgumentWithLetContextTests
 
         classified.Should().Be(
             new ParameterSpecialization.ConcreteFunctionValue(
-                new DeclQualifiedName(moduleName, "parseDouble")));
+                DeclQualifiedName.Create(moduleName, "parseDouble")));
     }
 
     [Fact]

@@ -165,7 +165,7 @@ public record CommandLineAppConfig(
             .ToList();
 
         var runRootQualifiedName =
-            new DeclQualifiedName(Namespaces: moduleName, DeclName: "runRoot");
+            DeclQualifiedName.Create(namespaces: moduleName, declName: "runRoot");
 
         var (compiledModulesValue, _) =
             Core.Elm.ElmCompilerInDotnet.ElmCompiler.CompileInteractiveEnvironment(

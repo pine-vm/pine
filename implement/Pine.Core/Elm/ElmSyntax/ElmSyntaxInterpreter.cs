@@ -289,7 +289,7 @@ public partial class ElmSyntaxInterpreter
     {
         var context =
             new ApplicationContext(
-                CurrentTopLevel: new DeclQualifiedName([], ""),
+                CurrentTopLevel: DeclQualifiedName.Create([], ""),
                 LocalBindings: ImmutableDictionary<string, PineValueInProcess>.Empty);
 
         return
@@ -476,9 +476,9 @@ public partial class ElmSyntaxInterpreter
             if (declaration is SyntaxModel.Declaration.InfixDeclaration infixDecl)
             {
                 map[infixDecl.Infix.Operator.Value] =
-                    new DeclQualifiedName(
-                        Namespaces: declName.Namespaces,
-                        DeclName: infixDecl.Infix.FunctionName.Value);
+                    DeclQualifiedName.Create(
+                        namespaces: declName.Namespaces,
+                        declName: infixDecl.Infix.FunctionName.Value);
             }
         }
 
@@ -523,7 +523,7 @@ public partial class ElmSyntaxInterpreter
 
         var rootContext =
             new ApplicationContext(
-                CurrentTopLevel: new DeclQualifiedName([], ""),
+                CurrentTopLevel: DeclQualifiedName.Create([], ""),
                 LocalBindings: ImmutableDictionary<string, PineValueInProcess>.Empty);
 
         var result =
@@ -584,7 +584,7 @@ public partial class ElmSyntaxInterpreter
 
         var rootContext =
             new ApplicationContext(
-                CurrentTopLevel: new DeclQualifiedName([], ""),
+                CurrentTopLevel: DeclQualifiedName.Create([], ""),
                 LocalBindings: ImmutableDictionary<string, PineValueInProcess>.Empty);
 
         var result =
@@ -2049,9 +2049,9 @@ public partial class ElmSyntaxInterpreter
         var application =
             new Application(
                 FunctionName:
-                new DeclQualifiedName(
-                    Namespaces: [.. functionOrValue.ModuleName],
-                    DeclName: functionOrValue.Name),
+                DeclQualifiedName.Create(
+                    namespaces: [.. functionOrValue.ModuleName],
+                    declName: functionOrValue.Name),
                 Arguments: arguments,
                 Context: env);
 
@@ -2542,9 +2542,9 @@ public partial class ElmSyntaxInterpreter
         _ = lambda;
 
         return
-            new DeclQualifiedName(
-                Namespaces: [],
-                DeclName: "<lambda>");
+            DeclQualifiedName.Create(
+                namespaces: [],
+                declName: "<lambda>");
     }
 
     /// <summary>
@@ -2817,9 +2817,9 @@ public partial class ElmSyntaxInterpreter
                 // declaration so two let-bound functions of the same simple name from
                 // different surrounding functions don't accidentally compare equal.
                 var qualifiedName =
-                    new DeclQualifiedName(
-                        Namespaces: [.. outerTopLevel.Namespaces, outerTopLevel.DeclName, "<let>"],
-                        DeclName: bindingName);
+                    DeclQualifiedName.Create(
+                        namespaces: [.. outerTopLevel.Namespaces, outerTopLevel.DeclName, "<let>"],
+                        declName: bindingName);
 
                 extended[bindingName] =
                     new ElmClosureInProcess(

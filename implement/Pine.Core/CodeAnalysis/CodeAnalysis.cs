@@ -38,7 +38,7 @@ public class CodeAnalysis
 
             foreach (var decl in parsedModule.moduleContent.FunctionDeclarations)
             {
-                var declQualifiedName = new DeclQualifiedName(moduleName, decl.Key);
+                var declQualifiedName = DeclQualifiedName.Create(moduleName, decl.Key);
 
                 if (!includeDeclaration(declQualifiedName))
                     continue;
@@ -182,9 +182,9 @@ public class CodeAnalysis
             }
 
             return
-                new DeclQualifiedName(
-                    [],
-                    AnonymousFunctionName(functionIdentifier.EncodedExpr, functionIdentifier.EnvClass, hashCache));
+                DeclQualifiedName.Create(
+                    namespaces: [],
+                    declName: AnonymousFunctionName(functionIdentifier.EncodedExpr, functionIdentifier.EnvClass, hashCache));
         }
 
         var namedFunctions =

@@ -509,9 +509,9 @@ internal static class ElmSyntaxTransformations
         ModuleName currentModuleName)
     {
         if (reference.ModuleName.Count is 0)
-            return new DeclQualifiedName(currentModuleName, reference.Name);
+            return DeclQualifiedName.Create(currentModuleName, reference.Name);
 
-        return new DeclQualifiedName(reference.ModuleName, reference.Name);
+        return DeclQualifiedName.Create(reference.ModuleName, reference.Name);
     }
 
     /// <summary>
@@ -526,9 +526,9 @@ internal static class ElmSyntaxTransformations
         ModuleName currentModuleName)
     {
         if (qname.ModuleName.Count is 0)
-            return new DeclQualifiedName(currentModuleName, qname.Name);
+            return DeclQualifiedName.Create(currentModuleName, qname.Name);
 
-        return new DeclQualifiedName(qname.ModuleName, qname.Name);
+        return DeclQualifiedName.Create(qname.ModuleName, qname.Name);
     }
 
     /// <summary>

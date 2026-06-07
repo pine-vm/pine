@@ -668,7 +668,7 @@ public partial class ElmSyntaxOptimization
 
             if (current is SyntaxTypes.Expression.FunctionOrValue funcOrValue)
             {
-                results.Add(new DeclQualifiedName(funcOrValue.ModuleName, funcOrValue.Name));
+                results.Add(DeclQualifiedName.Create(funcOrValue.ModuleName, funcOrValue.Name));
             }
 
             SyntaxTypes.SyntaxAnalysis.ForEachChildExpression(current, worklist.Push);
@@ -794,14 +794,14 @@ public partial class ElmSyntaxOptimization
             var (inlinedNewDecl, furtherDecls) = InlineDeclaration(newDecl, context);
 
             var newDeclName = ElmCompiler.GetDeclarationName(inlinedNewDecl.Value);
-            var newKey = new DeclQualifiedName(moduleName, newDeclName ?? "unknown");
+            var newKey = DeclQualifiedName.Create(moduleName, newDeclName ?? "unknown");
 
             inlinedDeclarations.Add((newKey, inlinedNewDecl));
 
             foreach (var furtherDecl in furtherDecls)
             {
                 var furtherDeclName = ElmCompiler.GetDeclarationName(furtherDecl.Value);
-                var furtherKey = new DeclQualifiedName(moduleName, furtherDeclName ?? "unknown");
+                var furtherKey = DeclQualifiedName.Create(moduleName, furtherDeclName ?? "unknown");
                 inlinedDeclarations.Add((furtherKey, furtherDecl));
             }
         }
@@ -2766,7 +2766,7 @@ public partial class ElmSyntaxOptimization
         // dependencies the current compiler pipeline does not yet propagate robustly.
         if (funcOrValue.ModuleName.Count > 0 &&
             context.Resolution.FunctionsByQualifiedName.ContainsKey(
-                new DeclQualifiedName(funcOrValue.ModuleName, funcOrValue.Name)))
+                DeclQualifiedName.Create(funcOrValue.ModuleName, funcOrValue.Name)))
         {
             return true;
         }
@@ -2774,7 +2774,7 @@ public partial class ElmSyntaxOptimization
         if (funcOrValue.ModuleName.Count is 0 &&
             context.Resolution.CurrentModuleName is { } currentModuleName &&
             context.Resolution.FunctionsByQualifiedName.ContainsKey(
-                new DeclQualifiedName(currentModuleName, funcOrValue.Name)))
+                DeclQualifiedName.Create(currentModuleName, funcOrValue.Name)))
         {
             return true;
         }
@@ -3275,7 +3275,7 @@ nextParam:;
                 BoundVariableName: fieldName,
                 ParameterSpecialization:
                 new ParameterSpecialization.SingleChoiceTagUnwrap(
-                    new DeclQualifiedName(constructorName.ModuleName, constructorName.Name),
+                    DeclQualifiedName.Create(constructorName.ModuleName, constructorName.Name),
                     nestedSpecFields.ToImmutable()),
                 FlattenedParameters: [.. nestedFieldPlans.SelectMany(plan => plan.FlattenedParameters)],
                 FlattenedActualArguments: [.. nestedFieldPlans.SelectMany(plan => plan.FlattenedActualArguments)],
@@ -3308,7 +3308,7 @@ nextParam:;
         // Look up the pre-assigned name from the specialization catalog
         var specializedName =
             LookupSpecializedName(
-                new DeclQualifiedName(funcInfo.ModuleName, funcImpl.Name.Value),
+                DeclQualifiedName.Create(funcInfo.ModuleName, funcImpl.Name.Value),
                 specialization.ParamIndex,
                 BuildSingleChoiceTagUnwrapSpec(specialization, context),
                 context);
@@ -3428,7 +3428,7 @@ nextParam:;
             return null;
 
         if (!context.SpecializationCatalog.SpecializationsByFunction.TryGetValue(
-                new DeclQualifiedName(funcInfo.ModuleName, funcImpl.Name.Value),
+                DeclQualifiedName.Create(funcInfo.ModuleName, funcImpl.Name.Value),
                 out var availableSpecializations))
         {
             return null;
@@ -4205,7 +4205,7 @@ nextParam:;
         NamedSpecialization? bestSpecialization = null;
 
         if (context.SpecializationCatalog.SpecializationsByFunction.TryGetValue(
-            new DeclQualifiedName(funcModuleName, funcName),
+            DeclQualifiedName.Create(funcModuleName, funcName),
             out var availableSpecializations))
         {
             bestSpecialization =
@@ -4240,7 +4240,7 @@ nextParam:;
 
             var fallbackSpecializedName =
                 LookupSpecializedNameForHigherOrder(
-                    new DeclQualifiedName(funcModuleName, funcName),
+                    DeclQualifiedName.Create(funcModuleName, funcName),
                     fallbackParamSpecs.ToImmutable(),
                     context);
 
@@ -4248,7 +4248,7 @@ nextParam:;
             {
                 bestSpecialization =
                     new NamedSpecialization(
-                        new DeclQualifiedName(funcModuleName, funcName),
+                        DeclQualifiedName.Create(funcModuleName, funcName),
                         new FunctionSpecialization(fallbackParamSpecs.ToImmutable()),
                         fallbackSpecializedName);
             }
@@ -4718,7 +4718,7 @@ nextParam:;
 
         var startFuncName = startFunc.Function.Declaration.Value.Name.Value;
         var startFuncModule = startFunc.ModuleName;
-        var startKey = new DeclQualifiedName(startFuncModule, startFuncName);
+        var startKey = DeclQualifiedName.Create(startFuncModule, startFuncName);
         var startBody = startFunc.Function.Declaration.Value.Expression.Value;
 
         var candidates = new List<FunctionInfo>();
@@ -5191,7 +5191,7 @@ nextParam:;
         // Look up the start function's specialized name from the catalog.
         var startSpecializedName =
             LookupSpecializedNameForHigherOrder(
-                new DeclQualifiedName(startFunc.ModuleName, startImpl.Name.Value),
+                DeclQualifiedName.Create(startFunc.ModuleName, startImpl.Name.Value),
                 builtParamSpecs,
                 context);
 
@@ -5216,7 +5216,7 @@ nextParam:;
 
             var memberSpecName =
                 LookupSpecializedNameForHigherOrder(
-                    new DeclQualifiedName(member.ModuleName, memberImpl.Name.Value),
+                    DeclQualifiedName.Create(member.ModuleName, memberImpl.Name.Value),
                     builtParamSpecs,
                     context);
 
@@ -5401,22 +5401,9 @@ nextParam:;
                 (name.Contains(GeneratedNameSuffixes.Lifted, StringComparison.Ordinal) ||
                 name.Contains(GeneratedNameSuffixes.Specialized, StringComparison.Ordinal)) &&
                 resolution.FunctionsByQualifiedName.ContainsKey(
-                    new DeclQualifiedName(calleeModuleName, name)),
+                    DeclQualifiedName.Create(calleeModuleName, name)),
                 trackLocalScope: false);
     }
-
-
-
-
-
-
-
-
-
-
-
-
-
 
     private static (SyntaxTypes.CaseBlock, ImmutableList<Node<SyntaxTypes.Declaration>>) InlineCaseBlock(
         SyntaxTypes.CaseBlock caseBlock,
@@ -5653,7 +5640,7 @@ nextParam:;
         if (expr is SyntaxTypes.Expression.FunctionOrValue fov &&
             fov.ModuleName.Count > 0 &&
             context.Resolution.FunctionsByQualifiedName.ContainsKey(
-                new DeclQualifiedName(fov.ModuleName, fov.Name)))
+                DeclQualifiedName.Create(fov.ModuleName, fov.Name)))
             return (exprNode, ImmutableList<Node<SyntaxTypes.Declaration>>.Empty);
 
         // Parenthesized expression
@@ -5694,7 +5681,7 @@ nextParam:;
                         if (inlinedResult is SyntaxTypes.Expression.FunctionOrValue resultFov &&
                             (resultFov.ModuleName.Count is 0 ||
                             !context.Resolution.FunctionsByQualifiedName.ContainsKey(
-                                new DeclQualifiedName(resultFov.ModuleName, resultFov.Name))))
+                                DeclQualifiedName.Create(resultFov.ModuleName, resultFov.Name))))
                         {
                             // Not a known function reference, discard declarations
                             return (null, []);
@@ -5759,7 +5746,7 @@ nextParam:;
     {
         if (funcOrValue.ModuleName.Count > 0)
         {
-            var qualifiedName = new DeclQualifiedName(funcOrValue.ModuleName, funcOrValue.Name);
+            var qualifiedName = DeclQualifiedName.Create(funcOrValue.ModuleName, funcOrValue.Name);
 
             if (context.Resolution.FunctionsByQualifiedName.TryGetValue(qualifiedName, out var funcInfo))
                 return new ResolvedFunctionReference(qualifiedName, funcInfo);
@@ -5780,7 +5767,7 @@ nextParam:;
 
         if (context.Resolution.CurrentModuleName is { } currentModuleName)
         {
-            var qualifiedName = new DeclQualifiedName(currentModuleName, funcOrValue.Name);
+            var qualifiedName = DeclQualifiedName.Create(currentModuleName, funcOrValue.Name);
 
             if (context.Resolution.FunctionsByQualifiedName.TryGetValue(qualifiedName, out var funcInfo))
                 return new ResolvedFunctionReference(qualifiedName, funcInfo);

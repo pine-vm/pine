@@ -110,7 +110,7 @@ public class OptimizeAndEmitIdivTests
                 includeDeclaration:
                 declName =>
                 {
-                    return declName == new DeclQualifiedName(["Test"], "idiv");
+                    return declName.FullName == "Test.idiv";
                 },
                 parseCache);
 
@@ -289,7 +289,7 @@ public class OptimizeAndEmitIdivTests
                 functionMetadata,
                 CodeAnalysisTestHelper.DeclarationSyntaxContext);
 
-        var testClass = asCSharp.ModulesClasses[new DeclQualifiedName([], "Test")];
+        var testClass = asCSharp.ModulesClasses[DeclQualifiedName.Create([], "Test")];
 
         var moduleTestCSharpText =
             testClass.RenderToString();

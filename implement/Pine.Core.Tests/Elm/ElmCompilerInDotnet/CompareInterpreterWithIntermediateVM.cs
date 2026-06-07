@@ -447,7 +447,7 @@ public sealed class CompareInterpreterWithIntermediateVM
         }
 
         var explicitlyQualified =
-            new DeclQualifiedName([.. functionOrValue.ModuleName], functionOrValue.Name);
+            DeclQualifiedName.Create([.. functionOrValue.ModuleName], functionOrValue.Name);
 
         if (_entryFunctionValuesByQualifiedName.ContainsKey(explicitlyQualified))
         {
@@ -511,7 +511,7 @@ public sealed class CompareInterpreterWithIntermediateVM
             {
                 if (declNode.Value is SyntaxModel.Declaration.InfixDeclaration infixDecl)
                 {
-                    declarations[new DeclQualifiedName(moduleNameParts, infixDecl.Infix.Operator.Value)] =
+                    declarations[DeclQualifiedName.Create(moduleNameParts, infixDecl.Infix.Operator.Value)] =
                         declNode.Value;
 
                     continue;
@@ -522,7 +522,7 @@ public sealed class CompareInterpreterWithIntermediateVM
                 if (declName is null)
                     continue;
 
-                declarations[new DeclQualifiedName(moduleNameParts, declName)] = declNode.Value;
+                declarations[DeclQualifiedName.Create(moduleNameParts, declName)] = declNode.Value;
             }
         }
 
@@ -567,7 +567,7 @@ public sealed class CompareInterpreterWithIntermediateVM
                 if (declNode.Value is SyntaxModel.Declaration.InfixDeclaration infixDecl)
                 {
                     yield return (
-                        new DeclQualifiedName(moduleNameParts, infixDecl.Infix.Operator.Value),
+                        DeclQualifiedName.Create(moduleNameParts, infixDecl.Infix.Operator.Value),
                         declNode.Value);
 
                     continue;
@@ -579,7 +579,7 @@ public sealed class CompareInterpreterWithIntermediateVM
                     continue;
 
                 yield return (
-                    new DeclQualifiedName(moduleNameParts, declName),
+                    DeclQualifiedName.Create(moduleNameParts, declName),
                     declNode.Value);
             }
         }

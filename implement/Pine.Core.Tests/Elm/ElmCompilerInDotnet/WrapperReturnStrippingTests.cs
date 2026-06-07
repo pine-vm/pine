@@ -98,7 +98,7 @@ public class WrapperReturnStrippingTests
         var b = ImmutableDictionary.CreateBuilder<DeclQualifiedName, SyntaxTypes.Declaration>();
 
         foreach (var (n, d) in items)
-            b[new DeclQualifiedName(s_module, n)] = d;
+            b[DeclQualifiedName.Create(s_module, n)] = d;
 
         return b.ToImmutable();
     }
@@ -119,13 +119,13 @@ public class WrapperReturnStrippingTests
         var registry = NewtypeWrapperAnalysis.BuildNewtypeRegistry(decls);
         var plans = WrapperReturnStripping.BuildStripPlans(decls, registry);
 
-        plans.Should().ContainKey(new DeclQualifiedName(s_module, "f"));
+        plans.Should().ContainKey(DeclQualifiedName.Create(s_module, "f"));
 
-        var plan = plans[new DeclQualifiedName(s_module, "f")];
+        var plan = plans[DeclQualifiedName.Create(s_module, "f")];
         plan.OriginalArity.Should().Be(1);
         plan.StrippedDeclName.DeclName.Should().Be("f__stripped");
         plan.StrippedDeclName.Namespaces.Should().Equal(s_module);
-        plan.ConstructorName.Should().Be(new DeclQualifiedName(s_module, "Wrap"));
+        plan.ConstructorName.Should().Be(DeclQualifiedName.Create(s_module, "Wrap"));
         plan.StrippedBody.Should().Be(inner);
     }
 
@@ -198,7 +198,7 @@ public class WrapperReturnStrippingTests
                 currentModuleName: s_module);
 
         match.Should().NotBeNull();
-        match!.ConstructorName.Should().Be(new DeclQualifiedName(s_module, "Wrap"));
+        match!.ConstructorName.Should().Be(DeclQualifiedName.Create(s_module, "Wrap"));
         match.StrippedInnerExpression.Should().BeOfType<SyntaxTypes.Expression.LetExpression>();
 
         var rewrittenLet = (SyntaxTypes.Expression.LetExpression)match.StrippedInnerExpression;
@@ -237,7 +237,7 @@ public class WrapperReturnStrippingTests
                 currentModuleName: s_module);
 
         match.Should().NotBeNull();
-        match!.ConstructorName.Should().Be(new DeclQualifiedName(s_module, "Wrap"));
+        match!.ConstructorName.Should().Be(DeclQualifiedName.Create(s_module, "Wrap"));
 
         var rewrittenCase = (SyntaxTypes.Expression.CaseExpression)match.StrippedInnerExpression;
         rewrittenCase.CaseBlock.Cases.Should().HaveCount(2);
@@ -297,9 +297,9 @@ public class WrapperReturnStrippingTests
         // Plan: f arity 1, ctor Wrap, sibling f__stripped.
         var plan =
             new WrapperReturnStripping.WrapperStripPlan(
-                OriginalDeclName: new DeclQualifiedName(s_module, "f"),
-                StrippedDeclName: new DeclQualifiedName(s_module, "f__stripped"),
-                ConstructorName: new DeclQualifiedName(s_module, "Wrap"),
+                OriginalDeclName: DeclQualifiedName.Create(s_module, "f"),
+                StrippedDeclName: DeclQualifiedName.Create(s_module, "f__stripped"),
+                ConstructorName: DeclQualifiedName.Create(s_module, "Wrap"),
                 OriginalArity: 1,
                 StrippedBody: FunctionOrValue([], "x"));
 
@@ -349,9 +349,9 @@ public class WrapperReturnStrippingTests
         // Plan: f arity 2 — only `f a b` is fully saturated.
         var plan =
             new WrapperReturnStripping.WrapperStripPlan(
-                OriginalDeclName: new DeclQualifiedName(s_module, "f"),
-                StrippedDeclName: new DeclQualifiedName(s_module, "f__stripped"),
-                ConstructorName: new DeclQualifiedName(s_module, "Wrap"),
+                OriginalDeclName: DeclQualifiedName.Create(s_module, "f"),
+                StrippedDeclName: DeclQualifiedName.Create(s_module, "f__stripped"),
+                ConstructorName: DeclQualifiedName.Create(s_module, "Wrap"),
                 OriginalArity: 2,
                 StrippedBody: FunctionOrValue([], "x"));
 
@@ -415,10 +415,10 @@ public class WrapperReturnStrippingTests
 
         var rewritten = WrapperReturnStripping.RewriteDeclarationDictionary(decls);
 
-        rewritten.Should().ContainKey(new DeclQualifiedName(s_module, "f__stripped"));
+        rewritten.Should().ContainKey(DeclQualifiedName.Create(s_module, "f__stripped"));
 
         var fStripped =
-            rewritten[new DeclQualifiedName(s_module, "f__stripped")]
+            rewritten[DeclQualifiedName.Create(s_module, "f__stripped")]
             .Should().BeOfType<SyntaxTypes.Declaration.FunctionDeclaration>().Subject;
 
         fStripped.Function.Declaration.Value.Arguments.Should().HaveCount(1);
@@ -426,7 +426,7 @@ public class WrapperReturnStrippingTests
 
         // Caller `g` should now wrap the stripped sibling call.
         var gAfter =
-            rewritten[new DeclQualifiedName(s_module, "g")]
+            rewritten[DeclQualifiedName.Create(s_module, "g")]
             .Should().BeOfType<SyntaxTypes.Declaration.FunctionDeclaration>().Subject;
 
         var gOuter =
@@ -451,7 +451,7 @@ public class WrapperReturnStrippingTests
         // inlining passes do not re-introduce the wrapper-form body
         // at every call site.
         var fAfter =
-            rewritten[new DeclQualifiedName(s_module, "f")]
+            rewritten[DeclQualifiedName.Create(s_module, "f")]
             .Should().BeOfType<SyntaxTypes.Declaration.FunctionDeclaration>().Subject;
 
         var fOuter =
@@ -492,7 +492,7 @@ public class WrapperReturnStrippingTests
         // recursive call site inside the stripped body must itself be
         // rewritten to go through the sibling.
         var fStripped =
-            rewritten[new DeclQualifiedName(s_module, "f__stripped")]
+            rewritten[DeclQualifiedName.Create(s_module, "f__stripped")]
             .Should().BeOfType<SyntaxTypes.Declaration.FunctionDeclaration>().Subject;
 
         var stripBody = fStripped.Function.Declaration.Value.Expression.Value;
@@ -546,11 +546,11 @@ public class WrapperReturnStrippingTests
         var first = WrapperReturnStripping.RewriteDeclarationDictionary(decls);
         var second = WrapperReturnStripping.RewriteDeclarationDictionary(first);
 
-        second.Should().NotContainKey(new DeclQualifiedName(s_module, "f__stripped__stripped"));
+        second.Should().NotContainKey(DeclQualifiedName.Create(s_module, "f__stripped__stripped"));
 
         // The original `f` and the generated `f__stripped` both still
         // exist after the second pass.
-        second.Should().ContainKey(new DeclQualifiedName(s_module, "f"));
-        second.Should().ContainKey(new DeclQualifiedName(s_module, "f__stripped"));
+        second.Should().ContainKey(DeclQualifiedName.Create(s_module, "f"));
+        second.Should().ContainKey(DeclQualifiedName.Create(s_module, "f__stripped"));
     }
 }

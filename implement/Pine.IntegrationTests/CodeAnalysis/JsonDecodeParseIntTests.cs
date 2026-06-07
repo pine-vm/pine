@@ -179,7 +179,7 @@ public class JsonDecodeParseIntTests
                 includeDeclaration:
                 declName =>
                 {
-                    return declName == new DeclQualifiedName(["Test"], "parseInt");
+                    return declName == DeclQualifiedName.Create(["Test"], "parseInt");
                 },
                 parseCache);
 
@@ -814,7 +814,7 @@ public class JsonDecodeParseIntTests
                 functionMetadata,
                 CodeAnalysisTestHelper.DeclarationSyntaxContext);
 
-        var testClass = asCSharp.ModulesClasses[new DeclQualifiedName([], "Test")];
+        var testClass = asCSharp.ModulesClasses[DeclQualifiedName.Create([], "Test")];
 
         var moduleTestCSharpText =
             testClass.RenderToString();

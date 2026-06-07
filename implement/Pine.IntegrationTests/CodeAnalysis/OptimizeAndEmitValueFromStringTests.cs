@@ -72,7 +72,7 @@ public class OptimizeAndEmitValueFromStringTests
                 includeDeclaration:
                 declName =>
                 {
-                    return declName == new DeclQualifiedName(["Test"], "computeValueFromString");
+                    return declName.FullName == "Test.computeValueFromString";
                 },
                 parseCache);
 
@@ -84,7 +84,7 @@ public class OptimizeAndEmitValueFromStringTests
                 functionMetadata,
                 CodeAnalysisTestHelper.DeclarationSyntaxContext);
 
-        var moduleTest = asCSharp.ModulesClasses[new DeclQualifiedName([], "Test")];
+        var moduleTest = asCSharp.ModulesClasses[DeclQualifiedName.Create([], "Test")];
 
         var moduleTestCSharpText =
             moduleTest.RenderToString();

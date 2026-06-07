@@ -72,9 +72,9 @@ public record NamesFromCompiledEnv
             foreach (var decl in parsedModule.moduleContent.FunctionDeclarations)
             {
                 var qualifiedName =
-                    new DeclQualifiedName(
-                        Namespaces: parsedModule.moduleName.Split('.'),
-                        DeclName: decl.Key);
+                    DeclQualifiedName.Create(
+                        namespaces: parsedModule.moduleName.Split('.'),
+                        declName: decl.Key);
 
                 var namedValue = decl.Value;
                 var envClass = PineValueClass.Create([]);
@@ -223,9 +223,9 @@ public record NamesFromCompiledEnv
                 else
                 {
                     var expandedDeclName =
-                        new DeclQualifiedName(
-                            Namespaces: declName.Namespaces,
-                            DeclName: string.Concat(declName.DeclName, "_", remainderClass.HashBase16.AsSpan(0, 8)));
+                        DeclQualifiedName.Create(
+                            namespaces: declName.Namespaces,
+                            declName: string.Concat(declName.DeclName, "_", remainderClass.HashBase16.AsSpan(0, 8)));
 
                     matchesNames.Add(expandedDeclName);
                 }

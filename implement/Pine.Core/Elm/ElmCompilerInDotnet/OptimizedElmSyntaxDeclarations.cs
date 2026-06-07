@@ -110,9 +110,9 @@ public record OptimizedElmSyntaxDeclarations(
                     specialization.Function.Declaration.Value.Name.Value;
 
                 var specializationQualifiedName =
-                    new DeclQualifiedName(
-                        Namespaces: originalName.Namespaces,
-                        DeclName: specializationDeclName);
+                    DeclQualifiedName.Create(
+                        originalName.Namespaces,
+                        specializationDeclName);
 
                 builder.Add(specializationQualifiedName, specialization);
             }
@@ -154,9 +154,9 @@ public record OptimizedElmSyntaxDeclarations(
                     specialization.Function.Declaration.Value.Name.Value;
 
                 var specializationQualifiedName =
-                    new DeclQualifiedName(
-                        Namespaces: originalName.Namespaces,
-                        DeclName: specializationDeclName);
+                    DeclQualifiedName.Create(
+                        originalName.Namespaces,
+                        specializationDeclName);
 
                 yield return new System.Collections.Generic.KeyValuePair<DeclQualifiedName, SyntaxTypes.Declaration>(
                     specializationQualifiedName, specialization);

@@ -1058,7 +1058,7 @@ public static class OptimizationOpportunityFinder
                     if (funcOrValue.ModuleName.Count > 0)
                     {
                         var qualified =
-                            new DeclQualifiedName(funcOrValue.ModuleName, funcOrValue.Name);
+                            DeclQualifiedName.Create(funcOrValue.ModuleName, funcOrValue.Name);
 
                         if (topLevelArity.TryGetValue(qualified, out var topArity))
                         {
@@ -1511,10 +1511,10 @@ public static class OptimizationOpportunityFinder
             var ctor = ctd.TypeDeclaration.Constructors[0].Value;
 
             var typeName =
-                new DeclQualifiedName(declName.Namespaces, ctd.TypeDeclaration.Name.Value);
+                DeclQualifiedName.Create(declName.Namespaces, ctd.TypeDeclaration.Name.Value);
 
             var ctorName =
-                new DeclQualifiedName(declName.Namespaces, ctor.Name.Value);
+                DeclQualifiedName.Create(declName.Namespaces, ctor.Name.Value);
 
             var generics =
                 ctd.TypeDeclaration.Generics
@@ -1747,9 +1747,9 @@ public static class OptimizationOpportunityFinder
         var qualified =
             typeRef.ModuleName.Count > 0
             ?
-            new DeclQualifiedName(typeRef.ModuleName, typeRef.Name)
+            DeclQualifiedName.Create(typeRef.ModuleName, typeRef.Name)
             :
-            new DeclQualifiedName(ownModule, typeRef.Name);
+            DeclQualifiedName.Create(ownModule, typeRef.Name);
 
         if (!singleTagRegistry.TryGetValue(qualified, out var info))
             return (null, null);
@@ -1801,9 +1801,9 @@ public static class OptimizationOpportunityFinder
         var qualified =
             named.Name.ModuleName.Count > 0
             ?
-            new DeclQualifiedName(named.Name.ModuleName, named.Name.Name)
+            DeclQualifiedName.Create(named.Name.ModuleName, named.Name.Name)
             :
-            new DeclQualifiedName(ownModule, named.Name.Name);
+            DeclQualifiedName.Create(ownModule, named.Name.Name);
 
         if (!singleTagRegistry.TryGetValue(qualified, out var info))
             return null;
@@ -1914,9 +1914,9 @@ public static class OptimizationOpportunityFinder
             var qualified =
                 funcOrValue.ModuleName.Count > 0
                 ?
-                new DeclQualifiedName(funcOrValue.ModuleName, funcOrValue.Name)
+                DeclQualifiedName.Create(funcOrValue.ModuleName, funcOrValue.Name)
                 :
-                new DeclQualifiedName(ownModule, funcOrValue.Name);
+                DeclQualifiedName.Create(ownModule, funcOrValue.Name);
 
             if (!singleTagRegistry.TryGetValue(qualified, out var info))
                 return false;

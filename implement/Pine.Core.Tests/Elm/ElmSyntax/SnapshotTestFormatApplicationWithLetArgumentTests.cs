@@ -47,7 +47,7 @@ public class SnapshotTestFormatApplicationWithLetArgumentTests
 
         var rendered =
             SnapshotTestFormat.RenderQualifiedDeclaration(
-                new DeclQualifiedName(["TestModule"], "f"),
+                DeclQualifiedName.Create(["TestModule"], "f"),
                 SyntaxTypes.ToFullSyntaxModel.Convert(declaration));
 
         AssertMultilineApplicationLayout(rendered, "let");
@@ -123,7 +123,7 @@ public class SnapshotTestFormatApplicationWithLetArgumentTests
 
         var rendered =
             SnapshotTestFormat.RenderQualifiedDeclaration(
-                new DeclQualifiedName(["TestModule"], "fNested"),
+                DeclQualifiedName.Create(["TestModule"], "fNested"),
                 SyntaxTypes.ToFullSyntaxModel.Convert(declaration));
 
         AssertMultilineApplicationLayout(rendered, "let");

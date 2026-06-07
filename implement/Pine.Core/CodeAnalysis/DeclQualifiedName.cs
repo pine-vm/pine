@@ -6,23 +6,50 @@ namespace Pine.Core.CodeAnalysis;
 /// Represents the fully qualified name of a declaration consisting of a (possibly empty) sequence
 /// of namespace identifiers and the simple declaration name.
 /// </summary>
-/// <param name="Namespaces">Ordered list of namespace identifiers from outermost to innermost. Can be empty for global namespace.</param>
-/// <param name="DeclName">The simple (unqualified) name of the declaration.</param>
-public record DeclQualifiedName(
-    IReadOnlyList<string> Namespaces,
-    string DeclName)
+public record DeclQualifiedName
     : System.IComparable<DeclQualifiedName>, System.IEquatable<DeclQualifiedName>
 {
     /// <summary>
+    /// Ordered list of namespace identifiers from outermost to innermost. Can be empty for global namespace.
+    /// </summary>
+    public IReadOnlyList<string> Namespaces { get; init; }
+
+    /// <summary>
+    /// The simple (unqualified) name of the declaration.
+    /// </summary>
+    public string DeclName { get; init; }
+
+    /// <summary>
     /// Gets the full name composed from <see cref="Namespaces"/> (if any) and <see cref="DeclName"/>, separated by dots.
     /// </summary>
-    public string FullName =>
-        Namespaces.Count is 0
-        ?
-        DeclName
-        :
-        string.Join(".", Namespaces) + "." + DeclName;
+    public string FullName { get; init; }
 
+    private DeclQualifiedName(
+        IReadOnlyList<string> namespaces,
+        string declName,
+        string fullName)
+    {
+        Namespaces = namespaces;
+        DeclName = declName;
+        FullName = fullName;
+    }
+
+    /// <summary>
+    /// Creates a new <see cref="DeclQualifiedName"/> from the given namespace and declaration name components.
+    /// </summary>
+    static public DeclQualifiedName Create(
+        IReadOnlyList<string> namespaces,
+        string declName)
+    {
+        var fullName =
+            namespaces.Count > 0
+            ?
+            string.Join(".", namespaces) + "." + declName
+            :
+            declName;
+
+        return new DeclQualifiedName(namespaces, declName, fullName);
+    }
 
     /// <inheritdoc/>
     public override string ToString()
@@ -39,19 +66,7 @@ public record DeclQualifiedName(
         if (ReferenceEquals(this, other))
             return true;
 
-        if (DeclName != other.DeclName)
-            return false;
-
-        if (Namespaces.Count != other.Namespaces.Count)
-            return false;
-
-        for (var i = 0; i < Namespaces.Count; i++)
-        {
-            if (Namespaces[i] != other.Namespaces[i])
-                return false;
-        }
-
-        return true;
+        return FullName == other.FullName;
     }
 
     /// <inheritdoc/>
@@ -81,13 +96,7 @@ public record DeclQualifiedName(
         if (parts.Length is 0)
             throw new System.ArgumentException("Full name cannot be empty.", nameof(fullName));
 
-        if (parts.Length is 1)
-            return new DeclQualifiedName(Namespaces: [], DeclName: parts[0]);
-
-        return
-            new DeclQualifiedName(
-                Namespaces: parts[..^1],
-                DeclName: parts[^1]);
+        return Create(parts[..^1], parts[^1]);
     }
 
     /// <summary>
@@ -100,10 +109,10 @@ public record DeclQualifiedName(
     /// A <see cref="DeclQualifiedName"/> with namespaces extended by the current <see cref="DeclName"/>, 
     /// and <see cref="DeclName"/> set to <paramref name="containedDeclName"/>.
     /// </returns>
-    public DeclQualifiedName ContainedDeclName(string containedDeclName) =>
-        new(
-            Namespaces: [.. Namespaces, DeclName],
-            DeclName: containedDeclName);
+    public DeclQualifiedName ContainedDeclName(string containedDeclName)
+    {
+        return Create([.. Namespaces, DeclName], containedDeclName);
+    }
 
     /// <inheritdoc/>
     public int CompareTo(DeclQualifiedName? other)
@@ -114,27 +123,7 @@ public record DeclQualifiedName(
         if (other is null)
             return 1;
 
-        var minNamespaceCount =
-            Namespaces.Count < other.Namespaces.Count
-            ?
-            Namespaces.Count
-            :
-            other.Namespaces.Count;
-
-        for (var i = 0; i < minNamespaceCount; i++)
-        {
-            var nsComparison = string.Compare(Namespaces[i], other.Namespaces[i], System.StringComparison.Ordinal);
-
-            if (nsComparison is not 0)
-                return nsComparison;
-        }
-
-        var namespaceCountComparison = Namespaces.Count.CompareTo(other.Namespaces.Count);
-
-        if (namespaceCountComparison is not 0)
-            return namespaceCountComparison;
-
-        return string.Compare(DeclName, other.DeclName, System.StringComparison.Ordinal);
+        return string.Compare(FullName, other.FullName, System.StringComparison.Ordinal);
     }
 }
 

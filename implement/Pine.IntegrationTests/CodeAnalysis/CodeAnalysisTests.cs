@@ -385,7 +385,7 @@ public class CodeAnalysisTests
                 includeDeclaration:
                 declName =>
                 {
-                    return declName == new DeclQualifiedName(["Basics"], "compare");
+                    return declName.FullName == "Basics.compare";
                 },
                 parseCache);
 
@@ -847,7 +847,7 @@ public class CodeAnalysisTests
                 includeDeclaration:
                 declName =>
                 {
-                    return declName == new DeclQualifiedName(["Test"], "idiv");
+                    return declName.FullName == "Test.idiv";
                 },
                 parseCache);
 
@@ -1043,7 +1043,7 @@ public class CodeAnalysisTests
                 includeDeclaration:
                 declName =>
                 {
-                    return declName == new DeclQualifiedName(["Dict"], "insert");
+                    return declName.FullName == "Dict.insert";
                 },
                 parseCache);
 
@@ -1844,7 +1844,7 @@ public class CodeAnalysisTests
                 includeDeclaration:
                 declName =>
                 {
-                    return declName == new DeclQualifiedName(["Test"], "hexStringToInt");
+                    return declName.FullName == "Test.hexStringToInt";
                 },
                 parseCache);
 
@@ -2117,7 +2117,7 @@ public class CodeAnalysisTests
                 includeDeclaration:
                 declName =>
                 {
-                    return declName == new DeclQualifiedName(["Test"], "listRepeatMultiply");
+                    return declName.FullName == "Test.listRepeatMultiply";
                 },
                 parseCache);
 
@@ -2171,83 +2171,83 @@ public class CodeAnalysisTests
          * */
         new Dictionary<DeclQualifiedName, bool>
         {
-            { new DeclQualifiedName(["Basics"], "eq"), true },
+            { DeclQualifiedName.Create(["Basics"], "eq"), true },
 
-            // { new DeclQualifiedName(["Basics"], "neq"), true },
+            // { DeclQualifiedName.Create(["Basics"], "neq"), true },
 
-            { new DeclQualifiedName(["Basics"], "add"), true },
-            { new DeclQualifiedName(["Basics"], "sub"), true },
-            { new DeclQualifiedName(["Basics"], "mul"), true },
+            { DeclQualifiedName.Create(["Basics"], "add"), true },
+            { DeclQualifiedName.Create(["Basics"], "sub"), true },
+            { DeclQualifiedName.Create(["Basics"], "mul"), true },
 
-            { new DeclQualifiedName(["Basics"], "idiv"), true },
+            { DeclQualifiedName.Create(["Basics"], "idiv"), true },
 
-            // { new DeclQualifiedName(["Basics"], "pow"), true },
+            // { DeclQualifiedName.Create(["Basics"], "pow"), true },
 
-            { new DeclQualifiedName(["Basics"], "and"), true },
-            { new DeclQualifiedName(["Basics"], "or"), true },
-            { new DeclQualifiedName(["Basics"], "append"), true },
+            { DeclQualifiedName.Create(["Basics"], "and"), true },
+            { DeclQualifiedName.Create(["Basics"], "or"), true },
+            { DeclQualifiedName.Create(["Basics"], "append"), true },
 
-            { new DeclQualifiedName(["Basics"], "lt"), true },
-            { new DeclQualifiedName(["Basics"], "gt"), true },
-            { new DeclQualifiedName(["Basics"], "le"), true },
-            { new DeclQualifiedName(["Basics"], "ge"), true },
+            { DeclQualifiedName.Create(["Basics"], "lt"), true },
+            { DeclQualifiedName.Create(["Basics"], "gt"), true },
+            { DeclQualifiedName.Create(["Basics"], "le"), true },
+            { DeclQualifiedName.Create(["Basics"], "ge"), true },
 
-            { new DeclQualifiedName(["Basics"], "min"), true },
-            { new DeclQualifiedName(["Basics"], "max"), true },
+            { DeclQualifiedName.Create(["Basics"], "min"), true },
+            { DeclQualifiedName.Create(["Basics"], "max"), true },
 
-            { new DeclQualifiedName(["Basics"], "apR"), false },
-            { new DeclQualifiedName(["Basics"], "apL"), false },
+            { DeclQualifiedName.Create(["Basics"], "apR"), false },
+            { DeclQualifiedName.Create(["Basics"], "apL"), false },
 
-            { new DeclQualifiedName(["Basics"], "composeL"), false },
-            { new DeclQualifiedName(["Basics"], "composeR"), false },
+            { DeclQualifiedName.Create(["Basics"], "composeL"), false },
+            { DeclQualifiedName.Create(["Basics"], "composeR"), false },
 
             /*
              * 
-            { new DeclQualifiedName(["Basics"], "identity"), true },
-            { new DeclQualifiedName(["Basics"], "always"), true },
-            { new DeclQualifiedName(["Basics"], "not"), true },
+            { DeclQualifiedName.Create(["Basics"], "identity"), true },
+            { DeclQualifiedName.Create(["Basics"], "always"), true },
+            { DeclQualifiedName.Create(["Basics"], "not"), true },
             */
 
-            { new DeclQualifiedName(["Basics"], "compare"), true },
+            { DeclQualifiedName.Create(["Basics"], "compare"), true },
 
-            { new DeclQualifiedName(["Basics"], "modBy"), true },
-            { new DeclQualifiedName(["Basics"], "remainderBy"), true },
+            { DeclQualifiedName.Create(["Basics"], "modBy"), true },
+            { DeclQualifiedName.Create(["Basics"], "remainderBy"), true },
 
-            // { new DeclQualifiedName(["Basics"], "negate"), true },
+            // { DeclQualifiedName.Create(["Basics"], "negate"), true },
 
 
-            { new DeclQualifiedName(["String"], "toInt"), true },
+            { DeclQualifiedName.Create(["String"], "toInt"), true },
 
-            { new DeclQualifiedName(["String"], "trim"), true },
-            { new DeclQualifiedName(["String"], "trimLeft"), true },
-            { new DeclQualifiedName(["String"], "trimRight"), true },
+            { DeclQualifiedName.Create(["String"], "trim"), true },
+            { DeclQualifiedName.Create(["String"], "trimLeft"), true },
+            { DeclQualifiedName.Create(["String"], "trimRight"), true },
 
-            { new DeclQualifiedName(["String"], "startsWith"), true },
-            { new DeclQualifiedName(["String"], "endsWith"), true },
+            { DeclQualifiedName.Create(["String"], "startsWith"), true },
+            { DeclQualifiedName.Create(["String"], "endsWith"), true },
 
-            { new DeclQualifiedName(["String"], "toLower"), false }, // Using higher-order function 'map' internally
-            { new DeclQualifiedName(["String"], "toUpper"), false },
+            { DeclQualifiedName.Create(["String"], "toLower"), false }, // Using higher-order function 'map' internally
+            { DeclQualifiedName.Create(["String"], "toUpper"), false },
 
-            // { new DeclQualifiedName(["String"], "indexes"), true },
+            // { DeclQualifiedName.Create(["String"], "indexes"), true },
 
-            { new DeclQualifiedName(["Dict"], "insert"), true },
-            { new DeclQualifiedName(["Dict"], "remove"), true },
+            { DeclQualifiedName.Create(["Dict"], "insert"), true },
+            { DeclQualifiedName.Create(["Dict"], "remove"), true },
 
-            { new DeclQualifiedName(["Bitwise"], "and"), true },
-            { new DeclQualifiedName(["Bitwise"], "or"), true },
-            { new DeclQualifiedName(["Bitwise"], "xor"), true },
+            { DeclQualifiedName.Create(["Bitwise"], "and"), true },
+            { DeclQualifiedName.Create(["Bitwise"], "or"), true },
+            { DeclQualifiedName.Create(["Bitwise"], "xor"), true },
 
-            { new DeclQualifiedName(["Bitwise"], "complement"), true },
+            { DeclQualifiedName.Create(["Bitwise"], "complement"), true },
 
-            { new DeclQualifiedName(["Bitwise"], "shiftLeftBy"), true },
-            { new DeclQualifiedName(["Bitwise"], "shiftRightBy"), true },
-            { new DeclQualifiedName(["Bitwise"], "shiftRightZfBy"), true },
+            { DeclQualifiedName.Create(["Bitwise"], "shiftLeftBy"), true },
+            { DeclQualifiedName.Create(["Bitwise"], "shiftRightBy"), true },
+            { DeclQualifiedName.Create(["Bitwise"], "shiftRightZfBy"), true },
 
-            { new DeclQualifiedName(["Json","Decode"], "parseJsonStringToValue"), true },
+            { DeclQualifiedName.Create(["Json","Decode"], "parseJsonStringToValue"), true },
 
-            { new DeclQualifiedName(["Pine"], "blobBytesFromChar"), true },
-            { new DeclQualifiedName(["Pine"], "intFromValue"), true },
-            { new DeclQualifiedName(["Pine"], "valueFromInt"), true },
+            { DeclQualifiedName.Create(["Pine"], "blobBytesFromChar"), true },
+            { DeclQualifiedName.Create(["Pine"], "intFromValue"), true },
+            { DeclQualifiedName.Create(["Pine"], "valueFromInt"), true },
         }
         .ToFrozenDictionary();
 

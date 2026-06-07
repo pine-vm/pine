@@ -19,7 +19,7 @@ public class BuildStaticProgramParserConfig
                 parseCache)
             .AddCoreModules(
                 fromCoreModuleBasics:
-                declName => new DeclQualifiedName(Namespaces: ["Basics"], declName),
+                declName => DeclQualifiedName.Create(["Basics"], declName),
                 parseCache);
     }
 
@@ -33,7 +33,7 @@ public class BuildStaticProgramParserConfig
                 parseCache)
             .AddCoreModules(
                 fromCoreModuleBasics:
-                declName => new DeclQualifiedName(Namespaces: ["Basics"], declName),
+                declName => DeclQualifiedName.Create(["Basics"], declName),
                 parseCache);
     }
 
@@ -49,7 +49,7 @@ public class BuildStaticProgramParserConfig
         {
             foreach (var kvp in moduleContent.FunctionDeclarations)
             {
-                var declName = new DeclQualifiedName(Namespaces: [moduleName], kvp.Key);
+                var declName = DeclQualifiedName.Create([moduleName], kvp.Key);
 
                 // Use the same logic as NamesFromCompiledEnv to determine the named value.
                 // For functions with env functions, the named value might be extracted from the
@@ -76,7 +76,7 @@ public class BuildStaticProgramParserConfig
                 // TODO: Do more here to recognize function values which are choice tag constructors.
                 // TODO: Probably do more here to recognize function values which are record constructors.
 
-                var declName = new DeclQualifiedName(Namespaces: [moduleName], kvp.Key);
+                var declName = DeclQualifiedName.Create([moduleName], kvp.Key);
 
                 declNamesWithOriginals[kvp.Value] = (mapName(declName), kvp.Value);
             }

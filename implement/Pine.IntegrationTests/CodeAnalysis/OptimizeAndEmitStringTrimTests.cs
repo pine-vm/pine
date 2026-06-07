@@ -18,7 +18,7 @@ public class OptimizeAndEmitStringTrimTests
                 includeDeclaration:
                 declName =>
                 {
-                    return declName == new DeclQualifiedName(["String"], "trim");
+                    return declName.FullName == "String.trim";
                 },
                 parseCache);
 
@@ -30,7 +30,7 @@ public class OptimizeAndEmitStringTrimTests
                 functionMetadata,
                 CodeAnalysisTestHelper.DeclarationSyntaxContext);
 
-        var moduleString = asCSharp.ModulesClasses[new DeclQualifiedName([], "String")];
+        var moduleString = asCSharp.ModulesClasses[DeclQualifiedName.Create([], "String")];
 
         var moduleStringCSharpText =
             moduleString.RenderToString();

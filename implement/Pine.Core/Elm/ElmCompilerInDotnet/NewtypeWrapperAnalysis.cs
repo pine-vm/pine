@@ -112,12 +112,12 @@ internal static class NewtypeWrapperAnalysis
             // Use the type's own module path for the constructor (Elm
             // constructors live in the same module as their type).
             var typeName =
-                new DeclQualifiedName(
+                DeclQualifiedName.Create(
                     declName.Namespaces,
                     ctd.TypeDeclaration.Name.Value);
 
             var ctorName =
-                new DeclQualifiedName(
+                DeclQualifiedName.Create(
                     declName.Namespaces,
                     ctorBareName!);
 

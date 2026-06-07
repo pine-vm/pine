@@ -138,48 +138,48 @@ public record BundledPineToDotnet(
     private static readonly FrozenSet<DeclQualifiedName> s_includedDeclarationsDefault =
         new[]
         {
-            new DeclQualifiedName(["Basics"], "remainderBy"),
-            new DeclQualifiedName(["Basics"], "modBy"),
+            DeclQualifiedName.Create(["Basics"], "remainderBy"),
+            DeclQualifiedName.Create(["Basics"], "modBy"),
 
-            new DeclQualifiedName(["String"], "trim"),
-            new DeclQualifiedName(["String"], "trimLeft"),
-            new DeclQualifiedName(["String"], "trimRight"),
+            DeclQualifiedName.Create(["String"], "trim"),
+            DeclQualifiedName.Create(["String"], "trimLeft"),
+            DeclQualifiedName.Create(["String"], "trimRight"),
 
-            new DeclQualifiedName(["String"], "split"),
-            new DeclQualifiedName(["String"], "padLeft"),
-            new DeclQualifiedName(["String"], "padRight"),
+            DeclQualifiedName.Create(["String"], "split"),
+            DeclQualifiedName.Create(["String"], "padLeft"),
+            DeclQualifiedName.Create(["String"], "padRight"),
 
-            new DeclQualifiedName(["String"], "contains"),
-            new DeclQualifiedName(["String"], "indexes"),
+            DeclQualifiedName.Create(["String"], "contains"),
+            DeclQualifiedName.Create(["String"], "indexes"),
 
-            new DeclQualifiedName(["String"], "toInt"),
-            new DeclQualifiedName(["String"], "fromInt"),
+            DeclQualifiedName.Create(["String"], "toInt"),
+            DeclQualifiedName.Create(["String"], "fromInt"),
 
-            new DeclQualifiedName(["Dict"], "size"),
-            new DeclQualifiedName(["Dict"], "insert"),
-            new DeclQualifiedName(["Dict"], "remove"),
+            DeclQualifiedName.Create(["Dict"], "size"),
+            DeclQualifiedName.Create(["Dict"], "insert"),
+            DeclQualifiedName.Create(["Dict"], "remove"),
 
-            new DeclQualifiedName(["Json","Decode"], "parseJsonStringToValue"),
-            new DeclQualifiedName(["Json","Encode"], "encode"),
+            DeclQualifiedName.Create(["Json","Decode"], "parseJsonStringToValue"),
+            DeclQualifiedName.Create(["Json","Encode"], "encode"),
 
-            new DeclQualifiedName(["Bitwise"], "and"),
-            new DeclQualifiedName(["Bitwise"], "complement"),
-            new DeclQualifiedName(["Bitwise"], "or"),
-            new DeclQualifiedName(["Bitwise"], "xor"),
-            new DeclQualifiedName(["Bitwise"], "shiftLeftBy"),
-            new DeclQualifiedName(["Bitwise"], "shiftRightBy"),
-            new DeclQualifiedName(["Bitwise"], "shiftRightZfBy"),
+            DeclQualifiedName.Create(["Bitwise"], "and"),
+            DeclQualifiedName.Create(["Bitwise"], "complement"),
+            DeclQualifiedName.Create(["Bitwise"], "or"),
+            DeclQualifiedName.Create(["Bitwise"], "xor"),
+            DeclQualifiedName.Create(["Bitwise"], "shiftLeftBy"),
+            DeclQualifiedName.Create(["Bitwise"], "shiftRightBy"),
+            DeclQualifiedName.Create(["Bitwise"], "shiftRightZfBy"),
 
-            new DeclQualifiedName(["Pine"], "stringFromValue"),
-            new DeclQualifiedName(["Pine"], "valueFromString"),
-            new DeclQualifiedName(["Pine"], "applyKernelFunction"),
+            DeclQualifiedName.Create(["Pine"], "stringFromValue"),
+            DeclQualifiedName.Create(["Pine"], "valueFromString"),
+            DeclQualifiedName.Create(["Pine"], "applyKernelFunction"),
 
             /*
              * Would benefit more from memoization, not clear which variant is more efficient at the moment.
              * 
-            new DeclQualifiedName(["Pine"], "evaluateExpression"),
-            new DeclQualifiedName(["Pine"], "encodeExpressionAsValue"),
-            new DeclQualifiedName(["Pine"], "parseExpressionFromValue"),
+            DeclQualifiedName.Create(["Pine"], "evaluateExpression"),
+            DeclQualifiedName.Create(["Pine"], "encodeExpressionAsValue"),
+            DeclQualifiedName.Create(["Pine"], "parseExpressionFromValue"),
             */
         }
         .ToFrozenSet();

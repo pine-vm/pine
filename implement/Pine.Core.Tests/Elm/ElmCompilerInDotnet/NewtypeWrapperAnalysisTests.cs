@@ -157,7 +157,7 @@ public class NewtypeWrapperAnalysisTests
         var decls =
             ImmutableDictionary<DeclQualifiedName, SyntaxTypes.Declaration>.Empty
             .Add(
-                new DeclQualifiedName(moduleName, "Parser"),
+                DeclQualifiedName.Create(moduleName, "Parser"),
                 new SyntaxTypes.Declaration.CustomTypeDeclaration(ts));
 
         var registry = NewtypeWrapperAnalysis.BuildNewtypeRegistry(decls);
@@ -165,10 +165,10 @@ public class NewtypeWrapperAnalysisTests
         // Both the type and the constructor live in the same module
         // and happen to share the same bare name here, so the registry
         // should still contain a single entry under that one key.
-        registry.Should().ContainKey(new DeclQualifiedName(moduleName, "Parser"));
+        registry.Should().ContainKey(DeclQualifiedName.Create(moduleName, "Parser"));
 
-        registry[new DeclQualifiedName(moduleName, "Parser")].ConstructorName
-            .Should().Be(new DeclQualifiedName(moduleName, "Parser"));
+        registry[DeclQualifiedName.Create(moduleName, "Parser")].ConstructorName
+            .Should().Be(DeclQualifiedName.Create(moduleName, "Parser"));
     }
 
     [Fact]
@@ -186,16 +186,16 @@ public class NewtypeWrapperAnalysisTests
         var decls =
             ImmutableDictionary<DeclQualifiedName, SyntaxTypes.Declaration>.Empty
             .Add(
-                new DeclQualifiedName(moduleName, "Wrapped"),
+                DeclQualifiedName.Create(moduleName, "Wrapped"),
                 new SyntaxTypes.Declaration.CustomTypeDeclaration(ts));
 
         var registry = NewtypeWrapperAnalysis.BuildNewtypeRegistry(decls);
 
-        registry.Should().ContainKey(new DeclQualifiedName(moduleName, "Wrapped"));
-        registry.Should().ContainKey(new DeclQualifiedName(moduleName, "MkWrapped"));
+        registry.Should().ContainKey(DeclQualifiedName.Create(moduleName, "Wrapped"));
+        registry.Should().ContainKey(DeclQualifiedName.Create(moduleName, "MkWrapped"));
 
-        registry[new DeclQualifiedName(moduleName, "Wrapped")].Should()
-            .BeSameAs(registry[new DeclQualifiedName(moduleName, "MkWrapped")]);
+        registry[DeclQualifiedName.Create(moduleName, "Wrapped")].Should()
+            .BeSameAs(registry[DeclQualifiedName.Create(moduleName, "MkWrapped")]);
     }
 
     [Fact]
@@ -215,7 +215,7 @@ public class NewtypeWrapperAnalysisTests
         var decls =
             ImmutableDictionary<DeclQualifiedName, SyntaxTypes.Declaration>.Empty
             .Add(
-                new DeclQualifiedName(moduleName, "Maybe"),
+                DeclQualifiedName.Create(moduleName, "Maybe"),
                 new SyntaxTypes.Declaration.CustomTypeDeclaration(ts));
 
         NewtypeWrapperAnalysis.BuildNewtypeRegistry(decls).Should().BeEmpty();
@@ -229,7 +229,7 @@ public class NewtypeWrapperAnalysisTests
         var decls =
             ImmutableDictionary<DeclQualifiedName, SyntaxTypes.Declaration>.Empty
             .Add(
-                new DeclQualifiedName(moduleName, typeName),
+                DeclQualifiedName.Create(moduleName, typeName),
                 new SyntaxTypes.Declaration.CustomTypeDeclaration(ts));
 
         return NewtypeWrapperAnalysis.BuildNewtypeRegistry(decls);
@@ -261,7 +261,7 @@ public class NewtypeWrapperAnalysisTests
                 currentModuleName: moduleName);
 
         match.Should().NotBeNull();
-        match!.ConstructorName.Should().Be(new DeclQualifiedName(moduleName, "MkWrapped"));
+        match!.ConstructorName.Should().Be(DeclQualifiedName.Create(moduleName, "MkWrapped"));
         match.StrippedInnerExpression.Should().Be(inner);
     }
 
@@ -287,7 +287,7 @@ public class NewtypeWrapperAnalysisTests
                 currentModuleName: moduleName);
 
         match.Should().NotBeNull();
-        match!.ConstructorName.Should().Be(new DeclQualifiedName(moduleName, "MkWrapped"));
+        match!.ConstructorName.Should().Be(DeclQualifiedName.Create(moduleName, "MkWrapped"));
     }
 
     [Fact]

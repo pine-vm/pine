@@ -52,7 +52,7 @@ public class PineBuiltinTests
 
     private static ElmValue Invoke(string functionName, params ElmValue[] arguments) =>
         ElmInterpreter.InterpretAsElmValue(
-            new DeclQualifiedName([], functionName),
+            DeclQualifiedName.Create([], functionName),
             arguments,
             s_declarations)
         .Extract(err => throw new System.Exception(err.ToString()));

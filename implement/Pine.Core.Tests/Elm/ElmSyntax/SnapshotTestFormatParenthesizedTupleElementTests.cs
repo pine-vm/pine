@@ -32,7 +32,7 @@ public class SnapshotTestFormatParenthesizedTupleElementTests
     [Fact]
     public void Tuple_with_parenthesized_application_element_renders_canonical_multi_line()
     {
-        var declQualifiedName = new DeclQualifiedName(["TestModule"], "f");
+        var declQualifiedName = DeclQualifiedName.Create(["TestModule"], "f");
 
         var declaration =
             BuildFunctionDeclarationReturning(
@@ -128,7 +128,7 @@ public class SnapshotTestFormatParenthesizedTupleElementTests
         // Companion test to the tuple case: lists exhibit the same
         // defect because ShouldFormatListAsMultiline shares the same
         // bare-kind classification logic.
-        var declQualifiedName = new DeclQualifiedName(["TestModule"], "f");
+        var declQualifiedName = DeclQualifiedName.Create(["TestModule"], "f");
 
         var declaration =
             BuildFunctionDeclarationReturning(

@@ -72,7 +72,7 @@ public class MarkRecursiveFunctionsTests
         var b = ImmutableDictionary.CreateBuilder<DeclQualifiedName, SyntaxTypes.Declaration>();
 
         foreach (var (n, d) in items)
-            b[new DeclQualifiedName(s_module, n)] = d;
+            b[DeclQualifiedName.Create(s_module, n)] = d;
 
         return b.ToImmutable();
     }
@@ -85,7 +85,7 @@ public class MarkRecursiveFunctionsTests
             ElmSyntaxOptimization.MarkRecursiveFunctions(
                 ElmSyntaxOptimization.BuildFunctionDictionary(decls));
 
-        return marked[new DeclQualifiedName(s_module, name)].IsRecursive;
+        return marked[DeclQualifiedName.Create(s_module, name)].IsRecursive;
     }
 
     [Fact]

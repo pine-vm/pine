@@ -110,7 +110,7 @@ public class SnapshotTestFormatNestedCaseFormatTests
 
         var rendered =
             SnapshotTestFormat.RenderQualifiedDeclaration(
-                new DeclQualifiedName(["TestModule"], "f"),
+                DeclQualifiedName.Create(["TestModule"], "f"),
                 SyntaxTypes.ToFullSyntaxModel.Convert(declaration));
 
         // Two strict invariants matching what avh4 elm-format produces for a
@@ -180,7 +180,7 @@ public class SnapshotTestFormatNestedCaseFormatTests
 
         var rendered =
             SnapshotTestFormat.RenderQualifiedDeclaration(
-                new DeclQualifiedName(["TestModule"], "g"),
+                DeclQualifiedName.Create(["TestModule"], "g"),
                 SyntaxTypes.ToFullSyntaxModel.Convert(declaration));
 
         rendered.Should().NotContain("case if");

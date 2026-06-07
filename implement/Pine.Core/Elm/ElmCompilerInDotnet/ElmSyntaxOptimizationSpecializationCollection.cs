@@ -498,7 +498,7 @@ public partial class ElmSyntaxOptimization
                 var funcImpl = resolved.FunctionInfo.Function.Declaration.Value;
                 var funcParams = funcImpl.Arguments;
                 var appArgs = app.Arguments.Skip(1).ToList();
-                var targetDeclName = new DeclQualifiedName(resolved.FunctionInfo.ModuleName, funcImpl.Name.Value);
+                var targetDeclName = DeclQualifiedName.Create(resolved.FunctionInfo.ModuleName, funcImpl.Name.Value);
 
                 // Check for single-choice tag specialization opportunity
                 var tagSpec =
@@ -659,7 +659,7 @@ public partial class ElmSyntaxOptimization
 
         return
             new ParameterSpecialization.SingleChoiceTagUnwrap(
-                new DeclQualifiedName(specialization.ConstructorName.ModuleName, specialization.ConstructorName.Name),
+                DeclQualifiedName.Create(specialization.ConstructorName.ModuleName, specialization.ConstructorName.Name),
                 fieldSpecs.ToImmutable());
     }
 
@@ -787,7 +787,7 @@ public partial class ElmSyntaxOptimization
                 groupMemberSpecs =
                     AddToCollected(
                         groupMemberSpecs,
-                        new DeclQualifiedName(member.ModuleName, memberImpl.Name.Value),
+                        DeclQualifiedName.Create(member.ModuleName, memberImpl.Name.Value),
                         new FunctionSpecialization(builtParamSpecs));
             }
         }

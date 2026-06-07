@@ -211,7 +211,7 @@ public partial class ElmSyntaxInterpreter
             {
                 if (declNode.Value is SyntaxModel.Declaration.InfixDeclaration infixDecl)
                 {
-                    declarations[new DeclQualifiedName(moduleNameParts, infixDecl.Infix.Operator.Value)] =
+                    declarations[DeclQualifiedName.Create(moduleNameParts, infixDecl.Infix.Operator.Value)] =
                         declNode.Value;
 
                     continue;
@@ -222,7 +222,7 @@ public partial class ElmSyntaxInterpreter
                 if (declName is null)
                     continue;
 
-                declarations[new DeclQualifiedName(moduleNameParts, declName)] = declNode.Value;
+                declarations[DeclQualifiedName.Create(moduleNameParts, declName)] = declNode.Value;
             }
         }
 

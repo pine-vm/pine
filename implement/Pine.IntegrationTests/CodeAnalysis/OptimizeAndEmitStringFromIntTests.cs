@@ -22,7 +22,7 @@ public class OptimizeAndEmitStringFromIntTests
                 includeDeclaration:
                 declName =>
                 {
-                    return declName == new DeclQualifiedName(["String"], "fromInt");
+                    return declName.FullName == "String.fromInt";
                 },
                 parseCache);
 
@@ -34,7 +34,7 @@ public class OptimizeAndEmitStringFromIntTests
                 functionMetadata,
                 CodeAnalysisTestHelper.DeclarationSyntaxContext);
 
-        var moduleString = asCSharp.ModulesClasses[new DeclQualifiedName([], "String")];
+        var moduleString = asCSharp.ModulesClasses[DeclQualifiedName.Create([], "String")];
 
         var moduleStringCSharpText =
             moduleString.RenderToString();

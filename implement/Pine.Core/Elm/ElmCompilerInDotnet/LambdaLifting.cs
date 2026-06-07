@@ -173,7 +173,7 @@ public static class LambdaLifting
 
                     if (liftedDeclName is not null)
                     {
-                        var liftedKey = new DeclQualifiedName(key.Namespaces, liftedDeclName);
+                        var liftedKey = DeclQualifiedName.Create(key.Namespaces, liftedDeclName);
                         resultBuilder[liftedKey] = liftedFunc.Value;
 
                         if (!newLiftedNamesByModule.TryGetValue(key.Namespaces, out var moduleSet))
@@ -617,7 +617,7 @@ public static class LambdaLifting
                 // fingerprint map so subsequent lifts (within the same
                 // pass) of structurally-equivalent lambdas reuse it.
                 existingFingerprintMap[fingerprint] =
-                    new DeclQualifiedName(moduleNamespaces, liftedFunctionName);
+                    DeclQualifiedName.Create(moduleNamespaces, liftedFunctionName);
             }
         }
 

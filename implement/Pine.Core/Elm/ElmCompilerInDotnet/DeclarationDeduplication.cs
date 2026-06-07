@@ -350,7 +350,7 @@ public static class DeclarationDeduplication
         // Use a fixed dummy qualified name; RenderQualifiedDeclaration
         // renames the decl internally so the name string never affects
         // the fingerprint.
-        var dummyName = new DeclQualifiedName(["__dedup__"], "__decl__");
+        var dummyName = DeclQualifiedName.Create(["__dedup__"], "__decl__");
 
         var single =
             ImmutableDictionary.CreateRange(
@@ -780,9 +780,9 @@ public static class DeclarationDeduplication
         var candidate =
             fov.ModuleName.Count is 0
             ?
-            new DeclQualifiedName(currentModuleName, fov.Name)
+            DeclQualifiedName.Create(currentModuleName, fov.Name)
             :
-            new DeclQualifiedName(fov.ModuleName, fov.Name);
+            DeclQualifiedName.Create(fov.ModuleName, fov.Name);
 
         if (!renameMap.TryGetValue(candidate, out var target))
             return null;

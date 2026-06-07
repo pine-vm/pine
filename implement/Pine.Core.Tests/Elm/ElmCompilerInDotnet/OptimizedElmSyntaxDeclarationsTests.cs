@@ -452,9 +452,7 @@ public class OptimizedElmSyntaxDeclarationsTests
         // Specialization's qualified name uses the original's namespaces
         // ("Mod", "Sub") combined with the specialization's own decl name.
         var expectedSpecQualifiedName =
-            new DeclQualifiedName(
-                Namespaces: moduleQualifier.Namespaces,
-                DeclName: "f__specialized__1");
+            DeclQualifiedName.Create(moduleQualifier.Namespaces, "f__specialized__1");
 
         flat.ContainsKey(expectedSpecQualifiedName).Should().BeTrue();
         flat[expectedSpecQualifiedName].Should().BeSameAs(specialization);
@@ -492,8 +490,8 @@ public class OptimizedElmSyntaxDeclarationsTests
 
         flat.Should().HaveCount(3);
         flat[moduleQualifier].Should().BeSameAs(original);
-        flat[new DeclQualifiedName(moduleQualifier.Namespaces, "f__specialized__1")].Should().BeSameAs(spec1);
-        flat[new DeclQualifiedName(moduleQualifier.Namespaces, "f__specialized__2")].Should().BeSameAs(spec2);
+        flat[DeclQualifiedName.Create(moduleQualifier.Namespaces, "f__specialized__1")].Should().BeSameAs(spec1);
+        flat[DeclQualifiedName.Create(moduleQualifier.Namespaces, "f__specialized__2")].Should().BeSameAs(spec2);
     }
 
     [Fact]
@@ -525,9 +523,7 @@ public class OptimizedElmSyntaxDeclarationsTests
         var flat = model.RenderAsFlatDictionary();
 
         var expectedSpecQualifiedName =
-            new DeclQualifiedName(
-                Namespaces: moduleQualifier.Namespaces,
-                DeclName: "some_other_internal_name__specialized__7");
+            DeclQualifiedName.Create(moduleQualifier.Namespaces, "some_other_internal_name__specialized__7");
 
         flat.ContainsKey(expectedSpecQualifiedName).Should().BeTrue();
         flat[expectedSpecQualifiedName].Should().BeSameAs(specialization);
@@ -563,9 +559,7 @@ public class OptimizedElmSyntaxDeclarationsTests
         flat.Should().HaveCount(2);
 
         var expectedSpecQualifiedName =
-            new DeclQualifiedName(
-                Namespaces: [],
-                DeclName: "topLevel__specialized__1");
+            DeclQualifiedName.Create([], "topLevel__specialized__1");
 
         flat[globalName].Should().BeSameAs(original);
         flat[expectedSpecQualifiedName].Should().BeSameAs(specialization);
@@ -602,7 +596,7 @@ public class OptimizedElmSyntaxDeclarationsTests
 
         flat.Should().HaveCount(3);
         flat[fnName].Should().BeSameAs(original);
-        flat[new DeclQualifiedName(fnName.Namespaces, "f__specialized__1")].Should().BeSameAs(specialization);
+        flat[DeclQualifiedName.Create(fnName.Namespaces, "f__specialized__1")].Should().BeSameAs(specialization);
         flat[portName].Should().BeSameAs(portDecl);
     }
 
@@ -623,7 +617,7 @@ public class OptimizedElmSyntaxDeclarationsTests
                 ImmutableDictionary<FunctionSpecialization, SyntaxTypes.Declaration.FunctionDeclaration>
                 .Empty.Add(specKey, specialization));
 
-        var collidingOther = new DeclQualifiedName(fnName.Namespaces, "collide");
+        var collidingOther = DeclQualifiedName.Create(fnName.Namespaces, "collide");
 
         var model =
             new OptimizedElmSyntaxDeclarations(

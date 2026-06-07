@@ -1347,7 +1347,7 @@ public class OptimizationOpportunityFinderTests
         var transformed =
             OptimizationOpportunityFinder.TryRenderTransformedSignature(
                 declarations,
-                new DeclQualifiedName(["Test"], "skipWhileWhitespaceFollowedBy"));
+                DeclQualifiedName.Create(["Test"], "skipWhileWhitespaceFollowedBy"));
 
         transformed.Should().Be(
             "(Test.State -> Test.PStep next) -> Test.State -> Test.PStep next");
@@ -1373,7 +1373,7 @@ public class OptimizationOpportunityFinderTests
         var transformed =
             OptimizationOpportunityFinder.TryRenderTransformedSignature(
                 declarations,
-                new DeclQualifiedName(["Test"], "mk"));
+                DeclQualifiedName.Create(["Test"], "mk"));
 
         transformed.Should().Be(
             "(Basics.Int, String.String) -> (Basics.Int, String.String)");
@@ -1398,7 +1398,7 @@ public class OptimizationOpportunityFinderTests
         var transformed =
             OptimizationOpportunityFinder.TryRenderTransformedSignature(
                 declarations,
-                new DeclQualifiedName(["Test"], "unwrap"));
+                DeclQualifiedName.Create(["Test"], "unwrap"));
 
         transformed.Should().BeNull();
     }

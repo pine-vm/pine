@@ -939,7 +939,7 @@ public class HigherOrderParameterAnalysisTests
                 case SyntaxTypes.Declaration.FunctionDeclaration funcDecl:
                     {
                         var name = funcDecl.Function.Declaration.Value.Name.Value;
-                        builder[new DeclQualifiedName(moduleName, name)] = funcDecl;
+                        builder[DeclQualifiedName.Create(moduleName, name)] = funcDecl;
                         break;
                     }
             }
@@ -949,5 +949,5 @@ public class HigherOrderParameterAnalysisTests
     }
 
     private static DeclQualifiedName QName(string moduleName, string declName) =>
-        new([moduleName], declName);
+        DeclQualifiedName.Create([moduleName], declName);
 }

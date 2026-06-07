@@ -107,7 +107,7 @@ public class UnqualifiedReferenceModuleResolutionTests
             if (name is null)
                 continue;
 
-            declarations[new DeclQualifiedName(moduleName, name)] = declNode.Value;
+            declarations[DeclQualifiedName.Create(moduleName, name)] = declNode.Value;
         }
     }
 
@@ -120,7 +120,7 @@ public class UnqualifiedReferenceModuleResolutionTests
         // not Q.helper (3-arg Good), so the value matches P.entry's `Good a s1` case arm.
         var result =
             ElmInterpreter.InterpretAsElmValue(
-                new DeclQualifiedName(["P"], "entry"),
+                DeclQualifiedName.Create(["P"], "entry"),
                 [ElmValue.Integer(7), ElmValue.Integer(0)],
                 declarations);
 
@@ -138,12 +138,12 @@ public class UnqualifiedReferenceModuleResolutionTests
 
         var callerContext =
             new ElmInterpreter.ApplicationContext(
-                CurrentTopLevel: new DeclQualifiedName(["P"], "entry"),
+                CurrentTopLevel: DeclQualifiedName.Create(["P"], "entry"),
                 LocalBindings: System.Collections.Immutable.ImmutableDictionary<string, Core.Internal.PineValueInProcess>.Empty);
 
         var application =
             new ElmInterpreter.Application(
-                FunctionName: new DeclQualifiedName([], "helper"),
+                FunctionName: DeclQualifiedName.Create([], "helper"),
                 Arguments: [IntegerInProcess(7), IntegerInProcess(0)],
                 Context: callerContext);
 

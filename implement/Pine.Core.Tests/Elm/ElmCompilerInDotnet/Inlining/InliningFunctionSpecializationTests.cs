@@ -20,11 +20,11 @@ public class InliningFunctionSpecializationTests
 
         ParameterSpecialization left =
             new ParameterSpecialization.ConcreteFunctionValue(
-                new DeclQualifiedName(moduleNameA, "increment"));
+                DeclQualifiedName.Create(moduleNameA, "increment"));
 
         ParameterSpecialization right =
             new ParameterSpecialization.ConcreteFunctionValue(
-                new DeclQualifiedName(moduleNameB, "increment"));
+                DeclQualifiedName.Create(moduleNameB, "increment"));
 
         left.Equals(right).Should().BeTrue();
         left.GetHashCode().Should().Be(right.GetHashCode());
@@ -66,20 +66,20 @@ public class InliningFunctionSpecializationTests
 
         ParameterSpecialization left =
             new ParameterSpecialization.SingleChoiceTagUnwrap(
-                new DeclQualifiedName(moduleNameA, "Outer"),
+                DeclQualifiedName.Create(moduleNameA, "Outer"),
                 ImmutableDictionary<int, ParameterSpecialization>.Empty.Add(
                     0,
                     new ParameterSpecialization.SingleChoiceTagUnwrap(
-                        new DeclQualifiedName(moduleNameA, "Inner"),
+                        DeclQualifiedName.Create(moduleNameA, "Inner"),
                         [])));
 
         ParameterSpecialization right =
             new ParameterSpecialization.SingleChoiceTagUnwrap(
-                new DeclQualifiedName(moduleNameB, "Outer"),
+                DeclQualifiedName.Create(moduleNameB, "Outer"),
                 ImmutableDictionary<int, ParameterSpecialization>.Empty.Add(
                     0,
                     new ParameterSpecialization.SingleChoiceTagUnwrap(
-                        new DeclQualifiedName(moduleNameB, "Inner"),
+                        DeclQualifiedName.Create(moduleNameB, "Inner"),
                         [])));
 
         left.Equals(right).Should().BeTrue();
@@ -97,11 +97,11 @@ public class InliningFunctionSpecializationTests
                 ImmutableDictionary<int, ParameterSpecialization>.Empty.Add(
                     1,
                     new ParameterSpecialization.SingleChoiceTagUnwrap(
-                        new DeclQualifiedName(moduleNameA, "Outer"),
+                        DeclQualifiedName.Create(moduleNameA, "Outer"),
                         ImmutableDictionary<int, ParameterSpecialization>.Empty.Add(
                             0,
                             new ParameterSpecialization.SingleChoiceTagUnwrap(
-                                new DeclQualifiedName(moduleNameA, "Inner"),
+                                DeclQualifiedName.Create(moduleNameA, "Inner"),
                                 [])))));
 
         var right =
@@ -109,11 +109,11 @@ public class InliningFunctionSpecializationTests
                 ImmutableDictionary<int, ParameterSpecialization>.Empty.Add(
                     1,
                     new ParameterSpecialization.SingleChoiceTagUnwrap(
-                        new DeclQualifiedName(moduleNameB, "Outer"),
+                        DeclQualifiedName.Create(moduleNameB, "Outer"),
                         ImmutableDictionary<int, ParameterSpecialization>.Empty.Add(
                             0,
                             new ParameterSpecialization.SingleChoiceTagUnwrap(
-                                new DeclQualifiedName(moduleNameB, "Inner"),
+                                DeclQualifiedName.Create(moduleNameB, "Inner"),
                                 [])))));
 
         left.Equals(right).Should().BeTrue();

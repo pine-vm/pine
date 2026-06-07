@@ -84,7 +84,7 @@ internal static class InterpreterTestHelper
 
         foreach (var (name, declaration) in byName)
         {
-            result[new DeclQualifiedName([], name)] = declaration;
+            result[DeclQualifiedName.Create([], name)] = declaration;
         }
 
         return result;
@@ -118,7 +118,7 @@ internal static class InterpreterTestHelper
         IReadOnlyDictionary<DeclQualifiedName, SyntaxTypes.Declaration> declarations,
         string functionName)
     {
-        var declaration = declarations[new DeclQualifiedName([], functionName)];
+        var declaration = declarations[DeclQualifiedName.Create([], functionName)];
 
         if (declaration is SyntaxTypes.Declaration.FunctionDeclaration functionDeclaration)
         {

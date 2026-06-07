@@ -55,7 +55,7 @@ public class OptimizeAndEmitStringToListTests
                 includeDeclaration:
                 declName =>
                 {
-                    return declName == new DeclQualifiedName(["Test"], "toList");
+                    return declName.FullName == "Test.toList";
                 },
                 parseCache);
 
@@ -67,7 +67,7 @@ public class OptimizeAndEmitStringToListTests
                 functionMetadata,
                 CodeAnalysisTestHelper.DeclarationSyntaxContext);
 
-        var moduleTest = asCSharp.ModulesClasses[new DeclQualifiedName([], "Test")];
+        var moduleTest = asCSharp.ModulesClasses[DeclQualifiedName.Create([], "Test")];
 
         var moduleTestCSharpText =
             moduleTest.RenderToString();

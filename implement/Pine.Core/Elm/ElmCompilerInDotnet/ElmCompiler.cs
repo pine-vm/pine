@@ -2625,9 +2625,9 @@ public class ElmCompiler
                     continue;
 
                 var qualifiedName =
-                    new DeclQualifiedName(
-                        Namespaces: moduleName,
-                        DeclName: declName);
+                    DeclQualifiedName.Create(
+                        moduleName,
+                        declName);
 
                 builder[qualifiedName] = decl;
             }
@@ -2736,9 +2736,9 @@ public class ElmCompiler
                 if (declName is not null)
                 {
                     var qualifiedName =
-                        new DeclQualifiedName(
-                            Namespaces: moduleName,
-                            DeclName: declName);
+                        DeclQualifiedName.Create(
+                            moduleName,
+                            declName);
 
                     if (flatDecls.TryGetValue(qualifiedName, out var replacementDecl))
                     {

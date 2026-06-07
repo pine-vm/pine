@@ -85,7 +85,7 @@ public class SnapshotTestFormatTupleWithLetElementTests
 
     private static string RenderTupleWithSecondElement(SyntaxTypes.Expression second)
     {
-        var declQualifiedName = new DeclQualifiedName(["TestModule"], "f");
+        var declQualifiedName = DeclQualifiedName.Create(["TestModule"], "f");
 
         var declaration =
             BuildFunctionDeclarationReturning(
@@ -108,7 +108,7 @@ public class SnapshotTestFormatTupleWithLetElementTests
 
     private static string RenderListWithSecondElement(SyntaxTypes.Expression second)
     {
-        var declQualifiedName = new DeclQualifiedName(["TestModule"], "f");
+        var declQualifiedName = DeclQualifiedName.Create(["TestModule"], "f");
 
         var declaration =
             BuildFunctionDeclarationReturning(

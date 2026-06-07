@@ -232,10 +232,10 @@ public class ElmParserExpressionTests
                 rootFilePaths: rootFilePaths,
                 entryPoints:
                 [
-                new DeclQualifiedName(
+                DeclQualifiedName.Create(
                     ["ElmParserExpressionTestModule"],
                     "parseCharLiteral"),
-                new DeclQualifiedName(
+                DeclQualifiedName.Create(
                     ["ElmParserExpressionTestModule"],
                     "parseExpression"),
                 ],

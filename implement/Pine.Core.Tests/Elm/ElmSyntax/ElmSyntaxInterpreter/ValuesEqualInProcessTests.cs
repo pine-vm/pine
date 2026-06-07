@@ -38,7 +38,7 @@ public class ValuesEqualInProcessTests
         PineValueInProcess.Create(PopularEncodings.StringEncoding.ValueFromString(tagName));
 
     private static DeclQualifiedName Name(string declName) =>
-        new([], declName);
+        DeclQualifiedName.Create([], declName);
 
     private static ElmInterpreter.ElmClosureInProcess.SourceRef LambdaSource() =>
         new ElmInterpreter.ElmClosureInProcess.SourceRef.Lambda(

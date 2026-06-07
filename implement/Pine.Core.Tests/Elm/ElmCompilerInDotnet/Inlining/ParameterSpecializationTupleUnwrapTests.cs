@@ -41,18 +41,18 @@ public class ParameterSpecializationTupleUnwrapTests
             new ParameterSpecialization.TupleUnwrap(
                 [
                 new ParameterSpecialization.ConcreteFunctionValue(
-                    new DeclQualifiedName(moduleNameA, "double")),
+                    DeclQualifiedName.Create(moduleNameA, "double")),
                 new ParameterSpecialization.ConcreteFunctionValue(
-                    new DeclQualifiedName(moduleNameA, "triple")),
+                    DeclQualifiedName.Create(moduleNameA, "triple")),
                 ]);
 
         ParameterSpecialization right =
             new ParameterSpecialization.TupleUnwrap(
                 [
                 new ParameterSpecialization.ConcreteFunctionValue(
-                    new DeclQualifiedName(moduleNameB, "double")),
+                    DeclQualifiedName.Create(moduleNameB, "double")),
                 new ParameterSpecialization.ConcreteFunctionValue(
-                    new DeclQualifiedName(moduleNameB, "triple")),
+                    DeclQualifiedName.Create(moduleNameB, "triple")),
                 ]);
 
         left.Equals(right).Should().BeTrue();
@@ -68,18 +68,18 @@ public class ParameterSpecializationTupleUnwrapTests
             new ParameterSpecialization.TupleUnwrap(
                 [
                 new ParameterSpecialization.ConcreteFunctionValue(
-                    new DeclQualifiedName(moduleName, "double")),
+                    DeclQualifiedName.Create(moduleName, "double")),
                 new ParameterSpecialization.ConcreteFunctionValue(
-                    new DeclQualifiedName(moduleName, "triple")),
+                    DeclQualifiedName.Create(moduleName, "triple")),
                 ]);
 
         ParameterSpecialization right =
             new ParameterSpecialization.TupleUnwrap(
                 [
                 new ParameterSpecialization.ConcreteFunctionValue(
-                    new DeclQualifiedName(moduleName, "double")),
+                    DeclQualifiedName.Create(moduleName, "double")),
                 new ParameterSpecialization.ConcreteFunctionValue(
-                    new DeclQualifiedName(moduleName, "quadruple")),
+                    DeclQualifiedName.Create(moduleName, "quadruple")),
                 ]);
 
         left.Equals(right).Should().BeFalse();
@@ -94,20 +94,20 @@ public class ParameterSpecializationTupleUnwrapTests
             new ParameterSpecialization.TupleUnwrap(
                 [
                 new ParameterSpecialization.ConcreteFunctionValue(
-                    new DeclQualifiedName(moduleName, "double")),
+                    DeclQualifiedName.Create(moduleName, "double")),
                 new ParameterSpecialization.ConcreteFunctionValue(
-                    new DeclQualifiedName(moduleName, "triple")),
+                    DeclQualifiedName.Create(moduleName, "triple")),
                 ]);
 
         ParameterSpecialization right =
             new ParameterSpecialization.TupleUnwrap(
                 [
                 new ParameterSpecialization.ConcreteFunctionValue(
-                    new DeclQualifiedName(moduleName, "double")),
+                    DeclQualifiedName.Create(moduleName, "double")),
                 new ParameterSpecialization.ConcreteFunctionValue(
-                    new DeclQualifiedName(moduleName, "triple")),
+                    DeclQualifiedName.Create(moduleName, "triple")),
                 new ParameterSpecialization.ConcreteFunctionValue(
-                    new DeclQualifiedName(moduleName, "identity")),
+                    DeclQualifiedName.Create(moduleName, "identity")),
                 ]);
 
         left.Equals(right).Should().BeFalse();
@@ -136,13 +136,13 @@ public class ParameterSpecializationTupleUnwrapTests
             new ParameterSpecialization.TupleUnwrap(
                 [
                 new ParameterSpecialization.ConcreteFunctionValue(
-                    new DeclQualifiedName(moduleNameA, "double")),
+                    DeclQualifiedName.Create(moduleNameA, "double")),
                 new ParameterSpecialization.TupleUnwrap(
                     [
                     new ParameterSpecialization.ConcreteFunctionValue(
-                        new DeclQualifiedName(moduleNameA, "triple")),
+                        DeclQualifiedName.Create(moduleNameA, "triple")),
                     new ParameterSpecialization.ConcreteFunctionValue(
-                        new DeclQualifiedName(moduleNameA, "identity")),
+                        DeclQualifiedName.Create(moduleNameA, "identity")),
                     ]),
                 ]);
 
@@ -150,13 +150,13 @@ public class ParameterSpecializationTupleUnwrapTests
             new ParameterSpecialization.TupleUnwrap(
                 [
                 new ParameterSpecialization.ConcreteFunctionValue(
-                    new DeclQualifiedName(moduleNameB, "double")),
+                    DeclQualifiedName.Create(moduleNameB, "double")),
                 new ParameterSpecialization.TupleUnwrap(
                     [
                     new ParameterSpecialization.ConcreteFunctionValue(
-                        new DeclQualifiedName(moduleNameB, "triple")),
+                        DeclQualifiedName.Create(moduleNameB, "triple")),
                     new ParameterSpecialization.ConcreteFunctionValue(
-                        new DeclQualifiedName(moduleNameB, "identity")),
+                        DeclQualifiedName.Create(moduleNameB, "identity")),
                     ]),
                 ]);
 
@@ -173,9 +173,9 @@ public class ParameterSpecializationTupleUnwrapTests
             new ParameterSpecialization.TupleUnwrap(
                 [
                 new ParameterSpecialization.ConcreteFunctionValue(
-                    new DeclQualifiedName(moduleName, "double")),
+                    DeclQualifiedName.Create(moduleName, "double")),
                 new ParameterSpecialization.ConcreteFunctionValue(
-                    new DeclQualifiedName(moduleName, "triple")),
+                    DeclQualifiedName.Create(moduleName, "triple")),
                 ]);
 
         SyntaxTypes.Expression argument =
@@ -197,9 +197,9 @@ public class ParameterSpecializationTupleUnwrapTests
             new ParameterSpecialization.TupleUnwrap(
                 [
                 new ParameterSpecialization.ConcreteFunctionValue(
-                    new DeclQualifiedName(moduleName, "double")),
+                    DeclQualifiedName.Create(moduleName, "double")),
                 new ParameterSpecialization.ConcreteFunctionValue(
-                    new DeclQualifiedName(moduleName, "triple")),
+                    DeclQualifiedName.Create(moduleName, "triple")),
                 ]);
 
         SyntaxTypes.Expression argument =
@@ -220,7 +220,7 @@ public class ParameterSpecializationTupleUnwrapTests
             new ParameterSpecialization.TupleUnwrap(
                 [
                 new ParameterSpecialization.ConcreteFunctionValue(
-                    new DeclQualifiedName(moduleName, "double")),
+                    DeclQualifiedName.Create(moduleName, "double")),
                 ]);
 
         SyntaxTypes.Expression argument =
@@ -238,9 +238,9 @@ public class ParameterSpecializationTupleUnwrapTests
             new ParameterSpecialization.TupleUnwrap(
                 [
                 new ParameterSpecialization.ConcreteFunctionValue(
-                    new DeclQualifiedName(moduleName, "double")),
+                    DeclQualifiedName.Create(moduleName, "double")),
                 new ParameterSpecialization.ConcreteFunctionValue(
-                    new DeclQualifiedName(moduleName, "triple")),
+                    DeclQualifiedName.Create(moduleName, "triple")),
                 ]);
 
         var inner =
@@ -270,9 +270,9 @@ public class ParameterSpecializationTupleUnwrapTests
             new ParameterSpecialization.TupleUnwrap(
                 [
                 new ParameterSpecialization.ConcreteFunctionValue(
-                    new DeclQualifiedName(moduleName, "parseDouble")),
+                    DeclQualifiedName.Create(moduleName, "parseDouble")),
                 new ParameterSpecialization.ConcreteFunctionValue(
-                    new DeclQualifiedName(moduleName, "parseTriple")),
+                    DeclQualifiedName.Create(moduleName, "parseTriple")),
                 ]);
 
         SyntaxTypes.Expression BuildWrappedRef(string declName, string bindName)
@@ -321,13 +321,13 @@ public class ParameterSpecializationTupleUnwrapTests
                     new ParameterSpecialization.TupleUnwrap(
                         [
                         new ParameterSpecialization.ConcreteFunctionValue(
-                            new DeclQualifiedName(moduleName, "double")),
+                            DeclQualifiedName.Create(moduleName, "double")),
                         new ParameterSpecialization.TupleUnwrap(
                             [
                             new ParameterSpecialization.ConcreteFunctionValue(
-                                new DeclQualifiedName(moduleName, "triple")),
+                                DeclQualifiedName.Create(moduleName, "triple")),
                             new ParameterSpecialization.ConcreteFunctionValue(
-                                new DeclQualifiedName(moduleName, "identity")),
+                                DeclQualifiedName.Create(moduleName, "identity")),
                             ]),
                         ])));
 

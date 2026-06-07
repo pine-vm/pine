@@ -127,7 +127,7 @@ public class WrapUnwrapCancellationTests
         var b = ImmutableDictionary.CreateBuilder<DeclQualifiedName, SyntaxTypes.Declaration>();
 
         foreach (var (n, d) in items)
-            b[new DeclQualifiedName(s_module, n)] = d;
+            b[DeclQualifiedName.Create(s_module, n)] = d;
 
         return b.ToImmutable();
     }
@@ -139,7 +139,7 @@ public class WrapUnwrapCancellationTests
     {
         var decl =
             (SyntaxTypes.Declaration.FunctionDeclaration)
-            rewritten[new DeclQualifiedName(s_module, callerName)];
+            rewritten[DeclQualifiedName.Create(s_module, callerName)];
 
         return decl.Function.Declaration.Value.Expression.Value;
     }
@@ -347,17 +347,17 @@ public class WrapUnwrapCancellationTests
         // rewritten to call `f__stripped` directly, dropping the wrap.
         var siblings =
             ImmutableDictionary<DeclQualifiedName, GeneratedSiblingDecl>.Empty.Add(
-                new DeclQualifiedName(s_module, "f"),
+                DeclQualifiedName.Create(s_module, "f"),
                 new GeneratedSiblingDecl(
-                    OriginalDeclName: new DeclQualifiedName(s_module, "f"),
-                    SiblingDeclName: new DeclQualifiedName(s_module, "f__stripped"),
+                    OriginalDeclName: DeclQualifiedName.Create(s_module, "f"),
+                    SiblingDeclName: DeclQualifiedName.Create(s_module, "f__stripped"),
                     OriginalArity: 1,
                     ParameterOrigins:
                     [
                     new SiblingParameterOrigin.Identity(SiblingIndex: 0, OriginalIndex: 0),
                     ],
                     ResultTransform: new SiblingResultTransform.WrapWithConstructor(
-                        new DeclQualifiedName(s_module, "Wrap"))));
+                        DeclQualifiedName.Create(s_module, "Wrap"))));
 
         var rewritten = WrapUnwrapCancellation.RewriteDeclarationDictionary(decls, siblings);
 
@@ -558,17 +558,17 @@ public class WrapUnwrapCancellationTests
         // Drive Shape B' explicitly via the sibling-aware overload.
         var siblings =
             ImmutableDictionary<DeclQualifiedName, GeneratedSiblingDecl>.Empty.Add(
-                new DeclQualifiedName(s_module, "f"),
+                DeclQualifiedName.Create(s_module, "f"),
                 new GeneratedSiblingDecl(
-                    OriginalDeclName: new DeclQualifiedName(s_module, "f"),
-                    SiblingDeclName: new DeclQualifiedName(s_module, "f__stripped"),
+                    OriginalDeclName: DeclQualifiedName.Create(s_module, "f"),
+                    SiblingDeclName: DeclQualifiedName.Create(s_module, "f__stripped"),
                     OriginalArity: 1,
                     ParameterOrigins:
                     [
                     new SiblingParameterOrigin.Identity(SiblingIndex: 0, OriginalIndex: 0),
                     ],
                     ResultTransform: new SiblingResultTransform.WrapWithConstructor(
-                        new DeclQualifiedName(s_module, "Wrap"))));
+                        DeclQualifiedName.Create(s_module, "Wrap"))));
 
         var rewritten = WrapUnwrapCancellation.RewriteDeclarationDictionary(decls, siblings);
 

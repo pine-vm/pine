@@ -291,7 +291,7 @@ internal static class WrapperReturnStripping
                 continue;
 
             var originalDeclName =
-                new DeclQualifiedName(declName.Namespaces, originalSimpleName);
+                DeclQualifiedName.Create(declName.Namespaces, originalSimpleName);
 
             if (!declarations.TryGetValue(originalDeclName, out var originalDecl))
                 continue;
@@ -454,7 +454,7 @@ internal static class WrapperReturnStripping
             // *legitimate* idempotent re-application — not a bug — so
             // we detect it structurally and silently skip the plan.
             var strippedName =
-                new DeclQualifiedName(
+                DeclQualifiedName.Create(
                     declName.Namespaces,
                     declName.DeclName + StrippedSuffix);
 
