@@ -106,6 +106,77 @@ public class ElmSyntaxParser
         return parser.ParseModuleHeaderWithRecovery();
     }
 
+    /// <summary>
+    /// Parses a standalone Elm expression directly from <paramref name="elmExpressionText"/>,
+    /// without wrapping it in a synthetic module declaration.
+    /// The parser always preserves parentheses/tuples in the syntax tree.
+    /// Use <see cref="ElmSyntaxAbstract.ConvertFromConcrete.FromExpression(SyntaxTypes.Expression)"/>
+    /// to get the abstract syntax model that matches the original stil4m/elm-syntax behavior.
+    /// </summary>
+    /// <param name="elmExpressionText">Source text of the Elm expression to parse.</param>
+    /// <returns>
+    /// Result containing either the parsed expression or an error description.
+    /// </returns>
+    public static Result<string, SyntaxTypes.Expression> ParseExpression(
+        string elmExpressionText)
+    {
+        var tokenizer = new Tokenizer(elmExpressionText);
+
+        var tokens = tokenizer.Tokenize().ToArray();
+
+        var parser = new Parser(tokens);
+
+        return parser.ParseExpressionTopLevel();
+    }
+
+    /// <summary>
+    /// Union of the two top-level syntax forms returned by
+    /// <see cref="ParseDeclarationOrExpression(string)"/>: either a top-level
+    /// <see cref="SyntaxTypes.Declaration"/> or a standalone
+    /// <see cref="SyntaxTypes.Expression"/>.
+    /// </summary>
+    public abstract record DeclarationOrExpression
+    {
+        /// <summary>
+        /// The parsed input was a top-level declaration (for example a function,
+        /// type, type alias, port or infix declaration).
+        /// </summary>
+        public sealed record DeclarationSyntax(SyntaxTypes.Declaration Declaration)
+            : DeclarationOrExpression;
+
+        /// <summary>
+        /// The parsed input was a standalone expression.
+        /// </summary>
+        public sealed record ExpressionSyntax(SyntaxTypes.Expression Expression)
+            : DeclarationOrExpression;
+    }
+
+    /// <summary>
+    /// Parses <paramref name="elmText"/> as either a top-level Elm declaration or a
+    /// standalone expression, returning whichever form the input represents.
+    /// <para>
+    /// Inputs starting with the <c>type</c>, <c>port</c> or <c>infix</c> keywords, as well as
+    /// function/value declarations of the form <c>name args = body</c> (optionally preceded by a
+    /// <c>name : Type</c> signature), are parsed as declarations. Any other input is parsed as an
+    /// expression.
+    /// </para>
+    /// </summary>
+    /// <param name="elmText">Source text of the Elm declaration or expression to parse.</param>
+    /// <returns>
+    /// Result containing either the parsed declaration-or-expression union or an error description.
+    /// </returns>
+    public static Result<string, DeclarationOrExpression> ParseDeclarationOrExpression(
+        string elmText)
+    {
+        var tokenizer = new Tokenizer(elmText);
+
+        var tokens = tokenizer.Tokenize().ToArray();
+
+        var parser = new Parser(tokens);
+
+        return parser.ParseDeclarationOrExpressionTopLevel();
+    }
+
     private record InfixOperatorInfo(
         int Precedence,
         InfixDirection Direction)
@@ -1937,6 +2008,118 @@ public class ElmSyntaxParser
         /// <summary>
         /// Parse next declaration (infix, type, function, etc.)
         /// </summary>
+        // Entry point: parse a standalone expression and return it.
+        public Result<string, SyntaxTypes.Expression> ParseExpressionTopLevel()
+        {
+            try
+            {
+                ConsumeAllTrivia();
+
+                if (IsAtEnd())
+                {
+                    return "No tokens to parse as an expression.";
+                }
+
+                var expression = ParseExpression(indentMin: 0);
+
+                ConsumeAllTrivia();
+
+                if (!IsAtEnd())
+                {
+                    return
+                        "Unexpected token '" + Peek.Lexeme +
+                        "' after parsing expression.";
+                }
+
+                return expression.Value;
+            }
+            catch (Exception ex)
+            {
+                return "Failed to parse expression: " + ex.Message;
+            }
+        }
+
+        // Entry point: parse either a top-level declaration or a standalone expression.
+        public Result<string, DeclarationOrExpression> ParseDeclarationOrExpressionTopLevel()
+        {
+            try
+            {
+                ConsumeAllTrivia();
+
+                if (IsAtEnd())
+                {
+                    return "No tokens to parse as a declaration or expression.";
+                }
+
+                // The 'type', 'port' and 'infix' keywords unambiguously start a declaration.
+                var startsWithDeclarationKeyword =
+                    Peek.Type is TokenType.Identifier &&
+                    Peek.Lexeme is "type" or "port" or "infix";
+
+                if (startsWithDeclarationKeyword)
+                {
+                    var declaration = ParseDeclaration(docComment: null);
+
+                    ConsumeAllTrivia();
+
+                    if (!IsAtEnd())
+                    {
+                        return
+                            "Unexpected token '" + Peek.Lexeme +
+                            "' after parsing declaration.";
+                    }
+
+                    return new DeclarationOrExpression.DeclarationSyntax(declaration.Value);
+                }
+
+                // Otherwise the input is either a function/value declaration ('name args = body',
+                // optionally preceded by a 'name : Type' signature) or an expression. A complete
+                // function declaration always contains a top-level '=' which an expression can never
+                // contain, so attempting the declaration parse first is unambiguous: it only succeeds
+                // and consumes all tokens for an actual declaration. On failure (or leftover tokens)
+                // we rewind and parse the input as an expression instead.
+                var startPosition = _current;
+
+                try
+                {
+                    var declaration = ParseDeclaration(docComment: null);
+
+                    ConsumeAllTrivia();
+
+                    if (IsAtEnd())
+                    {
+                        return new DeclarationOrExpression.DeclarationSyntax(declaration.Value);
+                    }
+
+                    // Parsed a declaration but tokens remain: treat the input as an expression.
+                    _current = startPosition;
+                }
+                catch (Exception)
+                {
+                    _current = startPosition;
+                }
+
+                ConsumeAllTrivia();
+
+                var expression = ParseExpression(indentMin: 0);
+
+                ConsumeAllTrivia();
+
+                if (!IsAtEnd())
+                {
+                    return
+                        "Unexpected token '" + Peek.Lexeme +
+                        "' after parsing expression.";
+                }
+
+                return new DeclarationOrExpression.ExpressionSyntax(expression.Value);
+            }
+            catch (Exception ex)
+            {
+                return "Failed to parse declaration or expression: " + ex.Message;
+            }
+        }
+
         private Node<SyntaxTypes.Declaration> ParseDeclaration(
             Token? docComment)
         {
@@ -2845,7 +3028,7 @@ public class ElmSyntaxParser
 
                 var namespaces = new List<Token>();
 
-                while (Peek.Type is TokenType.Dot)
+                while (!IsAtEnd() && Peek.Type is TokenType.Dot)
                 {
                     Consume(TokenType.Dot);
 

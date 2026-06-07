@@ -600,63 +600,36 @@ public partial class ElmSyntaxInterpreter
     }
 
     /// <summary>
-    /// Parses <paramref name="rootExpressionText"/> as an Elm expression by wrapping it in a
-    /// synthetic module and extracting the body of the sole function declaration. Exposed
-    /// internally so collaborating helpers (for example
-    /// <c>CompareInterpreterWithIntermediateVM</c> in the test assembly) can decompose
-    /// the parsed form to extract a top-level function call's arguments without re-doing
-    /// the synthetic-module wrapping themselves.
+    /// Parses <paramref name="rootExpressionText"/> as an Elm expression directly via
+    /// <see cref="ElmSyntaxParser.ParseExpression(string)"/>. Exposed internally so collaborating
+    /// helpers (for example <c>CompareInterpreterWithIntermediateVM</c> in the test assembly) can
+    /// decompose the parsed form to extract a top-level function call's arguments.
     /// </summary>
     internal static Result<string, SyntaxModel.Expression> ParseRootExpressionForDecomposition(
         string rootExpressionText) =>
         ParseRootExpression(rootExpressionText);
 
     /// <summary>
-    /// Parses <paramref name="rootExpressionText"/> as an Elm expression by wrapping it in a
-    /// synthetic module and extracting the body of the sole function declaration.
+    /// Parses <paramref name="rootExpressionText"/> as an Elm expression directly via
+    /// <see cref="ElmSyntaxParser.ParseExpression(string)"/>.
     /// </summary>
     private static Result<string, SyntaxModel.Expression> ParseRootExpression(
         string rootExpressionText)
     {
-        const string RootName = "pine_root_expression";
-
-        var indented =
-            string.Join(
-                "\n",
-                rootExpressionText
-                .Replace("\r\n", "\n")
-                .Split('\n')
-                .Select(line => "    " + line));
-
-        var syntheticModuleText =
-            "module PineRootExpression exposing (..)\n\n\n"
-            + RootName + " =\n"
-            + indented
-            + "\n";
-
-        var parseResult = ElmSyntaxParser.ParseModuleText(syntheticModuleText);
+        var parseResult = ElmSyntaxParser.ParseExpression(rootExpressionText);
 
         if (parseResult.IsErrOrNull() is { } parseErr)
         {
             return "Failed to parse root expression: " + parseErr;
         }
 
-        if (parseResult.IsOkOrNull() is not { } parsedFile)
+        if (parseResult.IsOkOrNull() is not { } parsedExpression)
         {
             throw new System.NotImplementedException(
                 "Unexpected parse result type: " + parseResult.GetType().FullName);
         }
 
-        foreach (var declarationNode in parsedFile.Declarations)
-        {
-            if (declarationNode.Value is SyntaxModel.Declaration.FunctionDeclaration functionDeclaration
-                && functionDeclaration.Function.Declaration.Value.Name.Value == RootName)
-            {
-                return functionDeclaration.Function.Declaration.Value.Expression.Value;
-            }
-        }
-
-        return "Parsed module did not contain the synthetic root declaration.";
+        return parsedExpression;
     }
 
     // ------------------------------------------------------------------------
