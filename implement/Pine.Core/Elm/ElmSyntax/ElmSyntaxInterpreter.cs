@@ -219,6 +219,37 @@ public partial class ElmSyntaxInterpreter
     }
 
     /// <summary>
+    /// Interprets <paramref name="rootExpressionText"/> using a resolver that combines
+    /// <see cref="PineBuiltinResolver(Application)"/> with <see cref="UserDefinedResolver(Application, IReadOnlyDictionary{DeclQualifiedName, SyntaxModel.Declaration})"/>
+    /// backed by the supplied <paramref name="prepared"/>.
+    /// </summary>
+    public static Result<ElmInterpretationError, ElmValue> InterpretAsElmValue(
+        string rootExpressionText,
+        Prepared prepared)
+    {
+        var parseResult =
+            ParseAndCanonicalizeExpressionWithDefaultImports(rootExpressionText);
+
+        if (parseResult.IsErrOrNull() is { } parseErr)
+        {
+            return new ElmInterpretationError($"Parse error: {parseErr}", []);
+        }
+
+        if (parseResult.IsOkOrNull() is not { } rootExpression)
+        {
+            throw new System.NotImplementedException(
+                $"Unexpected parse result type: {parseResult.GetType().FullName}");
+        }
+
+        var combined = BuildResolvers(prepared.Declarations);
+
+        var valueInProcess =
+            Interpret(rootExpression, combined, BuildInfixOperatorMap(prepared.Declarations));
+
+        return valueInProcess.Map(ToElm);
+    }
+
+    /// <summary>
     /// Interprets <paramref name="rootExpression"/> using a resolver that combines
     /// <see cref="PineBuiltinResolver(Application)"/> with <see cref="UserDefinedResolver(Application, IReadOnlyDictionary{DeclQualifiedName, SyntaxModel.Declaration})"/>
     /// backed by the supplied <paramref name="declarations"/>.

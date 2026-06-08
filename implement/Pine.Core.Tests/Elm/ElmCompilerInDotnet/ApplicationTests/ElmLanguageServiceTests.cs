@@ -558,10 +558,21 @@ public class ElmLanguageServiceTests
                 wrapperModuleText,
             };
 
+        var preparedApp =
+            Core.Elm.ElmSyntax.ElmSyntaxInterpreter.PrepareModules(modulesWithWrapper)
+            .Extract(err => throw new Exception("Failed to prepare modules: " + err));
+
+        var interpreterStopwatch = System.Diagnostics.Stopwatch.StartNew();
+
         var result =
-            Core.Elm.ElmSyntax.ElmSyntaxInterpreter.ParseAndInterpretAsElmValue(
+            Core.Elm.ElmSyntax.ElmSyntaxInterpreter.InterpretAsElmValue(
                 "ElmLanguageServiceReferencesScenario.referencesScenarioResponse",
-                modulesWithWrapper);
+                preparedApp);
+
+        interpreterStopwatch.Stop();
+
+        TestContext.Current.TestOutputHelper?.WriteLine(
+            $"Interpreter execution time: {interpreterStopwatch.Elapsed}");
 
         var value =
             result.Extract(err => throw new Exception(err.ToString()));

@@ -19,12 +19,69 @@ namespace Pine.Core.Elm.ElmSyntax;
 public partial class ElmSyntaxInterpreter
 {
     /// <summary>
+    /// Program code of an app prepared to run functions in the interpreter.
+    /// </summary>
+    public record Prepared(
+        IReadOnlyDictionary<DeclQualifiedName, SyntaxModel.Declaration> Declarations);
+
+    /// <summary>
     /// Parses the supplied <paramref name="moduleSourceTexts"/> to qualify every reference in every module,
     /// and then interprets the canonicalized root expression against a declaration
     /// dictionary keyed by full module-qualified name.
     /// </summary>
     public static Result<ElmInterpretationError, ElmValue> ParseAndInterpretAsElmValue(
         string rootExpressionText,
+        IReadOnlyList<string> moduleSourceTexts)
+    {
+        var prepareModulesResult = PrepareModules(moduleSourceTexts);
+
+        if (prepareModulesResult.IsErrOrNull() is { } prepareErr)
+        {
+            return prepareErr;
+        }
+
+        if (prepareModulesResult.IsOkOrNull() is not { } preprocessed)
+        {
+            throw new System.NotImplementedException(
+                "Unexpected result type from PrepareModules: " + prepareModulesResult.GetType().FullName);
+        }
+
+        return InterpretAsElmValue(rootExpressionText, preprocessed);
+    }
+
+    /// <summary>
+    /// Parses the supplied <paramref name="expressionText"/> and qualifies every reference.
+    /// </summary>
+    public static Result<string, SyntaxModel.Expression> ParseAndCanonicalizeExpressionWithDefaultImports(
+        string expressionText)
+    {
+        var parseResult = ElmSyntaxParser.ParseExpression(expressionText);
+
+        if (parseResult.IsErrOrNull() is { } parseRootErr)
+        {
+            return "Failed to parse root expression: " + parseRootErr;
+        }
+
+        if (parseResult.IsOkOrNull() is not { } rootExpression)
+        {
+            throw new System.NotImplementedException(
+                "Unexpected parse result type: " + parseResult.GetType().FullName);
+        }
+
+        var canonicalizeRootResult = CanonicalizeExpression(rootExpression);
+
+        if (canonicalizeRootResult.Errors.Count is not 0)
+        {
+            return "Canonicalization of root expression failed: " + string.Join("; ", canonicalizeRootResult.Errors);
+        }
+
+        return canonicalizeRootResult.Value;
+    }
+
+    /// <summary>
+    /// Parses the supplied <paramref name="moduleSourceTexts"/> to qualify every reference in every module.
+    /// </summary>
+    public static Result<ElmInterpretationError, Prepared> PrepareModules(
         IReadOnlyList<string> moduleSourceTexts)
     {
         // Parse every module text into the full SyntaxModel form.
@@ -51,15 +108,14 @@ public partial class ElmSyntaxInterpreter
             parsedFiles.Add(parsedFile);
         }
 
-        return ParseAndInterpretAsElmValue(rootExpressionText, parsedFiles);
+        return PrepareModules(parsedFiles);
     }
 
     /// <summary>
-    /// As <see cref="ParseAndInterpretAsElmValue(string, IReadOnlyList{string})"/>, but accepts
+    /// As <see cref="PrepareModules(string, IReadOnlyList{string})"/>, but accepts
     /// pre-parsed modules.
     /// </summary>
-    public static Result<ElmInterpretationError, ElmValue> ParseAndInterpretAsElmValue(
-        string rootExpressionText,
+    public static Result<ElmInterpretationError, Prepared> PrepareModules(
         IReadOnlyList<SyntaxModel.File> modules)
     {
         if (modules.Count is 0)
@@ -124,34 +180,7 @@ public partial class ElmSyntaxInterpreter
             }
         }
 
-        var parseRootResult =
-            ElmSyntaxParser.ParseExpression(rootExpressionText);
-
-        if (parseRootResult.IsErrOrNull() is { } parseRootErr)
-        {
-            return
-                new ElmInterpretationError(
-                    "Failed to parse root expression: " + parseRootErr,
-                    []);
-        }
-
-        if (parseRootResult.IsOkOrNull() is not { } rootExpression)
-        {
-            throw new System.NotImplementedException(
-                "Unexpected parse result type: " + parseRootResult.GetType().FullName);
-        }
-
-        var canonicalizeRootResult = CanonicalizeExpression(rootExpression);
-
-        if (canonicalizeRootResult.Errors.Count is not 0)
-        {
-            return
-                new ElmInterpretationError(
-                    "Canonicalization of root expression failed: " + string.Join("; ", canonicalizeRootResult.Errors),
-                    []);
-        }
-
-        return InterpretAsElmValue(canonicalizeRootResult.Value, declarations);
+        return new Prepared(declarations);
     }
 
     private static CanonicalizationResult<SyntaxModel.Expression> CanonicalizeExpression(
@@ -163,7 +192,6 @@ public partial class ElmSyntaxInterpreter
             Canonicalization.CanonicalizeExpression(stil4mExpr, ImplicitImportConfig.Default)
             .MapValue(stil4mCanonicalExpr => Stil4mToFull.Convert(stil4mCanonicalExpr));
     }
-
 
     /// <summary>
     /// Returns the simple top-level name of <paramref name="declaration"/>, or null when
