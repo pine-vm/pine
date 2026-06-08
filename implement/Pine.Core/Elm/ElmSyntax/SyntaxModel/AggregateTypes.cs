@@ -1,3 +1,4 @@
+using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 
@@ -11,6 +12,7 @@ namespace Pine.Core.Elm.ElmSyntax.SyntaxModel;
 /// It does not store the actual delimiter tokens, therefore only fit for contexts where the delimiter type is known and fixed.
 /// </summary>
 public abstract record SeparatedSyntaxList<TNode>
+    : IEnumerable<TNode>
 {
     /// <summary>
     /// The case of an empty list.
@@ -102,6 +104,36 @@ public abstract record SeparatedSyntaxList<TNode>
         _ =>
         throw new System.ArgumentOutOfRangeException(nameof(index))
     };
+
+    /// <inheritdoc/>
+    public IEnumerator<TNode> GetEnumerator()
+    {
+        switch (this)
+        {
+            case Empty:
+                yield break;
+
+            case NonEmpty nonEmpty:
+
+                yield return nonEmpty.First;
+
+                foreach (var item in nonEmpty.Rest)
+                {
+                    yield return item.Node;
+                }
+
+                break;
+
+            default:
+                throw new System.NotImplementedException(
+                    "Unexpected type: " + this.GetType().FullName);
+        }
+    }
+
+    IEnumerator IEnumerable.GetEnumerator()
+    {
+        return GetEnumerator();
+    }
 }
 
 /// <summary>
