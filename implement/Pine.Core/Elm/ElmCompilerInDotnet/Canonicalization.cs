@@ -1653,6 +1653,33 @@ public class Canonicalization
                 fieldTypeResult.Errors);
     }
 
+    public static CanonicalizationResult<SyntaxTypes.Expression> CanonicalizeExpression(
+        SyntaxTypes.Expression expr,
+        ImplicitImportConfig implicitImportConfig)
+    {
+        var context =
+            new CanonicalizationContext(
+                CurrentModuleName: [],
+                TypeImportMap: [],
+                ValueImportMap: [],
+                AliasMap: [],
+                ModuleLevelDeclarations: ImmutableHashSet<string>.Empty,
+                LocalDeclarations: [],
+                OperatorToFunction: ImmutableDictionary<string, (ModuleName ModuleName, string FunctionName)>.Empty,
+                DeclarationPath: [])
+            .WithDefaults(implicitImportConfig);
+
+        var fakeLocation = new Location(0, 0);
+        var fakeRange = new Range(fakeLocation, fakeLocation);
+
+        var exprNode =
+            new Node<SyntaxTypes.Expression>(
+                Range: fakeRange,
+                Value: expr);
+
+        return CanonicalizeExpressionNode(exprNode, context).MapValue(node => node.Value);
+    }
+
     private static CanonicalizationResult<Node<SyntaxTypes.Expression>> CanonicalizeExpressionNode(
         Node<SyntaxTypes.Expression> exprNode,
         CanonicalizationContext context)

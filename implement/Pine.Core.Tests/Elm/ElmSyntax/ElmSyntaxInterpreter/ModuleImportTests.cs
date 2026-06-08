@@ -8,7 +8,7 @@ namespace Pine.Core.Tests.Elm.ElmSyntax.ElmSyntaxInterpreter;
 
 /// <summary>
 /// End-to-end coverage of the multi-module overload of
-/// <see cref="ElmInterpreter.ParseAndInterpret(string, System.Collections.Generic.IReadOnlyList{string})"/>,
+/// <see cref="ElmInterpreter.ParseAndInterpretAsElmValue(string, System.Collections.Generic.IReadOnlyList{string})"/>,
 /// which wraps the supplied root expression in a dedicated synthetic module
 /// (with no explicit <c>import</c> statements) and reuses the Elm compiler's
 /// <see cref="Core.Elm.ElmCompilerInDotnet.Canonicalization"/> pass to qualify
@@ -42,7 +42,7 @@ public class ModuleImportTests
 {
     private static string EvaluateRendered(string expression, params string[] modules)
     {
-        var result = ElmInterpreter.ParseAndInterpret(expression, modules);
+        var result = ElmInterpreter.ParseAndInterpretAsElmValue(expression, modules);
 
         var value = result.Extract(err => throw new System.Exception(err.ToString()));
 
@@ -154,7 +154,7 @@ public class ModuleImportTests
         // for the root expression — only inside `Mid`. The interpreter must
         // therefore fail when the root expression tries to use `F.bar`.
         var result =
-            ElmInterpreter.ParseAndInterpret(
+            ElmInterpreter.ParseAndInterpretAsElmValue(
                 "F.bar",
                 [
                 """
@@ -217,7 +217,7 @@ public class ModuleImportTests
         // Inside `Mid`, `bar` is not exposed (only `other` is). `Mid.value`
         // tries to use the bare `bar`, which the canonicalizer cannot resolve.
         var result =
-            ElmInterpreter.ParseAndInterpret(
+            ElmInterpreter.ParseAndInterpretAsElmValue(
                 "Mid.value",
                 [
                 """
@@ -255,7 +255,7 @@ public class ModuleImportTests
         // scope is independent of `Mid`'s imports. A bare `bar` in the root
         // expression is therefore unresolved.
         var result =
-            ElmInterpreter.ParseAndInterpret(
+            ElmInterpreter.ParseAndInterpretAsElmValue(
                 "bar",
                 [
                 """

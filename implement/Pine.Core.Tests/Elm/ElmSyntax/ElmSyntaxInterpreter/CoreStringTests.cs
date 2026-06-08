@@ -16,7 +16,7 @@ namespace Pine.Core.Tests.Elm.ElmSyntax.ElmSyntaxInterpreter;
 /// modules (<c>Basics.elm</c>, <c>List.elm</c>, <c>Maybe.elm</c>, <c>Char.elm</c>) — is
 /// loaded verbatim from <see cref="BundledFiles.CompilerSourceContainerFilesDefault"/>
 /// and dispatched through the multi-module
-/// <see cref="ElmInterpreter.ParseAndInterpret(string, IReadOnlyList{string})"/>
+/// <see cref="ElmInterpreter.ParseAndInterpretAsElmValue(string, IReadOnlyList{string})"/>
 /// overload, which wraps the test expression in a synthetic root module with no
 /// explicit imports (only the implicit imports from
 /// <see cref="Core.Elm.ElmCompilerInDotnet.ImplicitImportConfig.Default"/> are in
@@ -73,7 +73,7 @@ public class CoreStringTests
     /// </summary>
     private static string Evaluate(string expression) =>
         ElmValue.RenderAsElmExpression(
-            ElmInterpreter.ParseAndInterpret(expression, s_modules.Value)
+            ElmInterpreter.ParseAndInterpretAsElmValue(expression, s_modules.Value)
             .Extract(err => throw new Exception(err.ToString())))
         .expressionString;
 

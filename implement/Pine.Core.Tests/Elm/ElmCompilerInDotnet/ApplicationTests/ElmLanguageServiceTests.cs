@@ -559,7 +559,7 @@ public class ElmLanguageServiceTests
             };
 
         var result =
-            Core.Elm.ElmSyntax.ElmSyntaxInterpreter.ParseAndInterpret(
+            Core.Elm.ElmSyntax.ElmSyntaxInterpreter.ParseAndInterpretAsElmValue(
                 "ElmLanguageServiceReferencesScenario.referencesScenarioResponse",
                 modulesWithWrapper);
 
