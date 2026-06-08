@@ -755,7 +755,10 @@ public partial class ElmSyntaxOptimization
         {
             var moduleNameString = string.Join(".", key.Namespaces);
 
-            TypeInference.CollectFunctionSignaturesFromDeclaration(decl, moduleNameString, builder);
+            TypeInference.CollectFunctionSignaturesFromDeclaration(
+                ElmSyntaxAbstractConversion.FromDeclaration(decl),
+                moduleNameString,
+                builder);
         }
 
         return builder.ToImmutable();

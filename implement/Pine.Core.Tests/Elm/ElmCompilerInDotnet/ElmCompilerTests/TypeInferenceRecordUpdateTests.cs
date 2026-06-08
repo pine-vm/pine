@@ -5,6 +5,7 @@ using System.Collections.Generic;
 using Xunit;
 
 using SyntaxTypes = Pine.Core.Elm.ElmSyntax.Stil4mElmSyntax7;
+using static Pine.Core.Tests.Elm.ElmCompilerInDotnet.ElmCompilerTests.AbstractSyntaxTestConversion;
 
 namespace Pine.Core.Tests.Elm.ElmCompilerInDotnet.ElmCompilerTests;
 
@@ -38,7 +39,7 @@ public class TypeInferenceRecordUpdateTests
 
         var parameterTypes =
             TypeInference.InferParameterTypesFromUsage(
-                expression,
+                Abs(expression),
                 parameterNames: new Dictionary<string, int> { ["r"] = 0 },
                 functionSignatures: new Dictionary<string, TypeInference.InferredType>());
 
@@ -65,7 +66,7 @@ public class TypeInferenceRecordUpdateTests
 
         var parameterTypes =
             TypeInference.InferParameterTypesFromUsage(
-                expression,
+                Abs(expression),
                 parameterNames: new Dictionary<string, int> { ["r"] = 0 },
                 functionSignatures: new Dictionary<string, TypeInference.InferredType>());
 
@@ -100,7 +101,7 @@ public class TypeInferenceRecordUpdateTests
 
         var inferredType =
             TypeInference.InferExpressionType(
-                expression,
+                Abs(expression),
                 parameterNames: new Dictionary<string, int> { ["r"] = 0 },
                 parameterTypes: new Dictionary<string, TypeInference.InferredType> { ["r"] = existingRecord });
 
@@ -132,7 +133,7 @@ public class TypeInferenceRecordUpdateTests
 
         var parameterTypes =
             TypeInference.InferParameterTypesFromUsage(
-                expression,
+                Abs(expression),
                 parameterNames: new Dictionary<string, int> { ["r"] = 0 },
                 functionSignatures: new Dictionary<string, TypeInference.InferredType>());
 
@@ -172,7 +173,7 @@ public class TypeInferenceRecordUpdateTests
 
         var parameterTypes =
             TypeInference.InferParameterTypesFromUsage(
-                expression,
+                Abs(expression),
                 parameterNames: new Dictionary<string, int> { ["r"] = 0 },
                 functionSignatures: new Dictionary<string, TypeInference.InferredType>());
 

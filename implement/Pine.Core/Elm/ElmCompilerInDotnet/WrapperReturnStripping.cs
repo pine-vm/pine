@@ -872,7 +872,7 @@ internal static class WrapperReturnStripping
     /// so dictionaries are not kept alive past their normal lifetime
     /// — the cache simply avoids repeating the
     /// <c>O(|declarations|)</c> traversal when
-    /// <see cref="RewriteDeclarationDictionary"/> is invoked multiple
+    /// <see cref="RewriteDeclarationDictionary(OptimizedElmSyntaxDeclarations)"/> is invoked multiple
     /// times against the same input (see §11.11 in
     /// <c>explore/internal-analysis/2026-05-18-eliminate-higher-order-parameters-in-focused-tests.md</c>).
     /// </para>
@@ -979,7 +979,7 @@ internal static class WrapperReturnStripping
     /// constructor: <c>f a1 a2 … = Wrap (f__stripped a1 a2 …)</c>.
     /// Argument patterns must be <see cref="SyntaxTypes.Pattern.VarPattern"/>
     /// or <see cref="SyntaxTypes.Pattern.UnitPattern"/> —
-    /// <see cref="BuildStripPlans"/> enforces this invariant. For a
+    /// <see cref="BuildStripPlans(OptimizedElmSyntaxDeclarations, ImmutableDictionary{DeclQualifiedName, NewtypeWrapperAnalysis.NewtypeShapeInfo})"/> enforces this invariant. For a
     /// var-pattern position the forwarding call passes the bound
     /// name; for a unit-pattern position it passes the literal
     /// <c>()</c> via <see cref="SyntaxTypes.Expression.UnitExpr"/>.

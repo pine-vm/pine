@@ -1,6 +1,6 @@
 using Pine.Core.Elm.ElmCompilerInDotnet.CoreLibraryModule;
 
-using SyntaxTypes = Pine.Core.Elm.ElmSyntax.Stil4mElmSyntax7;
+using SyntaxTypes = Pine.Core.Elm.ElmSyntax.ElmSyntaxAbstract;
 
 namespace Pine.Core.Elm.ElmCompilerInDotnet;
 
@@ -29,7 +29,7 @@ public class OperatorCompiler
                 context.CurrentModuleName,
                 context.FunctionTypes);
 
-        var leftResult = ExpressionCompiler.Compile(operatorApp.Left.Value, context);
+        var leftResult = ExpressionCompiler.Compile(operatorApp.Left, context);
 
         if (leftResult.IsErrOrNull() is { } leftErr)
         {
@@ -39,7 +39,7 @@ public class OperatorCompiler
                     leftErr);
         }
 
-        var rightResult = ExpressionCompiler.Compile(operatorApp.Right.Value, context);
+        var rightResult = ExpressionCompiler.Compile(operatorApp.Right, context);
 
         if (rightResult.IsErrOrNull() is { } rightErr)
         {

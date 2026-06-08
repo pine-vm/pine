@@ -4,7 +4,8 @@ using System.Collections.Immutable;
 using System.Linq;
 
 using SyntaxModelTypes = Pine.Core.Elm.ElmSyntax.SyntaxModel;
-using SyntaxTypes = Pine.Core.Elm.ElmSyntax.Stil4mElmSyntax7;
+using SyntaxTypes = Pine.Core.Elm.ElmSyntax.ElmSyntaxAbstract;
+using ConcreteSyntaxTypes = Pine.Core.Elm.ElmSyntax.Stil4mElmSyntax7;
 
 namespace Pine.Core.Elm.ElmCompilerInDotnet;
 
@@ -166,6 +167,31 @@ public record ModuleCompilationContext(
     IReadOnlyDictionary<SyntaxModelTypes.QualifiedNameRef, IReadOnlyList<TypeInference.InferredType>>? ChoiceTagArgumentTypes = null,
     IReadOnlyDictionary<SyntaxModelTypes.QualifiedNameRef, IReadOnlyList<string>>? RecordTypeAliasConstructors = null)
 {
+    public ModuleCompilationContext(
+        IReadOnlyDictionary<SyntaxModelTypes.QualifiedNameRef, (string moduleName, string functionName, ConcreteSyntaxTypes.Declaration.FunctionDeclaration declaration)> AllFunctions,
+        ImmutableDictionary<SyntaxModelTypes.QualifiedNameRef, CompiledFunctionInfo> CompiledFunctionsCache,
+        FrozenSet<string> PineKernelModuleNames,
+        IReadOnlyDictionary<SyntaxModelTypes.QualifiedNameRef, IReadOnlyList<string>>? FunctionDependencyLayouts = null,
+        IReadOnlyDictionary<SyntaxModelTypes.QualifiedNameRef, FunctionTypeInfo>? FunctionTypes = null,
+        IReadOnlyDictionary<SyntaxModelTypes.QualifiedNameRef, IReadOnlyList<TypeInference.InferredType>>? ChoiceTagArgumentTypes = null,
+        IReadOnlyDictionary<SyntaxModelTypes.QualifiedNameRef, IReadOnlyList<string>>? RecordTypeAliasConstructors = null)
+        : this(
+            AllFunctions.ToDictionary(
+                kvp => kvp.Key,
+                kvp =>
+                (
+                    kvp.Value.moduleName,
+                    kvp.Value.functionName,
+                    (SyntaxTypes.Declaration.FunctionDeclaration)ElmSyntaxAbstractConversion.FromDeclaration(kvp.Value.declaration))),
+            CompiledFunctionsCache,
+            PineKernelModuleNames,
+            FunctionDependencyLayouts,
+            FunctionTypes,
+            ChoiceTagArgumentTypes,
+            RecordTypeAliasConstructors)
+    {
+    }
+
     /// <summary>
     /// Creates a new context with the specified function added to the cache.
     /// </summary>

@@ -6,7 +6,7 @@ using System.Collections.Immutable;
 using System.Linq;
 using System.Numerics;
 
-using SyntaxTypes = Pine.Core.Elm.ElmSyntax.Stil4mElmSyntax7;
+using SyntaxTypes = Pine.Core.Elm.ElmSyntax.ElmSyntaxAbstract;
 
 namespace Pine.Core.Elm.ElmCompilerInDotnet;
 
@@ -33,13 +33,10 @@ public class ExpressionCompiler
             SyntaxTypes.Expression.Integer expr =>
             CompileInteger(expr),
 
-            SyntaxTypes.Expression.Floatable expr =>
-            CompileFloatable(expr),
+            SyntaxTypes.Expression.FloatLiteral expr =>
+            CompileFloatLiteral(expr),
 
-            SyntaxTypes.Expression.Hex expr =>
-            CompileHex(expr),
-
-            SyntaxTypes.Expression.Literal expr =>
+            SyntaxTypes.Expression.StringLiteral expr =>
             CompileLiteral(expr),
 
             SyntaxTypes.Expression.CharLiteral expr =>
@@ -62,9 +59,6 @@ public class ExpressionCompiler
 
             SyntaxTypes.Expression.OperatorApplication expr =>
             CompileOperatorApplication(expr, context),
-
-            SyntaxTypes.Expression.ParenthesizedExpression expr =>
-            CompileParenthesizedExpression(expr, context),
 
             SyntaxTypes.Expression.PrefixOperator expr =>
             CompilePrefixOperator(expr),
@@ -98,12 +92,12 @@ public class ExpressionCompiler
         SyntaxTypes.Expression.Integer expr) =>
         Expression.LiteralInstance(EmitIntegerLiteral(expr.Value));
 
-    private static Result<CompilationError, Expression> CompileFloatable(
-        SyntaxTypes.Expression.Floatable expr)
+    private static Result<CompilationError, Expression> CompileFloatLiteral(
+        SyntaxTypes.Expression.FloatLiteral expr)
     {
         var floatValue =
             ElmValue.ElmFloat.Convert(
-                double.Parse(expr.LiteralText, System.Globalization.CultureInfo.InvariantCulture));
+                ((double)expr.Numerator / (double)expr.Denominator));
 
         var pineValue =
             ElmValueEncoding.ElmValueAsPineValue(floatValue);
@@ -111,12 +105,8 @@ public class ExpressionCompiler
         return Expression.LiteralInstance(pineValue);
     }
 
-    private static Result<CompilationError, Expression> CompileHex(
-        SyntaxTypes.Expression.Hex expr) =>
-        Expression.LiteralInstance(EmitIntegerLiteral(expr.Value));
-
     private static Result<CompilationError, Expression> CompileLiteral(
-        SyntaxTypes.Expression.Literal expr) =>
+        SyntaxTypes.Expression.StringLiteral expr) =>
         Expression.LiteralInstance(EmitStringLiteral(expr.Value));
 
     private static Result<CompilationError, Expression> CompileCharLiteral(
@@ -281,19 +271,19 @@ public class ExpressionCompiler
         SyntaxTypes.Expression.Application expr,
         ExpressionCompilationContext context)
     {
-        if (expr.Arguments.Count < 2)
+        if (expr.Arguments.Count < 1)
         {
-            return new CompilationError.ApplicationTooFewArguments(expr.Arguments.Count);
+            return new CompilationError.ApplicationTooFewArguments(expr.Arguments.Count + 1);
         }
 
-        var functionExpr = expr.Arguments[0].Value;
+        var functionExpr = expr.Function;
 
         // Check if this is a Pine_kernel application
         if (functionExpr is SyntaxTypes.Expression.FunctionOrValue kernelFunc &&
             kernelFunc.ModuleName.Count is 1 &&
             context.ModuleCompilationContext.IsPineKernelModule(kernelFunc.ModuleName[0]))
         {
-            var kernelInput = expr.Arguments[1].Value;
+            var kernelInput = expr.Arguments[0];
             var compiledInputResult = Compile(kernelInput, context);
 
             if (compiledInputResult.IsErrOrNull() is { } err)
@@ -308,11 +298,11 @@ public class ExpressionCompiler
         }
 
         // Compile all arguments
-        var compiledArguments = new Expression[expr.Arguments.Count - 1];
+        var compiledArguments = new Expression[expr.Arguments.Count];
 
-        for (var i = 1; i < expr.Arguments.Count; i++)
+        for (var i = 0; i < expr.Arguments.Count; i++)
         {
-            var argResult = Compile(expr.Arguments[i].Value, context);
+            var argResult = Compile(expr.Arguments[i], context);
 
             if (argResult.IsErrOrNull() is { } argErr)
             {
@@ -325,7 +315,7 @@ public class ExpressionCompiler
                     "Unexpected result type when compiling application argument: " + argResult.GetType());
             }
 
-            compiledArguments[i - 1] = argOk;
+            compiledArguments[i] = argOk;
         }
 
         // Check if this is a prefix operator application with 2 arguments (e.g., (&&) x y)
@@ -364,7 +354,7 @@ public class ExpressionCompiler
                 // Arguments are in declaration order (same as fieldNamesInDeclOrder)
                 // We need to construct a record with fields sorted alphabetically
 
-                var argumentCount = expr.Arguments.Count - 1; // First arg is the constructor itself
+                var argumentCount = expr.Arguments.Count; // First arg is the constructor itself
 
                 if (argumentCount < fieldNamesInDeclOrder.Count)
                 {
@@ -581,7 +571,7 @@ public class ExpressionCompiler
                 return new CompilationError.UnresolvedReference(funcRef.Name, context.CurrentModuleName);
             }
 
-            var paramCount = funcInfo.declaration.Function.Declaration.Value.Arguments.Count;
+            var paramCount = funcInfo.declaration.Function.Declaration.Arguments.Count;
             var argCount = compiledArguments.Length;
 
             if (argCount >= paramCount && paramCount > 0)
@@ -692,7 +682,7 @@ public class ExpressionCompiler
         {
             var item = expr.Elements[i];
 
-            var itemResult = Compile(item.Value, context);
+            var itemResult = Compile(item, context);
 
             if (itemResult.IsErrOrNull() is { } err)
             {
@@ -705,7 +695,7 @@ public class ExpressionCompiler
             if (itemResult.IsOkOrNull() is not { } itemOk)
             {
                 throw new NotImplementedException(
-                    "Unexpected result type when compiling list element [" + i + "]: " + item.Value.GetType());
+                    "Unexpected result type when compiling list element [" + i + "]: " + item.GetType());
             }
 
             compiledItems[i] = itemOk;
@@ -725,7 +715,7 @@ public class ExpressionCompiler
         {
             var item = expr.Elements[i];
 
-            var itemResult = Compile(item.Value, context);
+            var itemResult = Compile(item, context);
 
             if (itemResult.IsErrOrNull() is { } err)
             {
@@ -738,7 +728,7 @@ public class ExpressionCompiler
             if (itemResult.IsOkOrNull() is not { } itemOk)
             {
                 throw new NotImplementedException(
-                    "Unexpected result type when compiling tuple element [" + i + "]: " + item.Value.GetType());
+                    "Unexpected result type when compiling tuple element [" + i + "]: " + item.GetType());
             }
 
             compiledItems[i] = itemOk;
@@ -754,15 +744,15 @@ public class ExpressionCompiler
         // Sort fields by name alphabetically (as per Elm record encoding)
         var sortedFields =
             expr.Fields
-            .OrderBy(f => f.Value.fieldName.Value, StringComparer.Ordinal)
+            .OrderBy(f => f.FieldName, StringComparer.Ordinal)
             .ToList();
 
         var compiledFieldItems = new List<Expression>();
 
         foreach (var field in sortedFields)
         {
-            var fieldName = field.Value.fieldName.Value;
-            var fieldValueExpr = field.Value.valueExpr.Value;
+            var fieldName = field.FieldName;
+            var fieldValueExpr = field.Value;
 
             var compiledValue = Compile(fieldValueExpr, context);
 
@@ -792,7 +782,7 @@ public class ExpressionCompiler
         ExpressionCompilationContext context)
     {
         // Get the original record value from the record name variable
-        var recordName = expr.RecordName.Value;
+        var recordName = expr.RecordName;
 
         Expression recordExpr;
         TypeInference.InferredType.RecordType? recordType = null;
@@ -829,7 +819,7 @@ public class ExpressionCompiler
         // merge them in a single pass.
         var sortedFields =
             expr.Fields
-            .OrderBy(f => f.Value.fieldName.Value, StringComparer.Ordinal)
+            .OrderBy(f => f.FieldName, StringComparer.Ordinal)
             .ToList();
 
         // Compile update values
@@ -837,8 +827,8 @@ public class ExpressionCompiler
 
         foreach (var field in sortedFields)
         {
-            var fieldName = field.Value.fieldName.Value;
-            var fieldValueExpr = field.Value.valueExpr.Value;
+            var fieldName = field.FieldName;
+            var fieldValueExpr = field.Value;
 
             var compiledValue = Compile(fieldValueExpr, context);
 
@@ -961,7 +951,7 @@ public class ExpressionCompiler
         ExpressionCompilationContext context)
     {
         // Compile the record expression
-        var recordResult = Compile(expr.Record.Value, context);
+        var recordResult = Compile(expr.Record, context);
 
         if (recordResult.IsErrOrNull() is { } err)
         {
@@ -969,10 +959,10 @@ public class ExpressionCompiler
         }
 
         var recordExpr = recordResult.IsOkOrNull()!;
-        var fieldName = expr.FieldName.Value;
+        var fieldName = expr.FieldName;
 
         // Try to get the record type to compute field index at compile time
-        var recordType = TryGetRecordType(expr.Record.Value, context);
+        var recordType = TryGetRecordType(expr.Record, context);
 
         if (recordType is not null)
         {
@@ -1026,7 +1016,7 @@ public class ExpressionCompiler
         // PineValue.EmptyList — which then crashes the surrounding
         // ParseAndEval with an "expressionValue is string ''" / empty-list
         // diagnostic when the result is invoked or used as a function.
-        var fieldName = expr.FunctionName.TrimStart('.');
+        var fieldName = expr.FieldName;
 
         // Build a 1-argument function: \record -> record.fieldName
         // env = [envFunctions, record], so the parameter is at env[1]
@@ -1104,11 +1094,6 @@ public class ExpressionCompiler
         ExpressionCompilationContext context) =>
         OperatorCompiler.Compile(expr, context);
 
-    private static Result<CompilationError, Expression> CompileParenthesizedExpression(
-        SyntaxTypes.Expression.ParenthesizedExpression expr,
-        ExpressionCompilationContext context) =>
-        Compile(expr.Expression.Value, context);
-
     /// <summary>
     /// Compiles a prefix operator expression like <c>(+)</c> to a function value.
     /// Prefix operators are operators used as functions, e.g., <c>(+) 1 2</c> instead of <c>1 + 2</c>.
@@ -1162,12 +1147,12 @@ public class ExpressionCompiler
         SyntaxTypes.Expression.Negation expr,
         ExpressionCompilationContext context)
     {
-        if (expr.Expression.Value is SyntaxTypes.Expression.Integer intLiteral)
+        if (expr.Expression is SyntaxTypes.Expression.Integer intLiteral)
         {
             return Expression.LiteralInstance(EmitIntegerLiteral(-intLiteral.Value));
         }
 
-        var innerResult = Compile(expr.Expression.Value, context);
+        var innerResult = Compile(expr.Expression, context);
 
         if (innerResult.IsErrOrNull() is { } err)
         {
@@ -1182,21 +1167,21 @@ public class ExpressionCompiler
         SyntaxTypes.Expression.IfBlock expr,
         ExpressionCompilationContext context)
     {
-        var conditionResult = Compile(expr.Condition.Value, context);
+        var conditionResult = Compile(expr.Condition, context);
 
         if (conditionResult.IsErrOrNull() is { } condErr)
         {
             return condErr;
         }
 
-        var trueBranchResult = Compile(expr.ThenBlock.Value, context);
+        var trueBranchResult = Compile(expr.ThenBlock, context);
 
         if (trueBranchResult.IsErrOrNull() is { } trueErr)
         {
             return trueErr;
         }
 
-        var falseBranchResult = Compile(expr.ElseBlock.Value, context);
+        var falseBranchResult = Compile(expr.ElseBlock, context);
 
         if (falseBranchResult.IsErrOrNull() is { } falseErr)
         {
@@ -1213,15 +1198,15 @@ public class ExpressionCompiler
     private static Result<CompilationError, Expression> CompileCaseExpression(
         SyntaxTypes.Expression.CaseExpression expr,
         ExpressionCompilationContext context) =>
-        PatternCompiler.CompileCaseExpression(expr.CaseBlock, context);
+        PatternCompiler.CompileCaseExpression(expr, context);
 
     private static Result<CompilationError, Expression> CompileLetExpression(
         SyntaxTypes.Expression.LetExpression expr,
         ExpressionCompilationContext context) =>
-        CompileLetExpressionBody(expr.Value, context);
+        CompileLetExpressionBody(expr, context);
 
     private static Result<CompilationError, Expression> CompileLetExpressionBody(
-        SyntaxTypes.Expression.LetBlock letBlock,
+        SyntaxTypes.Expression.LetExpression letBlock,
         ExpressionCompilationContext context)
     {
         var newBindings = new Dictionary<string, Expression>();
@@ -1246,21 +1231,21 @@ public class ExpressionCompiler
 
         for (var i = 0; i < declarations.Count; i++)
         {
-            var decl = declarations[i].Value;
+            var decl = declarations[i];
             var names = new HashSet<string>();
             var deps = new HashSet<string>();
 
             switch (decl)
             {
-                case SyntaxTypes.Expression.LetDeclaration.LetFunction letFunc:
-                    var funcName = letFunc.Function.Declaration.Value.Name.Value;
+                case SyntaxTypes.LetDeclaration.LetFunction letFunc:
+                    var funcName = letFunc.Function.Declaration.Name;
                     names.Add(funcName);
-                    CollectExpressionReferences(letFunc.Function.Declaration.Value.Expression.Value, deps);
+                    CollectExpressionReferences(letFunc.Function.Declaration.Expression, deps);
                     break;
 
-                case SyntaxTypes.Expression.LetDeclaration.LetDestructuring letDestructuring:
-                    PatternCompiler.CollectPatternNames(letDestructuring.Pattern.Value, names);
-                    CollectExpressionReferences(letDestructuring.Expression.Value, deps);
+                case SyntaxTypes.LetDeclaration.LetDestructuring letDestructuring:
+                    PatternCompiler.CollectPatternNames(letDestructuring.Pattern, names);
+                    CollectExpressionReferences(letDestructuring.Expression, deps);
                     break;
             }
 
@@ -1289,14 +1274,14 @@ public class ExpressionCompiler
 
         foreach (var idx in sortedIndices)
         {
-            var decl = declarations[idx].Value;
+            var decl = declarations[idx];
 
             switch (decl)
             {
-                case SyntaxTypes.Expression.LetDeclaration.LetFunction letFunc:
-                    var funcName = letFunc.Function.Declaration.Value.Name.Value;
-                    var funcBody = letFunc.Function.Declaration.Value.Expression.Value;
-                    var funcArgs = letFunc.Function.Declaration.Value.Arguments;
+                case SyntaxTypes.LetDeclaration.LetFunction letFunc:
+                    var funcName = letFunc.Function.Declaration.Name;
+                    var funcBody = letFunc.Function.Declaration.Expression;
+                    var funcArgs = letFunc.Function.Declaration.Arguments;
 
                     if (funcArgs.Count is 0)
                     {
@@ -1332,12 +1317,12 @@ public class ExpressionCompiler
 
                     break;
 
-                case SyntaxTypes.Expression.LetDeclaration.LetDestructuring letDestructuring:
+                case SyntaxTypes.LetDeclaration.LetDestructuring letDestructuring:
 
                     // Infer the type of the expression being destructured
                     var destructuredExprType =
                         TypeInference.InferExpressionType(
-                            letDestructuring.Expression.Value,
+                            letDestructuring.Expression,
                             context.ParameterNames,
                             context.ParameterTypes,
                             newBindingTypes.Count > 0 ? newBindingTypes : null,
@@ -1347,14 +1332,14 @@ public class ExpressionCompiler
                     // Extract binding types from the pattern using the inferred type
                     newBindingTypes =
                         TypeInference.ExtractPatternBindingTypesFromInferred(
-                            letDestructuring.Pattern.Value,
+                            letDestructuring.Pattern,
                             destructuredExprType,
                             newBindingTypes);
 
                     // Update the let context with the new types
                     letContext = letContext.WithReplacedLocalBindingsAndTypes(newBindings, newBindingTypes);
 
-                    var destructuredResult = Compile(letDestructuring.Expression.Value, letContext);
+                    var destructuredResult = Compile(letDestructuring.Expression, letContext);
 
                     if (destructuredResult.IsErrOrNull() is { } destrErr)
                     {
@@ -1363,7 +1348,7 @@ public class ExpressionCompiler
 
                     var patternBindings =
                         PatternCompiler.ExtractPatternBindings(
-                            letDestructuring.Pattern.Value,
+                            letDestructuring.Pattern,
                             destructuredResult.IsOkOrNull()!,
                             scrutineeType: destructuredExprType,
                             recordTypeAliasFields:
@@ -1383,7 +1368,7 @@ public class ExpressionCompiler
             }
         }
 
-        return Compile(letBlock.Expression.Value, letContext);
+        return Compile(letBlock.Expression, letContext);
     }
 
     #region Helper Methods
@@ -1403,9 +1388,11 @@ public class ExpressionCompiler
                 break;
 
             case SyntaxTypes.Expression.Application app:
+                CollectExpressionReferences(app.Function, refs);
+
                 foreach (var arg in app.Arguments)
                 {
-                    CollectExpressionReferences(arg.Value, refs);
+                    CollectExpressionReferences(arg, refs);
                 }
 
                 break;
@@ -1413,64 +1400,60 @@ public class ExpressionCompiler
             case SyntaxTypes.Expression.ListExpr listExpr:
                 foreach (var elem in listExpr.Elements)
                 {
-                    CollectExpressionReferences(elem.Value, refs);
+                    CollectExpressionReferences(elem, refs);
                 }
 
                 break;
 
             case SyntaxTypes.Expression.OperatorApplication opApp:
-                CollectExpressionReferences(opApp.Left.Value, refs);
-                CollectExpressionReferences(opApp.Right.Value, refs);
-                break;
-
-            case SyntaxTypes.Expression.ParenthesizedExpression paren:
-                CollectExpressionReferences(paren.Expression.Value, refs);
+                CollectExpressionReferences(opApp.Left, refs);
+                CollectExpressionReferences(opApp.Right, refs);
                 break;
 
             case SyntaxTypes.Expression.Negation neg:
-                CollectExpressionReferences(neg.Expression.Value, refs);
+                CollectExpressionReferences(neg.Expression, refs);
                 break;
 
             case SyntaxTypes.Expression.IfBlock ifBlock:
-                CollectExpressionReferences(ifBlock.Condition.Value, refs);
-                CollectExpressionReferences(ifBlock.ThenBlock.Value, refs);
-                CollectExpressionReferences(ifBlock.ElseBlock.Value, refs);
+                CollectExpressionReferences(ifBlock.Condition, refs);
+                CollectExpressionReferences(ifBlock.ThenBlock, refs);
+                CollectExpressionReferences(ifBlock.ElseBlock, refs);
                 break;
 
             case SyntaxTypes.Expression.LetExpression letExpr:
                 var localNames = new HashSet<string>();
 
-                foreach (var decl in letExpr.Value.Declarations)
+                foreach (var decl in letExpr.Declarations)
                 {
-                    switch (decl.Value)
+                    switch (decl)
                     {
-                        case SyntaxTypes.Expression.LetDeclaration.LetFunction letFunc:
-                            localNames.Add(letFunc.Function.Declaration.Value.Name.Value);
+                        case SyntaxTypes.LetDeclaration.LetFunction letFunc:
+                            localNames.Add(letFunc.Function.Declaration.Name);
                             break;
 
-                        case SyntaxTypes.Expression.LetDeclaration.LetDestructuring letDestr:
-                            PatternCompiler.CollectPatternNames(letDestr.Pattern.Value, localNames);
+                        case SyntaxTypes.LetDeclaration.LetDestructuring letDestr:
+                            PatternCompiler.CollectPatternNames(letDestr.Pattern, localNames);
                             break;
                     }
                 }
 
                 var innerRefs = new HashSet<string>();
 
-                foreach (var decl in letExpr.Value.Declarations)
+                foreach (var decl in letExpr.Declarations)
                 {
-                    switch (decl.Value)
+                    switch (decl)
                     {
-                        case SyntaxTypes.Expression.LetDeclaration.LetFunction letFunc:
-                            CollectExpressionReferences(letFunc.Function.Declaration.Value.Expression.Value, innerRefs);
+                        case SyntaxTypes.LetDeclaration.LetFunction letFunc:
+                            CollectExpressionReferences(letFunc.Function.Declaration.Expression, innerRefs);
                             break;
 
-                        case SyntaxTypes.Expression.LetDeclaration.LetDestructuring letDestr:
-                            CollectExpressionReferences(letDestr.Expression.Value, innerRefs);
+                        case SyntaxTypes.LetDeclaration.LetDestructuring letDestr:
+                            CollectExpressionReferences(letDestr.Expression, innerRefs);
                             break;
                     }
                 }
 
-                CollectExpressionReferences(letExpr.Value.Expression.Value, innerRefs);
+                CollectExpressionReferences(letExpr.Expression, innerRefs);
 
                 foreach (var innerRef in innerRefs)
                 {
@@ -1485,35 +1468,35 @@ public class ExpressionCompiler
             case SyntaxTypes.Expression.RecordExpr recordExpr:
                 foreach (var field in recordExpr.Fields)
                 {
-                    CollectExpressionReferences(field.Value.valueExpr.Value, refs);
+                    CollectExpressionReferences(field.Value, refs);
                 }
 
                 break;
 
             case SyntaxTypes.Expression.RecordUpdateExpression recordUpdate:
-                refs.Add(recordUpdate.RecordName.Value);
+                refs.Add(recordUpdate.RecordName);
 
                 foreach (var field in recordUpdate.Fields)
                 {
-                    CollectExpressionReferences(field.Value.valueExpr.Value, refs);
+                    CollectExpressionReferences(field.Value, refs);
                 }
 
                 break;
 
             case SyntaxTypes.Expression.RecordAccess recordAccess:
-                CollectExpressionReferences(recordAccess.Record.Value, refs);
+                CollectExpressionReferences(recordAccess.Record, refs);
                 break;
 
             case SyntaxTypes.Expression.CaseExpression caseExpr:
-                CollectExpressionReferences(caseExpr.CaseBlock.Expression.Value, refs);
+                CollectExpressionReferences(caseExpr.Expression, refs);
 
-                foreach (var caseItem in caseExpr.CaseBlock.Cases)
+                foreach (var caseItem in caseExpr.Cases)
                 {
                     var caseLocalNames = new HashSet<string>();
-                    PatternCompiler.CollectPatternNames(caseItem.Pattern.Value, caseLocalNames);
+                    PatternCompiler.CollectPatternNames(caseItem.Pattern, caseLocalNames);
 
                     var caseRefs = new HashSet<string>();
-                    CollectExpressionReferences(caseItem.Expression.Value, caseRefs);
+                    CollectExpressionReferences(caseItem.Expression, caseRefs);
 
                     foreach (var caseRef in caseRefs)
                     {
@@ -1529,7 +1512,7 @@ public class ExpressionCompiler
             case SyntaxTypes.Expression.TupledExpression tupled:
                 foreach (var elem in tupled.Elements)
                 {
-                    CollectExpressionReferences(elem.Value, refs);
+                    CollectExpressionReferences(elem, refs);
                 }
 
                 break;
@@ -1537,13 +1520,13 @@ public class ExpressionCompiler
             case SyntaxTypes.Expression.LambdaExpression lambdaExpr:
                 var lambdaParamNames = new HashSet<string>();
 
-                foreach (var param in lambdaExpr.Lambda.Arguments)
+                foreach (var param in lambdaExpr.Arguments)
                 {
-                    PatternCompiler.CollectPatternNames(param.Value, lambdaParamNames);
+                    PatternCompiler.CollectPatternNames(param, lambdaParamNames);
                 }
 
                 var lambdaRefs = new HashSet<string>();
-                CollectExpressionReferences(lambdaExpr.Lambda.Expression.Value, lambdaRefs);
+                CollectExpressionReferences(lambdaExpr.Expression, lambdaRefs);
 
                 foreach (var lambdaRef in lambdaRefs)
                 {
@@ -1682,7 +1665,7 @@ public class ExpressionCompiler
             return new CompilationError.UnresolvedReference(qualifiedFunctionName, context.CurrentModuleName);
         }
 
-        var paramCount = funcInfo.declaration.Function.Declaration.Value.Arguments.Count;
+        var paramCount = funcInfo.declaration.Function.Declaration.Arguments.Count;
 
         // Get the encoded body from the environment.
         // For declarations compiled with env functions, the root environment uses the flat layout

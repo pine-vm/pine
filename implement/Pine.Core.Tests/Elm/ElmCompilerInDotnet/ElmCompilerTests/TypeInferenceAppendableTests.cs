@@ -5,6 +5,7 @@ using System.Collections.Generic;
 using Xunit;
 
 using SyntaxTypes = Pine.Core.Elm.ElmSyntax.Stil4mElmSyntax7;
+using static Pine.Core.Tests.Elm.ElmCompilerInDotnet.ElmCompilerTests.AbstractSyntaxTestConversion;
 
 namespace Pine.Core.Tests.Elm.ElmCompilerInDotnet.ElmCompilerTests;
 
@@ -42,7 +43,7 @@ public class TypeInferenceAppendableTests
 
         var parameterTypes =
             TypeInference.InferParameterTypesFromUsage(
-                expression,
+                Abs(expression),
                 parameterNames: new Dictionary<string, int> { ["a"] = 0 },
                 functionSignatures: new Dictionary<string, TypeInference.InferredType>());
 
@@ -65,7 +66,7 @@ public class TypeInferenceAppendableTests
 
         var parameterTypes =
             TypeInference.InferParameterTypesFromUsage(
-                expression,
+                Abs(expression),
                 parameterNames: new Dictionary<string, int> { ["a"] = 0 },
                 functionSignatures: new Dictionary<string, TypeInference.InferredType>());
 
@@ -81,7 +82,7 @@ public class TypeInferenceAppendableTests
 
         var parameterTypes =
             TypeInference.InferParameterTypesFromUsage(
-                expression,
+                Abs(expression),
                 parameterNames: new Dictionary<string, int> { ["a"] = 0, ["b"] = 1 },
                 functionSignatures: new Dictionary<string, TypeInference.InferredType>());
 
@@ -116,7 +117,7 @@ public class TypeInferenceAppendableTests
 
         var parameterTypes =
             TypeInference.InferParameterTypesFromUsage(
-                expression,
+                Abs(expression),
                 parameterNames: new Dictionary<string, int> { ["a"] = 0 },
                 functionSignatures: new Dictionary<string, TypeInference.InferredType>());
 
@@ -135,7 +136,7 @@ public class TypeInferenceAppendableTests
 
         var parameterTypes =
             TypeInference.InferParameterTypesFromUsage(
-                expression,
+                Abs(expression),
                 parameterNames: new Dictionary<string, int> { ["a"] = 0, ["b"] = 1 },
                 functionSignatures: new Dictionary<string, TypeInference.InferredType>());
 
@@ -166,7 +167,7 @@ public class TypeInferenceAppendableTests
 
         var inferredType =
             TypeInference.InferExpressionType(
-                expression,
+                Abs(expression),
                 parameterNames: new Dictionary<string, int>(),
                 parameterTypes: new Dictionary<string, TypeInference.InferredType>());
 
@@ -188,7 +189,7 @@ public class TypeInferenceAppendableTests
 
         var inferredType =
             TypeInference.InferExpressionType(
-                expression,
+                Abs(expression),
                 parameterNames: new Dictionary<string, int>(),
                 parameterTypes: new Dictionary<string, TypeInference.InferredType>());
 
@@ -202,7 +203,7 @@ public class TypeInferenceAppendableTests
 
         var inferredType =
             TypeInference.InferExpressionType(
-                expression,
+                Abs(expression),
                 parameterNames: new Dictionary<string, int> { ["a"] = 0, ["b"] = 1 },
                 parameterTypes: new Dictionary<string, TypeInference.InferredType>());
 

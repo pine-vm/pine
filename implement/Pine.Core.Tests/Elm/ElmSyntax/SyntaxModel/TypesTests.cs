@@ -87,7 +87,7 @@ public class TypesTests
         var list1 = new SeparatedSyntaxList<string>.Empty();
         var list2 = new SeparatedSyntaxList<string>.Empty();
 
-        list1.Should().Be(list2);
+        ((object)list1).Should().Be(list2);
         list1.GetHashCode().Should().Be(list2.GetHashCode());
     }
 
@@ -106,7 +106,7 @@ public class TypesTests
                 "first",
                 [(location, "second")]);
 
-        list1.Should().Be(list2);
+        ((object)list1).Should().Be(list2);
         list1.GetHashCode().Should().Be(list2.GetHashCode());
     }
 

@@ -5,6 +5,7 @@ using System.Collections.Generic;
 using Xunit;
 
 using SyntaxTypes = Pine.Core.Elm.ElmSyntax.Stil4mElmSyntax7;
+using static Pine.Core.Tests.Elm.ElmCompilerInDotnet.ElmCompilerTests.AbstractSyntaxTestConversion;
 
 namespace Pine.Core.Tests.Elm.ElmCompilerInDotnet.ElmCompilerTests;
 
@@ -73,7 +74,7 @@ public class TypeInferenceRecordTests
         var expression = new SyntaxTypes.Expression.RecordExpr([]);
 
         var inferredType =
-            TypeInference.InferExpressionType(expression, new Dictionary<string, int>(), Empty);
+            TypeInference.InferExpressionType(Abs(expression), new Dictionary<string, int>(), Empty);
 
         inferredType.Should().BeOfType<TypeInference.InferredType.RecordType>();
 
@@ -127,7 +128,7 @@ public class TypeInferenceRecordTests
                 ["g"] = 5,
             };
 
-        var inferredType = TypeInference.InferExpressionType(expression, parameterNames, Empty);
+        var inferredType = TypeInference.InferExpressionType(Abs(expression), parameterNames, Empty);
 
         inferredType.Should().BeOfType<TypeInference.InferredType.RecordType>();
 
@@ -162,7 +163,7 @@ public class TypeInferenceRecordTests
         // Constraints flow to parameters in a single scan as well.
         var paramTypes =
             TypeInference.InferParameterTypesFromUsage(
-                expression,
+                Abs(expression),
                 parameterNames,
                 new Dictionary<string, TypeInference.InferredType>());
 
@@ -209,7 +210,7 @@ public class TypeInferenceRecordTests
 
         var parameterNames = new Dictionary<string, int> { ["s"] = 0, ["b"] = 1 };
 
-        var inferredType = TypeInference.InferExpressionType(expression, parameterNames, Empty);
+        var inferredType = TypeInference.InferExpressionType(Abs(expression), parameterNames, Empty);
 
         inferredType.Should().BeOfType<TypeInference.InferredType.RecordType>();
 
@@ -291,7 +292,7 @@ public class TypeInferenceRecordTests
 
         var paramTypes =
             TypeInference.InferParameterTypesFromUsage(
-                expression,
+                Abs(expression),
                 parameterNames: new Dictionary<string, int> { ["r"] = 0 },
                 functionSignatures: new Dictionary<string, TypeInference.InferredType>());
 
@@ -339,7 +340,7 @@ public class TypeInferenceRecordTests
 
         var paramTypes =
             TypeInference.InferParameterTypesFromUsage(
-                expression,
+                Abs(expression),
                 parameterNames: new Dictionary<string, int> { ["r"] = 0 },
                 functionSignatures: new Dictionary<string, TypeInference.InferredType>());
 
@@ -387,7 +388,7 @@ public class TypeInferenceRecordTests
 
         var paramTypes =
             TypeInference.InferParameterTypesFromUsage(
-                expression,
+                Abs(expression),
                 parameterNames: new Dictionary<string, int> { ["deadEnd"] = 0, ["offset"] = 1 },
                 functionSignatures: new Dictionary<string, TypeInference.InferredType>());
 
@@ -434,7 +435,7 @@ public class TypeInferenceRecordTests
 
         var paramTypes =
             TypeInference.InferParameterTypesFromUsage(
-                expression,
+                Abs(expression),
                 parameterNames:
                 new Dictionary<string, int> { ["configBefore"] = 0, ["b"] = 1 },
                 functionSignatures: new Dictionary<string, TypeInference.InferredType>());
@@ -471,7 +472,7 @@ public class TypeInferenceRecordTests
 
         var parameterNames = new Dictionary<string, int> { ["src"] = 0 };
 
-        var inferredType = TypeInference.InferExpressionType(expression, parameterNames, Empty);
+        var inferredType = TypeInference.InferExpressionType(Abs(expression), parameterNames, Empty);
         inferredType.Should().BeOfType<TypeInference.InferredType.RecordType>();
 
         var rec = (TypeInference.InferredType.RecordType)inferredType;
@@ -484,7 +485,7 @@ public class TypeInferenceRecordTests
 
         var paramTypes =
             TypeInference.InferParameterTypesFromUsage(
-                expression,
+                Abs(expression),
                 parameterNames,
                 new Dictionary<string, TypeInference.InferredType>());
 
@@ -515,7 +516,7 @@ public class TypeInferenceRecordTests
 
         var inferredType =
             TypeInference.InferExpressionType(
-                expression,
+                Abs(expression),
                 new Dictionary<string, int> { ["node"] = 0 },
                 Empty);
 
@@ -524,7 +525,7 @@ public class TypeInferenceRecordTests
 
         var paramTypes =
             TypeInference.InferParameterTypesFromUsage(
-                expression,
+                Abs(expression),
                 parameterNames: new Dictionary<string, int> { ["node"] = 0 },
                 functionSignatures: new Dictionary<string, TypeInference.InferredType>());
 
@@ -566,7 +567,7 @@ public class TypeInferenceRecordTests
 
         var paramTypes =
             TypeInference.InferParameterTypesFromUsage(
-                expression,
+                Abs(expression),
                 parameterNames:
                 new Dictionary<string, int> { ["stack"] = 0, ["newItem"] = 1 },
                 functionSignatures: new Dictionary<string, TypeInference.InferredType>());

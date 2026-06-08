@@ -210,7 +210,7 @@ public static class ConvertFromConcrete
             recordField.FieldName.Value,
             FromTypeAnnotation(recordField.FieldType.Value));
 
-    private static FunctionStruct FromFunctionStruct(SyntaxModel.FunctionStruct functionStruct) =>
+    public static FunctionStruct FromFunctionStruct(SyntaxModel.FunctionStruct functionStruct) =>
         new(
             functionStruct.Signature is { } signature
             ?

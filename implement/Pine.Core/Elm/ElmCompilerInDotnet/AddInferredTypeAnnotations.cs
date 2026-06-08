@@ -158,7 +158,11 @@ public class AddInferredTypeAnnotations
 
             canonicalizedFilesByModuleName[moduleNameStr] = canonicalizedFile;
 
-            var moduleSignatures = TypeInference.BuildFunctionSignaturesMap(canonicalizedFile, moduleNameStr);
+            var moduleSignatures =
+                TypeInference.BuildFunctionSignaturesMap(
+                    ElmSyntaxAbstractConversion.FromFile(canonicalizedFile),
+                    moduleNameStr);
+
             allSignatures = allSignatures.SetItems(moduleSignatures);
         }
 
@@ -257,8 +261,8 @@ public class AddInferredTypeAnnotations
                 // Use TypeInference to infer the function type
                 var (returnType, parameterTypes) =
                     TypeInference.InferFunctionDeclarationType(
-                        abstractExpression.Value,
-                        abstractArguments,
+                        ElmSyntaxAbstractConversion.FromExpression(abstractExpression.Value),
+                        [.. abstractArguments.Select(arg => ElmSyntaxAbstractConversion.FromPattern(arg.Value))],
                         moduleName,
                         functionSignatures);
 
@@ -267,7 +271,7 @@ public class AddInferredTypeAnnotations
                     // Build the full function type using TypeInference
                     var fullType =
                         TypeInference.BuildFunctionType(
-                            abstractArguments,
+                            [.. abstractArguments.Select(arg => ElmSyntaxAbstractConversion.FromPattern(arg.Value))],
                             parameterTypes,
                             returnType);
 
@@ -346,8 +350,12 @@ public class AddInferredTypeAnnotations
                         // Use TypeInference to infer the type of the local declaration
                         var (returnType, parameterTypes) =
                             TypeInference.InferFunctionDeclarationType(
-                                letFunc.Function.Declaration.Value.Expression.Value,
-                                letFunc.Function.Declaration.Value.Arguments,
+                                ElmSyntaxAbstractConversion.FromExpression(
+                                    letFunc.Function.Declaration.Value.Expression.Value),
+                                [
+                                .. letFunc.Function.Declaration.Value.Arguments.Select(
+                                    arg => ElmSyntaxAbstractConversion.FromPattern(arg.Value))
+                                ],
                                 moduleName,
                                 functionSignatures);
 
@@ -356,7 +364,10 @@ public class AddInferredTypeAnnotations
                             // Build the full function type using TypeInference
                             var fullType =
                                 TypeInference.BuildFunctionType(
-                                    letFunc.Function.Declaration.Value.Arguments,
+                                    [
+                                    .. letFunc.Function.Declaration.Value.Arguments.Select(
+                                        arg => ElmSyntaxAbstractConversion.FromPattern(arg.Value))
+                                    ],
                                     parameterTypes,
                                     returnType);
 

@@ -64,7 +64,13 @@ public static class BuiltinOperatorLowering
     {
         var functionTypes = BuildFunctionTypes(declarations);
         var aliasTypes = BuildAliasTypes(declarations);
-        var choiceTypeDefinitions = TypeInference.BuildChoiceTypeDefinitions(declarations);
+
+        var choiceTypeDefinitions =
+            TypeInference.BuildChoiceTypeDefinitions(
+                declarations.ToImmutableDictionary(
+                    kvp => kvp.Key,
+                    kvp => ElmSyntaxAbstractConversion.FromDeclaration(kvp.Value)));
+
         var functionSignatures = BuildFunctionSignatures(declarations);
 
         var resultBuilder =
@@ -106,8 +112,8 @@ public static class BuiltinOperatorLowering
 
         var inferred =
             TypeInference.InferFunctionDeclarationType(
-                implementation.Expression.Value,
-                implementation.Arguments,
+                ElmSyntaxAbstractConversion.FromExpression(implementation.Expression.Value),
+                [.. implementation.Arguments.Select(arg => ElmSyntaxAbstractConversion.FromPattern(arg.Value))],
                 moduleName,
                 functionSignatures);
 
@@ -131,7 +137,7 @@ public static class BuiltinOperatorLowering
                 FunctionSignatures: functionSignatures);
 
         var expectedReturnType =
-            TypeInference.GetFunctionReturnType(functionDeclaration.Function) is { } explicitReturnType &&
+            TypeInference.GetFunctionReturnType(ElmSyntaxAbstractConversion.FromFunctionStruct(functionDeclaration.Function)) is { } explicitReturnType &&
             explicitReturnType is not TypeInference.InferredType.UnknownType
             ?
             explicitReturnType
@@ -301,7 +307,7 @@ public static class BuiltinOperatorLowering
         {
             var leftType =
                 TypeInference.InferExpressionType(
-                    rewrittenArguments[1].Value,
+                    ElmSyntaxAbstractConversion.FromExpression(rewrittenArguments[1].Value),
                     context.ParameterNames,
                     context.ParameterTypes,
                     context.LocalBindingTypes,
@@ -310,7 +316,7 @@ public static class BuiltinOperatorLowering
 
             var rightType =
                 TypeInference.InferExpressionType(
-                    rewrittenArguments[2].Value,
+                    ElmSyntaxAbstractConversion.FromExpression(rewrittenArguments[2].Value),
                     context.ParameterNames,
                     context.ParameterTypes,
                     context.LocalBindingTypes,
@@ -544,7 +550,8 @@ public static class BuiltinOperatorLowering
                         var implementation = letFunction.Function.Declaration.Value;
 
                         localBindingTypes[implementation.Name.Value] =
-                            TypeInference.BuildFunctionTypeFromSignatureOrNull(letFunction.Function)
+                            TypeInference.BuildFunctionTypeFromSignatureOrNull(
+                                ElmSyntaxAbstractConversion.FromFunctionStruct(letFunction.Function))
                             ??
                             BuildInferredFunctionType(
                                 implementation.Expression.Value,
@@ -560,7 +567,7 @@ public static class BuiltinOperatorLowering
 
                     localBindingTypes[varPattern.Name] =
                         TypeInference.InferExpressionType(
-                            letDestructuring.Expression.Value,
+                            ElmSyntaxAbstractConversion.FromExpression(letDestructuring.Expression.Value),
                             context.ParameterNames,
                             context.ParameterTypes,
                             localBindingTypes.ToImmutable(),
@@ -615,8 +622,8 @@ public static class BuiltinOperatorLowering
 
         var inferred =
             TypeInference.InferFunctionDeclarationType(
-                implementation.Expression.Value,
-                implementation.Arguments,
+                ElmSyntaxAbstractConversion.FromExpression(implementation.Expression.Value),
+                [.. implementation.Arguments.Select(arg => ElmSyntaxAbstractConversion.FromPattern(arg.Value))],
                 context.CurrentModuleName,
                 context.FunctionSignatures);
 
@@ -635,7 +642,7 @@ public static class BuiltinOperatorLowering
             };
 
         var expectedReturnType =
-            TypeInference.GetFunctionReturnType(letFunction.Function) is { } explicitReturnType &&
+            TypeInference.GetFunctionReturnType(ElmSyntaxAbstractConversion.FromFunctionStruct(letFunction.Function)) is { } explicitReturnType &&
             explicitReturnType is not TypeInference.InferredType.UnknownType
             ?
             explicitReturnType
@@ -663,8 +670,8 @@ public static class BuiltinOperatorLowering
     {
         var inferred =
             TypeInference.InferFunctionDeclarationType(
-                lambda.Expression.Value,
-                lambda.Arguments,
+                ElmSyntaxAbstractConversion.FromExpression(lambda.Expression.Value),
+                [.. lambda.Arguments.Select(arg => ElmSyntaxAbstractConversion.FromPattern(arg.Value))],
                 context.CurrentModuleName,
                 context.FunctionSignatures);
 
@@ -1151,8 +1158,10 @@ public static class BuiltinOperatorLowering
 
                 result[QualifiedNameHelper.ToQualifiedNameRef(key.Namespaces, functionName)] =
                     new FunctionTypeInfo(
-                        TypeInference.GetFunctionReturnType(declaration),
-                        TypeInference.GetFunctionParameterTypes(declaration));
+                        TypeInference.GetFunctionReturnType(
+                            (ElmSyntax.ElmSyntaxAbstract.Declaration.FunctionDeclaration)ElmSyntaxAbstractConversion.FromDeclaration(declaration)),
+                        TypeInference.GetFunctionParameterTypes(
+                            (ElmSyntax.ElmSyntaxAbstract.Declaration.FunctionDeclaration)ElmSyntaxAbstractConversion.FromDeclaration(declaration)));
             }
         }
 
@@ -1169,7 +1178,8 @@ public static class BuiltinOperatorLowering
             if (decl is SyntaxTypes.Declaration.AliasDeclaration declaration)
             {
                 result[QualifiedNameHelper.ToQualifiedNameRef(key.Namespaces, declaration.TypeAlias.Name.Value)] =
-                    TypeInference.TypeAnnotationToInferredType(declaration.TypeAlias.TypeAnnotation.Value);
+                    TypeInference.TypeAnnotationToInferredType(
+                        ElmSyntaxAbstractConversion.FromTypeAnnotation(declaration.TypeAlias.TypeAnnotation.Value));
             }
         }
 
@@ -1185,7 +1195,10 @@ public static class BuiltinOperatorLowering
         {
             var moduleNameString = string.Join(".", key.Namespaces);
 
-            TypeInference.CollectFunctionSignaturesFromDeclaration(decl, moduleNameString, builder);
+            TypeInference.CollectFunctionSignaturesFromDeclaration(
+                ElmSyntaxAbstractConversion.FromDeclaration(decl),
+                moduleNameString,
+                builder);
         }
 
         return builder.ToImmutable();
@@ -1307,14 +1320,14 @@ public static class BuiltinOperatorLowering
     {
         var inferred =
             TypeInference.InferFunctionDeclarationType(
-                expression,
-                arguments,
+                ElmSyntaxAbstractConversion.FromExpression(expression),
+                [.. arguments.Select(arg => ElmSyntaxAbstractConversion.FromPattern(arg.Value))],
                 moduleName,
                 functionSignatures);
 
         return
             TypeInference.BuildFunctionType(
-                arguments,
+                [.. arguments.Select(arg => ElmSyntaxAbstractConversion.FromPattern(arg.Value))],
                 inferred.parameterTypes,
                 inferred.returnType);
     }
@@ -1322,7 +1335,8 @@ public static class BuiltinOperatorLowering
     private static ImmutableDictionary<string, TypeInference.InferredType> BuildExplicitParameterTypes(
         SyntaxTypes.FunctionStruct function)
     {
-        var annotatedParameterTypes = TypeInference.GetFunctionParameterTypes(function);
+        var annotatedParameterTypes =
+            TypeInference.GetFunctionParameterTypes(ElmSyntaxAbstractConversion.FromFunctionStruct(function));
 
         if (annotatedParameterTypes.Count is 0)
             return [];

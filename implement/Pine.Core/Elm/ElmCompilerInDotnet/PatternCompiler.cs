@@ -4,7 +4,7 @@ using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
 
-using SyntaxTypes = Pine.Core.Elm.ElmSyntax.Stil4mElmSyntax7;
+using SyntaxTypes = Pine.Core.Elm.ElmSyntax.ElmSyntaxAbstract;
 using SyntaxModelTypes = Pine.Core.Elm.ElmSyntax.SyntaxModel;
 
 namespace Pine.Core.Elm.ElmCompilerInDotnet;
@@ -64,10 +64,10 @@ public class PatternCompiler
     /// Compiles a case expression to a Pine expression.
     /// </summary>
     public static Result<CompilationError, Expression> CompileCaseExpression(
-        SyntaxTypes.CaseBlock caseBlock,
+        SyntaxTypes.Expression.CaseExpression caseExpression,
         ExpressionCompilationContext context)
     {
-        var scrutineeResult = ExpressionCompiler.Compile(caseBlock.Expression.Value, context);
+        var scrutineeResult = ExpressionCompiler.Compile(caseExpression.Expression, context);
 
         if (scrutineeResult.IsErrOrNull() is { } scrutineeErr)
         {
@@ -83,14 +83,14 @@ public class PatternCompiler
         // Infer the type of the scrutinee for pattern type extraction
         var scrutineeType =
             TypeInference.InferExpressionType(
-                caseBlock.Expression.Value,
+                caseExpression.Expression,
                 context.ParameterNames,
                 context.ParameterTypes,
                 context.LocalBindingTypes,
                 context.CurrentModuleName,
                 context.FunctionTypes);
 
-        return CompileCaseBlock(scrutinee, scrutineeType, caseBlock.Cases, context);
+        return CompileCaseBlock(scrutinee, scrutineeType, caseExpression.Cases, context);
     }
 
     /// <summary>
@@ -181,7 +181,7 @@ public class PatternCompiler
         for (var i = cases.Count - 1; i >= 0; i--)
         {
             var caseItem = cases[i];
-            var pattern = caseItem.Pattern.Value;
+            var pattern = caseItem.Pattern;
 
             var patternBindings =
                 ExtractPatternBindings(
@@ -223,7 +223,7 @@ public class PatternCompiler
                     caseContext.WithReplacedLocalBindingsAndTypes(caseContext.LocalBindings, mergedBindingTypes);
             }
 
-            var caseBodyResult = ExpressionCompiler.Compile(caseItem.Expression.Value, caseContext);
+            var caseBodyResult = ExpressionCompiler.Compile(caseItem.Expression, caseContext);
 
             if (caseBodyResult.IsErrOrNull() is { } caseErr)
             {
@@ -277,9 +277,20 @@ public class PatternCompiler
         {
             var caseItem = cases[caseIndex];
 
+            var caseExpressionRefs = new HashSet<string>();
+            ExpressionCompiler.CollectExpressionReferences(caseItem.Expression, caseExpressionRefs);
+
+            var casePatternNames = new HashSet<string>();
+            CollectPatternNames(caseItem.Pattern, casePatternNames);
+
             bindingsNames =
                 bindingsNames.Union(
-                    SyntaxTypes.SyntaxAnalysis.CollectRemainingFreeVariables(caseItem));
+                    caseExpressionRefs
+                    .Except(casePatternNames)
+                    .Where(
+                        name =>
+                        outerContext.ParameterNames.ContainsKey(name) ||
+                        (outerContext.LocalBindings?.ContainsKey(name) ?? false)));
         }
 
         var bindingsNamesSorted =
@@ -349,7 +360,7 @@ public class PatternCompiler
         for (var i = cases.Count - 1; i >= 0; i--)
         {
             var caseItem = cases[i];
-            var pattern = caseItem.Pattern.Value;
+            var pattern = caseItem.Pattern;
 
             var patternBindings =
                 ExtractPatternBindings(
@@ -391,7 +402,7 @@ public class PatternCompiler
                     caseContext.WithReplacedLocalBindingsAndTypes(caseContext.LocalBindings, mergedBindingTypes);
             }
 
-            var caseBodyResult = ExpressionCompiler.Compile(caseItem.Expression.Value, caseContext);
+            var caseBodyResult = ExpressionCompiler.Compile(caseItem.Expression, caseContext);
 
             if (caseBodyResult.IsErrOrNull() is { } caseErr)
             {
@@ -511,24 +522,10 @@ public class PatternCompiler
             SyntaxTypes.Pattern.VarPattern varPattern =>
             PatternAnalysis.WithBinding(varPattern.Name, scrutinee),
 
-            SyntaxTypes.Pattern.ParenthesizedPattern parenthesized =>
-            AnalyzePatternRecursive(
-                parenthesized.Pattern.Value,
-                scrutinee,
-                scrutineeType,
-                recordTypeAliasFields,
-                choiceTagArgumentTypes,
-                topLevelRecordFieldNamesOverride),
-
             SyntaxTypes.Pattern.IntPattern intPattern =>
             PatternAnalysis.WithCondition(
                 new PatternCondition.ValueEquals(
                     Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(intPattern.Value)))),
-
-            SyntaxTypes.Pattern.HexPattern hexPattern =>
-            PatternAnalysis.WithCondition(
-                new PatternCondition.ValueEquals(
-                    Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(hexPattern.Value)))),
 
             SyntaxTypes.Pattern.CharPattern charPattern =>
             PatternAnalysis.WithCondition(
@@ -617,7 +614,7 @@ public class PatternCompiler
 
         for (var i = 0; i < listPattern.Elements.Count; i++)
         {
-            var elementPattern = listPattern.Elements[i].Value;
+            var elementPattern = listPattern.Elements[i];
             var elementExpr = GetListElementExpression(scrutinee, i);
 
             var elementAnalysis =
@@ -672,7 +669,7 @@ public class PatternCompiler
 
         var headAnalysis =
             AnalyzePatternRecursive(
-                unConsPattern.Head.Value,
+                unConsPattern.Head,
                 headExpr,
                 elementType,
                 recordTypeAliasFields,
@@ -680,7 +677,7 @@ public class PatternCompiler
 
         var tailAnalysis =
             AnalyzePatternRecursive(
-                unConsPattern.Tail.Value,
+                unConsPattern.Tail,
                 tailExpr,
                 scrutineeType,
                 recordTypeAliasFields,
@@ -754,7 +751,7 @@ public class PatternCompiler
 
         for (var i = 0; i < tuplePattern.Elements.Count; i++)
         {
-            var elementPattern = tuplePattern.Elements[i].Value;
+            var elementPattern = tuplePattern.Elements[i];
             var elementExpr = GetListElementExpression(scrutinee, i);
 
             var elementType =
@@ -853,7 +850,7 @@ public class PatternCompiler
 
             for (var i = 0; i < namedPattern.Arguments.Count; i++)
             {
-                var argPattern = namedPattern.Arguments[i].Value;
+                var argPattern = namedPattern.Arguments[i];
                 var argExpr = GetListElementExpression(argsListExpr, i);
 
                 var argType =
@@ -934,7 +931,7 @@ public class PatternCompiler
 
             foreach (var fieldNode in recordPattern.Fields)
             {
-                var fieldName = fieldNode.Value;
+                var fieldName = fieldNode.FieldName;
 
                 if (!fieldNameToIndex.TryGetValue(fieldName, out var indexInRecord))
                 {
@@ -963,7 +960,7 @@ public class PatternCompiler
         // declaration has no type annotation.
         foreach (var fieldNode in recordPattern.Fields)
         {
-            var fieldName = fieldNode.Value;
+            var fieldName = fieldNode.FieldName;
 
             var lookupEnv =
                 Expression.ListInstance(
@@ -994,7 +991,7 @@ public class PatternCompiler
         // First, analyze the inner pattern
         var innerAnalysis =
             AnalyzePatternRecursive(
-                asPattern.Pattern.Value,
+                asPattern.Pattern,
                 scrutinee,
                 scrutineeType,
                 recordTypeAliasFields,
@@ -1002,7 +999,7 @@ public class PatternCompiler
                 topLevelRecordFieldNamesOverride);
 
         // Add the "as" binding - this binds the entire scrutinee to the alias name
-        var bindings = innerAnalysis.Bindings.Add(asPattern.Name.Value, scrutinee);
+        var bindings = innerAnalysis.Bindings.Add(asPattern.Name, scrutinee);
 
         return new PatternAnalysis(bindings, innerAnalysis.Condition);
     }
@@ -1217,17 +1214,11 @@ public class PatternCompiler
             SyntaxTypes.Pattern.IntPattern intPattern =>
             IntegerEncoding.EncodeSignedInteger(intPattern.Value),
 
-            SyntaxTypes.Pattern.HexPattern hexPattern =>
-            IntegerEncoding.EncodeSignedInteger(hexPattern.Value),
-
             SyntaxTypes.Pattern.CharPattern charPattern =>
             ElmValueEncoding.ElmCharAsPineValue(charPattern.Value),
 
             SyntaxTypes.Pattern.StringPattern stringPattern =>
             ElmValueEncoding.StringAsPineValue(stringPattern.Value),
-
-            SyntaxTypes.Pattern.ParenthesizedPattern p =>
-            AsConstantPattern(p.Pattern.Value),
 
             SyntaxTypes.Pattern.AllPattern =>
             null, // Wildcard pattern contains no constant value
@@ -1268,7 +1259,7 @@ public class PatternCompiler
 
         for (var i = 0; i < listPattern.Elements.Count; i++)
         {
-            var elementValue = AsConstantPattern(listPattern.Elements[i].Value);
+            var elementValue = AsConstantPattern(listPattern.Elements[i]);
 
             if (elementValue is null)
                 return null;
@@ -1285,7 +1276,7 @@ public class PatternCompiler
 
         for (var i = 0; i < tuplePattern.Elements.Count; i++)
         {
-            var elementValue = AsConstantPattern(tuplePattern.Elements[i].Value);
+            var elementValue = AsConstantPattern(tuplePattern.Elements[i]);
 
             if (elementValue is null)
                 return null;
@@ -1313,7 +1304,7 @@ public class PatternCompiler
 
         for (var i = 0; i < namedPattern.Arguments.Count; i++)
         {
-            var argValue = AsConstantPattern(namedPattern.Arguments[i].Value);
+            var argValue = AsConstantPattern(namedPattern.Arguments[i]);
 
             if (argValue is null)
                 return null;
@@ -1340,37 +1331,33 @@ public class PatternCompiler
             case SyntaxTypes.Pattern.TuplePattern tuplePattern:
                 foreach (var elem in tuplePattern.Elements)
                 {
-                    CollectPatternNames(elem.Value, names);
+                    CollectPatternNames(elem, names);
                 }
 
-                break;
-
-            case SyntaxTypes.Pattern.ParenthesizedPattern parenthesized:
-                CollectPatternNames(parenthesized.Pattern.Value, names);
                 break;
 
             case SyntaxTypes.Pattern.ListPattern listPattern:
                 foreach (var elem in listPattern.Elements)
                 {
-                    CollectPatternNames(elem.Value, names);
+                    CollectPatternNames(elem, names);
                 }
 
                 break;
 
             case SyntaxTypes.Pattern.UnConsPattern unConsPattern:
-                CollectPatternNames(unConsPattern.Head.Value, names);
-                CollectPatternNames(unConsPattern.Tail.Value, names);
+                CollectPatternNames(unConsPattern.Head, names);
+                CollectPatternNames(unConsPattern.Tail, names);
                 break;
 
             case SyntaxTypes.Pattern.AsPattern asPattern:
-                names.Add(asPattern.Name.Value);
-                CollectPatternNames(asPattern.Pattern.Value, names);
+                names.Add(asPattern.Name);
+                CollectPatternNames(asPattern.Pattern, names);
                 break;
 
             case SyntaxTypes.Pattern.NamedPattern namedPattern:
                 foreach (var arg in namedPattern.Arguments)
                 {
-                    CollectPatternNames(arg.Value, names);
+                    CollectPatternNames(arg, names);
                 }
 
                 break;
@@ -1378,7 +1365,7 @@ public class PatternCompiler
             case SyntaxTypes.Pattern.RecordPattern recordPattern:
                 foreach (var field in recordPattern.Fields)
                 {
-                    names.Add(field.Value);
+                    names.Add(field.FieldName);
                 }
 
                 break;

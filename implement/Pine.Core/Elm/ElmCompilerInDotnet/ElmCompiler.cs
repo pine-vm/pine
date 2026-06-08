@@ -10,6 +10,7 @@ using System.Text;
 
 using SyntaxModelTypes = Pine.Core.Elm.ElmSyntax.SyntaxModel;
 using SyntaxTypes = Pine.Core.Elm.ElmSyntax.Stil4mElmSyntax7;
+using AbstractSyntaxTypes = Pine.Core.Elm.ElmSyntax.ElmSyntaxAbstract;
 
 namespace Pine.Core.Elm.ElmCompilerInDotnet;
 
@@ -893,10 +894,18 @@ public class ElmCompiler
             }
         }
 
+        var abstractAllFunctions =
+            allFunctions.ToDictionary(
+                kvp => kvp.Key,
+                kvp =>
+                (kvp.Value.moduleName,
+                kvp.Value.functionName,
+                (AbstractSyntaxTypes.Declaration.FunctionDeclaration)ElmSyntaxAbstractConversion.FromDeclaration(kvp.Value.declaration)));
+
         // Build function type metadata dictionary for type inference
         var functionTypes = new Dictionary<SyntaxModelTypes.QualifiedNameRef, FunctionTypeInfo>();
 
-        foreach (var (qualifiedName, (_, _, declaration)) in allFunctions)
+        foreach (var (qualifiedName, (_, _, declaration)) in abstractAllFunctions)
         {
             functionTypes[qualifiedName] =
                 new FunctionTypeInfo(
@@ -934,7 +943,10 @@ public class ElmCompiler
 
                     foreach (var argNode in ctor.Arguments)
                     {
-                        var argType = TypeInference.TypeAnnotationToInferredType(argNode.Value);
+                        var argType =
+                            TypeInference.TypeAnnotationToInferredType(
+                                ElmSyntaxAbstractConversion.FromTypeAnnotation(argNode.Value));
+
                         argTypes.Add(argType);
                     }
 
@@ -981,7 +993,7 @@ public class ElmCompiler
         // Create initial compilation context with all available functions
         var initialContext =
             new ModuleCompilationContext(
-                allFunctions,
+                abstractAllFunctions,
                 CompiledFunctionsCache: [],
                 PineKernelModuleNames: s_pineKernelModuleNamesDefault,
                 FunctionTypes: functionTypes,
@@ -1516,8 +1528,8 @@ public class ElmCompiler
 
             var declaration = funcInfo.declaration;
             var moduleName = funcInfo.moduleName;
-            var functionBody = declaration.Function.Declaration.Value.Expression.Value;
-            var arguments = declaration.Function.Declaration.Value.Arguments;
+            var functionBody = declaration.Function.Declaration.Expression;
+            var arguments = declaration.Function.Declaration.Arguments;
             var paramCount = arguments.Count;
 
             // Build parameter mappings
@@ -1532,26 +1544,26 @@ public class ElmCompiler
             var parameterTypesByIndex = new TypeInference.InferredType?[arguments.Count];
 
             {
-                if (declaration.Function.Signature?.Value is { } sig)
+                if (declaration.Function.Signature is { } sig)
                 {
-                    var currentType = sig.TypeAnnotation.Value;
+                    var currentType = sig.TypeAnnotation;
 
                     for (var pi = 0; pi < arguments.Count
-                        && currentType is SyntaxTypes.TypeAnnotation.FunctionTypeAnnotation funcType; pi++)
+                        && currentType is AbstractSyntaxTypes.TypeAnnotation.FunctionTypeAnnotation funcType; pi++)
                     {
                         parameterTypesByIndex[pi] =
-                            TypeInference.TypeAnnotationToInferredType(funcType.ArgumentType.Value);
+                            TypeInference.TypeAnnotationToInferredType(funcType.ArgumentType);
 
-                        currentType = funcType.ReturnType.Value;
+                        currentType = funcType.ReturnType;
                     }
                 }
             }
 
             for (var i = 0; i < arguments.Count; i++)
             {
-                var argPattern = arguments[i].Value;
+                var argPattern = arguments[i];
 
-                if (argPattern is SyntaxTypes.Pattern.VarPattern varPattern)
+                if (argPattern is AbstractSyntaxTypes.Pattern.VarPattern varPattern)
                 {
                     parameterNames[varPattern.Name] = i;
                 }
@@ -1588,7 +1600,7 @@ public class ElmCompiler
                     ParameterNames: parameterNames,
                     ParameterTypes: parameterTypes,
                     CurrentModuleName: moduleName,
-                    CurrentFunctionName: declaration.Function.Declaration.Value.Name.Value,
+                    CurrentFunctionName: declaration.Function.Declaration.Name,
                     LocalBindings: localBindings.Count > 0 ? localBindings : null,
                     LocalBindingTypes: null,
                     DependencyLayout: sharedLayout,
@@ -1892,35 +1904,35 @@ public class ElmCompiler
     }
 
     private static ImmutableDictionary<string, TypeInference.InferredType> ExtractParameterTypes(
-        SyntaxTypes.FunctionStruct function,
+        AbstractSyntaxTypes.FunctionStruct function,
         IReadOnlyDictionary<SyntaxModelTypes.QualifiedNameRef, IReadOnlyList<TypeInference.InferredType>>? constructorArgumentTypes,
         IReadOnlyDictionary<SyntaxModelTypes.QualifiedNameRef, FunctionTypeInfo>? functionTypes,
         string currentModuleName)
     {
         var parameterTypes = ImmutableDictionary<string, TypeInference.InferredType>.Empty;
 
-        if (function.Signature?.Value is { } signature)
+        if (function.Signature is { } signature)
         {
-            var typeAnnotation = signature.TypeAnnotation.Value;
-            var parameters = function.Declaration.Value.Arguments;
+            var typeAnnotation = signature.TypeAnnotation;
+            var parameters = function.Declaration.Arguments;
 
             // Walk through the function type annotation to extract parameter types
             var currentType = typeAnnotation;
 
             var paramIndex = 0;
 
-            while (currentType is SyntaxTypes.TypeAnnotation.FunctionTypeAnnotation funcType &&
+            while (currentType is AbstractSyntaxTypes.TypeAnnotation.FunctionTypeAnnotation funcType &&
                 paramIndex < parameters.Count)
             {
-                var paramPattern = parameters[paramIndex].Value;
-                var paramTypeAnnotation = funcType.ArgumentType.Value;
+                var paramPattern = parameters[paramIndex];
+                var paramTypeAnnotation = funcType.ArgumentType;
 
                 // Extract binding types from the pattern
                 // This handles both simple VarPattern and complex patterns like TuplePattern
                 parameterTypes =
                     TypeInference.ExtractPatternBindingTypes(paramPattern, paramTypeAnnotation, parameterTypes);
 
-                currentType = funcType.ReturnType.Value;
+                currentType = funcType.ReturnType;
                 paramIndex++;
             }
         }
@@ -1929,20 +1941,20 @@ public class ElmCompiler
         // This handles cases where the function has no type signature but uses choice type patterns
         if (constructorArgumentTypes is not null)
         {
-            var parameters = function.Declaration.Value.Arguments;
+            var parameters = function.Declaration.Arguments;
 
             foreach (var paramNode in parameters)
             {
                 parameterTypes =
                     TypeInference.ExtractPatternBindingTypesWithConstructors(
-                        paramNode.Value,
+                        paramNode,
                         constructorArgumentTypes,
                         parameterTypes);
             }
 
             // Also analyze the function body for tag applications that constrain parameter types
             // For example, in `alfa a b = let c = TagAlfa a in ...`, we infer that `a` is Int
-            var functionBody = function.Declaration.Value.Expression.Value;
+            var functionBody = function.Declaration.Expression;
 
             parameterTypes =
                 TypeInference.ExtractTypeConstraintsFromTagApplications(
@@ -1955,7 +1967,7 @@ public class ElmCompiler
         // For example, in `beta a b = let c = alfa a in ...` where `alfa : Int -> String`, we infer that `a` is Int
         if (functionTypes is not null)
         {
-            var functionBody = function.Declaration.Value.Expression.Value;
+            var functionBody = function.Declaration.Expression;
 
             parameterTypes =
                 TypeInference.ExtractTypeConstraintsFromFunctionApplications(

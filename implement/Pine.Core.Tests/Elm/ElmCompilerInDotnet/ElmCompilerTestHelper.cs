@@ -4,6 +4,7 @@ using Pine.Core.Elm.ElmSyntax;
 using Pine.Core.Elm.ElmSyntax.Stil4mElmSyntax7;
 using Pine.Core.Elm.ElmSyntax.SyntaxModel;
 using Pine.Core.Interpreter.IntermediateVM;
+using Pine.Core.Tests.Elm.ElmCompilerInDotnet.ElmCompilerTests;
 using Pine.Core.Tests.Elm.ElmCompilerTests;
 using System;
 using System.Collections.Frozen;
@@ -628,7 +629,9 @@ public class ElmCompilerTestHelper
         var abstractFile = FromFullSyntaxModel.Convert(parsedFile);
 
         // Build a map of function signatures from the file using TypeInference
-        var functionSignatures = TypeInference.BuildFunctionSignaturesMap(abstractFile, moduleNameStr);
+        var functionSignatures =
+            TypeInference.BuildFunctionSignaturesMap(
+                AbstractSyntaxTestConversion.AbsFile(abstractFile), moduleNameStr);
 
         // Find the declaration
         foreach (var declaration in parsedFile.Declarations)
@@ -658,15 +661,15 @@ public class ElmCompilerTestHelper
                 // Use TypeInference to infer the function type
                 var (returnType, parameterTypes) =
                     TypeInference.InferFunctionDeclarationType(
-                        abstractExpression.Value,
-                        abstractArguments,
+                        AbstractSyntaxTestConversion.Abs(abstractExpression.Value),
+                        AbstractSyntaxTestConversion.AbsPatterns(abstractArguments),
                         moduleNameStr,
                         functionSignatures);
 
                 // Build the full function type using TypeInference
                 return
                     TypeInference.BuildFunctionType(
-                        abstractArguments,
+                        AbstractSyntaxTestConversion.AbsPatterns(abstractArguments),
                         parameterTypes,
                         returnType);
             }

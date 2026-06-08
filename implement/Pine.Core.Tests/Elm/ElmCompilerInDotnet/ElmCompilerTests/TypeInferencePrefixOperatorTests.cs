@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using Xunit;
 
 using SyntaxTypes = Pine.Core.Elm.ElmSyntax.Stil4mElmSyntax7;
+using static Pine.Core.Tests.Elm.ElmCompilerInDotnet.ElmCompilerTests.AbstractSyntaxTestConversion;
 
 namespace Pine.Core.Tests.Elm.ElmCompilerInDotnet.ElmCompilerTests;
 
@@ -26,7 +27,7 @@ public class TypeInferencePrefixOperatorTests
 
         var inferredType =
             TypeInference.InferExpressionType(
-                expression,
+                Abs(expression),
                 parameterNames: new Dictionary<string, int>(),
                 parameterTypes: new Dictionary<string, TypeInference.InferredType>());
 
@@ -43,7 +44,7 @@ public class TypeInferencePrefixOperatorTests
 
         var inferredType =
             TypeInference.InferExpressionType(
-                expression,
+                Abs(expression),
                 parameterNames: new Dictionary<string, int>(),
                 parameterTypes: new Dictionary<string, TypeInference.InferredType>());
 
@@ -60,7 +61,7 @@ public class TypeInferencePrefixOperatorTests
 
         var inferredType =
             TypeInference.InferExpressionType(
-                expression,
+                Abs(expression),
                 parameterNames: new Dictionary<string, int>(),
                 parameterTypes: new Dictionary<string, TypeInference.InferredType>());
 
@@ -77,7 +78,7 @@ public class TypeInferencePrefixOperatorTests
 
         var inferredType =
             TypeInference.InferExpressionType(
-                expression,
+                Abs(expression),
                 parameterNames: new Dictionary<string, int>(),
                 parameterTypes: new Dictionary<string, TypeInference.InferredType>());
 

@@ -7,6 +7,7 @@ using System.Linq;
 using Xunit;
 
 using SyntaxTypes = Pine.Core.Elm.ElmSyntax.Stil4mElmSyntax7;
+using static Pine.Core.Tests.Elm.ElmCompilerInDotnet.ElmCompilerTests.AbstractSyntaxTestConversion;
 
 namespace Pine.Core.Tests.Elm.ElmCompilerInDotnet.ElmCompilerTests;
 
@@ -55,7 +56,7 @@ public class TypeInferenceRecordPatternTests
 
         return
             TypeInference.InferParameterTypesFromUsage(
-                implementation.Expression.Value,
+                Abs(implementation.Expression.Value),
                 parameterNames: parameterNames,
                 functionSignatures: new Dictionary<string, TypeInference.InferredType>());
     }
