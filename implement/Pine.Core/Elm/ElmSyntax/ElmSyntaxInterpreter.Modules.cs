@@ -22,7 +22,7 @@ public partial class ElmSyntaxInterpreter
     /// Program code of an app prepared to run functions in the interpreter.
     /// </summary>
     public record Prepared(
-        IReadOnlyDictionary<DeclQualifiedName, SyntaxModel.Declaration> Declarations);
+        IReadOnlyDictionary<DeclQualifiedName, ElmSyntaxAbstract.Declaration> Declarations);
 
     /// <summary>
     /// Parses the supplied <paramref name="moduleSourceTexts"/> to qualify every reference in every module,
@@ -112,7 +112,7 @@ public partial class ElmSyntaxInterpreter
     }
 
     /// <summary>
-    /// As <see cref="PrepareModules(string, IReadOnlyList{string})"/>, but accepts
+    /// As <see cref="PrepareModules(IReadOnlyList{string})"/>, but accepts
     /// pre-parsed modules.
     /// </summary>
     public static Result<ElmInterpretationError, Prepared> PrepareModules(
@@ -154,29 +154,31 @@ public partial class ElmSyntaxInterpreter
         // Build a declarations dictionary keyed by full module-qualified name. For
         // InfixDeclaration entries, the key uses the operator symbol as DeclName (so
         // BuildInfixOperatorMap finds them).
-        var declarations = new Dictionary<DeclQualifiedName, SyntaxModel.Declaration>();
+        var declarations = new Dictionary<DeclQualifiedName, ElmSyntaxAbstract.Declaration>();
 
         foreach (var (moduleNameKey, (canonicalizedFile, errors, shadowings)) in canonicalized)
         {
             var fullModuleFile = Stil4mToFull.Convert(canonicalizedFile);
 
+            var abstractFile = ElmSyntaxAbstract.ConvertFromConcrete.FromFile(fullModuleFile);
+
             var moduleNameParts = moduleNameKey.ToList();
 
-            foreach (var declNode in fullModuleFile.Declarations)
+            foreach (var declNode in abstractFile.Declarations)
             {
-                if (declNode.Value is SyntaxModel.Declaration.InfixDeclaration infixDecl)
+                if (declNode is ElmSyntaxAbstract.Declaration.InfixDeclaration infixDecl)
                 {
-                    declarations[DeclQualifiedName.Create(moduleNameParts, infixDecl.Infix.Operator.Value)] = declNode.Value;
+                    declarations[DeclQualifiedName.Create(moduleNameParts, infixDecl.Infix.Operator)] = declNode;
 
                     continue;
                 }
 
-                var declName = DeclarationSimpleName(declNode.Value);
+                var declName = DeclarationSimpleName(declNode);
 
                 if (declName is null)
                     continue;
 
-                declarations[DeclQualifiedName.Create(moduleNameParts, declName)] = declNode.Value;
+                declarations[DeclQualifiedName.Create(moduleNameParts, declName)] = declNode;
             }
         }
 
@@ -197,17 +199,17 @@ public partial class ElmSyntaxInterpreter
     /// Returns the simple top-level name of <paramref name="declaration"/>, or null when
     /// the declaration kind does not carry such a name (e.g. infix or destructuring).
     /// </summary>
-    private static string? DeclarationSimpleName(SyntaxModel.Declaration declaration) =>
+    private static string? DeclarationSimpleName(ElmSyntaxAbstract.Declaration declaration) =>
         declaration switch
         {
-            SyntaxModel.Declaration.FunctionDeclaration functionDeclaration =>
-            functionDeclaration.Function.Declaration.Value.Name.Value,
+            ElmSyntaxAbstract.Declaration.FunctionDeclaration functionDeclaration =>
+            functionDeclaration.Function.Declaration.Name,
 
-            SyntaxModel.Declaration.AliasDeclaration aliasDeclaration =>
-            aliasDeclaration.TypeAlias.Name.Value,
+            ElmSyntaxAbstract.Declaration.AliasDeclaration aliasDeclaration =>
+            aliasDeclaration.TypeAlias.Name,
 
-            SyntaxModel.Declaration.ChoiceTypeDeclaration choiceTypeDeclaration =>
-            choiceTypeDeclaration.TypeDeclaration.Name.Value,
+            ElmSyntaxAbstract.Declaration.ChoiceTypeDeclaration choiceTypeDeclaration =>
+            choiceTypeDeclaration.TypeDeclaration.Name,
 
             _ =>
             null,

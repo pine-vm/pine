@@ -220,7 +220,7 @@ public partial class ElmSyntaxInterpreter
 
     /// <summary>
     /// Interprets <paramref name="rootExpressionText"/> using a resolver that combines
-    /// <see cref="PineBuiltinResolver(Application)"/> with <see cref="UserDefinedResolver(Application, IReadOnlyDictionary{DeclQualifiedName, SyntaxModel.Declaration})"/>
+    /// <see cref="PineBuiltinResolver(Application)"/> with <see cref="UserDefinedResolver(Application, IReadOnlyDictionary{DeclQualifiedName, ElmSyntaxAbstract.Declaration})"/>
     /// backed by the supplied <paramref name="prepared"/>.
     /// </summary>
     public static Result<ElmInterpretationError, ElmValue> InterpretAsElmValue(
@@ -500,16 +500,29 @@ public partial class ElmSyntaxInterpreter
     private static IReadOnlyDictionary<string, DeclQualifiedName> BuildInfixOperatorMap(
         IReadOnlyDictionary<DeclQualifiedName, SyntaxModel.Declaration> declarations)
     {
+        return BuildInfixOperatorMap(GetOrConvertDeclarations(declarations));
+    }
+
+    /// <summary>
+    /// Builds an operator-symbol → function-name map from any
+    /// <see cref="SyntaxModel.Declaration.InfixDeclaration"/> entries in
+    /// <paramref name="declarations"/>. The function name is materialized as a
+    /// <see cref="DeclQualifiedName"/> in the same namespace as the infix declaration so
+    /// the resolver dispatches it like any other top-level call.
+    /// </summary>
+    private static IReadOnlyDictionary<string, DeclQualifiedName> BuildInfixOperatorMap(
+        IReadOnlyDictionary<DeclQualifiedName, ElmSyntaxAbstract.Declaration> declarations)
+    {
         var map = new Dictionary<string, DeclQualifiedName>();
 
         foreach (var (declName, declaration) in declarations)
         {
-            if (declaration is SyntaxModel.Declaration.InfixDeclaration infixDecl)
+            if (declaration is ElmSyntaxAbstract.Declaration.InfixDeclaration infixDecl)
             {
-                map[infixDecl.Infix.Operator.Value] =
+                map[infixDecl.Infix.Operator] =
                     DeclQualifiedName.Create(
                         namespaces: declName.Namespaces,
-                        declName: infixDecl.Infix.FunctionName.Value);
+                        declName: infixDecl.Infix.FunctionName);
             }
         }
 
@@ -4029,6 +4042,22 @@ public partial class ElmSyntaxInterpreter
     /// </summary>
     public static System.Func<Application, ApplicationResolution> BuildResolvers(
         IReadOnlyDictionary<DeclQualifiedName, SyntaxModel.Declaration> declarations,
+        IReadOnlyDictionary<DeclQualifiedName, System.Func<ImmutableList<PineValueInProcess>, PineValueInProcess>>? customFunctionResolvers = null)
+    {
+        return
+            CombineResolvers(
+                [
+                ApplicationResolver(customFunctionResolvers ?? ImmutableDictionary<DeclQualifiedName, System.Func<ImmutableList<PineValueInProcess>, PineValueInProcess>>.Empty),
+                PineBuiltinResolver,
+                app => UserDefinedResolver(app, declarations)
+                ]);
+    }
+
+    /// <summary>
+    /// Default resolver for applications of named functions.
+    /// </summary>
+    public static System.Func<Application, ApplicationResolution> BuildResolvers(
+        IReadOnlyDictionary<DeclQualifiedName, ElmSyntaxAbstract.Declaration> declarations,
         IReadOnlyDictionary<DeclQualifiedName, System.Func<ImmutableList<PineValueInProcess>, PineValueInProcess>>? customFunctionResolvers = null)
     {
         return
