@@ -121,8 +121,29 @@ public class FunctionApplicationPartialTests
     }
 
     /// <summary>
-    /// A bare reference to a top-level function with no application escapes as a function value.
+    /// A list that still contains a partially-applied closure is rendered with each nested
+    /// closure rendered as a <c>&lt;closure(...)&gt;</c> placeholder rather than throwing. This
+    /// is the same closure-tolerant rendering used for runtime-error call-stack frames, and
+    /// guards against the crash where rendering a value that embeds a closure threw
+    /// <c>NotSupportedException</c>.
     /// </summary>
+    [Fact]
+    public void List_containing_partially_applied_closure_renders_closure_placeholder()
+    {
+        var elmModuleText =
+            """
+            module Test exposing (..)
+
+
+            add a b =
+                Pine_builtin.int_add [ a, b ]
+            """;
+
+        Evaluate(elmModuleText, "[ add 7 ]")
+            .Should().Be("[ <closure(declared:add)> ]");
+    }
+
+
     [Fact]
     public void Bare_reference_to_top_level_function_escapes_as_function_value()
     {

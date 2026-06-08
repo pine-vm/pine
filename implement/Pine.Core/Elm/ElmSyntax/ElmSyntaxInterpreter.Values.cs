@@ -179,7 +179,17 @@ public partial class ElmSyntaxInterpreter
     /// resolver/result boundary (and for rendering values in runtime-error messages).
     /// </summary>
     internal static ElmValue ToElm(PineValueInProcess value) =>
-        ToElm(value, visiting: null);
+        ToElm(value, visiting: null, renderClosuresForError: false);
+
+    /// <summary>
+    /// Closure-tolerant variant of <see cref="ToElm(PineValueInProcess)"/> used only when rendering
+    /// values into runtime-error messages (for example a call-stack frame's arguments). Instead of
+    /// throwing when a closure is encountered - which would mask the actual interpretation error and
+    /// crash the caller - each closure (including closures nested inside a list, tuple, record or
+    /// tag) is rendered as a short <c>&lt;closure(...)&gt;</c> placeholder.
+    /// </summary>
+    internal static ElmValue ToElmForErrorRendering(PineValueInProcess value) =>
+        ToElm(value, visiting: null, renderClosuresForError: true);
 
     /// <summary>
     /// Core of <see cref="ToElm(PineValueInProcess)"/>. <paramref name="visiting"/> tracks the
@@ -187,20 +197,30 @@ public partial class ElmSyntaxInterpreter
     /// closure that captures itself in its own environment) is broken instead of recursing forever.
     /// It is allocated lazily on the first closure encountered and threaded through every nested
     /// conversion. Identity is by reference (<see cref="ElmClosureInProcess"/> uses reference equality).
+    /// <para>
+    /// When <paramref name="renderClosuresForError"/> is set, closures are rendered as a placeholder
+    /// (<see cref="ElmValue.ElmInternal"/>) instead of throwing; see <see cref="ToElmForErrorRendering"/>.
+    /// </para>
     /// </summary>
     private static ElmValue ToElm(
         PineValueInProcess value,
-        HashSet<ElmClosureInProcess>? visiting)
+        HashSet<ElmClosureInProcess>? visiting,
+        bool renderClosuresForError)
     {
         if (value is ElmClosureInProcess closure)
         {
+            if (renderClosuresForError)
+            {
+                return new ElmValue.ElmInternal("closure(" + RenderSourceRef(closure.Source) + ")");
+            }
+
             throw new System.NotSupportedException(
                 "Cannot convert a closure to an ElmValue. Closures cannot be returned from resolvers or captured in ElmValues; they can only be applied to arguments within the resolver's execution.");
         }
 
         if (ContainsOpaque(value))
         {
-            return ToElmStructural(value, visiting);
+            return ToElmStructural(value, visiting, renderClosuresForError);
         }
 
         return
@@ -222,7 +242,8 @@ public partial class ElmSyntaxInterpreter
     /// </summary>
     private static ElmValue ToElmStructural(
         PineValueInProcess value,
-        HashSet<ElmClosureInProcess>? visiting)
+        HashSet<ElmClosureInProcess>? visiting,
+        bool renderClosuresForError)
     {
         var items = AsListItems(value);
 
@@ -230,7 +251,7 @@ public partial class ElmSyntaxInterpreter
         {
             // Unreachable in practice: a value flagged as opaque-containing is either a box, a
             // closure (both handled by the caller) or an unevaluated list/tagged structure.
-            return ToElm(value, visiting);
+            return ToElm(value, visiting, renderClosuresForError);
         }
 
         // Record (new flat format): [recordTag, fieldName0, fieldValue0, fieldName1, fieldValue1, ...].
@@ -252,7 +273,7 @@ public partial class ElmSyntaxInterpreter
                         throw new System.InvalidOperationException(
                             "Failed decoding record field name: " + err));
 
-                recordFields[i] = (fieldName, ToElm(items[2 + 2 * i], visiting));
+                recordFields[i] = (fieldName, ToElm(items[2 + 2 * i], visiting, renderClosuresForError));
             }
 
             return new ElmValue.ElmRecord(recordFields);
@@ -269,7 +290,7 @@ public partial class ElmSyntaxInterpreter
 
             for (var i = 0; i < tagArguments.Length; i++)
             {
-                tagArguments[i] = ToElm(tagArgs[i], visiting);
+                tagArguments[i] = ToElm(tagArgs[i], visiting, renderClosuresForError);
             }
 
             return ElmValue.TagInstance(tagName, tagArguments);
@@ -280,7 +301,7 @@ public partial class ElmSyntaxInterpreter
 
         for (var i = 0; i < elements.Length; i++)
         {
-            elements[i] = ToElm(items[i], visiting);
+            elements[i] = ToElm(items[i], visiting, renderClosuresForError);
         }
 
         return new ElmValue.ElmList(elements);
@@ -622,7 +643,7 @@ public partial class ElmSyntaxInterpreter
             return ("record-access: ." + string.Join('.', recordAccessChain.FieldNames), needsParens: true);
         }
 
-        return ElmValue.RenderAsElmExpression(ToElm(value));
+        return ElmValue.RenderAsElmExpression(ToElmForErrorRendering(value));
     }
 
     /// <summary>
@@ -637,7 +658,7 @@ public partial class ElmSyntaxInterpreter
             return ($"<closure({RenderSourceRef(closure.Source)})>", needsParens: true);
         }
 
-        var asElmValue = ToElm(valueInProcess);
+        var asElmValue = ToElmForErrorRendering(valueInProcess);
 
         return ElmValue.RenderAsElmExpression(asElmValue);
     }
