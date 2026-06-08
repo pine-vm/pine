@@ -1,8 +1,10 @@
 using Pine.Core.CommonEncodings;
+using Pine.Core.Json;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
 using System.Numerics;
+using System.Text.Json.Serialization;
 
 using ModuleName = System.Collections.Generic.IReadOnlyList<string>;
 
@@ -168,6 +170,7 @@ public record Import(
 /// <summary>
 /// Elm module kinds: normal, port or effect.
 /// </summary>
+[JsonConverter(typeof(JsonConverterForChoiceType))]
 public abstract record Module
 {
     /// <summary>Standard module.</summary>
@@ -275,6 +278,7 @@ public record EffectModuleData(
 /// <summary>
 /// How a module exposes its definitions: all or an explicit list.
 /// </summary>
+[JsonConverter(typeof(JsonConverterForChoiceType))]
 public abstract record Exposing
 {
     /// <summary>Expose everything (represented by <c>(..)</c> in Elm).</summary>
@@ -317,6 +321,7 @@ public abstract record Exposing
 /// <summary>
 /// Individual item exposed from a module: operator, function, type or type with constructors.
 /// </summary>
+[JsonConverter(typeof(JsonConverterForChoiceType))]
 public abstract record TopLevelExpose
 {
     /// <summary>Exposed operator (infix).</summary>
@@ -350,6 +355,7 @@ public record ExposedType(
 /// <summary>
 /// Top-level declarations in a module.
 /// </summary>
+[JsonConverter(typeof(JsonConverterForChoiceType))]
 public abstract record Declaration
 {
     /// <summary>Function declaration including implementation.</summary>
@@ -527,6 +533,7 @@ public record ValueConstructor(
 /// <summary>
 /// Elm type annotations: generics, concrete typed names, tuples, records, functions, etc.
 /// </summary>
+[JsonConverter(typeof(JsonConverterForChoiceType))]
 public abstract record TypeAnnotation
 {
     /// <summary>Reference to a generic type variable.</summary>
@@ -745,6 +752,7 @@ public record Signature(
 /// <summary>
 /// Pattern matching forms used in destructuring and case expressions.
 /// </summary>
+[JsonConverter(typeof(JsonConverterForChoiceType))]
 public abstract record Pattern
 {
     /// <summary>Pattern matching any value.</summary>
@@ -1069,6 +1077,7 @@ public record QualifiedNameRef(
 /// Elm expressions: literals, applications, control flow, data structures, lambda, let, case, etc.
 /// Literals are normalized and redundant parentheses are removed.
 /// </summary>
+[JsonConverter(typeof(JsonConverterForChoiceType))]
 public abstract record Expression
 {
     /// <summary>Expression producing unit.</summary>
@@ -1580,6 +1589,7 @@ public record RecordSetter(
 /// <summary>
 /// Declarations inside a let: nested functions or destructuring bindings.
 /// </summary>
+[JsonConverter(typeof(JsonConverterForChoiceType))]
 public abstract record LetDeclaration
 {
     /// <summary>Local function declaration inside a let block.</summary>
