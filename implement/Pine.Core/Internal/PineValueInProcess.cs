@@ -29,6 +29,8 @@ public class PineValueInProcess
 
     private BigInteger? _integer;
 
+    private bool _integerIsStrict;
+
     /// <summary>
     /// Track a list without involving the general <see cref="PineValue.ListValue"/> system.
     /// </summary>
@@ -40,6 +42,23 @@ public class PineValueInProcess
     /// Represents a 2-element list [tag, tagArgs] without forcing evaluation.
     /// </summary>
     private (PineValueInProcess tag, IReadOnlyList<PineValueInProcess> tagArgs)? _tagged;
+
+    private readonly static IReadOnlyList<PineValueInProcess> s_integersPositive =
+        [.. Enumerable.Range(0, 4_000).Select(i =>
+        {
+            var v = CreateInteger(i);
+            v.Evaluate();
+
+            return v;
+        })];
+
+    private readonly static IReadOnlyList<PineValueInProcess> s_integersNegative =
+        [.. Enumerable.Range(1, 1_000).Select(i =>
+        {
+            var v = CreateInteger(-i);
+            v.Evaluate();
+            return v;
+        })];
 
     /// <summary>
     /// The value of the empty list, <see cref="PineValue.EmptyList"/>.
@@ -142,10 +161,29 @@ public class PineValueInProcess
     /// <returns>A new <see cref="PineValueInProcess"/> representing the integer.</returns>
     public static PineValueInProcess CreateInteger(BigInteger integer)
     {
+        if (0 <= integer && s_integersPositive is not null)
+        {
+            if (integer < s_integersPositive.Count)
+            {
+                return s_integersPositive[(int)integer];
+            }
+        }
+
+        if (integer < 0 && s_integersNegative is not null)
+        {
+            var abs = -integer - 1;
+
+            if (abs < s_integersNegative.Count)
+            {
+                return s_integersNegative[(int)abs];
+            }
+        }
+
         return
             new PineValueInProcess
             {
                 _integer = integer,
+                _integerIsStrict = true
             };
     }
 
@@ -716,6 +754,18 @@ public class PineValueInProcess
         if (ReferenceEquals(a, b))
         {
             return true;
+        }
+
+        if (a._integer.HasValue && b._integer.HasValue)
+        {
+            var aInt = a._integer.Value;
+            var bInt = b._integer.Value;
+
+            if (aInt != bInt)
+                return false;
+
+            if (a._integerIsStrict && b._integerIsStrict)
+                return aInt == bInt;
         }
 
         if (a._evaluated is { } evalA && b._evaluated is { } evalB)
