@@ -3190,7 +3190,8 @@ public static class FormatCSharpFile
                 .WithTrailingTrivia(
                     EnsureSpaceBeforeComments(StripWhitespace(node.ColonToken.TrailingTrivia))))
             .WithWhenFalse(
-                fmtFalse.WithLeadingTrivia(new SyntaxTriviaList(s_lineFeed, ci)));
+                fmtFalse.WithLeadingTrivia(
+                    EnsureLeadingBreaks(node.WhenFalse.GetLeadingTrivia(), 1, ctx.IndentLevel)));
     }
 
     /// <summary>Formats a switch expression with arms on separate lines.</summary>

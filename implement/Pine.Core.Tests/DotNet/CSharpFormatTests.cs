@@ -6364,4 +6364,21 @@ public class CSharpFormatTests
 
         AssertFormattedSyntax(input, input, scriptMode: true);
     }
+
+    [Fact]
+    public void Preserve_conditional_expression_single_line_comment_before_WhenFalse()
+    {
+        var input =
+            """"
+            var remainder =
+                divisor.IsZero
+                ?
+                dividend
+                :
+                // BigInteger division truncates toward zero, matching Elm's idiv.
+                dividend - divisor * (dividend / divisor);
+            """";
+
+        AssertFormattedSyntax(input, input, scriptMode: true);
+    }
 }
