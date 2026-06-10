@@ -416,7 +416,7 @@ public class JsonRoundtripTests
     {
         var prepared =
             Core.Elm.ElmSyntax.ElmSyntaxInterpreter.PrepareModules([SampleModuleText])
-            .Extract(err => throw new System.Exception("Failed to prepare modules: " + err.Message));
+            .Extract(err => throw new System.Exception("Failed to prepare modules: " + err));
 
         var json = ElmSyntaxInterpreterPreparedJson.ToJsonString(prepared);
 
@@ -464,7 +464,7 @@ public class JsonRoundtripTests
 
         var prepared =
             Core.Elm.ElmSyntax.ElmSyntaxInterpreter.PrepareModules([moduleA, moduleB])
-            .Extract(err => throw new System.Exception("Failed to prepare modules: " + err.Message));
+            .Extract(err => throw new System.Exception("Failed to prepare modules: " + err));
 
         var json = ElmSyntaxInterpreterPreparedJson.ToJsonString(prepared);
 

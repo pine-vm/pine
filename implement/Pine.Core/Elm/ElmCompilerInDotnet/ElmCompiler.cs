@@ -2594,7 +2594,7 @@ public class ElmCompiler
     /// <summary>
     /// Renders a <see cref="CanonicalizationError"/> as a human-readable string.
     /// </summary>
-    private static string RenderCanonicalizationError(CanonicalizationError error) =>
+    public static string RenderCanonicalizationError(CanonicalizationError error) =>
         error switch
         {
             CanonicalizationError.UnresolvedReference unresolved =>
@@ -2611,7 +2611,8 @@ public class ElmCompiler
             $"Name '{ambiguous.Name}' is exposed by multiple imports: {string.Join(", ", ambiguous.ImportingModules)}",
 
             _ =>
-            $"Unknown canonicalization error at {error.Range}"
+            throw new NotImplementedException(
+                "Unexpected error type: " + error.GetType())
         };
 
     /// <summary>

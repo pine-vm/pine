@@ -39,7 +39,7 @@ public partial class ElmSyntaxInterpreter
 
         if (prepareModulesResult.IsErrOrNull() is { } prepareErr)
         {
-            return prepareErr;
+            return new ElmInterpretationError(prepareErr, []);
         }
 
         if (prepareModulesResult.IsOkOrNull() is not { } preprocessed)
@@ -160,7 +160,7 @@ public partial class ElmSyntaxInterpreter
     /// <summary>
     /// Parses the supplied <paramref name="moduleSourceTexts"/> to qualify every reference in every module.
     /// </summary>
-    public static Result<ElmInterpretationError, Prepared> PrepareModules(
+    public static Result<string, Prepared> PrepareModules(
         IReadOnlyList<string> moduleSourceTexts)
     {
         // Parse every module text into the full SyntaxModel form.
@@ -172,10 +172,7 @@ public partial class ElmSyntaxInterpreter
 
             if (parseResult.IsErrOrNull() is { } parseErr)
             {
-                return
-                    new ElmInterpretationError(
-                        "Failed to parse module #" + i + ": " + parseErr,
-                        []);
+                return "Failed to parse module #" + i + ": " + parseErr;
             }
 
             if (parseResult.IsOkOrNull() is not { } parsedFile)
@@ -194,16 +191,14 @@ public partial class ElmSyntaxInterpreter
     /// As <see cref="PrepareModules(IReadOnlyList{string})"/>, but accepts
     /// pre-parsed modules.
     /// </summary>
-    public static Result<ElmInterpretationError, Prepared> PrepareModules(
+    public static Result<string, Prepared> PrepareModules(
         IReadOnlyList<SyntaxModel.File> modules)
     {
         if (modules.Count is 0)
         {
             return
-                new ElmInterpretationError(
-                    "ParseAndInterpret with modules requires at least one module "
-                    + "(the synthetic root module containing 'pine_root_expression').",
-                    []);
+                "ParseAndInterpret with modules requires at least one module " +
+                "(the synthetic root module containing 'pine_root_expression').";
         }
 
         // Convert to the Stil4mElmSyntax7 form expected by Canonicalization.
@@ -218,10 +213,7 @@ public partial class ElmSyntaxInterpreter
 
         if (canonicalizeResult.IsErrOrNull() is { } canonErr)
         {
-            return
-                new ElmInterpretationError(
-                    "Canonicalization failed: " + canonErr,
-                    []);
+            return "Canonicalization failed: " + canonErr;
         }
 
         if (canonicalizeResult.IsOkOrNull() is not { } canonicalized)
@@ -237,6 +229,15 @@ public partial class ElmSyntaxInterpreter
 
         foreach (var (moduleNameKey, (canonicalizedFile, errors, shadowings)) in canonicalized)
         {
+            if (errors.Count is not 0)
+            {
+                var moduleNameStr = string.Join(".", moduleNameKey);
+
+                var errMessages = string.Join("\n", errors.Select(ElmCompiler.RenderCanonicalizationError));
+
+                return "Failed canonicalization in module " + moduleNameStr + ":\n" + errMessages;
+            }
+
             var fullModuleFile = Stil4mToFull.Convert(canonicalizedFile);
 
             var abstractFile = ElmSyntaxAbstract.ConvertFromConcrete.FromFile(fullModuleFile);
