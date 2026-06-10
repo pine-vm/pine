@@ -1,9 +1,11 @@
 using Pine.Core.CodeAnalysis;
 using Pine.Core.Elm;
+using Pine.Core.Elm.ElmInElm;
 using Pine.Core.Elm.ElmSyntax;
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
+using System.Text;
 
 using SyntaxTypes = Pine.Core.Elm.ElmSyntax.SyntaxModel;
 using ElmInterpreter = Pine.Core.Elm.ElmSyntax.ElmSyntaxInterpreter;
@@ -216,4 +218,123 @@ internal static class InterpreterTestHelper
         ElmInterpreter.RenderAsElmExpression(
             EvaluateInModuleOrCrash(expression, elmModuleText))
         .expressionString;
+
+    /// <summary>
+    /// Loads the verbatim source text of one of the bundled Elm kernel modules (e.g.
+    /// <c>Basics.elm</c>, <c>Dict.elm</c>, <c>String.elm</c>, <c>List.elm</c>) from
+    /// <see cref="BundledFiles.ElmKernelModulesDefault"/>.
+    /// </summary>
+    public static string LoadKernelModuleSource(string fileName)
+    {
+        var node =
+            BundledFiles.ElmKernelModulesDefault.Value
+            .GetNodeAtPath([fileName])
+            ?? throw new Exception("Did not find elm-kernel-modules/" + fileName + " in bundled files.");
+
+        if (node is not Files.FileTree.FileNode fileNode)
+        {
+            throw new Exception(
+                "Expected elm-kernel-modules/" + fileName + " to be a file node, but got: " + node.GetType());
+        }
+
+        return Encoding.UTF8.GetString(fileNode.Bytes.Span);
+    }
+
+    /// <summary>
+    /// Loads the verbatim source text of one of the bundled compiler-source-container modules
+    /// (e.g. <c>src/Base64/Encode.elm</c>) from
+    /// <see cref="BundledFiles.CompilerSourceContainerFilesDefault"/>. The path is given as the
+    /// sequence of directory/file segments from the container root (e.g.
+    /// <c>"src", "Base64", "Encode.elm"</c>).
+    /// </summary>
+    public static string LoadCompilerSourceModule(params string[] path)
+    {
+        var node =
+            BundledFiles.CompilerSourceContainerFilesDefault.Value
+            .GetNodeAtPath(path)
+            ?? throw new Exception("Did not find compiler source module at " + string.Join("/", path) + ".");
+
+        if (node is not Files.FileTree.FileNode fileNode)
+        {
+            throw new Exception(
+                "Expected compiler source " + string.Join("/", path) + " to be a file node, but got: " + node.GetType());
+        }
+
+        return Encoding.UTF8.GetString(fileNode.Bytes.Span);
+    }
+
+    /// <summary>
+    /// Canonicalizes the supplied bundled kernel modules (identified by file name) into a
+    /// single <see cref="ElmInterpreter.Prepared"/> program. References between modules are
+    /// resolved by their fully-qualified canonical names, so a root expression evaluated
+    /// against the result must address kernel functions with their module-qualified names
+    /// (e.g. <c>String.split</c>, <c>Dict.get</c>).
+    /// </summary>
+    public static ElmInterpreter.Prepared PrepareKernelModules(params string[] fileNames)
+    {
+        var modules = new List<string>(fileNames.Length);
+
+        foreach (var fileName in fileNames)
+        {
+            modules.Add(LoadKernelModuleSource(fileName));
+        }
+
+        return
+            ElmInterpreter.PrepareModules(modules)
+            .Extract(err => throw new Exception(err.ToString()));
+    }
+
+    /// <summary>
+    /// As <see cref="PrepareKernelModules(string[])"/>, but canonicalizes an explicit list of
+    /// already-loaded module source texts. Use this to combine bundled kernel modules with
+    /// additional source-container modules (such as the <c>Base64</c> modules under
+    /// <c>src/Base64</c>) in a single prepared program.
+    /// </summary>
+    public static ElmInterpreter.Prepared PrepareModulesFromSources(IReadOnlyList<string> moduleSources) =>
+        ElmInterpreter.PrepareModules(moduleSources)
+        .Extract(err => throw new Exception(err.ToString()));
+
+    /// <summary>
+    /// Evaluates <paramref name="expression"/> against the prepared modules and materializes
+    /// the result into a concrete <see cref="PineValue"/> via
+    /// <see cref="PineValueInProcess.Evaluate"/>. Operating on the <see cref="PineValue"/>
+    /// directly (rather than converting to <see cref="ElmValue"/>) keeps the assertions
+    /// robust for any plain-data result; as in Elm, values that contain functions are not
+    /// supported and would surface as a runtime exception.
+    /// </summary>
+    public static PineValue EvaluateInModulesToPineValue(
+        string expression,
+        ElmInterpreter.Prepared prepared)
+    {
+        var (result, _) =
+            ElmInterpreter.ParseAndInterpretWithCounters(expression, prepared);
+
+        return
+            result
+            .Extract(err => throw new Exception(err.ToString()))
+            .Evaluate();
+    }
+
+    /// <summary>
+    /// Evaluates <paramref name="expression"/> with the default builtin function resolvers
+    /// disabled, so that the evaluation falls through to the user-defined (Elm-source) kernel
+    /// implementations. Used to assert that a builtin produces exactly the same value as the
+    /// Elm implementation it short-circuits.
+    /// </summary>
+    public static PineValue EvaluateInModulesWithoutBuiltinsToPineValue(
+        string expression,
+        ElmInterpreter.Prepared prepared)
+    {
+        var (result, _) =
+            ElmInterpreter.ParseAndInterpretWithCounters(
+                expression,
+                prepared,
+                onApplication: null,
+                enableDefaultBuiltins: false);
+
+        return
+            result
+            .Extract(err => throw new Exception(err.ToString()))
+            .Evaluate();
+    }
 }

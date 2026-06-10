@@ -3649,15 +3649,19 @@ public partial class ElmSyntaxInterpreter
         PineBuiltinResolver(application, s_pineBuiltinModuleNamesDefault);
 
     public static System.Func<Application, ApplicationResolution?> ApplicationResolver(
-        IReadOnlyDictionary<DeclQualifiedName, System.Func<ImmutableList<PineValueInProcess>, PineValueInProcess>> functionResolvers)
+        IReadOnlyDictionary<DeclQualifiedName, System.Func<ImmutableList<PineValueInProcess>, PineValueInProcess?>> functionResolvers)
     {
         ApplicationResolution? TryResolve(Application application)
         {
             if (functionResolvers.TryGetValue(application.FunctionName, out var resolver))
             {
-                var returnValue = resolver(application.Arguments);
-
-                return new ApplicationResolution.Resolved(returnValue);
+                // A resolver returns null to signal that it does not handle this particular
+                // application (for example a builtin that is under- or over-applied, so the
+                // application must fall through to the regular currying / user-defined path).
+                if (resolver(application.Arguments) is { } returnValue)
+                {
+                    return new ApplicationResolution.Resolved(returnValue);
+                }
             }
 
             return null;
@@ -4042,12 +4046,12 @@ public partial class ElmSyntaxInterpreter
     /// </summary>
     public static System.Func<Application, ApplicationResolution> BuildResolvers(
         IReadOnlyDictionary<DeclQualifiedName, SyntaxModel.Declaration> declarations,
-        IReadOnlyDictionary<DeclQualifiedName, System.Func<ImmutableList<PineValueInProcess>, PineValueInProcess>>? customFunctionResolvers = null)
+        IReadOnlyDictionary<DeclQualifiedName, System.Func<ImmutableList<PineValueInProcess>, PineValueInProcess?>>? customFunctionResolvers = null)
     {
         return
             CombineResolvers(
                 [
-                ApplicationResolver(customFunctionResolvers ?? ImmutableDictionary<DeclQualifiedName, System.Func<ImmutableList<PineValueInProcess>, PineValueInProcess>>.Empty),
+                ApplicationResolver(customFunctionResolvers ?? ImmutableDictionary<DeclQualifiedName, System.Func<ImmutableList<PineValueInProcess>, PineValueInProcess?>>.Empty),
                 PineBuiltinResolver,
                 app => UserDefinedResolver(app, declarations)
                 ]);
@@ -4057,13 +4061,22 @@ public partial class ElmSyntaxInterpreter
     /// Default resolver for applications of named functions.
     /// </summary>
     public static System.Func<Application, ApplicationResolution> BuildResolvers(
+        IReadOnlyDictionary<DeclQualifiedName, ElmSyntaxAbstract.Declaration> declarations)
+    {
+        return BuildResolvers(declarations, s_builtinFunctionResolvers);
+    }
+
+    /// <summary>
+    /// Default resolver for applications of named functions.
+    /// </summary>
+    public static System.Func<Application, ApplicationResolution> BuildResolvers(
         IReadOnlyDictionary<DeclQualifiedName, ElmSyntaxAbstract.Declaration> declarations,
-        IReadOnlyDictionary<DeclQualifiedName, System.Func<ImmutableList<PineValueInProcess>, PineValueInProcess>>? customFunctionResolvers = null)
+        IReadOnlyDictionary<DeclQualifiedName, System.Func<ImmutableList<PineValueInProcess>, PineValueInProcess?>>? customFunctionResolvers)
     {
         return
             CombineResolvers(
                 [
-                ApplicationResolver(customFunctionResolvers ?? ImmutableDictionary<DeclQualifiedName, System.Func<ImmutableList<PineValueInProcess>, PineValueInProcess>>.Empty),
+                ApplicationResolver(customFunctionResolvers ?? ImmutableDictionary<DeclQualifiedName, System.Func<ImmutableList<PineValueInProcess>, PineValueInProcess?>>.Empty),
                 PineBuiltinResolver,
                 app => UserDefinedResolver(app, declarations)
                 ]);
