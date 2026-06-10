@@ -1,6 +1,8 @@
 using Pine.Core.CodeAnalysis;
 using Pine.Core.Elm.ElmCompilerInDotnet;
+using Pine.Core.Internal;
 using System.Collections.Generic;
+using System.Collections.Immutable;
 using System.Linq;
 
 using Stil4mFile = Pine.Core.Elm.ElmSyntax.Stil4mElmSyntax7.File;
@@ -47,6 +49,83 @@ public partial class ElmSyntaxInterpreter
         }
 
         return InterpretAsElmValue(rootExpressionText, preprocessed);
+    }
+
+    /// <summary>
+    /// As <see cref="InterpretAsElmValue(string, Prepared)"/>, but additionally records an
+    /// <see cref="ElmSyntaxInterpreterPerformanceCounters"/> snapshot, optionally forwards every
+    /// observed function application to <paramref name="onApplication"/>, and lets the caller
+    /// choose whether the interpreter's default builtins (such as the
+    /// <c>Basics.compare</c> entry registered by <see cref="BuildBuiltinFunctionResolvers"/>)
+    /// short-circuit the corresponding user-defined Elm declarations.
+    /// <para>
+    /// The root expression is parsed and canonicalized with the default implicit imports, so an
+    /// unqualified reference such as <c>compare</c> resolves to <c>Basics.compare</c> and is
+    /// served by the builtin when <paramref name="enableDefaultBuiltins"/> is <c>true</c>.
+    /// </para>
+    /// </summary>
+    /// <param name="rootExpressionText">The Elm expression text to parse and evaluate.</param>
+    /// <param name="prepared">Canonicalized declarations the root expression can reference.</param>
+    /// <param name="onApplication">
+    /// Optional callback invoked once for each <see cref="ApplicationLogEntry"/> the interpreter
+    /// dispatches. Tests typically supply <c>list.Add</c> here to capture a trace they can later
+    /// search or render.
+    /// </param>
+    /// <param name="enableDefaultBuiltins">
+    /// When <c>true</c> (the default), applications matching a registered builtin in
+    /// <see cref="BuildBuiltinFunctionResolvers"/> are computed directly on the value model
+    /// rather than by interpreting the user-defined declaration. When <c>false</c>, builtins
+    /// are bypassed and every application resolves against <paramref name="prepared"/>.
+    /// </param>
+    public static (Result<ElmInterpretationError, PineValueInProcess> Result, ElmSyntaxInterpreterPerformanceCounters Counters)
+        ParseAndInterpretWithCounters(
+        string rootExpressionText,
+        Prepared prepared,
+        System.Action<ApplicationLogEntry>? onApplication = null,
+        bool enableDefaultBuiltins = true)
+    {
+        var parseResult = ParseAndCanonicalizeExpressionWithDefaultImports(rootExpressionText);
+
+        if (parseResult.IsErrOrNull() is { } parseErr)
+        {
+            return (new ElmInterpretationError(parseErr, []), default);
+        }
+
+        if (parseResult.IsOkOrNull() is not { } rootExpression)
+        {
+            throw new System.NotImplementedException(
+                "Unexpected parse result type: " + parseResult.GetType().FullName);
+        }
+
+        var invocationCounter = new InvocationCounter(onApplication);
+
+        var resolvers = new List<System.Func<Application, ApplicationResolution?>>();
+
+        if (enableDefaultBuiltins)
+        {
+            resolvers.Add(ApplicationResolver(s_builtinFunctionResolvers));
+        }
+
+        resolvers.Add(app => PineBuiltinResolverCounting(app, invocationCounter));
+        resolvers.Add(app => UserDefinedResolver(app, prepared.Declarations));
+
+        var combined = CombineResolvers(resolvers);
+
+        var rootContext =
+            new ApplicationContext(
+                CurrentTopLevel: DeclQualifiedName.Create([], ""),
+                LocalBindings: ImmutableDictionary<string, PineValueInProcess>.Empty);
+
+        var result =
+            RunTrampoline(
+                initialExpression: ElmSyntaxAbstract.ConvertFromConcrete.FromExpression(rootExpression),
+                initialEnv: rootContext,
+                initialApplication: null,
+                resolveApplication: combined,
+                infixOperators: BuildInfixOperatorMap(prepared.Declarations),
+                invocationLogger: invocationCounter);
+
+        return (result, invocationCounter.ToReadOnly());
     }
 
     /// <summary>
@@ -183,6 +262,26 @@ public partial class ElmSyntaxInterpreter
         }
 
         return new Prepared(declarations);
+    }
+
+    /// <summary>
+    /// Invokes the function identified by <paramref name="functionName"/> with the given
+    /// <paramref name="arguments"/>, resolving against the supplied <paramref name="prepared"/>
+    /// declarations (and the default builtins) via <see cref="BuildResolvers(IReadOnlyDictionary{DeclQualifiedName, ElmSyntaxAbstract.Declaration})"/>.
+    /// </summary>
+    public static Result<ElmInterpretationError, PineValueInProcess> Interpret(
+        DeclQualifiedName functionName,
+        IReadOnlyList<PineValueInProcess> arguments,
+        Prepared prepared)
+    {
+        var resolver = BuildResolvers(prepared.Declarations);
+
+        return
+            Interpret(
+                functionName,
+                arguments,
+                resolver,
+                BuildInfixOperatorMap(prepared.Declarations));
     }
 
     private static CanonicalizationResult<SyntaxModel.Expression> CanonicalizeExpression(
