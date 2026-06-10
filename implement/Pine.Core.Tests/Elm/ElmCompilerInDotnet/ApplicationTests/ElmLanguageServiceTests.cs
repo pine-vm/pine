@@ -544,29 +544,24 @@ public class ElmLanguageServiceTests
     [Fact]
     public void References_request_finds_usage_across_modules_via_interpreter()
     {
-        var wrapperModuleText =
-            BuildReferencesScenarioWrapperModule(
-                moduleAText: ReferencesScenario_ModuleAText,
-                moduleBText: ReferencesScenario_ModuleBText,
+        var preparedApp = s_referencesScenarioPreparedApp.Value;
+
+        var rootExpression =
+            BuildReferencesScenarioRootExpression(
+                workspaceFiles:
+                [
+                    ("src/ModuleA.elm", ReferencesScenario_ModuleAText),
+                    ("src/ModuleB.elm", ReferencesScenario_ModuleBText),
+                ],
                 queryFilePath: ReferencesScenario_QueryFilePath,
                 positionLineNumber: ReferencesScenario_PositionLineNumber,
                 positionColumn: ReferencesScenario_PositionColumn);
-
-        var modulesWithWrapper =
-            new List<string>(s_compilerSourceModules.Value)
-            {
-                wrapperModuleText,
-            };
-
-        var preparedApp =
-            Core.Elm.ElmSyntax.ElmSyntaxInterpreter.PrepareModules(modulesWithWrapper)
-            .Extract(err => throw new Exception("Failed to prepare modules: " + err));
 
         var interpreterStopwatch = System.Diagnostics.Stopwatch.StartNew();
 
         var result =
             Core.Elm.ElmSyntax.ElmSyntaxInterpreter.InterpretAsElmValue(
-                "ElmLanguageServiceReferencesScenario.referencesScenarioResponse",
+                rootExpression,
                 preparedApp);
 
         interpreterStopwatch.Stop();
@@ -581,6 +576,270 @@ public class ElmLanguageServiceTests
             ElmValue.RenderAsElmExpression(value).expressionString;
 
         rendered.Should().Be(ReferencesScenario_ExpectedResponse);
+    }
+
+    /// <summary>
+    /// ModuleA workspace file used by the harder
+    /// <see cref="References_request_finds_usage_across_modules_via_interpreter_challenging"/>
+    /// scenario. Compared with <see cref="ReferencesScenario_ModuleAText"/> it
+    /// adds a record type alias (<c>Settings</c>), a record-valued declaration
+    /// (<c>defaultSettings</c>), and a record-access application inside
+    /// <c>helper</c>, so the parser has to handle a record before reaching the
+    /// queried <c>helper</c> declaration. <c>helper</c> appears in the exposing
+    /// list at row 1 and as a top-level declaration starting at row 12
+    /// (1-indexed).
+    /// </summary>
+    private const string ChallengingReferencesScenario_ModuleAText =
+        """
+        module ModuleA exposing (helper, Settings, defaultSettings)
+
+        type alias Settings =
+            { base : Int
+            , step : Int
+            }
+
+        defaultSettings : Settings
+        defaultSettings =
+            { base = 10, step = 2 }
+
+        helper : Int -> Int
+        helper x =
+            x + defaultSettings.step
+
+        """;
+
+    /// <summary>
+    /// ModuleB workspace file used by the harder references scenario. It imports
+    /// <c>ModuleA</c> and combines several application expressions, including two
+    /// call sites of <c>ModuleA.helper</c>.
+    /// </summary>
+    private const string ChallengingReferencesScenario_ModuleBText =
+        """
+        module ModuleB exposing (doWork)
+
+        import ModuleA
+
+        doWork : Int -> Int
+        doWork n =
+            ModuleA.helper n + ModuleA.helper (n + 1)
+
+        """;
+
+    /// <summary>
+    /// ModuleC workspace file used by the harder references scenario. It imports
+    /// <c>ModuleA</c>, declares a record (<c>Bounds</c>), and contains three more
+    /// call sites of <c>ModuleA.helper</c> spread across two declarations with
+    /// nested application expressions.
+    /// </summary>
+    private const string ChallengingReferencesScenario_ModuleCText =
+        """
+        module ModuleC exposing (compute)
+
+        import ModuleA
+
+        type alias Bounds =
+            { lower : Int
+            , upper : Int
+            }
+
+        transform : Int -> Int -> Int
+        transform a b =
+            ModuleA.helper a + ModuleA.helper (b + 2)
+
+        compute : Bounds -> Int
+        compute bounds =
+            transform (ModuleA.helper bounds.lower) (bounds.upper + 3)
+
+        """;
+
+    /// <summary>
+    /// Position used by the harder references request: row 12 / column 1 lands on
+    /// the <c>helper</c> name in the type signature <c>helper : Int -> Int</c> of
+    /// <see cref="ChallengingReferencesScenario_ModuleAText"/>. (The Elm parser
+    /// uses 1-indexed rows.)
+    /// </summary>
+    private const int ChallengingReferencesScenario_PositionLineNumber = 12;
+
+    private const int ChallengingReferencesScenario_PositionColumn = 1;
+
+    private const string ChallengingReferencesScenario_QueryFilePath = "src/ModuleA.elm";
+
+    /// <summary>
+    /// Expected rendered Elm-expression form of the language service response for
+    /// the harder references scenario. The query for <c>helper</c> yields matches
+    /// in multiple modules: the original name in the
+    /// <c>module ModuleA exposing (helper, ...)</c> declaration, both
+    /// <c>ModuleA.helper</c> call sites in
+    /// <see cref="ChallengingReferencesScenario_ModuleBText"/>, and all three
+    /// <c>ModuleA.helper</c> call sites in
+    /// <see cref="ChallengingReferencesScenario_ModuleCText"/>.
+    /// </summary>
+    private const string ChallengingReferencesScenario_ExpectedResponse =
+        """TextDocumentReferencesResponse [ { fileLocation = WorkspaceFileLocation "src/ModuleA.elm", range = { endColumn = 32, endLineNumber = 1, startColumn = 26, startLineNumber = 1 } }, { fileLocation = WorkspaceFileLocation "src/ModuleB.elm", range = { endColumn = 19, endLineNumber = 7, startColumn = 13, startLineNumber = 7 } }, { fileLocation = WorkspaceFileLocation "src/ModuleB.elm", range = { endColumn = 38, endLineNumber = 7, startColumn = 32, startLineNumber = 7 } }, { fileLocation = WorkspaceFileLocation "src/ModuleC.elm", range = { endColumn = 19, endLineNumber = 12, startColumn = 13, startLineNumber = 12 } }, { fileLocation = WorkspaceFileLocation "src/ModuleC.elm", range = { endColumn = 38, endLineNumber = 12, startColumn = 32, startLineNumber = 12 } }, { fileLocation = WorkspaceFileLocation "src/ModuleC.elm", range = { endColumn = 30, endLineNumber = 16, startColumn = 24, startLineNumber = 16 } } ]""";
+
+    /// <summary>
+    /// Harder variant of
+    /// <see cref="References_request_finds_usage_across_modules_via_interpreter"/>
+    /// that also runs through the <see cref="ElmSyntaxInterpreter"/> intermediate
+    /// stage. The Elm source modules contain more declarations, more application
+    /// expressions, and at least one record (the <c>Settings</c> and <c>Bounds</c>
+    /// type aliases plus their record literals), so parsing is a bit more
+    /// challenging. The references query for <c>helper</c> is modelled so that it
+    /// yields matches in multiple modules (ModuleA, ModuleB, and ModuleC).
+    /// </summary>
+    [Fact]
+    public void References_request_finds_usage_across_modules_via_interpreter_challenging()
+    {
+        var preparedApp = s_referencesScenarioPreparedApp.Value;
+
+        var rootExpression =
+            BuildReferencesScenarioRootExpression(
+                workspaceFiles:
+                [
+                    ("src/ModuleA.elm", ChallengingReferencesScenario_ModuleAText),
+                    ("src/ModuleB.elm", ChallengingReferencesScenario_ModuleBText),
+                    ("src/ModuleC.elm", ChallengingReferencesScenario_ModuleCText),
+                ],
+                queryFilePath: ChallengingReferencesScenario_QueryFilePath,
+                positionLineNumber: ChallengingReferencesScenario_PositionLineNumber,
+                positionColumn: ChallengingReferencesScenario_PositionColumn);
+
+        var interpreterStopwatch = System.Diagnostics.Stopwatch.StartNew();
+
+        var result =
+            Core.Elm.ElmSyntax.ElmSyntaxInterpreter.InterpretAsElmValue(
+                rootExpression,
+                preparedApp);
+
+        interpreterStopwatch.Stop();
+
+        TestContext.Current.TestOutputHelper?.WriteLine(
+            $"Interpreter execution time: {interpreterStopwatch.Elapsed}");
+
+        var value =
+            result.Extract(err => throw new Exception(err.ToString()));
+
+        var rendered =
+            ElmValue.RenderAsElmExpression(value).expressionString;
+
+        rendered.Should().Be(ChallengingReferencesScenario_ExpectedResponse);
+    }
+
+    /// <summary>
+    /// Builds the generic wrapper Elm module that drives the references scenarios
+    /// through the <see cref="ElmSyntaxInterpreter"/>. The module is independent of
+    /// any concrete scenario: it embeds no workspace file texts or query positions.
+    /// Instead it exposes <c>referencesScenarioResponse</c> as a function that takes
+    /// the workspace files (a list of <c>( path, text )</c> pairs) and the references
+    /// query position (file path, line number, column) as arguments, adds every file
+    /// to a fresh language service state, issues a
+    /// <c>TextDocumentReferencesRequest</c>, and returns the resulting response. Tests
+    /// supply the concrete inputs through the root expression built by
+    /// <see cref="BuildReferencesScenarioRootExpression"/>.
+    /// </summary>
+    private static string BuildReferencesScenarioWrapperModule()
+    {
+        return
+            "module ElmLanguageServiceReferencesScenario exposing (..)\n"
+            + "\n"
+            + "import LanguageService\n"
+            + "import LanguageServiceInterface\n"
+            + "\n"
+            + "\n"
+            + "addFile :\n"
+            + "    ( String, String )\n"
+            + "    -> LanguageService.LanguageServiceState\n"
+            + "    -> LanguageService.LanguageServiceState\n"
+            + "addFile ( path, text ) state =\n"
+            + "    let\n"
+            + "        ( _, newState ) =\n"
+            + "            LanguageService.handleRequestInCurrentWorkspace\n"
+            + "                (LanguageServiceInterface.AddWorkspaceFileRequest\n"
+            + "                    path\n"
+            + "                    { asBase64 = \"\", asText = Just text }\n"
+            + "                )\n"
+            + "                state\n"
+            + "    in\n"
+            + "    newState\n"
+            + "\n"
+            + "\n"
+            + "addFiles :\n"
+            + "    List ( String, String )\n"
+            + "    -> LanguageService.LanguageServiceState\n"
+            + "    -> LanguageService.LanguageServiceState\n"
+            + "addFiles files state =\n"
+            + "    case files of\n"
+            + "        [] ->\n"
+            + "            state\n"
+            + "\n"
+            + "        file :: rest ->\n"
+            + "            addFiles rest (addFile file state)\n"
+            + "\n"
+            + "\n"
+            + "referencesScenarioResponse :\n"
+            + "    List ( String, String )\n"
+            + "    -> String\n"
+            + "    -> Int\n"
+            + "    -> Int\n"
+            + "    -> LanguageServiceInterface.Response\n"
+            + "referencesScenarioResponse workspaceFiles queryFilePath positionLineNumber positionColumn =\n"
+            + "    let\n"
+            + "        state0 : LanguageService.LanguageServiceState\n"
+            + "        state0 =\n"
+            + "            LanguageService.initLanguageServiceState []\n"
+            + "\n"
+            + "        stateWithFiles : LanguageService.LanguageServiceState\n"
+            + "        stateWithFiles =\n"
+            + "            addFiles workspaceFiles state0\n"
+            + "\n"
+            + "        ( serviceResult, _ ) =\n"
+            + "            LanguageService.handleRequestInCurrentWorkspace\n"
+            + "                (LanguageServiceInterface.TextDocumentReferencesRequest\n"
+            + "                    { fileLocation = LanguageServiceInterface.WorkspaceFileLocation queryFilePath\n"
+            + "                    , positionLineNumber = positionLineNumber\n"
+            + "                    , positionColumn = positionColumn\n"
+            + "                    }\n"
+            + "                )\n"
+            + "                stateWithFiles\n"
+            + "    in\n"
+            + "    case serviceResult of\n"
+            + "        Ok response ->\n"
+            + "            response\n"
+            + "\n"
+            + "        Err err ->\n"
+            + "            LanguageServiceInterface.ProvideHoverResponse [ \"Error: \" ++ err ]\n";
+    }
+
+    /// <summary>
+    /// Builds the Elm root expression that drives one references scenario through the
+    /// generic wrapper module built by <see cref="BuildReferencesScenarioWrapperModule"/>.
+    /// The caller supplies the scenario inputs: the <paramref name="workspaceFiles"/>
+    /// (each a <c>( path, text )</c> pair), the <paramref name="queryFilePath"/>, and
+    /// the <paramref name="positionLineNumber"/> / <paramref name="positionColumn"/> of
+    /// the references query. These are encoded as Elm literals so the prepared app does
+    /// not need to embed any of them.
+    /// </summary>
+    private static string BuildReferencesScenarioRootExpression(
+        IReadOnlyList<(string path, string text)> workspaceFiles,
+        string queryFilePath,
+        int positionLineNumber,
+        int positionColumn)
+    {
+        var workspaceFilesLiteral =
+            "[ "
+            + string.Join(
+                ", ",
+                workspaceFiles.Select(file =>
+                    "( " + EncodeAsElmStringLiteral(file.path)
+                    + ", " + EncodeAsElmStringLiteral(file.text) + " )"))
+            + " ]";
+
+        return
+            "ElmLanguageServiceReferencesScenario.referencesScenarioResponse\n"
+            + "    " + workspaceFilesLiteral + "\n"
+            + "    " + EncodeAsElmStringLiteral(queryFilePath) + "\n"
+            + "    " + positionLineNumber + "\n"
+            + "    " + positionColumn + "\n";
     }
 
     /// <summary>
@@ -606,6 +865,35 @@ public class ElmLanguageServiceTests
                 return modules;
             });
 
+    /// <summary>
+    /// Single prepared app shared by
+    /// <see cref="References_request_finds_usage_across_modules_via_interpreter"/> and
+    /// <see cref="References_request_finds_usage_across_modules_via_interpreter_challenging"/>.
+    /// It bundles the compiler source modules together with a single <em>generic</em>
+    /// references-scenario wrapper module (<c>ElmLanguageServiceReferencesScenario</c>)
+    /// that exposes <c>referencesScenarioResponse</c> as a <em>function</em> taking the
+    /// workspace files and the references-query position as arguments. No scenario
+    /// inputs (module source texts, query file path, position) are embedded here as
+    /// literals; instead each test supplies them itself via the root expression built
+    /// by <see cref="BuildReferencesScenarioRootExpression"/>. The comparatively
+    /// expensive <see cref="ElmSyntaxInterpreter.PrepareModules(IReadOnlyList{string})"/>
+    /// step therefore runs only once and is reusable for arbitrary scenario inputs.
+    /// </summary>
+    private static readonly Lazy<Core.Elm.ElmSyntax.ElmSyntaxInterpreter.Prepared> s_referencesScenarioPreparedApp =
+        new(
+            () =>
+            {
+                var modulesWithWrapper =
+                    new List<string>(s_compilerSourceModules.Value)
+                    {
+                        BuildReferencesScenarioWrapperModule(),
+                    };
+
+                return
+                    Core.Elm.ElmSyntax.ElmSyntaxInterpreter.PrepareModules(modulesWithWrapper)
+                    .Extract(err => throw new Exception("Failed to prepare modules: " + err));
+            });
+
     private static void AppendModuleTextsAtPath(
         FileTree root,
         IReadOnlyList<string> path,
@@ -626,89 +914,6 @@ public class ElmLanguageServiceTests
         {
             sink.Add(Encoding.UTF8.GetString(file.Span));
         }
-    }
-
-    /// <summary>
-    /// Builds the wrapper Elm module that drives the references scenario
-    /// through <see cref="ElmInterpreter.ParseAndInterpret(string, IReadOnlyList{string})"/>.
-    /// The wrapper threads the language service state through three requests
-    /// (add ModuleA, add ModuleB, references query) and exposes the final
-    /// response as the top-level value <c>referencesScenarioResponse</c>.
-    /// </summary>
-    private static string BuildReferencesScenarioWrapperModule(
-        string moduleAText,
-        string moduleBText,
-        string queryFilePath,
-        int positionLineNumber,
-        int positionColumn)
-    {
-        return
-            "module ElmLanguageServiceReferencesScenario exposing (..)\n"
-            + "\n"
-            + "import LanguageService\n"
-            + "import LanguageServiceInterface\n"
-            + "\n"
-            + "\n"
-            + "moduleAText : String\n"
-            + "moduleAText =\n"
-            + "    " + EncodeAsElmStringLiteral(moduleAText) + "\n"
-            + "\n"
-            + "\n"
-            + "moduleBText : String\n"
-            + "moduleBText =\n"
-            + "    " + EncodeAsElmStringLiteral(moduleBText) + "\n"
-            + "\n"
-            + "\n"
-            + "addFile :\n"
-            + "    String\n"
-            + "    -> String\n"
-            + "    -> LanguageService.LanguageServiceState\n"
-            + "    -> LanguageService.LanguageServiceState\n"
-            + "addFile path text state =\n"
-            + "    let\n"
-            + "        ( _, newState ) =\n"
-            + "            LanguageService.handleRequestInCurrentWorkspace\n"
-            + "                (LanguageServiceInterface.AddWorkspaceFileRequest\n"
-            + "                    path\n"
-            + "                    { asBase64 = \"\", asText = Just text }\n"
-            + "                )\n"
-            + "                state\n"
-            + "    in\n"
-            + "    newState\n"
-            + "\n"
-            + "\n"
-            + "referencesScenarioResponse : LanguageServiceInterface.Response\n"
-            + "referencesScenarioResponse =\n"
-            + "    let\n"
-            + "        state0 : LanguageService.LanguageServiceState\n"
-            + "        state0 =\n"
-            + "            LanguageService.initLanguageServiceState []\n"
-            + "\n"
-            + "        state1 : LanguageService.LanguageServiceState\n"
-            + "        state1 =\n"
-            + "            addFile \"src/ModuleA.elm\" moduleAText state0\n"
-            + "\n"
-            + "        state2 : LanguageService.LanguageServiceState\n"
-            + "        state2 =\n"
-            + "            addFile \"src/ModuleB.elm\" moduleBText state1\n"
-            + "\n"
-            + "        ( serviceResult, _ ) =\n"
-            + "            LanguageService.handleRequestInCurrentWorkspace\n"
-            + "                (LanguageServiceInterface.TextDocumentReferencesRequest\n"
-            + "                    { fileLocation = LanguageServiceInterface.WorkspaceFileLocation "
-            + EncodeAsElmStringLiteral(queryFilePath) + "\n"
-            + "                    , positionLineNumber = " + positionLineNumber + "\n"
-            + "                    , positionColumn = " + positionColumn + "\n"
-            + "                    }\n"
-            + "                )\n"
-            + "                state2\n"
-            + "    in\n"
-            + "    case serviceResult of\n"
-            + "        Ok response ->\n"
-            + "            response\n"
-            + "\n"
-            + "        Err err ->\n"
-            + "            LanguageServiceInterface.ProvideHoverResponse [ \"Error: \" ++ err ]\n";
     }
 
     /// <summary>
