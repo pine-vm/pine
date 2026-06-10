@@ -110,6 +110,20 @@ type Order
     | GT
 
 
+type Dict k v
+    = RBNode_elm_builtin NColor k v (Dict k v) (Dict k v)
+    | RBEmpty_elm_builtin
+
+
+type NColor
+    = Red
+    | Black
+
+
+type Set t
+    = Set_elm_builtin (Dict.Dict t ())
+
+
 eq : a -> a -> Bool
 eq a b =
     if Pine_kernel.equal [ a, b ] then
