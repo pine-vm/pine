@@ -3758,11 +3758,11 @@ public partial class ElmSyntaxInterpreter
         var functionName = application.FunctionName.DeclName;
 
         // Pine builtin/kernel functions receive a single argument;
-        PineValue kernelInput;
+        PineValueInProcess kernelInput;
 
         if (application.Arguments.Count is 1)
         {
-            kernelInput = application.Arguments[0].Evaluate();
+            kernelInput = application.Arguments[0];
         }
         else
         {
@@ -3773,9 +3773,95 @@ public partial class ElmSyntaxInterpreter
                 application.FunctionName.FullName + "' received " + application.Arguments.Count + " arguments.");
         }
 
-        var resultPine = KernelFunction.ApplyKernelFunctionGeneric(functionName, kernelInput);
+        var resultValue = ApplyPineBuiltinFunction(functionName, kernelInput);
 
-        return new ApplicationResolution.Resolved(PineValueInProcess.Create(resultPine));
+        return new ApplicationResolution.Resolved(resultValue);
+    }
+
+    private static PineValueInProcess ApplyPineBuiltinFunction(
+        string functionName,
+        PineValueInProcess input)
+    {
+        if (functionName is nameof(KernelFunction.concat))
+        {
+            return PineValueInProcess.Concat(input);
+        }
+
+        if (functionName is nameof(KernelFunction.skip))
+        {
+            if (input.GetLength() is not 2)
+            {
+                return PineValueInProcess.EmptyList;
+            }
+
+            var countInt = input.GetElementAt(0).AsInteger();
+
+            if (!countInt.HasValue)
+            {
+                return PineValueInProcess.EmptyList;
+            }
+
+            var count = countInt.Value;
+
+            var source = input.GetElementAt(1);
+
+            if (count < 0)
+            {
+                return source;
+            }
+
+            if (int.MaxValue < countInt.Value)
+            {
+                return
+                    source.IsBlob()
+                    ?
+                    PineValueInProcess.EmptyBlob
+                    :
+                    PineValueInProcess.EmptyList;
+            }
+
+            return PineValueInProcess.Skip((int)count, source);
+        }
+
+        if (functionName is nameof(KernelFunction.take))
+        {
+            if (input.GetLength() is not 2)
+            {
+                return PineValueInProcess.EmptyList;
+            }
+
+            var countInt = input.GetElementAt(0).AsInteger();
+
+            if (!countInt.HasValue)
+            {
+                return PineValueInProcess.EmptyList;
+            }
+
+            var count = countInt.Value;
+
+            var source = input.GetElementAt(1);
+
+            if (count <= 0)
+            {
+                return
+                    source.IsBlob()
+                    ?
+                    PineValueInProcess.EmptyBlob
+                    :
+                    PineValueInProcess.EmptyList;
+            }
+
+            if (int.MaxValue < countInt.Value)
+            {
+                return source;
+            }
+
+            return PineValueInProcess.Take((int)count, source);
+        }
+
+        var resultPine = KernelFunction.ApplyKernelFunctionGeneric(functionName, input.Evaluate());
+
+        return PineValueInProcess.Create(resultPine);
     }
 
     /// <summary>

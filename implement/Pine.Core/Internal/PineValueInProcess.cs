@@ -66,6 +66,11 @@ public class PineValueInProcess
     public static readonly PineValueInProcess EmptyList = Create(PineValue.EmptyList);
 
     /// <summary>
+    /// The value of the empty blob, <see cref="PineValue.EmptyBlob"/>.
+    /// </summary>
+    public static readonly PineValueInProcess EmptyBlob = Create(PineValue.EmptyBlob);
+
+    /// <summary>
     /// The kernel boolean true value, <see cref="PineKernelValues.TrueValue"/>.
     /// </summary>
     public static readonly PineValueInProcess KernelTrueValue = Create(PineKernelValues.TrueValue);
@@ -583,6 +588,30 @@ public class PineValueInProcess
             {
                 _sliceBuilder = ImmutableSliceBuilder.Create(evaluated).TakeLast(takeCount),
             };
+    }
+
+    /// <summary>
+    /// Analog to <see cref="KernelFunction.concat(PineValue)"/>
+    /// </summary>
+    public static PineValueInProcess Concat(PineValueInProcess input)
+    {
+        if (!input.IsList())
+            return EmptyList;
+
+        var length = input.GetLength();
+
+        if (length is 0)
+            return EmptyList;
+
+        if (length is 1)
+            return input.GetElementAt(0);
+
+        if (length is 2)
+        {
+            return ConcatBinary(input.GetElementAt(0), input.GetElementAt(1));
+        }
+
+        return Create(KernelFunction.concat(input.Evaluate()));
     }
 
     /// <summary>
