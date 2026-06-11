@@ -242,9 +242,11 @@ public partial class ElmSyntaxInterpreter
 
             var abstractFile = ElmSyntaxAbstract.ConvertFromConcrete.FromFile(fullModuleFile);
 
+            var abstractFileOptimized = OptimizeSyntax(abstractFile);
+
             var moduleNameParts = moduleNameKey.ToList();
 
-            foreach (var declNode in abstractFile.Declarations)
+            foreach (var declNode in abstractFileOptimized.Declarations)
             {
                 if (declNode is ElmSyntaxAbstract.Declaration.InfixDeclaration infixDecl)
                 {
@@ -263,6 +265,20 @@ public partial class ElmSyntaxInterpreter
         }
 
         return new Prepared(declarations);
+    }
+
+    private static ElmSyntaxAbstract.File OptimizeSyntax(ElmSyntaxAbstract.File file)
+    {
+        var operatorLoweringConfig =
+            new ElmSyntaxAbstract.OperatorLowering.Config(
+                LowerPipes: true,
+                LowerBasicsArithmeticOperators: true,
+                LowerBasicsComparisonOperators: true,
+                LowerBasicsEqualityOperators: true,
+                LowerBasicsLogicalOperators: true);
+
+        return
+            ElmSyntaxAbstract.OperatorLowering.RewriteOperators(file, operatorLoweringConfig);
     }
 
     /// <summary>
