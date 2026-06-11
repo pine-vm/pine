@@ -9,7 +9,7 @@ using Xunit;
 using Abstract = Pine.Core.Elm.ElmSyntax.ElmSyntaxAbstract;
 using Concrete = Pine.Core.Elm.ElmSyntax.SyntaxModel;
 
-namespace Pine.Core.Tests.Elm.ElmSyntax.ElmSyntaxAbstractTests;
+namespace Pine.Core.Tests.Elm.ElmSyntax.ElmSyntaxAbstract;
 
 /// <summary>
 /// Tests verifying conversion from the concrete syntax model (namespace <c>SyntaxModel</c>) into the

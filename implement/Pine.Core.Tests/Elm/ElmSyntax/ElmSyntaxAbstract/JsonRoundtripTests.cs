@@ -6,7 +6,7 @@ using System.Collections.Generic;
 using System.Numerics;
 using Xunit;
 
-namespace Pine.Core.Tests.Elm.ElmSyntax.ElmSyntaxAbstractTests;
+namespace Pine.Core.Tests.Elm.ElmSyntax.ElmSyntaxAbstract;
 
 // 'Expression' is also defined as Pine.Core.Expression in an enclosing namespace; alias to the abstract model.
 using InfixDirection = Core.Elm.ElmSyntax.SyntaxModel.InfixDirection;
