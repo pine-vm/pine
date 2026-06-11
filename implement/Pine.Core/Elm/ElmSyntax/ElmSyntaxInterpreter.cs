@@ -3690,8 +3690,7 @@ public partial class ElmSyntaxInterpreter
 
         var functionName = application.FunctionName.DeclName;
 
-        // Elm kernel functions receive a single argument; when multiple arguments are supplied in Elm,
-        // they are packed into a list and passed as that single argument.
+        // Pine builtin/kernel functions receive a single argument;
         PineValue kernelInput;
 
         if (application.Arguments.Count is 1)
@@ -3700,14 +3699,11 @@ public partial class ElmSyntaxInterpreter
         }
         else
         {
-            var argumentValues = new PineValue[application.Arguments.Count];
+            // Multiple arguments are illegal.
 
-            for (var i = 0; i < application.Arguments.Count; i++)
-            {
-                argumentValues[i] = application.Arguments[i].Evaluate();
-            }
-
-            kernelInput = PineValue.List(argumentValues);
+            throw new System.ArgumentException(
+                "Unexpected number of arguments for Pine builtin/kernel function application. Function '" +
+                application.FunctionName.FullName + "' received " + application.Arguments.Count + " arguments.");
         }
 
         var resultPine = KernelFunction.ApplyKernelFunctionGeneric(functionName, kernelInput);
