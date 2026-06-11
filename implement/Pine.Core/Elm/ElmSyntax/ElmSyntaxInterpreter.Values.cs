@@ -211,7 +211,7 @@ public partial class ElmSyntaxInterpreter
         {
             if (renderClosuresForError)
             {
-                return new ElmValue.ElmInternal("closure(" + RenderSourceRef(closure.Source) + ")");
+                return new ElmValue.ElmInternal("closure(" + RenderClosure(closure) + ")");
             }
 
             throw new System.NotSupportedException(
@@ -655,7 +655,7 @@ public partial class ElmSyntaxInterpreter
     {
         if (valueInProcess is ElmClosureInProcess closure)
         {
-            return ($"<closure({RenderSourceRef(closure.Source)})>", needsParens: true);
+            return ($"<closure({RenderClosure(closure)})>", needsParens: true);
         }
 
         var asElmValue = ToElmForErrorRendering(valueInProcess);
@@ -663,7 +663,19 @@ public partial class ElmSyntaxInterpreter
         return ElmValue.RenderAsElmExpression(asElmValue);
     }
 
-    internal static string RenderSourceRef(ElmClosureInProcess.SourceRef sourceRef)
+    /// <summary>
+    /// Renders a closure for inclusion in runtime-error messages and stack traces. For a
+    /// declared function the rendering carries the function's name; for an anonymous lambda it
+    /// carries the containing/originating top-level declaration (the closure's
+    /// <see cref="ElmClosureInProcess.CapturedTopLevel"/>) so developers can tell which
+    /// declaration the lambda came from.
+    /// </summary>
+    internal static string RenderClosure(ElmClosureInProcess closure) =>
+        RenderSourceRef(closure.Source, closure.CapturedTopLevel);
+
+    internal static string RenderSourceRef(
+        ElmClosureInProcess.SourceRef sourceRef,
+        DeclQualifiedName? containingDeclaration = null)
     {
         if (sourceRef is ElmClosureInProcess.SourceRef.Declared declared)
         {
@@ -672,7 +684,14 @@ public partial class ElmSyntaxInterpreter
 
         if (sourceRef is ElmClosureInProcess.SourceRef.Lambda lambda)
         {
-            return $"lambda:{lambda.LambdaExpression}";
+            var containingSuffix =
+                containingDeclaration is null
+                ?
+                ""
+                :
+                $" in {containingDeclaration.FullName}";
+
+            return $"lambda{containingSuffix}:{lambda.LambdaExpression}";
         }
 
         throw new System.NotImplementedException(

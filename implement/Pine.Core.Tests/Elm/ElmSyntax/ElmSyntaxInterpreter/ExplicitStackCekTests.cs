@@ -166,4 +166,82 @@ public class ExplicitStackCekTests
             new ElmCallStackFrame(DeclQualifiedName.Create([], "negateString"), []),
             new ElmCallStackFrame(DeclQualifiedName.Create([], "outer"), []));
     }
+
+    /// <summary>
+    /// Each argument rendering in a stack-trace frame is truncated to a configurable length
+    /// limit (default <see cref="ElmCallStackFrame.DefaultArgumentRenderLengthLimit"/>). The
+    /// truncated rendering keeps the value's prefix and records the value's full character length
+    /// so the information most useful for debugging is preserved. A negative limit disables
+    /// truncation.
+    /// </summary>
+    [Fact]
+    public void Stack_frame_argument_rendering_is_truncated_to_configurable_limit()
+    {
+        // A long string whose Elm rendering comfortably exceeds the default 400-char limit.
+        var longText = new string('a', 5000);
+
+        var frame =
+            new ElmCallStackFrame(
+                DeclQualifiedName.Create([], "consume"),
+                [ElmInterpreter.ToProcess(ElmValue.StringInstance(longText))]);
+
+        // Full (untruncated) rendering: the entire string plus the surrounding quotes.
+        var full = frame.Render(argumentRenderLengthLimit: -1);
+
+        full.Should().Contain(longText);
+        full.Should().NotContain("truncated");
+
+        // Default rendering (via ToString) truncates each argument to 400 characters and records
+        // the full length so the value's size remains visible.
+        var defaultRendered = frame.ToString();
+
+        defaultRendered.Should().Contain("consume");
+        defaultRendered.Should().Contain("truncated, " + (longText.Length + 2) + " chars total");
+        defaultRendered.Length.Should().BeLessThan(full.Length);
+
+        // A custom, smaller limit truncates even more aggressively.
+        var smallRendered = frame.Render(argumentRenderLengthLimit: 20);
+
+        smallRendered.Length.Should().BeLessThan(defaultRendered.Length);
+        smallRendered.Should().Contain("truncated, " + (longText.Length + 2) + " chars total");
+    }
+
+    /// <summary>
+    /// A runtime error raised while an anonymous lambda is the innermost active frame surfaces a
+    /// stack frame whose name carries the containing/originating top-level declaration (rather than
+    /// a bare <c>&lt;lambda&gt;</c>), so developers can tell which declaration the lambda came from.
+    /// </summary>
+    [Fact]
+    public void Lambda_frame_includes_containing_declaration_name()
+    {
+        var elmModuleText =
+            """
+            module Test exposing (..)
+
+
+            main =
+                callWithLambda
+
+
+            callWithLambda =
+                (\y -> -"not a number") 1
+            """;
+
+        var declarations = InterpreterTestHelper.ParseDeclarationsRemovingModuleNames(elmModuleText);
+
+        var mainBody = InterpreterTestHelper.GetFunctionBody(declarations, "main");
+
+        var result = ElmInterpreter.InterpretAsElmValue(mainBody, declarations);
+
+        var error =
+            result.IsErrOrNull()
+            ?? throw new System.Exception(
+                "Expected error result, got " + result.GetType().FullName);
+
+        // The innermost frame is the anonymous lambda, named after the declaration it originated in.
+        error.CallStack[0].FunctionName
+            .Should().Be(DeclQualifiedName.Create(["callWithLambda"], "<lambda>"));
+
+        error.ToString().Should().Contain("callWithLambda.<lambda>");
+    }
 }

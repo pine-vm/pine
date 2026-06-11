@@ -19,6 +19,15 @@ public sealed record ElmCallStackFrame(
     DeclQualifiedName FunctionName,
     IReadOnlyList<PineValueInProcess> Arguments)
 {
+    /// <summary>
+    /// Default upper bound (in characters) applied to each individual argument rendering
+    /// when a frame is rendered as part of a stack trace. Argument renderings longer than
+    /// this are truncated (see <see cref="Render(int)"/>) so that a single large value (for
+    /// example a whole source file passed as a <c>String</c>) does not flood the trace, while
+    /// still surfacing enough of the value — and its total length — to be useful for debugging.
+    /// </summary>
+    public const int DefaultArgumentRenderLengthLimit = 400;
+
     /// <inheritdoc/>
     public bool Equals(ElmCallStackFrame? other)
     {
@@ -56,9 +65,27 @@ public sealed record ElmCallStackFrame(
     /// <summary>
     /// Renders the frame as an Elm-style function application: the fully-qualified function
     /// name followed by each argument's Elm-expression rendering, parenthesising arguments
-    /// whose own rendering would be ambiguous in an application context.
+    /// whose own rendering would be ambiguous in an application context. Each argument's
+    /// rendering is truncated to <see cref="DefaultArgumentRenderLengthLimit"/> characters; use
+    /// <see cref="Render(int)"/> to configure a different limit.
     /// </summary>
     public override string ToString()
+    {
+        return Render(DefaultArgumentRenderLengthLimit);
+    }
+
+    /// <summary>
+    /// Renders the frame as an Elm-style function application (see <see cref="ToString"/>),
+    /// truncating each individual argument rendering to at most
+    /// <paramref name="argumentRenderLengthLimit"/> characters. A negative limit disables
+    /// truncation and renders every argument in full. When an argument rendering is truncated,
+    /// a suffix recording the value's full character length is appended so that the information
+    /// most useful for debugging (the value's prefix and its overall size) is retained.
+    /// </summary>
+    /// <param name="argumentRenderLengthLimit">
+    /// Maximum number of characters to keep from each argument's rendering. Negative to keep all.
+    /// </param>
+    public string Render(int argumentRenderLengthLimit)
     {
         if (Arguments.Count is 0)
             return FunctionName.FullName;
@@ -69,16 +96,40 @@ public sealed record ElmCallStackFrame(
         {
             var (rendered, needsParens) = ElmSyntaxInterpreter.RenderArgumentForError(argument);
 
+            var truncated = TruncateArgumentRendering(rendered, argumentRenderLengthLimit);
+
             sb.Append(' ');
 
             if (needsParens)
-                sb.Append('(').Append(rendered).Append(')');
+                sb.Append('(').Append(truncated).Append(')');
 
             else
-                sb.Append(rendered);
+                sb.Append(truncated);
         }
 
         return sb.ToString();
+    }
+
+    /// <summary>
+    /// Truncates <paramref name="rendered"/> to at most <paramref name="limit"/> characters,
+    /// appending a marker that records the value's full length. Returns the input unchanged when
+    /// <paramref name="limit"/> is negative or the rendering already fits. The cut is adjusted so
+    /// that it never splits a UTF-16 surrogate pair.
+    /// </summary>
+    internal static string TruncateArgumentRendering(string rendered, int limit)
+    {
+        if (limit < 0 || rendered.Length <= limit)
+            return rendered;
+
+        var cut = limit;
+
+        // Avoid splitting a surrogate pair at the cut boundary.
+        if (cut > 0 && char.IsHighSurrogate(rendered[cut - 1]))
+            cut--;
+
+        return
+            rendered[..cut]
+            + "…⟨truncated, " + rendered.Length.ToString() + " chars total⟩";
     }
 }
 
@@ -131,9 +182,25 @@ public sealed record ElmInterpretationError(
     /// <summary>
     /// Renders the error as a human-readable string: the <see cref="Message"/> on the first
     /// line, followed by the Elm call stack, innermost frame first, with one "<c>  at &lt;frame&gt;</c>"
-    /// line per frame.
+    /// line per frame. Each frame's argument renderings are truncated to
+    /// <see cref="ElmCallStackFrame.DefaultArgumentRenderLengthLimit"/> characters; use
+    /// <see cref="Render(int)"/> to configure a different limit.
     /// </summary>
     public override string ToString()
+    {
+        return Render(ElmCallStackFrame.DefaultArgumentRenderLengthLimit);
+    }
+
+    /// <summary>
+    /// Renders the error as a human-readable string (see <see cref="ToString"/>), truncating each
+    /// stack frame's individual argument renderings to at most
+    /// <paramref name="argumentRenderLengthLimit"/> characters. A negative limit disables
+    /// truncation and renders every argument in full.
+    /// </summary>
+    /// <param name="argumentRenderLengthLimit">
+    /// Maximum number of characters to keep from each argument's rendering. Negative to keep all.
+    /// </param>
+    public string Render(int argumentRenderLengthLimit)
     {
         if (CallStack.Count is 0)
             return Message;
@@ -143,7 +210,7 @@ public sealed record ElmInterpretationError(
 
         for (var i = 0; i < CallStack.Count; i++)
         {
-            sb.Append("\n  at ").Append(CallStack[i]);
+            sb.Append("\n  at ").Append(CallStack[i].Render(argumentRenderLengthLimit));
         }
 
         return sb.ToString();
@@ -2511,7 +2578,7 @@ public partial class ElmSyntaxInterpreter
             case ElmClosureInProcess.SourceRef.Lambda lambdaSource:
                 parameterPatterns = lambdaSource.LambdaExpression.Arguments;
                 bodyExpression = lambdaSource.LambdaExpression.Expression;
-                callFrameName = SyntheticLambdaName(lambdaSource.LambdaExpression);
+                callFrameName = SyntheticLambdaName(lambdaSource.LambdaExpression, closure.CapturedTopLevel);
                 callFrameSourceIdentity = lambdaSource.LambdaExpression;
                 break;
 
@@ -2575,20 +2642,20 @@ public partial class ElmSyntaxInterpreter
 
     /// <summary>
     /// Builds a synthetic <see cref="DeclQualifiedName"/> for a lambda's <see cref="Kont.CallFrame"/>.
-    /// The abstract syntax model carries no source location, so a fixed namespace-less
-    /// <c>&lt;lambda&gt;</c> name is used. Stack traces remain readable, and the
-    /// infinite-recursion detector relies on reference identity of the lambda AST node rather
-    /// than this name, so the fixed name does not cause false positives.
+    /// The abstract syntax model carries no source location, so the lambda is named
+    /// <c>&lt;lambda&gt;</c> qualified by <paramref name="containingDeclaration"/> — the top-level
+    /// declaration the lambda was reached from — so that stack traces make clear which declaration
+    /// the anonymous function originated in (e.g. <c>LanguageService.listDeclarationsInDeclaration.&lt;lambda&gt;</c>).
+    /// The infinite-recursion detector relies on reference identity of the lambda AST node rather
+    /// than this name, so the synthetic name does not cause false positives.
     /// </summary>
     private static DeclQualifiedName SyntheticLambdaName(
-        ElmSyntaxAbstract.Expression.LambdaExpression lambda)
+        ElmSyntaxAbstract.Expression.LambdaExpression lambda,
+        DeclQualifiedName containingDeclaration)
     {
         _ = lambda;
 
-        return
-            DeclQualifiedName.Create(
-                namespaces: [],
-                declName: "<lambda>");
+        return containingDeclaration.ContainedDeclName("<lambda>");
     }
 
     /// <summary>
