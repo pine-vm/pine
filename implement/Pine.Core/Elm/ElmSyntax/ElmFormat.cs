@@ -1,3 +1,6 @@
+using System.Collections.Generic;
+using System.Linq;
+
 namespace Pine.Core.Elm.ElmSyntax;
 
 /// <summary>
@@ -6,6 +9,30 @@ namespace Pine.Core.Elm.ElmSyntax;
 /// </summary>
 public static class ElmFormat
 {
+    /// <summary>
+    /// A syntax error encountered while parsing an Elm module that could otherwise still be
+    /// formatted (for example an incomplete declaration in an otherwise parseable module).
+    /// </summary>
+    /// <param name="Location">The precise location (1-based row/column) where parsing failed.</param>
+    /// <param name="Range">The range of the incomplete declaration the error belongs to.</param>
+    /// <param name="Message">The error message describing why parsing failed.</param>
+    public record ModuleSyntaxError(
+        SyntaxModel.Location Location,
+        SyntaxModel.Range Range,
+        string Message);
+
+    /// <summary>
+    /// The result of formatting an Elm module, including any syntax errors that were
+    /// recovered from while still producing a formatted rendering.
+    /// </summary>
+    /// <param name="FormattedText">The formatted source code.</param>
+    /// <param name="SyntaxErrors">
+    /// Syntax errors recovered from during parsing. Empty when the module parsed cleanly.
+    /// </param>
+    public record ModuleFormatResult(
+        string FormattedText,
+        IReadOnlyList<ModuleSyntaxError> SyntaxErrors);
+
     /// <summary>
     /// Formats Elm module source code, preserving the original linebreak style (LF or CRLF).
     /// </summary>
@@ -34,22 +61,78 @@ public static class ElmFormat
     /// </returns>
     public static Result<string, string> FormatModuleText(string moduleText, LinebreakStyle linebreakStyle)
     {
+        var result = FormatModuleTextReportingSyntaxErrors(moduleText, linebreakStyle);
+
+        if (result.IsErrOrNull() is { } err)
+        {
+            return Result<string, string>.err(err);
+        }
+
+        if (result.IsOkOrNull() is not { } ok)
+        {
+            throw new System.NotImplementedException(
+                "Unexpected null result from FormatModuleTextReportingSyntaxErrors: " + result.ToString());
+        }
+
+        return Result<string, string>.ok(ok.FormattedText);
+    }
+
+    /// <summary>
+    /// Formats Elm module source code, preserving the original linebreak style (LF or CRLF),
+    /// and reports any syntax errors that were recovered from while still producing a formatted rendering.
+    /// </summary>
+    /// <param name="moduleText">The Elm module source code to format.</param>
+    /// <returns>
+    /// A result containing either the formatted source code together with the list of recovered
+    /// syntax errors, or an error message describing why parsing/formatting failed entirely.
+    /// </returns>
+    public static Result<string, ModuleFormatResult> FormatModuleTextReportingSyntaxErrors(string moduleText)
+    {
+        var linebreakStyle =
+            Rendering.DetectLinebreakStyle(moduleText) ?? LinebreakStyle.LF;
+
+        return FormatModuleTextReportingSyntaxErrors(moduleText, linebreakStyle);
+    }
+
+    /// <summary>
+    /// Formats Elm module source code using the specified linebreak style and reports any syntax
+    /// errors that were recovered from while still producing a formatted rendering.
+    /// </summary>
+    /// <param name="moduleText">The Elm module source code to format.</param>
+    /// <param name="linebreakStyle">The linebreak style to use in the output (LF or CRLF).</param>
+    /// <returns>
+    /// A result containing either the formatted source code together with the list of recovered
+    /// syntax errors, or an error message describing why parsing/formatting failed entirely.
+    /// </returns>
+    public static Result<string, ModuleFormatResult> FormatModuleTextReportingSyntaxErrors(
+        string moduleText,
+        LinebreakStyle linebreakStyle)
+    {
         var parseResult = ElmSyntaxParser.ParseModuleText(moduleText);
 
         if (parseResult.IsErrOrNull() is { } parseErr)
         {
-            return Result<string, string>.err(parseErr);
+            return Result<string, ModuleFormatResult>.err(parseErr);
         }
 
         if (parseResult.IsOkOrNull() is not { } parsed)
         {
-            return Result<string, string>.err("Unexpected parse result type");
+            return Result<string, ModuleFormatResult>.err("Unexpected parse result type");
         }
 
         var formatted = Avh4Format.Format(parsed);
 
         var rendered = Rendering.ToString(formatted, linebreakStyle);
 
-        return Result<string, string>.ok(rendered);
+        IReadOnlyList<ModuleSyntaxError> syntaxErrors =
+            [.. parsed.IncompleteDeclarations
+                .Select(node =>
+                    new ModuleSyntaxError(
+                        Location: node.Value.ParseError.Location,
+                        Range: node.Range,
+                        Message: node.Value.ParseError.Message))];
+
+        return Result<string, ModuleFormatResult>.ok(
+            new ModuleFormatResult(rendered, syntaxErrors));
     }
 }

@@ -759,7 +759,8 @@ public class LanguageServer(
 
     public IReadOnlyList<TextEdit> TextDocument_formatting(
         TextDocumentIdentifier textDocument,
-        FormattingOptions options)
+        FormattingOptions options,
+        System.Action<TextDocumentIdentifier, IReadOnlyList<Diagnostic>> publishDiagnostics)
     {
         var textDocumentUri = DocumentUriCleaned(textDocument.Uri);
 
@@ -822,6 +823,18 @@ public class LanguageServer(
         if (newContent is null)
         {
             Log("Exiting because new content for document " + textDocumentUri + " is null");
+
+            // Even when formatting could not produce new content (for example because of
+            // syntax errors), publish diagnostics for any syntax errors so the user can see
+            // them right away. Locations refer to the unchanged document content.
+            if (textDocument.Uri.EndsWith(".elm"))
+            {
+                PublishSyntaxErrorDiagnostics(
+                    textDocument,
+                    textDocumentContentBefore,
+                    publishDiagnostics);
+            }
+
             return [];
         }
 
@@ -838,8 +851,40 @@ public class LanguageServer(
             textEdits.Count + " text edits with " +
             textEdits.Sum(te => te.NewText.Length) + " aggregate chars replaced or added");
 
+        // Publish diagnostics for syntax errors in the formatted document. The client will
+        // apply the returned edits, so locations refer to the formatted content. Publishing
+        // (even an empty list) ensures stale diagnostics are removed on formatting.
+        if (textDocument.Uri.EndsWith(".elm"))
+        {
+            PublishSyntaxErrorDiagnostics(
+                textDocument,
+                newContent,
+                publishDiagnostics);
+        }
+
         return textEdits;
     }
+
+    /// <summary>
+    /// Computes syntax-error diagnostics for the given Elm module content and publishes them
+    /// for the document. Publishing an empty list removes stale diagnostics from the client.
+    /// </summary>
+    private void PublishSyntaxErrorDiagnostics(
+        TextDocumentIdentifier textDocument,
+        string moduleContent,
+        System.Action<TextDocumentIdentifier, IReadOnlyList<Diagnostic>> publishDiagnostics)
+    {
+        var diagnostics = ComputeSyntaxErrorDiagnostics(moduleContent);
+
+        Log(
+            "Publishing " + diagnostics.Count + " syntax-error diagnostics for " +
+            textDocument.Uri);
+
+        publishDiagnostics(
+            new TextDocumentIdentifier(textDocument.Uri),
+            diagnostics);
+    }
+
 
     public string? TextDocument_formatting_lessStore(
         TextDocumentIdentifier textDocument,
@@ -887,10 +932,10 @@ public class LanguageServer(
                         return null;
                     }
 
-                    if (formatResult.IsOkOrNull() is not { } rendered)
+                    if (formatResult.IsOkOrNull() is not { } formatOk)
                     {
-                        Log("Error: Unexpected format result type");
-                        return null;
+                        throw new System.NotImplementedException(
+                            "Unexpected ElmFormat.FormatModuleTextReportingSyntaxErrors result: " + formatResult.GetType());
                     }
 
                     formatClock.Stop();
@@ -900,7 +945,7 @@ public class LanguageServer(
                         CommandLineInterface.FormatIntegerForDisplay((int)formatClock.Elapsed.TotalMilliseconds)
                         + " ms");
 
-                    return rendered;
+                    return formatOk;
                 }
                 catch (System.Exception e)
                 {
@@ -1368,12 +1413,66 @@ public class LanguageServer(
                 "Unexpected result type: " + localPathResult.GetType());
         }
 
+        // First check for syntax errors using the Elm syntax parser. As long as the module
+        // contains any syntax errors, publish those as diagnostics and skip elm make: while
+        // the module is not even parseable, an elm make report would not add value, and the
+        // syntax-error locations come straight from the Elm syntax parser.
+        if (textDocumentUri.EndsWith(".elm"))
+        {
+            var savedContent = didSaveParams.Text;
+
+            if (savedContent is null)
+            {
+                _clientTextDocumentContents.TryGetValue(textDocumentUri, out savedContent);
+            }
+
+            if (savedContent is null)
+            {
+                try
+                {
+                    savedContent = System.IO.File.ReadAllText(localPath);
+                }
+                catch (System.Exception e)
+                {
+                    Log("Failed reading file for syntax check: " + e);
+                }
+            }
+
+            if (savedContent is not null)
+            {
+                var syntaxDiagnostics = ComputeSyntaxErrorDiagnostics(savedContent);
+
+                if (syntaxDiagnostics.Count is not 0)
+                {
+                    Log(
+                        "Found " + syntaxDiagnostics.Count + " syntax error(s) in " +
+                        textDocumentUri + "; skipping elm make");
+
+                    publishDiagnostics(
+                        new TextDocumentIdentifier(didSaveParams.TextDocument.Uri),
+                        syntaxDiagnostics);
+
+                    return;
+                }
+            }
+        }
+
         var elmJsonFilePath =
             FindElmJsonFile(localPath) ?? initializeParams?.RootPath;
 
         if (elmJsonFilePath is null)
         {
             Log("Failed to find elm.json file for " + textDocumentUri);
+
+            // The module parsed cleanly (otherwise we would have returned above), so clear
+            // any stale syntax-error diagnostics even though elm make cannot run here.
+            if (textDocumentUri.EndsWith(".elm"))
+            {
+                publishDiagnostics(
+                    new TextDocumentIdentifier(didSaveParams.TextDocument.Uri),
+                    []);
+            }
+
             return;
         }
 
@@ -1383,6 +1482,14 @@ public class LanguageServer(
         if (workingDirectoryAbsolute is null)
         {
             Log("Failed to get elm.json directory for " + textDocumentUri);
+
+            if (textDocumentUri.EndsWith(".elm"))
+            {
+                publishDiagnostics(
+                    new TextDocumentIdentifier(didSaveParams.TextDocument.Uri),
+                    []);
+            }
+
             return;
         }
 
@@ -1480,6 +1587,86 @@ public class LanguageServer(
                     diagnostics);
             }
         }
+    }
+
+    /// <summary>
+    /// Computes language-server diagnostics for syntax errors in an Elm module, reusing the
+    /// locations and messages reported by the Elm syntax parser. Each diagnostic has severity
+    /// 'error' and source "elm syntax".
+    /// <para>
+    /// Returns an empty list when the module parses cleanly (it may still need formatting).
+    /// When the module cannot be parsed at all, a single diagnostic is reported at the start
+    /// of the document carrying the parser's error message.
+    /// </para>
+    /// </summary>
+    public static IReadOnlyList<Diagnostic> ComputeSyntaxErrorDiagnostics(string moduleText)
+    {
+        const string DiagnosticSource = "elm syntax";
+
+        var formatResult =
+            ElmFormat.FormatModuleTextReportingSyntaxErrors(moduleText);
+
+        if (formatResult.IsErrOrNull() is { } parseErr)
+        {
+            // The module could not be parsed at all (e.g. malformed module header).
+            // Report a single diagnostic at the start of the document.
+            return
+                [
+                new Diagnostic(
+                    Range: new Range(
+                        Start: new Position(Line: 0, Character: 0),
+                        End: new Position(Line: 0, Character: 1)),
+                    Severity: DiagnosticSeverity.Error,
+                    Code: null,
+                    Source: DiagnosticSource,
+                    Message: parseErr,
+                    CodeDescription: null,
+                    Tags: null,
+                    RelatedInformation: null)
+                ];
+        }
+
+        if (formatResult.IsOkOrNull() is not { } formatOk)
+        {
+            throw new System.NotImplementedException(
+                "Unexpected ElmFormat.FormatModuleTextReportingSyntaxErrors result: " + formatResult.GetType());
+        }
+
+        return
+            [
+            ..formatOk.SyntaxErrors
+            .Select(
+                syntaxError =>
+                {
+                    // The Elm syntax parser uses 1-based rows/columns; LSP uses 0-based positions.
+                    var startLine = System.Math.Max(0, syntaxError.Location.Row - 1);
+                    var startChar = System.Math.Max(0, syntaxError.Location.Column - 1);
+
+                    // Highlight from the error location to the end of the incomplete declaration.
+                    var endLine = System.Math.Max(0, syntaxError.Range.End.Row - 1);
+                    var endChar = System.Math.Max(0, syntaxError.Range.End.Column - 1);
+
+                    // Guard against an end that precedes the start.
+                    if (endLine < startLine || (endLine == startLine && endChar < startChar))
+                    {
+                        endLine = startLine;
+                        endChar = startChar + 1;
+                    }
+
+                    return
+                        new Diagnostic(
+                            Range: new Range(
+                                Start: new Position(Line: (uint)startLine, Character: (uint)startChar),
+                                End: new Position(Line: (uint)endLine, Character: (uint)endChar)),
+                            Severity: DiagnosticSeverity.Error,
+                            Code: null,
+                            Source: DiagnosticSource,
+                            Message: syntaxError.Message,
+                            CodeDescription: null,
+                            Tags: null,
+                            RelatedInformation: null);
+                })
+            ];
     }
 
     public static string MessageItemToString(MessageItem messageItem)

@@ -132,7 +132,12 @@ public record LanguageServerRpcTarget(
         TextDocumentIdentifier textDocument,
         FormattingOptions options)
     {
-        return Server.TextDocument_formatting(textDocument, options);
+        return
+            Server.TextDocument_formatting(
+                textDocument,
+                options,
+                publishDiagnostics:
+                (documentId, diagnostics) => PublishDiagnosticsAsync(documentId.Uri, diagnostics));
     }
 
     /// <summary>

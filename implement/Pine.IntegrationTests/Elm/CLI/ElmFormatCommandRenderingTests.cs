@@ -1,7 +1,11 @@
 using AwesomeAssertions;
+using Pine.Core.Elm.ElmSyntax;
 using Pine.Elm.CLI;
+using System.Collections.Generic;
 using System.Collections.Immutable;
 using Xunit;
+
+using SyntaxModel = Pine.Core.Elm.ElmSyntax.SyntaxModel;
 
 namespace Pine.IntegrationTests.Elm.CLI;
 
@@ -252,5 +256,71 @@ public class ElmFormatCommandRenderingTests
         lines.Should().HaveCountGreaterThanOrEqualTo(2);
         lines.Should().Contain(line => line.Contains("properly formatted"));
         lines.Should().Contain(line => line.Contains("Verification passed"));
+    }
+
+    [Fact]
+    public void RenderSyntaxErrors_lists_each_error_with_location()
+    {
+        IReadOnlyList<(string path, IReadOnlyList<ElmFormat.ModuleSyntaxError> errors)> filesWithErrors =
+            [
+                (
+                    "/path/to/Test_A.elm",
+                    [
+                        new ElmFormat.ModuleSyntaxError(
+                            Location: new SyntaxModel.Location(Row: 7, Column: 8),
+                            Range: new SyntaxModel.Range(new SyntaxModel.Location(7, 1), new SyntaxModel.Location(7, 9)),
+                            Message: "Unsupported token type in expression"),
+                    ]
+                ),
+            ];
+
+        var rendered = ElmFormatCommand.RenderSyntaxErrorsToString(filesWithErrors);
+
+        rendered.Should().Contain("SYNTAX ERRORS (1)");
+        rendered.Should().Contain("/path/to/Test_A.elm");
+        rendered.Should().Contain("7:8: Unsupported token type in expression");
+    }
+
+    [Fact]
+    public void RenderSyntaxErrors_counts_errors_across_files_and_sorts_by_location()
+    {
+        IReadOnlyList<(string path, IReadOnlyList<ElmFormat.ModuleSyntaxError> errors)> filesWithErrors =
+            [
+                (
+                    "/path/to/Beta.elm",
+                    [
+                        new ElmFormat.ModuleSyntaxError(
+                            Location: new SyntaxModel.Location(Row: 20, Column: 3),
+                            Range: new SyntaxModel.Range(new SyntaxModel.Location(20, 1), new SyntaxModel.Location(20, 5)),
+                            Message: "second error"),
+                        new ElmFormat.ModuleSyntaxError(
+                            Location: new SyntaxModel.Location(Row: 5, Column: 1),
+                            Range: new SyntaxModel.Range(new SyntaxModel.Location(5, 1), new SyntaxModel.Location(5, 5)),
+                            Message: "first error"),
+                    ]
+                ),
+                (
+                    "/path/to/Alfa.elm",
+                    [
+                        new ElmFormat.ModuleSyntaxError(
+                            Location: new SyntaxModel.Location(Row: 1, Column: 1),
+                            Range: new SyntaxModel.Range(new SyntaxModel.Location(1, 1), new SyntaxModel.Location(1, 5)),
+                            Message: "alfa error"),
+                    ]
+                ),
+            ];
+
+        var rendered = ElmFormatCommand.RenderSyntaxErrorsToString(filesWithErrors);
+
+        rendered.Should().Contain("SYNTAX ERRORS (3)");
+
+        // Files are sorted alphabetically and errors within a file are sorted by location.
+        var alfaIndex = rendered.IndexOf("Alfa.elm", System.StringComparison.Ordinal);
+        var betaIndex = rendered.IndexOf("Beta.elm", System.StringComparison.Ordinal);
+        alfaIndex.Should().BeLessThan(betaIndex);
+
+        var firstErrorIndex = rendered.IndexOf("5:1: first error", System.StringComparison.Ordinal);
+        var secondErrorIndex = rendered.IndexOf("20:3: second error", System.StringComparison.Ordinal);
+        firstErrorIndex.Should().BeLessThan(secondErrorIndex);
     }
 }

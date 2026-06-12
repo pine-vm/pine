@@ -146,6 +146,7 @@ public class ElmFormatCommand
         var alreadyFormatted = new ConcurrentBag<string>();
         var needsFormatting = new ConcurrentBag<(string path, string formattedContent)>();
         var parseErrors = new ConcurrentBag<(string path, string error)>();
+        var syntaxErrors = new ConcurrentBag<(string path, IReadOnlyList<ElmFormat.ModuleSyntaxError> errors)>();
 
         Parallel.ForEach(
             elmFiles,
@@ -155,7 +156,7 @@ public class ElmFormatCommand
                 {
                     var originalContent = File.ReadAllText(filePath);
 
-                    var formatResult = ElmFormat.FormatModuleText(originalContent);
+                    var formatResult = ElmFormat.FormatModuleTextReportingSyntaxErrors(originalContent);
 
                     if (formatResult.IsErrOrNull() is { } formatErr)
                     {
@@ -163,10 +164,17 @@ public class ElmFormatCommand
                         return;
                     }
 
-                    if (formatResult.IsOkOrNull() is not { } rendered)
+                    if (formatResult.IsOkOrNull() is not { } formatOk)
                     {
-                        parseErrors.Add((filePath, "Unexpected format result type"));
-                        return;
+                        throw new NotImplementedException(
+                            "Unexpected ElmFormat.FormatModuleTextReportingSyntaxErrors result: " + formatResult.GetType());
+                    }
+
+                    var rendered = formatOk.FormattedText;
+
+                    if (formatOk.SyntaxErrors.Count is not 0)
+                    {
+                        syntaxErrors.Add((filePath, formatOk.SyntaxErrors));
                     }
 
                     // Check if content changed
@@ -201,6 +209,11 @@ public class ElmFormatCommand
             .OrderBy(f => f.path, StringComparer.Ordinal)
             .ToImmutableList();
 
+        var sortedSyntaxErrors =
+            syntaxErrors
+            .OrderBy(e => e.path, StringComparer.Ordinal)
+            .ToImmutableList();
+
         // For larger file counts, show a nice overview
         var showDetailedOverview = elmFiles.Count >= MinFilesForDetailedOverview;
 
@@ -211,7 +224,7 @@ public class ElmFormatCommand
                 elmFiles.Count,
                 sortedAlreadyFormatted.Count,
                 sortedNeedsFormatting.Count,
-                sortedParseErrors.Count,
+                sortedParseErrors.Count + sortedSyntaxErrors.Count,
                 verifyNoChanges);
         }
 
@@ -221,6 +234,12 @@ public class ElmFormatCommand
             if (sortedParseErrors.Count is not 0)
             {
                 PrintFilesWithErrors(sortedParseErrors, showDetailedOverview);
+                return 200;
+            }
+
+            if (sortedSyntaxErrors.Count is not 0)
+            {
+                PrintSyntaxErrors(sortedSyntaxErrors);
                 return 200;
             }
 
@@ -241,6 +260,13 @@ public class ElmFormatCommand
             return 200;
         }
 
+        // Report recovered syntax errors (incomplete declarations). The file can still be
+        // formatted, so list the errors before continuing with the formatting flow.
+        if (sortedSyntaxErrors.Count is not 0)
+        {
+            PrintSyntaxErrors(sortedSyntaxErrors);
+        }
+
         // Report already formatted files (for single file mode)
         if (!showDetailedOverview && sortedAlreadyFormatted.Count is not 0)
         {
@@ -253,6 +279,18 @@ public class ElmFormatCommand
         // Report files that need formatting
         if (sortedNeedsFormatting.Count is 0)
         {
+            if (sortedSyntaxErrors.Count is not 0)
+            {
+                // The file(s) are already formatted but still contain syntax errors,
+                // so do not claim everything is fine.
+                Console.WriteLine("");
+
+                Console.WriteLine(
+                    $"⚠ {sortedSyntaxErrors.Count} file(s) contain syntax errors (see above).");
+
+                return 200;
+            }
+
             PrintSuccessMessage(elmFiles.Count, verifyNoChanges);
             return 0;
         }
@@ -284,6 +322,12 @@ public class ElmFormatCommand
             }
 
             Console.WriteLine($"\n✓ Formatted {sortedNeedsFormatting.Count} file(s).");
+
+            if (sortedSyntaxErrors.Count is not 0)
+            {
+                Console.WriteLine(
+                    $"⚠ {sortedSyntaxErrors.Count} file(s) still contain syntax errors (see above).");
+            }
         }
 
         return 0;
@@ -556,6 +600,80 @@ public class ElmFormatCommand
             Console.WriteLine,
             errors.ToImmutableDictionary(e => e.path, e => new ElmFormatFileResult.ParseError(e.error)),
             showGrouped);
+
+    /// <summary>
+    /// Renders recovered syntax errors (from incomplete declarations) grouped by file.
+    /// Each individual syntax/parsing error is rendered on a dedicated line including its
+    /// location (line:column) as reported by the Elm syntax parser.
+    /// </summary>
+    /// <param name="writeLine">Delegate to write a line of output.</param>
+    /// <param name="filesWithErrors">Files paired with the syntax errors found in them.</param>
+    /// <param name="width">The total width of the separator lines.</param>
+    public static void RenderSyntaxErrors(
+        Action<string> writeLine,
+        IReadOnlyList<(string path, IReadOnlyList<ElmFormat.ModuleSyntaxError> errors)> filesWithErrors,
+        int width)
+    {
+        var totalErrors = filesWithErrors.Sum(f => f.errors.Count);
+
+        writeLine(new string('═', width));
+        writeLine($" ✗ SYNTAX ERRORS ({totalErrors})");
+        writeLine(new string('═', width));
+        writeLine("");
+
+        foreach (var (filePath, errors) in filesWithErrors.OrderBy(f => f.path, StringComparer.Ordinal))
+        {
+            writeLine($"✗ {filePath}");
+
+            foreach (var error in
+                errors
+                .OrderBy(e => e.Location.Row)
+                .ThenBy(e => e.Location.Column))
+            {
+                writeLine(
+                    $"  {error.Location.Row}:{error.Location.Column}: {error.Message}");
+            }
+
+            writeLine("");
+        }
+    }
+
+    /// <summary>
+    /// Renders recovered syntax errors with the default render width.
+    /// </summary>
+    public static void RenderSyntaxErrors(
+        Action<string> writeLine,
+        IReadOnlyList<(string path, IReadOnlyList<ElmFormat.ModuleSyntaxError> errors)> filesWithErrors) =>
+        RenderSyntaxErrors(writeLine, filesWithErrors, DefaultRenderWidth);
+
+    /// <summary>
+    /// Renders recovered syntax errors to a string with configurable width.
+    /// </summary>
+    public static string RenderSyntaxErrorsToString(
+        IReadOnlyList<(string path, IReadOnlyList<ElmFormat.ModuleSyntaxError> errors)> filesWithErrors,
+        int width)
+    {
+        var sb = new StringBuilder();
+        RenderSyntaxErrors(line => sb.Append(line + "\n"), filesWithErrors, width);
+        return sb.ToString();
+    }
+
+    /// <summary>
+    /// Renders recovered syntax errors to a string with the default render width.
+    /// </summary>
+    public static string RenderSyntaxErrorsToString(
+        IReadOnlyList<(string path, IReadOnlyList<ElmFormat.ModuleSyntaxError> errors)> filesWithErrors) =>
+        RenderSyntaxErrorsToString(filesWithErrors, DefaultRenderWidth);
+
+    /// <summary>
+    /// Prints recovered syntax errors to the console.
+    /// </summary>
+    private static void PrintSyntaxErrors(
+        IReadOnlyList<(string path, IReadOnlyList<ElmFormat.ModuleSyntaxError> errors)> filesWithErrors) =>
+        RenderSyntaxErrors(
+            Console.WriteLine,
+            filesWithErrors,
+            width: GetConsoleWidth() ?? 80);
 
     /// <summary>
     /// Renders files needing formatting, grouped by directory for better navigation.

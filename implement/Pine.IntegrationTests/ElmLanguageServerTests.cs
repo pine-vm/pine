@@ -1,4 +1,5 @@
 using AwesomeAssertions;
+using Pine.Core.IO;
 using Pine.Core.LanguageServerProtocol;
 using Pine.Elm;
 using StreamJsonRpc;
@@ -8,10 +9,9 @@ using System.Collections.Immutable;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Text.Json;
 using System.Threading.Tasks;
 using Xunit;
-using System.Text.Json;
-using Pine.Core.IO;
 
 using ElmLanguageServer = Pine.Elm.LanguageServer;
 
@@ -24,12 +24,14 @@ public class ElmLanguageServerTests
     {
         var executablePath = FindPineExecutableFilePath();
 
-        using var lspProcess = Process.Start(new ProcessStartInfo(executablePath)
-        {
-            Arguments = "  lsp  --log-dir=.",
-            RedirectStandardInput = true,
-            RedirectStandardOutput = true,
-        }) ?? throw new Exception("Failed starting process");
+        using var lspProcess =
+            Process.Start(
+                new ProcessStartInfo(executablePath)
+                {
+                    Arguments = "  lsp  --log-dir=.",
+                    RedirectStandardInput = true,
+                    RedirectStandardOutput = true,
+                }) ?? throw new Exception("Failed starting process");
 
         try
         {
@@ -141,115 +143,130 @@ public class ElmLanguageServerTests
             [
             new(
                 OriginalText: "Hello World",
-                Edits: [new TextEdit(
-                    Range: new Core.LanguageServerProtocol.Range(
-                        Start: new Position(Line: 0, Character: 0),
-                        End: new Position(Line: 0, Character: 1)),
-                    NewText: "h")],
-                ExpectedText: "hello World"
-            ),
-
-            // Test case 2: Insert at middle of line
-            new(
-                OriginalText: "Hello World",
-                Edits: [new TextEdit(
-                    Range: new Core.LanguageServerProtocol.Range(
-                        Start: new Position(Line: 0, Character: 5),
-                        End: new Position(Line: 0, Character: 5)),
-                    NewText: " Beautiful")],
-                ExpectedText: "Hello Beautiful World"
-            ),
-
-            // Test case 3: Replacement at end of line
-            new(
-                OriginalText: "Hello World",
-                Edits: [new TextEdit(
-                    Range: new Core.LanguageServerProtocol.Range(
-                        Start: new Position(Line: 0, Character: 6),
-                        End: new Position(Line: 0, Character: 11)),
-                    NewText: "Pine")],
-                ExpectedText: "Hello Pine"
-            ),
-
-            // Test case 4: Multi-line text with edits
-            new(
-                OriginalText: "Line 1\nLine 2\nLine 3",
-                Edits: [new TextEdit(
-                    Range: new Core.LanguageServerProtocol.Range(
-                        Start: new Position(Line: 1, Character: 5),
-                        End: new Position(Line: 1, Character: 6)),
-                    NewText: "Two")],
-                ExpectedText: "Line 1\nLine Two\nLine 3"
-            ),
-
-            // Test case 5: Multi-line edit (spanning lines)
-            new(
-                OriginalText: "Line 1\nLine 2\nLine 3",
-                Edits: [new TextEdit(
-                    Range: new Core.LanguageServerProtocol.Range(
-                        Start: new Position(Line: 0, Character: 4),
-                        End: new Position(Line: 2, Character: 4)),
-                    NewText: " X\nNew Line")],
-                ExpectedText: "Line X\nNew Line 3"
-            ),
-
-            // Test case 6: Multiple edits in different order (should be applied correctly)
-            new(
-                OriginalText: "ABCDEF",
-                Edits: [
-                    new TextEdit(
-                        Range: new Core.LanguageServerProtocol.Range(
-                            Start: new Position(Line: 0, Character: 3),
-                            End: new Position(Line: 0, Character: 3)),
-                        NewText: "X"),
+                Edits:
+                [
                     new TextEdit(
                         Range: new Core.LanguageServerProtocol.Range(
                             Start: new Position(Line: 0, Character: 0),
                             End: new Position(Line: 0, Character: 1)),
-                        NewText: "Z")
+                        NewText: "h")
                 ],
-                ExpectedText: "ZBCXDEF"
-            ),
+                ExpectedText: "hello World"),
+
+            // Test case 2: Insert at middle of line
+            new(
+                OriginalText: "Hello World",
+                Edits:
+                [
+                    new TextEdit(
+                        Range: new Core.LanguageServerProtocol.Range(
+                            Start: new Position(Line: 0, Character: 5),
+                            End: new Position(Line: 0, Character: 5)),
+                        NewText: " Beautiful")
+                ],
+                ExpectedText: "Hello Beautiful World"),
+
+            // Test case 3: Replacement at end of line
+            new(
+                OriginalText: "Hello World",
+                Edits:
+                [
+                    new TextEdit(
+                        Range: new Core.LanguageServerProtocol.Range(
+                            Start: new Position(Line: 0, Character: 6),
+                            End: new Position(Line: 0, Character: 11)),
+                        NewText: "Pine")
+                ],
+                ExpectedText: "Hello Pine"),
+
+            // Test case 4: Multi-line text with edits
+            new(
+                OriginalText: "Line 1\nLine 2\nLine 3",
+                Edits:
+                [
+                    new TextEdit(
+                        Range: new Core.LanguageServerProtocol.Range(
+                            Start: new Position(Line: 1, Character: 5),
+                            End: new Position(Line: 1, Character: 6)),
+                        NewText: "Two")
+                ],
+                ExpectedText: "Line 1\nLine Two\nLine 3"),
+
+            // Test case 5: Multi-line edit (spanning lines)
+            new(
+                OriginalText: "Line 1\nLine 2\nLine 3",
+                Edits:
+                [
+                    new TextEdit(
+                        Range: new Core.LanguageServerProtocol.Range(
+                            Start: new Position(Line: 0, Character: 4),
+                            End: new Position(Line: 2, Character: 4)),
+                        NewText: " X\nNew Line")
+                ],
+                ExpectedText: "Line X\nNew Line 3"),
+
+            // Test case 6: Multiple edits in different order (should be applied correctly)
+            new(
+                OriginalText: "ABCDEF",
+                Edits:
+                [
+                new TextEdit(
+                    Range: new Core.LanguageServerProtocol.Range(
+                        Start: new Position(Line: 0, Character: 3),
+                        End: new Position(Line: 0, Character: 3)),
+                    NewText: "X"),
+                new TextEdit(
+                    Range: new Core.LanguageServerProtocol.Range(
+                        Start: new Position(Line: 0, Character: 0),
+                        End: new Position(Line: 0, Character: 1)),
+                    NewText: "Z")
+                ],
+                ExpectedText: "ZBCXDEF"),
 
             // Test case 7: Delete only (empty replacement)
             new(
                 OriginalText: "Hello Beautiful World",
-                Edits: [new TextEdit(
-                    Range: new Core.LanguageServerProtocol.Range(
-                        Start: new Position(Line: 0, Character: 5),
-                        End: new Position(Line: 0, Character: 15)),
-                    NewText: "")],
-                ExpectedText: "Hello World"
-            ),
+                Edits:
+                [
+                    new TextEdit(
+                        Range: new Core.LanguageServerProtocol.Range(
+                            Start: new Position(Line: 0, Character: 5),
+                            End: new Position(Line: 0, Character: 15)),
+                        NewText: "")
+                ],
+                ExpectedText: "Hello World"),
 
             // Test case 8: Insert at start of document
             new(
                 OriginalText: "World",
-                Edits: [new TextEdit(
-                    Range: new Core.LanguageServerProtocol.Range(
-                        Start: new Position(Line: 0, Character: 0),
-                        End: new Position(Line: 0, Character: 0)),
-                    NewText: "Hello ")],
-                ExpectedText: "Hello World"
-            ),
+                Edits:
+                [
+                    new TextEdit(
+                        Range: new Core.LanguageServerProtocol.Range(
+                            Start: new Position(Line: 0, Character: 0),
+                            End: new Position(Line: 0, Character: 0)),
+                        NewText: "Hello ")
+                ],
+                ExpectedText: "Hello World"),
 
             // Test case 9: Insert at end of document
             new(
                 OriginalText: "Hello",
-                Edits: [new TextEdit(
-                    Range: new Core.LanguageServerProtocol.Range(
-                        Start: new Position(Line: 0, Character: 5),
-                        End: new Position(Line: 0, Character: 5)),
-                    NewText: " World")],
-                ExpectedText: "Hello World"
-            ),
+                Edits:
+                [
+                    new TextEdit(
+                        Range: new Core.LanguageServerProtocol.Range(
+                            Start: new Position(Line: 0, Character: 5),
+                            End: new Position(Line: 0, Character: 5)),
+                        NewText: " World")
+                ],
+                ExpectedText: "Hello World"),
 
             // Test case 10: No edits (empty list)
             new(
                 OriginalText: "No changes",
                 Edits: [],
-                ExpectedText: "No changes"
-            )
+                ExpectedText: "No changes")
             ];
 
         for (var testCaseIndex = 0; testCaseIndex < testCases.Count; testCaseIndex++)
@@ -279,94 +296,105 @@ public class ElmLanguageServerTests
             new(
                 OriginalText: "line 1\nline 2\nline 3",
                 NewText: "line 1\nline 2\nline 3",
-                ExpectedEdits: []
-            ),
+                ExpectedEdits: []),
 
             new(
                 OriginalText: "old line 1\nline 2\nline 3",
                 NewText: "new line 1\nline 2\nline 3",
-                ExpectedEdits: [new TextEdit(
-                    Range: new Core.LanguageServerProtocol.Range(
-                        Start: new Position(Line: 0, Character: 0),
-                        End: new Position(Line: 0, Character: 10)),
-                    NewText: "new line 1")]
-            ),
+                ExpectedEdits:
+                [
+                    new TextEdit(
+                        Range: new Core.LanguageServerProtocol.Range(
+                            Start: new Position(Line: 0, Character: 0),
+                            End: new Position(Line: 0, Character: 10)),
+                        NewText: "new line 1")
+                ]),
 
             new(
                 OriginalText: "line 1\nold line 2\nline 3",
                 NewText: "line 1\nnew line 2\nline 3",
-                ExpectedEdits: [new TextEdit(
-                    Range: new Core.LanguageServerProtocol.Range(
-                        Start: new Position(Line: 1, Character: 0),
-                        End: new Position(Line: 1, Character: 10)),
-                    NewText: "new line 2")]
-            ),
+                ExpectedEdits:
+                [
+                    new TextEdit(
+                        Range: new Core.LanguageServerProtocol.Range(
+                            Start: new Position(Line: 1, Character: 0),
+                            End: new Position(Line: 1, Character: 10)),
+                        NewText: "new line 2")
+                ]),
 
             new(
                 OriginalText: "line 1\nline 2\nold line 3",
                 NewText: "line 1\nline 2\nnew line 3",
-                ExpectedEdits: [new TextEdit(
-                    Range: new Core.LanguageServerProtocol.Range(
-                        Start: new Position(Line: 2, Character: 0),
-                        End: new Position(Line: 2, Character: 10)),
-                    NewText: "new line 3")]
-            ),
+                ExpectedEdits:
+                [
+                    new TextEdit(
+                        Range: new Core.LanguageServerProtocol.Range(
+                            Start: new Position(Line: 2, Character: 0),
+                            End: new Position(Line: 2, Character: 10)),
+                        NewText: "new line 3")
+                ]),
 
             new(
                 OriginalText: "line 1\nold line 2\nold line 3\nline 4",
                 NewText: "line 1\nnew line 2\nnew line 3\nline 4",
-                ExpectedEdits: [new TextEdit(
-                    Range: new Core.LanguageServerProtocol.Range(
-                        Start: new Position(Line: 1, Character: 0),
-                        End: new Position(Line: 2, Character: 10)),
-                    NewText: "new line 2\nnew line 3")]
-            ),
+                ExpectedEdits:
+                [
+                    new TextEdit(
+                        Range: new Core.LanguageServerProtocol.Range(
+                            Start: new Position(Line: 1, Character: 0),
+                            End: new Position(Line: 2, Character: 10)),
+                        NewText: "new line 2\nnew line 3")
+                ]),
 
             new(
                 OriginalText: "old line 1\nold line 2",
                 NewText: "new line 1\nnew line 2",
-                ExpectedEdits: [new TextEdit(
-                    Range: new Core.LanguageServerProtocol.Range(
-                        Start: new Position(Line: 0, Character: 0),
-                        End: new Position(Line: 1, Character: 10)),
-                    NewText: "new line 1\nnew line 2")]
-            ),
+                ExpectedEdits:
+                [
+                    new TextEdit(
+                        Range: new Core.LanguageServerProtocol.Range(
+                            Start: new Position(Line: 0, Character: 0),
+                            End: new Position(Line: 1, Character: 10)),
+                        NewText: "new line 1\nnew line 2")
+                ]),
 
             new(
                 OriginalText: "line 1\nline 2",
                 NewText: "line 1\nline 2\nline 3",
-                ExpectedEdits: [new TextEdit(
-                    Range: new Core.LanguageServerProtocol.Range(
-                        Start: new Position(Line: 1, Character: 6),
-                        End: new Position(Line: 1, Character: 6)),
-                    NewText: "\nline 3")]
-            ),
+                ExpectedEdits:
+                [
+                    new TextEdit(
+                        Range: new Core.LanguageServerProtocol.Range(
+                            Start: new Position(Line: 1, Character: 6),
+                            End: new Position(Line: 1, Character: 6)),
+                        NewText: "\nline 3")
+                ]),
 
             new(
                 OriginalText: "line 1\nline 2\nline 3",
                 NewText: "line 1\nline 2",
-                ExpectedEdits: [new TextEdit(
-                    Range: new Core.LanguageServerProtocol.Range(
-                        Start: new Position(Line: 1, Character: 6),
-                        End: new Position(Line: 2, Character: 6)),
-                    NewText: "")]
-            ),
+                ExpectedEdits:
+                [
+                    new TextEdit(
+                        Range: new Core.LanguageServerProtocol.Range(
+                            Start: new Position(Line: 1, Character: 6),
+                            End: new Position(Line: 2, Character: 6)),
+                        NewText: "")
+                ]),
 
             new(
                 OriginalText:
                 "dec_a = 11\n\n\n\ndecl_b = 13",
                 NewText:
                 "dec_a = 11\n\n\ndecl_b = 13",
-                ExpectedEdits: null
-            ),
+                ExpectedEdits: null),
 
             new(
                 OriginalText:
                 "dec_a = 11\n\ndecl_b = 13",
                 NewText:
                 "dec_a = 11\n\n\ndecl_b = 13",
-                ExpectedEdits: null
-            ),
+                ExpectedEdits: null),
 
             new(
                 OriginalText:
@@ -470,10 +498,45 @@ public class ElmLanguageServerTests
             firstEdit.Range.Start.Character is 0 &&
             firstEdit.Range.End.Line >= Core.Elm.ElmSyntax.ElmModule.ModuleLines(originalContent).Count();
 
-        isWholeDocumentReplacement.Should().BeFalse("formatting should return minimal edits, not whole document replacement");
+        isWholeDocumentReplacement.Should().BeFalse(
+            "formatting should return minimal edits, not whole document replacement");
 
         // Verify the result is correct
         var result = ElmLanguageServer.ApplyTextEdits(originalContent, edits);
         result.Should().Be(formattedContent);
+    }
+
+    [Fact]
+    public void ComputeSyntaxErrorDiagnostics_returns_empty_for_valid_module()
+    {
+        var content =
+            "module Test exposing (..)\n\n\nalfa =\n    \"a\"\n";
+
+        var diagnostics = ElmLanguageServer.ComputeSyntaxErrorDiagnostics(content);
+
+        diagnostics.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void ComputeSyntaxErrorDiagnostics_reports_error_for_incomplete_declaration()
+    {
+        // 'beta = ?' is an incomplete declaration in an otherwise formattable module.
+        var content =
+            "module Test_A exposing (..)\n\n\nalfa =\n    \"a\"\n\nbeta = ?\n\n\ngamma =\n    [ 1, 2, 3 ]\n";
+
+        var diagnostics = ElmLanguageServer.ComputeSyntaxErrorDiagnostics(content);
+
+        diagnostics.Should().HaveCount(1);
+
+        var diagnostic = diagnostics[0];
+
+        diagnostic.Severity.Should().Be(DiagnosticSeverity.Error);
+        diagnostic.Source.Should().Be("elm syntax");
+        diagnostic.Message.Should().NotBeNullOrWhiteSpace();
+
+        // The parser reports 1-based row/column; LSP positions are 0-based.
+        // The error is on the 'beta' line (row 7 -> line 6) at the '?' token (column 8 -> char 7).
+        diagnostic.Range.Start.Line.Should().Be(6);
+        diagnostic.Range.Start.Character.Should().Be(7);
     }
 }
