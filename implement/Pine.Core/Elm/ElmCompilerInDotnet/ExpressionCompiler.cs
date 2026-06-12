@@ -1269,7 +1269,12 @@ public class ExpressionCompiler
             return sortErr;
         }
 
-        var sortedIndices = sortedIndicesResult.IsOkOrNull()!;
+        if (sortedIndicesResult.IsOkOrNull() is not { } sortedIndices)
+        {
+            throw new NotImplementedException(
+                "Unexpected type of result from TopologicalSortDeclarations: " + sortedIndicesResult.GetType().FullName);
+        }
+
         var letContext = context.WithReplacedLocalBindingsAndTypes(newBindings, newBindingTypes);
 
         foreach (var idx in sortedIndices)
@@ -1346,10 +1351,16 @@ public class ExpressionCompiler
                         return destrErr;
                     }
 
+                    if (destructuredResult.IsOkOrNull() is not { } destrExpr)
+                    {
+                        throw new NotImplementedException(
+                            "Unexpected type of result from Compile: " + destructuredResult.GetType().FullName);
+                    }
+
                     var patternBindings =
                         PatternCompiler.ExtractPatternBindings(
                             letDestructuring.Pattern,
-                            destructuredResult.IsOkOrNull()!,
+                            destrExpr,
                             scrutineeType: destructuredExprType,
                             recordTypeAliasFields:
                             context.ModuleCompilationContext.RecordTypeAliasConstructors,
@@ -1709,7 +1720,7 @@ public class ExpressionCompiler
                 Expression.ListInstance([envFuncsListExpr]);
 
             return
-                (Result<CompilationError, Expression>)new Expression.ParseAndEval(
+                new Expression.ParseAndEval(
                     encoded: encodedBodyExpr,
                     environment: callEnvironment);
         }
