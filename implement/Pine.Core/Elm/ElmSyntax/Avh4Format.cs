@@ -1545,11 +1545,24 @@ public class Avh4Format
                     normalizedIncompleteDeclarations,
                     contextBeforeDecls);
 
-            // Get trailing comments that appear after all declarations
+            // Get trailing comments that appear after all declarations.
+            // Incomplete declarations must be taken into account here as well:
+            // their original text already embeds any comments that belong to
+            // them, so those comments must not be re-emitted as trailing comments.
             var lastDeclRow =
-                file.Declarations.Any()
+                file.Declarations.Any() || normalizedIncompleteDeclarations.Any()
                 ?
-                file.Declarations.Max(d => d.Range.End.Row)
+                System.Math.Max(
+                    file.Declarations.Any()
+                    ?
+                    file.Declarations.Max(d => d.Range.End.Row)
+                    :
+                    0,
+                    normalizedIncompleteDeclarations.Any()
+                    ?
+                    normalizedIncompleteDeclarations.Max(d => d.Range.End.Row)
+                    :
+                    0)
                 :
                 (normalizedImports.Any()
                 ?

@@ -117,7 +117,8 @@ public static class ElmFormat
 
         if (parseResult.IsOkOrNull() is not { } parsed)
         {
-            return Result<string, ModuleFormatResult>.err("Unexpected parse result type");
+            throw new System.NotImplementedException(
+                "Unexpected result type from ElmSyntaxParser.ParseModuleText: " + parseResult.ToString());
         }
 
         var formatted = Avh4Format.Format(parsed);
@@ -125,14 +126,18 @@ public static class ElmFormat
         var rendered = Rendering.ToString(formatted, linebreakStyle);
 
         IReadOnlyList<ModuleSyntaxError> syntaxErrors =
-            [.. parsed.IncompleteDeclarations
-                .Select(node =>
-                    new ModuleSyntaxError(
-                        Location: node.Value.ParseError.Location,
-                        Range: node.Range,
-                        Message: node.Value.ParseError.Message))];
+            [
+            .. parsed.IncompleteDeclarations
+            .Select(
+                node =>
+                new ModuleSyntaxError(
+                    Location: node.Value.ParseError.Location,
+                    Range: node.Range,
+                    Message: node.Value.ParseError.Message))
+            ];
 
-        return Result<string, ModuleFormatResult>.ok(
-            new ModuleFormatResult(rendered, syntaxErrors));
+        return
+            Result<string, ModuleFormatResult>.ok(
+                new ModuleFormatResult(rendered, syntaxErrors));
     }
 }

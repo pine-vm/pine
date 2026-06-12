@@ -152,4 +152,46 @@ public class FormatIncompleteTests
         // The ErrorMessage should describe the issue unexpected open bracket
         incompleteDecl.Value.ParseError.Message.Should().Contain("OpenBracket");
     }
+
+    [Fact]
+    public void Preserves_comments_in_incomplete_declarations()
+    {
+        var input =
+            """"
+            module Test exposing (..)
+
+
+            type alias Model =
+                { name : String
+                , age : Int
+                }
+
+
+            alfa =
+                71
+
+
+            beta =
+                -- an unfinished record
+                { name = "Alice", age = 30
+
+
+            gamma =
+                -- a finished record
+                { name = "Bob", age = 25 }
+
+
+            delta =
+                -- another unfinished record
+                { name = """Charlie"""
+                {-
+                A multi-line comment
+                -}
+                , age = 
+                }
+
+            """";
+
+        FormatTestHelper.AssertModuleTextFormatsToExpected(input, input);
+    }
 }

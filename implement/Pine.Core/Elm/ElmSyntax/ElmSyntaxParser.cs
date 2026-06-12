@@ -420,11 +420,36 @@ public class ElmSyntaxParser
                 }
             }
 
-            sb.Append(token.Lexeme);
+            sb.Append(LexemeSourceText(token));
             previousToken = token;
         }
 
         return sb.ToString();
+    }
+
+    /// <summary>
+    /// Returns the source-text representation of a token for reconstructing the
+    /// original text of an incomplete declaration. For string and character
+    /// literals the lexeme holds the decoded value (without the surrounding
+    /// quotes and with escapes resolved), so we restore the delimiters and the
+    /// raw, unescaped content captured during tokenization.
+    /// </summary>
+    private static string LexemeSourceText(Token token)
+    {
+        return token.Type switch
+        {
+            TokenType.StringLiteral =>
+            "\"" + (token.RawText ?? token.Lexeme) + "\"",
+
+            TokenType.TripleQuotedStringLiteral =>
+            "\"\"\"" + (token.RawText ?? token.Lexeme) + "\"\"\"",
+
+            TokenType.CharLiteral =>
+            "'" + (token.RawText ?? token.Lexeme) + "'",
+
+            _ =>
+            token.Lexeme,
+        };
     }
 
     /// <summary>
@@ -759,12 +784,17 @@ public class ElmSyntaxParser
             {
                 Advance(); // Consume the opening quote
 
+                var innerStart = _position;
+
                 var literal = ParseStringLiteral(termination: "'");
 
                 if (literal is not null)
                 {
                     Location end = new(_line, _column);
-                    return new Token(TokenType.CharLiteral, literal, start, end);
+
+                    var rawText = CaptureRawLiteralText(innerStart, terminationLength: 1);
+
+                    return new Token(TokenType.CharLiteral, literal, start, end, rawText);
                 }
 
                 // Unterminated character literal; here you might want to throw an error.
