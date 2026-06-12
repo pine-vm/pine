@@ -36,6 +36,7 @@ The runtime performance items are not related to the Pine language, but are impl
 ## Language Elm
 
 - [ ] Expand the Elm compiler to instantiate higher-order functions so that downstream code analysis only needs to parse first-order functions.
+- [ ] `elm-format`: add line breaks wrapping long lines to maintain width-limit.
 
 ## App Developer Tools
 
