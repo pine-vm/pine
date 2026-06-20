@@ -34,6 +34,18 @@ public static class FunctionValueBuilder
     private static readonly Expression s_environmentTag =
         Expression.LiteralInstance(StringEncoding.ValueFromString("Environment"));
 
+    private static readonly Expression s_kernelApplicationTag =
+        Expression.LiteralInstance(StringEncoding.ValueFromString("KernelApplication"));
+
+    private static readonly Expression s_concatTag =
+        Expression.LiteralInstance(StringEncoding.ValueFromString("concat"));
+
+    private static readonly Expression s_level0EnvStructureEncodingStatic =
+        BuildLevel0EnvStructureEncodingStatic();
+
+    private static readonly Expression s_levelNEnvStructureEncodingStatic =
+        BuildLevelNEnvStructureEncodingStatic();
+
     /// <summary>
     /// Composes a function value in a form that supports incremental argument application via
     /// <see cref="Expression.ParseAndEval"/> expressions.
@@ -167,7 +179,7 @@ public static class FunctionValueBuilder
             Expression.ListInstance(
                 [
                 s_literalTag,
-                Expression.ListInstance([Expression.LiteralInstance(StringEncoding.ValueFromString("Literal"))])
+                Expression.ListInstance([s_literalTag])
                 ]);
 
         // ["Literal", [nextLevelEncodingExpr]] - evaluates to ["Literal", [nextLevelValue]]
@@ -199,11 +211,11 @@ public static class FunctionValueBuilder
 
         if (level is 0)
         {
-            envStructureEncoding = BuildLevel0EnvStructureEncodingStatic();
+            envStructureEncoding = s_level0EnvStructureEncodingStatic;
         }
         else
         {
-            envStructureEncoding = BuildLevelNEnvStructureEncodingStatic();
+            envStructureEncoding = s_levelNEnvStructureEncodingStatic;
         }
 
         // ["Literal", ["ParseAndEval"]]
@@ -211,7 +223,7 @@ public static class FunctionValueBuilder
             Expression.ListInstance(
                 [
                 s_literalTag,
-                Expression.ListInstance([Expression.LiteralInstance(StringEncoding.ValueFromString("ParseAndEval"))])
+                Expression.ListInstance([s_parseAndEvalTag])
                 ]);
 
         // ["List", [[nextLevelLiteralEncoding, envStructureEncoding]]]
@@ -251,7 +263,7 @@ public static class FunctionValueBuilder
             Expression.ListInstance(
                 [
                 s_literalTag,
-                Expression.ListInstance([Expression.LiteralInstance(StringEncoding.ValueFromString("Literal"))])
+                Expression.ListInstance([s_literalTag])
                 ]);
 
         // encode(env) = ["Environment", []]
@@ -293,7 +305,7 @@ public static class FunctionValueBuilder
             Expression.ListInstance(
                 [
                 s_literalTag,
-                Expression.ListInstance([Expression.LiteralInstance(StringEncoding.ValueFromString("Environment"))])
+                Expression.ListInstance([s_environmentTag])
                 ]);
 
         var emptyListEncoding =
@@ -332,7 +344,7 @@ public static class FunctionValueBuilder
             Expression.ListInstance(
                 [
                 s_literalTag,
-                Expression.ListInstance([Expression.LiteralInstance(StringEncoding.ValueFromString("List"))])
+                Expression.ListInstance([s_listTag])
                 ]);
 
         // encode(envStructure) = ["List", [[listTagEncoding, innerListEncoding]]]
@@ -369,7 +381,7 @@ public static class FunctionValueBuilder
             Expression.ListInstance(
                 [
                 s_literalTag,
-                Expression.ListInstance([Expression.LiteralInstance(StringEncoding.ValueFromString("Literal"))])
+                Expression.ListInstance([s_literalTag])
                 ]);
 
         var newCapturedListEncoding =
@@ -391,7 +403,7 @@ public static class FunctionValueBuilder
             Expression.ListInstance(
                 [
                 s_literalTag,
-                Expression.ListInstance([Expression.LiteralInstance(StringEncoding.ValueFromString("Environment"))])
+                Expression.ListInstance([s_environmentTag])
                 ]);
 
         var emptyListEncoding =
@@ -428,7 +440,7 @@ public static class FunctionValueBuilder
             Expression.ListInstance(
                 [
                 s_literalTag,
-                Expression.ListInstance([Expression.LiteralInstance(StringEncoding.ValueFromString("List"))])
+                Expression.ListInstance([s_listTag])
                 ]);
 
         // envStructure encoding
@@ -481,7 +493,7 @@ public static class FunctionValueBuilder
             // ["KernelApplication", [function_name, input_encoded]]
             Expression.ListInstance(
                 [
-                Expression.LiteralInstance(StringEncoding.ValueFromString("KernelApplication")),
+                s_kernelApplicationTag,
                 Expression.ListInstance(
                     [
                     Expression.LiteralInstance(StringEncoding.ValueFromString(kernelApp.Function)),
@@ -1035,10 +1047,10 @@ public static class FunctionValueBuilder
         var invocationEnvEncoding =
             Expression.ListInstance(
                 [
-                Expression.LiteralInstance(StringEncoding.ValueFromString("KernelApplication")),
+                s_kernelApplicationTag,
                 Expression.ListInstance(
                     [
-                    Expression.LiteralInstance(StringEncoding.ValueFromString("concat")),
+                    s_concatTag,
                     concatInputEncoding
                     ])
                 ]);
