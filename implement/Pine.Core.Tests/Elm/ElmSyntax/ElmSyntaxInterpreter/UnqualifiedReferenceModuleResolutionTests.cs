@@ -160,7 +160,7 @@ public class UnqualifiedReferenceModuleResolutionTests
 
         var head = application2.Function.Should().BeOfType<Core.Elm.ElmSyntax.ElmSyntaxAbstract.Expression.FunctionOrValue>().Subject;
 
-        head.Name.Should().Be("Good");
+        head.QualifiedName.DeclName.Should().Be("Good");
 
         // P.helper: `Good v s` -> 2 args. Q.helper: `Good True v s` -> 3 args.
         application2.Arguments.Count.Should().Be(2);

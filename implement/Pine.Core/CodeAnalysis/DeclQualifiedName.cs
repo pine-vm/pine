@@ -96,7 +96,10 @@ public record DeclQualifiedName
         if (parts.Length is 0)
             throw new System.ArgumentException("Full name cannot be empty.", nameof(fullName));
 
-        return Create(parts[..^1], parts[^1]);
+        return new DeclQualifiedName(
+            namespaces: parts.Length > 1 ? parts[..^1] : [],
+            declName: parts[^1],
+            fullName: fullName);
     }
 
     /// <summary>

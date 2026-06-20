@@ -72,16 +72,16 @@ public class ModelTests
     public void FunctionOrValue_equality_compares_module_name_by_value()
     {
         AssertValueEqual(
-            new Expression.FunctionOrValue(["Basics"], "always"),
-            new Expression.FunctionOrValue(["Basics"], "always"));
+            Expression.FunctionOrValue.Create(["Basics"], "always"),
+            Expression.FunctionOrValue.Create(["Basics"], "always"));
 
         AssertNotEqual(
-            new Expression.FunctionOrValue(["Basics"], "always"),
-            new Expression.FunctionOrValue(["List"], "always"));
+            Expression.FunctionOrValue.Create(["Basics"], "always"),
+            Expression.FunctionOrValue.Create(["List"], "always"));
 
         AssertNotEqual(
-            new Expression.FunctionOrValue(["Basics"], "always"),
-            new Expression.FunctionOrValue([], "always"));
+            Expression.FunctionOrValue.Create(["Basics"], "always"),
+            Expression.FunctionOrValue.Create([], "always"));
     }
 
     [Fact]
@@ -103,7 +103,7 @@ public class ModelTests
     [Fact]
     public void Application_equality_compares_function_and_arguments()
     {
-        var function = new Expression.FunctionOrValue([], "f");
+        var function = Expression.FunctionOrValue.Create([], "f");
 
         AssertValueEqual(
             new Expression.Application(function, [IntExpr(1), IntExpr(2)]),
@@ -115,7 +115,7 @@ public class ModelTests
 
         AssertNotEqual(
             new Expression.Application(function, [IntExpr(1)]),
-            new Expression.Application(new Expression.FunctionOrValue([], "g"), [IntExpr(1)]));
+            new Expression.Application(Expression.FunctionOrValue.Create([], "g"), [IntExpr(1)]));
     }
 
     [Fact]
@@ -135,21 +135,21 @@ public class ModelTests
     {
         AssertValueEqual(
             new Expression.RecordAccess(
-                new Expression.FunctionOrValue([], "r"),
+                Expression.FunctionOrValue.Create([], "r"),
                 "field",
                 StringEncoding.ValueFromString("field")),
             new Expression.RecordAccess(
-                new Expression.FunctionOrValue([], "r"),
+                Expression.FunctionOrValue.Create([], "r"),
                 "field",
                 StringEncoding.ValueFromString("field")));
 
         AssertNotEqual(
             new Expression.RecordAccess(
-                new Expression.FunctionOrValue([], "r"),
+                Expression.FunctionOrValue.Create([], "r"),
                 "field",
                 StringEncoding.ValueFromString("field")),
             new Expression.RecordAccess(
-                new Expression.FunctionOrValue([], "r"),
+                Expression.FunctionOrValue.Create([], "r"),
                 "other",
                 StringEncoding.ValueFromString("other")));
     }
@@ -230,18 +230,18 @@ public class ModelTests
         AssertValueEqual(
             new Expression.LambdaExpression(
                 [new Pattern.VarPattern("x"), new Pattern.VarPattern("y")],
-                new Expression.FunctionOrValue([], "x")),
+                Expression.FunctionOrValue.Create([], "x")),
             new Expression.LambdaExpression(
                 [new Pattern.VarPattern("x"), new Pattern.VarPattern("y")],
-                new Expression.FunctionOrValue([], "x")));
+                Expression.FunctionOrValue.Create([], "x")));
 
         AssertNotEqual(
             new Expression.LambdaExpression(
                 [new Pattern.VarPattern("x")],
-                new Expression.FunctionOrValue([], "x")),
+                Expression.FunctionOrValue.Create([], "x")),
             new Expression.LambdaExpression(
                 [new Pattern.VarPattern("x"), new Pattern.VarPattern("y")],
-                new Expression.FunctionOrValue([], "x")));
+                Expression.FunctionOrValue.Create([], "x")));
     }
 
     [Fact]
@@ -249,7 +249,7 @@ public class ModelTests
     {
         var caseA =
             new Expression.CaseExpression(
-                new Expression.FunctionOrValue([], "x"),
+                Expression.FunctionOrValue.Create([], "x"),
                 [
                     new Case(new Pattern.IntPattern(0), IntExpr(1)),
                     new Case(new Pattern.AllPattern(), IntExpr(2)),
@@ -257,7 +257,7 @@ public class ModelTests
 
         var caseB =
             new Expression.CaseExpression(
-                new Expression.FunctionOrValue([], "x"),
+                Expression.FunctionOrValue.Create([], "x"),
                 [
                     new Case(new Pattern.IntPattern(0), IntExpr(1)),
                     new Case(new Pattern.AllPattern(), IntExpr(2)),
@@ -268,7 +268,7 @@ public class ModelTests
         AssertNotEqual(
             caseA,
             new Expression.CaseExpression(
-                new Expression.FunctionOrValue([], "x"),
+                Expression.FunctionOrValue.Create([], "x"),
                 [
                     new Case(new Pattern.IntPattern(0), IntExpr(1)),
                 ]));
@@ -281,12 +281,12 @@ public class ModelTests
             new LetDeclaration.LetDestructuring(new Pattern.VarPattern(name), IntExpr(value));
 
         AssertValueEqual(
-            new Expression.LetExpression([Binding("a", 1)], new Expression.FunctionOrValue([], "a")),
-            new Expression.LetExpression([Binding("a", 1)], new Expression.FunctionOrValue([], "a")));
+            new Expression.LetExpression([Binding("a", 1)], Expression.FunctionOrValue.Create([], "a")),
+            new Expression.LetExpression([Binding("a", 1)], Expression.FunctionOrValue.Create([], "a")));
 
         AssertNotEqual(
-            new Expression.LetExpression([Binding("a", 1)], new Expression.FunctionOrValue([], "a")),
-            new Expression.LetExpression([Binding("a", 2)], new Expression.FunctionOrValue([], "a")));
+            new Expression.LetExpression([Binding("a", 1)], Expression.FunctionOrValue.Create([], "a")),
+            new Expression.LetExpression([Binding("a", 2)], Expression.FunctionOrValue.Create([], "a")));
     }
 
     [Fact]
@@ -294,14 +294,14 @@ public class ModelTests
     {
         static Expression Build() =>
             new Expression.Application(
-                new Expression.FunctionOrValue(["List"], "map"),
+                Expression.FunctionOrValue.Create(["List"], "map"),
                 [
                     new Expression.LambdaExpression(
                         [new Pattern.VarPattern("x")],
                         new Expression.OperatorApplication(
                             "+",
                             InfixDirection.Left,
-                            new Expression.FunctionOrValue([], "x"),
+                            Expression.FunctionOrValue.Create([], "x"),
                             IntExpr(1))),
                     new Expression.ListExpr([IntExpr(1), IntExpr(2), IntExpr(3)]),
                 ]);

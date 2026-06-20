@@ -1,8 +1,6 @@
 using Pine.Core.CodeAnalysis;
 using Pine.Core.Elm.ElmSyntax.ElmSyntaxAbstract;
-using System;
 using System.Text.Json;
-using System.Text.Json.Serialization;
 
 namespace Pine.Core.Elm.ElmSyntax;
 
@@ -35,8 +33,6 @@ public static class ElmSyntaxInterpreterPreparedJson
     {
         var options = ElmSyntaxAbstractJson.BuildJsonSerializerOptions();
 
-        options.Converters.Add(new DeclQualifiedNameJsonConverter());
-
         return options;
     }
 
@@ -52,35 +48,4 @@ public static class ElmSyntaxInterpreterPreparedJson
     public static ElmSyntaxInterpreter.Prepared FromJsonString(string json) =>
         JsonSerializer.Deserialize<ElmSyntaxInterpreter.Prepared>(json, s_jsonSerializerOptions)
         ?? throw new JsonException("Decoded a null Prepared from JSON.");
-}
-
-/// <summary>
-/// JSON converter encoding a <see cref="DeclQualifiedName"/> as its
-/// <see cref="DeclQualifiedName.FullName"/> string, both as a value and as a dictionary property name.
-/// </summary>
-public class DeclQualifiedNameJsonConverter : JsonConverter<DeclQualifiedName>
-{
-    /// <inheritdoc/>
-    public override DeclQualifiedName Read(
-        ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options) =>
-        DeclQualifiedName.FromString(
-            reader.GetString()
-            ?? throw new JsonException("Expected a non-null DeclQualifiedName string."));
-
-    /// <inheritdoc/>
-    public override void Write(
-        Utf8JsonWriter writer, DeclQualifiedName value, JsonSerializerOptions options) =>
-        writer.WriteStringValue(value.FullName);
-
-    /// <inheritdoc/>
-    public override DeclQualifiedName ReadAsPropertyName(
-        ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options) =>
-        DeclQualifiedName.FromString(
-            reader.GetString()
-            ?? throw new JsonException("Expected a non-null DeclQualifiedName property name."));
-
-    /// <inheritdoc/>
-    public override void WriteAsPropertyName(
-        Utf8JsonWriter writer, DeclQualifiedName value, JsonSerializerOptions options) =>
-        writer.WritePropertyName(value.FullName);
 }

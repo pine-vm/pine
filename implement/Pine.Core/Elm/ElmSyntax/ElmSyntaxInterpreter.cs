@@ -1138,8 +1138,8 @@ public partial class ElmSyntaxInterpreter
                             // Bare name lookup. If it resolves to a local binding, return it directly;
                             // otherwise it's a nullary application which is handled by the same path
                             // as a full application with zero arguments.
-                            if (functionOrValue.ModuleName.Count is 0
-                                && currentEnv.LocalBindings.TryGetValue(functionOrValue.Name, out var localValue))
+                            if (functionOrValue.QualifiedName.Namespaces.Count is 0
+                                && currentEnv.LocalBindings.TryGetValue(functionOrValue.QualifiedName.DeclName, out var localValue))
                             {
                                 currentValue = localValue;
                                 currentExpr = null;
@@ -1386,9 +1386,9 @@ public partial class ElmSyntaxInterpreter
                             // First evaluate the record name as a bare FunctionOrValue so the
                             // existing local-binding / top-level lookup machinery applies.
                             var recordNameExpr =
-                                new ElmSyntaxAbstract.Expression.FunctionOrValue(
-                                    ModuleName: [],
-                                    Name: recordUpdate.RecordName);
+                                ElmSyntaxAbstract.Expression.FunctionOrValue.Create(
+                                    moduleName: [],
+                                    name: recordUpdate.RecordName);
 
                             kstack.Push(
                                 new Kont.BuildRecordUpdate(
@@ -1422,9 +1422,9 @@ public partial class ElmSyntaxInterpreter
                             }
 
                             var functionRef =
-                                new ElmSyntaxAbstract.Expression.FunctionOrValue(
-                                    ModuleName: opFunctionName.Namespaces,
-                                    Name: opFunctionName.DeclName);
+                                ElmSyntaxAbstract.Expression.FunctionOrValue.Create(
+                                    moduleName: opFunctionName.Namespaces,
+                                    name: opFunctionName.DeclName);
 
                             currentExpr =
                                 new ElmSyntaxAbstract.Expression.Application(
@@ -1453,9 +1453,9 @@ public partial class ElmSyntaxInterpreter
                             }
 
                             currentExpr =
-                                new ElmSyntaxAbstract.Expression.FunctionOrValue(
-                                    ModuleName: opFunctionName.Namespaces,
-                                    Name: opFunctionName.DeclName);
+                                ElmSyntaxAbstract.Expression.FunctionOrValue.Create(
+                                    moduleName: opFunctionName.Namespaces,
+                                    name: opFunctionName.DeclName);
 
                             break;
                         }
@@ -1584,15 +1584,15 @@ public partial class ElmSyntaxInterpreter
                             // application like `let addTen = add 10 in addTen 32` apply against
                             // the local closure instead of trying to look up `addTen` as a
                             // top-level declaration.
-                            if (buildArgs.FunctionOrValue.ModuleName.Count is 0
+                            if (buildArgs.FunctionOrValue.QualifiedName.Namespaces.Count is 0
                                 && buildArgs.Env.LocalBindings.TryGetValue(
-                                    buildArgs.FunctionOrValue.Name,
+                                    buildArgs.FunctionOrValue.QualifiedName.DeclName,
                                     out var localFnValue))
                             {
                                 var localResult =
                                     ApplyFunctionValue(
                                         functionValue: localFnValue,
-                                        functionRenderForError: buildArgs.FunctionOrValue.Name,
+                                        functionRenderForError: buildArgs.FunctionOrValue.QualifiedName.DeclName,
                                         newArguments: buildArgs.Accumulated,
                                         callerEnv: buildArgs.Env,
                                         kstack: kstack,
@@ -2161,8 +2161,8 @@ public partial class ElmSyntaxInterpreter
             new Application(
                 FunctionName:
                 DeclQualifiedName.Create(
-                    namespaces: [.. functionOrValue.ModuleName],
-                    declName: functionOrValue.Name),
+                    namespaces: [.. functionOrValue.QualifiedName.Namespaces],
+                    declName: functionOrValue.QualifiedName.DeclName),
                 Arguments: arguments,
                 Context: env);
 
@@ -3227,10 +3227,10 @@ public partial class ElmSyntaxInterpreter
                 break;
 
             case ElmSyntaxAbstract.Expression.FunctionOrValue functionOrValue:
-                if (functionOrValue.ModuleName.Count is 0
-                    && !shadowed.Contains(functionOrValue.Name))
+                if (functionOrValue.QualifiedName.Namespaces.Count is 0
+                    && !shadowed.Contains(functionOrValue.QualifiedName.DeclName))
                 {
-                    free.Add(functionOrValue.Name);
+                    free.Add(functionOrValue.QualifiedName.DeclName);
                 }
 
                 break;

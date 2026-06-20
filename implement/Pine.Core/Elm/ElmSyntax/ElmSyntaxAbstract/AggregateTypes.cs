@@ -1,3 +1,4 @@
+using Pine.Core.CodeAnalysis;
 using Pine.Core.CommonEncodings;
 using Pine.Core.Json;
 using System.Collections.Generic;
@@ -1177,40 +1178,16 @@ public abstract record Expression
 
     /// <summary>Reference to a function or value.</summary>
     public sealed record FunctionOrValue(
-        ModuleName ModuleName,
-        string Name)
+        DeclQualifiedName QualifiedName)
         : Expression
     {
-        private readonly int _slimHashCode = ComputeSlimHashCode(ModuleName, Name);
-
-        private static int ComputeSlimHashCode(
+        /// <summary>
+        /// Creates a new <see cref="FunctionOrValue"/> from the given namespace and declaration name components.
+        /// </summary>
+        public static FunctionOrValue Create(
             ModuleName moduleName,
-            string name)
-        {
-            var hashCode = new System.HashCode();
-
-            AbstractModelEquality.AddItems(ref hashCode, moduleName);
-            hashCode.Add(name);
-
-            return hashCode.ToHashCode();
-        }
-
-        /// <inheritdoc/>
-        public bool Equals(FunctionOrValue? other)
-        {
-            if (ReferenceEquals(this, other))
-                return true;
-
-            if (other is null)
-                return false;
-
-            return
-                Name == other.Name &&
-                AbstractModelEquality.SequenceEqual(ModuleName, other.ModuleName);
-        }
-
-        /// <inheritdoc/>
-        public override int GetHashCode() => _slimHashCode;
+            string name) =>
+            new(DeclQualifiedName.Create(moduleName, name));
     }
 
     /// <summary>Conditional expression with then/else branches.</summary>

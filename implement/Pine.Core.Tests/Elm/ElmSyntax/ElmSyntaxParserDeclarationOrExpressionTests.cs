@@ -108,8 +108,8 @@ public class ElmSyntaxParserDeclarationOrExpressionTests
                         new Abstract.Expression.OperatorApplication(
                             "+",
                             Concrete.InfixDirection.Left,
-                            new Abstract.Expression.FunctionOrValue([], "a"),
-                            new Abstract.Expression.FunctionOrValue([], "b"))))));
+                            Abstract.Expression.FunctionOrValue.Create([], "a"),
+                            Abstract.Expression.FunctionOrValue.Create([], "b"))))));
     }
 
     [Fact]

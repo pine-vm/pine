@@ -321,7 +321,7 @@ public class PatternCompiler
 
             var nameExprResult =
                 ExpressionCompiler.CompileFunctionOrValue(
-                    new SyntaxTypes.Expression.FunctionOrValue(ModuleName: [], name),
+                    SyntaxTypes.Expression.FunctionOrValue.Create(moduleName: [], name),
                     outerContext);
 
             if (nameExprResult.IsErrOrNull() is { } nameExprErr)
@@ -399,7 +399,7 @@ public class PatternCompiler
                     patternBindingTypes;
 
                 caseContext =
-                    caseContext.WithReplacedLocalBindingsAndTypes(caseContext.LocalBindings, mergedBindingTypes);
+                                    caseContext.WithReplacedLocalBindingsAndTypes(caseContext.LocalBindings, mergedBindingTypes);
             }
 
             var caseBodyResult = ExpressionCompiler.Compile(caseItem.Expression, caseContext);

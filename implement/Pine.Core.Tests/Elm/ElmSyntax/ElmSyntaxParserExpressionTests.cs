@@ -112,14 +112,14 @@ public class ElmSyntaxParserExpressionTests
     public void Parses_function_or_value_reference()
     {
         ParseAndConvert("foo")
-            .Should().Be(new Abstract.Expression.FunctionOrValue([], "foo"));
+            .Should().Be(Abstract.Expression.FunctionOrValue.Create([], "foo"));
     }
 
     [Fact]
     public void Parses_qualified_function_or_value_reference()
     {
         ParseAndConvert("String.fromInt")
-            .Should().Be(new Abstract.Expression.FunctionOrValue(["String"], "fromInt"));
+            .Should().Be(Abstract.Expression.FunctionOrValue.Create(["String"], "fromInt"));
     }
 
     [Fact]
@@ -165,7 +165,7 @@ public class ElmSyntaxParserExpressionTests
         ParseAndConvert("String.fromInt 42")
             .Should().Be(
             new Abstract.Expression.Application(
-                new Abstract.Expression.FunctionOrValue(["String"], "fromInt"),
+                Abstract.Expression.FunctionOrValue.Create(["String"], "fromInt"),
                 [IntegerExpr(42)]));
     }
 
@@ -175,7 +175,7 @@ public class ElmSyntaxParserExpressionTests
         ParseAndConvert("if cond then 1 else 2")
             .Should().Be(
             new Abstract.Expression.IfBlock(
-                new Abstract.Expression.FunctionOrValue([], "cond"),
+                Abstract.Expression.FunctionOrValue.Create([], "cond"),
                 IntegerExpr(1),
                 IntegerExpr(2)));
     }
@@ -186,7 +186,7 @@ public class ElmSyntaxParserExpressionTests
         ParseAndConvert("-x")
             .Should().Be(
             new Abstract.Expression.Negation(
-                new Abstract.Expression.FunctionOrValue([], "x")));
+                Abstract.Expression.FunctionOrValue.Create([], "x")));
     }
 
     [Fact]

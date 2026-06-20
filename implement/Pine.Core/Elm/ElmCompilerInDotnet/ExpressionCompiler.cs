@@ -117,29 +117,29 @@ public class ExpressionCompiler
         SyntaxTypes.Expression.FunctionOrValue expr,
         ExpressionCompilationContext context)
     {
-        if (expr.ModuleName.Count is 0)
+        if (expr.QualifiedName.Namespaces.Count is 0)
         {
             // Check if it's a local binding from pattern matching first
-            if (context.TryGetLocalBinding(expr.Name) is { } bindingExpr)
+            if (context.TryGetLocalBinding(expr.QualifiedName.DeclName) is { } bindingExpr)
             {
                 return bindingExpr;
             }
 
             // Check if it's a parameter reference
-            if (context.TryGetParameterIndex(expr.Name) is { } paramIndex)
+            if (context.TryGetParameterIndex(expr.QualifiedName.DeclName) is { } paramIndex)
             {
                 return BuiltinHelpers.BuildPathToParameter(paramIndex);
             }
         }
 
-        if (expr.ModuleName.Count is 1 && expr.ModuleName[0] is "Basics")
+        if (expr.QualifiedName.Namespaces.Count is 1 && expr.QualifiedName.Namespaces[0] is "Basics")
         {
-            if (expr.Name is "True")
+            if (expr.QualifiedName.DeclName is "True")
             {
                 return Expression.LiteralInstance(EmitBooleanLiteral(true));
             }
 
-            if (expr.Name is "False")
+            if (expr.QualifiedName.DeclName is "False")
             {
                 return Expression.LiteralInstance(EmitBooleanLiteral(false));
             }
@@ -148,14 +148,7 @@ public class ExpressionCompiler
         // Check if this is a record type alias constructor used as a function value
         // Record constructors also have uppercase names, so check this before the tag name check
         {
-            var qualifiedConstructorName =
-                expr.ModuleName.Count > 0
-                ?
-                string.Join(".", expr.ModuleName) + "." + expr.Name
-                :
-                context.CurrentModuleName + "." + expr.Name;
-
-            if (context.ModuleCompilationContext.TryGetRecordConstructorFieldNames(qualifiedConstructorName) is { } fieldNamesInDeclOrder)
+            if (context.ModuleCompilationContext.TryGetRecordConstructorFieldNames(expr.QualifiedName.FullName) is { } fieldNamesInDeclOrder)
             {
                 // Record constructor used as a function value (no application yet)
                 // Build a function value that accepts all field arguments and constructs the record
@@ -165,14 +158,14 @@ public class ExpressionCompiler
 
         // After canonicalization, tags have a module name but are still recognized
         // by having an uppercase first letter
-        if (ElmValueEncoding.StringIsValidTagName(expr.Name))
+        if (ElmValueEncoding.StringIsValidTagName(expr.QualifiedName.DeclName))
         {
             var qualifiedConstructorName =
-                expr.ModuleName.Count > 0
+                expr.QualifiedName.Namespaces.Count > 0
                 ?
-                QualifiedNameHelper.ToQualifiedNameString(expr.ModuleName, expr.Name)
+                QualifiedNameHelper.ToQualifiedNameString(expr.QualifiedName.Namespaces, expr.QualifiedName.DeclName)
                 :
-                QualifiedNameHelper.ToQualifiedNameString([context.CurrentModuleName], expr.Name);
+                QualifiedNameHelper.ToQualifiedNameString([context.CurrentModuleName], expr.QualifiedName.DeclName);
 
             var expectedArgCount =
                 context.ModuleCompilationContext.TryGetChoiceTypeConstructorArgumentCount(qualifiedConstructorName);
@@ -180,12 +173,12 @@ public class ExpressionCompiler
             if (expectedArgCount is null || expectedArgCount.Value is 0)
             {
                 // Zero-argument tag: emit as a literal value
-                return Expression.LiteralInstance(ElmValueEncoding.TagAsPineValue(expr.Name, []));
+                return Expression.LiteralInstance(ElmValueEncoding.TagAsPineValue(expr.QualifiedName.DeclName, []));
             }
 
             // Tag with arguments used as a function value (no application yet)
             // Build a function value that accepts all arguments
-            return EmitChoiceTypeTagFunctionValue(expr.Name, expectedArgCount.Value);
+            return EmitChoiceTypeTagFunctionValue(expr.QualifiedName.DeclName, expectedArgCount.Value);
         }
 
         // Check if this is a reference to a top-level function (function value without application)
@@ -195,11 +188,11 @@ public class ExpressionCompiler
         //     _ -> functionB
         {
             var qualifiedFunctionName =
-                expr.ModuleName.Count > 0
+                expr.QualifiedName.Namespaces.Count > 0
                 ?
-                string.Join(".", expr.ModuleName) + "." + expr.Name
+                string.Join(".", expr.QualifiedName.Namespaces) + "." + expr.QualifiedName.DeclName
                 :
-                context.CurrentModuleName + "." + expr.Name;
+                context.CurrentModuleName + "." + expr.QualifiedName.DeclName;
 
             if (context.GetFunctionIndexInLayout(qualifiedFunctionName) is { } functionIndex)
             {
@@ -248,9 +241,9 @@ public class ExpressionCompiler
 
         // Handle references to natively-implemented Basics functions used as values
         // (e.g., passing `min` or `max` as an argument to a higher-order function like `foldl`)
-        if (expr.ModuleName.Count is 1 && expr.ModuleName[0] is "Basics")
+        if (expr.QualifiedName.Namespaces.Count is 1 && expr.QualifiedName.Namespaces[0] is "Basics")
         {
-            if (CoreLibraryModule.CoreBasics.GetFunctionValue(expr.Name) is { } basicsFunctionValue)
+            if (CoreLibraryModule.CoreBasics.GetFunctionValue(expr.QualifiedName.DeclName) is { } basicsFunctionValue)
             {
                 return Expression.LiteralInstance(basicsFunctionValue);
             }
@@ -258,13 +251,13 @@ public class ExpressionCompiler
 
         // Handle List.cons used as a value reference (the :: operator after canonicalization)
         // This handles cases like passing (::) as a function value: `applyFunc (::) 1 [2, 3]`
-        if (expr.ModuleName.Count is 1 && expr.ModuleName[0] is "List" &&
-            expr.Name is "cons")
+        if (expr.QualifiedName.Namespaces.Count is 1 && expr.QualifiedName.Namespaces[0] is "List" &&
+            expr.QualifiedName.DeclName is "cons")
         {
             return Expression.LiteralInstance(s_consFunction.Value);
         }
 
-        return new CompilationError.UnresolvedReference(expr.Name, context.CurrentModuleName);
+        return new CompilationError.UnresolvedReference(expr.QualifiedName.DeclName, context.CurrentModuleName);
     }
 
     private static Result<CompilationError, Expression> CompileApplication(
@@ -280,8 +273,8 @@ public class ExpressionCompiler
 
         // Check if this is a Pine_kernel application
         if (functionExpr is SyntaxTypes.Expression.FunctionOrValue kernelFunc &&
-            kernelFunc.ModuleName.Count is 1 &&
-            context.ModuleCompilationContext.IsPineKernelModule(kernelFunc.ModuleName[0]))
+            kernelFunc.QualifiedName.Namespaces.Count is 1 &&
+            context.ModuleCompilationContext.IsPineKernelModule(kernelFunc.QualifiedName.Namespaces[0]))
         {
             var kernelInput = expr.Arguments[0];
             var compiledInputResult = Compile(kernelInput, context);
@@ -293,7 +286,7 @@ public class ExpressionCompiler
 
             return
                 Expression.KernelApplicationInstance(
-                    kernelFunc.Name,
+                    kernelFunc.QualifiedName.DeclName,
                     compiledInputResult.IsOkOrNull()!);
         }
 
@@ -342,11 +335,11 @@ public class ExpressionCompiler
             // Check if this is a record type alias constructor application
             // Record type alias constructors also have uppercase names, so check this first
             var qualifiedConstructorName =
-                funcRef.ModuleName.Count > 0
+                funcRef.QualifiedName.Namespaces.Count > 0
                 ?
-                string.Join(".", funcRef.ModuleName) + "." + funcRef.Name
+                string.Join(".", funcRef.QualifiedName.Namespaces) + "." + funcRef.QualifiedName.DeclName
                 :
-                context.CurrentModuleName + "." + funcRef.Name;
+                context.CurrentModuleName + "." + funcRef.QualifiedName.DeclName;
 
             if (context.ModuleCompilationContext.TryGetRecordConstructorFieldNames(qualifiedConstructorName) is { } fieldNamesInDeclOrder)
             {
@@ -401,16 +394,16 @@ public class ExpressionCompiler
             }
 
             // Check if this is a choice type tag application
-            if (ElmValueEncoding.StringIsValidTagName(funcRef.Name))
+            if (ElmValueEncoding.StringIsValidTagName(funcRef.QualifiedName.DeclName))
             {
-                var tagNameValue = Expression.LiteralInstance(StringEncoding.ValueFromString(funcRef.Name));
+                var tagNameValue = Expression.LiteralInstance(StringEncoding.ValueFromString(funcRef.QualifiedName.DeclName));
 
                 var qualifiedTagName =
-                    funcRef.ModuleName.Count > 0
+                    funcRef.QualifiedName.Namespaces.Count > 0
                     ?
-                    QualifiedNameHelper.ToQualifiedNameString(funcRef.ModuleName, funcRef.Name)
+                    QualifiedNameHelper.ToQualifiedNameString(funcRef.QualifiedName.Namespaces, funcRef.QualifiedName.DeclName)
                     :
-                    QualifiedNameHelper.ToQualifiedNameString([context.CurrentModuleName], funcRef.Name);
+                    QualifiedNameHelper.ToQualifiedNameString([context.CurrentModuleName], funcRef.QualifiedName.DeclName);
 
                 var expectedArgCount =
                     context.ModuleCompilationContext.TryGetChoiceTypeConstructorArgumentCount(qualifiedTagName);
@@ -431,7 +424,7 @@ public class ExpressionCompiler
                 // Build an expression that evaluates to a function value
                 return
                     EmitChoiceTypeTagPartialApplicationExpression(
-                        funcRef.Name,
+                        funcRef.QualifiedName.DeclName,
                         expectedArgCount.Value,
                         compiledArguments);
             }
@@ -439,15 +432,15 @@ public class ExpressionCompiler
             // Check if the function is a parameter or local binding (higher-order function application)
             // This handles cases like: `applyTwoArgs func a b = func a b`
             // where `func` is a parameter that holds a function value
-            if (funcRef.ModuleName.Count is 0)
+            if (funcRef.QualifiedName.Namespaces.Count is 0)
             {
-                if (context.TryGetLocalBinding(funcRef.Name) is { } bindingExpr)
+                if (context.TryGetLocalBinding(funcRef.QualifiedName.DeclName) is { } bindingExpr)
                 {
                     // Apply arguments to the function value from local binding using generic application
                     return CompileGenericFunctionApplication(bindingExpr, compiledArguments);
                 }
 
-                if (context.TryGetParameterIndex(funcRef.Name) is { } paramIndex)
+                if (context.TryGetParameterIndex(funcRef.QualifiedName.DeclName) is { } paramIndex)
                 {
                     // Apply arguments to the function value from parameter using generic application
                     var funcExpr = BuiltinHelpers.BuildPathToParameter(paramIndex);
@@ -458,13 +451,13 @@ public class ExpressionCompiler
 
             // Handle Basics module functions that are implemented in BasicArithmetic
             // Check using the structured module name list rather than string manipulation
-            if (funcRef.ModuleName.Count is 1 && funcRef.ModuleName[0] is "Basics" &&
-                CoreLibraryModule.CoreBasics.GetBasicsFunctionInfo(funcRef.Name) is { } basicsFuncInfo &&
+            if (funcRef.QualifiedName.Namespaces.Count is 1 && funcRef.QualifiedName.Namespaces[0] is "Basics" &&
+                CoreLibraryModule.CoreBasics.GetBasicsFunctionInfo(funcRef.QualifiedName.DeclName) is { } basicsFuncInfo &&
                 basicsFuncInfo.FunctionType.Count - compiledArguments.Length - 1 is 0)
             {
                 // For polymorphic numeric functions (add, sub, mul), use type inference to decide
                 // whether to use the integer-specific implementation
-                if (funcRef.Name is "add" or "sub" or "mul")
+                if (funcRef.QualifiedName.DeclName is "add" or "sub" or "mul")
                 {
                     // Use type inference to determine the expression type
                     var expressionType =
@@ -479,13 +472,13 @@ public class ExpressionCompiler
                     if (expressionType is TypeInference.InferredType.IntType)
                     {
                         // Use integer-specific implementation
-                        if (funcRef.Name is "add")
+                        if (funcRef.QualifiedName.DeclName is "add")
                             return BuiltinHelpers.ApplyBuiltinIntAdd(compiledArguments);
 
-                        if (funcRef.Name is "sub")
+                        if (funcRef.QualifiedName.DeclName is "sub")
                             return CoreLibraryModule.CoreBasics.Int_sub(compiledArguments[0], compiledArguments[1]);
 
-                        if (funcRef.Name is "mul")
+                        if (funcRef.QualifiedName.DeclName is "mul")
                             return BuiltinHelpers.ApplyBuiltinIntMul(compiledArguments);
                     }
                 }
@@ -495,11 +488,11 @@ public class ExpressionCompiler
 
             // Determine qualified function name
             var qualifiedFunctionName =
-                funcRef.ModuleName.Count > 0
+                funcRef.QualifiedName.Namespaces.Count > 0
                 ?
-                string.Join(".", funcRef.ModuleName) + "." + funcRef.Name
+                string.Join(".", funcRef.QualifiedName.Namespaces) + "." + funcRef.QualifiedName.DeclName
                 :
-                context.CurrentModuleName + "." + funcRef.Name;
+                context.CurrentModuleName + "." + funcRef.QualifiedName.DeclName;
 
             // Resolve callee in the compiled-functions cache. After §7.6b the
             // caller's layout contains only its SCC members, so a cross-SCC
@@ -519,8 +512,8 @@ public class ExpressionCompiler
             {
                 // Handle references to natively-implemented Basics functions
                 // that are partially applied or not in the dependency layout
-                if (funcRef.ModuleName.Count is 1 && funcRef.ModuleName[0] is "Basics" &&
-                    CoreLibraryModule.CoreBasics.GetFunctionValue(funcRef.Name) is { } basicsFuncValue)
+                if (funcRef.QualifiedName.Namespaces.Count is 1 && funcRef.QualifiedName.Namespaces[0] is "Basics" &&
+                    CoreLibraryModule.CoreBasics.GetFunctionValue(funcRef.QualifiedName.DeclName) is { } basicsFuncValue)
                 {
                     return
                         CompileGenericFunctionApplication(
@@ -529,8 +522,8 @@ public class ExpressionCompiler
                 }
 
                 // Handle List.cons (the :: operator after canonicalization)
-                if (funcRef.ModuleName.Count is 1 && funcRef.ModuleName[0] is "List" &&
-                    funcRef.Name is "cons")
+                if (funcRef.QualifiedName.Namespaces.Count is 1 && funcRef.QualifiedName.Namespaces[0] is "List" &&
+                    funcRef.QualifiedName.DeclName is "cons")
                 {
                     if (compiledArguments.Length >= 2)
                     {
@@ -568,7 +561,7 @@ public class ExpressionCompiler
             {
                 // Function exists in dependency layout but info is not available
                 // This shouldn't happen if the function is properly registered
-                return new CompilationError.UnresolvedReference(funcRef.Name, context.CurrentModuleName);
+                return new CompilationError.UnresolvedReference(funcRef.QualifiedName.DeclName, context.CurrentModuleName);
             }
 
             var paramCount = funcInfo.declaration.Function.Declaration.Arguments.Count;
@@ -1068,9 +1061,9 @@ public class ExpressionCompiler
     {
         // Check if the expression is a simple variable reference
         if (expression is SyntaxTypes.Expression.FunctionOrValue funcOrValue &&
-            funcOrValue.ModuleName.Count is 0)
+            funcOrValue.QualifiedName.Namespaces.Count is 0)
         {
-            var varName = funcOrValue.Name;
+            var varName = funcOrValue.QualifiedName.DeclName;
 
             // Check local binding types first
             if (context.TryGetLocalBindingType(varName) is TypeInference.InferredType.RecordType localRecordType)
@@ -1391,9 +1384,9 @@ public class ExpressionCompiler
         switch (expression)
         {
             case SyntaxTypes.Expression.FunctionOrValue funcOrVal:
-                if (funcOrVal.ModuleName.Count is 0)
+                if (funcOrVal.QualifiedName.Namespaces.Count is 0)
                 {
-                    refs.Add(funcOrVal.Name);
+                    refs.Add(funcOrVal.QualifiedName.DeclName);
                 }
 
                 break;

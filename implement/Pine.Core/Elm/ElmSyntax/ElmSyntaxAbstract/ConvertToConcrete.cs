@@ -408,7 +408,7 @@ public static class ConvertToConcrete
                     [.. listExpr.Elements.Select(element => Node(ToExpression(element)))])),
 
             Expression.FunctionOrValue functionOrValue =>
-            new SyntaxModel.Expression.FunctionOrValue(functionOrValue.ModuleName, functionOrValue.Name),
+            new SyntaxModel.Expression.FunctionOrValue(functionOrValue.QualifiedName.Namespaces, functionOrValue.QualifiedName.DeclName),
 
             Expression.IfBlock ifBlock =>
             new SyntaxModel.Expression.IfBlock(

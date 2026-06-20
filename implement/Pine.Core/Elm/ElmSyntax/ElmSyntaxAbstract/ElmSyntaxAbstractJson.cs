@@ -1,3 +1,4 @@
+using Pine.Core.CodeAnalysis;
 using Pine.Core.CommonEncodings;
 using System;
 using System.Collections.Generic;
@@ -21,6 +22,10 @@ namespace Pine.Core.Elm.ElmSyntax.ElmSyntaxAbstract;
 /// The field-name list of <see cref="Pattern.RecordPattern"/> is encoded compactly as an array of
 /// strings (see <see cref="RecordPatternFieldsJsonConverter"/>); the field-name
 /// <see cref="PineValue"/> instances are recomputed on deserialization.
+/// </para>
+/// <para>
+/// The <see cref="DeclQualifiedName"/> carried by <see cref="Expression.FunctionOrValue"/> is encoded as its
+/// <see cref="DeclQualifiedName.FullName"/> string (see <see cref="DeclQualifiedNameJsonConverter"/>).
 /// </para>
 /// </summary>
 public static class ElmSyntaxAbstractJson
@@ -47,6 +52,7 @@ public static class ElmSyntaxAbstractJson
         options.Converters.Add(new PineValueJsonConverter());
         options.Converters.Add(new BigIntegerJsonConverter());
         options.Converters.Add(new RecordPatternFieldsJsonConverter());
+        options.Converters.Add(new DeclQualifiedNameJsonConverter());
 
         return options;
     }
@@ -269,4 +275,35 @@ public class BigIntegerJsonConverter : JsonConverter<System.Numerics.BigInteger>
     public override void Write(
         Utf8JsonWriter writer, System.Numerics.BigInteger value, JsonSerializerOptions options) =>
         writer.WriteStringValue(value.ToString(System.Globalization.CultureInfo.InvariantCulture));
+}
+
+/// <summary>
+/// JSON converter encoding a <see cref="DeclQualifiedName"/> as its
+/// <see cref="DeclQualifiedName.FullName"/> string, both as a value and as a dictionary property name.
+/// </summary>
+public class DeclQualifiedNameJsonConverter : JsonConverter<DeclQualifiedName>
+{
+    /// <inheritdoc/>
+    public override DeclQualifiedName Read(
+        ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options) =>
+        DeclQualifiedName.FromString(
+            reader.GetString()
+            ?? throw new JsonException("Expected a non-null DeclQualifiedName string."));
+
+    /// <inheritdoc/>
+    public override void Write(
+        Utf8JsonWriter writer, DeclQualifiedName value, JsonSerializerOptions options) =>
+        writer.WriteStringValue(value.FullName);
+
+    /// <inheritdoc/>
+    public override DeclQualifiedName ReadAsPropertyName(
+        ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options) =>
+        DeclQualifiedName.FromString(
+            reader.GetString()
+            ?? throw new JsonException("Expected a non-null DeclQualifiedName property name."));
+
+    /// <inheritdoc/>
+    public override void WriteAsPropertyName(
+        Utf8JsonWriter writer, DeclQualifiedName value, JsonSerializerOptions options) =>
+        writer.WritePropertyName(value.FullName);
 }

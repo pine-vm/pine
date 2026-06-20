@@ -336,7 +336,7 @@ public static class ConvertFromConcrete
                 [.. listExpr.Elements.Nodes.Select(node => FromExpression(node.Value))]),
 
             SyntaxModel.Expression.FunctionOrValue functionOrValue =>
-            new Expression.FunctionOrValue(functionOrValue.ModuleName, functionOrValue.Name),
+            Expression.FunctionOrValue.Create(functionOrValue.ModuleName, functionOrValue.Name),
 
             SyntaxModel.Expression.IfBlock ifBlock =>
             new Expression.IfBlock(
