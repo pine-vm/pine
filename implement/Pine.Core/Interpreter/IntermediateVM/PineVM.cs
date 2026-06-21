@@ -62,6 +62,8 @@ public class PineVM : IPineVM
 
     private readonly IReadOnlyDictionary<Expression, ExpressionCompilation>? _expressionCompilationOverrides;
 
+    private readonly bool _disableDirectContinueForSimpleEval;
+
     public static PineVM CreateCustom(
         IDictionary<EvalCacheEntryKey, PineValue>? evalCache,
         EvaluationConfig? evaluationConfigDefault,
@@ -82,6 +84,7 @@ public class PineVM : IPineVM
         int pathMaxLowExclusive = ExpressionCompilation.DefaultPathMaxLowExclusive,
         int pathMaxHighInclusive = ExpressionCompilation.DefaultPathMaxHighInclusive,
         bool disableGenericApplicationChainConsolidation = false,
+        bool disableDirectContinueForSimpleEval = false,
         ReportTailLoopIteration? reportTailLoopIteration = null,
         ReportExpressionCompiled? reportExpressionCompiled = null)
     {
@@ -106,6 +109,7 @@ public class PineVM : IPineVM
                 pathMaxLowExclusive: pathMaxLowExclusive,
                 pathMaxHighInclusive: pathMaxHighInclusive,
                 disableGenericApplicationChainConsolidation: disableGenericApplicationChainConsolidation,
+                disableDirectContinueForSimpleEval: disableDirectContinueForSimpleEval,
                 reportTailLoopIteration: reportTailLoopIteration,
                 reportExpressionCompiled: reportExpressionCompiled);
 
@@ -131,6 +135,7 @@ public class PineVM : IPineVM
         int pathMaxLowExclusive = ExpressionCompilation.DefaultPathMaxLowExclusive,
         int pathMaxHighInclusive = ExpressionCompilation.DefaultPathMaxHighInclusive,
         bool disableGenericApplicationChainConsolidation = false,
+        bool disableDirectContinueForSimpleEval = false,
         ReportTailLoopIteration? reportTailLoopIteration = null,
         ReportExpressionCompiled? reportExpressionCompiled = null)
     {
@@ -174,6 +179,8 @@ public class PineVM : IPineVM
         _pathMaxHighInclusive = pathMaxHighInclusive;
 
         _disableGenericApplicationChainConsolidation = disableGenericApplicationChainConsolidation;
+
+        _disableDirectContinueForSimpleEval = disableDirectContinueForSimpleEval;
     }
 
     /// <inheritdoc/>
@@ -1114,7 +1121,8 @@ public class PineVM : IPineVM
             }
             else
             {
-                if (_precompiledLeaves is not null && expressionValue is not null)
+                if (currentFrame.StackValues.Length > 0 &&
+                    _precompiledLeaves is not null && expressionValue is not null)
                 {
                     if (_precompiledLeaves.TryGetValue(expressionValue, out var computeLeafDelegate))
                     {
@@ -1135,6 +1143,49 @@ public class PineVM : IPineVM
                     }
                 }
 
+                if (!_expressionCompilationDict.ContainsKey(expression))
+                {
+                    if (!_disableDirectContinueForSimpleEval && DirectContinuationIfSimpleEnough(expression, environmentValue) is { } directContResult)
+                    {
+                        var encodedExprValueMaterialized = directContResult.EncodedExprValue.Evaluate();
+
+                        var contParseResult = ParseExpression(encodedExprValueMaterialized);
+
+                        if (contParseResult.IsErrOrNull() is { } contParseErr)
+                        {
+                            return
+                                BuildEvaluationError(
+                                    "Failed to parse expression from value: " + contParseErr +
+                                    " - expressionValue is " +
+                                    (expressionValue is null
+                                    ?
+                                    "null"
+                                    :
+                                    DescribeValueForErrorMessage(expressionValue)) +
+                                    " - environmentValue is " +
+                                    DescribeValueForErrorMessage(environmentValue.Evaluate()));
+                        }
+
+                        if (contParseResult.IsOkOrNull() is not { } contParseOk)
+                        {
+                            throw new NotImplementedException(
+                                "Unexpected result type: " + contParseResult.GetType().FullName);
+                        }
+
+                        buildListCount += directContResult.PerformanceCounters.BuildListCount;
+                        invocationCount += directContResult.PerformanceCounters.InvocationCount + 1;
+                        loopIterationCount += directContResult.PerformanceCounters.LoopIterationCount;
+                        instructionCount += directContResult.PerformanceCounters.InstructionCount;
+
+                        return
+                            InvokePrecompiledOrBuildStackFrame(
+                                expressionValue: encodedExprValueMaterialized,
+                                expression: contParseOk,
+                                environmentValue: directContResult.EnvironmentValue,
+                                replaceCurrentFrame: replaceCurrentFrame);
+                    }
+                }
+
                 var exprEntry = GetExpressionEntry(expression);
 
                 var instructions =
@@ -1145,6 +1196,7 @@ public class PineVM : IPineVM
                         environmentValue: environmentValue,
                         parameters: instructions.Parameters);
 
+                if (currentFrame.StackValues.Length > 0)
                 {
                     if (expressionValue is not null && EvalCache is { } evalCache)
                     {
@@ -1161,7 +1213,8 @@ public class PineVM : IPineVM
 
                 string? cacheFileName = null;
 
-                if (exprEntry.OptimizationConfig is { } optimizationConfig &&
+                if (currentFrame.StackValues.Length > 0 &&
+                    exprEntry.OptimizationConfig is { } optimizationConfig &&
                     _cacheFileStore is { } cacheFileStore)
                 {
                     if (optimizationConfig.PersistentCachePredicate?.SatisfiedBy(
@@ -2908,4 +2961,403 @@ public class PineVM : IPineVM
     public static string DescribeValueForErrorMessage(PineValue pineValue) =>
         StringEncoding.StringFromValue(pineValue)
         .Unpack(fromErr: _ => "not a string", fromOk: asString => "string \'" + asString + "\'");
+
+    private record struct DirectContinuation(
+        PineValueInProcess EncodedExprValue,
+        PineValueInProcess EnvironmentValue,
+        PerformanceCounters PerformanceCounters);
+
+    private static DirectContinuation? DirectContinuationIfSimpleEnough(
+        Expression expression,
+        PineValueInProcess envValue)
+    {
+        if (expression is not Expression.ParseAndEval evalExpr)
+            return null;
+
+        if (evalExpr.Encoded.ContainsParseAndEval || evalExpr.Environment.ContainsParseAndEval)
+            return null;
+
+        var encodedExprValue = EvalDirect(evalExpr.Encoded, envValue);
+
+        if (encodedExprValue is null)
+            return null;
+
+        var innerEnvValue = EvalDirect(evalExpr.Environment, envValue);
+
+        if (innerEnvValue is null)
+            return null;
+
+        var aggregatePerformanceCounters =
+            PerformanceCounters.Add(encodedExprValue.Value.perfCounts, innerEnvValue.Value.perfCounts);
+
+        return new DirectContinuation(
+            EncodedExprValue: encodedExprValue.Value.value,
+            EnvironmentValue: innerEnvValue.Value.value,
+            PerformanceCounters: aggregatePerformanceCounters);
+    }
+
+    private static (PineValueInProcess value, PerformanceCounters perfCounts)? EvalDirect(
+        Expression expression,
+        PineValueInProcess envValue)
+    {
+        var performanceCounters = new MutablePerformanceCounters();
+
+        var value = EvalDirect(expression, envValue, ref performanceCounters);
+
+        if (value is null)
+            return null;
+
+        var perfCounts = performanceCounters.ToImmutable();
+
+        return (value, perfCounts);
+    }
+
+    private record struct MutablePerformanceCounters(
+        long InvocationCount,
+        long BuildListCount,
+        long LoopIterationCount,
+        long InstructionCount)
+    {
+        public readonly PerformanceCounters ToImmutable() =>
+            new(InvocationCount, BuildListCount, LoopIterationCount, InstructionCount);
+    }
+
+    private static PineValueInProcess? EvalDirect(
+        Expression expression,
+        PineValueInProcess envValue,
+        ref MutablePerformanceCounters performanceCounters)
+    {
+        performanceCounters.InstructionCount++;
+
+        if (expression is Expression.Literal literal)
+        {
+            return PineValueInProcess.Create(literal.Value);
+        }
+
+        if (expression is Expression.List listExpr)
+        {
+            performanceCounters.BuildListCount++;
+
+            var items = new PineValueInProcess[listExpr.Items.Count];
+
+            for (var i = 0; i < items.Length; ++i)
+            {
+                var itemExpr = listExpr.Items[i];
+
+                var itemValue =
+                    EvalDirect(itemExpr, envValue, ref performanceCounters);
+
+                if (itemValue is null)
+                {
+                    return null;
+                }
+
+                items[i] = itemValue;
+            }
+
+            return PineValueInProcess.CreateList(items);
+        }
+
+        if (expression is Expression.Conditional conditionalExpr)
+        {
+            var conditionValue =
+                EvalDirect(conditionalExpr.Condition, envValue, ref performanceCounters);
+
+            if (conditionValue is null)
+            {
+                return null;
+            }
+
+            if (PineValueInProcess.AreEqual(conditionValue, PineValueInProcess.KernelTrueValue))
+            {
+                return EvalDirect(conditionalExpr.TrueBranch, envValue, ref performanceCounters);
+            }
+            else
+            {
+                return EvalDirect(conditionalExpr.FalseBranch, envValue, ref performanceCounters);
+            }
+        }
+
+        if (expression is Expression.Environment)
+        {
+            return envValue;
+        }
+
+        if (expression is Expression.KernelApplication builtinExpr)
+        {
+            if (builtinExpr.Function is nameof(KernelFunction.length))
+            {
+                var argumentValue = EvalDirect(builtinExpr.Input, envValue, ref performanceCounters);
+
+                if (argumentValue is null)
+                {
+                    return null;
+                }
+
+                return PineValueInProcess.CreateInteger(argumentValue.GetLength());
+            }
+
+            if (builtinExpr.Function is nameof(KernelFunction.equal))
+            {
+                if (builtinExpr.Input is Expression.List equalList)
+                {
+                    if (equalList.Items.Count < 2)
+                    {
+                        return PineValueInProcess.KernelTrueValue;
+                    }
+
+                    var firstValue = EvalDirect(equalList.Items[0], envValue, ref performanceCounters);
+
+                    if (firstValue is null)
+                    {
+                        return null;
+                    }
+
+                    for (var i = 1; i < equalList.Items.Count; ++i)
+                    {
+                        var nextValue = EvalDirect(equalList.Items[i], envValue, ref performanceCounters);
+
+                        if (nextValue is null)
+                        {
+                            return null;
+                        }
+
+                        if (!PineValueInProcess.AreEqual(firstValue, nextValue))
+                        {
+                            return PineValueInProcess.KernelFalseValue;
+                        }
+                    }
+
+                    return PineValueInProcess.KernelTrueValue;
+                }
+
+                var inputValue = EvalDirect(builtinExpr.Input, envValue, ref performanceCounters);
+
+                if (inputValue is null)
+                {
+                    return null;
+                }
+
+                if (inputValue.IsBlob())
+                {
+                    return PineValueInProcess.Create(KernelFunction.equal(inputValue.Evaluate()));
+                }
+
+                if (inputValue.GetLength() < 2)
+                    return PineValueInProcess.KernelTrueValue;
+
+                var firstItemValue = inputValue.GetElementAt(0);
+
+                for (var i = 1; i < inputValue.GetLength(); ++i)
+                {
+                    var nextItemValue = inputValue.GetElementAt(i);
+
+                    if (!PineValueInProcess.AreEqual(firstItemValue, nextItemValue))
+                    {
+                        return PineValueInProcess.KernelFalseValue;
+                    }
+                }
+
+                return PineValueInProcess.KernelTrueValue;
+            }
+
+            if (builtinExpr.Function is nameof(KernelFunction.head))
+            {
+                if (builtinExpr.Input is Expression.KernelApplication innerBuiltinExpr &&
+                    innerBuiltinExpr.Function is nameof(KernelFunction.skip))
+                {
+                    var skipInputValue = EvalDirect(innerBuiltinExpr.Input, envValue, ref performanceCounters);
+
+                    if (skipInputValue is null)
+                        return null;
+
+                    int? skipCount = null;
+
+                    if (innerBuiltinExpr.Input is Expression.Literal skipCountLiteral)
+                    {
+                        if (KernelFunction.SignedIntegerFromValueRelaxed(skipCountLiteral.Value) is { } skipCountValue)
+                        {
+                            skipCount = (int)skipCountValue;
+                        }
+                    }
+
+                    if (!skipCount.HasValue)
+                    {
+                        var skipCountValue = EvalDirect(innerBuiltinExpr.Input, envValue, ref performanceCounters);
+
+                        if (skipCountValue is null)
+                            return null;
+
+                        skipCount = (int?)skipCountValue.AsInteger();
+                    }
+
+                    if (skipCount.HasValue)
+                    {
+                        return skipInputValue.GetElementAt(skipCount.Value);
+                    }
+                }
+
+                var inputValue = EvalDirect(builtinExpr.Input, envValue, ref performanceCounters);
+
+                if (inputValue is null)
+                {
+                    return null;
+                }
+
+                return inputValue.GetElementAt(0);
+            }
+
+            if (builtinExpr.Function is nameof(KernelFunction.skip))
+            {
+                if (builtinExpr.Input is Expression.List skipListExpr &&
+                    skipListExpr.Items.Count is 2)
+                {
+                    var inputValue = EvalDirect(skipListExpr.Items[1], envValue, ref performanceCounters);
+
+                    if (inputValue is null)
+                        return null;
+
+                    int? skipCount = null;
+
+                    if (skipListExpr.Items[0] is Expression.Literal skipCountLiteral)
+                    {
+                        if (KernelFunction.SignedIntegerFromValueRelaxed(skipCountLiteral.Value) is { } skipCountValue)
+                        {
+                            skipCount = (int)skipCountValue;
+                        }
+                    }
+
+                    if (!skipCount.HasValue)
+                    {
+                        var skipCountValue = EvalDirect(skipListExpr.Items[0], envValue, ref performanceCounters);
+
+                        if (skipCountValue is null)
+                            return null;
+
+                        skipCount = (int?)skipCountValue.AsInteger();
+                    }
+
+                    if (skipCount.HasValue)
+                    {
+                        var skippedValue = EvalDirect(skipListExpr.Items[1], envValue, ref performanceCounters);
+
+                        if (skippedValue is null)
+                            return null;
+
+                        return PineValueInProcess.Skip(skipCount.Value, skippedValue);
+                    }
+                }
+            }
+
+            if (builtinExpr.Function is nameof(KernelFunction.take))
+            {
+                if (builtinExpr.Input is Expression.List skipListExpr &&
+                    skipListExpr.Items.Count is 2)
+                {
+                    var inputValue = EvalDirect(skipListExpr.Items[1], envValue);
+
+                    if (inputValue is null)
+                        return null;
+
+                    int? takeCount = null;
+
+                    if (skipListExpr.Items[0] is Expression.Literal takeCountLiteral)
+                    {
+                        if (KernelFunction.SignedIntegerFromValueRelaxed(takeCountLiteral.Value) is { } takeCountValue)
+                        {
+                            takeCount = (int)takeCountValue;
+                        }
+                    }
+
+                    if (!takeCount.HasValue)
+                    {
+                        var takeCountValue = EvalDirect(skipListExpr.Items[0], envValue, ref performanceCounters);
+
+                        if (takeCountValue is null)
+                            return null;
+
+                        takeCount = (int?)takeCountValue.AsInteger();
+                    }
+
+                    if (takeCount.HasValue)
+                    {
+                        var takenValue = EvalDirect(skipListExpr.Items[1], envValue, ref performanceCounters);
+
+                        if (takenValue is null)
+                            return null;
+
+                        return PineValueInProcess.Take(takeCount.Value, takenValue);
+                    }
+                }
+            }
+
+            if (builtinExpr.Function is nameof(KernelFunction.concat))
+            {
+                if (builtinExpr.Input is Expression.List concatList && concatList.Items.Count is 2)
+                {
+                    var leftValue = EvalDirect(concatList.Items[0], envValue, ref performanceCounters);
+
+                    var rightValue = EvalDirect(concatList.Items[1], envValue, ref performanceCounters);
+
+                    if (leftValue is null || rightValue is null)
+                        return null;
+
+                    return PineValueInProcess.ConcatBinary(leftValue, rightValue);
+                }
+
+                var inputValue = EvalDirect(builtinExpr.Input, envValue, ref performanceCounters);
+
+                if (inputValue is null)
+                    return null;
+
+                if (inputValue.IsList() && inputValue.GetLength() is 2)
+                {
+                    return PineValueInProcess.ConcatBinary(inputValue.GetElementAt(0), inputValue.GetElementAt(1));
+                }
+            }
+
+            if (builtinExpr.Function is nameof(KernelFunction.int_is_sorted_asc))
+            {
+                var inputValue = EvalDirect(builtinExpr.Input, envValue, ref performanceCounters);
+
+                if (inputValue is null)
+                    return null;
+
+                var plainValue = KernelFunction.int_is_sorted_asc(inputValue.Evaluate());
+
+                return PineValueInProcess.Create(plainValue);
+            }
+
+            if (builtinExpr.Function is nameof(KernelFunction.int_add))
+            {
+                var inputValue = EvalDirect(builtinExpr.Input, envValue, ref performanceCounters);
+
+                if (inputValue is null)
+                    return null;
+
+                var plainValue = KernelFunction.int_add(inputValue.Evaluate());
+
+                return PineValueInProcess.Create(plainValue);
+            }
+
+            if (builtinExpr.Function is nameof(KernelFunction.int_mul))
+            {
+                var inputValue = EvalDirect(builtinExpr.Input, envValue, ref performanceCounters);
+
+                if (inputValue is null)
+                    return null;
+
+                var plainValue = KernelFunction.int_mul(inputValue.Evaluate());
+
+                return PineValueInProcess.Create(plainValue);
+            }
+        }
+
+        if (expression is Expression.StringTag stringTagExpr)
+        {
+            return EvalDirect(stringTagExpr.Tagged, envValue, ref performanceCounters);
+        }
+
+        return null;
+    }
 }

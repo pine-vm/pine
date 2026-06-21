@@ -323,9 +323,9 @@ public class FunctionApplicationOverheadTests
         PerformanceCountersFormatting.FormatCounts(report).Should().Be(
             """
             InvocationCount: 2
-            BuildListCount: 1
+            BuildListCount: 2
             LoopIterationCount: 0
-            InstructionCount: 11
+            InstructionCount: 10
             """);
     }
 
@@ -351,9 +351,9 @@ public class FunctionApplicationOverheadTests
         PerformanceCountersFormatting.FormatCounts(report).Should().Be(
             """
             InvocationCount: 4
-            BuildListCount: 8
+            BuildListCount: 13
             LoopIterationCount: 0
-            InstructionCount: 32
+            InstructionCount: 42
             """);
     }
 
@@ -377,9 +377,9 @@ public class FunctionApplicationOverheadTests
         PerformanceCountersFormatting.FormatCounts(report).Should().Be(
             """
             InvocationCount: 2
-            BuildListCount: 1
+            BuildListCount: 2
             LoopIterationCount: 0
-            InstructionCount: 11
+            InstructionCount: 10
             """);
     }
 
@@ -409,9 +409,9 @@ public class FunctionApplicationOverheadTests
         PerformanceCountersFormatting.FormatCounts(report).Should().Be(
             """
             InvocationCount: 6
-            BuildListCount: 5
+            BuildListCount: 8
             LoopIterationCount: 0
-            InstructionCount: 63
+            InstructionCount: 70
             """);
     }
 
@@ -490,9 +490,9 @@ public class FunctionApplicationOverheadTests
         PerformanceCountersFormatting.FormatCounts(report).Should().Be(
             """
             InvocationCount: 9
-            BuildListCount: 8
+            BuildListCount: 11
             LoopIterationCount: 0
-            InstructionCount: 225
+            InstructionCount: 232
             """);
 
         // --- StackFrameInstructions tracking ---
@@ -507,8 +507,8 @@ public class FunctionApplicationOverheadTests
 
         var uniqueFrameCount = uniqueFrameInstructions.Count;
 
-        totalFrameCount.Should().Be(10, "total entered frame count");
-        uniqueFrameCount.Should().Be(4, "unique frame instruction count");
+        totalFrameCount.Should().Be(8, "total entered frame count");
+        uniqueFrameCount.Should().Be(2, "unique frame instruction count");
 
         // Snapshot assertions for the first five entered frames.
         enteredFrames.Should().HaveCountGreaterThanOrEqualTo(5);
@@ -539,35 +539,99 @@ public class FunctionApplicationOverheadTests
 
         frame1.Should().Be(
             """
-            0: Push_Literal (List [0] (0))
-            1: Local_Get (0)
-            2: Build_List (2)
-            3: Push_Literal (List [2] (814))
-            4: Parse_And_Eval_Binary
-            5: Return
+             0: Local_Get (1)
+             1: Skip_Const (1)
+             2: Local_Set (2)
+             3: Skip_Const (1)
+             4: Local_Set (3)
+             5: Length
+             6: Jump_If_Equal_Const (Blob [2] (0x0400 | int 0) , 5)
+             7: Local_Get (2)
+             8: Length_Equal_Const (0)
+             9: Equal_Binary_Const (Blob [1] (0x02))
+            10: Jump_Const (2)
+            11: Push_Literal (Blob [1] (0x02))
+            12: Jump_If_Equal_Const (Blob [1] (0x04) , 3)
+            13: Push_Literal (Blob [1] (0x02))
+            14: Jump_Const (4)
+            15: Local_Get (1)
+            16: Length_Equal_Const (0)
+            17: Equal_Binary_Const (Blob [1] (0x02))
+            18: Jump_If_Equal_Const (Blob [1] (0x04) , 3)
+            19: Push_Literal (List [0] (0))
+            20: Return
+            21: Local_Get (1)
+            22: Head_Generic
+            23: Local_Get (1)
+            24: Skip_Head_Const (1)
+            25: Int_Add_Binary
+            26: Local_Get (2)
+            27: Skip_Head_Const (1)
+            28: Int_Add_Binary
+            29: Local_Get (0)
+            30: Local_Get (3)
+            31: Skip_Const (1)
+            32: Build_List (2)
+            33: Local_Get (0)
+            34: Head_Generic
+            35: Parse_And_Eval_Binary
+            36: Prepend_List_Items (1)
+            37: Return
             """);
 
         var frame2 =
             StackInstructionTraceRenderer.RenderStackFrameInstructions(
                 enteredFrames[2].Instructions);
 
-        enteredFrames[2].StackFrameDepth.Should().Be(1);
+        enteredFrames[2].StackFrameDepth.Should().Be(2);
 
         frame2.Should().Be(
             """
-            0: Push_Literal (List [1] (391))
-            1: Local_Get (0)
-            2: Build_List (2)
-            3: Push_Literal (List [2] (390))
-            4: Parse_And_Eval_Binary
-            5: Return
+             0: Local_Get (1)
+             1: Skip_Const (1)
+             2: Local_Set (2)
+             3: Skip_Const (1)
+             4: Local_Set (3)
+             5: Length
+             6: Jump_If_Equal_Const (Blob [2] (0x0400 | int 0) , 5)
+             7: Local_Get (2)
+             8: Length_Equal_Const (0)
+             9: Equal_Binary_Const (Blob [1] (0x02))
+            10: Jump_Const (2)
+            11: Push_Literal (Blob [1] (0x02))
+            12: Jump_If_Equal_Const (Blob [1] (0x04) , 3)
+            13: Push_Literal (Blob [1] (0x02))
+            14: Jump_Const (4)
+            15: Local_Get (1)
+            16: Length_Equal_Const (0)
+            17: Equal_Binary_Const (Blob [1] (0x02))
+            18: Jump_If_Equal_Const (Blob [1] (0x04) , 3)
+            19: Push_Literal (List [0] (0))
+            20: Return
+            21: Local_Get (1)
+            22: Head_Generic
+            23: Local_Get (1)
+            24: Skip_Head_Const (1)
+            25: Int_Add_Binary
+            26: Local_Get (2)
+            27: Skip_Head_Const (1)
+            28: Int_Add_Binary
+            29: Local_Get (0)
+            30: Local_Get (3)
+            31: Skip_Const (1)
+            32: Build_List (2)
+            33: Local_Get (0)
+            34: Head_Generic
+            35: Parse_And_Eval_Binary
+            36: Prepend_List_Items (1)
+            37: Return
             """);
 
         var frame3 =
             StackInstructionTraceRenderer.RenderStackFrameInstructions(
                 enteredFrames[3].Instructions);
 
-        enteredFrames[3].StackFrameDepth.Should().Be(1);
+        enteredFrames[3].StackFrameDepth.Should().Be(3);
 
         frame3.Should().Be(
             """
@@ -615,7 +679,7 @@ public class FunctionApplicationOverheadTests
             StackInstructionTraceRenderer.RenderStackFrameInstructions(
                 enteredFrames[4].Instructions);
 
-        enteredFrames[4].StackFrameDepth.Should().Be(2);
+        enteredFrames[4].StackFrameDepth.Should().Be(4);
 
         frame4.Should().Be(
             """
@@ -681,9 +745,9 @@ public class FunctionApplicationOverheadTests
         PerformanceCountersFormatting.FormatCounts(report).Should().Be(
             """
             InvocationCount: 2
-            BuildListCount: 1
+            BuildListCount: 2
             LoopIterationCount: 0
-            InstructionCount: 11
+            InstructionCount: 10
             """);
     }
 
@@ -710,9 +774,9 @@ public class FunctionApplicationOverheadTests
         PerformanceCountersFormatting.FormatCounts(report).Should().Be(
             """
             InvocationCount: 2
-            BuildListCount: 1
+            BuildListCount: 2
             LoopIterationCount: 0
-            InstructionCount: 11
+            InstructionCount: 10
             """);
     }
 
@@ -753,9 +817,9 @@ public class FunctionApplicationOverheadTests
         PerformanceCountersFormatting.FormatCounts(report).Should().Be(
             """
             InvocationCount: 24
-            BuildListCount: 24
+            BuildListCount: 25
             LoopIterationCount: 0
-            InstructionCount: 330
+            InstructionCount: 329
             """);
     }
 
@@ -791,9 +855,9 @@ public class FunctionApplicationOverheadTests
         PerformanceCountersFormatting.FormatCounts(report).Should().Be(
             """
             InvocationCount: 6
-            BuildListCount: 5
+            BuildListCount: 8
             LoopIterationCount: 0
-            InstructionCount: 63
+            InstructionCount: 70
             """);
     }
 
@@ -836,9 +900,9 @@ public class FunctionApplicationOverheadTests
         PerformanceCountersFormatting.FormatCounts(report).Should().Be(
             """
             InvocationCount: 24
-            BuildListCount: 24
+            BuildListCount: 25
             LoopIterationCount: 0
-            InstructionCount: 330
+            InstructionCount: 329
             """);
     }
 
@@ -869,9 +933,9 @@ public class FunctionApplicationOverheadTests
         PerformanceCountersFormatting.FormatCounts(report).Should().Be(
             """
             InvocationCount: 6
-            BuildListCount: 5
+            BuildListCount: 8
             LoopIterationCount: 0
-            InstructionCount: 63
+            InstructionCount: 70
             """);
     }
 
@@ -910,9 +974,9 @@ public class FunctionApplicationOverheadTests
         PerformanceCountersFormatting.FormatCounts(report).Should().Be(
             """
             InvocationCount: 24
-            BuildListCount: 24
+            BuildListCount: 25
             LoopIterationCount: 0
-            InstructionCount: 330
+            InstructionCount: 329
             """);
     }
 }

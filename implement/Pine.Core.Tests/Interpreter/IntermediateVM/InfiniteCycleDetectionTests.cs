@@ -387,6 +387,7 @@ public class InfiniteCycleDetectionTests
                 reportFunctionApplication: null,
                 compilationEnvClasses: null,
                 disableReductionInCompilation: true,
+                disableDirectContinueForSimpleEval: true,
                 selectPrecompiled: null,
                 skipInlineForExpression: _ => false,
                 enableTailRecursionOptimization: false,
