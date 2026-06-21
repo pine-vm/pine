@@ -67,6 +67,16 @@ public record StackFrame(
                 "PushInstructionResult called with null value");
         }
 
+        if (StackPointer < 0)
+            throw new InvalidOperationException("PushInstructionResult called with negative stack pointer");
+
+        if (StackPointer >= StackValues.Length)
+        {
+            throw new InvalidOperationException(
+                $"Stack overflow: Attempting to push value onto stack at position {StackPointer}, " +
+                $"but stack size is only {StackValues.Length}");
+        }
+
         StackValues.Span[StackPointer] = value;
         StackPointer++;
         ++InstructionPointer;
