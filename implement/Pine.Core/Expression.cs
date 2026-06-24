@@ -41,6 +41,16 @@ public abstract record Expression
     public abstract bool ContainsParseAndEval { get; }
 
     /// <summary>
+    /// Number of condition expressions (<see cref="Conditional"/>) contained in this expression, including the expression itself if it is a conditional.
+    /// </summary>
+    public abstract long ConditionCount { get; }
+
+    /// <summary>
+    /// Number of built-in expressions (<see cref="KernelApplication"/>) contained in this expression, including the expression itself if it is a built-in.
+    /// </summary>
+    public abstract long BuiltinCount { get; }
+
+    /// <summary>
     /// Instance of the <see cref="Environment"/> expression type.
     /// </summary>
     public static readonly Expression EnvironmentInstance = new Environment();
@@ -181,6 +191,12 @@ public abstract record Expression
         public override bool ContainsParseAndEval { get; } = false;
 
         /// <inheritdoc/>
+        public override long ConditionCount { get; } = 0;
+
+        /// <inheritdoc/>
+        public override long BuiltinCount { get; } = 0;
+
+        /// <inheritdoc/>
         public override string ToString()
         {
             string? valueInterpretationString = null;
@@ -223,6 +239,12 @@ public abstract record Expression
         /// <inheritdoc/>
         public override bool ContainsParseAndEval { get; } = false;
 
+        /// <inheritdoc/>
+        public override long ConditionCount { get; } = 0;
+
+        /// <inheritdoc/>
+        public override long BuiltinCount { get; } = 0;
+
         /// <summary>
         /// The list of subexpressions.
         /// </summary>
@@ -244,13 +266,19 @@ public abstract record Expression
 
             for (var i = 0; i < Items.Count; ++i)
             {
-                SubexpressionCount += Items[i].SubexpressionCount;
+                var item = Items[i];
 
-                if (Items[i].ReferencesEnvironment)
+                SubexpressionCount += item.SubexpressionCount;
+
+                if (item.ReferencesEnvironment)
                     ReferencesEnvironment = true;
 
-                if (Items[i].ContainsParseAndEval)
+                if (item.ContainsParseAndEval)
                     ContainsParseAndEval = true;
+
+                ConditionCount += item.ConditionCount;
+
+                BuiltinCount += item.BuiltinCount;
             }
         }
 
@@ -267,6 +295,9 @@ public abstract record Expression
                 return false;
 
             if (Items.Count != notNull.Items.Count)
+                return false;
+
+            if (!(SubexpressionCount == notNull.SubexpressionCount))
                 return false;
 
             for (var i = 0; i < Items.Count; ++i)
@@ -393,6 +424,12 @@ public abstract record Expression
         /// </summary>
         public override bool ContainsParseAndEval { get; } = true;
 
+        /// <inheritdoc/>
+        public override long ConditionCount { get; } = 0;
+
+        /// <inheritdoc/>
+        public override long BuiltinCount { get; } = 0;
+
         /// <summary>
         /// Creates a new instance of a Parse-and-Eval expression.
         /// </summary>
@@ -410,6 +447,12 @@ public abstract record Expression
 
             ReferencesEnvironment =
                 encoded.ReferencesEnvironment || environment.ReferencesEnvironment;
+
+            ConditionCount =
+                encoded.ConditionCount + environment.ConditionCount;
+
+            BuiltinCount =
+                encoded.BuiltinCount + environment.BuiltinCount;
         }
 
         /// <inheritdoc/>
@@ -464,6 +507,12 @@ public abstract record Expression
         /// <inheritdoc/>
         public override bool ContainsParseAndEval { get; }
 
+        /// <inheritdoc/>
+        public override long ConditionCount { get; } = 0;
+
+        /// <inheritdoc/>
+        public override long BuiltinCount { get; } = 0;
+
         /// <summary>
         /// Creates a new instance of a kernel application.
         /// </summary>
@@ -481,6 +530,8 @@ public abstract record Expression
             SubexpressionCount = input.SubexpressionCount + 1;
             ReferencesEnvironment = input.ReferencesEnvironment;
             ContainsParseAndEval = input.ContainsParseAndEval;
+            ConditionCount = input.ConditionCount;
+            BuiltinCount = input.BuiltinCount + 1;
         }
 
         /// <inheritdoc/>
@@ -537,6 +588,12 @@ public abstract record Expression
         /// <inheritdoc/>
         public override bool ContainsParseAndEval { get; }
 
+        /// <inheritdoc/>
+        public override long ConditionCount { get; } = 0;
+
+        /// <inheritdoc/>
+        public override long BuiltinCount { get; } = 0;
+
         internal Conditional(
             Expression condition,
             Expression falseBranch,
@@ -570,6 +627,16 @@ public abstract record Expression
                 Condition.ContainsParseAndEval ||
                 FalseBranch.ContainsParseAndEval ||
                 TrueBranch.ContainsParseAndEval;
+
+            ConditionCount =
+                Condition.ConditionCount +
+                FalseBranch.ConditionCount +
+                TrueBranch.ConditionCount + 1;
+
+            BuiltinCount =
+                Condition.BuiltinCount +
+                FalseBranch.BuiltinCount +
+                TrueBranch.BuiltinCount;
         }
 
         /// <inheritdoc/>
@@ -654,6 +721,12 @@ public abstract record Expression
 
         /// <inheritdoc/>
         public override bool ContainsParseAndEval { get; } = false;
+
+        /// <inheritdoc/>
+        public override long ConditionCount { get; } = 0;
+
+        /// <inheritdoc/>
+        public override long BuiltinCount { get; } = 0;
     }
 
     /// <summary>
@@ -683,7 +756,13 @@ public abstract record Expression
         /// <inheritdoc/>
         public override bool ContainsParseAndEval { get; }
 
-        internal readonly int SlimHashCode;
+        /// <inheritdoc/>
+        public override long ConditionCount { get; }
+
+        /// <inheritdoc/>
+        public override long BuiltinCount { get; }
+
+        private readonly int _slimHashCode;
 
         /// <summary>
         /// Creates a new instance of a string tag expression.
@@ -698,13 +777,15 @@ public abstract record Expression
             SubexpressionCount = tagged.SubexpressionCount + 1;
             ReferencesEnvironment = tagged.ReferencesEnvironment;
             ContainsParseAndEval = tagged.ContainsParseAndEval;
+            ConditionCount = tagged.ConditionCount;
+            BuiltinCount = tagged.BuiltinCount;
 
-            SlimHashCode = HashCode.Combine(tag, tagged);
+            _slimHashCode = HashCode.Combine(tag, tagged);
         }
 
         /// <inheritdoc/>
         public override int GetHashCode() =>
-            SlimHashCode;
+            _slimHashCode;
 
         /// <inheritdoc/>
         public virtual bool Equals(StringTag? other)
@@ -716,7 +797,7 @@ public abstract record Expression
                 return false;
 
             return
-                other.SlimHashCode == SlimHashCode &&
+                other._slimHashCode == _slimHashCode &&
                 other.Tag == Tag &&
                 other.Tagged == Tagged;
         }

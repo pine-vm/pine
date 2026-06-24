@@ -17,7 +17,9 @@ public class ExpressionTests
             Expression.LiteralInstance(PineValue.EmptyList),
 
             Expression.ListInstance([]),
+
             Expression.ListInstance([Expression.EnvironmentInstance]),
+
             Expression.ListInstance(
                 [
                 Expression.EnvironmentInstance,
@@ -110,6 +112,35 @@ public class ExpressionTests
                     Expression.EnvironmentInstance,
                     Expression.LiteralInstance(PineValue.EmptyList)),
                 Expression.EnvironmentInstance),
+
+            Expression.KernelApplicationInstance(
+                nameof(KernelFunction.int_add),
+                Expression.KernelApplicationInstance(
+                    nameof(KernelFunction.int_mul),
+                    Expression.LiteralInstance(PineValue.EmptyList))),
+
+            Expression.ListInstance(
+                [
+                Expression.KernelApplicationInstance(
+                    nameof(KernelFunction.int_add),
+                    Expression.LiteralInstance(PineValue.EmptyList)),
+
+                Expression.KernelApplicationInstance(
+                    nameof(KernelFunction.int_add),
+                    Expression.LiteralInstance(PineValue.EmptyList)),
+                ]),
+
+            Expression.ConditionalInstance(
+                Expression.KernelApplicationInstance(
+                    nameof(KernelFunction.int_add),
+                    Expression.LiteralInstance(PineValue.EmptyList)),
+                Expression.KernelApplicationInstance(
+                    nameof(KernelFunction.int_add),
+                    Expression.LiteralInstance(PineValue.EmptyList)),
+                Expression.KernelApplicationInstance(
+                    nameof(KernelFunction.int_add),
+                    Expression.LiteralInstance(PineValue.EmptyList))),
+
             ];
 
         foreach (var testCase in testCases)
@@ -129,9 +160,17 @@ public class ExpressionTests
             var anyNodeIsParseAndEval =
                 rootAndSubexpressions.OfType<Expression.ParseAndEval>().Any();
 
+            var conditionCount =
+                rootAndSubexpressions.OfType<Expression.Conditional>().Count();
+
+            var builtinCount =
+                rootAndSubexpressions.OfType<Expression.KernelApplication>().Count();
+
             testCase.SubexpressionCount.Should().Be(subexpressions.Count);
             testCase.ReferencesEnvironment.Should().Be(anyNodeIsEnvironment);
             testCase.ContainsParseAndEval.Should().Be(anyNodeIsParseAndEval);
+            testCase.ConditionCount.Should().Be(conditionCount);
+            testCase.BuiltinCount.Should().Be(builtinCount);
         }
     }
 }
