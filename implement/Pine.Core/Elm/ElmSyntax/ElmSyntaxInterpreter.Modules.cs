@@ -170,7 +170,7 @@ public partial class ElmSyntaxInterpreter
         {
             var parseResult = ElmSyntaxParser.ParseModuleText(moduleSourceTexts[i]);
 
-            if (parseResult.IsErrOrNull() is { } parseErr)
+            if (parseResult.IsErrOrNullable() is { } parseErr)
             {
                 return "Failed to parse module #" + i + ": " + parseErr;
             }

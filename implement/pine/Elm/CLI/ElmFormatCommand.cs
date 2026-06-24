@@ -158,9 +158,9 @@ public class ElmFormatCommand
 
                     var formatResult = ElmFormat.FormatModuleTextReportingSyntaxErrors(originalContent);
 
-                    if (formatResult.IsErrOrNull() is { } formatErr)
+                    if (formatResult.IsErrOrNullable() is { } formatErr)
                     {
-                        parseErrors.Add((filePath, formatErr));
+                        parseErrors.Add((filePath, formatErr.ToString()));
                         return;
                     }
 

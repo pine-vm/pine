@@ -41,7 +41,7 @@ public static class ElmFormat
     /// A result containing either the formatted source code on success,
     /// or an error message describing why parsing/formatting failed.
     /// </returns>
-    public static Result<string, string> FormatModuleText(string moduleText)
+    public static Result<ElmSyntaxParseError, string> FormatModuleText(string moduleText)
     {
         // Detect linebreak style from original content and use it for rendering
         var linebreakStyle =
@@ -59,13 +59,13 @@ public static class ElmFormat
     /// A result containing either the formatted source code on success,
     /// or an error message describing why parsing/formatting failed.
     /// </returns>
-    public static Result<string, string> FormatModuleText(string moduleText, LinebreakStyle linebreakStyle)
+    public static Result<ElmSyntaxParseError, string> FormatModuleText(string moduleText, LinebreakStyle linebreakStyle)
     {
         var result = FormatModuleTextReportingSyntaxErrors(moduleText, linebreakStyle);
 
-        if (result.IsErrOrNull() is { } err)
+        if (result.IsErrOrNullable() is { } err)
         {
-            return Result<string, string>.err(err);
+            return err;
         }
 
         if (result.IsOkOrNull() is not { } ok)
@@ -74,7 +74,7 @@ public static class ElmFormat
                 "Unexpected null result from FormatModuleTextReportingSyntaxErrors: " + result.ToString());
         }
 
-        return Result<string, string>.ok(ok.FormattedText);
+        return ok.FormattedText;
     }
 
     /// <summary>
@@ -86,7 +86,7 @@ public static class ElmFormat
     /// A result containing either the formatted source code together with the list of recovered
     /// syntax errors, or an error message describing why parsing/formatting failed entirely.
     /// </returns>
-    public static Result<string, ModuleFormatResult> FormatModuleTextReportingSyntaxErrors(string moduleText)
+    public static Result<ElmSyntaxParseError, ModuleFormatResult> FormatModuleTextReportingSyntaxErrors(string moduleText)
     {
         var linebreakStyle =
             Rendering.DetectLinebreakStyle(moduleText) ?? LinebreakStyle.LF;
@@ -104,15 +104,15 @@ public static class ElmFormat
     /// A result containing either the formatted source code together with the list of recovered
     /// syntax errors, or an error message describing why parsing/formatting failed entirely.
     /// </returns>
-    public static Result<string, ModuleFormatResult> FormatModuleTextReportingSyntaxErrors(
+    public static Result<ElmSyntaxParseError, ModuleFormatResult> FormatModuleTextReportingSyntaxErrors(
         string moduleText,
         LinebreakStyle linebreakStyle)
     {
         var parseResult = ElmSyntaxParser.ParseModuleText(moduleText);
 
-        if (parseResult.IsErrOrNull() is { } parseErr)
+        if (parseResult.IsErrOrNullable() is { } parseErr)
         {
-            return Result<string, ModuleFormatResult>.err(parseErr);
+            return parseErr;
         }
 
         if (parseResult.IsOkOrNull() is not { } parsed)
@@ -136,8 +136,6 @@ public static class ElmFormat
                     Message: node.Value.ParseError.Message))
             ];
 
-        return
-            Result<string, ModuleFormatResult>.ok(
-                new ModuleFormatResult(rendered, syntaxErrors));
+        return new ModuleFormatResult(rendered, syntaxErrors);
     }
 }

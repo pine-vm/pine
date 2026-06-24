@@ -19,7 +19,7 @@ public class ParseIncompleteTests
         var parseResult =
             ElmSyntaxParser.ParseModuleText(elmModuleText);
 
-        if (parseResult.IsErrOrNull() is { } err)
+        if (parseResult.IsErrOrNullable() is { } err)
         {
             throw new System.Exception($"Failed to parse Elm module text: {err}");
         }
@@ -109,7 +109,7 @@ public class ParseIncompleteTests
 
         var parseFileOk =
             parseFileResult
-            .Extract(err => throw new System.Exception(err));
+            .Extract(err => throw new System.Exception(err.ToString()));
 
         var incompleteDeclaration =
             parseFileOk.IncompleteDeclarations.Single();
@@ -135,12 +135,39 @@ public class ParseIncompleteTests
 
         var parseFileOk =
             parseFileResult
-            .Extract(err => throw new System.Exception(err));
+            .Extract(err => throw new System.Exception(err.ToString()));
 
         var incompleteDeclaration =
             parseFileOk.IncompleteDeclarations.Single();
 
         RenderParseError(incompleteDeclaration.Value.ParseError).Should().Be(
             "Error at 4:16: Unfinished list");
+    }
+
+    [Fact]
+    public void Produces_syntax_error_unfinished_import()
+    {
+        var input =
+            """"
+            module Test exposing (..)
+
+
+            import
+
+
+            decl =
+                123
+
+            """";
+
+        var parseFileResult =
+            ElmSyntaxParser.ParseModuleText(input);
+
+        var parseFileErr =
+            parseFileResult.IsErrOrNullable() ??
+            throw new System.Exception("Was expected an error, but got " + parseFileResult.ToString());
+
+        RenderParseError(parseFileErr).Should().Be(
+            "Error at 4:7: Unfinished import");
     }
 }

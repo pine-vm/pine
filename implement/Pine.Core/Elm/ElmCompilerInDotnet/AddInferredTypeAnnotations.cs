@@ -107,7 +107,7 @@ public class AddInferredTypeAnnotations
 
             var parseResult = ElmSyntaxParser.ParseModuleText(moduleText);
 
-            if (parseResult.IsErrOrNull() is { } err)
+            if (parseResult.IsErrOrNullable() is { } err)
             {
                 return $"Failed to parse module: {err}";
             }

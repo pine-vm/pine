@@ -29,7 +29,7 @@ public class ElmSyntaxParserTests
 
         var parsedFile =
             ElmSyntaxParser.ParseModuleText(input)
-            .Extract(err => throw new System.Exception(err));
+            .Extract(err => throw new System.Exception(err.ToString()));
 
         var funcDecl =
             parsedFile.Declarations[0].Value as Declaration.FunctionDeclaration;
@@ -61,7 +61,7 @@ public class ElmSyntaxParserTests
 
         var parsedFile =
             ElmSyntaxParser.ParseModuleText(input)
-            .Extract(err => throw new System.Exception(err));
+            .Extract(err => throw new System.Exception(err.ToString()));
 
         var aliasDecl =
             parsedFile.Declarations[0].Value as Declaration.AliasDeclaration;
@@ -103,7 +103,7 @@ public class ElmSyntaxParserTests
 
         var parsedFile =
             ElmSyntaxParser.ParseModuleText(input)
-            .Extract(err => throw new System.Exception(err));
+            .Extract(err => throw new System.Exception(err.ToString()));
 
         var funcDecl =
             parsedFile.Declarations[0].Value as Declaration.FunctionDeclaration;
@@ -136,7 +136,7 @@ public class ElmSyntaxParserTests
 
         var parsedFile =
             ElmSyntaxParser.ParseModuleText(input)
-            .Extract(err => throw new System.Exception(err));
+            .Extract(err => throw new System.Exception(err.ToString()));
 
         var aliasDecl =
             parsedFile.Declarations[0].Value as Declaration.AliasDeclaration;
@@ -183,7 +183,7 @@ public class ElmSyntaxParserTests
 
         var parsedFile =
             ElmSyntaxParser.ParseModuleText(input)
-            .Extract(err => throw new System.Exception(err));
+            .Extract(err => throw new System.Exception(err.ToString()));
 
         var aliasDecl =
             parsedFile.Declarations[0].Value as Declaration.AliasDeclaration;
@@ -227,7 +227,7 @@ public class ElmSyntaxParserTests
 
         var parsedFile =
             ElmSyntaxParser.ParseModuleText(input)
-            .Extract(err => throw new System.Exception(err));
+            .Extract(err => throw new System.Exception(err.ToString()));
 
         parsedFile.Imports.Select(import => string.Join(".", import.Value.ModuleName.Value))
             .Should()
@@ -269,7 +269,7 @@ public class ElmSyntaxParserTests
 
         var parsedFile =
             ElmSyntaxParser.ParseModuleText(input)
-            .Extract(err => throw new System.Exception(err));
+            .Extract(err => throw new System.Exception(err.ToString()));
 
         var functionDeclaration =
             parsedFile.Declarations
@@ -326,7 +326,7 @@ public class ElmSyntaxParserTests
 
         var parsedFile =
             ElmSyntaxParser.ParseModuleText(input)
-            .Extract(err => throw new System.Exception(err));
+            .Extract(err => throw new System.Exception(err.ToString()));
 
         parsedFile.IncompleteDeclarations.Should().BeEmpty();
 
@@ -395,7 +395,7 @@ public class ElmSyntaxParserTests
 
         var parsedFile =
             ElmSyntaxParser.ParseModuleText(input)
-            .Extract(err => throw new System.Exception(err));
+            .Extract(err => throw new System.Exception(err.ToString()));
 
         parsedFile.IncompleteDeclarations.Should().BeEmpty();
 

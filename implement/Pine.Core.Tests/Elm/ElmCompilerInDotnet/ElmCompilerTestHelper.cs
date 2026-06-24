@@ -263,9 +263,9 @@ public class ElmCompilerTestHelper
             var moduleText = Encoding.UTF8.GetString(moduleFile.fileContent.Span);
             var parseResult = ElmSyntaxParser.ParseModuleText(moduleText);
 
-            if (parseResult.IsErrOrNull() is { } err)
+            if (parseResult.IsErrOrNullable() is { } err)
             {
-                throw new Exception(err);
+                throw new Exception(err.ToString());
             }
 
             if (parseResult.IsOkOrNull() is not { } parseModuleOk)
@@ -612,7 +612,7 @@ public class ElmCompilerTestHelper
     {
         var parseResult = ElmSyntaxParser.ParseModuleText(moduleText);
 
-        if (parseResult.IsErrOrNull() is { } err)
+        if (parseResult.IsErrOrNullable() is { } err)
         {
             throw new Exception($"Failed to parse module: {err}");
         }

@@ -2047,7 +2047,7 @@ public class ParseElmModuleTextToPineValueTests
         var fromDotnetResult =
             Core.Elm.ElmSyntax.ElmSyntaxParser.ParseModuleTextAsElmSyntaxElmValue(testCase);
 
-        if (fromDotnetResult.IsErrOrNull() is { } err)
+        if (fromDotnetResult.IsErrOrNullable() is { } err)
         {
             throw new AssertionFailedException("Failed to parse Elm module text as Elm syntax: " + err);
         }
@@ -2137,7 +2137,7 @@ public class ParseElmModuleTextToPineValueTests
             var fromDotnetResult =
                 Core.Elm.ElmSyntax.ElmSyntaxParser.ParseModuleTextAsElmSyntaxElmValue(elmModuleText);
 
-            if (fromDotnetResult.IsErrOrNull() is { } err)
+            if (fromDotnetResult.IsErrOrNullable() is { } err)
             {
                 throw new AssertionFailedException("Failed to parse Elm module text as Elm syntax: " + err);
             }

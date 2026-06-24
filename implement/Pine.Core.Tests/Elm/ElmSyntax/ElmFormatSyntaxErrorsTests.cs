@@ -14,7 +14,7 @@ public class ElmFormatSyntaxErrorsTests
 
         var result = ElmFormat.FormatModuleTextReportingSyntaxErrors(src);
 
-        result.IsErrOrNull().Should().BeNull();
+        result.IsErrOrNullable().Should().BeNull();
 
         var ok = result.IsOkOrNull();
         ok.Should().NotBeNull();
@@ -30,7 +30,7 @@ public class ElmFormatSyntaxErrorsTests
 
         var result = ElmFormat.FormatModuleTextReportingSyntaxErrors(src);
 
-        result.IsErrOrNull().Should().BeNull();
+        result.IsErrOrNullable().Should().BeNull();
 
         var ok = result.IsOkOrNull();
         ok.Should().NotBeNull();

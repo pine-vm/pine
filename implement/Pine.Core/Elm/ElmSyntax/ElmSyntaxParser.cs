@@ -27,13 +27,13 @@ public class ElmSyntaxParser
     /// </summary>
     /// <param name="elmModuleText">Source code of the Elm module to parse.</param>
     /// <returns>Result containing either the encoded Elm value or an error description.</returns>
-    public static Result<string, ElmValue> ParseModuleTextAsElmSyntaxElmValue(
+    public static Result<ElmSyntaxParseError, ElmValue> ParseModuleTextAsElmSyntaxElmValue(
         string elmModuleText)
     {
         var parseResult =
             ParseModuleText(elmModuleText);
 
-        if (parseResult.IsErrOrNull() is { } err)
+        if (parseResult.IsErrOrNullable() is { } err)
         {
             return err;
         }
@@ -62,7 +62,7 @@ public class ElmSyntaxParser
     /// <returns>
     /// Result containing either the parsed file structure or an error description.
     /// </returns>
-    public static Result<string, SyntaxTypes.File> ParseModuleText(
+    public static Result<ElmSyntaxParseError, SyntaxTypes.File> ParseModuleText(
         string elmModuleText)
     {
         var tokenizer = new Tokenizer(elmModuleText);
@@ -1267,7 +1267,7 @@ public class ElmSyntaxParser
         private int _current = 0;
 
         // Entry point: parse the entire file and return a File record.
-        public Result<string, SyntaxTypes.File> ParseFile()
+        public Result<ElmSyntaxParseError, SyntaxTypes.File> ParseFile()
         {
             try
             {
@@ -1503,8 +1503,28 @@ public class ElmSyntaxParser
             }
             catch (Exception ex)
             {
-                return ex.Message;
+                return ParseErrorFromException(ex);
             }
+        }
+
+        /// <summary>
+        /// Builds an <see cref="ElmSyntaxParseError"/> from an exception thrown during parsing,
+        /// preserving the source location when available from a <see cref="ParserException"/>.
+        /// </summary>
+        private ElmSyntaxParseError ParseErrorFromException(Exception ex)
+        {
+            if (ex is ParserException parserEx &&
+                parserEx.LineNumber.HasValue &&
+                parserEx.ColumnNumber.HasValue)
+            {
+                return new ElmSyntaxParseError(
+                    new Location(parserEx.LineNumber.Value, parserEx.ColumnNumber.Value),
+                    parserEx.ErrorMessage);
+            }
+
+            var currentToken = IsAtEnd() ? tokens.Span[tokens.Length - 1] : Peek;
+
+            return new ElmSyntaxParseError(currentToken.Start, ex.Message);
         }
 
         /// <summary>
@@ -1818,6 +1838,17 @@ public class ElmSyntaxParser
 
             ConsumeAllTrivia();
             // Parse module name (e.g. CompilationInterface.ElmMake.Generated_ElmMake)
+
+            // The module name must be indented relative to the start of the line, i.e. it cannot
+            // start a new top-level construct. If the next token is at column 1 (or we reached the
+            // end of the file), the import statement is unfinished.
+            if (IsAtEnd() || Peek.Start.Column is 1)
+            {
+                throw new ParserException(
+                    "Unfinished import",
+                    lineNumber: importKeyword.End.Row,
+                    columnNumber: importKeyword.End.Column);
+            }
 
             var firstModuleNamePart =
                 ConsumeAnyIdentifier("module name");

@@ -439,7 +439,7 @@ public class ElmCompiler
             var parseResult =
                 ElmSyntax.ElmSyntaxParser.ParseModuleText(moduleText);
 
-            if (parseResult.IsErrOrNull() is not null)
+            if (parseResult.IsErrOrNullable() is not null)
             {
                 parseFailures.Add(moduleNameFlattened);
                 continue;

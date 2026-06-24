@@ -451,7 +451,7 @@ public class FromFullSyntaxModelTests
     {
         var parsedFile =
             ElmSyntaxParser.ParseModuleText(moduleText)
-            .Extract(err => throw new System.Exception(err));
+            .Extract(err => throw new System.Exception(err.ToString()));
 
         AssertPreservationDespiteConversionFromFullSyntaxModel(parsedFile);
     }

@@ -926,7 +926,7 @@ public class LanguageServer(
 
                     var formatResult = ElmFormat.FormatModuleText(textDocumentContentBefore);
 
-                    if (formatResult.IsErrOrNull() is { } formatErr)
+                    if (formatResult.IsErrOrNullable() is { } formatErr)
                     {
                         Log("Error: Failed formatting Elm module: " + formatErr);
                         return null;
@@ -1606,20 +1606,25 @@ public class LanguageServer(
         var formatResult =
             ElmFormat.FormatModuleTextReportingSyntaxErrors(moduleText);
 
-        if (formatResult.IsErrOrNull() is { } parseErr)
+        if (formatResult.IsErrOrNullable() is { } parseErr)
         {
+            var locationMapped =
+                new Position(
+                    Line: (uint)parseErr.Location.Row - 1,
+                    Character: (uint)parseErr.Location.Column - 1);
+
             // The module could not be parsed at all (e.g. malformed module header).
             // Report a single diagnostic at the start of the document.
             return
                 [
                 new Diagnostic(
                     Range: new Range(
-                        Start: new Position(Line: 0, Character: 0),
-                        End: new Position(Line: 0, Character: 1)),
+                        Start: locationMapped,
+                        End: locationMapped),
                     Severity: DiagnosticSeverity.Error,
                     Code: null,
                     Source: DiagnosticSource,
-                    Message: parseErr,
+                    Message: parseErr.ToString(),
                     CodeDescription: null,
                     Tags: null,
                     RelatedInformation: null)
