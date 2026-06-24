@@ -64,6 +64,8 @@ public class PineVM : IPineVM
 
     private readonly bool _disableDirectContinueForSimpleEval;
 
+    private readonly bool _disableDirectEvalForSimpleTemplate;
+
     public static PineVM CreateCustom(
         IDictionary<EvalCacheEntryKey, PineValue>? evalCache,
         EvaluationConfig? evaluationConfigDefault,
@@ -85,6 +87,7 @@ public class PineVM : IPineVM
         int pathMaxHighInclusive = ExpressionCompilation.DefaultPathMaxHighInclusive,
         bool disableGenericApplicationChainConsolidation = false,
         bool disableDirectContinueForSimpleEval = false,
+        bool disableDirectEvalForSimpleTemplate = false,
         ReportTailLoopIteration? reportTailLoopIteration = null,
         ReportExpressionCompiled? reportExpressionCompiled = null)
     {
@@ -110,6 +113,7 @@ public class PineVM : IPineVM
                 pathMaxHighInclusive: pathMaxHighInclusive,
                 disableGenericApplicationChainConsolidation: disableGenericApplicationChainConsolidation,
                 disableDirectContinueForSimpleEval: disableDirectContinueForSimpleEval,
+                disableDirectEvalForSimpleTemplate: disableDirectEvalForSimpleTemplate,
                 reportTailLoopIteration: reportTailLoopIteration,
                 reportExpressionCompiled: reportExpressionCompiled);
 
@@ -136,6 +140,7 @@ public class PineVM : IPineVM
         int pathMaxHighInclusive = ExpressionCompilation.DefaultPathMaxHighInclusive,
         bool disableGenericApplicationChainConsolidation = false,
         bool disableDirectContinueForSimpleEval = false,
+        bool disableDirectEvalForSimpleTemplate = false,
         ReportTailLoopIteration? reportTailLoopIteration = null,
         ReportExpressionCompiled? reportExpressionCompiled = null)
     {
@@ -181,6 +186,7 @@ public class PineVM : IPineVM
         _disableGenericApplicationChainConsolidation = disableGenericApplicationChainConsolidation;
 
         _disableDirectContinueForSimpleEval = disableDirectContinueForSimpleEval;
+        _disableDirectEvalForSimpleTemplate = disableDirectEvalForSimpleTemplate;
     }
 
     /// <inheritdoc/>
@@ -1143,7 +1149,8 @@ public class PineVM : IPineVM
                     }
                 }
 
-                if (!_expressionCompilationDict.ContainsKey(expression))
+                if (!_expressionCompilationDict.ContainsKey(expression) &&
+                    !(_expressionCompilationOverrides?.ContainsKey(expression) ?? false))
                 {
                     if (!_disableDirectContinueForSimpleEval && DirectContinuationIfSimpleEnough(expression, environmentValue) is { } directContResult)
                     {
@@ -1183,6 +1190,20 @@ public class PineVM : IPineVM
                                 expression: contParseOk,
                                 environmentValue: directContResult.EnvironmentValue,
                                 replaceCurrentFrame: replaceCurrentFrame);
+                    }
+
+                    if (!_disableDirectEvalForSimpleTemplate &&
+                        currentFrame.StackValues.Length > 0 &&
+                        DirectEvalIfSimpleTemplate(expression, environmentValue) is { } directEvalResult)
+                    {
+                        buildListCount += directEvalResult.perfCounts.BuildListCount;
+                        invocationCount += directEvalResult.perfCounts.InvocationCount + 1;
+                        loopIterationCount += directEvalResult.perfCounts.LoopIterationCount;
+                        instructionCount += directEvalResult.perfCounts.InstructionCount;
+
+                        currentFrame.PushInstructionResult(directEvalResult.value);
+
+                        return null;
                     }
                 }
 
@@ -2994,6 +3015,19 @@ public class PineVM : IPineVM
             EncodedExprValue: encodedExprValue.Value.value,
             EnvironmentValue: innerEnvValue.Value.value,
             PerformanceCounters: aggregatePerformanceCounters);
+    }
+
+    private static (PineValueInProcess value, PerformanceCounters perfCounts)? DirectEvalIfSimpleTemplate(
+        Expression expression,
+        PineValueInProcess envValue)
+    {
+        if (expression.ContainsParseAndEval)
+            return null;
+
+        if (expression.BuiltinCount is not 0)
+            return null;
+
+        return EvalDirect(expression, envValue);
     }
 
     private static (PineValueInProcess value, PerformanceCounters perfCounts)? EvalDirect(

@@ -149,6 +149,7 @@ public class ExpressionCompiledCallbackTests
                 reportFunctionApplication: null,
                 compilationEnvClasses: null,
                 disableReductionInCompilation: true,
+                disableDirectEvalForSimpleTemplate: true,
                 selectPrecompiled: null,
                 skipInlineForExpression: _ => false,
                 enableTailRecursionOptimization: false,

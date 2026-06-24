@@ -350,10 +350,10 @@ public class FunctionApplicationOverheadTests
 
         PerformanceCountersFormatting.FormatCounts(report).Should().Be(
             """
-            InvocationCount: 4
-            BuildListCount: 13
+            InvocationCount: 5
+            BuildListCount: 18
             LoopIterationCount: 0
-            InstructionCount: 42
+            InstructionCount: 52
             """);
     }
 

@@ -494,20 +494,20 @@ public class ElmLanguageServiceTests
 
         PerformanceCountersFormatting.FormatCounts(aggregateCounters).Should().Be(
             """
-            InvocationCount: 3_216
-            BuildListCount: 10_808
+            InvocationCount: 3_240
+            BuildListCount: 10_976
             LoopIterationCount: 0
-            InstructionCount: 83_194
+            InstructionCount: 83_437
             """);
 
         InvocationCountReportFormatting.FormatCounts(aggregateInvocationCounts).Should().Be(
             """
-            CompiledExpressionCount: 198
-            InvocationCountTotal: 2_170
+            CompiledExpressionCount: 191
+            InvocationCountTotal: 2_146
             InvocationCountAverage: 11
             InvocationCountPercentile10: 2
             InvocationCountMedian: 4
-            InvocationCountPercentile90: 15
+            InvocationCountPercentile90: 17
             """);
     }
 
