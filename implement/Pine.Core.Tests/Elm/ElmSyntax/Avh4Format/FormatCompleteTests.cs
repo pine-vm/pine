@@ -3900,6 +3900,63 @@ public class FormatCompleteTests
     }
 
     [Fact]
+    public void Formats_case_arms_with_uneven_indentation_in_application()
+    {
+        var input =
+            """"
+            module Test exposing (..)
+
+
+            declA a =
+                case a of
+                    [] ->
+                        abcd
+                        17
+
+                    _ ->
+                        3
+
+
+            declB a =
+                case a of
+                    [] ->
+                        abcd
+                       19
+
+                    _ ->
+                        3
+            """";
+
+        var expected =
+            """"
+            module Test exposing (..)
+
+
+            declA a =
+                case a of
+                    [] ->
+                        abcd
+                            17
+
+                    _ ->
+                        3
+
+
+            declB a =
+                case a of
+                    [] ->
+                        abcd
+                            19
+
+                    _ ->
+                        3
+            
+            """";
+
+        AssertModuleTextFormatsToExpected(input, expected);
+    }
+
+    [Fact]
     public void Stable_configurations_units()
     {
         /*

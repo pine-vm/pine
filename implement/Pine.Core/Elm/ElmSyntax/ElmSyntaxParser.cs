@@ -3982,7 +3982,21 @@ public class ElmSyntaxParser
 
             ConsumeAllTrivia();
 
-            var expressionIndentMin = Peek.Start.Column;
+            // The case branch body forms a layout block whose enclosing indentation
+            // is the branch's pattern column (indentMin). Continuation lines (for
+            // example further arguments of a multi-line function application) belong
+            // to the body as long as they are indented more than that branch indent,
+            // even when they are indented less than the body's first token. Using the
+            // body's first token column here would incorrectly reject such uneven
+            // indentation (e.g. `abcd` followed by an argument on the next line at an
+            // equal or smaller column).
+            //
+            // We use indentMin + 1 (rather than indentMin) so that branches whose
+            // patterns are misaligned by a single column - which this parser tolerates
+            // leniently, like avh4 (see the case-arm indentation tests) - are still
+            // recognized as separate branches instead of being absorbed as trailing
+            // arguments of the preceding branch's body.
+            var expressionIndentMin = indentMin + 1;
 
             var expression = ParseExpression(expressionIndentMin);
 
