@@ -1173,30 +1173,52 @@ findReferences ( targetDefinitionFilePath, targetDefinitionRange ) languageServi
                 , List.map .parseResult languageServiceState.coreModulesCache
                 ]
 
+        -- Name of the declaration at the target location, if it is a
+        -- value/type/local declaration. Resolving a reference can only yield a
+        -- match for the target when the reference uses this exact name, so we
+        -- use it to skip the (otherwise dominant) cost of resolving every
+        -- reference in modules with thousands of lines but only a few uses of
+        -- the queried declaration. When the target is a module (or otherwise
+        -- not found here) this is 'Nothing' and every reference is resolved,
+        -- matching the previous behaviour exactly.
+        maybeTargetName : Maybe String
+        maybeTargetName =
+            allParsedModules
+                |> Common.listMapFind
+                    (\parsedModule ->
+                        if LanguageServiceInterface.WorkspaceFileLocation parsedModule.fileUri == targetDefinitionFilePath then
+                            declarationNameAtRange targetDefinitionRange parsedModule.completionItems
+
+                        else
+                            Nothing
+                    )
+
+        -- Implicit top-level imports do not depend on the module being scanned,
+        -- so compute them once instead of once per module.
+        implicitTopLevelImports :
+            List
+                ( ( LanguageServiceInterface.FileLocation, DeclarationRange )
+                , CompletionItem
+                )
+        implicitTopLevelImports =
+            commonImplicitTopLevelImports languageServiceState
+
         findReferencesInModule :
             ParsedCookedModuleCache
             -> Maybe ( LanguageServiceInterface.FileLocation, List Range )
         findReferencesInModule parsedModule =
             let
-                { fromDeclarations } =
-                    hoverItemsFromParsedModule
+                ranges : List Range
+                ranges =
+                    referenceRangesInModuleResolvingTo
+                        ( targetDefinitionFilePath, targetDefinitionRange )
+                        maybeTargetName
+                        implicitTopLevelImports
                         ( parsedModule.syntax
                         , parsedModule.completionItems
                         , LanguageServiceInterface.WorkspaceFileLocation parsedModule.fileUri
                         )
                         languageServiceState
-
-                ranges : List Range
-                ranges =
-                    fromDeclarations
-                        |> List.filterMap
-                            (\( range, LocationInFile defFilePath (DeclarationRange defRange _), _ ) ->
-                                if defFilePath == targetDefinitionFilePath && defRange == targetDefinitionRange then
-                                    Just range
-
-                                else
-                                    Nothing
-                            )
             in
             if ranges == [] then
                 Nothing
@@ -1209,6 +1231,288 @@ findReferences ( targetDefinitionFilePath, targetDefinitionRange ) languageServi
     in
     allParsedModules
         |> List.filterMap findReferencesInModule
+
+
+{-| Look up the label (declaration name) of the completion item whose whole
+declaration range equals the given range. Used by 'findReferences' to recover
+the name of the queried declaration so reference resolution can be limited to
+references that use that name.
+-}
+declarationNameAtRange : Range -> ModuleCompletionItems -> Maybe String
+declarationNameAtRange targetRange completionItems =
+    case
+        completionItems.fromTopLevel
+            |> Common.listMapFind
+                (\item ->
+                    let
+                        (DeclarationRange wholeRange _) =
+                            item.range
+
+                        (CompletionItem label _ _ _) =
+                            item.completionItem
+                    in
+                    if wholeRange == targetRange then
+                        Just label
+
+                    else
+                        Nothing
+                )
+    of
+        Just label ->
+            Just label
+
+        Nothing ->
+            completionItems.fromLocals
+                |> Common.listMapFind
+                    (\( CompletionItem label _ _ _, DeclarationRange wholeRange _, _ ) ->
+                        if wholeRange == targetRange then
+                            Just label
+
+                        else
+                            Nothing
+                    )
+
+
+{-| Collect the ranges of all references in a single module that resolve to the
+given target definition. This mirrors the reference resolution performed by
+'hoverItemsFromParsedModule', but avoids constructing the (here unused) hover
+documentation strings and, when the target's name is known, only resolves
+references that share that name.
+-}
+referenceRangesInModuleResolvingTo :
+    ( LanguageServiceInterface.FileLocation, Range )
+    -> Maybe String
+    ->
+        List
+            ( ( LanguageServiceInterface.FileLocation, DeclarationRange )
+            , CompletionItem
+            )
+    -> ( Elm.Syntax.File.File, ModuleCompletionItems, LanguageServiceInterface.FileLocation )
+    -> LanguageServiceState
+    -> List Range
+referenceRangesInModuleResolvingTo ( targetDefinitionFilePath, targetDefinitionRange ) maybeTargetName implicitTopLevelImports ( parsedModuleSyntax, currentModuleDeclarations, currentModuleFileLocation ) languageServiceState =
+    let
+        importedModules : List ImportedModule
+        importedModules =
+            importedModulesFromFile
+                parsedModuleSyntax
+                languageServiceState
+
+        localDeclarationsAndImportExposings :
+            List
+                ( ( LanguageServiceInterface.FileLocation, DeclarationRange )
+                , DeclarationScope
+                , CompletionItem
+                )
+        localDeclarationsAndImportExposings =
+            List.concat
+                [ List.concat
+                    [ List.map
+                        (\fromTopLevel ->
+                            ( ( currentModuleFileLocation, fromTopLevel.range )
+                            , TopLevelScope
+                            , fromTopLevel.completionItem
+                            )
+                        )
+                        currentModuleDeclarations.fromTopLevel
+                    , implicitTopLevelImports
+                        |> List.map
+                            (\( declRange, completionItem ) ->
+                                ( declRange, TopLevelScope, completionItem )
+                            )
+                    ]
+                , List.map
+                    (\( completionItem, declRange, scopeRange ) ->
+                        ( ( currentModuleFileLocation, declRange )
+                        , LocalScope scopeRange
+                        , completionItem
+                        )
+                    )
+                    currentModuleDeclarations.fromLocals
+                ]
+
+        importedModulesCompletionItems :
+            List
+                ( List String
+                , ( ImportedModule
+                  , ModuleCompletionItems
+                  )
+                )
+        importedModulesCompletionItems =
+            importedModules
+                |> List.map
+                    (\importedModule ->
+                        ( importedModule.importedName
+                        , ( importedModule
+                          , case importedModule.parsedModule of
+                                Nothing ->
+                                    { fromTopLevel = [], fromLocals = [] }
+
+                                Just ( _, importedCompletionItems ) ->
+                                    importedCompletionItems
+                          )
+                        )
+                    )
+
+        localModuleItemsBeforeFiltering :
+            List
+                ( String
+                , ( Maybe Range
+                  , LocationInFile DeclarationRange
+                  )
+                )
+        localModuleItemsBeforeFiltering =
+            localDeclarationsAndImportExposings
+                |> List.map
+                    (\( ( declFileLocation, declRange ), scope, (CompletionItem completionItemLabel _ _ _) ) ->
+                        let
+                            ( maybeFilterRange, completionItemRange ) =
+                                case scope of
+                                    TopLevelScope ->
+                                        ( Nothing, declRange )
+
+                                    LocalScope scopeRange ->
+                                        ( Just scopeRange, declRange )
+                        in
+                        ( completionItemLabel
+                        , ( maybeFilterRange
+                          , LocationInFile declFileLocation completionItemRange
+                          )
+                        )
+                    )
+
+        -- Resolve the name part of a reference node to its definition location,
+        -- without building hover documentation (see 'getHoverForFunctionOrName').
+        resolveNameLocation :
+            Elm.Syntax.ModuleName.ModuleName
+            -> String
+            -> ( Int, Int )
+            -> Maybe (LocationInFile DeclarationRange)
+        resolveNameLocation moduleName nameInModule ( startRow, startColumn ) =
+            if moduleName == [] then
+                case Common.assocListGet nameInModule localModuleItemsBeforeFiltering of
+                    Nothing ->
+                        Nothing
+
+                    Just ( maybeFilterRange, locationUnderFilePath ) ->
+                        case maybeFilterRange of
+                            Nothing ->
+                                Just locationUnderFilePath
+
+                            Just filterRange ->
+                                if
+                                    rangeContainsLocation
+                                        ( startRow, startColumn )
+                                        filterRange
+                                then
+                                    Just locationUnderFilePath
+
+                                else
+                                    Nothing
+
+            else
+                case Common.assocListGet moduleName importedModulesCompletionItems of
+                    Nothing ->
+                        Nothing
+
+                    Just ( referencedModule, moduleCompletionItems ) ->
+                        moduleCompletionItems.fromTopLevel
+                            |> Common.listMapFind
+                                (\item ->
+                                    let
+                                        (CompletionItem _ itemInsertText _ _) =
+                                            item.completionItem
+                                    in
+                                    if itemInsertText == nameInModule && item.isExposed then
+                                        Just
+                                            (LocationInFile
+                                                referencedModule.fileLocation
+                                                item.range
+                                            )
+
+                                    else
+                                        Nothing
+                                )
+
+        nameMatchesTarget : LocationInFile DeclarationRange -> Bool
+        nameMatchesTarget (LocationInFile defFilePath (DeclarationRange defRange _)) =
+            defFilePath == targetDefinitionFilePath && defRange == targetDefinitionRange
+
+        resolveReferenceNode : SyntaxNode ( List String, String ) -> Maybe Range
+        resolveReferenceNode (SyntaxNode wholeRange ( moduleName, nameInModule )) =
+            let
+                (Range ( wholeRangeStartLine, wholeRangeStartColumn ) ( wholeRangeEndLine, wholeRangeEndColumn )) =
+                    wholeRange
+
+                forNameInModuleRange : Range
+                forNameInModuleRange =
+                    Range
+                        ( wholeRangeStartLine, wholeRangeEndColumn - String.length nameInModule )
+                        ( wholeRangeEndLine, wholeRangeEndColumn )
+            in
+            case resolveNameLocation moduleName nameInModule ( wholeRangeStartLine, wholeRangeStartColumn ) of
+                Just location ->
+                    if nameMatchesTarget location then
+                        Just forNameInModuleRange
+
+                    else
+                        Nothing
+
+                Nothing ->
+                    Nothing
+
+        -- References at the name part of declarations and usages. When the
+        -- target's name is known, only nodes that use that name can match, so
+        -- skip resolving the rest entirely.
+        nameReferenceRanges : List Range
+        nameReferenceRanges =
+            listReferencesInFile parsedModuleSyntax
+                |> List.filterMap
+                    (\((SyntaxNode _ ( _, nameInModule )) as referenceNode) ->
+                        case maybeTargetName of
+                            Just targetName ->
+                                if nameInModule == targetName then
+                                    resolveReferenceNode referenceNode
+
+                                else
+                                    Nothing
+
+                            Nothing ->
+                                resolveReferenceNode referenceNode
+                    )
+
+        -- References to imported module names (relevant when the target is a
+        -- module declaration). Mirrors 'fromImportSyntax' in
+        -- 'hoverItemsFromParsedModule' minus the documentation.
+        importNameReferenceRanges : List Range
+        importNameReferenceRanges =
+            importedModules
+                |> List.concatMap
+                    (\importedModule ->
+                        case importedModule.parsedModule of
+                            Nothing ->
+                                []
+
+                            Just ( importedModuleParsedSyntax, _ ) ->
+                                let
+                                    (Elm.Syntax.Node.Node moduleDeclSyntaxRange _) =
+                                        importedModuleParsedSyntax.moduleDefinition
+                                in
+                                if
+                                    (importedModule.fileLocation == targetDefinitionFilePath)
+                                        && (rangeFromRecordRange moduleDeclSyntaxRange == targetDefinitionRange)
+                                then
+                                    importedModule.referencesRanges
+                                        |> List.map rangeFromRecordRange
+
+                                else
+                                    []
+                    )
+    in
+    List.concat
+        [ importNameReferenceRanges
+        , nameReferenceRanges
+        ]
 
 
 textDocumentRename :
