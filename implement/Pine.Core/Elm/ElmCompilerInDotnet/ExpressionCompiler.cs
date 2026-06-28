@@ -163,7 +163,7 @@ public class ExpressionCompiler
             var qualifiedConstructorName =
                 expr.QualifiedName.Namespaces.Count > 0
                 ?
-                QualifiedNameHelper.ToQualifiedNameString(expr.QualifiedName.Namespaces, expr.QualifiedName.DeclName)
+                expr.QualifiedName.FullName
                 :
                 QualifiedNameHelper.ToQualifiedNameString([context.CurrentModuleName], expr.QualifiedName.DeclName);
 
@@ -190,7 +190,7 @@ public class ExpressionCompiler
             var qualifiedFunctionName =
                 expr.QualifiedName.Namespaces.Count > 0
                 ?
-                string.Join(".", expr.QualifiedName.Namespaces) + "." + expr.QualifiedName.DeclName
+                expr.QualifiedName.FullName
                 :
                 context.CurrentModuleName + "." + expr.QualifiedName.DeclName;
 
@@ -337,7 +337,7 @@ public class ExpressionCompiler
             var qualifiedConstructorName =
                 funcRef.QualifiedName.Namespaces.Count > 0
                 ?
-                string.Join(".", funcRef.QualifiedName.Namespaces) + "." + funcRef.QualifiedName.DeclName
+                funcRef.QualifiedName.FullName
                 :
                 context.CurrentModuleName + "." + funcRef.QualifiedName.DeclName;
 
@@ -401,7 +401,7 @@ public class ExpressionCompiler
                 var qualifiedTagName =
                     funcRef.QualifiedName.Namespaces.Count > 0
                     ?
-                    QualifiedNameHelper.ToQualifiedNameString(funcRef.QualifiedName.Namespaces, funcRef.QualifiedName.DeclName)
+                    funcRef.QualifiedName.FullName
                     :
                     QualifiedNameHelper.ToQualifiedNameString([context.CurrentModuleName], funcRef.QualifiedName.DeclName);
 
@@ -490,7 +490,7 @@ public class ExpressionCompiler
             var qualifiedFunctionName =
                 funcRef.QualifiedName.Namespaces.Count > 0
                 ?
-                string.Join(".", funcRef.QualifiedName.Namespaces) + "." + funcRef.QualifiedName.DeclName
+                funcRef.QualifiedName.FullName
                 :
                 context.CurrentModuleName + "." + funcRef.QualifiedName.DeclName;
 
