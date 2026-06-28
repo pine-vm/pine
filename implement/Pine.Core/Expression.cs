@@ -51,6 +51,12 @@ public abstract record Expression
     public abstract long BuiltinCount { get; }
 
     /// <summary>
+    /// Maximum depth found in the tree.
+    /// Zero for leaf nodes like literals or environment reference.
+    /// </summary>
+    public abstract int MaxDepth { get; }
+
+    /// <summary>
     /// Instance of the <see cref="Environment"/> expression type.
     /// </summary>
     public static readonly Expression EnvironmentInstance = new Environment();
@@ -197,6 +203,9 @@ public abstract record Expression
         public override long BuiltinCount { get; } = 0;
 
         /// <inheritdoc/>
+        public override int MaxDepth { get; } = 0;
+
+        /// <inheritdoc/>
         public override string ToString()
         {
             string? valueInterpretationString = null;
@@ -245,6 +254,9 @@ public abstract record Expression
         /// <inheritdoc/>
         public override long BuiltinCount { get; } = 0;
 
+        /// <inheritdoc/>
+        public override int MaxDepth { get; } = 0;
+
         /// <summary>
         /// The list of subexpressions.
         /// </summary>
@@ -264,6 +276,8 @@ public abstract record Expression
 
             SubexpressionCount = Items.Count;
 
+            var maxDepth = 0;
+
             for (var i = 0; i < Items.Count; ++i)
             {
                 var item = Items[i];
@@ -279,7 +293,14 @@ public abstract record Expression
                 ConditionCount += item.ConditionCount;
 
                 BuiltinCount += item.BuiltinCount;
+
+                var itemDepth = item.MaxDepth + 1;
+
+                if (itemDepth > maxDepth)
+                    maxDepth = itemDepth;
             }
+
+            MaxDepth = maxDepth;
         }
 
         /// <inheritdoc/>
@@ -319,12 +340,14 @@ public abstract record Expression
             return
                 ToShortString(
                     itemsCount: Items.Count,
+                    maxDepth: MaxDepth,
                     subexpressionCount: SubexpressionCount,
                     referencesEnvironment: ReferencesEnvironment);
         }
 
         internal static string ToShortString(
             int itemsCount,
+            int maxDepth,
             long subexpressionCount,
             bool referencesEnvironment)
         {
@@ -334,6 +357,7 @@ public abstract record Expression
             return
                 nameof(List) +
                 " { ItemsCount = " + CommandLineInterface.FormatIntegerForDisplay(itemsCount) +
+                ", MaxDepth = " + CommandLineInterface.FormatIntegerForDisplay(maxDepth) +
                 ", SubexpressionCount = " + CommandLineInterface.FormatIntegerForDisplay(subexpressionCount) +
                 ", ReferencesEnvironment = " + referencesEnvironment +
                 " }";
@@ -430,6 +454,9 @@ public abstract record Expression
         /// <inheritdoc/>
         public override long BuiltinCount { get; } = 0;
 
+        /// <inheritdoc/>
+        public override int MaxDepth { get; } = 0;
+
         /// <summary>
         /// Creates a new instance of a Parse-and-Eval expression.
         /// </summary>
@@ -453,6 +480,9 @@ public abstract record Expression
 
             BuiltinCount =
                 encoded.BuiltinCount + environment.BuiltinCount;
+
+            MaxDepth =
+                Math.Max(encoded.MaxDepth, environment.MaxDepth) + 1;
         }
 
         /// <inheritdoc/>
@@ -513,6 +543,9 @@ public abstract record Expression
         /// <inheritdoc/>
         public override long BuiltinCount { get; } = 0;
 
+        /// <inheritdoc/>
+        public override int MaxDepth { get; } = 0;
+
         /// <summary>
         /// Creates a new instance of a kernel application.
         /// </summary>
@@ -532,6 +565,7 @@ public abstract record Expression
             ContainsParseAndEval = input.ContainsParseAndEval;
             ConditionCount = input.ConditionCount;
             BuiltinCount = input.BuiltinCount + 1;
+            MaxDepth = input.MaxDepth + 1;
         }
 
         /// <inheritdoc/>
@@ -594,6 +628,9 @@ public abstract record Expression
         /// <inheritdoc/>
         public override long BuiltinCount { get; } = 0;
 
+        /// <inheritdoc/>
+        public override int MaxDepth { get; } = 0;
+
         internal Conditional(
             Expression condition,
             Expression falseBranch,
@@ -637,6 +674,11 @@ public abstract record Expression
                 Condition.BuiltinCount +
                 FalseBranch.BuiltinCount +
                 TrueBranch.BuiltinCount;
+
+            MaxDepth =
+                Math.Max(
+                    Math.Max(Condition.MaxDepth, FalseBranch.MaxDepth),
+                    TrueBranch.MaxDepth) + 1;
         }
 
         /// <inheritdoc/>
@@ -727,6 +769,9 @@ public abstract record Expression
 
         /// <inheritdoc/>
         public override long BuiltinCount { get; } = 0;
+
+        /// <inheritdoc/>
+        public override int MaxDepth { get; } = 0;
     }
 
     /// <summary>
@@ -762,6 +807,9 @@ public abstract record Expression
         /// <inheritdoc/>
         public override long BuiltinCount { get; }
 
+        /// <inheritdoc/>
+        public override int MaxDepth { get; } = 0;
+
         private readonly int _slimHashCode;
 
         /// <summary>
@@ -779,6 +827,7 @@ public abstract record Expression
             ContainsParseAndEval = tagged.ContainsParseAndEval;
             ConditionCount = tagged.ConditionCount;
             BuiltinCount = tagged.BuiltinCount;
+            MaxDepth = tagged.MaxDepth + 1;
 
             _slimHashCode = HashCode.Combine(tag, tagged);
         }

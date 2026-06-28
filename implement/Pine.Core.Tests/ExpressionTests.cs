@@ -173,4 +173,51 @@ public class ExpressionTests
             testCase.BuiltinCount.Should().Be(builtinCount);
         }
     }
+
+    [Fact]
+    public void Expression_aggregate_property_max_depth()
+    {
+        var testCases =
+            new List<(Expression expression, int expectedMaxDepth)>
+        {
+            (Expression.EnvironmentInstance, 0),
+
+            (Expression.LiteralInstance(PineValue.EmptyList), 0),
+
+            (Expression.ListInstance([]), 0),
+
+            (Expression.ListInstance([Expression.EnvironmentInstance]), 1),
+
+            (Expression.ListInstance(
+                [
+                Expression.EnvironmentInstance,
+                Expression.LiteralInstance(PineValue.EmptyList)
+                ]),
+                1),
+
+            (Expression.ConditionalInstance(
+                Expression.ListInstance([]),
+                Expression.ListInstance(
+                    [
+                    Expression.EnvironmentInstance,
+                    Expression.LiteralInstance(PineValue.EmptyList),
+                    ]),
+                Expression.ListInstance([])), 2),
+
+            (new Expression.ParseAndEval(
+                Expression.EnvironmentInstance,
+                Expression.EnvironmentInstance), 1),
+
+            (Expression.KernelApplicationInstance(
+                "function",
+                Expression.EnvironmentInstance), 1),
+        };
+
+        for (var i = 0; i < testCases.Count; i++)
+        {
+            var (expression, expectedMaxDepth) = testCases[i];
+
+            expression.MaxDepth.Should().Be(expectedMaxDepth, $"Test case {i} failed.");
+        }
+    }
 }
