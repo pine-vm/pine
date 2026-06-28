@@ -21,9 +21,13 @@ public class PineExpressionEncodingCache
     /// caching the result. Subsequent calls with the same <paramref name="expression"/> return the
     /// cached result without re-encoding.
     /// </summary>
-    public PineValue.ListValue EncodeExpressionAsValue(Expression expression) =>
-        _encodeExprCache.GetOrAdd(
-            expression,
-            valueFactory:
-            expr => ExpressionEncoding.EncodeExpressionAsValueWithoutTopLevelCacheLookup(expr, EncodeExpressionAsValue));
+    public PineValue.ListValue EncodeExpressionAsValue(Expression expression)
+    {
+        if (_encodeExprCache.TryGetValue(expression, out var alreadyEncoded))
+            return alreadyEncoded;
+
+        // Delegate to the explicit post-order encoder so that deeply nested expressions do not
+        // overflow the call stack, while still memoizing every (shared) subtree into this cache.
+        return ExpressionEncoding.EncodeExpressionAsValueViaPostOrder(expression, _encodeExprCache);
+    }
 }

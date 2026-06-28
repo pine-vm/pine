@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 
@@ -35,11 +36,126 @@ public static class ExpressionEncoding
         if (cache is not null)
             return cache.EncodeExpressionAsValue(expression);
 
-        if (expression.SubexpressionCount > 100)
+        // Encode via an explicit post-order traversal (rather than recursing through
+        // 'EncodeExpressionAsValue') so that deeply nested expressions do not overflow the
+        // call stack. A local store memoizes shared subtrees within this single call.
+        return EncodeExpressionAsValueViaPostOrder(expression, new ConcurrentDictionary<Expression, PineValue.ListValue>());
+    }
+
+    /// <summary>
+    /// Encodes <paramref name="rootExpression"/> using an explicit work stack instead of recursion,
+    /// so that arbitrarily deep expression trees do not overflow the call stack.
+    /// <para>
+    /// Subexpressions are encoded in post-order (children before parents) into <paramref name="store"/>,
+    /// which also deduplicates shared subtrees so each distinct subexpression is encoded at most once.
+    /// Because every direct child is already present in <paramref name="store"/> by the time its parent
+    /// is encoded, the per-node call to
+    /// <see cref="EncodeExpressionAsValueWithoutTopLevelCacheLookup"/> never recurses more than one level.
+    /// </para>
+    /// </summary>
+    internal static PineValue.ListValue EncodeExpressionAsValueViaPostOrder(
+        Expression rootExpression,
+        ConcurrentDictionary<Expression, PineValue.ListValue> store)
+    {
+        if (store.TryGetValue(rootExpression, out var alreadyEncoded))
+            return alreadyEncoded;
+
+        var stack = new Stack<Expression>();
+
+        stack.Push(rootExpression);
+
+        var expanded = new HashSet<Expression>();
+
+        while (stack.Count is not 0)
         {
+            var current = stack.Peek();
+
+            if (store.ContainsKey(current))
+            {
+                stack.Pop();
+                continue;
+            }
+
+            if (expanded.Add(current))
+            {
+                // First visit: schedule not-yet-encoded direct children to be processed first.
+                PushUnencodedChildren(current, store, stack);
+
+                continue;
+            }
+
+            // Second visit: all children are encoded and present in 'store'.
+            stack.Pop();
+
+            store.GetOrAdd(
+                current,
+                valueFactory:
+                expr =>
+                EncodeExpressionAsValueWithoutTopLevelCacheLookup(
+                    expr,
+                    childExpression => store[childExpression]));
         }
 
-        return EncodeExpressionAsValueWithoutTopLevelCacheLookup(expression, EncodeExpressionAsValue);
+        return store[rootExpression];
+    }
+
+    private static void PushUnencodedChildren(
+        Expression expression,
+        ConcurrentDictionary<Expression, PineValue.ListValue> store,
+        Stack<Expression> stack)
+    {
+        switch (expression)
+        {
+            case Expression.Environment:
+            case Expression.Literal:
+                break;
+
+            case Expression.List list:
+                for (var i = 0; i < list.Items.Count; i++)
+                {
+                    if (!store.ContainsKey(list.Items[i]))
+                        stack.Push(list.Items[i]);
+                }
+
+                break;
+
+            case Expression.ParseAndEval parseAndEval:
+                if (!store.ContainsKey(parseAndEval.Encoded))
+                    stack.Push(parseAndEval.Encoded);
+
+                if (!store.ContainsKey(parseAndEval.Environment))
+                    stack.Push(parseAndEval.Environment);
+
+                break;
+
+            case Expression.KernelApplication kernelApplication:
+                if (!store.ContainsKey(kernelApplication.Input))
+                    stack.Push(kernelApplication.Input);
+
+                break;
+
+            case Expression.Conditional conditional:
+                if (!store.ContainsKey(conditional.Condition))
+                    stack.Push(conditional.Condition);
+
+                if (!store.ContainsKey(conditional.FalseBranch))
+                    stack.Push(conditional.FalseBranch);
+
+                if (!store.ContainsKey(conditional.TrueBranch))
+                    stack.Push(conditional.TrueBranch);
+
+                break;
+
+            case Expression.StringTag stringTag:
+                if (!store.ContainsKey(stringTag.Tagged))
+                    stack.Push(stringTag.Tagged);
+
+                break;
+
+            default:
+                throw new NotImplementedException(
+                    "Unknown expression type: " + expression.GetType().FullName);
+        }
     }
 
     /// <summary>

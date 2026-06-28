@@ -84,33 +84,44 @@ public static class ValueEncodingFlatDeterministic
             WriteAndCount(encodedInt32);
         }
 
-        void EncodeNext(PineValue current)
+        // Use an explicit stack rather than recursion so that deeply nested
+        // values do not overflow the call stack. Items are pushed in reverse
+        // order so that they are processed (and thus written) in their original
+        // order, preserving the exact pre-order byte layout and back-reference
+        // addressing of the recursive implementation.
+        var pending = new Stack<PineValue>();
+
+        pending.Push(composition);
+
+        Span<byte> encodedInt32 = stackalloc byte[4];
+
+        while (pending.Count is not 0)
         {
+            var current = pending.Pop();
+
             if (current is PineValue.ListValue list)
             {
                 if (listsStartAddresses.TryGetValue(list, out var earlierAddress))
                 {
                     // Already encoded this list earlier - write a reference.
                     WriteReferenceToEarlier((int)earlierAddress);
-                    return;
+                    continue;
                 }
 
                 listsStartAddresses[list] = bytesWritten;
 
                 WriteAndCount(s_tagListEncoded.Span);
 
-                Span<byte> encodedInt32 = stackalloc byte[4];
-
                 BinaryPrimitives.WriteInt32BigEndian(encodedInt32, list.Items.Length);
 
                 WriteAndCount(encodedInt32);
 
-                for (var i = 0; i < list.Items.Length; i++)
+                for (var i = list.Items.Length - 1; i >= 0; i--)
                 {
-                    EncodeNext(list.Items.Span[i]);
+                    pending.Push(list.Items.Span[i]);
                 }
 
-                return;
+                continue;
             }
 
             if (current is PineValue.BlobValue blob)
@@ -119,14 +130,12 @@ public static class ValueEncodingFlatDeterministic
                 {
                     // Already encoded this blob earlier - write a reference.
                     WriteReferenceToEarlier((int)earlierAddress);
-                    return;
+                    continue;
                 }
 
                 blobsStartAddresses[blob] = bytesWritten;
 
                 WriteAndCount(s_tagBlobEncoded.Span);
-
-                Span<byte> encodedInt32 = stackalloc byte[4];
 
                 BinaryPrimitives.WriteInt32BigEndian(encodedInt32, blob.Bytes.Length);
 
@@ -150,15 +159,13 @@ public static class ValueEncodingFlatDeterministic
                         break;
                 }
 
-                return;
+                continue;
             }
 
             throw new NotImplementedException(
                 "Encoding of this PineValue type is not implemented: " +
                 current.GetType());
         }
-
-        EncodeNext(composition);
     }
 
     /// <summary>
