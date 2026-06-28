@@ -1,4 +1,4 @@
-# 2026-06-28 Pine Expression Encoding Migration
+# 2026-06-27 Pine Expression Encoding Migration
 
 Goal is to switch the encoding of Pine expression to a more compact format, mostly as already introduced in [2025-11-26-dense-expression-encoding-implementation.md](./2025-11-26-dense-expression-encoding-implementation.md)
 
