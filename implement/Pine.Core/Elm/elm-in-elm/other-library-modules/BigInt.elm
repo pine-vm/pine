@@ -173,9 +173,12 @@ toString bigInt =
 -}
 div : BigInt -> BigInt -> BigInt
 div num den =
-    divmod num den
-        |> Maybe.map Tuple.first
-        |> Maybe.withDefault zero
+    case divmod num den of
+        Just ( quotient, _ ) ->
+            quotient
+
+        Nothing ->
+            zero
 
 
 {-| Modulus.
@@ -185,7 +188,12 @@ div num den =
 -}
 modBy : BigInt -> BigInt -> Maybe BigInt
 modBy modulus x =
-    divmod x modulus |> Maybe.map Tuple.second
+    case divmod x modulus of
+        Just ( _, remainder ) ->
+            Just remainder
+
+        Nothing ->
+            Nothing
 
 
 {-| Square.

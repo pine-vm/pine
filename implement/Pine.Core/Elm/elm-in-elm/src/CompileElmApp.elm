@@ -1789,11 +1789,11 @@ parseElmTypeAndDependenciesRecursivelyFromAnnotationInternalTyped stack modules 
                                 currentModule.imports
                                     |> Common.listMapFind
                                         (\(Elm.Syntax.Node.Node _ moduleImport) ->
-                                            case Maybe.map Elm.Syntax.Node.value moduleImport.exposingList of
+                                            case moduleImport.exposingList of
                                                 Nothing ->
                                                     Nothing
 
-                                                Just importExposing ->
+                                                Just (Elm.Syntax.Node.Node _ importExposing) ->
                                                     let
                                                         (Elm.Syntax.Node.Node _ importModuleName) =
                                                             moduleImport.moduleName
@@ -1808,8 +1808,8 @@ parseElmTypeAndDependenciesRecursivelyFromAnnotationInternalTyped stack modules 
                                                                 Elm.Syntax.Exposing.Explicit topLevelExpositions ->
                                                                     topLevelExpositions
                                                                         |> List.any
-                                                                            (\topLevelExpose ->
-                                                                                case Elm.Syntax.Node.value topLevelExpose of
+                                                                            (\(Elm.Syntax.Node.Node _ topLevelExpose) ->
+                                                                                case topLevelExpose of
                                                                                     Elm.Syntax.Exposing.InfixExpose _ ->
                                                                                         False
 
@@ -1824,9 +1824,12 @@ parseElmTypeAndDependenciesRecursivelyFromAnnotationInternalTyped stack modules 
                                                                             )
                                                     in
                                                     if containsMatchingExposition then
-                                                        modules
-                                                            |> findModuleByName importModuleName
-                                                            |> Maybe.map (Tuple.second >> .parsedSyntax)
+                                                        case findModuleByName importModuleName modules of
+                                                            Nothing ->
+                                                                Nothing
+
+                                                            Just ( _, instantiatedModule ) ->
+                                                                instantiatedModule.parsedSyntax
 
                                                     else
                                                         Nothing

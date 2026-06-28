@@ -488,8 +488,8 @@ migrateStateTypeAnnotationFromElmModule parsedModule =
                     Err "Missing function signature"
 
                 Just (Elm.Syntax.Node.Node _ functionSignature) ->
-                    case Elm.Syntax.Node.value functionSignature.typeAnnotation of
-                        Elm.Syntax.TypeAnnotation.FunctionTypeAnnotation inputType (Elm.Syntax.Node.Node _ returnType) ->
+                    case functionSignature.typeAnnotation of
+                        Elm.Syntax.Node.Node _ (Elm.Syntax.TypeAnnotation.FunctionTypeAnnotation inputType (Elm.Syntax.Node.Node _ returnType)) ->
                             case returnType of
                                 Elm.Syntax.TypeAnnotation.FunctionTypeAnnotation _ _ ->
                                     Err "Too many parameters."
@@ -521,8 +521,8 @@ parseExposeFunctionsToAdminConfig { originalSourceModules, backendStateType } =
                 functionDeclarations =
                     originalInterfaceModule.parsedSyntax.declarations
                         |> List.filterMap
-                            (\declaration ->
-                                case Elm.Syntax.Node.value declaration of
+                            (\(Elm.Syntax.Node.Node _ declaration) ->
+                                case declaration of
                                     Elm.Syntax.Declaration.FunctionDeclaration functionDeclaration ->
                                         Just functionDeclaration
 
@@ -530,30 +530,34 @@ parseExposeFunctionsToAdminConfig { originalSourceModules, backendStateType } =
                                         Nothing
                             )
             in
-            functionDeclarations
-                |> Common.resultListMapCombine
-                    (\functionDeclaration ->
-                        parseExposeFunctionsToAdminConfigFromDeclaration
-                            { originalSourceModules = originalSourceModules
-                            , interfaceModuleFilePath = originalInterfaceModuleFilePath
-                            , interfaceModule = originalInterfaceModule
-                            , backendStateType = backendStateType
-                            }
-                            functionDeclaration
-                            |> Result.mapError
-                                (mapLocatedInSourceFiles
-                                    ((++)
-                                        ("Failed exposing function '"
-                                            ++ Elm.Syntax.Node.value (Elm.Syntax.Node.value functionDeclaration.declaration).name
-                                            ++ "': "
+            case
+                functionDeclarations
+                    |> Common.resultListMapCombine
+                        (\functionDeclaration ->
+                            parseExposeFunctionsToAdminConfigFromDeclaration
+                                { originalSourceModules = originalSourceModules
+                                , interfaceModuleFilePath = originalInterfaceModuleFilePath
+                                , interfaceModule = originalInterfaceModule
+                                , backendStateType = backendStateType
+                                }
+                                functionDeclaration
+                                |> Result.mapError
+                                    (mapLocatedInSourceFiles
+                                        ((++)
+                                            ("Failed exposing function '"
+                                                ++ Elm.Syntax.Node.value (Elm.Syntax.Node.value functionDeclaration.declaration).name
+                                                ++ "': "
+                                            )
                                         )
                                     )
-                                )
-                    )
-                |> Result.mapError List.singleton
-                |> Result.map
-                    (\parsedDeclarations ->
-                        Just
+                        )
+            of
+                Err locatedErrs ->
+                    Err [ locatedErrs ]
+
+                Ok parsedDeclarations ->
+                    Ok
+                        (Just
                             { exposedFunctions =
                                 parsedDeclarations |> List.foldl (.exposedFunctions >> Dict.union) Dict.empty
                             , jsonConverterDeclarations =
@@ -561,7 +565,7 @@ parseExposeFunctionsToAdminConfig { originalSourceModules, backendStateType } =
                             , modulesToImport =
                                 parsedDeclarations |> List.foldl (.modulesToImport >> (++)) []
                             }
-                    )
+                        )
 
 
 parseExposeFunctionsToAdminConfigFromDeclaration :
@@ -602,11 +606,11 @@ parseExposeFunctionsToAdminConfigFromDeclaration { originalSourceModules, interf
                             |> String.join "\n"
                     )
     in
-    case Maybe.map Elm.Syntax.Node.value functionDeclaration.signature of
+    case functionDeclaration.signature of
         Nothing ->
             returnErrorInInterfaceModule "Missing function signature"
 
-        Just functionSignature ->
+        Just (Elm.Syntax.Node.Node _ functionSignature) ->
             parseElmFunctionTypeAndDependenciesRecursivelyFromAnnotation
                 originalSourceModules
                 ( ( interfaceModuleFilePath, interfaceModule.parsedSyntax ), functionSignature.typeAnnotation )
