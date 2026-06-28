@@ -324,6 +324,19 @@ internal static class CaseBlockConsolidation
 
             if (armPatternBindings.Overlaps(leafFreeVars))
                 return null;
+
+            // Also abort if the arm pattern would re-bind a name that is
+            // already introduced by a binder inside the leaf expression
+            // (e.g. a nested `let quotient = ...` inside the leaf and a
+            // `Just (quotient, _)` arm pattern). Emitting
+            // `let <armPattern> = <leafExpr> in <armBody>` in that case
+            // produces two declarations of the same name in overlapping
+            // scopes — a naming clash caught by post-stage validation.
+            var leafBoundVars =
+                SyntaxTypes.SyntaxAnalysis.CollectTopLevelLetBoundNames(leaves[i].LeafExpression);
+
+            if (armPatternBindings.Overlaps(leafBoundVars))
+                return null;
         }
 
         var leafIndex = 0;
@@ -637,6 +650,16 @@ internal static class CaseBlockConsolidation
                 SyntaxTypes.SyntaxAnalysis.CollectNamesBoundByPattern(outerArm.Pattern.Value);
 
             if (innerBindings.Overlaps(outerBindings))
+                return null;
+
+            // The outer-arm pattern is emitted as a let-destructure whose
+            // RHS is the inner-arm body. If that body itself introduces a
+            // binder of the same name (e.g. a nested `let`), the wrapping
+            // would create a naming clash; abort.
+            var innerBodyBound =
+                SyntaxTypes.SyntaxAnalysis.CollectTopLevelLetBoundNames(innerArms[i].Expression.Value);
+
+            if (outerBindings.Overlaps(innerBodyBound))
                 return null;
 
             outerArmForInnerArm[i] = outerArm;

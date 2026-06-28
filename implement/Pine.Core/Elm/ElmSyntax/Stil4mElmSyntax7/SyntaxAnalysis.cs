@@ -138,6 +138,55 @@ public static class SyntaxAnalysis
     }
 
     /// <summary>
+    /// Collects only the names introduced by binders that share the
+    /// top-level scope of <paramref name="expression"/>: the declaration
+    /// names of let-expressions wrapping the value (peeling parentheses
+    /// and recursing through the let body). These are exactly the names
+    /// that would become siblings of, and clash with, a fresh outer
+    /// let-destructure pattern wrapping the expression. Binders nested in
+    /// isolated scopes (lambda parameters, case arms, sub-expression let
+    /// blocks) are intentionally excluded.
+    /// </summary>
+    public static ImmutableHashSet<string> CollectTopLevelLetBoundNames(
+        Expression expression)
+    {
+        var names = new HashSet<string>();
+        var current = expression;
+
+        while (true)
+        {
+            switch (current)
+            {
+                case Expression.ParenthesizedExpression paren:
+                    current = paren.Expression.Value;
+                    continue;
+
+                case Expression.LetExpression letExpr:
+                    foreach (var decl in letExpr.Value.Declarations)
+                    {
+                        switch (decl.Value)
+                        {
+                            case Expression.LetDeclaration.LetFunction letFunc:
+                                names.Add(letFunc.Function.Declaration.Value.Name.Value);
+                                break;
+
+                            case Expression.LetDeclaration.LetDestructuring letDestr:
+                                CollectNamesBoundByPatternInto(letDestr.Pattern.Value, names);
+                                break;
+                        }
+                    }
+
+                    current = letExpr.Value.Expression.Value;
+                    continue;
+            }
+
+            break;
+        }
+
+        return [.. names];
+    }
+
+    /// <summary>
     /// Computes the set of free variable names referenced inside
     /// <paramref name="expression"/>. A "free variable" is an unqualified
     /// <see cref="Expression.FunctionOrValue"/> (one with an empty
