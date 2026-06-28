@@ -769,6 +769,58 @@ public class StaticProgramParser
                 return ParseExpression(path, inlinedExpression, envClass, parseConfig, parseCache);
             }
 
+            // Second recovery: the resolved function value may itself be the encoding of
+            // a partially-applied curried template, rather than a plain function record.
+            // This arises when the compiler's reducer pre-applies a constant leading
+            // argument to a template-based function value (see FunctionValueBuilder's
+            // TryBuildCurriedFunctionValueAsTemplate). The value then encodes
+            //   ParseAndEval(Literal(innerBody), List([envFuncs, capturedArg.., Environment]))
+            // with the remaining parameter delivered via the final Environment slot.
+            //
+            // Invert the application symbolically by decoding the construction for each
+            // collected (remaining) argument. Each remaining argument is wrapped in a
+            // single-element list so that, after re-parsing, it is rendered as the
+            // remaining-argument group of the partial application - matching the rendering
+            // the legacy (nested-wrapper) format produced for the same source program.
+            {
+                Expression? decodedInline = currentExpr.Encoded;
+
+                for (var i = 0; i < collectedArgs.Count && decodedInline is not null; i++)
+                {
+                    // collectedArgs is in reverse-application order; reverse to first..last.
+                    var remainingArg = collectedArgs[collectedArgs.Count - 1 - i];
+
+                    decodedInline =
+                        ReducePineExpression.TryDecodeApplicationOfConstructedEncoding(
+                            decodedInline,
+                            Expression.ListInstance([remainingArg]),
+                            parseCache);
+                }
+
+                if (decodedInline is not null)
+                {
+                    try
+                    {
+                        var decodedRecovered =
+                            ParseExpression(
+                                path,
+                                decodedInline,
+                                envClass,
+                                parseConfig,
+                                parseCache);
+
+                        if (decodedRecovered.IsErrOrNull() is null)
+                        {
+                            return decodedRecovered;
+                        }
+                    }
+                    catch (InvalidOperationException)
+                    {
+                        // Fall through to rethrow the original failure below.
+                    }
+                }
+            }
+
             throw;
         }
 

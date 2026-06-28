@@ -189,6 +189,79 @@ public class PartialApplicationTests
     }
 
     [Fact]
+    public void Partial_application_emits_compact_template_without_generic_parse_and_eval_chain()
+    {
+        // For a partial application of a known (cross-SCC) function the compiler now emits a compact
+        // template that builds the partially-applied function value structurally, instead of the generic
+        // form that wraps the callee's function value in one ParseAndEval per applied argument. The
+        // template producer is built purely from List/Literal nodes, so the emitted partial-application
+        // expression contains no ParseAndEval nodes - regardless of how many leading arguments are
+        // already supplied.
+        var elmModuleText =
+            """"
+            module Test exposing (..)
+
+            decl a b c =
+                [ a, c, b, a ]
+
+            applyFirst x =
+                decl x
+
+            applyFirstAndSecond x y =
+                decl x y
+
+            """";
+
+        var parseCache = new PineVMParseCache();
+
+        var (parsedEnv, _) =
+            ElmCompilerTestHelper.CompileElmModules(
+                [elmModuleText],
+                disableInlining: true);
+
+        var testModule =
+            parsedEnv.Modules.First(c => c.moduleName is "Test");
+
+        static int CountParseAndEval(Expression expression) =>
+            Expression.EnumerateSelfAndDescendants(expression)
+            .Count(sub => sub is Expression.ParseAndEval);
+
+        Expression DecodeDecl(string name)
+        {
+            var declValue =
+                testModule.moduleContent.FunctionDeclarations
+                .First(decl => decl.Key == name)
+                .Value;
+
+            return
+                parseCache.ParseExpression(declValue)
+                .Extract(err => throw new System.Exception("Failed parsing declaration expression: " + err));
+        }
+
+        // applyFirst (one of three arguments supplied) compiles to a single-parameter wrapper
+        // ParseAndEval(Literal(bodyEncoded), [envFunctions, Environment]); the body, once decoded, is the
+        // compact template producer and contains no ParseAndEval nodes.
+        var applyFirstWrapper = DecodeDecl("applyFirst");
+        applyFirstWrapper.Should().BeOfType<Expression.ParseAndEval>();
+
+        var applyFirstBodyEncoded =
+            ((Expression.Literal)((Expression.ParseAndEval)applyFirstWrapper).Encoded).Value;
+
+        var applyFirstBody =
+            parseCache.ParseExpression(applyFirstBodyEncoded)
+            .Extract(err => throw new System.Exception("Failed parsing applyFirst body: " + err));
+
+        CountParseAndEval(applyFirstBody)
+            .Should().Be(0);
+
+        // applyFirstAndSecond (two of three arguments supplied) compiles to a multi-parameter wrapper
+        // that is itself a structural producer (a List expression building an encoding), again with no
+        // ParseAndEval nodes anywhere in the emitted expression.
+        CountParseAndEval(DecodeDecl("applyFirstAndSecond"))
+            .Should().Be(0);
+    }
+
+    [Fact]
     public void Case_block_returning_various_functions()
     {
         var elmModuleText =

@@ -513,20 +513,20 @@ public class ElmLanguageServiceTests
 
         PerformanceCountersFormatting.FormatCounts(aggregateCounters).Should().Be(
             """
-            InvocationCount: 2_906
-            BuildListCount: 10_051
+            InvocationCount: 2_433
+            BuildListCount: 5_929
             LoopIterationCount: 0
-            InstructionCount: 77_161
+            InstructionCount: 60_963
             """);
 
         InvocationCountReportFormatting.FormatCounts(aggregateInvocationCounts).Should().Be(
             """
             CompiledExpressionCount: 193
-            InvocationCountTotal: 1_943
+            InvocationCountTotal: 1_857
             InvocationCountAverage: 10
-            InvocationCountPercentile10: 2
-            InvocationCountMedian: 4
-            InvocationCountPercentile90: 12
+            InvocationCountPercentile10: 1
+            InvocationCountMedian: 3
+            InvocationCountPercentile90: 11
             """);
     }
 
@@ -851,20 +851,20 @@ public class ElmLanguageServiceTests
 
         PerformanceCountersFormatting.FormatCounts(aggregateCounters).Should().Be(
             """
-            InvocationCount: 8_259
-            BuildListCount: 29_945
+            InvocationCount: 6_957
+            BuildListCount: 18_205
             LoopIterationCount: 0
-            InstructionCount: 231_857
+            InstructionCount: 186_532
             """);
 
         InvocationCountReportFormatting.FormatCounts(aggregateInvocationCounts).Should().Be(
             """
-            CompiledExpressionCount: 228
-            InvocationCountTotal: 5_506
+            CompiledExpressionCount: 226
+            InvocationCountTotal: 5_313
             InvocationCountAverage: 24
             InvocationCountPercentile10: 2
             InvocationCountMedian: 6
-            InvocationCountPercentile90: 31
+            InvocationCountPercentile90: 29
             """);
     }
 
@@ -982,20 +982,20 @@ public class ElmLanguageServiceTests
 
         PerformanceCountersFormatting.FormatCounts(aggregateCounters).Should().Be(
             """
-            InvocationCount: 9_332
-            BuildListCount: 33_064
+            InvocationCount: 7_886
+            BuildListCount: 21_320
             LoopIterationCount: 0
-            InstructionCount: 255_828
+            InstructionCount: 209_017
             """);
 
         InvocationCountReportFormatting.FormatCounts(aggregateInvocationCounts).Should().Be(
             """
-            CompiledExpressionCount: 229
-            InvocationCountTotal: 6_155
-            InvocationCountAverage: 27
+            CompiledExpressionCount: 227
+            InvocationCountTotal: 5_950
+            InvocationCountAverage: 26
             InvocationCountPercentile10: 2
-            InvocationCountMedian: 7
-            InvocationCountPercentile90: 36
+            InvocationCountMedian: 6
+            InvocationCountPercentile90: 33
             """);
     }
 

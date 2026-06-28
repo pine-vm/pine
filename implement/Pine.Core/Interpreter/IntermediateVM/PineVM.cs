@@ -3017,7 +3017,7 @@ public class PineVM : IPineVM
             PerformanceCounters: aggregatePerformanceCounters);
     }
 
-    private static (PineValueInProcess value, PerformanceCounters perfCounts)? DirectEvalIfSimpleTemplate(
+    public static (PineValueInProcess value, PerformanceCounters perfCounts)? DirectEvalIfSimpleTemplate(
         Expression expression,
         PineValueInProcess envValue)
     {

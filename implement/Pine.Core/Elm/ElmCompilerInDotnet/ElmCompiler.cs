@@ -1677,15 +1677,33 @@ public class ElmCompiler
             if (!compiledBodies.TryGetValue(memberName, out var bodyInfo))
                 continue;
 
+            PineValue BuildWrapper()
+            {
+                if (bodyInfo.paramCount is 0)
+                {
+                    return
+                        FunctionValueBuilder.EmitFunctionValueWithEnvFunctions(
+                            bodyInfo.body,
+                            bodyInfo.paramCount,
+                            envFunctionsList,
+                            encodeExprCache: expressionEncodingCache);
+                }
+
+                return
+                    FunctionValueBuilder.TryBuildCurriedFunctionValueAsTemplate(
+                        bodyInfo.body,
+                        bodyInfo.paramCount,
+                        envFunctionsList,
+                        encodeExprCache: expressionEncodingCache)
+                    ??
+                    throw new NotImplementedException(
+                        "Failed to build curried function value for " + memberName + ".");
+            }
+
             // Phase 1 of Approach A1: always emit WithEnvFunctions wrapper.
             // For non-recursive single-member SCCs, envFunctionsList is empty
             // (per §7.6b), so this produces a wrapper with env[0] = List([]).
-            var wrapper =
-                FunctionValueBuilder.EmitFunctionValueWithEnvFunctions(
-                    bodyInfo.body,
-                    bodyInfo.paramCount,
-                    envFunctionsList,
-                    encodeExprCache: expressionEncodingCache);
+            var wrapper = BuildWrapper();
 
             var encodedBody = encodedBodies[memberName];
 

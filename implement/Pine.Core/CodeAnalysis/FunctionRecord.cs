@@ -146,6 +146,15 @@ public record FunctionRecord(
                     return multiRecord;
                 }
 
+                // Fall back to the template-based form emitted by
+                // FunctionValueBuilder.TryBuildCurriedFunctionValueAsTemplate.
+                var templateResult = ParseMultiParamTemplateForm(pineValue, parseCache);
+
+                if (templateResult.IsOkOrNull() is { } templateRecord)
+                {
+                    return templateRecord;
+                }
+
                 return multiResult;
             }
         }
@@ -559,6 +568,147 @@ public record FunctionRecord(
         }
 
         return "Expected env functions to be either a Literal (containing list) or List of Literals";
+    }
+
+    /// <summary>
+    /// Tag literal used to build distinct symbolic placeholder arguments when decoding a
+    /// template-based function value in <see cref="ParseMultiParamTemplateForm"/>.
+    /// </summary>
+    private static readonly PineValue s_templateParsePlaceholderTag =
+        StringEncoding.ValueFromString("__FunctionRecordTemplateParsePlaceholder__");
+
+    /// <summary>
+    /// Parses a function record from the template-based form emitted by
+    /// <see cref="FunctionValueBuilder.TryBuildCurriedFunctionValueAsTemplate"/> for multi-parameter
+    /// functions.
+    /// <para>
+    /// The template-based function value is a producer expression that, when applied one argument at a
+    /// time, constructs the encoding of the next stage and finally yields
+    /// <c>ParseAndEval(Literal(innerBody), List([envFuncs, arg0, ..., arg{N-1}]))</c>. This method
+    /// recovers the parameter count, env functions, and inner body by applying distinct symbolic
+    /// placeholder arguments and symbolically decoding the constructed encoding via
+    /// <see cref="ReducePineExpression.TryDecodeApplicationOfConstructedEncoding"/> until the final
+    /// application is reached.
+    /// </para>
+    /// </summary>
+    private static Result<string, FunctionRecord> ParseMultiParamTemplateForm(
+        PineValue encodedWrapper,
+        PineVMParseCache parseCache)
+    {
+        // Upper bound on the number of decoding steps, guarding against malformed input that never
+        // reduces to a final ParseAndEval.
+        const int maxParameterCount = 16;
+
+        var placeholders = new Expression[maxParameterCount];
+
+        for (var i = 0; i < placeholders.Length; i++)
+        {
+            placeholders[i] =
+                Expression.LiteralInstance(
+                    PineValue.List(
+                        [
+                        s_templateParsePlaceholderTag,
+                        IntegerEncoding.EncodeSignedInteger(i)
+                        ]));
+        }
+
+        Expression current = Expression.LiteralInstance(encodedWrapper);
+
+        var parameterCount = 0;
+
+        while (true)
+        {
+            if (parameterCount >= maxParameterCount)
+            {
+                return "Exceeded maximum parameter count while decoding template function value";
+            }
+
+            var decoded =
+                ReducePineExpression.TryDecodeApplicationOfConstructedEncoding(
+                    current,
+                    placeholders[parameterCount],
+                    parseCache);
+
+            if (decoded is null)
+            {
+                return "Failed to decode template function value at parameter " + parameterCount;
+            }
+
+            parameterCount++;
+
+            current = decoded;
+
+            if (current is Expression.ParseAndEval)
+            {
+                break;
+            }
+
+            if (current is not Expression.List)
+            {
+                return
+                    "Unexpected expression type while decoding template function value: " +
+                    current.GetType().Name;
+            }
+        }
+
+        var finalApplication = (Expression.ParseAndEval)current;
+
+        // The final application's encoded slot holds the inner function body as a literal.
+        if (finalApplication.Encoded is not Expression.Literal innerLit)
+        {
+            return "Expected Literal in template final ParseAndEval.Encoded";
+        }
+
+        var innerParseResult = parseCache.ParseExpression(innerLit.Value);
+
+        if (innerParseResult.IsErrOrNull() is { } innerErr)
+        {
+            return "Failed to parse template inner expression: " + innerErr;
+        }
+
+        if (innerParseResult.IsOkOrNull() is not { } innerExpression)
+        {
+            return "Failed to extract template inner expression";
+        }
+
+        // The final application's environment is the flat layout [envFuncs, arg0, ..., arg{N-1}].
+        if (finalApplication.Environment is not Expression.List envList ||
+            envList.Items.Count != parameterCount + 1)
+        {
+            return "Unexpected environment structure in template final ParseAndEval";
+        }
+
+        // Verify the argument slots are exactly the placeholders we substituted, in order. This
+        // confirms the value matches the template layout rather than coincidentally decoding.
+        for (var i = 0; i < parameterCount; i++)
+        {
+            if (!envList.Items[1 + i].Equals(placeholders[i]))
+            {
+                return
+                    "Template final environment argument slot " + i +
+                    " does not match expected placeholder";
+            }
+        }
+
+        var envFunctionsResult = ParseEnvFunctionsFromExpression(envList.Items[0]);
+
+        if (envFunctionsResult.IsErrOrNull() is { } envFuncsErr)
+        {
+            return "Failed to parse template env functions: " + envFuncsErr;
+        }
+
+        if (envFunctionsResult.IsOkOrNull() is not { } envFunctions)
+        {
+            return "Failed to extract template env functions";
+        }
+
+        return
+            new FunctionRecord(
+                InnerFunction: innerExpression,
+                ParameterCount: parameterCount,
+                EnvFunctions: envFunctions,
+                ArgumentsAlreadyCollected: ReadOnlyMemory<PineValue>.Empty,
+                UsesNestedArgFormat: false);
     }
 
     /// <summary>
