@@ -1,6 +1,7 @@
 using AwesomeAssertions;
 using Pine.Core.CodeAnalysis;
 using Pine.Core.CommonEncodings;
+using Pine.Core.Elm;
 using System.Linq;
 using Xunit;
 
@@ -126,13 +127,10 @@ public class ApplyChoiceTypeTagTests
             ElmCompilerTestHelper.CreateFunctionValueInvocationDelegate(functionValue, parseCache)
             ([IntegerEncoding.EncodeSignedInteger(42)]);
 
-        // The result should be [SingleArgInt, [42]]
-        result.Should().Be(
-            PineValue.List(
-                [
-                StringEncoding.ValueFromString("SingleArgInt"),
-                PineValue.List([IntegerEncoding.EncodeSignedInteger(42)])
-                ]));
+        var resultRendered =
+            ElmCompilerTestHelper.RenderValueAsElmExpression(result);
+
+        resultRendered.Should().Be("SingleArgInt 42");
     }
 
     [Fact]
@@ -177,7 +175,7 @@ public class ApplyChoiceTypeTagTests
 
         // Apply first argument (the string)
         var firstApplied =
-            invokeApplyFirstArg([StringEncoding.ValueFromString("hello")]);
+            invokeApplyFirstArg([ElmValueEncoding.StringAsPineValue("hello")]);
 
         // The return value should be an encoded expression (a function that accepts more arguments)
         var parseAsExprResult =
@@ -200,17 +198,10 @@ public class ApplyChoiceTypeTagTests
             ElmCompilerTestHelper.CreateFunctionValueInvocationDelegate(firstApplied.returnValue, parseCache)
             ([IntegerEncoding.EncodeSignedInteger(42)]);
 
-        // The result should be [TwoArgs, ["hello", 42]]
-        finalResult.Should().Be(
-            PineValue.List(
-                [
-                StringEncoding.ValueFromString("TwoArgs"),
-                PineValue.List(
-                    [
-                    StringEncoding.ValueFromString("hello"),
-                    IntegerEncoding.EncodeSignedInteger(42)
-                    ])
-                ]));
+        var finalResultRendered =
+            ElmCompilerTestHelper.RenderValueAsElmExpression(finalResult);
+
+        finalResultRendered.Should().Be("""TwoArgs "hello" 42""");
     }
 
     [Fact]
@@ -276,22 +267,14 @@ public class ApplyChoiceTypeTagTests
             var (finalResult, _) =
                 ElmCompilerTestHelper.CreateFunctionValueInvocationDelegate(firstApplied.returnValue, parseCache)(
                     [
-                    StringEncoding.ValueFromString("middle"),
+                    ElmValueEncoding.StringAsPineValue("middle"),
                     IntegerEncoding.EncodeSignedInteger(30)
                     ]);
 
-            // The result should be [ThreeArgs, [10, "middle", 30]]
-            finalResult.Should().Be(
-                PineValue.List(
-                    [
-                    StringEncoding.ValueFromString("ThreeArgs"),
-                    PineValue.List(
-                        [
-                        IntegerEncoding.EncodeSignedInteger(10),
-                        StringEncoding.ValueFromString("middle"),
-                        IntegerEncoding.EncodeSignedInteger(30)
-                        ])
-                    ]));
+            var finalResultRendered =
+                ElmCompilerTestHelper.RenderValueAsElmExpression(finalResult);
+
+            finalResultRendered.Should().Be("""ThreeArgs 10 "middle" 30""");
         }
 
         // Test applyFirstTwoArgs - apply two args, then the third
@@ -308,7 +291,7 @@ public class ApplyChoiceTypeTagTests
                 invokeApplyFirstTwoArgs(
                     [
                     IntegerEncoding.EncodeSignedInteger(100),
-                    StringEncoding.ValueFromString("test")
+                    ElmValueEncoding.StringAsPineValue("test")
                     ]);
 
             // Should be an encoded expression
@@ -326,18 +309,10 @@ public class ApplyChoiceTypeTagTests
                 ElmCompilerTestHelper.CreateFunctionValueInvocationDelegate(twoArgsApplied.returnValue, parseCache)
                 ([IntegerEncoding.EncodeSignedInteger(200)]);
 
-            // The result should be [ThreeArgs, [100, "test", 200]]
-            finalResult.Should().Be(
-                PineValue.List(
-                    [
-                    StringEncoding.ValueFromString("ThreeArgs"),
-                    PineValue.List(
-                        [
-                        IntegerEncoding.EncodeSignedInteger(100),
-                        StringEncoding.ValueFromString("test"),
-                        IntegerEncoding.EncodeSignedInteger(200)
-                        ])
-                    ]));
+            var finalResultRendered =
+                ElmCompilerTestHelper.RenderValueAsElmExpression(finalResult);
+
+            finalResultRendered.Should().Be("""ThreeArgs 100 "test" 200""");
         }
     }
 
@@ -399,13 +374,10 @@ public class ApplyChoiceTypeTagTests
             ElmCompilerTestHelper.CreateFunctionValueInvocationDelegate(functionValue, parseCache)
             ([IntegerEncoding.EncodeSignedInteger(42)]);
 
-        // The result should be [SingleArgInt, [42]]
-        result.Should().Be(
-            PineValue.List(
-                [
-                StringEncoding.ValueFromString("SingleArgInt"),
-                PineValue.List([IntegerEncoding.EncodeSignedInteger(42)])
-                ]));
+        var resultRendered =
+            ElmCompilerTestHelper.RenderValueAsElmExpression(result);
+
+        resultRendered.Should().Be("SingleArgInt 42");
     }
 
     [Fact]
@@ -459,7 +431,7 @@ public class ApplyChoiceTypeTagTests
 
         // Apply first argument (the string)
         var firstApplied =
-            invokeApplyFirstArg([StringEncoding.ValueFromString("hello")]);
+            invokeApplyFirstArg([ElmValueEncoding.StringAsPineValue("hello")]);
 
         // The return value should be an encoded expression (a function that accepts more arguments)
         var parseAsExprResult =
@@ -476,17 +448,10 @@ public class ApplyChoiceTypeTagTests
             ElmCompilerTestHelper.CreateFunctionValueInvocationDelegate(firstApplied.returnValue, parseCache)
             ([IntegerEncoding.EncodeSignedInteger(42)]);
 
-        // The result should be [TwoArgs, ["hello", 42]]
-        finalResult.Should().Be(
-            PineValue.List(
-                [
-                StringEncoding.ValueFromString("TwoArgs"),
-                PineValue.List(
-                    [
-                    StringEncoding.ValueFromString("hello"),
-                    IntegerEncoding.EncodeSignedInteger(42)
-                    ])
-                ]));
+        var finalResultRendered =
+            ElmCompilerTestHelper.RenderValueAsElmExpression(finalResult);
+
+        finalResultRendered.Should().Be("""TwoArgs "hello" 42""");
     }
 
     [Fact]
@@ -561,22 +526,14 @@ public class ApplyChoiceTypeTagTests
             var (finalResult, _) =
                 ElmCompilerTestHelper.CreateFunctionValueInvocationDelegate(firstApplied.returnValue, parseCache)(
                     [
-                    StringEncoding.ValueFromString("middle"),
+                    ElmValueEncoding.StringAsPineValue("middle"),
                     IntegerEncoding.EncodeSignedInteger(30)
                     ]);
 
-            // The result should be [ThreeArgs, [10, "middle", 30]]
-            finalResult.Should().Be(
-                PineValue.List(
-                    [
-                    StringEncoding.ValueFromString("ThreeArgs"),
-                    PineValue.List(
-                        [
-                        IntegerEncoding.EncodeSignedInteger(10),
-                        StringEncoding.ValueFromString("middle"),
-                        IntegerEncoding.EncodeSignedInteger(30)
-                        ])
-                    ]));
+            var finalResultRendered =
+                ElmCompilerTestHelper.RenderValueAsElmExpression(finalResult);
+
+            finalResultRendered.Should().Be("""ThreeArgs 10 "middle" 30""");
         }
 
         // Test applyFirstTwoArgs - apply two args, then the third
@@ -593,7 +550,7 @@ public class ApplyChoiceTypeTagTests
                 invokeApplyFirstTwoArgs(
                     [
                     IntegerEncoding.EncodeSignedInteger(100),
-                    StringEncoding.ValueFromString("test")
+                    ElmValueEncoding.StringAsPineValue("test")
                     ]);
 
             // Should be an encoded expression
@@ -611,18 +568,10 @@ public class ApplyChoiceTypeTagTests
                 ElmCompilerTestHelper.CreateFunctionValueInvocationDelegate(twoArgsApplied.returnValue, parseCache)
                 ([IntegerEncoding.EncodeSignedInteger(200)]);
 
-            // The result should be [ThreeArgs, [100, "test", 200]]
-            finalResult.Should().Be(
-                PineValue.List(
-                    [
-                    StringEncoding.ValueFromString("ThreeArgs"),
-                    PineValue.List(
-                        [
-                        IntegerEncoding.EncodeSignedInteger(100),
-                        StringEncoding.ValueFromString("test"),
-                        IntegerEncoding.EncodeSignedInteger(200)
-                        ])
-                    ]));
+            var finalResultRendered =
+                ElmCompilerTestHelper.RenderValueAsElmExpression(finalResult);
+
+            finalResultRendered.Should().Be("""ThreeArgs 100 "test" 200""");
         }
     }
 
@@ -682,12 +631,10 @@ public class ApplyChoiceTypeTagTests
 
             var (result, _) = invokeDecl([IntegerEncoding.EncodeSignedInteger(42)]);
 
-            result.Should().Be(
-                PineValue.List(
-                    [
-                    StringEncoding.ValueFromString("SingleArgInt"),
-                    PineValue.List([IntegerEncoding.EncodeSignedInteger(42)])
-                    ]));
+            var resultRendered =
+                ElmCompilerTestHelper.RenderValueAsElmExpression(result);
+
+            resultRendered.Should().Be("""SingleArgInt 42""");
         }
 
         // Test partialApplyQualifiedTwoArgs - partial application with qualified tag reference
@@ -701,7 +648,7 @@ public class ApplyChoiceTypeTagTests
 
             // Apply first argument
             var firstApplied =
-                invokeDecl([StringEncoding.ValueFromString("hello")]);
+                invokeDecl([ElmValueEncoding.StringAsPineValue("hello")]);
 
             // Should be an encoded expression (function value)
             var parseAsExprResult =
@@ -718,16 +665,10 @@ public class ApplyChoiceTypeTagTests
                 ElmCompilerTestHelper.CreateFunctionValueInvocationDelegate(firstApplied.returnValue, parseCache)
                 ([IntegerEncoding.EncodeSignedInteger(99)]);
 
-            finalResult.Should().Be(
-                PineValue.List(
-                    [
-                    StringEncoding.ValueFromString("TwoArgs"),
-                    PineValue.List(
-                        [
-                        StringEncoding.ValueFromString("hello"),
-                        IntegerEncoding.EncodeSignedInteger(99)
-                        ])
-                    ]));
+            var finalResultRendered =
+                ElmCompilerTestHelper.RenderValueAsElmExpression(finalResult);
+
+            finalResultRendered.Should().Be("""TwoArgs "hello" 99""");
         }
     }
 }

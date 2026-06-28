@@ -1,4 +1,5 @@
 using Pine.Core.CodeAnalysis;
+using Pine.Core.Elm;
 using Pine.Core.Elm.ElmCompilerInDotnet;
 using Pine.Core.Elm.ElmSyntax;
 using Pine.Core.Elm.ElmSyntax.Stil4mElmSyntax7;
@@ -727,4 +728,12 @@ public class ElmCompilerTestHelper
         return FromFullSyntaxModel.Convert(formatted);
     }
 
+    public static string RenderValueAsElmExpression(PineValue pineValue)
+    {
+        var asElmValue =
+            ElmValueEncoding.PineValueAsElmValue(pineValue, additionalReusableDecodings: null, reportNewDecoding: null)
+            .Extract(err => throw new InvalidOperationException($"Failed to convert PineValue to ElmValue: {err}"));
+
+        return ElmValue.RenderAsElmExpression(asElmValue).expressionString;
+    }
 }
