@@ -1,4 +1,5 @@
 using AwesomeAssertions;
+using Pine.Core.CommonEncodings;
 using System.Collections.Generic;
 using System.Linq;
 using Xunit;
@@ -172,5 +173,44 @@ public class ExpressionTests
             testCase.ConditionCount.Should().Be(conditionCount);
             testCase.BuiltinCount.Should().Be(builtinCount);
         }
+    }
+
+    [Fact]
+    public void Expression_nested_list_equality()
+    {
+        var exprA =
+            Expression.ListInstance(
+                [
+                Expression.ListInstance(
+                    [
+                    Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(31)),
+                    ]),
+                Expression.ListInstance(
+                    [
+                    Expression.ListInstance(
+                        [
+                        Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(41)),
+                        ]),
+                    ]),
+                ]);
+
+        var exprB =
+            Expression.ListInstance(
+                [
+                Expression.ListInstance(
+                    [
+                    Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(31)),
+                    ]),
+                Expression.ListInstance(
+                    [
+                    Expression.ListInstance(
+                        [
+                        Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(41)),
+                        ]),
+                    ]),
+                ]);
+
+        exprA.Should().Be(exprB);
+        exprA.GetHashCode().Should().Be(exprB.GetHashCode());
     }
 }

@@ -285,25 +285,50 @@ public abstract record Expression
         /// <inheritdoc/>
         public virtual bool Equals(List? other)
         {
-            if (other is not { } notNull)
-                return false;
+            return Equal(this, other);
+        }
 
-            if (ReferenceEquals(this, notNull))
+        private static bool Equal(List left, List? right)
+        {
+            if (ReferenceEquals(left, right))
                 return true;
 
-            if (!(_slimHashCode == notNull._slimHashCode))
+            if (right is null)
                 return false;
 
-            if (Items.Count != notNull.Items.Count)
+            if (!(left._slimHashCode == right._slimHashCode))
                 return false;
 
-            if (!(SubexpressionCount == notNull.SubexpressionCount))
+            if (!(left.SubexpressionCount == right.SubexpressionCount))
                 return false;
 
-            for (var i = 0; i < Items.Count; ++i)
+            if (left.Items.Count != right.Items.Count)
+                return false;
+
+            for (var i = 0; i < left.Items.Count; ++i)
             {
-                if (!Items[i].Equals(notNull.Items[i]))
+                var leftItem = left.Items[i];
+                var rightItem = right.Items[i];
+
+                if (leftItem is List leftList)
+                {
+                    /*
+                     * Reduce stack depth for nested lists:
+                     * Dispatch directly to the equality check for the nested list, instead of calling the virtual Equals method.
+                     *
+                     * Note: this must be an 'else' relative to the generic 'Equals' below. Otherwise a nested
+                     * list item would be compared twice (once here and once via 'leftItem.Equals'), doubling the
+                     * work at every nesting level and yielding exponential (O(2^depth)) comparisons for deeply
+                     * nested, structurally-equal lists.
+                     * */
+
+                    if (!Equal(leftList, rightItem as List))
+                        return false;
+                }
+                else if (!leftItem.Equals(rightItem))
+                {
                     return false;
+                }
             }
 
             return true;
