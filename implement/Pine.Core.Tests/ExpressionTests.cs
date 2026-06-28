@@ -1,4 +1,5 @@
 using AwesomeAssertions;
+using Pine.Core.CommonEncodings;
 using System.Collections.Generic;
 using System.Linq;
 using Xunit;
@@ -175,6 +176,53 @@ public class ExpressionTests
     }
 
     [Fact]
+    public void Expression_deeply_nested_list_equality_does_not_overflow_stack()
+    {
+        // Build a deeply nested list expression. A recursive equality implementation would
+        // overflow the call stack for nesting this deep.
+
+        static Expression BuildDeeplyNestedList(int depth)
+        {
+            Expression current =
+                Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(31));
+
+            for (var i = 0; i < depth; ++i)
+            {
+                current = Expression.ListInstance([current]);
+            }
+
+            return current;
+        }
+
+        const int depth = 100_000;
+
+        var exprA = BuildDeeplyNestedList(depth);
+        var exprB = BuildDeeplyNestedList(depth);
+
+        exprA.Equals(exprB).Should().BeTrue();
+        exprA.GetHashCode().Should().Be(exprB.GetHashCode());
+
+        // A difference at the deepest level must still be detected.
+
+        static Expression BuildDeeplyNestedListWithInnerValue(int depth, long innerValue)
+        {
+            Expression current =
+                Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(innerValue));
+
+            for (var i = 0; i < depth; ++i)
+            {
+                current = Expression.ListInstance([current]);
+            }
+
+            return current;
+        }
+
+        var exprC = BuildDeeplyNestedListWithInnerValue(depth, 41);
+
+        exprA.Equals(exprC).Should().BeFalse();
+    }
+
+    [Fact]
     public void Expression_aggregate_property_max_depth()
     {
         var testCases =
@@ -219,5 +267,44 @@ public class ExpressionTests
 
             expression.MaxDepth.Should().Be(expectedMaxDepth, $"Test case {i} failed.");
         }
+    }
+
+    [Fact]
+    public void Expression_nested_list_equality()
+    {
+        var exprA =
+            Expression.ListInstance(
+                [
+                Expression.ListInstance(
+                    [
+                    Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(31)),
+                    ]),
+                Expression.ListInstance(
+                    [
+                    Expression.ListInstance(
+                        [
+                        Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(41)),
+                        ]),
+                    ]),
+                ]);
+
+        var exprB =
+            Expression.ListInstance(
+                [
+                Expression.ListInstance(
+                    [
+                    Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(31)),
+                    ]),
+                Expression.ListInstance(
+                    [
+                    Expression.ListInstance(
+                        [
+                        Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(41)),
+                        ]),
+                    ]),
+                ]);
+
+        exprA.Should().Be(exprB);
+        exprA.GetHashCode().Should().Be(exprB.GetHashCode());
     }
 }

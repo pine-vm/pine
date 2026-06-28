@@ -306,25 +306,68 @@ public abstract record Expression
         /// <inheritdoc/>
         public virtual bool Equals(List? other)
         {
-            if (other is not { } notNull)
-                return false;
+            return Equal(this, other);
+        }
 
-            if (ReferenceEquals(this, notNull))
+        private static bool Equal(List left, List? right)
+        {
+            if (ReferenceEquals(left, right))
                 return true;
 
-            if (!(_slimHashCode == notNull._slimHashCode))
+            if (right is null)
                 return false;
 
-            if (Items.Count != notNull.Items.Count)
-                return false;
+            /*
+             * Compare nested lists iteratively using an explicit stack instead of recursion.
+             *
+             * Deeply nested list expressions would otherwise recurse once per nesting level and
+             * overflow the call stack (observed in practice for thousands of levels). Pushing the
+             * pairs of nested lists onto an explicit work stack keeps the call stack depth constant.
+             *
+             * Note: nested-list items are dispatched directly to this comparison (via the stack)
+             * instead of calling the virtual Equals method. This must be an 'else' relative to the
+             * generic 'Equals' below. Otherwise a nested list item would be compared twice (once here
+             * and once via 'leftItem.Equals'), doubling the work at every nesting level and yielding
+             * exponential (O(2^depth)) comparisons for deeply nested, structurally-equal lists.
+             * */
 
-            if (!(SubexpressionCount == notNull.SubexpressionCount))
-                return false;
+            var stack = new Stack<(List left, List right)>();
 
-            for (var i = 0; i < Items.Count; ++i)
+            stack.Push((left, right));
+
+            while (stack.Count > 0)
             {
-                if (!Items[i].Equals(notNull.Items[i]))
+                var (currentLeft, currentRight) = stack.Pop();
+
+                if (ReferenceEquals(currentLeft, currentRight))
+                    continue;
+
+                if (!(currentLeft._slimHashCode == currentRight._slimHashCode))
                     return false;
+
+                if (!(currentLeft.SubexpressionCount == currentRight.SubexpressionCount))
+                    return false;
+
+                if (currentLeft.Items.Count != currentRight.Items.Count)
+                    return false;
+
+                for (var i = 0; i < currentLeft.Items.Count; ++i)
+                {
+                    var leftItem = currentLeft.Items[i];
+                    var rightItem = currentRight.Items[i];
+
+                    if (leftItem is List leftList)
+                    {
+                        if (rightItem is not List rightList)
+                            return false;
+
+                        stack.Push((leftList, rightList));
+                    }
+                    else if (!leftItem.Equals(rightItem))
+                    {
+                        return false;
+                    }
+                }
             }
 
             return true;
