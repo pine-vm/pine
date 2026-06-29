@@ -362,6 +362,12 @@ public class CoreBasics
                 [TypeInference.InferredType.Number(), TypeInference.InferredType.Number()],
                 args => Generic_Abs(args[0])),
 
+            // floor : Float -> Int
+            "floor" =>
+            new CoreFunctionInfo(
+                [TypeInference.InferredType.Number(), TypeInference.InferredType.Int()],
+                args => Generic_Floor(args[0])),
+
             // clamp : number -> number -> number -> number
             "clamp" =>
             new CoreFunctionInfo(
@@ -560,6 +566,9 @@ public class CoreBasics
             "abs" =>
             Abs_FunctionValue(),
 
+            "floor" =>
+            Floor_FunctionValue(),
+
             "clamp" =>
             Clamp_FunctionValue(),
 
@@ -612,6 +621,7 @@ public class CoreBasics
             "lt", "gt", "le", "ge",
             "not", "negate",
             "abs", "clamp",
+            "floor",
             "min", "max",
             "identity",
             "always",
@@ -1938,6 +1948,74 @@ public class CoreBasics
                 condition: isFloatCondition,
                 trueBranch: absFloat,
                 falseBranch: absInt);
+
+        return
+            ExpressionEncoding.EncodeExpressionAsValue(asExpr);
+    }
+
+    /// <summary>
+    /// floor : Float -> Int
+    /// <para>
+    /// <see href="https://package.elm-lang.org/packages/elm/core/latest/Basics#floor"/>
+    /// </para>
+    /// </summary>
+    public static Expression Generic_Floor(
+        Expression arg)
+    {
+        return
+            UnaryApplication(
+                functionValue: Floor_FunctionValue(),
+                arg: arg);
+    }
+
+    /// <summary>
+    /// floor : Float -> Int
+    /// <para>
+    /// <see href="https://package.elm-lang.org/packages/elm/core/latest/Basics#floor"/>
+    /// </para>
+    /// </summary>
+    public static PineValue Floor_FunctionValue()
+    {
+        /*
+        floor : Float -> Int
+        floor number =
+            case number of
+                Elm_Float numerator denom ->
+                    idiv numerator denom
+
+                _ ->
+                    number
+
+        This reproduces the observable result of the kernel `Basics.floor`
+        implementation (which scales numerator/denominator to a power of ten
+        before integer-dividing). Because scaling both operands by the same
+        positive factor preserves the truncated quotient, this is equivalent to
+        `idiv numerator denom`.
+         * */
+
+        var n = Expression.EnvironmentInstance;
+
+        // Check if the value is a float by checking if head(n) equals "Elm_Float"
+        var isFloatCondition =
+            BuiltinHelpers.ApplyBuiltinEqualBinary(
+                BuiltinHelpers.ApplyBuiltinHead(n),
+                s_elmFloatTypeTagNameLiteral);
+
+        // For float: access numerator and denominator from [Elm_Float, [numerator, denominator]]
+        var tagArgs = BuiltinHelpers.ApplyBuiltinHead(BuiltinHelpers.ApplyBuiltinSkip(1, n));
+
+        var numerator = BuiltinHelpers.ApplyBuiltinHead(tagArgs);
+        var denominator = BuiltinHelpers.ApplyBuiltinHead(BuiltinHelpers.ApplyBuiltinSkip(1, tagArgs));
+
+        // For float: integer division of numerator by denominator
+        var floorFloat = Internal_Int_div(numerator, denominator);
+
+        // For non-float: the value is already an integer
+        var asExpr =
+            Expression.ConditionalInstance(
+                condition: isFloatCondition,
+                trueBranch: floorFloat,
+                falseBranch: n);
 
         return
             ExpressionEncoding.EncodeExpressionAsValue(asExpr);

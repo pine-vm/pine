@@ -1612,6 +1612,63 @@ public class CoreBasicsFunctionTests
         resultValue.Should().Be(ElmValue.ElmFloat.Convert(3.7));
     }
 
+    // ========== Tests for floor ==========
+
+    [Fact]
+    public void Floor_positive_float()
+    {
+        var resultValue =
+            ApplyUnary(
+                CoreBasics.Floor_FunctionValue(),
+                ElmValue.ElmFloat.Convert(3.7));
+
+        resultValue.Should().Be(ElmValue.Integer(3));
+    }
+
+    [Fact]
+    public void Floor_negative_float()
+    {
+        var resultValue =
+            ApplyUnary(
+                CoreBasics.Floor_FunctionValue(),
+                ElmValue.ElmFloat.Convert(-3.7));
+
+        resultValue.Should().Be(ElmValue.Integer(-3));
+    }
+
+    [Fact]
+    public void Floor_integer_valued_float()
+    {
+        var resultValue =
+            ApplyUnary(
+                CoreBasics.Floor_FunctionValue(),
+                ElmValue.ElmFloat.Convert(4.0));
+
+        resultValue.Should().Be(ElmValue.Integer(4));
+    }
+
+    [Fact]
+    public void Floor_zero_float()
+    {
+        var resultValue =
+            ApplyUnary(
+                CoreBasics.Floor_FunctionValue(),
+                ElmValue.ElmFloat.Convert(0.0));
+
+        resultValue.Should().Be(ElmValue.Integer(0));
+    }
+
+    [Fact]
+    public void Floor_int_passthrough()
+    {
+        var resultValue =
+            ApplyUnary(
+                CoreBasics.Floor_FunctionValue(),
+                ElmValue.Integer(17));
+
+        resultValue.Should().Be(ElmValue.Integer(17));
+    }
+
     // ========== Tests for clamp ==========
 
     [Fact]
