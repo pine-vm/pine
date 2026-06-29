@@ -53,6 +53,14 @@ public record File(
 
         return hashCode.ToHashCode();
     }
+
+    /// <inheritdoc/>
+    public override string ToString()
+    {
+        return
+            "module " + string.Join('.', Module.GetModuleName(ModuleDefinition.Value).Value) +
+            " (" + Declarations.Count + " declarations)";
+    }
 }
 
 /// <summary>

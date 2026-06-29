@@ -232,13 +232,13 @@ public class ElmCompiler
                     if (standardResult.IsErrOrNull() is { } stdErr)
                         return stdErr;
 
-                    if (standardResult is not Result<string, (DefaultLoweredResults Lowered, ImmutableList<OptimizationIterationStageResults>? Iterations)>.Ok stdOkWrapper)
+                    if (standardResult.IsOkOrNullable() is not { } stdOkWrapper)
                     {
                         throw new NotImplementedException(
                             "Unexpected result type: " + standardResult.GetType().Name);
                     }
 
-                    var (lowered, iterations) = stdOkWrapper.Value;
+                    var (lowered, iterations) = stdOkWrapper;
 
                     capturedIterations = iterations;
                     capturedLambdaLifted = lowered.LambdaLifted;
@@ -1768,13 +1768,13 @@ public class ElmCompiler
                 case SyntaxTypes.Expression.OperatorApplication operatorApp:
                     AnalyzeExpression(operatorApp.Left.Value);
                     AnalyzeExpression(operatorApp.Right.Value);
-                    break;
+                    return;
 
                 case SyntaxTypes.Expression.IfBlock ifBlock:
                     AnalyzeExpression(ifBlock.Condition.Value);
                     AnalyzeExpression(ifBlock.ThenBlock.Value);
                     AnalyzeExpression(ifBlock.ElseBlock.Value);
-                    break;
+                    return;
 
                 case SyntaxTypes.Expression.LetExpression letExpr:
                     foreach (var decl in letExpr.Value.Declarations)
@@ -1792,7 +1792,7 @@ public class ElmCompiler
                     }
 
                     AnalyzeExpression(letExpr.Value.Expression.Value);
-                    break;
+                    return;
 
                 case SyntaxTypes.Expression.ListExpr listExpr:
                     foreach (var elem in listExpr.Elements)
@@ -1800,15 +1800,15 @@ public class ElmCompiler
                         AnalyzeExpression(elem.Value);
                     }
 
-                    break;
+                    return;
 
                 case SyntaxTypes.Expression.ParenthesizedExpression parenthesized:
                     AnalyzeExpression(parenthesized.Expression.Value);
-                    break;
+                    return;
 
                 case SyntaxTypes.Expression.Negation negation:
                     AnalyzeExpression(negation.Expression.Value);
-                    break;
+                    return;
 
                 case SyntaxTypes.Expression.CaseExpression caseExpr:
                     AnalyzeExpression(caseExpr.CaseBlock.Expression.Value);
@@ -1818,7 +1818,7 @@ public class ElmCompiler
                         AnalyzeExpression(caseItem.Expression.Value);
                     }
 
-                    break;
+                    return;
 
                 case SyntaxTypes.Expression.TupledExpression tupledExpr:
                     foreach (var elem in tupledExpr.Elements)
@@ -1826,7 +1826,7 @@ public class ElmCompiler
                         AnalyzeExpression(elem.Value);
                     }
 
-                    break;
+                    return;
 
                 case SyntaxTypes.Expression.RecordExpr recordExpr:
                     foreach (var field in recordExpr.Fields)
@@ -1834,7 +1834,7 @@ public class ElmCompiler
                         AnalyzeExpression(field.Value.valueExpr.Value);
                     }
 
-                    break;
+                    return;
 
                 case SyntaxTypes.Expression.RecordUpdateExpression recordUpdateExpr:
                     foreach (var setter in recordUpdateExpr.Fields)
@@ -1842,27 +1842,28 @@ public class ElmCompiler
                         AnalyzeExpression(setter.Value.valueExpr.Value);
                     }
 
-                    break;
+                    return;
 
                 case SyntaxTypes.Expression.RecordAccess recordAccess:
                     AnalyzeExpression(recordAccess.Record.Value);
-                    break;
+                    return;
 
                 case SyntaxTypes.Expression.LambdaExpression lambdaExpr:
                     AnalyzeExpression(lambdaExpr.Lambda.Expression.Value);
-                    break;
+                    return;
 
                 case SyntaxTypes.Expression.FunctionOrValue funcOrValue:
 
                     if (funcOrValue.Name.Length < 0)
                     {
-                        break;
+                        throw new InvalidOperationException(
+                            "Function or value name cannot be empty.");
                     }
 
                     if (char.IsUpper(funcOrValue.Name[0]))
                     {
                         // This must be a choice type tag constructor or record constructor - cannot contribute to dependencies
-                        break;
+                        return;
                     }
 
                     {
@@ -1877,7 +1878,7 @@ public class ElmCompiler
                             if (funcOrValue.ModuleName.Count is 1 &&
                                 context.IsPineKernelModule(funcOrValue.ModuleName[0]))
                             {
-                                break;
+                                return;
                             }
 
                             qualifiedName = string.Join(".", funcOrValue.ModuleName) + "." + funcOrValue.Name;
@@ -1894,7 +1895,22 @@ public class ElmCompiler
                         }
                     }
 
-                    break;
+                    return;
+
+                case SyntaxTypes.Expression.PrefixOperator:
+                case SyntaxTypes.Expression.UnitExpr:
+                case SyntaxTypes.Expression.Literal:
+                case SyntaxTypes.Expression.Integer:
+                case SyntaxTypes.Expression.CharLiteral:
+                case SyntaxTypes.Expression.Hex:
+                case SyntaxTypes.Expression.Floatable:
+                case SyntaxTypes.Expression.RecordAccessFunction:
+                case SyntaxTypes.Expression.GLSLExpression:
+                    return;
+
+                default:
+                    throw new NotImplementedException(
+                        $"Unhandled expression type: {expr.GetType().Name}");
             }
         }
 
