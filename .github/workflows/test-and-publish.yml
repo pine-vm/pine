@@ -7,25 +7,36 @@ on:
     types: [submitted]
 
 jobs:
+
+  # Build the matrix dynamically so macOS is only included on manual runs (workflow_dispatch).
+  # macOS runners are about ten times as expensive as Linux runners, so we avoid running them
+  # on every push/PR. The build job below consumes this matrix via fromJSON.
+  configure:
+    runs-on: ubuntu-24.04
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+    steps:
+    - name: Compute build matrix
+      id: set-matrix
+      shell: bash
+      env:
+        IS_MANUAL_RUN: ${{ github.event_name == 'workflow_dispatch' }}
+      run: |
+        # Always build Linux and Windows.
+        include='{"environment":"ubuntu-24.04","publish-runtime-id":"linux-x64"},{"environment":"windows-2022","publish-runtime-id":"win-x64"}'
+        # Add macOS only on manual workflow_dispatch runs.
+        if [ "$IS_MANUAL_RUN" = "true" ]; then
+          include="$include,{\"environment\":\"macos-14\",\"publish-runtime-id\":\"osx-x64\"}"
+        fi
+        echo "matrix={\"include\":[$include]}" >> "$GITHUB_OUTPUT"
+
   build:
+
+    needs: configure
 
     strategy:
       fail-fast: false
-      matrix:
-        environment: [ubuntu-24.04, windows-2022, macos-14]
-        isManualRun:
-          - ${{ github.event_name == 'workflow_dispatch' }}
-        include:
-          - environment: ubuntu-24.04
-            publish-runtime-id: linux-x64
-          - environment: windows-2022
-            publish-runtime-id: win-x64
-          - environment: macos-14
-            publish-runtime-id: osx-x64
-        # Exclude macOS on automatic triggers (push/PR). On manual workflow_dispatch, all environments run.
-        exclude:
-          - isManualRun: false
-            environment: macos-14
+      matrix: ${{ fromJSON(needs.configure.outputs.matrix) }}
 
     runs-on: ${{ matrix.environment }}
 
