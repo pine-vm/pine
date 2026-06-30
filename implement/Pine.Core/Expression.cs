@@ -257,6 +257,8 @@ public abstract record Expression
         /// <inheritdoc/>
         public override int MaxDepth { get; } = 0;
 
+        private int _subtreeListItemsCount = 1;
+
         /// <summary>
         /// The list of subexpressions.
         /// </summary>
@@ -298,6 +300,11 @@ public abstract record Expression
 
                 if (itemDepth > maxDepth)
                     maxDepth = itemDepth;
+
+                if (item is List itemList)
+                {
+                    _subtreeListItemsCount += itemList._subtreeListItemsCount;
+                }
             }
 
             MaxDepth = maxDepth;
@@ -317,56 +324,90 @@ public abstract record Expression
             if (right is null)
                 return false;
 
-            /*
-             * Compare nested lists iteratively using an explicit stack instead of recursion.
-             *
-             * Deeply nested list expressions would otherwise recurse once per nesting level and
-             * overflow the call stack (observed in practice for thousands of levels). Pushing the
-             * pairs of nested lists onto an explicit work stack keeps the call stack depth constant.
-             *
-             * Note: nested-list items are dispatched directly to this comparison (via the stack)
-             * instead of calling the virtual Equals method. This must be an 'else' relative to the
-             * generic 'Equals' below. Otherwise a nested list item would be compared twice (once here
-             * and once via 'leftItem.Equals'), doubling the work at every nesting level and yielding
-             * exponential (O(2^depth)) comparisons for deeply nested, structurally-equal lists.
-             * */
-
-            var stack = new Stack<(List left, List right)>();
-
-            stack.Push((left, right));
-
-            while (stack.Count > 0)
+            if (10 < left._subtreeListItemsCount)
             {
-                var (currentLeft, currentRight) = stack.Pop();
+                /*
+                 * Compare nested lists iteratively using an explicit stack instead of recursion.
+                 *
+                 * Deeply nested list expressions would otherwise recurse once per nesting level and
+                 * overflow the call stack (observed in practice for thousands of levels). Pushing the
+                 * pairs of nested lists onto an explicit work stack keeps the call stack depth constant.
+                 *
+                 * Note: nested-list items are dispatched directly to this comparison (via the stack)
+                 * instead of calling the virtual Equals method. This must be an 'else' relative to the
+                 * generic 'Equals' below. Otherwise a nested list item would be compared twice (once here
+                 * and once via 'leftItem.Equals'), doubling the work at every nesting level and yielding
+                 * exponential (O(2^depth)) comparisons for deeply nested, structurally-equal lists.
+                 * */
 
-                if (ReferenceEquals(currentLeft, currentRight))
-                    continue;
+                var stack = new Stack<(List left, List right)>();
 
-                if (!(currentLeft._slimHashCode == currentRight._slimHashCode))
-                    return false;
+                stack.Push((left, right));
 
-                if (!(currentLeft.SubexpressionCount == currentRight.SubexpressionCount))
-                    return false;
-
-                if (currentLeft.Items.Count != currentRight.Items.Count)
-                    return false;
-
-                for (var i = 0; i < currentLeft.Items.Count; ++i)
+                while (stack.Count > 0)
                 {
-                    var leftItem = currentLeft.Items[i];
-                    var rightItem = currentRight.Items[i];
+                    var (currentLeft, currentRight) = stack.Pop();
 
-                    if (leftItem is List leftList)
-                    {
-                        if (rightItem is not List rightList)
-                            return false;
+                    if (ReferenceEquals(currentLeft, currentRight))
+                        continue;
 
-                        stack.Push((leftList, rightList));
-                    }
-                    else if (!leftItem.Equals(rightItem))
-                    {
+                    if (!(currentLeft._slimHashCode == currentRight._slimHashCode))
                         return false;
+
+                    if (!(currentLeft.SubexpressionCount == currentRight.SubexpressionCount))
+                        return false;
+
+                    if (currentLeft.Items.Count != currentRight.Items.Count)
+                        return false;
+
+                    for (var i = 0; i < currentLeft.Items.Count; ++i)
+                    {
+                        var leftItem = currentLeft.Items[i];
+                        var rightItem = currentRight.Items[i];
+
+                        if (leftItem is List leftList)
+                        {
+                            if (rightItem is not List rightList)
+                                return false;
+
+                            stack.Push((leftList, rightList));
+                        }
+                        else if (!leftItem.Equals(rightItem))
+                        {
+                            return false;
+                        }
                     }
+                }
+
+                return true;
+            }
+
+            if (left._slimHashCode != right._slimHashCode)
+                return false;
+
+            if (left.SubexpressionCount != right.SubexpressionCount)
+                return false;
+
+            if (left.Items.Count != right.Items.Count)
+                return false;
+
+            for (var i = 0; i < left.Items.Count; ++i)
+            {
+                var leftItem = left.Items[i];
+                var rightItem = right.Items[i];
+
+                if (leftItem is List leftList)
+                {
+                    if (rightItem is not List rightList)
+                        return false;
+
+                    if (!Equal(leftList, rightList))
+                        return false;
+
+                }
+                else if (!leftItem.Equals(rightItem))
+                {
+                    return false;
                 }
             }
 
