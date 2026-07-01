@@ -99,7 +99,7 @@ public static class ExpressionBuilder
                     function: "skip",
                     input:
                     Expression.ListInstance(
-                        items: [new Expression.Literal(IntegerEncoding.EncodeSignedInteger(nextOffset)), current]));
+                        items: [Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(nextOffset)), current]));
 
             var headExpr =
                 Expression.KernelApplicationInstance(

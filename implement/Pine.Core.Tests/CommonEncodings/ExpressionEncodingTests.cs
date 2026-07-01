@@ -12,33 +12,33 @@ public class ExpressionEncodingTests
         var testCases =
             new Expression[]
             {
-                new Expression.Literal(StringEncoding.ValueFromString("literal content")),
+                Expression.LiteralInstance(StringEncoding.ValueFromString("literal content")),
 
                 new Expression.Environment(),
 
                 Expression.ListInstance(
                     [
-                    new Expression.Literal(StringEncoding.ValueFromString("list element alfa")),
-                    new Expression.Literal(StringEncoding.ValueFromString("list element beta")),
-                    new Expression.Literal(StringEncoding.ValueFromString("list element gamma")),
+                    Expression.LiteralInstance(StringEncoding.ValueFromString("list element alfa")),
+                    Expression.LiteralInstance(StringEncoding.ValueFromString("list element beta")),
+                    Expression.LiteralInstance(StringEncoding.ValueFromString("list element gamma")),
                     ]),
 
                 Expression.ConditionalInstance(
-                    condition: new Expression.Literal(StringEncoding.ValueFromString("condition")),
-                    falseBranch: new Expression.Literal(StringEncoding.ValueFromString("if false")),
-                    trueBranch: new Expression.Literal(StringEncoding.ValueFromString("if true"))),
+                    condition: Expression.LiteralInstance(StringEncoding.ValueFromString("condition")),
+                    falseBranch: Expression.LiteralInstance(StringEncoding.ValueFromString("if false")),
+                    trueBranch: Expression.LiteralInstance(StringEncoding.ValueFromString("if true"))),
 
                 new Expression.ParseAndEval(
-                    encoded: new Expression.Literal(StringEncoding.ValueFromString("encoded")),
-                    environment: new Expression.Literal(StringEncoding.ValueFromString("environment"))),
+                    encoded: Expression.LiteralInstance(StringEncoding.ValueFromString("encoded")),
+                    environment: Expression.LiteralInstance(StringEncoding.ValueFromString("environment"))),
 
                 Expression.KernelApplicationInstance(
                     function: nameof(KernelFunction.length),
-                    input: new Expression.Literal(StringEncoding.ValueFromString("kernel app arg"))),
+                    input: Expression.LiteralInstance(StringEncoding.ValueFromString("kernel app arg"))),
 
                 new Expression.StringTag(
                     tag: "tag text",
-                    tagged: new Expression.Literal(StringEncoding.ValueFromString("tagged expr")))
+                    tagged: Expression.LiteralInstance(StringEncoding.ValueFromString("tagged expr")))
             };
 
         foreach (var testCase in testCases)

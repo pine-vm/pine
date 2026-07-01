@@ -3,6 +3,7 @@ using Pine.Core.Json;
 using System;
 using System.Collections.Frozen;
 using System.Collections.Generic;
+using System.Linq;
 using System.Text.Json.Serialization;
 
 namespace Pine.Core;
@@ -66,6 +67,22 @@ public abstract record Expression
     /// </summary>
     public static readonly List EmptyList = new([]);
 
+    private static readonly Literal s_literalEmptyList =
+        LiteralInstance(PineValue.EmptyList);
+
+    private static readonly Literal s_literalEmptyBlob =
+        LiteralInstance(PineValue.EmptyBlob);
+
+    private static readonly IReadOnlyList<Literal> s_literalsBlobSingleByte =
+        [.. Enumerable.Range(0, 0x100).Select(i => LiteralInstance(PineValue.BlobSingleByte((byte)i)))
+        ];
+
+    private static readonly FrozenDictionary<PineValue, Literal> s_literalOtherInstances =
+        ReusedLiteralOtherInstancesSource()
+        .ToFrozenDictionary(
+            literalValue => literalValue,
+            LiteralInstance);
+
     private static readonly FrozenDictionary<(string function, Expression input), KernelApplication> s_kernelApplicationInstances =
         ReusedKernelApplicationInstancesSource()
         .ToFrozenDictionary(
@@ -105,12 +122,41 @@ public abstract record Expression
     /// 
     /// Checks the cache of reused instances to avoid allocating a new instance if an equivalent instance is already available.
     /// </summary>
-    public static Literal LiteralInstance(PineValue pineValue)
+    public static Literal LiteralInstance(PineValue literalValue)
     {
-        if (ReusedInstances.Instance.LiteralExpressions?.TryGetValue(pineValue, out var literal) ?? false)
+        if (literalValue is PineValue.BlobValue blobValue)
+        {
+            if (blobValue.Bytes.Length is 0 && s_literalEmptyBlob is { } reusedEmptyBlobLiteral)
+            {
+                return reusedEmptyBlobLiteral;
+            }
+
+            if (blobValue.Bytes.Length is 1 && s_literalsBlobSingleByte is { } reusedSingleByteLiterals)
+            {
+                return reusedSingleByteLiterals[blobValue.Bytes.Span[0]];
+            }
+        }
+
+        if (literalValue is PineValue.ListValue listValue)
+        {
+            if (listValue.Items.Length is 0 && s_literalEmptyList is { } reusedEmptyListLiteral)
+            {
+                return reusedEmptyListLiteral;
+            }
+        }
+
+        if (s_literalOtherInstances is { } reusedLiterals)
+        {
+            if (reusedLiterals.TryGetValue(literalValue, out var reusedInstance))
+            {
+                return reusedInstance;
+            }
+        }
+
+        if (ReusedInstances.Instance.LiteralExpressions?.TryGetValue(literalValue, out var literal) ?? false)
             return literal;
 
-        return new Literal(pineValue);
+        return new Literal(literalValue);
     }
 
     /// <summary>
@@ -177,10 +223,19 @@ public abstract record Expression
     /// <summary>
     /// A literal expression only contains a concrete value.
     /// </summary>
-    public record Literal(
-        PineValue Value)
+    public record Literal
         : Expression
     {
+        internal Literal(PineValue value)
+        {
+            Value = value;
+        }
+
+        /// <summary>
+        /// The concrete value of the literal expression.
+        /// </summary>
+        public PineValue Value { get; }
+
         /// <summary>
         /// Always returns zero, as a <see cref="Literal"/> expression does not contain any subexpressions.
         /// </summary>
@@ -1074,53 +1129,127 @@ public abstract record Expression
         }
     }
 
+    private static IEnumerable<PineValue> ReusedLiteralOtherInstancesSource()
+    {
+        foreach (var popularString in PopularValues.PopularStrings)
+        {
+            yield return StringEncoding.ValueFromString(popularString);
+        }
+
+        for (var i = -100; i <= 400; i++)
+        {
+            yield return IntegerEncoding.EncodeSignedInteger(i);
+        }
+    }
+
     private static IEnumerable<KernelApplication> ReusedKernelApplicationInstancesSource()
     {
-        yield return KernelApplicationInstance(
-            nameof(KernelFunction.head),
-            EnvironmentInstance);
-
-        for (var i = 0; i <= 16; ++i)
+        for (var i = 0; i < 16; ++i)
         {
-            var skipZero =
+            var level0Skip =
+                i is 0
+                ?
+                EnvironmentInstance
+                :
                 KernelApplicationInstance(
                     nameof(KernelFunction.skip),
                     ListInstance(
                         [
                         LiteralInstance(IntegerEncoding.EncodeSignedInteger(i)),
-                        KernelApplicationInstance(
-                            nameof(KernelFunction.head),
-                            EnvironmentInstance)
+                        EnvironmentInstance
                         ]));
 
-            yield return skipZero;
+            if (level0Skip is KernelApplication skipZeroBuiltin)
+                yield return skipZeroBuiltin;
 
-            yield return KernelApplicationInstance(
-                nameof(KernelFunction.head),
-                skipZero);
-
-            var skipOne =
+            var level0SkipHead =
                 KernelApplicationInstance(
-                    nameof(KernelFunction.skip),
-                    ListInstance(
-                        [
-                        LiteralInstance(IntegerEncoding.EncodeSignedInteger(i)),
+                    nameof(KernelFunction.head),
+                    level0Skip);
+
+            yield return level0SkipHead;
+
+            for (var j = 0; j < 4; ++j)
+            {
+                var level1Skip =
+                    j is 0
+                    ?
+                    level0SkipHead
+                    :
+                    KernelApplicationInstance(
+                        nameof(KernelFunction.skip),
+                        ListInstance(
+                            [
+                            LiteralInstance(IntegerEncoding.EncodeSignedInteger(j)),
+                            level0SkipHead
+                            ]));
+
+                if (j is not 0)
+                    yield return level1Skip;
+
+                var level1SkipHead =
+                    KernelApplicationInstance(
+                        nameof(KernelFunction.head),
+                        level1Skip);
+
+                yield return level1SkipHead;
+
+                for (var k = 0; k < 4; ++k)
+                {
+                    var level2Skip =
+                        k is 0
+                        ?
+                        level1SkipHead
+                        :
                         KernelApplicationInstance(
                             nameof(KernelFunction.skip),
                             ListInstance(
                                 [
-                                LiteralInstance(IntegerEncoding.EncodeSignedInteger(1)),
-                                KernelApplicationInstance(
-                                    nameof(KernelFunction.head),
-                                    EnvironmentInstance)
-                                ]))
-                        ]));
+                                LiteralInstance(IntegerEncoding.EncodeSignedInteger(k)),
+                                level1SkipHead
+                                ]));
 
-            yield return skipOne;
+                    if (k is not 0)
+                        yield return level2Skip;
 
-            yield return KernelApplicationInstance(
-                nameof(KernelFunction.head),
-                skipOne);
+                    var level2SkipHead =
+                        KernelApplicationInstance(
+                            nameof(KernelFunction.head),
+                            level2Skip);
+
+                    yield return level2SkipHead;
+                }
+            }
+        }
+
+        for (var i = 0; i < 2; ++i)
+        {
+            {
+                var concatPrependPlusSign =
+                    KernelApplicationInstance(
+                        nameof(KernelFunction.concat),
+                        ListInstance(
+                            [
+                            LiteralInstance(PineValue.BlobSingleByte(4)),
+                            CodeAnalysis.ExpressionBuilder.BuildExpressionForPathInExpression([i], EnvironmentInstance)
+                            ]));
+
+                yield return concatPrependPlusSign;
+            }
+
+            for (var j = 0; j < 2; ++j)
+            {
+                var concatPrependPlusSign =
+                    KernelApplicationInstance(
+                        nameof(KernelFunction.concat),
+                        ListInstance(
+                            [
+                            LiteralInstance(PineValue.BlobSingleByte(4)),
+                            CodeAnalysis.ExpressionBuilder.BuildExpressionForPathInExpression([i, j], EnvironmentInstance)
+                            ]));
+
+                yield return concatPrependPlusSign;
+            }
         }
     }
 }

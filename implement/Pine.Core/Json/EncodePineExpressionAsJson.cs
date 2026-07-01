@@ -1,5 +1,4 @@
 using Pine.Core.CommonEncodings;
-using System;
 using System.Collections.Generic;
 using System.Text.Json;
 
@@ -29,19 +28,131 @@ public class EncodePineExpressionAsJson
 
     /// <summary>
     /// Expects a JSON string encoding a single <see cref="Expression"/>.
+    /// <para>
+    /// Decoding constructs the expression tree using the <c>Instance</c> factory methods on
+    /// <see cref="Expression"/> (for example <see cref="Expression.LiteralInstance"/> and
+    /// <see cref="Expression.ListInstance"/>), so that reuse of common heap instances also happens
+    /// on the JSON decoding path.
+    /// </para>
     /// </summary>
-    public static Expression SingleFromJsonString(string json) =>
-        JsonSerializer.Deserialize<Expression>(json, s_jsonSerializerOptions)
-        ?? throw new Exception();
+    public static Expression SingleFromJsonString(string json)
+    {
+        using var document = JsonDocument.Parse(json, s_jsonDocumentOptions);
+
+        return ParseExpressionFromJsonElement(document.RootElement);
+    }
 
     /// <summary>
     /// Expects a JSON string encoding a list (JSON array) of <see cref="Expression"/>.
+    /// <para>
+    /// Decoding constructs the expression tree using the <c>Instance</c> factory methods on
+    /// <see cref="Expression"/> (for example <see cref="Expression.LiteralInstance"/> and
+    /// <see cref="Expression.ListInstance"/>), so that reuse of common heap instances also happens
+    /// on the JSON decoding path.
+    /// </para>
     /// </summary>
-    public static IReadOnlyList<Expression> ListFromJsonString(string json) =>
-        JsonSerializer.Deserialize<IReadOnlyList<Expression>>(json, s_jsonSerializerOptions)
-        ?? throw new Exception();
+    public static IReadOnlyList<Expression> ListFromJsonString(string json)
+    {
+        using var document = JsonDocument.Parse(json, s_jsonDocumentOptions);
+
+        return ParseExpressionListFromJsonElement(document.RootElement);
+    }
+
+    private static Expression ParseExpressionFromJsonElement(JsonElement element)
+    {
+        if (element.ValueKind is not JsonValueKind.Object)
+            throw new JsonException("Expected object, got " + element.ValueKind);
+
+        JsonProperty variantProperty = default;
+        var found = false;
+
+        foreach (var property in element.EnumerateObject())
+        {
+            if (found)
+                throw new JsonException("Expected exactly one property on expression object");
+
+            variantProperty = property;
+            found = true;
+        }
+
+        if (!found)
+            throw new JsonException("Expected exactly one property on expression object");
+
+        var variantName = variantProperty.Name;
+        var arguments = variantProperty.Value;
+
+        if (arguments.ValueKind is not JsonValueKind.Array)
+            throw new JsonException("Expected array of arguments for variant " + variantName);
+
+        return variantName switch
+        {
+            "Environment" =>
+                Expression.EnvironmentInstance,
+
+            "Literal" =>
+                Expression.LiteralInstance(
+                    ParsePineValueFromJsonElement(arguments[0])),
+
+            "List" =>
+                Expression.ListInstance(
+                    ParseExpressionListFromJsonElement(arguments[0])),
+
+            "ParseAndEval" =>
+                new Expression.ParseAndEval(
+                    encoded: ParseExpressionFromJsonElement(arguments[0]),
+                    environment: ParseExpressionFromJsonElement(arguments[1])),
+
+            "KernelApplication" =>
+                Expression.KernelApplicationInstance(
+                    function:
+                    arguments[0].GetString()
+                    ?? throw new JsonException("Expected function name string"),
+                    input: ParseExpressionFromJsonElement(arguments[1])),
+
+            "Conditional" =>
+                Expression.ConditionalInstance(
+                    condition: ParseExpressionFromJsonElement(arguments[0]),
+                    falseBranch: ParseExpressionFromJsonElement(arguments[1]),
+                    trueBranch: ParseExpressionFromJsonElement(arguments[2])),
+
+            "StringTag" =>
+                new Expression.StringTag(
+                    tag:
+                    arguments[0].GetString()
+                    ?? throw new JsonException("Expected tag string"),
+                    tagged: ParseExpressionFromJsonElement(arguments[1])),
+
+            _ =>
+                throw new JsonException("Unexpected expression variant: " + variantName),
+        };
+    }
+
+    private static IReadOnlyList<Expression> ParseExpressionListFromJsonElement(JsonElement element)
+    {
+        if (element.ValueKind is not JsonValueKind.Array)
+            throw new JsonException("Expected array of expressions, got " + element.ValueKind);
+
+        var items = new List<Expression>(element.GetArrayLength());
+
+        foreach (var item in element.EnumerateArray())
+        {
+            items.Add(ParseExpressionFromJsonElement(item));
+        }
+
+        return items;
+    }
+
+    private static PineValue ParsePineValueFromJsonElement(JsonElement element) =>
+        element.Deserialize<PineValue>(s_jsonSerializerOptions)
+        ?? throw new JsonException("Failed to parse PineValue");
 
     private readonly static JsonSerializerOptions s_jsonSerializerOptions = BuildJsonSerializerOptions();
+
+    private readonly static JsonDocumentOptions s_jsonDocumentOptions =
+        new()
+        {
+            MaxDepth = 1000
+        };
 
     /// <summary>
     /// Configuration to use <see cref="JsonSerializer"/> with <see cref="Expression"/>s.

@@ -328,6 +328,7 @@ public static class PopularValues
 
         "Expression",
         "Literal",
+        "Litral",
         "LiteralExpression",
         "List",
         "ListExpression",
@@ -339,6 +340,7 @@ public static class PopularValues
         "EnvironmentExpression",
         "Function",
         "FunctionExpression",
+        "Builtin",
         "KernelApplication",
         "KernelApplicationExpression",
         "StringTag",

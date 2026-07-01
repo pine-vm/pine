@@ -17,13 +17,13 @@ public class EncodePineExpressionAsJsonTests
             Expression.EnvironmentInstance,
             Expression.ListInstance([]),
 
-            new Expression.Literal(
+            Expression.LiteralInstance(
                 IntegerEncoding.EncodeSignedInteger(1)),
 
-            new Expression.Literal(
+            Expression.LiteralInstance(
                 StringEncoding.ValueFromString("Hello world!")),
 
-            new Expression.Literal(
+            Expression.LiteralInstance(
                 PineValue.List(
                     [
                     StringEncoding.ValueFromString("String"),
@@ -36,19 +36,19 @@ public class EncodePineExpressionAsJsonTests
             input: Expression.ListInstance(
                 [Expression.KernelApplicationInstance(
                     input: Expression.ListInstance(
-                        [new Expression.Literal(
+                        [Expression.LiteralInstance(
                             IntegerEncoding.EncodeSignedInteger(0)),
                         Expression.KernelApplicationInstance(
                             input: Expression.KernelApplicationInstance(
                                 input: Expression.KernelApplicationInstance(
                                     input: Expression.ListInstance(
-                                        [new Expression.Literal(
+                                        [Expression.LiteralInstance(
                                             IntegerEncoding.EncodeSignedInteger(
-                                                1)), new Expression.Environment()]),
+                                                1)), Expression.EnvironmentInstance]),
                                     function: "skip"),
                                 function: "head"),
                             function: "head")]),
-                    function: "take"), new Expression.Literal(
+                    function: "take"), Expression.LiteralInstance(
                     PineValue.EmptyList)]),
             function: "equal")
 
@@ -74,10 +74,10 @@ public class EncodePineExpressionAsJsonTests
             [Expression.EnvironmentInstance],
             [Expression.ListInstance([])],
 
-            [new Expression.Literal(
+            [Expression.LiteralInstance(
                 IntegerEncoding.EncodeSignedInteger(1))],
 
-            [new Expression.Literal(
+            [Expression.LiteralInstance(
                 StringEncoding.ValueFromString("Hello world!"))],
 
             ];

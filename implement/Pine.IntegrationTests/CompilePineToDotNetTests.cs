@@ -376,7 +376,7 @@ public class CompilePineToDotNetTests
                         function:"skip",
                         input: Expression.ListInstance(
                             [
-                            new Expression.Literal(IntegerEncoding.EncodeSignedInteger(13)),
+                            Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(13)),
                             new Expression.Environment()
                             ]))),
 
