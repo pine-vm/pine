@@ -4208,43 +4208,60 @@ emitModuleFunctionDeclarations emitStack allModuleDeclarations exposedDeclaratio
         recursionDomains =
             FirCompiler.recursionDomainsFromDeclarationDependencies
                 declarationsTransitiveDependencies
-
-        emitRecursionDomainsRecursive :
-            List EmittedRecursionDomain
-            -> List (Set.Set String)
-            -> Result String (List EmittedRecursionDomain)
-        emitRecursionDomainsRecursive alreadyEmitted remainingRecursionDomains =
-            case remainingRecursionDomains of
-                [] ->
-                    Ok alreadyEmitted
-
-                currentRecursionDomain :: followingRecursionDomains ->
-                    case
-                        emitRecursionDomain
-                            { exposedDeclarationsNames = exposedDeclarationsNames
-                            , allModuleDeclarations = allModuleDeclarations
-                            , importedFunctionsToShare = importedFunctionsToShare
-                            , importedFunctionsToInline = importedFunctionsToInline
-                            , declarationsDirectDependencies = declarationsDirectDependencies
-                            }
-                            emitStack
-                            currentRecursionDomain
-                            alreadyEmitted
-                    of
-                        Err err ->
-                            Err err
-
-                        Ok emittedDomain ->
-                            emitRecursionDomainsRecursive
-                                (List.concat [ alreadyEmitted, [ emittedDomain ] ])
-                                followingRecursionDomains
     in
-    case emitRecursionDomainsRecursive [] recursionDomains of
+    case
+        emitRecursionDomainsRecursive
+            emitStack
+            { exposedDeclarationsNames = exposedDeclarationsNames
+            , allModuleDeclarations = allModuleDeclarations
+            , importedFunctionsToShare = importedFunctionsToShare
+            , importedFunctionsToInline = importedFunctionsToInline
+            , declarationsDirectDependencies = declarationsDirectDependencies
+            }
+            []
+            recursionDomains
+    of
         Err err ->
             Err err
 
         Ok domains ->
             Ok (List.concatMap .exposedDeclarations domains)
+
+
+emitRecursionDomainsRecursive :
+    EmitStack
+    ->
+        { exposedDeclarationsNames : List String
+        , allModuleDeclarations : List ( String, Expression )
+        , importedFunctionsToShare : List ( List String, List ( String, ( FirCompiler.EnvironmentFunctionEntry, Pine.Value ) ) )
+        , importedFunctionsToInline : List ( List String, List ( String, Pine.Value ) )
+        , declarationsDirectDependencies : Dict.Dict String (List String)
+        }
+    -> List EmittedRecursionDomain
+    -> List (Set.Set String)
+    -> Result String (List EmittedRecursionDomain)
+emitRecursionDomainsRecursive emitStack moduleConfig alreadyEmitted remainingRecursionDomains =
+    case remainingRecursionDomains of
+        currentRecursionDomain :: followingRecursionDomains ->
+            case
+                emitRecursionDomain
+                    moduleConfig
+                    emitStack
+                    currentRecursionDomain
+                    alreadyEmitted
+            of
+                Err err ->
+                    Err err
+
+                Ok emittedDomain ->
+                    emitRecursionDomainsRecursive
+                        emitStack
+                        moduleConfig
+                        (List.concat [ alreadyEmitted, [ emittedDomain ] ])
+                        followingRecursionDomains
+
+        [] ->
+            Ok alreadyEmitted
 
 
 emitRecursionDomain :
