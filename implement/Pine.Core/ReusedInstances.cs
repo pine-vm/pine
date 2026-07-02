@@ -266,40 +266,44 @@ public record ReusedInstances(
                     .Concat(tempElmValueEncodingDict.Values)
                     .Concat(additionalRoots));
 
-            var allListsComponentsSorted =
+            var allListComponentsByDepthSorted =
                 allListsComponents
-                .OrderBy(listValue => listValue.NodesCount)
-                .ToList();
+                .GroupBy(c => c.MaxDepth)
+                .OrderBy(g => g.Key)
+                .ToArray();
 
             var reusedListsDictInConstruction =
                 new Dictionary<PineValue.ListValue, PineValue.ListValue>();
 
-            foreach (var oldInstance in allListsComponentsSorted)
+            foreach (var depthGroup in allListComponentsByDepthSorted)
             {
-                /*
-                 * Since we are iterating in order of increasing size and all components,
-                 * all the elements of the current list have already been rebuilt.
-                 * Thus, we only need to rebuild shallowly the current list.
-                 * */
-
-                var rebuiltItems = oldInstance.Items.ToArray();
-
-                for (var i = 0; i < rebuiltItems.Length; i++)
+                foreach (var oldInstance in depthGroup)
                 {
-                    var listItem = rebuiltItems[i];
+                    /*
+                     * Since we are iterating in order of increasing size and all components,
+                     * all the elements of the current list have already been rebuilt.
+                     * Thus, we only need to rebuild shallowly the current list.
+                     * */
 
-                    if (listItem is not PineValue.ListValue oldItemAsList)
-                        continue;
+                    var rebuiltItems = oldInstance.Items.ToArray();
 
-                    listItem = reusedListsDictInConstruction[oldItemAsList];
+                    for (var i = 0; i < rebuiltItems.Length; i++)
+                    {
+                        var listItem = rebuiltItems[i];
 
-                    rebuiltItems[i] = listItem;
+                        if (listItem is not PineValue.ListValue oldItemAsList)
+                            continue;
+
+                        listItem = reusedListsDictInConstruction[oldItemAsList];
+
+                        rebuiltItems[i] = listItem;
+                    }
+
+                    var rebuilt =
+                        PineValue.List(rebuiltItems);
+
+                    reusedListsDictInConstruction[rebuilt] = rebuilt;
                 }
-
-                var rebuilt =
-                    PineValue.List(rebuiltItems);
-
-                reusedListsDictInConstruction[rebuilt] = rebuilt;
             }
 
             PineValueLists =

@@ -270,10 +270,10 @@ public static class ValueBinaryEncodingClassic
             .OfType<PineValue.BlobValue>()
             .GroupBy(b => b.Bytes.Length);
 
-        var listsDeclarationsByNodesCount =
+        var listsDeclarationsByDepth =
             seenTwice
             .OfType<PineValue.ListValue>()
-            .GroupBy(l => l.NodesCount);
+            .GroupBy(l => l.MaxDepth);
 
         var componentId = componentIdOffset;
 
@@ -318,7 +318,7 @@ public static class ValueBinaryEncodingClassic
             OrderAndWriteDeclarations(lengthGroup);
         }
 
-        foreach (var nodesCountGroup in listsDeclarationsByNodesCount.OrderBy(kv => kv.Key))
+        foreach (var nodesCountGroup in listsDeclarationsByDepth.OrderBy(kv => kv.Key))
         {
             OrderAndWriteDeclarations(nodesCountGroup);
         }
