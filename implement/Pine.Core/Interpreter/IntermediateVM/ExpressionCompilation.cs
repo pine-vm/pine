@@ -338,9 +338,11 @@ public record ExpressionCompilation(
         var expressionReduced =
             ReducePineExpression.ReduceExpressionBottomUp(
                 currentExpression,
-                new ReductionConfig(
-                    DisableGenericApplicationChainConsolidation: disableGenericApplicationChainConsolidation,
-                    DisableInliningParseAndEval: false),
+                ReductionConfig.Default
+                with
+                {
+                    DisableGenericApplicationChainConsolidation = disableGenericApplicationChainConsolidation
+                },
                 parseCache,
                 reducedExpressionCache: reducedExpressionCache);
 
@@ -409,9 +411,11 @@ public record ExpressionCompilation(
             var inlinedExprReduced =
                 ReducePineExpression.ReduceExpressionBottomUp(
                     inlinedExpr,
-                    new ReductionConfig(
-                        DisableGenericApplicationChainConsolidation: disableGenericApplicationChainConsolidation,
-                        DisableInliningParseAndEval: false),
+                    ReductionConfig.Default
+                    with
+                    {
+                        DisableGenericApplicationChainConsolidation = disableGenericApplicationChainConsolidation
+                    },
                     parseCache,
                     reducedExpressionCache: reducedExpressionCache);
 
@@ -618,9 +622,11 @@ public record ExpressionCompilation(
         var expressionInlinedReduced =
             ReducePineExpression.ReduceExpressionBottomUp(
                 expressionInlined,
-                new ReductionConfig(
-                    DisableGenericApplicationChainConsolidation: disableGenericApplicationChainConsolidation,
-                    DisableInliningParseAndEval: false),
+                ReductionConfig.Default
+                with
+                {
+                    DisableGenericApplicationChainConsolidation = disableGenericApplicationChainConsolidation
+                },
                 parseCache,
                 reducedExpressionCache: reducedExpressionCache);
 
@@ -751,9 +757,11 @@ public record ExpressionCompilation(
         var expressionReduced =
             ReducePineExpression.ReduceExpressionBottomUp(
                 expressionSubstituted,
-                new ReductionConfig(
-                    DisableGenericApplicationChainConsolidation: disableGenericApplicationChainConsolidation,
-                    DisableInliningParseAndEval: false),
+                ReductionConfig.Default
+                with
+                {
+                    DisableGenericApplicationChainConsolidation = disableGenericApplicationChainConsolidation
+                },
                 parseCache,
                 reducedExpressionCache: reducedExpressionCache);
 
@@ -844,9 +852,11 @@ public record ExpressionCompilation(
                 var inlinedExprReduced =
                     ReducePineExpression.ReduceExpressionBottomUp(
                         inlinedExprSubstituted,
-                        new ReductionConfig(
-                            DisableGenericApplicationChainConsolidation: disableGenericApplicationChainConsolidation,
-                            DisableInliningParseAndEval: false),
+                        ReductionConfig.Default
+                        with
+                        {
+                            DisableGenericApplicationChainConsolidation = disableGenericApplicationChainConsolidation,
+                        },
                         parseCache,
                         reducedExpressionCache: reducedExpressionCache);
 
@@ -1012,9 +1022,11 @@ public record ExpressionCompilation(
         var expressionInlinedReduced =
             ReducePineExpression.ReduceExpressionBottomUp(
                 expressionInlined,
-                new ReductionConfig(
-                    DisableGenericApplicationChainConsolidation: disableGenericApplicationChainConsolidation,
-                    DisableInliningParseAndEval: false),
+                ReductionConfig.Default
+                with
+                {
+                    DisableGenericApplicationChainConsolidation = disableGenericApplicationChainConsolidation
+                },
                 parseCache,
                 reducedExpressionCache: reducedExpressionCache);
 
