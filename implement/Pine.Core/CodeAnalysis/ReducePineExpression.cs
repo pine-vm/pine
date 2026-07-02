@@ -25,20 +25,26 @@ namespace Pine.Core.CodeAnalysis;
 /// during reduction. Intended for diagnostic / inspection scenarios where the
 /// caller wants to observe the pre-consolidation behavior side-by-side with the
 /// optimized one.</param>
-/// <param name="DisableInliningParseAndEval">When <c>true</c>, suppresses
-/// <see cref="ReducePineExpression.TryInlineEvalBottomUp(Expression.ParseAndEval, ReductionConfig, PineVMParseCache, IDictionary{ValueTuple{Expression, ReductionConfig}, Expression}?)"/>
+/// <param name="InlineEvalEnvironmentSizeLimit">Specifies the maximum size of the environment
+/// for which <see cref="ReducePineExpression.TryInlineEvalBottomUp(Expression.ParseAndEval, ReductionConfig, PineVMParseCache, IDictionary{ValueTuple{Expression, ReductionConfig}, Expression}?)"/>
+/// will attempt to inline <see cref="Expression.ParseAndEval"/> nodes. Intended for diagnostic /
+/// inspection scenarios where the caller wants to observe the
+/// pre-inlining shape of the expression tree.</param>
 /// during reduction, leaving <see cref="Expression.ParseAndEval"/> nodes whose
 /// encoded operand is a known constant un-inlined. Intended for diagnostic /
 /// inspection scenarios where the caller wants to observe the
 /// pre-inlining shape of the expression tree.</param>
 public record struct ReductionConfig(
     bool DisableGenericApplicationChainConsolidation,
-    bool DisableInliningParseAndEval)
+    int InlineEvalEnvironmentSizeLimit)
 {
     /// <summary>
     /// The default configuration: all optional behaviors enabled (no suppression flags set).
     /// </summary>
-    public static readonly ReductionConfig Default = new();
+    public static readonly ReductionConfig Default =
+        new(
+            DisableGenericApplicationChainConsolidation: false,
+            InlineEvalEnvironmentSizeLimit: 4_000);
 }
 
 /// <summary>
@@ -1623,8 +1629,7 @@ public class ReducePineExpression
             return reducedConsolidated;
         }
 
-        if (!config.DisableInliningParseAndEval &&
-            TryInlineEvalBottomUp(reduced, config, parseCache, reducedExpressionCache) is { } inlined)
+        if (TryInlineEvalBottomUp(reduced, config, parseCache, reducedExpressionCache) is { } inlined)
         {
             return inlined;
         }
@@ -1645,6 +1650,9 @@ public class ReducePineExpression
         PineVMParseCache parseCache,
         IDictionary<(Expression, ReductionConfig), Expression>? reducedExpressionCache)
     {
+        if (config.InlineEvalEnvironmentSizeLimit <= evalExpr.SubexpressionCount)
+            return null;
+
         if (evalExpr.Encoded.ReferencesEnvironment)
             return null;
 
