@@ -266,8 +266,39 @@ public record ReusedInstances(
                     .Concat(tempElmValueEncodingDict.Values)
                     .Concat(additionalRoots));
 
-            var allListsComponentsSorted =
+            var allListsComponentsFiltered =
                 allListsComponents
+                // Account for observed overflows in NodesCount: Filter to remove these cases.
+                .Where(c =>
+                {
+                    if (c.NodesCount < c.Items.Length)
+                        return false;
+
+                    if (c.BlobsBytesCount < 0)
+                        return false;
+
+                    if (400 < c.MaxDepth)
+                        return false;
+
+                    for (var i = 0; i < c.Items.Length; i++)
+                    {
+                        var item = c.Items.Span[i];
+
+                        if (item is PineValue.ListValue itemList)
+                        {
+                            if (c.NodesCount < itemList.NodesCount || itemList.BlobsBytesCount < 0)
+                            {
+                                return false;
+                            }
+                        }
+                    }
+
+                    return true;
+                })
+                .ToList();
+
+            var allListsComponentsSorted =
+                allListsComponentsFiltered
                 .OrderBy(listValue => listValue.NodesCount)
                 .ToList();
 
