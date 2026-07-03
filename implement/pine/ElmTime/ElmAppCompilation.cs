@@ -108,11 +108,12 @@ namespace ElmTime
             var compilationHash =
                 System.Security.Cryptography.SHA256.HashData(
                     Encoding.UTF8.GetBytes(
-                        System.Text.Json.JsonSerializer.Serialize(new
-                        {
-                            sourceFilesHash,
-                            interfaceConfig,
-                        })));
+                        System.Text.Json.JsonSerializer.Serialize(
+                            new
+                            {
+                                sourceFilesHash,
+                                interfaceConfig,
+                            })));
 
             var compilationHashBase16 =
                 Convert.ToHexStringLower(compilationHash);
@@ -202,7 +203,8 @@ namespace ElmTime
 
             var compilerElmProgramCodeFiles =
                 CachedCompilerElmProgramCodeFilesForElmBackend.Value
-                .Extract(error => throw new Exception(nameof(CachedCompilerElmProgramCodeFilesForElmBackend) + ": " + error));
+                .Extract(
+                    error => throw new Exception(nameof(CachedCompilerElmProgramCodeFilesForElmBackend) + ": " + error));
 
             var (compilationResult, compilationReport) =
                 CachedElmAppCompilationIteration(
@@ -217,12 +219,11 @@ namespace ElmTime
                     elmCompilerCache)
                 .Extract(error => throw new Exception(error));
 
-            var currentIterationReport = new CompilationIterationReport
-            (
-                Compilation: compilationReport,
-                DependenciesReports: null,
-                TotalTimeSpentMilli: (int)totalStopwatch.ElapsedMilliseconds
-            );
+            var currentIterationReport =
+                new CompilationIterationReport(
+                    Compilation: compilationReport,
+                    DependenciesReports: null,
+                    TotalTimeSpentMilli: (int)totalStopwatch.ElapsedMilliseconds);
 
             return
                 compilationResult
@@ -239,15 +240,16 @@ namespace ElmTime
                     {
                         var compilationErrorsMissingElmMakeDependencies =
                             compilationErrors
-                            .SelectMany(error =>
-                            {
-                                var dependencyKey = error.Error?.MissingDependencyError?.FirstOrDefault();
+                            .SelectMany(
+                                error =>
+                                {
+                                    var dependencyKey = error.Error?.MissingDependencyError?.FirstOrDefault();
 
-                                if (dependencyKey != null)
-                                    return ImmutableList.Create((error, dependencyKey));
+                                    if (dependencyKey is not null)
+                                        return ImmutableList.Create((error, dependencyKey));
 
-                                return [];
-                            })
+                                    return [];
+                                })
                             .ToImmutableList();
 
                         var otherErrors =
@@ -271,14 +273,15 @@ namespace ElmTime
                             bool enableDebug,
                             bool enableOptimize)
                         {
-                            var elmMakeCommandAppendix = new[]
-                            {
-                                enableDebug ? "--debug" : null,
-                                enableOptimize ? "--optimize" : null
-                            }.Where(flag => !string.IsNullOrEmpty(flag))
-                            .Aggregate(
-                                seed: (string?)null,
-                                (current, next) => current + " " + next);
+                            var elmMakeCommandAppendix =
+                                new[]
+                                {
+                                    enableDebug ? "--debug" : null,
+                                    enableOptimize ? "--optimize" : null
+                                }.Where(flag => !string.IsNullOrEmpty(flag))
+                                .Aggregate(
+                                    seed: (string?)null,
+                                    (current, next) => current + " " + next);
 
                             var elmMakeResult =
                                 Elm019Binaries.ElmMake(
@@ -309,51 +312,59 @@ namespace ElmTime
 
                         var newDependencies =
                             compilationErrorsMissingElmMakeDependencies
-                            .Select(error =>
-                            {
-                                var dependencyTotalStopwatch = System.Diagnostics.Stopwatch.StartNew();
-
-                                TimedReport<CompilationIterationDependencyReport> completeDependencyReport(CompilationIterationDependencyReport dependencyReport) =>
-                                    new(Report: dependencyReport, TotalTimeSpentMilli: (int)dependencyTotalStopwatch.ElapsedMilliseconds);
-
-                                var dependencyKey = error.dependencyKey;
-
-                                var elmMakeRequest = dependencyKey.ElmMakeDependency?.FirstOrDefault();
-
-                                if (elmMakeRequest != null)
+                            .Select(
+                                error =>
                                 {
-                                    Result<string, ReadOnlyMemory<byte>> buildResultValue()
-                                    {
-                                        try
-                                        {
-                                            var elmMakeRequestFiles =
-                                                elmMakeRequest.Files
-                                                .ToImmutableDictionary(
-                                                    entry => [.. entry.Path],
-                                                    entry => (ReadOnlyMemory<byte>)Convert.FromBase64String(entry.Content.AsBase64),
-                                                    keyComparer: EnumerableExtensions.EqualityComparer<IReadOnlyList<string>>());
+                                    var dependencyTotalStopwatch = System.Diagnostics.Stopwatch.StartNew();
 
-                                            return
-                                            ElmMake(
-                                                elmCodeFiles: elmMakeRequestFiles,
-                                                pathToFileWithElmEntryPoint: elmMakeRequest.EntryPointFilePath.ToImmutableList(),
-                                                makeJavascript: elmMakeRequest.OutputType.ElmMakeOutputTypeJs != null,
-                                                enableDebug: elmMakeRequest.EnableDebug,
-                                                enableOptimize: elmMakeRequest.EnableOptimize);
-                                        }
-                                        catch (Exception e)
+                                    TimedReport<CompilationIterationDependencyReport> completeDependencyReport(
+                                        CompilationIterationDependencyReport dependencyReport) =>
+                                        new(
+                                            Report: dependencyReport,
+                                            TotalTimeSpentMilli: (int)dependencyTotalStopwatch.ElapsedMilliseconds);
+
+                                    var dependencyKey = error.dependencyKey;
+
+                                    var elmMakeRequest = dependencyKey.ElmMakeDependency?.FirstOrDefault();
+
+                                    if (elmMakeRequest is not null)
+                                    {
+                                        Result<string, ReadOnlyMemory<byte>> buildResultValue()
                                         {
-                                            return "Failed with runtime exception: " + e;
+                                            try
+                                            {
+                                                var elmMakeRequestFiles =
+                                                    elmMakeRequest.Files
+                                                    .ToImmutableDictionary(
+                                                        entry => [.. entry.Path],
+                                                        entry =>
+                                                        (ReadOnlyMemory<byte>)Convert.FromBase64String(entry.Content.AsBase64),
+                                                        keyComparer:
+                                                        EnumerableExtensions.EqualityComparer<IReadOnlyList<string>>());
+
+                                                return
+                                                    ElmMake(
+                                                        elmCodeFiles: elmMakeRequestFiles,
+                                                        pathToFileWithElmEntryPoint:
+                                                        elmMakeRequest.EntryPointFilePath.ToImmutableList(),
+                                                        makeJavascript:
+                                                        elmMakeRequest.OutputType.ElmMakeOutputTypeJs is not null,
+                                                        enableDebug: elmMakeRequest.EnableDebug,
+                                                        enableOptimize: elmMakeRequest.EnableOptimize);
+                                            }
+                                            catch (Exception e)
+                                            {
+                                                return "Failed with runtime exception: " + e;
+                                            }
                                         }
+
+                                        return
+                                            ((key: dependencyKey, result: buildResultValue()),
+                                            completeDependencyReport(new CompilationIterationDependencyReport(DependencyKeySummary: "ElmMake")));
                                     }
 
-                                    return (
-                                        (key: dependencyKey, result: buildResultValue()),
-                                        completeDependencyReport(new CompilationIterationDependencyReport(DependencyKeySummary: "ElmMake")));
-                                }
-
-                                throw new Exception("Protocol error: Unknown type of dependency: " + DescribeCompilationError(error.error));
-                            })
+                                    throw new Exception("Protocol error: Unknown type of dependency: " + DescribeCompilationError(error.error));
+                                })
                             .ToImmutableList();
 
                         currentIterationReport =
@@ -374,35 +385,38 @@ namespace ElmTime
                         {
                             return
                                 (CompilationResult)
-                                newDependenciesWithError.Select(dep => new LocatedCompilationError(
-                                    location: null,
-                                    error: new CompilationError(
-                                        DependencyError:
-                                        dep.Item2.Report.DependencyKeySummary + " " +
-                                        dep.Item1.result.Unpack(
-                                            fromErr: error => error,
-                                            fromOk: _ => throw new NotImplementedException()))))
+                                newDependenciesWithError.Select(
+                                    dep => new LocatedCompilationError(
+                                        location: null,
+                                        error: new CompilationError(
+                                            DependencyError:
+                                            dep.Item2.Report.DependencyKeySummary + " " +
+                                            dep.Item1.result.Unpack(
+                                                fromErr: error => error,
+                                                fromOk: _ => throw new NotImplementedException()))))
                                 .ToImmutableList();
                         }
 
                         var newStackFrame =
                             new StackFrame(
                                 DiscoveredDependencies:
-                                newDependencies.Select(depAndReport =>
-                                (depAndReport.Item1.key,
-                                depAndReport.Item1.result.Extract(error => throw new Exception(error)))).ToImmutableList(),
+                                newDependencies.Select(
+                                    depAndReport =>
+                                    (depAndReport.Item1.key,
+                                    depAndReport.Item1.result.Extract(error => throw new Exception(error)))).ToImmutableList(),
                                 IterationReport: currentIterationReport);
 
-                        return AsCompletelyLoweredElmApp(
-                            sourceFiles: sourceFiles,
-                            workingDirectoryRelative: workingDirectoryRelative,
-                            compilationRootFilePath: compilationRootFilePath,
-                            interfaceToHostRootModuleName: interfaceToHostRootModuleName,
-                            stack: stack.Push(newStackFrame),
-                            elmCompiler,
-                            parseCache,
-                            pineVM,
-                            elmCompilerCache);
+                        return
+                            AsCompletelyLoweredElmApp(
+                                sourceFiles: sourceFiles,
+                                workingDirectoryRelative: workingDirectoryRelative,
+                                compilationRootFilePath: compilationRootFilePath,
+                                interfaceToHostRootModuleName: interfaceToHostRootModuleName,
+                                stack: stack.Push(newStackFrame),
+                                elmCompiler,
+                                parseCache,
+                                pineVM,
+                                elmCompilerCache);
                     });
         }
 
@@ -534,54 +548,61 @@ namespace ElmTime
 
             var sourceFilesValues =
                 sourceFiles
-                .Select(entry =>
-                {
-                    return
-                    PineValue.List(
-                        [PineListValueForElmListString(entry.Key)
-                        ,ElmValueEncoding.AsElmBytesBytes(entry.Value)
-                        ]);
-                })
+                .Select(
+                    entry =>
+                    {
+                        return
+                            PineValue.List(
+                                [
+                                PineListValueForElmListString(entry.Key),
+                                ElmValueEncoding.AsElmBytesBytes(entry.Value)
+                                ]);
+                    })
                 .ToImmutableArray();
 
             var dependenciesValues =
                 dependencies
-                .Select(dependency =>
-                {
-                    return
-                    PineValue.List(
-                        [dependency.key.DependencyKeyValue
-                        ?? throw new Exception("Protocol error: Missing dependency key value."),
+                .Select(
+                    dependency =>
+                    {
+                        return
+                            PineValue.List(
+                                [
+                                dependency.key.DependencyKeyValue
+                                ?? throw new Exception("Protocol error: Missing dependency key value."),
 
-                        ElmValueEncoding.AsElmBytesBytes(dependency.value)
-                        ]);
-                })
+                                ElmValueEncoding.AsElmBytesBytes(dependency.value)
+                                ]);
+                    })
                 .ToImmutableArray();
+
+            IReadOnlyList<PineValue> arguments =
+                [
+                    // Source files
+                    PineValue.List([..sourceFilesValues]),
+
+                    // Dependencies
+                    PineValue.List([..dependenciesValues]),
+
+                    // Compilation root file path
+                    PineListValueForElmListString(compilationRootFilePath),
+
+                    // Interface to host root module name
+                    PineListValueForElmListString(interfaceToHostRootModuleName),
+
+                    // Interface Elm module name prefixes
+                    PineValue.List(
+                        [
+                        .. ElmAppInterfaceConvention.CompilationInterfaceModuleNamePrefixes.Select(
+                            ElmValueEncoding.StringAsPineValue)
+                        ]),
+                ];
 
             var applyResult =
                 ElmInteractiveEnvironment.ApplyFunction(
                     pineVM: pineVM,
                     functionRecord: lowerElmAppDecl.functionRecord,
-                    arguments:
-                    [
-                        // Source files
-                        PineValue.List([..sourceFilesValues]),
-
-                        // Dependencies
-                        PineValue.List([..dependenciesValues]),
-
-                        // Compilation root file path
-                        PineListValueForElmListString(compilationRootFilePath),
-
-                        // Interface to host root module name
-                        PineListValueForElmListString([.. InterfaceToHostRootModuleName.Split('.')]),
-
-                        // Interface Elm module name prefixes
-                        PineValue.List(
-                            [.. ElmAppInterfaceConvention.CompilationInterfaceModuleNamePrefixes.Select(
-                                ElmValueEncoding.StringAsPineValue)
-                            ]),
-                        ]);
+                    arguments: arguments);
 
             {
                 if (applyResult.IsErrOrNull() is { } err)
@@ -603,10 +624,8 @@ namespace ElmTime
 
             return
                 (compilationResult,
-                new CompilationIterationCompilationReport
-                (
-                    TotalTimeSpentMilli: (int)totalStopwatch.ElapsedMilliseconds
-                ));
+                new CompilationIterationCompilationReport(
+                    TotalTimeSpentMilli: (int)totalStopwatch.ElapsedMilliseconds));
         }
 
 
@@ -725,8 +744,10 @@ namespace ElmTime
             var compilationError =
                 ParseCompilationError(compilationErrorValue, elmCompilerCache);
 
-            return new CompilerSerialInterface.LocatedCompilationError(
-                locationInSourceFiles, compilationError);
+            return
+                new CompilerSerialInterface.LocatedCompilationError(
+                    locationInSourceFiles,
+                    compilationError);
         }
 
         public static CompilerSerialInterface.LocationInSourceFiles ParseLocationInSourceFiles(
@@ -761,14 +782,16 @@ namespace ElmTime
 
             var filePath =
                 filePathList.Items
-                .Select(pathElement =>
-                {
-                    if (pathElement is not ElmValue.ElmString pathString)
+                .Select(
+                    pathElement =>
                     {
-                        throw new Exception("Expected Elm string value, got: " + pathElement);
-                    }
-                    return pathString.Value;
-                })
+                        if (pathElement is not ElmValue.ElmString pathString)
+                        {
+                            throw new Exception("Expected Elm string value, got: " + pathElement);
+                        }
+
+                        return pathString.Value;
+                    })
                 .ToImmutableList();
 
             var locationInModuleTextValue = asElmRecord["locationInModuleText"];
@@ -850,9 +873,11 @@ namespace ElmTime
                 return
                     new CompilerSerialInterface.CompilationError(
                         MissingDependencyError:
-                        [new CompilerSerialInterface.DependencyKey(
+                        [
+                        new CompilerSerialInterface.DependencyKey(
                             dependencyKey.ElmMakeDependency,
-                            DependencyKeyValue: dependencyKeyValue)]);
+                            DependencyKeyValue: dependencyKeyValue)
+                        ]);
             }
 
             if (tagName is "OtherCompilationError")
@@ -893,8 +918,9 @@ namespace ElmTime
                         "Expected Elm string value, got: " + asElmList.Items[0]);
                 }
 
-                return new CompilerSerialInterface.CompilationError(
-                    OtherCompilationError: [asElmString.Value]);
+                return
+                    new CompilerSerialInterface.CompilationError(
+                        OtherCompilationError: [asElmString.Value]);
             }
 
             throw new Exception("Unexpected tag name: " + tagName);
@@ -963,52 +989,57 @@ namespace ElmTime
             }
 
             IReadOnlyList<CompilerSerialInterface.AppCodeEntry> filesList =
-                [.. filesElmList.Items
-                .Select(fileEntry =>
-                {
-                    if (fileEntry is not ElmValue.ElmList fileEntryList)
+                [
+                .. filesElmList.Items
+                .Select(
+                    fileEntry =>
                     {
-                        throw new Exception("Expected Elm list value, got: " + fileEntry);
-                    }
-
-                    if (fileEntryList.Items.Count is not 2)
-                    {
-                        throw new Exception("Expected list with two elements, got: " + fileEntryList.Items.Count);
-                    }
-
-                    var pathValue = fileEntryList.Items[0];
-
-                    if (pathValue is not ElmValue.ElmList pathList)
-                    {
-                        throw new Exception("Expected Elm list value, got: " + pathValue);
-                    }
-
-                    var path =
-                        pathList.Items
-                        .Select(pathElement =>
+                        if (fileEntry is not ElmValue.ElmList fileEntryList)
                         {
-                            if (pathElement is not ElmValue.ElmString pathString)
-                            {
-                                throw new Exception("Expected Elm string value, got: " + pathElement);
-                            }
-                            return pathString.Value;
-                        })
-                        .ToImmutableList();
+                            throw new Exception("Expected Elm list value, got: " + fileEntry);
+                        }
 
-                    var contentValue = fileEntryList.Items[1];
+                        if (fileEntryList.Items.Count is not 2)
+                        {
+                            throw new Exception("Expected list with two elements, got: " + fileEntryList.Items.Count);
+                        }
 
-                    if (contentValue is not ElmValue.ElmBytes contentBytes)
-                    {
-                        throw new Exception("Expected Elm bytes value, got: " + contentValue);
-                    }
+                        var pathValue = fileEntryList.Items[0];
 
-                    var contentBase64 = Convert.ToBase64String(contentBytes.Value.Span);
+                        if (pathValue is not ElmValue.ElmList pathList)
+                        {
+                            throw new Exception("Expected Elm list value, got: " + pathValue);
+                        }
 
-                    return
-                    new CompilerSerialInterface.AppCodeEntry(
-                        Path: path,
-                        Content: new CompilerSerialInterface.BytesJson(contentBase64));
-                })];
+                        var path =
+                            pathList.Items
+                            .Select(
+                                pathElement =>
+                                {
+                                    if (pathElement is not ElmValue.ElmString pathString)
+                                    {
+                                        throw new Exception("Expected Elm string value, got: " + pathElement);
+                                    }
+
+                                    return pathString.Value;
+                                })
+                            .ToImmutableList();
+
+                        var contentValue = fileEntryList.Items[1];
+
+                        if (contentValue is not ElmValue.ElmBytes contentBytes)
+                        {
+                            throw new Exception("Expected Elm bytes value, got: " + contentValue);
+                        }
+
+                        var contentBase64 = Convert.ToBase64String(contentBytes.Value.Span);
+
+                        return
+                            new CompilerSerialInterface.AppCodeEntry(
+                                Path: path,
+                                Content: new CompilerSerialInterface.BytesJson(contentBase64));
+                    })
+                ];
 
             var entryPointFilePathValue = asElmRecord["entryPointFilePath"];
 
@@ -1019,14 +1050,16 @@ namespace ElmTime
 
             var entryPointFilePath =
                 entryPointFilePathList.Items
-                .Select(pathElement =>
-                {
-                    if (pathElement is not ElmValue.ElmString pathString)
+                .Select(
+                    pathElement =>
                     {
-                        throw new Exception("Expected Elm string value, got: " + pathElement);
-                    }
-                    return pathString.Value;
-                })
+                        if (pathElement is not ElmValue.ElmString pathString)
+                        {
+                            throw new Exception("Expected Elm string value, got: " + pathElement);
+                        }
+
+                        return pathString.Value;
+                    })
                 .ToImmutableList();
 
             var outputTypeValue = asElmRecord["outputType"];
@@ -1060,12 +1093,13 @@ namespace ElmTime
                     throw new Exception("Unexpected tag name: " + enableDebugBoolTag.TagName)
                 };
 
-            return new CompilerSerialInterface.ElmMakeRequestStructure(
-                Files: filesList,
-                EntryPointFilePath: entryPointFilePath,
-                OutputType: outputType,
-                EnableDebug: enableDebug,
-                EnableOptimize: false);
+            return
+                new CompilerSerialInterface.ElmMakeRequestStructure(
+                    Files: filesList,
+                    EntryPointFilePath: entryPointFilePath,
+                    OutputType: outputType,
+                    EnableDebug: enableDebug,
+                    EnableOptimize: false);
         }
 
         private static CompilerSerialInterface.ElmMakeOutputType ParseElmMakeOutputType(ElmValue elmValue)
@@ -1159,51 +1193,54 @@ namespace ElmTime
 
             var compiledFiles =
                 compiledFilesElmList.Items
-                .Select(compiledFileElmValue =>
-                {
-                    if (compiledFileElmValue is not ElmValue.ElmList compiledFileElmList)
+                .Select(
+                    compiledFileElmValue =>
                     {
-                        throw new Exception(
-                            "Expected list value, got: " + compiledFileElmValue);
-                    }
-
-                    if (compiledFileElmList.Items.Count is not 2)
-                    {
-                        throw new Exception(
-                            "Expected list with two elements, got: " + compiledFileElmList.Items.Count);
-                    }
-
-                    var pathElmValue = compiledFileElmList.Items[0];
-
-                    if (pathElmValue is not ElmValue.ElmList pathElmList)
-                    {
-                        throw new Exception(
-                            "Expected string value, got: " + pathElmValue);
-                    }
-
-                    var path =
-                        pathElmList.Items
-                        .Select(pathElement =>
+                        if (compiledFileElmValue is not ElmValue.ElmList compiledFileElmList)
                         {
-                            if (pathElement is not ElmValue.ElmString pathString)
-                            {
-                                throw new Exception(
-                                    "Expected string value, got: " + pathElement);
-                            }
-                            return pathString.Value;
-                        })
-                        .ToImmutableList();
+                            throw new Exception(
+                                "Expected list value, got: " + compiledFileElmValue);
+                        }
 
-                    var contentElmValue = compiledFileElmList.Items[1];
+                        if (compiledFileElmList.Items.Count is not 2)
+                        {
+                            throw new Exception(
+                                "Expected list with two elements, got: " + compiledFileElmList.Items.Count);
+                        }
 
-                    if (contentElmValue is not ElmValue.ElmBytes contentElmBytes)
-                    {
-                        throw new Exception(
-                            "Expected bytes value, got: " + contentElmValue);
-                    }
+                        var pathElmValue = compiledFileElmList.Items[0];
 
-                    return (path, contentElmBytes.Value);
-                })
+                        if (pathElmValue is not ElmValue.ElmList pathElmList)
+                        {
+                            throw new Exception(
+                                "Expected string value, got: " + pathElmValue);
+                        }
+
+                        var path =
+                            pathElmList.Items
+                            .Select(
+                                pathElement =>
+                                {
+                                    if (pathElement is not ElmValue.ElmString pathString)
+                                    {
+                                        throw new Exception(
+                                            "Expected string value, got: " + pathElement);
+                                    }
+
+                                    return pathString.Value;
+                                })
+                            .ToImmutableList();
+
+                        var contentElmValue = compiledFileElmList.Items[1];
+
+                        if (contentElmValue is not ElmValue.ElmBytes contentElmBytes)
+                        {
+                            throw new Exception(
+                                "Expected bytes value, got: " + contentElmValue);
+                        }
+
+                        return (path, contentElmBytes.Value);
+                    })
                 .ToImmutableDictionary(
                     entry =>
                     (IReadOnlyList<string>)entry.path,
@@ -1345,33 +1382,46 @@ namespace ElmTime
         public static Result<string, IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>>> LoadCompilerElmProgramCodeFilesForElmBackend() =>
             Pine.Core.Elm.ElmInElm.BundledFiles.LoadElmCompilerSourceCodeFiles();
 
-        public static string CompileCompilationErrorsDisplayText(IReadOnlyList<LocatedCompilationError>? compilationErrors)
+        public static string CompileCompilationErrorsDisplayText(
+            IReadOnlyList<LocatedCompilationError>? compilationErrors)
         {
             var errorsText =
-                compilationErrors == null ? null :
+                compilationErrors is null
+                ?
+                null
+                :
                 string.Join("\n\n", compilationErrors.Select(DescribeCompilationError));
 
-            return "Compilation failed with " + compilationErrors?.Count + " error" + (compilationErrors?.Count == 1 ? "" : "s") + ":\n\n" + errorsText;
+            return
+                "Compilation failed with " + compilationErrors?.Count + " error" +
+                (compilationErrors?.Count is 1 ? "" : "s") +
+                ":\n\n" +
+                errorsText;
         }
 
         public static string DescribeCompilationError(LocatedCompilationError locatedCompilationError) =>
-            (locatedCompilationError.location == null ? "without location information" :
-            "in file " + string.Join('/', locatedCompilationError.location.FilePath)) + ": " +
+            (locatedCompilationError.location is not { } location
+            ?
+            "without location information"
+            :
+            "in file " + string.Join('/', location.FilePath)) + ": " +
             DescribeCompilationError(locatedCompilationError.error);
 
-        private static string DescribeCompilationError(CompilerSerialInterface.LocatedCompilationError locatedCompilationError) =>
+        private static string DescribeCompilationError(
+            CompilerSerialInterface.LocatedCompilationError locatedCompilationError) =>
             "in file " + string.Join('/', locatedCompilationError.Location.FilePath) + ": " +
             DescribeCompilationError(locatedCompilationError.Error);
 
         private static string DescribeCompilationError(CompilationError compilationError)
         {
-            if (compilationError.OtherError != null)
-                return compilationError.OtherError;
+            if (compilationError.OtherError is { } otherError)
+                return otherError;
 
-            if (compilationError.DependencyError != null)
-                return "Dependency Error: " + compilationError.DependencyError;
+            if (compilationError.DependencyError is { } dependencyError)
+                return "Dependency Error: " + dependencyError;
 
-            throw new Exception("Unexpected shape of value " +
+            throw new Exception(
+                "Unexpected shape of value " +
                 System.Text.Json.JsonSerializer.Serialize(
                     compilationError,
                     new System.Text.Json.JsonSerializerOptions
@@ -1386,8 +1436,8 @@ namespace ElmTime
             var otherCompilationError =
                 compilationError?.OtherCompilationError?.FirstOrDefault();
 
-            if (otherCompilationError != null)
-                return otherCompilationError;
+            if (otherCompilationError is { } otherError)
+                return otherError;
 
             return
                 System.Text.Json.JsonSerializer.Serialize(
@@ -1411,7 +1461,8 @@ namespace ElmTime
         private static long EstimateCacheItemSizeInMemory(CompilationSuccess compilationSuccess) =>
             EstimateCacheItemSizeInMemory(compilationSuccess.Result);
 
-        private static long EstimateCacheItemSizeInMemory(IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> item) =>
+        private static long EstimateCacheItemSizeInMemory(
+            IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> item) =>
             item?.Sum(file => file.Key.Sum(e => e.Length) + file.Value.Length) ?? 0;
 
         private static long EstimateCacheItemSizeInMemory(LocatedCompilationError compilationError) =>
@@ -1442,11 +1493,12 @@ namespace ElmTime
             string? DependencyError = null,
             string? OtherError = null)
         {
-            public static CompilationError AsCompilationError(CompilerSerialInterface.CompilationError compilationError)
+            public static CompilationError AsCompilationError(
+                CompilerSerialInterface.CompilationError compilationError)
             {
                 var missingDependencyError = compilationError.MissingDependencyError?.FirstOrDefault();
 
-                if (missingDependencyError != null)
+                if (missingDependencyError is { } dependencyError)
                     return new CompilationError(DependencyError: "Missing dependency: " + DescribeCompilationError(compilationError));
 
                 return new CompilationError(OtherError: compilationError.OtherCompilationError?.FirstOrDefault());
