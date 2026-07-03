@@ -475,11 +475,7 @@ findSourceDirectories arguments =
                             Err "Failed to decode file content as string"
 
                         Just elmJsonString ->
-                            case
-                                Json.Decode.decodeString
-                                    decodeElmJson
-                                    (String.trim elmJsonString)
-                            of
+                            case decodeElmJsonString elmJsonString of
                                 Err err ->
                                     Err ("Failed to decode elm.json: " ++ Json.Decode.errorToString err)
 
@@ -568,6 +564,11 @@ parseElmJsonSourceDirectoryPath pathInJson =
             )
             { parentLevel = 0, subdirectories = [] }
             pathItems
+
+
+decodeElmJsonString : String -> Result Json.Decode.Error ElmJson
+decodeElmJsonString elmJsonString =
+    Json.Decode.decodeString decodeElmJson (String.trim elmJsonString)
 
 
 decodeElmJson : Json.Decode.Decoder ElmJson
