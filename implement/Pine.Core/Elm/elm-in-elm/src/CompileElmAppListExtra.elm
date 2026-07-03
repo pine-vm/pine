@@ -45,26 +45,22 @@ reverseAppend list1 list2 =
 -}
 isPrefixOf : List a -> List a -> Bool
 isPrefixOf prefix list =
-    case ( prefix, list ) of
-        ( [], _ ) ->
-            True
-
-        ( _ :: _, [] ) ->
-            False
-
-        ( p :: ps, x :: xs ) ->
-            if p == x then
-                isPrefixOf ps xs
-
-            else
-                False
+    let
+        sublist =
+            List.take (List.length prefix) list
+    in
+    sublist == prefix
 
 
 {-| Take two lists and return `True`, if the first list is the suffix of the second list.
 -}
 isSuffixOf : List a -> List a -> Bool
 isSuffixOf suffix xs =
-    isPrefixOf (List.reverse suffix) (List.reverse xs)
+    let
+        sublist =
+            List.drop (List.length xs - List.length suffix) xs
+    in
+    sublist == suffix
 
 
 {-| Drop duplicates where what is considered to be a duplicate is the result of first applying the supplied function to the elements of the list.

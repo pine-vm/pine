@@ -54,9 +54,6 @@ listFindIndex predicate list =
 listFindIndexHelper : Int -> (a -> Bool) -> List a -> Maybe Int
 listFindIndexHelper index predicate list =
     case list of
-        [] ->
-            Nothing
-
         first :: rest ->
             if predicate first then
                 Just index
@@ -64,19 +61,22 @@ listFindIndexHelper index predicate list =
             else
                 listFindIndexHelper (index + 1) predicate rest
 
+        [] ->
+            Nothing
+
 
 assocListGet : key -> List ( key, value ) -> Maybe value
 assocListGet key list =
     case list of
-        [] ->
-            Nothing
-
         ( firstKey, firstValue ) :: rest ->
             if firstKey == key then
                 Just firstValue
 
             else
                 assocListGet key rest
+
+        [] ->
+            Nothing
 
 
 assocListInsert : key -> value -> List ( key, value ) -> List ( key, value )
