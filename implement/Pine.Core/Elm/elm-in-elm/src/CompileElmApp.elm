@@ -1209,8 +1209,11 @@ mapSourceFilesModuleText sourceDirs ( sourceFiles, moduleFilePath, moduleText ) 
         mapErrorStringForFunctionDeclaration : Elm.Syntax.Node.Node { a | declaration : Elm.Syntax.Node.Node { b | name : Elm.Syntax.Node.Node String } } -> String -> String
         mapErrorStringForFunctionDeclaration (Elm.Syntax.Node.Node _ functionDeclaration) baseErr =
             let
+                (Elm.Syntax.Node.Node _ declaration) =
+                    functionDeclaration.declaration
+
                 (Elm.Syntax.Node.Node _ functionName) =
-                    (Elm.Syntax.Node.value functionDeclaration.declaration).name
+                    declaration.name
             in
             String.concat
                 [ "Failed to replace function '" ++ functionName ++ "': "
@@ -1240,16 +1243,25 @@ mapSourceFilesModuleText sourceDirs ( sourceFiles, moduleFilePath, moduleText ) 
                 parsedModule.declarations
                     -- TODO: Also share the 'map all functions' part with `mapJsonConvertersModuleText`
                     -- Remember: The module to interface with git services will probably use similar functionality.
-                    |> List.filterMap declarationWithRangeAsFunctionDeclaration
-                    |> List.filter
-                        (Elm.Syntax.Node.value
-                            >> .declaration
-                            >> Elm.Syntax.Node.value
-                            >> .name
-                            >> Elm.Syntax.Node.value
-                            >> (\functionName ->
-                                    not (List.member functionName sourceFilesInterfaceModuleAddedFunctionsNames)
-                               )
+                    |> List.filterMap
+                        (\declNode ->
+                            case declarationWithRangeAsFunctionDeclaration declNode of
+                                Nothing ->
+                                    Nothing
+
+                                Just ((Elm.Syntax.Node.Node _ declarationFunction) as functionDeclarationNode) ->
+                                    let
+                                        (Elm.Syntax.Node.Node _ declaration) =
+                                            declarationFunction.declaration
+
+                                        (Elm.Syntax.Node.Node _ functionName) =
+                                            declaration.name
+                                    in
+                                    if List.member functionName sourceFilesInterfaceModuleAddedFunctionsNames then
+                                        Nothing
+
+                                    else
+                                        Just functionDeclarationNode
                         )
                     |> Common.resultListMapCombine
                         (\((Elm.Syntax.Node.Node functionDeclarationRange _) as functionDeclaration) ->
@@ -1336,7 +1348,11 @@ type FileTreeNode blobStructure
                                     (\(Elm.Syntax.Node.Node _ declaration) ->
                                         case declaration of
                                             Elm.Syntax.Declaration.CustomTypeDeclaration choiceTypeDeclaration ->
-                                                Elm.Syntax.Node.value choiceTypeDeclaration.name == "FileTreeNode"
+                                                let
+                                                    (Elm.Syntax.Node.Node _ choiceTypeDeclarationName) =
+                                                        choiceTypeDeclaration.name
+                                                in
+                                                choiceTypeDeclarationName == "FileTreeNode"
 
                                             _ ->
                                                 False
@@ -1714,12 +1730,12 @@ parseElmTypeAndDependenciesRecursivelyFromAnnotationInternal stack modules ( cur
         Elm.Syntax.TypeAnnotation.Record fieldsNodes ->
             fieldsNodes
                 |> Common.resultListMapCombine
-                    (\(Elm.Syntax.Node.Node _ ( Elm.Syntax.Node.Node _ fieldName, fieldAnnotation )) ->
+                    (\(Elm.Syntax.Node.Node _ ( Elm.Syntax.Node.Node _ fieldName, Elm.Syntax.Node.Node _ fieldAnnotation )) ->
                         case
                             parseElmTypeAndDependenciesRecursivelyFromAnnotationInternal
                                 stack
                                 modules
-                                ( currentModule, Elm.Syntax.Node.value fieldAnnotation )
+                                ( currentModule, fieldAnnotation )
                         of
                             Err error ->
                                 Err
@@ -1909,14 +1925,22 @@ parseElmTypeAndDependenciesRecursivelyFromAnnotationInternalTyped stack modules 
                                         (\(Elm.Syntax.Node.Node _ declaration) ->
                                             case declaration of
                                                 Elm.Syntax.Declaration.AliasDeclaration aliasDeclaration ->
-                                                    if Elm.Syntax.Node.value aliasDeclaration.name /= instantiatedLocalName then
+                                                    let
+                                                        (Elm.Syntax.Node.Node _ aliasDeclarationName) =
+                                                            aliasDeclaration.name
+                                                    in
+                                                    if aliasDeclarationName /= instantiatedLocalName then
                                                         Nothing
 
                                                     else
                                                         Just (AliasDeclaration aliasDeclaration)
 
                                                 Elm.Syntax.Declaration.CustomTypeDeclaration choiceTypeDeclaration ->
-                                                    if Elm.Syntax.Node.value choiceTypeDeclaration.name /= instantiatedLocalName then
+                                                    let
+                                                        (Elm.Syntax.Node.Node _ choiceTypeDeclarationName) =
+                                                            choiceTypeDeclaration.name
+                                                    in
+                                                    if choiceTypeDeclarationName /= instantiatedLocalName then
                                                         Nothing
 
                                                     else
@@ -1938,16 +1962,23 @@ parseElmTypeAndDependenciesRecursivelyFromAnnotationInternalTyped stack modules 
                                 Just declaration ->
                                     case declaration of
                                         AliasDeclaration aliasDeclaration ->
+                                            let
+                                                (Elm.Syntax.Node.Node _ aliasDeclarationName) =
+                                                    aliasDeclaration.name
+
+                                                (Elm.Syntax.Node.Node _ aliasDeclarationTypeAnnotation) =
+                                                    aliasDeclaration.typeAnnotation
+                                            in
                                             case
                                                 parseElmTypeAndDependenciesRecursivelyFromAnnotationInternal
                                                     stack
                                                     modules
-                                                    ( instantiatedModule, Elm.Syntax.Node.value aliasDeclaration.typeAnnotation )
+                                                    ( instantiatedModule, aliasDeclarationTypeAnnotation )
                                             of
                                                 Err error ->
                                                     Err
                                                         ("Failed to parse alias '"
-                                                            ++ Elm.Syntax.Node.value aliasDeclaration.name
+                                                            ++ aliasDeclarationName
                                                             ++ "' type annotation: "
                                                             ++ error
                                                         )
@@ -1991,6 +2022,10 @@ parseElmTypeAndDependenciesRecursivelyFromAnnotationInternalTyped stack modules 
                                                 choiceTypeDeclaration.constructors
                                                     |> Common.resultListMapCombine
                                                         (\(Elm.Syntax.Node.Node _ constructor) ->
+                                                            let
+                                                                (Elm.Syntax.Node.Node _ constructorName) =
+                                                                    constructor.name
+                                                            in
                                                             case
                                                                 Common.resultListMapCombine
                                                                     (\(Elm.Syntax.Node.Node _ constructorArgument) ->
@@ -2009,7 +2044,7 @@ parseElmTypeAndDependenciesRecursivelyFromAnnotationInternalTyped stack modules 
                                                                 Err err ->
                                                                     Err
                                                                         ("Failed to parse arguments of constructor '"
-                                                                            ++ Elm.Syntax.Node.value constructor.name
+                                                                            ++ constructorName
                                                                             ++ "': "
                                                                             ++ err
                                                                         )
@@ -2020,7 +2055,7 @@ parseElmTypeAndDependenciesRecursivelyFromAnnotationInternalTyped stack modules 
                                                                             listTupleSecondDictUnion beforeUnion
                                                                     in
                                                                     Ok
-                                                                        ( ( Elm.Syntax.Node.value constructor.name
+                                                                        ( ( constructorName
                                                                           , argumentsTypes
                                                                           )
                                                                         , argumentsDeps
@@ -3568,10 +3603,14 @@ elmModulesDictFromAppFiles appFiles =
                                                     Err ("Failed parsing module text: " ++ Parser.deadEndsToString err)
 
                                                 Ok parsedSyntax ->
+                                                    let
+                                                        (Elm.Syntax.Node.Node _ moduleDefinition) =
+                                                            parsedSyntax.moduleDefinition
+                                                    in
                                                     Ok
                                                         { fileText = fileContentAsString
                                                         , parsedSyntax = parsedSyntax
-                                                        , moduleName = Elm.Syntax.Module.moduleName (Elm.Syntax.Node.value parsedSyntax.moduleDefinition)
+                                                        , moduleName = Elm.Syntax.Module.moduleName moduleDefinition
                                                         }
                             in
                             [ ( filePath
@@ -5400,27 +5439,29 @@ filePathRepresentationInFunctionName pathItems =
 
 addModulesFromTextToAppFiles : SourceDirectories -> List String -> AppFiles -> AppFiles
 addModulesFromTextToAppFiles sourceDirs modulesToAdd sourceFiles =
-    modulesToAdd
-        |> List.foldl
-            (\moduleToAdd prevFiles ->
-                moduleToAdd
-                    |> parseElmModuleText
-                    |> Result.map
-                        (\moduleToAddSyntax ->
-                            let
-                                filePath =
-                                    filePathFromElmModuleName
-                                        sourceDirs
-                                        (Elm.Syntax.Module.moduleName (Elm.Syntax.Node.value moduleToAddSyntax.moduleDefinition))
-                            in
-                            prevFiles
-                                |> Common.assocListInsert
-                                    filePath
-                                    (fileContentFromString moduleToAdd)
-                        )
-                    |> Result.withDefault prevFiles
-            )
-            sourceFiles
+    List.foldl
+        (\moduleToAdd prevFiles ->
+            case parseElmModuleText moduleToAdd of
+                Err _ ->
+                    prevFiles
+
+                Ok moduleToAddSyntax ->
+                    let
+                        (Elm.Syntax.Node.Node _ moduleDefinition) =
+                            moduleToAddSyntax.moduleDefinition
+
+                        filePath =
+                            filePathFromElmModuleName
+                                sourceDirs
+                                (Elm.Syntax.Module.moduleName moduleDefinition)
+                    in
+                    Common.assocListInsert
+                        filePath
+                        (fileContentFromString moduleToAdd)
+                        prevFiles
+        )
+        sourceFiles
+        modulesToAdd
 
 
 elmModuleNameFromFilePath : SourceDirectories -> List String -> Maybe (List String)
