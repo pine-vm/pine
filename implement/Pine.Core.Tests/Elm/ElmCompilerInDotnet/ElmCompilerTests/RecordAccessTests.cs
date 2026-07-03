@@ -518,4 +518,130 @@ public class RecordAccessTests
             resultElm.Should().Be(new ElmValue.ElmInteger(6));
         }
     }
+
+    [Fact]
+    public void Record_access_in_nested_function()
+    {
+        var elmModuleText =
+            """"
+            module Test exposing (..)
+
+
+            findFirstFromEnd :
+                { compilationRootFilePath : List String, sourceFiles : List ( List String, () ) }
+                -> Result String (List String)
+            findFirstFromEnd arguments =
+                let
+                    searchRecursive : List String -> Result String (List String)
+                    searchRecursive currentDirectory =
+                        case
+                            assocListGet
+                                (List.concat [ currentDirectory, [ "elm.json" ] ])
+                                arguments.sourceFiles
+                        of
+                            Nothing ->
+                                if currentDirectory == [] then
+                                    Err
+                                        ("Did not find elm.json starting from " ++ String.join "/" arguments.compilationRootFilePath)
+
+                                else
+                                    searchRecursive
+                                        (List.take (List.length currentDirectory - 1) currentDirectory)
+
+                            Just _ ->
+                                Ok currentDirectory
+                in
+                searchRecursive arguments.compilationRootFilePath
+
+
+            assocListGet : key -> List ( key, value ) -> Maybe value
+            assocListGet key list =
+                case list of
+                    ( firstKey, firstValue ) :: rest ->
+                        if firstKey == key then
+                            Just firstValue
+
+                        else
+                            assocListGet key rest
+
+                    [] ->
+                        Nothing
+            
+            """";
+
+        var parseCache = new PineVMParseCache();
+
+        var (parsedEnv, _) =
+            ElmCompilerTestHelper.CompileElmModules(
+                [elmModuleText],
+                disableInlining: false);
+
+        var testModule =
+            parsedEnv.Modules.FirstOrDefault(c => c.moduleName is "Test");
+
+        var declValue =
+            testModule.moduleContent.FunctionDeclarations
+            .FirstOrDefault(decl => decl.Key is "findFirstFromEnd");
+
+        var declParsed =
+            FunctionRecord.ParseFunctionRecordTagged(declValue.Value, parseCache)
+            .Extract(err => throw new Exception("Failed parsing " + nameof(declValue) + ": " + err));
+
+        var invokeFunction = ElmCompilerTestHelper.CreateFunctionInvocationDelegate(declParsed);
+
+        {
+            var argument =
+                // { compilationRootFilePath : List String, sourceFiles : List ( List String, () ) }
+                ElmValueEncoding.ElmRecordAsPineValue(
+                    [
+                    ("compilationRootFilePath",
+                    PineValue.List(
+                        [
+                        ElmValueEncoding.StringAsPineValue("App"),
+                        ElmValueEncoding.StringAsPineValue("src"),
+                        ElmValueEncoding.StringAsPineValue("Main.elm"),
+                        ])),
+
+                    ("sourceFiles",
+                    PineValue.List(
+                        [
+                        PineValue.List(
+                            [
+                            PineValue.List(
+                                [
+                                ElmValueEncoding.StringAsPineValue("App"),
+                                ElmValueEncoding.StringAsPineValue("src"),
+                                ElmValueEncoding.StringAsPineValue("Main.elm")
+                                ]),
+
+                            PineValue.EmptyList
+                            ]),
+
+                        PineValue.List(
+                            [
+                            PineValue.List(
+                                [
+                                ElmValueEncoding.StringAsPineValue("App"),
+                                ElmValueEncoding.StringAsPineValue("elm.json"),
+                                ]),
+
+                            PineValue.EmptyList
+                            ]),
+                        ])),
+                    ]);
+
+            var (applyRunResult, _) = invokeFunction([argument]);
+
+            var resultValue = applyRunResult.ReturnValue.Evaluate();
+
+            var resultElm =
+                ElmValueEncoding.PineValueAsElmValue(resultValue, null, null)
+                .Extract(err => throw new Exception("Failed decoding result: " + err));
+
+            var asString =
+                ElmValue.RenderAsElmExpression(resultElm);
+
+            asString.expressionString.Should().Be("""Ok [ "App" ]""");
+        }
+    }
 }

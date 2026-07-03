@@ -960,10 +960,12 @@ public static class LambdaLifting
         // as references and resolve to the let binding which holds the
         // sibling's partial application.
         var substitutions =
-            new Dictionary<string, string>(StringComparer.Ordinal)
-            {
-                [bindingName] = liftedFunctionName,
-            };
+            new Dictionary<string, string>(StringComparer.Ordinal);
+
+        if (freeVariables.Count is 0)
+        {
+            substitutions[bindingName] = liftedFunctionName;
+        }
 
         foreach (var (siblingName, siblingLifted) in localFunctionLiftedNames)
         {
@@ -979,6 +981,18 @@ public static class LambdaLifting
         }
 
         var substitutedBody = SubstituteVariableReferences(transformedBody, substitutions);
+
+        if (freeVariables.Count > 0)
+        {
+            // Captures become leading parameter(s); forward them on self-calls so
+            // recursive references are not under-applied (which would yield a thunk).
+            substitutedBody =
+                ForwardCapturesOnSelfReference(
+                    substitutedBody,
+                    bindingName,
+                    liftedFunctionName,
+                    freeVariables);
+        }
 
         // Create the lifted function
         var liftedFuncDecl =
@@ -1074,10 +1088,12 @@ public static class LambdaLifting
         // as references and resolve to the let binding which holds the
         // sibling's partial application.
         var substitutions =
-            new Dictionary<string, string>(StringComparer.Ordinal)
-            {
-                [bindingName] = liftedFunctionName,
-            };
+            new Dictionary<string, string>(StringComparer.Ordinal);
+
+        if (freeVariables.Count is 0)
+        {
+            substitutions[bindingName] = liftedFunctionName;
+        }
 
         foreach (var (siblingName, siblingLifted) in localFunctionLiftedNames)
         {
@@ -1093,6 +1109,18 @@ public static class LambdaLifting
         }
 
         var substitutedBody = SubstituteVariableReferences(transformedBody, substitutions);
+
+        if (freeVariables.Count > 0)
+        {
+            // Captures become leading parameter(s); forward them on self-calls so
+            // recursive references are not under-applied (which would yield a thunk).
+            substitutedBody =
+                ForwardCapturesOnSelfReference(
+                    substitutedBody,
+                    bindingName,
+                    liftedFunctionName,
+                    freeVariables);
+        }
 
         // Create the lifted function
         var liftedFuncDecl =
@@ -1303,6 +1331,301 @@ public static class LambdaLifting
             default:
                 throw new NotImplementedException(
                     $"SubstituteVariableReferences not implemented for expression type: {expr.GetType().Name}");
+        }
+    }
+
+    /// <summary>
+    /// Rewrites references to a lifted function's own name (<paramref name="selfName"/>)
+    /// inside its lifted body so that the captured variables are forwarded as the
+    /// leading argument(s).
+    /// </summary>
+    /// <remarks>
+    /// Lambda lifting turns captured variables into the lifted function's leading
+    /// parameter(s). A bare self-reference (as produced for capture-free functions)
+    /// would therefore be under-applied: a recursive self-call would be missing the
+    /// captured argument and would evaluate to an un-applied function value (a thunk)
+    /// instead of recursing. This rewrite replaces:
+    /// <list type="bullet">
+    /// <item>a direct self-call <c>self a b</c> with <c>lifted captures a b</c>, and</item>
+    /// <item>a bare self-reference used as a value with the partial application
+    /// <c>lifted captures</c> (matching the replacement let binding).</item>
+    /// </list>
+    /// This is only applied when the lifted function actually captures variables.
+    /// </remarks>
+    private static Node<SyntaxTypes.Expression> ForwardCapturesOnSelfReference(
+        Node<SyntaxTypes.Expression> exprNode,
+        string selfName,
+        string liftedName,
+        IReadOnlyList<string> capturedVariables)
+    {
+        var expr = exprNode.Value;
+
+        switch (expr)
+        {
+            case SyntaxTypes.Expression.FunctionOrValue funcOrVal:
+
+                if (funcOrVal.ModuleName.Count is 0 && funcOrVal.Name == selfName)
+                {
+                    // Bare self-reference used as a value: replace with the
+                    // partial application 'lifted captures'.
+                    return CreateLiftedFunctionCall(liftedName, capturedVariables, exprNode.Range);
+                }
+
+                return exprNode;
+
+            case SyntaxTypes.Expression.Application appExpr:
+
+                if (appExpr.Arguments.Count > 0 &&
+                    appExpr.Arguments[0].Value is SyntaxTypes.Expression.FunctionOrValue headRef &&
+                    headRef.ModuleName.Count is 0 &&
+                    headRef.Name == selfName)
+                {
+                    // Direct self-call: forward the captured argument(s) as the
+                    // leading argument(s), keeping a single flat application.
+                    var liftedCall =
+                        CreateLiftedFunctionCall(liftedName, capturedVariables, appExpr.Arguments[0].Range);
+
+                    var leadingParts =
+                        liftedCall.Value is SyntaxTypes.Expression.Application liftedApp
+                        ?
+                        liftedApp.Arguments
+                        :
+                        [liftedCall];
+
+                    var forwardedArgs = new List<Node<SyntaxTypes.Expression>>(leadingParts);
+
+                    for (var i = 1; i < appExpr.Arguments.Count; i++)
+                    {
+                        forwardedArgs.Add(
+                            ForwardCapturesOnSelfReference(
+                                appExpr.Arguments[i],
+                                selfName,
+                                liftedName,
+                                capturedVariables));
+                    }
+
+                    return exprNode with { Value = new SyntaxTypes.Expression.Application(forwardedArgs) };
+                }
+
+                var newArgs =
+                    appExpr.Arguments
+                    .Select(a => ForwardCapturesOnSelfReference(a, selfName, liftedName, capturedVariables))
+                    .ToList();
+
+                return exprNode with { Value = new SyntaxTypes.Expression.Application(newArgs) };
+
+            case SyntaxTypes.Expression.OperatorApplication opApp:
+                return
+                    exprNode with
+                    {
+                        Value =
+                        new SyntaxTypes.Expression.OperatorApplication(
+                            opApp.Operator,
+                            opApp.Direction,
+                            ForwardCapturesOnSelfReference(opApp.Left, selfName, liftedName, capturedVariables),
+                            ForwardCapturesOnSelfReference(opApp.Right, selfName, liftedName, capturedVariables))
+                    };
+
+            case SyntaxTypes.Expression.IfBlock ifBlock:
+                return
+                    exprNode with
+                    {
+                        Value =
+                        new SyntaxTypes.Expression.IfBlock(
+                            ForwardCapturesOnSelfReference(ifBlock.Condition, selfName, liftedName, capturedVariables),
+                            ForwardCapturesOnSelfReference(ifBlock.ThenBlock, selfName, liftedName, capturedVariables),
+                            ForwardCapturesOnSelfReference(ifBlock.ElseBlock, selfName, liftedName, capturedVariables))
+                    };
+
+            case SyntaxTypes.Expression.CaseExpression caseExpr:
+                var newScrutinee =
+                    ForwardCapturesOnSelfReference(
+                        caseExpr.CaseBlock.Expression,
+                        selfName,
+                        liftedName,
+                        capturedVariables);
+
+                var newCases =
+                    caseExpr.CaseBlock.Cases
+                    .Select(
+                        c => new SyntaxTypes.Case(
+                            c.Pattern,
+                            ForwardCapturesOnSelfReference(c.Expression, selfName, liftedName, capturedVariables)))
+                    .ToList();
+
+                return
+                    exprNode with
+                    {
+                        Value =
+                        new SyntaxTypes.Expression.CaseExpression(new SyntaxTypes.CaseBlock(newScrutinee, newCases))
+                    };
+
+            case SyntaxTypes.Expression.LetExpression letExpr:
+                var newDecls =
+                    letExpr.Value.Declarations
+                    .Select(
+                        d => ForwardCapturesOnSelfReferenceInLetDeclaration(d, selfName, liftedName, capturedVariables))
+                    .ToList();
+
+                var newLetBody =
+                    ForwardCapturesOnSelfReference(letExpr.Value.Expression, selfName, liftedName, capturedVariables);
+
+                return
+                    exprNode with
+                    {
+                        Value =
+                        new SyntaxTypes.Expression.LetExpression(
+                            new SyntaxTypes.Expression.LetBlock(newDecls, newLetBody))
+                    };
+
+            case SyntaxTypes.Expression.LambdaExpression lambdaExpr:
+                var newLambdaBody =
+                    ForwardCapturesOnSelfReference(
+                        lambdaExpr.Lambda.Expression,
+                        selfName,
+                        liftedName,
+                        capturedVariables);
+
+                return
+                    exprNode with
+                    {
+                        Value =
+                        new SyntaxTypes.Expression.LambdaExpression(
+                            new SyntaxTypes.LambdaStruct(lambdaExpr.Lambda.Arguments, newLambdaBody))
+                    };
+
+            case SyntaxTypes.Expression.TupledExpression tupled:
+                var newElements =
+                    tupled.Elements
+                    .Select(e => ForwardCapturesOnSelfReference(e, selfName, liftedName, capturedVariables))
+                    .ToList();
+
+                return exprNode with { Value = new SyntaxTypes.Expression.TupledExpression(newElements) };
+
+            case SyntaxTypes.Expression.ListExpr listExpr:
+                var newListElements =
+                    listExpr.Elements
+                    .Select(e => ForwardCapturesOnSelfReference(e, selfName, liftedName, capturedVariables))
+                    .ToList();
+
+                return exprNode with { Value = new SyntaxTypes.Expression.ListExpr(newListElements) };
+
+            case SyntaxTypes.Expression.ParenthesizedExpression parenExpr:
+                return
+                    exprNode with
+                    {
+                        Value =
+                        new SyntaxTypes.Expression.ParenthesizedExpression(
+                            ForwardCapturesOnSelfReference(parenExpr.Expression, selfName, liftedName, capturedVariables))
+                    };
+
+            case SyntaxTypes.Expression.RecordExpr recordExpr:
+                var newFields =
+                    recordExpr.Fields
+                    .Select(
+                        f =>
+                        f with
+                        {
+                            Value =
+                            (f.Value.fieldName,
+                            ForwardCapturesOnSelfReference(f.Value.valueExpr, selfName, liftedName, capturedVariables))
+                        })
+                    .ToList();
+
+                return exprNode with { Value = new SyntaxTypes.Expression.RecordExpr(newFields) };
+
+            case SyntaxTypes.Expression.RecordAccess recordAccess:
+                return
+                    exprNode with
+                    {
+                        Value =
+                        new SyntaxTypes.Expression.RecordAccess(
+                            ForwardCapturesOnSelfReference(recordAccess.Record, selfName, liftedName, capturedVariables),
+                            recordAccess.FieldName)
+                    };
+
+            case SyntaxTypes.Expression.RecordUpdateExpression recordUpdate:
+                var newUpdateFields =
+                    recordUpdate.Fields
+                    .Select(
+                        f =>
+                        f with
+                        {
+                            Value =
+                            (f.Value.fieldName,
+                            ForwardCapturesOnSelfReference(f.Value.valueExpr, selfName, liftedName, capturedVariables))
+                        })
+                    .ToList();
+
+                return
+                    exprNode with
+                    {
+                        Value =
+                        new SyntaxTypes.Expression.RecordUpdateExpression(recordUpdate.RecordName, newUpdateFields)
+                    };
+
+            case SyntaxTypes.Expression.Negation negation:
+                return
+                    exprNode with
+                    {
+                        Value =
+                        new SyntaxTypes.Expression.Negation(
+                            ForwardCapturesOnSelfReference(negation.Expression, selfName, liftedName, capturedVariables))
+                    };
+
+            // Leaf expressions - no self-reference possible
+            case SyntaxTypes.Expression.Integer:
+            case SyntaxTypes.Expression.Literal:
+            case SyntaxTypes.Expression.CharLiteral:
+            case SyntaxTypes.Expression.Hex:
+            case SyntaxTypes.Expression.Floatable:
+            case SyntaxTypes.Expression.UnitExpr:
+            case SyntaxTypes.Expression.RecordAccessFunction:
+            case SyntaxTypes.Expression.PrefixOperator:
+                return exprNode;
+
+            default:
+                throw new NotImplementedException(
+                    $"ForwardCapturesOnSelfReference not implemented for expression type: {expr.GetType().Name}");
+        }
+    }
+
+    private static Node<SyntaxTypes.Expression.LetDeclaration> ForwardCapturesOnSelfReferenceInLetDeclaration(
+        Node<SyntaxTypes.Expression.LetDeclaration> declNode,
+        string selfName,
+        string liftedName,
+        IReadOnlyList<string> capturedVariables)
+    {
+        switch (declNode.Value)
+        {
+            case SyntaxTypes.Expression.LetDeclaration.LetFunction letFunc:
+                var newFuncExpr =
+                    ForwardCapturesOnSelfReference(
+                        letFunc.Function.Declaration.Value.Expression,
+                        selfName,
+                        liftedName,
+                        capturedVariables);
+
+                var newFuncImpl = letFunc.Function.Declaration.Value with { Expression = newFuncExpr };
+
+                var newFunc =
+                    letFunc.Function with { Declaration = letFunc.Function.Declaration with { Value = newFuncImpl } };
+
+                return declNode with { Value = new SyntaxTypes.Expression.LetDeclaration.LetFunction(newFunc) };
+
+            case SyntaxTypes.Expression.LetDeclaration.LetDestructuring letDestr:
+                var newDestrExpr =
+                    ForwardCapturesOnSelfReference(letDestr.Expression, selfName, liftedName, capturedVariables);
+
+                return
+                    declNode with
+                    {
+                        Value =
+                        new SyntaxTypes.Expression.LetDeclaration.LetDestructuring(letDestr.Pattern, newDestrExpr)
+                    };
+
+            default:
+                return declNode;
         }
     }
 
