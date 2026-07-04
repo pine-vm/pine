@@ -172,4 +172,43 @@ public class PineValueTests
                 testCase.testName);
         }
     }
+
+    [Fact]
+    public void List_value_equality_does_not_stack_overflow_on_deeply_nested_values()
+    {
+        // Comparing two structurally-equal, reference-distinct deeply nested list values previously
+        // recursed once per nesting level (via ListValue equality), overflowing the call stack.
+        // Equality now descends iteratively.
+        //
+        // The internal ListValue constructor is used directly to bypass the interning done by the
+        // PineValue.List factory, so that the two values do not share references at any level.
+
+        const int Depth = 100_000;
+
+        static PineValue BuildDeeplyNested(byte innerLeaf)
+        {
+            var sibling = PineValue.Blob([4]);
+
+            var nested = PineValue.Blob([innerLeaf, 2, 3]);
+
+            for (var i = 0; i < Depth; ++i)
+                nested = new PineValue.ListValue(new[] { sibling, nested });
+
+            return nested;
+        }
+
+        var valueA = BuildDeeplyNested(1);
+        var valueB = BuildDeeplyNested(1);
+
+        // Distinct instances that are structurally equal.
+        ReferenceEquals(valueA, valueB).Should().BeFalse();
+
+        valueA.Equals(valueB).Should().BeTrue();
+        valueA.GetHashCode().Should().Be(valueB.GetHashCode());
+
+        // A difference at the innermost leaf must still be detected.
+        var different = BuildDeeplyNested(9);
+
+        valueA.Equals(different).Should().BeFalse();
+    }
 }

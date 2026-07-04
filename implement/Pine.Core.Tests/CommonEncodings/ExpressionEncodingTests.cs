@@ -96,4 +96,49 @@ public class ExpressionEncodingTests
         current.Should().BeOfType<Expression.Literal>()
             .Subject.Value.Should().Be(StringEncoding.ValueFromString("innermost"));
     }
+
+    [Fact]
+    public void PineVMParseCache_does_not_stack_overflow_on_deeply_nested_expression()
+    {
+        // Parsing through PineVMParseCache previously recursed once per nesting level via the
+        // 'generalParser' delegate. It now uses an explicit work stack backed by the cache.
+
+        const int depth = 100_000;
+
+        Expression nested =
+            Expression.LiteralInstance(StringEncoding.ValueFromString("innermost"));
+
+        for (var i = 0; i < depth; ++i)
+        {
+            nested =
+                Expression.KernelApplicationInstance(
+                    function: nameof(KernelFunction.length),
+                    input: nested);
+        }
+
+        var encoded =
+            ExpressionEncoding.EncodeExpressionAsValue(nested);
+
+        var parseCache = new Pine.Core.CodeAnalysis.PineVMParseCache();
+
+        var decoded =
+            parseCache.ParseExpression(encoded)
+            .Extract(err => throw new System.Exception("Failed to parse expression: " + err));
+
+        // Verify the parsed structure by unwrapping iteratively; a recursive equality check
+        // (e.g. 'Should().Be') would itself overflow the stack at this depth.
+        var current = decoded;
+
+        for (var i = 0; i < depth; ++i)
+        {
+            var kernelApplication = current.Should().BeOfType<Expression.KernelApplication>().Subject;
+
+            kernelApplication.Function.Should().Be(nameof(KernelFunction.length));
+
+            current = kernelApplication.Input;
+        }
+
+        current.Should().BeOfType<Expression.Literal>()
+            .Subject.Value.Should().Be(StringEncoding.ValueFromString("innermost"));
+    }
 }

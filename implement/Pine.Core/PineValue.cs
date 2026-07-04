@@ -340,6 +340,65 @@ public abstract record PineValue : IEquatable<PineValue>
             if (other is null)
                 return false;
 
+            if (!NodeEqualStatic(self, other))
+                return false;
+
+            // Compare nested lists iteratively via an explicit work stack instead of recursing
+            // once per nesting level, so deeply nested values do not overflow the call stack.
+
+            Stack<(ListValue self, ListValue other)>? stack = null;
+
+            var currentSelf = self;
+            var currentOther = other;
+
+            while (true)
+            {
+                var selfSpan = currentSelf.Items.Span;
+                var otherSpan = currentOther.Items.Span;
+
+                var length = selfSpan.Length;
+
+                ref var selfItemFirst =
+                    ref System.Runtime.InteropServices.MemoryMarshal.GetReference(selfSpan);
+
+                ref var otherItemFirst =
+                    ref System.Runtime.InteropServices.MemoryMarshal.GetReference(otherSpan);
+
+                for (var i = 0; i < length; i++)
+                {
+                    var selfItem = System.Runtime.CompilerServices.Unsafe.Add(ref selfItemFirst, i);
+                    var otherItem = System.Runtime.CompilerServices.Unsafe.Add(ref otherItemFirst, i);
+
+                    if (ReferenceEquals(selfItem, otherItem))
+                        continue;
+
+                    if (selfItem is ListValue selfItemList && otherItem is ListValue otherItemList)
+                    {
+                        if (!NodeEqualStatic(selfItemList, otherItemList))
+                            return false;
+
+                        (stack ??= new Stack<(ListValue, ListValue)>()).Push((selfItemList, otherItemList));
+                    }
+                    else
+                    {
+                        if (!selfItem.Equals(otherItem))
+                            return false;
+                    }
+                }
+
+                if (stack is null || stack.Count is 0)
+                    return true;
+
+                (currentSelf, currentOther) = stack.Pop();
+            }
+        }
+
+        /// <summary>
+        /// Compares the node-level aggregates and item count of two <see cref="ListValue"/> instances,
+        /// without descending into nested lists. Used as a fast pre-check by the iterative equality comparison.
+        /// </summary>
+        private static bool NodeEqualStatic(ListValue self, ListValue other)
+        {
             if (self._slimHashCode != other._slimHashCode ||
                 self.NodesCount != other.NodesCount ||
                 self.BlobsBytesCount != other.BlobsBytesCount ||
@@ -348,38 +407,7 @@ public abstract record PineValue : IEquatable<PineValue>
                 return false;
             }
 
-            var selfSpan = self.Items.Span;
-            var otherSpan = other.Items.Span;
-
-            if (selfSpan.Length != otherSpan.Length)
-                return false;
-
-            var length = selfSpan.Length;
-
-            ref var selfItemFirst =
-                ref System.Runtime.InteropServices.MemoryMarshal.GetReference(selfSpan);
-
-            ref var otherItemFirst =
-                ref System.Runtime.InteropServices.MemoryMarshal.GetReference(otherSpan);
-
-            for (var i = 0; i < length; i++)
-            {
-                var selfItem = System.Runtime.CompilerServices.Unsafe.Add(ref selfItemFirst, i);
-                var otherItem = System.Runtime.CompilerServices.Unsafe.Add(ref otherItemFirst, i);
-
-                if (selfItem is ListValue selfItemList && otherItem is ListValue otherItemList)
-                {
-                    if (!EqualStatic(selfItemList, otherItemList))
-                        return false;
-                }
-                else
-                {
-                    if (!selfItem.Equals(otherItem))
-                        return false;
-                }
-            }
-
-            return true;
+            return self.Items.Length == other.Items.Length;
         }
 
         /// <inheritdoc/>

@@ -24,6 +24,20 @@ public class CodeAnalysis
         Func<DeclQualifiedName, bool> includeDeclaration,
         PineVMParseCache parseCache)
     {
+        return
+            RunOnLargeStackThread(
+                () => ParseAsStaticMonomorphicProgramLessStackGuard(
+                    parsedEnvironment,
+                    includeDeclaration,
+                    parseCache));
+    }
+
+    private static Result<string, (StaticProgram<DeclQualifiedName> staticProgram, IReadOnlyDictionary<DeclQualifiedName, StaticProgramFunctionMetadata> functionMetadata, IReadOnlyDictionary<DeclQualifiedName, string> declsFailed)>
+        ParseAsStaticMonomorphicProgramLessStackGuard(
+        ElmInteractiveEnvironment.ParsedInteractiveEnvironment parsedEnvironment,
+        Func<DeclQualifiedName, bool> includeDeclaration,
+        PineVMParseCache parseCache)
+    {
         var namesFromCompiledEnv =
             NamesFromCompiledEnv.FromCompiledEnvironment(
                 parsedEnvironment,
@@ -326,6 +340,78 @@ public class CodeAnalysis
 
     public static Result<string, ParsedFromSingleRoot>
         ParseAsStaticMonomorphicProgram(
+        Expression rootExpression,
+        PineValueClass rootEnvValueClass,
+        PineVMParseCache parseCache)
+    {
+        /*
+         * The analysis below recurses once per expression tree level across several helpers
+         * (inlining, reduction, and parsing as static expression). For deeply nested programs,
+         * this exceeds the default thread stack size (1 MiB on Windows), causing a stack overflow.
+         * Therefore, run the analysis on a dedicated thread with a larger stack.
+         * */
+
+        return
+            RunOnLargeStackThread(
+                () => ParseAsStaticMonomorphicProgramLessStackGuard(
+                    rootExpression,
+                    rootEnvValueClass,
+                    parseCache));
+    }
+
+    /// <summary>
+    /// Stack size for the dedicated analysis thread, large enough for the recursive descent
+    /// over deeply nested expression trees which can overflow default-sized stacks.
+    /// </summary>
+    private const int AnalysisThreadMaxStackSize = 64 * 1024 * 1024;
+
+    [ThreadStatic]
+    private static bool t_isOnLargeStackThread;
+
+    private static T RunOnLargeStackThread<T>(Func<T> func)
+    {
+        if (t_isOnLargeStackThread)
+        {
+            // Already running on a dedicated large-stack thread; avoid spawning another one.
+            return func();
+        }
+
+        T? result = default;
+
+        System.Runtime.ExceptionServices.ExceptionDispatchInfo? exceptionDispatchInfo = null;
+
+        var thread =
+            new System.Threading.Thread(
+                () =>
+                {
+                    t_isOnLargeStackThread = true;
+
+                    try
+                    {
+                        result = func();
+                    }
+                    catch (Exception e)
+                    {
+                        exceptionDispatchInfo =
+                            System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(e);
+                    }
+                },
+                maxStackSize: AnalysisThreadMaxStackSize)
+            {
+                IsBackground = true,
+                Name = nameof(CodeAnalysis) + " large stack"
+            };
+
+        thread.Start();
+        thread.Join();
+
+        exceptionDispatchInfo?.Throw();
+
+        return result!;
+    }
+
+    private static Result<string, ParsedFromSingleRoot>
+        ParseAsStaticMonomorphicProgramLessStackGuard(
         Expression rootExpression,
         PineValueClass rootEnvValueClass,
         PineVMParseCache parseCache)

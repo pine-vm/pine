@@ -20,15 +20,18 @@ public class PineVMParseCache
     /// and the <c>Err</c> case contains an error description if parsing failed. Subsequent calls with the
     /// same <paramref name="expressionValue"/> return the cached result without re-parsing.
     /// </returns>
+    /// <remarks>
+    /// Uses the iterative post-order traversal
+    /// <see cref="ExpressionEncoding.ParseExpressionFromValueViaPostOrder"/>, backed directly by the
+    /// cache dictionary, so that deeply nested encodings do not overflow the call stack while every
+    /// distinct subexpression value is still parsed and cached at most once.
+    /// </remarks>
     public Result<string, Expression> ParseExpression(PineValue expressionValue)
     {
         return
-            _parseExprCache
-            .GetOrAdd(
+            ExpressionEncoding.ParseExpressionFromValueViaPostOrder(
                 expressionValue,
-                valueFactory:
-                value =>
-                ExpressionEncoding.ParseExpressionFromValue(value, ParseExpression));
+                _parseExprCache);
     }
 }
 

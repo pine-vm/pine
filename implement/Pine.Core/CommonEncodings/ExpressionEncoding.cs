@@ -260,7 +260,10 @@ public static class ExpressionEncoding
     public static Result<string, Expression> ParseExpressionFromValue(
         PineValue value)
     {
-        return ParseExpressionFromValueViaPostOrder(value, []);
+        return
+            ParseExpressionFromValueViaPostOrder(
+                value,
+                new Dictionary<PineValue, Result<string, Expression>>());
     }
 
     /// <summary>
@@ -277,7 +280,7 @@ public static class ExpressionEncoding
     /// </summary>
     internal static Result<string, Expression> ParseExpressionFromValueViaPostOrder(
         PineValue rootValue,
-        Dictionary<PineValue, Result<string, Expression>> store)
+        IDictionary<PineValue, Result<string, Expression>> store)
     {
         if (store.TryGetValue(rootValue, out var alreadyParsed))
             return alreadyParsed;
@@ -328,7 +331,7 @@ public static class ExpressionEncoding
     /// </summary>
     private static void PushUnparsedChildren(
         PineValue value,
-        Dictionary<PineValue, Result<string, Expression>> store,
+        IDictionary<PineValue, Result<string, Expression>> store,
         Stack<PineValue> stack)
     {
         if (value is not PineValue.ListValue rootList)
@@ -402,7 +405,7 @@ public static class ExpressionEncoding
 
     private static void PushChildIfUnparsed(
         PineValue childValue,
-        Dictionary<PineValue, Result<string, Expression>> store,
+        IDictionary<PineValue, Result<string, Expression>> store,
         Stack<PineValue> stack)
     {
         if (!store.ContainsKey(childValue))
