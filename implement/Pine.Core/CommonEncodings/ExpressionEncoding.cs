@@ -253,16 +253,160 @@ public static class ExpressionEncoding
     /// </returns>
     /// <remarks>
     /// Inverse of <see cref="EncodeExpressionAsValue(Expression)"/>.
-    /// This overload delegates to <see cref="ParseExpressionFromValue(PineValue, Func{PineValue, Result{string, Expression}})"/>
-    /// using itself as the <c>generalParser</c> for nested expressions.
+    /// Decoding proceeds via an explicit post-order traversal (rather than recursing through
+    /// <see cref="ParseExpressionFromValue(PineValue, Func{PineValue, Result{string, Expression}})"/>)
+    /// so that deeply nested encodings do not overflow the call stack.
     /// </remarks>
     public static Result<string, Expression> ParseExpressionFromValue(
         PineValue value)
     {
-        return
-            ParseExpressionFromValue(
-                value,
-                generalParser: ParseExpressionFromValue);
+        return ParseExpressionFromValueViaPostOrder(value, []);
+    }
+
+    /// <summary>
+    /// Parses <paramref name="rootValue"/> using an explicit work stack instead of recursion,
+    /// so that arbitrarily deep encodings do not overflow the call stack.
+    /// <para>
+    /// Subexpressions are decoded in post-order (children before parents) into <paramref name="store"/>,
+    /// which also deduplicates shared subtrees so each distinct subvalue is decoded at most once.
+    /// Because every direct child is already present in <paramref name="store"/> by the time its parent
+    /// is decoded, the per-node call to
+    /// <see cref="ParseExpressionFromValue(PineValue, Func{PineValue, Result{string, Expression}})"/>
+    /// never recurses more than one level (its <c>generalParser</c> only reads from <paramref name="store"/>).
+    /// </para>
+    /// </summary>
+    internal static Result<string, Expression> ParseExpressionFromValueViaPostOrder(
+        PineValue rootValue,
+        Dictionary<PineValue, Result<string, Expression>> store)
+    {
+        if (store.TryGetValue(rootValue, out var alreadyParsed))
+            return alreadyParsed;
+
+        Result<string, Expression> lookupParser(PineValue childValue) => store[childValue];
+
+        var stack = new Stack<PineValue>();
+
+        stack.Push(rootValue);
+
+        var expanded = new HashSet<PineValue>();
+
+        while (stack.Count is not 0)
+        {
+            var current = stack.Peek();
+
+            if (store.ContainsKey(current))
+            {
+                stack.Pop();
+                continue;
+            }
+
+            if (expanded.Add(current))
+            {
+                // First visit: schedule not-yet-parsed direct children to be processed first.
+                PushUnparsedChildren(current, store, stack);
+
+                continue;
+            }
+
+            // Second visit: all children are parsed and present in 'store'.
+            stack.Pop();
+
+            store[current] = ParseExpressionFromValue(current, lookupParser);
+        }
+
+        return store[rootValue];
+    }
+
+    /// <summary>
+    /// Schedules the direct child expression values of <paramref name="value"/> that are not yet
+    /// present in <paramref name="store"/> to be parsed before <paramref name="value"/> itself.
+    /// <para>
+    /// Only values whose shape is that of a nested expression are pushed; malformed shapes are left
+    /// for the per-node parse step to report as errors. Values already known to decode to a reused
+    /// instance are treated as leaves.
+    /// </para>
+    /// </summary>
+    private static void PushUnparsedChildren(
+        PineValue value,
+        Dictionary<PineValue, Result<string, Expression>> store,
+        Stack<PineValue> stack)
+    {
+        if (value is not PineValue.ListValue rootList)
+            return;
+
+        if (ReusedInstances.Instance.ExpressionDecodings?.ContainsKey(rootList) ?? false)
+            return;
+
+        if (rootList.Items.Length is not 2)
+            return;
+
+        if (StringEncoding.StringFromValue(rootList.Items.Span[0]).IsOkOrNull() is not { } tag)
+            return;
+
+        if (rootList.Items.Span[1] is not PineValue.ListValue tagArguments)
+            return;
+
+        var arguments = tagArguments.Items;
+
+        switch (tag)
+        {
+            case "Literal":
+            case "Environment":
+                break;
+
+            case "List":
+                if (arguments.Length is 1 &&
+                    arguments.Span[0] is PineValue.ListValue listItems)
+                {
+                    for (var i = 0; i < listItems.Items.Length; ++i)
+                        PushChildIfUnparsed(listItems.Items.Span[i], store, stack);
+                }
+
+                break;
+
+            case "ParseAndEval":
+                if (arguments.Length is 2)
+                {
+                    PushChildIfUnparsed(arguments.Span[0], store, stack);
+                    PushChildIfUnparsed(arguments.Span[1], store, stack);
+                }
+
+                break;
+
+            case "KernelApplication":
+                if (arguments.Length is 2)
+                    PushChildIfUnparsed(arguments.Span[1], store, stack);
+
+                break;
+
+            case "Conditional":
+                if (arguments.Length is 3)
+                {
+                    PushChildIfUnparsed(arguments.Span[0], store, stack);
+                    PushChildIfUnparsed(arguments.Span[1], store, stack);
+                    PushChildIfUnparsed(arguments.Span[2], store, stack);
+                }
+
+                break;
+
+            case "StringTag":
+                if (arguments.Length is 2)
+                    PushChildIfUnparsed(arguments.Span[1], store, stack);
+
+                break;
+
+            default:
+                break;
+        }
+    }
+
+    private static void PushChildIfUnparsed(
+        PineValue childValue,
+        Dictionary<PineValue, Result<string, Expression>> store,
+        Stack<PineValue> stack)
+    {
+        if (!store.ContainsKey(childValue))
+            stack.Push(childValue);
     }
 
     /// <summary>
