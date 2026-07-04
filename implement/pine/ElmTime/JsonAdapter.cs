@@ -4,6 +4,7 @@ using Pine.Core.CommonEncodings;
 using Pine.Core.Elm;
 using Pine.Core.Elm.ElmSyntax;
 using Pine.Core.Files;
+using Pine.Core.Interpreter;
 using Pine.Core.PineVM;
 using Pine.Elm;
 using Pine.PineVM;
@@ -365,6 +366,22 @@ public class ElmTimeJsonAdapter
             if (exposedFunctionsDeclDictValue is null)
             {
                 return "Exposed functions declaration not found in root module " + RootModuleName;
+            }
+
+            if (parseCache.ParseExpression(exposedFunctionsDeclDictValue).IsOkOrNull() is { } exposedFunctionsDeclDictValueExpr)
+            {
+                if (exposedFunctionsDeclDictValueExpr.ReferencesEnvironment)
+                {
+                    throw new System.Exception(
+                        "Exposed functions declaration in root module " + RootModuleName +
+                        " should not reference the environment");
+                }
+
+                var interpreter = new DirectInterpreter(parseCache, evalCache: null);
+
+                exposedFunctionsDeclDictValue =
+                    interpreter.EvaluateExpression(exposedFunctionsDeclDictValueExpr, PineValue.EmptyList)
+                    .Extract(err => throw new System.Exception("Failed to evaluate exposed functions declaration: " + err));
             }
 
             var exposedFunctionsList = Precompiled.DictToListRecursive(exposedFunctionsDeclDictValue);

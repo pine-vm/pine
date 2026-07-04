@@ -4,6 +4,7 @@ using Pine.Core.CodeAnalysis;
 using Pine.Core.CommonEncodings;
 using Pine.Core.Elm;
 using Pine.Core.Files;
+using Pine.Core.Interpreter;
 using Pine.Core.PineVM;
 using System;
 using System.Collections.Generic;
@@ -254,9 +255,28 @@ type alias LoadDependencyStruct =
                     [stateBefore])
                 .Extract(err => throw new Exception("Failed applying function subscriptions: " + err));
 
+            var parseSubscriptionsElmRecordResult =
+                ElmValueEncoding.ParsePineValueAsRecordTagged_2025(subscriptionsValue);
+
+            {
+                if (parseSubscriptionsElmRecordResult.IsErr())
+                {
+                    parseSubscriptionsElmRecordResult =
+                        ElmValueEncoding.ParsePineValueAsRecordTagged(subscriptionsValue);
+                }
+            }
+
+            {
+                if (parseSubscriptionsElmRecordResult.IsErrOrNull() is { } err)
+                {
+                    throw new Exception("Failed parsing subscriptions record: " + err);
+                }
+            }
+
             var subscriptionsElmRecord =
-                ElmValueEncoding.ParsePineValueAsRecordTagged_2025(subscriptionsValue)
-                .Extract(err => throw new Exception("Failed parsing subscriptions value as Elm record: " + err));
+                parseSubscriptionsElmRecordResult.IsOkOrNull()
+                ??
+                throw new NotImplementedException("Unexpected result type: " + parseSubscriptionsElmRecordResult);
 
             var httpRequestFieldValue =
                 subscriptionsElmRecord
@@ -1696,6 +1716,13 @@ type alias LoadDependencyStruct =
         var asRecordResult = ElmValueEncoding.ParsePineValueAsRecordTagged_2025(pineValue);
 
         {
+            if (asRecordResult.IsErrOrNull() is not null)
+            {
+                asRecordResult = ElmValueEncoding.ParsePineValueAsRecordTagged(pineValue);
+            }
+        }
+
+        {
             if (asRecordResult.IsErrOrNull() is { } err)
             {
                 return "Failed to parse as record: " + err;
@@ -2347,7 +2374,24 @@ type alias LoadDependencyStruct =
             parseJsonAdapterResult
             .Extract(err => throw new Exception("Failed parsing JsonAdapter: " + err));
 
-        return ConfigFromDeclarationValue(parseDeclOk.declValue, parsedJsonAdapter);
+        var entryPointValue = parseDeclOk.declValue;
+
+        if (s_parseCache.ParseExpression(entryPointValue).IsOkOrNull() is { } entryPointValueExpr)
+        {
+            if (entryPointValueExpr.ReferencesEnvironment)
+            {
+                throw new Exception(
+                    "Entry point declaration value expression should not reference the environment");
+            }
+
+            var interpreter = new DirectInterpreter(s_parseCache, evalCache: null);
+
+            entryPointValue =
+                interpreter.EvaluateExpression(entryPointValueExpr, PineValue.EmptyList)
+                .Extract(err => throw new Exception("Failed to evaluate exposed functions declaration: " + err));
+        }
+
+        return ConfigFromDeclarationValue(entryPointValue, parsedJsonAdapter);
     }
 
     public static Result<string, WebServiceConfig> ConfigFromDeclarationValue(
@@ -2357,8 +2401,18 @@ type alias LoadDependencyStruct =
         var entryDeclRecordResult =
             ElmValueEncoding.ParsePineValueAsRecordTagged_2025(webServiceMainDeclValue);
 
-        if (entryDeclRecordResult.IsErrOrNull() is { } recordErr)
-            return "Failed to parse declaration: " + recordErr;
+        {
+            if (entryDeclRecordResult.IsErrOrNull() is { } recordErr)
+            {
+                entryDeclRecordResult =
+                    ElmValueEncoding.ParsePineValueAsRecordTagged(webServiceMainDeclValue);
+            }
+        }
+
+        {
+            if (entryDeclRecordResult.IsErrOrNull() is { } recordErr)
+                return "Failed to parse declaration: " + recordErr;
+        }
 
         if (entryDeclRecordResult.IsOkOrNull() is not { } webServiceMainRecord)
         {
