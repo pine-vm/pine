@@ -683,7 +683,7 @@ public partial class ElmSyntaxInterpreter
         {
             if (System.MemoryExtensions.SequenceEqual(stringBytes.Span.Slice(offset0, separatorBytes.Length), separatorSpan))
             {
-                segments.Add(MakeElmString(stringBytes.Slice(lastStart, offset0 - lastStart)));
+                segments.Add(MakeElmString(stringBytes[lastStart..offset0]));
 
                 offset0 += separatorBytes.Length;
                 lastStart = offset0;
@@ -694,7 +694,7 @@ public partial class ElmSyntaxInterpreter
             }
         }
 
-        segments.Add(MakeElmString(stringBytes.Slice(lastStart)));
+        segments.Add(MakeElmString(stringBytes[lastStart..]));
 
         return PineValueInProcess.CreateList(segments);
     }

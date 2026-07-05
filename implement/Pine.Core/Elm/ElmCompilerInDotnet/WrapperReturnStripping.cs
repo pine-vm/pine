@@ -283,9 +283,7 @@ internal static class WrapperReturnStripping
 
             // Derive the original decl's name by trimming the suffix.
             var originalSimpleName =
-                declName.DeclName.Substring(
-                    0,
-                    declName.DeclName.Length - StrippedSuffix.Length);
+                declName.DeclName[..^StrippedSuffix.Length];
 
             if (originalSimpleName.Length is 0)
                 continue;

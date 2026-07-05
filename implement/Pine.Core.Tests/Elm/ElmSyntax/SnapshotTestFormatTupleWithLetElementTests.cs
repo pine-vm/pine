@@ -237,7 +237,7 @@ public class SnapshotTestFormatTupleWithLetElementTests
                 // cannot match an inline-search hit since the trimmed
                 // form would not yield an inline `,` match. So any hit
                 // here is broken layout.
-                var prefix = line.Substring(0, inlineSep);
+                var prefix = line[..inlineSep];
                 var trimmedPrefix = prefix.TrimStart();
 
                 trimmedPrefix.Should().BeEmpty(
