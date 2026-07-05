@@ -42,52 +42,101 @@ public static class Testing
 
             if (firstDifferentCharIndex.HasValue)
             {
-                var sliceLengthMax = 160;
-
-                var sliceStartIndex =
-                    Math.Max(0, firstDifferentCharIndex.Value - sliceLengthMax / 2);
-
-                var sliceEndIndex =
-                    Math.Min(expectedChunk.Length, firstDifferentCharIndex.Value + sliceLengthMax / 2);
-
-                var sliceLength = sliceEndIndex - sliceStartIndex;
-
-                var expectedSlice =
-                    expectedChunk
-                    .Substring(startIndex: sliceStartIndex, length: sliceLength);
-
-                var responseSlice =
-                    responseChunk
-                    .PadRight(totalWidth: expectedChunk.Length, ' ')
-                    .Substring(startIndex: sliceStartIndex, length: sliceLength);
-
                 var remainingText =
                     actual[previousChunkEnd..];
+
+                var (markerSpaces, actualQuoted, expectedQuoted) =
+                    FormatSlices(
+                        actualText: remainingText,
+                        expectedText: expectedChunk,
+                        diffIndex: firstDifferentCharIndex.Value);
+
+                var coreDifference =
+                    string.Join(
+                        "\n",
+                        [
+                        markerSpaces + "↓ (actual)",
+                        actualQuoted,
+                        "<vs>",
+                        expectedQuoted,
+                        markerSpaces + "↑ (expected)"
+                        ]);
+
+                if (expectedChunks.Count > 1)
+                {
+                    return
+                        string.Join(
+                            "\n",
+                            [
+                                "Failed in chunk " + chunkIndex + " of " + expectedChunks.Count,
+                                "Chunks differ at char index " + firstDifferentCharIndex + ":",
+                                coreDifference,
+                                "Text following previous checked chunk is:",
+                                remainingText,
+                            ]);
+                }
 
                 return
                     string.Join(
                         "\n",
                         [
-                        "Failed in chunk " + chunkIndex + " of " + expectedChunks.Count,
-                        "Chunks differ at char index " + firstDifferentCharIndex + ":",
-                        "↓ (actual)",
-                        responseSlice,
-                        "<vs>",
-                        expectedSlice,
-                        "↑ (expected)",
-                        "Text following previous checked chunk is:",
-                        remainingText,
+                            "Strings differ at char index " + firstDifferentCharIndex + ":",
+                            coreDifference
                         ]);
             }
 
             previousChunkEnd += expectedChunk.Length;
         }
 
-        if (actual != string.Concat(expectedChunks))
+        var concatenatedExpected = string.Concat(expectedChunks);
+
+        if (actual != concatenatedExpected)
         {
-            return "Strings differ";
+            var diffIndex = concatenatedExpected.Length;
+
+            var (markerSpaces, actualQuoted, expectedQuoted) =
+                FormatSlices(
+                    actualText: actual,
+                    expectedText: concatenatedExpected,
+                    diffIndex: diffIndex);
+
+            return
+                string.Join(
+                    "\n",
+                    [
+                        "Strings differ at char index " + diffIndex + ":",
+                        markerSpaces + "↓ (actual)",
+                        actualQuoted,
+                        expectedQuoted,
+                        markerSpaces + "↑ (expected).",
+                    ]);
         }
 
         return null;
+    }
+
+    private static (string markerSpaces, string actualQuoted, string expectedQuoted) FormatSlices(
+        string actualText,
+        string expectedText,
+        int diffIndex)
+    {
+        var sliceLengthMax = 160;
+
+        var sliceStartIndex =
+            Math.Max(0, diffIndex - sliceLengthMax / 2);
+
+        string Slice(string text)
+        {
+            var startIndex = Math.Min(sliceStartIndex, text.Length);
+
+            var endIndex =
+                Math.Max(startIndex, Math.Min(text.Length, diffIndex + sliceLengthMax / 2));
+
+            return text[startIndex..endIndex];
+        }
+
+        var markerSpaces = new string(' ', diffIndex - sliceStartIndex + 1);
+
+        return (markerSpaces, "\"" + Slice(actualText) + "\"", "\"" + Slice(expectedText) + "\"");
     }
 }

@@ -37,21 +37,23 @@ public class CompareStringsChunkwiseTests
 
         result.Should().Be(
             """
-            Failed in chunk 0 of 1
-            Chunks differ at char index 0:
-            ↓ (actual)
-            actual text h
+            Strings differ at char index 0:
+             ↓ (actual)
+            "actual text here"
             <vs>
-            expected text
-            ↑ (expected)
-            Text following previous checked chunk is:
-            actual text here
+            "expected text"
+             ↑ (expected)
             """);
     }
 
     [Fact]
     public void Reports_difference_in_middle_of_chunk()
     {
+        /*
+         * Reference to emulate:
+         * "the quick green fox".Should().Be("the quick brown fox");
+         */
+
         var result =
             Testing.CompareStringsChunkwiseAndReportFirstDifference(
                 expectedChunks: ["the quick brown fox"],
@@ -59,21 +61,23 @@ public class CompareStringsChunkwiseTests
 
         result.Should().Be(
             """
-            Failed in chunk 0 of 1
-            Chunks differ at char index 10:
-            ↓ (actual)
-            the quick green fox
+            Strings differ at char index 10:
+                       ↓ (actual)
+            "the quick green fox"
             <vs>
-            the quick brown fox
-            ↑ (expected)
-            Text following previous checked chunk is:
-            the quick green fox
+            "the quick brown fox"
+                       ↑ (expected)
             """);
     }
 
     [Fact]
     public void Reports_difference_when_actual_is_shorter()
     {
+        /*
+         * Reference to emulate:
+         * "hello".Should().Be("hello world");
+         */
+
         var result =
             Testing.CompareStringsChunkwiseAndReportFirstDifference(
                 expectedChunks: ["hello world"],
@@ -81,21 +85,23 @@ public class CompareStringsChunkwiseTests
 
         result.Should().Be(
             """
-            Failed in chunk 0 of 1
-            Chunks differ at char index 5:
-            ↓ (actual)
-            hello      
+            Strings differ at char index 5:
+                  ↓ (actual)
+            "hello"
             <vs>
-            hello world
-            ↑ (expected)
-            Text following previous checked chunk is:
-            hello
+            "hello world"
+                  ↑ (expected)
             """);
     }
 
     [Fact]
     public void Reports_difference_in_second_chunk()
     {
+        /*
+         * Reference to emulate:
+         * "SECOND".Should().Be("second");
+         */
+
         var result =
             Testing.CompareStringsChunkwiseAndReportFirstDifference(
                 expectedChunks: ["first-", "second"],
@@ -105,11 +111,11 @@ public class CompareStringsChunkwiseTests
             """
             Failed in chunk 1 of 2
             Chunks differ at char index 0:
-            ↓ (actual)
-            SECOND
+             ↓ (actual)
+            "SECOND"
             <vs>
-            second
-            ↑ (expected)
+            "second"
+             ↑ (expected)
             Text following previous checked chunk is:
             SECOND
             """);
@@ -118,11 +124,23 @@ public class CompareStringsChunkwiseTests
     [Fact]
     public void Reports_difference_when_actual_has_extra_text_after_chunks()
     {
+        /*
+         * Reference to emulate:
+         * "hello extra".Should().Be("hello");
+         */
+
         var result =
             Testing.CompareStringsChunkwiseAndReportFirstDifference(
                 expectedChunks: ["hello"],
                 actual: "hello extra");
 
-        result.Should().Be("Strings differ");
+        result.Should().Be(
+            """
+            Strings differ at char index 5:
+                  ↓ (actual)
+            "hello extra"
+            "hello"
+                  ↑ (expected).
+            """);
     }
 }
