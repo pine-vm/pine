@@ -339,4 +339,95 @@ public class LetBlockExpressionsTests
 
         error.Message.Should().Contain("Cyclic let binding");
     }
+
+    /// <summary>
+    /// A <c>let</c> group nested inside a recursive function is re-entered on every
+    /// recursive call, each time with a different value bound to the enclosing parameter.
+    /// The interpreter caches the (AST-only) let-group analysis keyed by the let node, so
+    /// this exercises that the cached plan is reused correctly across many evaluations that
+    /// each carry a distinct runtime environment. A regression here would surface as a wrong
+    /// aggregate result (for example if the cached plan leaked bindings between evaluations).
+    /// </summary>
+    [Fact]
+    public void Let_group_inside_recursive_function_is_reevaluated_correctly_each_call()
+    {
+        var elmModuleText =
+            """
+            module Test exposing (..)
+
+
+            main =
+                sumTo 5
+
+
+            sumTo n =
+                let
+                    step =
+                        Pine_builtin.int_add [ n, 0 ]
+                in
+                if Pine_kernel.equal [ n, 0 ] then
+                    0
+
+                else
+                    Pine_builtin.int_add [ step, sumTo (Pine_builtin.int_add [ n, -1 ]) ]
+            """;
+
+        var declarations = InterpreterTestHelper.ParseDeclarationsRemovingModuleNames(elmModuleText);
+
+        var mainBody = InterpreterTestHelper.GetFunctionBody(declarations, "main");
+
+        var result =
+            ElmInterpreter.InterpretAsElmValue(mainBody, declarations).Extract(err => throw new System.Exception(err.ToString()));
+
+        // 5 + 4 + 3 + 2 + 1 + 0 = 15
+        result.Should().Be(ElmValue.Integer(15));
+    }
+
+    /// <summary>
+    /// A <c>let</c> group that combines a parameterised function binding (which closes over a
+    /// sibling value binding) with a non-function binding that depends on both, re-entered on
+    /// every recursive call. Guards that the cached let-group plan still materialises the
+    /// function closures and preserves the dependency ordering of the non-function bindings on
+    /// each evaluation.
+    /// </summary>
+    [Fact]
+    public void Let_group_mixing_parameterised_function_and_ordered_value_bindings_evaluates_repeatedly()
+    {
+        var elmModuleText =
+            """
+            module Test exposing (..)
+
+
+            main =
+                compute 3
+
+
+            compute n =
+                let
+                    doubled =
+                        Pine_builtin.int_mul [ n, 2 ]
+
+                    addDoubled x =
+                        Pine_builtin.int_add [ x, doubled ]
+
+                    result =
+                        addDoubled 10
+                in
+                if Pine_kernel.equal [ n, 0 ] then
+                    result
+
+                else
+                    Pine_builtin.int_add [ result, compute (Pine_builtin.int_add [ n, -1 ]) ]
+            """;
+
+        var declarations = InterpreterTestHelper.ParseDeclarationsRemovingModuleNames(elmModuleText);
+
+        var mainBody = InterpreterTestHelper.GetFunctionBody(declarations, "main");
+
+        var result =
+            ElmInterpreter.InterpretAsElmValue(mainBody, declarations).Extract(err => throw new System.Exception(err.ToString()));
+
+        // result(n) = 10 + 2 * n; summed over n = 3, 2, 1, 0 -> 16 + 14 + 12 + 10 = 52
+        result.Should().Be(ElmValue.Integer(52));
+    }
 }

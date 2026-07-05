@@ -2,6 +2,7 @@ using Pine.Core.CodeAnalysis;
 using Pine.Core.CommonEncodings;
 using Pine.Core.Elm.ElmCompilerInDotnet.CoreLibraryModule;
 using Pine.Core.Internal;
+using System.Collections.Generic;
 using System.Collections.Immutable;
 
 namespace Pine.Core.Elm.ElmSyntax;
@@ -22,13 +23,13 @@ namespace Pine.Core.Elm.ElmSyntax;
 /// </summary>
 public partial class ElmSyntaxInterpreter
 {
-    private static readonly ImmutableDictionary<DeclQualifiedName, System.Func<ImmutableList<PineValueInProcess>, PineValueInProcess?>> s_builtinFunctionResolvers =
+    private static readonly ImmutableDictionary<DeclQualifiedName, System.Func<IReadOnlyList<PineValueInProcess>, PineValueInProcess?>> s_builtinFunctionResolvers =
         BuildBuiltinFunctionResolvers();
 
-    private static ImmutableDictionary<DeclQualifiedName, System.Func<ImmutableList<PineValueInProcess>, PineValueInProcess?>> BuildBuiltinFunctionResolvers()
+    private static ImmutableDictionary<DeclQualifiedName, System.Func<IReadOnlyList<PineValueInProcess>, PineValueInProcess?>> BuildBuiltinFunctionResolvers()
     {
         var builder =
-            ImmutableDictionary.CreateBuilder<DeclQualifiedName, System.Func<ImmutableList<PineValueInProcess>, PineValueInProcess?>>();
+            ImmutableDictionary.CreateBuilder<DeclQualifiedName, System.Func<IReadOnlyList<PineValueInProcess>, PineValueInProcess?>>();
 
         builder.Add(
             DeclQualifiedName.Create(["Basics"], "compare"),
@@ -49,6 +50,14 @@ public partial class ElmSyntaxInterpreter
         builder.Add(
             DeclQualifiedName.Create(["Basics"], "mul"),
             ResolveBasicsMul);
+
+        builder.Add(
+            DeclQualifiedName.Create(["Basics"], "add"),
+            ResolveBasicsAdd);
+
+        builder.Add(
+            DeclQualifiedName.Create(["Basics"], "sub"),
+            ResolveBasicsSub);
 
         builder.Add(
             DeclQualifiedName.Create(["Basics"], "modBy"),
@@ -154,6 +163,34 @@ public partial class ElmSyntaxInterpreter
             DeclQualifiedName.Create(["Base64", "Decode"], "fromBytes"),
             ResolveBase64DecodeFromBytes);
 
+        builder.Add(
+            DeclQualifiedName.Create(["Char"], "isDigit"),
+            ResolveCharIsDigit);
+
+        builder.Add(
+            DeclQualifiedName.Create(["Char"], "isOctDigit"),
+            ResolveCharIsOctDigit);
+
+        builder.Add(
+            DeclQualifiedName.Create(["Char"], "isHexDigit"),
+            ResolveCharIsHexDigit);
+
+        builder.Add(
+            DeclQualifiedName.Create(["Char"], "isUpper"),
+            ResolveCharIsUpper);
+
+        builder.Add(
+            DeclQualifiedName.Create(["Char"], "isLower"),
+            ResolveCharIsLower);
+
+        builder.Add(
+            DeclQualifiedName.Create(["Char"], "isAlpha"),
+            ResolveCharIsAlpha);
+
+        builder.Add(
+            DeclQualifiedName.Create(["Char"], "isAlphaNum"),
+            ResolveCharIsAlphaNum);
+
         return builder.ToImmutable();
     }
 
@@ -169,7 +206,7 @@ public partial class ElmSyntaxInterpreter
     /// runtime exception (raised while evaluating the operands or by the comparison itself).
     /// </para>
     /// </summary>
-    private static PineValueInProcess? ResolveBasicsCompare(ImmutableList<PineValueInProcess> arguments)
+    private static PineValueInProcess? ResolveBasicsCompare(IReadOnlyList<PineValueInProcess> arguments)
     {
         if (arguments.Count is not 2)
         {
@@ -199,7 +236,7 @@ public partial class ElmSyntaxInterpreter
     /// exception (raised while evaluating the operands).
     /// </para>
     /// </summary>
-    private static PineValueInProcess? ResolveBasicsEq(ImmutableList<PineValueInProcess> arguments)
+    private static PineValueInProcess? ResolveBasicsEq(IReadOnlyList<PineValueInProcess> arguments)
     {
         if (arguments.Count is not 2)
         {
@@ -216,7 +253,7 @@ public partial class ElmSyntaxInterpreter
     /// Builtin implementation of <c>Basics.neq</c> (the <c>/=</c> operator): the negation of
     /// <see cref="ResolveBasicsEq"/>.
     /// </summary>
-    private static PineValueInProcess? ResolveBasicsNeq(ImmutableList<PineValueInProcess> arguments)
+    private static PineValueInProcess? ResolveBasicsNeq(IReadOnlyList<PineValueInProcess> arguments)
     {
         if (arguments.Count is not 2)
         {
@@ -406,7 +443,7 @@ public partial class ElmSyntaxInterpreter
     /// truncates toward zero, mirroring <c>elm-kernel-modules/Basics.elm</c>. Division by zero yields
     /// <c>0</c>, as in Elm.
     /// </summary>
-    private static PineValueInProcess? ResolveBasicsIdiv(ImmutableList<PineValueInProcess> arguments)
+    private static PineValueInProcess? ResolveBasicsIdiv(IReadOnlyList<PineValueInProcess> arguments)
     {
         if (arguments.Count is not 2)
         {
@@ -436,7 +473,7 @@ public partial class ElmSyntaxInterpreter
     /// example a <c>Float</c>), the builtin defers to the user-defined implementation, which handles
     /// the float cases.
     /// </summary>
-    private static PineValueInProcess? ResolveBasicsMul(ImmutableList<PineValueInProcess> arguments)
+    private static PineValueInProcess? ResolveBasicsMul(IReadOnlyList<PineValueInProcess> arguments)
     {
         if (arguments.Count is not 2)
         {
@@ -460,13 +497,72 @@ public partial class ElmSyntaxInterpreter
     }
 
     /// <summary>
+    /// Builtin implementation of <c>Basics.add</c> (the <c>+</c> operator) for integer operands,
+    /// mirroring <c>elm-kernel-modules/Basics.elm</c> (<c>add a b = Pine_kernel.int_add [ a, b ]</c>).
+    /// When either operand is not a plain integer (for example a <c>Float</c>), the builtin defers to
+    /// the user-defined implementation.
+    /// </summary>
+    private static PineValueInProcess? ResolveBasicsAdd(IReadOnlyList<PineValueInProcess> arguments)
+    {
+        if (arguments.Count is not 2)
+        {
+            // Defer to regular currying / the user-defined implementation when not saturated.
+            return null;
+        }
+
+        var left = arguments[0].Evaluate();
+        var right = arguments[1].Evaluate();
+
+        if (left is not PineValue.BlobValue ||
+            right is not PineValue.BlobValue ||
+            IntegerEncoding.ParseSignedIntegerRelaxed(left).IsOkOrNullable() is not { } leftInteger ||
+            IntegerEncoding.ParseSignedIntegerRelaxed(right).IsOkOrNullable() is not { } rightInteger)
+        {
+            // At least one operand is not a plain integer (for example a Float): defer.
+            return null;
+        }
+
+        return PineValueInProcess.CreateInteger(leftInteger + rightInteger);
+    }
+
+    /// <summary>
+    /// Builtin implementation of <c>Basics.sub</c> (the <c>-</c> operator) for integer operands,
+    /// mirroring <c>elm-kernel-modules/Basics.elm</c>
+    /// (<c>sub a b = Pine_kernel.int_add [ a, Pine_kernel.int_mul [ -1, b ] ]</c>). When either
+    /// operand is not a plain integer (for example a <c>Float</c>), the builtin defers to the
+    /// user-defined implementation.
+    /// </summary>
+    private static PineValueInProcess? ResolveBasicsSub(IReadOnlyList<PineValueInProcess> arguments)
+    {
+        if (arguments.Count is not 2)
+        {
+            // Defer to regular currying / the user-defined implementation when not saturated.
+            return null;
+        }
+
+        var left = arguments[0].Evaluate();
+        var right = arguments[1].Evaluate();
+
+        if (left is not PineValue.BlobValue ||
+            right is not PineValue.BlobValue ||
+            IntegerEncoding.ParseSignedIntegerRelaxed(left).IsOkOrNullable() is not { } leftInteger ||
+            IntegerEncoding.ParseSignedIntegerRelaxed(right).IsOkOrNullable() is not { } rightInteger)
+        {
+            // At least one operand is not a plain integer (for example a Float): defer.
+            return null;
+        }
+
+        return PineValueInProcess.CreateInteger(leftInteger - rightInteger);
+    }
+
+    /// <summary>
     /// Builtin implementation of <c>Basics.modBy</c> directly on the interpreter's value model,
     /// mirroring the recursive Elm implementation in <c>elm-kernel-modules/Basics.elm</c>
     /// (<c>modBy divisor dividend</c>). The modulo always carries the sign of the divisor, so it
     /// differs from <c>remainderBy</c> for operands of opposite sign. When either operand is not a
     /// plain integer the builtin defers to the user-defined implementation.
     /// </summary>
-    private static PineValueInProcess? ResolveBasicsModBy(ImmutableList<PineValueInProcess> arguments)
+    private static PineValueInProcess? ResolveBasicsModBy(IReadOnlyList<PineValueInProcess> arguments)
     {
         if (arguments.Count is not 2)
         {
@@ -554,7 +650,7 @@ public partial class ElmSyntaxInterpreter
     /// mirroring <c>elm-kernel-modules/String.elm</c>: splits the UTF-32 characters blob into one
     /// four-byte <c>Char</c> per code point.
     /// </summary>
-    private static PineValueInProcess? ResolveStringToList(ImmutableList<PineValueInProcess> arguments)
+    private static PineValueInProcess? ResolveStringToList(IReadOnlyList<PineValueInProcess> arguments)
     {
         if (arguments.Count is not 1)
         {
@@ -579,7 +675,7 @@ public partial class ElmSyntaxInterpreter
     /// mirroring <c>elm-kernel-modules/String.elm</c>: concatenates the four-byte <c>Char</c> blobs
     /// into a single Elm <c>String</c>.
     /// </summary>
-    private static PineValueInProcess? ResolveStringFromList(ImmutableList<PineValueInProcess> arguments)
+    private static PineValueInProcess? ResolveStringFromList(IReadOnlyList<PineValueInProcess> arguments)
     {
         if (arguments.Count is not 1)
         {
@@ -616,7 +712,7 @@ public partial class ElmSyntaxInterpreter
     /// mirroring <c>elm-kernel-modules/String.elm</c>: reverses the order of the four-byte code points
     /// in the characters blob.
     /// </summary>
-    private static PineValueInProcess? ResolveStringReverse(ImmutableList<PineValueInProcess> arguments)
+    private static PineValueInProcess? ResolveStringReverse(IReadOnlyList<PineValueInProcess> arguments)
     {
         if (arguments.Count is not 1)
         {
@@ -644,7 +740,7 @@ public partial class ElmSyntaxInterpreter
     /// separator (keeping empty segments). An empty separator yields the list of single-character
     /// strings.
     /// </summary>
-    private static PineValueInProcess? ResolveStringSplit(ImmutableList<PineValueInProcess> arguments)
+    private static PineValueInProcess? ResolveStringSplit(IReadOnlyList<PineValueInProcess> arguments)
     {
         if (arguments.Count is not 2)
         {
@@ -704,7 +800,7 @@ public partial class ElmSyntaxInterpreter
     /// mirroring <c>elm-kernel-modules/String.elm</c>: concatenates the chunk strings with the
     /// separator placed between consecutive chunks.
     /// </summary>
-    private static PineValueInProcess? ResolveStringJoin(ImmutableList<PineValueInProcess> arguments)
+    private static PineValueInProcess? ResolveStringJoin(IReadOnlyList<PineValueInProcess> arguments)
     {
         if (arguments.Count is not 2)
         {
@@ -742,7 +838,7 @@ public partial class ElmSyntaxInterpreter
     /// mirroring <c>elm-kernel-modules/String.elm</c>: renders the integer in base ten, with a leading
     /// <c>-</c> for negative values.
     /// </summary>
-    private static PineValueInProcess? ResolveStringFromInt(ImmutableList<PineValueInProcess> arguments)
+    private static PineValueInProcess? ResolveStringFromInt(IReadOnlyList<PineValueInProcess> arguments)
     {
         if (arguments.Count is not 1)
         {
@@ -767,7 +863,7 @@ public partial class ElmSyntaxInterpreter
     /// mirroring <c>elm-kernel-modules/String.elm</c>: parses an optionally-signed sequence of decimal
     /// digits, yielding <c>Just</c> the integer or <c>Nothing</c> for any malformed input.
     /// </summary>
-    private static PineValueInProcess? ResolveStringToInt(ImmutableList<PineValueInProcess> arguments)
+    private static PineValueInProcess? ResolveStringToInt(IReadOnlyList<PineValueInProcess> arguments)
     {
         if (arguments.Count is not 1)
         {
@@ -878,7 +974,7 @@ public partial class ElmSyntaxInterpreter
     /// mirroring <c>elm-kernel-modules/String.elm</c>: takes the substring between a start and end
     /// index, where negative indexes count from the end of the string.
     /// </summary>
-    private static PineValueInProcess? ResolveStringSlice(ImmutableList<PineValueInProcess> arguments)
+    private static PineValueInProcess? ResolveStringSlice(IReadOnlyList<PineValueInProcess> arguments)
     {
         if (arguments.Count is not 3)
         {
@@ -944,7 +1040,7 @@ public partial class ElmSyntaxInterpreter
     /// mirroring <c>elm-kernel-modules/String.elm</c>: splits the string into lines at every
     /// <c>\n</c>, <c>\r</c>, or <c>\r\n</c> sequence (the separators are removed).
     /// </summary>
-    private static PineValueInProcess? ResolveStringLines(ImmutableList<PineValueInProcess> arguments)
+    private static PineValueInProcess? ResolveStringLines(IReadOnlyList<PineValueInProcess> arguments)
     {
         if (arguments.Count is not 1)
         {
@@ -999,7 +1095,7 @@ public partial class ElmSyntaxInterpreter
     /// mirroring <c>elm-kernel-modules/String.elm</c>: reports whether the second string contains the
     /// first as a substring. The empty pattern is contained in every string.
     /// </summary>
-    private static PineValueInProcess? ResolveStringContains(ImmutableList<PineValueInProcess> arguments)
+    private static PineValueInProcess? ResolveStringContains(IReadOnlyList<PineValueInProcess> arguments)
     {
         if (arguments.Count is not 2)
         {
@@ -1065,7 +1161,7 @@ public partial class ElmSyntaxInterpreter
     /// (starting from <c>offset</c>) that belong to whitespace characters removed by <c>trim</c>.
     /// </summary>
     private static PineValueInProcess? ResolveStringTrimLeftCountBytesTrimmed(
-        ImmutableList<PineValueInProcess> arguments)
+        IReadOnlyList<PineValueInProcess> arguments)
     {
         if (arguments.Count is not 2)
         {
@@ -1106,7 +1202,7 @@ public partial class ElmSyntaxInterpreter
     /// <c>remainingLength</c> past any trailing whitespace characters removed by <c>trim</c>.
     /// </summary>
     private static PineValueInProcess? ResolveStringTrimRightCountBytesRemaining(
-        ImmutableList<PineValueInProcess> arguments)
+        IReadOnlyList<PineValueInProcess> arguments)
     {
         if (arguments.Count is not 2)
         {
@@ -1148,7 +1244,7 @@ public partial class ElmSyntaxInterpreter
     /// <c>Nothing</c> for malformed input. The produced numerator/denominator are not normalized,
     /// matching the Elm implementation byte-for-byte.
     /// </summary>
-    private static PineValueInProcess? ResolveStringToFloat(ImmutableList<PineValueInProcess> arguments)
+    private static PineValueInProcess? ResolveStringToFloat(IReadOnlyList<PineValueInProcess> arguments)
     {
         if (arguments.Count is not 1)
         {
@@ -1441,7 +1537,7 @@ public partial class ElmSyntaxInterpreter
     /// plain integer) as a decimal string with up to sixteen fractional digits, rounding half up and
     /// trimming trailing zeros.
     /// </summary>
-    private static PineValueInProcess? ResolveStringFromFloat(ImmutableList<PineValueInProcess> arguments)
+    private static PineValueInProcess? ResolveStringFromFloat(IReadOnlyList<PineValueInProcess> arguments)
     {
         if (arguments.Count is not 1)
         {
@@ -1617,7 +1713,7 @@ public partial class ElmSyntaxInterpreter
     /// it was stored; a missing key yields <c>Nothing</c>.
     /// </para>
     /// </summary>
-    internal static PineValueInProcess? ResolveDictGet(ImmutableList<PineValueInProcess> arguments)
+    internal static PineValueInProcess? ResolveDictGet(IReadOnlyList<PineValueInProcess> arguments)
     {
         if (arguments.Count is not 2)
         {
@@ -1767,7 +1863,7 @@ public partial class ElmSyntaxInterpreter
     /// each value is placed into the resulting list exactly as it was stored.
     /// </para>
     /// </summary>
-    internal static PineValueInProcess? ResolveDictValues(ImmutableList<PineValueInProcess> arguments)
+    internal static PineValueInProcess? ResolveDictValues(IReadOnlyList<PineValueInProcess> arguments)
     {
         if (arguments.Count is not 1)
         {
@@ -1805,7 +1901,7 @@ public partial class ElmSyntaxInterpreter
     /// are function closures (<see cref="ElmClosureInProcess"/>) pass through unchanged.
     /// </para>
     /// </summary>
-    internal static PineValueInProcess? ResolveDictToList(ImmutableList<PineValueInProcess> arguments)
+    internal static PineValueInProcess? ResolveDictToList(IReadOnlyList<PineValueInProcess> arguments)
     {
         if (arguments.Count is not 1)
         {
@@ -1845,7 +1941,7 @@ public partial class ElmSyntaxInterpreter
     /// (<see cref="ElmClosureInProcess"/>) are inserted and preserved unchanged.
     /// </para>
     /// </summary>
-    internal static PineValueInProcess? ResolveDictInsertHelp(ImmutableList<PineValueInProcess> arguments)
+    internal static PineValueInProcess? ResolveDictInsertHelp(IReadOnlyList<PineValueInProcess> arguments)
     {
         if (arguments.Count is not 3)
         {
@@ -1976,7 +2072,7 @@ public partial class ElmSyntaxInterpreter
     /// failing.
     /// </para>
     /// </summary>
-    internal static PineValueInProcess? ResolveDictSizeHelp(ImmutableList<PineValueInProcess> arguments)
+    internal static PineValueInProcess? ResolveDictSizeHelp(IReadOnlyList<PineValueInProcess> arguments)
     {
         if (arguments.Count is not 2)
         {
@@ -2015,5 +2111,159 @@ public partial class ElmSyntaxInterpreter
         }
 
         return count;
+    }
+
+    /// <summary>
+    /// Reads the Unicode code point of an Elm <c>Char</c> value. A char is stored as a
+    /// big-endian blob of its code point (see
+    /// <see cref="ElmValueEncoding.ElmCharAsPineValue(int)"/>); this mirrors the
+    /// <c>code = Pine_kernel.concat [ Pine_kernel.take [ 1, 0 ], char ]</c> step used by the
+    /// <c>Char</c> classification functions in <c>elm-kernel-modules/Char.elm</c>, which
+    /// prepend a positive sign byte and then interpret the result as a signed integer — i.e.
+    /// the unsigned big-endian value of the char blob.
+    /// </summary>
+    /// <returns>
+    /// <c>true</c> together with the decoded code point when <paramref name="value"/> is a blob
+    /// short enough to hold a code point; <c>false</c> (deferring to the user-defined
+    /// implementation) for any other shape.
+    /// </returns>
+    private static bool TryGetCharCode(PineValue value, out long code)
+    {
+        code = 0;
+
+        if (value is not PineValue.BlobValue blob)
+        {
+            return false;
+        }
+
+        var bytes = blob.Bytes.Span;
+
+        // A code point never needs more than 4 bytes; guard against overflow of the accumulator
+        // (and unexpectedly large blobs) by deferring in those cases.
+        if (bytes.Length > 4)
+        {
+            return false;
+        }
+
+        long acc = 0;
+
+        for (var i = 0; i < bytes.Length; ++i)
+        {
+            acc = (acc << 8) | bytes[i];
+        }
+
+        code = acc;
+
+        return true;
+    }
+
+    /// <summary>
+    /// Builtin implementation of <c>Char.isDigit</c> (code points <c>'0'</c>..<c>'9'</c>),
+    /// mirroring the range check in <c>elm-kernel-modules/Char.elm</c>. Defers to the
+    /// user-defined implementation when the argument is not a saturated char blob.
+    /// </summary>
+    private static PineValueInProcess? ResolveCharIsDigit(IReadOnlyList<PineValueInProcess> arguments)
+    {
+        if (arguments.Count is not 1 || !TryGetCharCode(arguments[0].Evaluate(), out var code))
+        {
+            return null;
+        }
+
+        return PineValueInProcess.CreateBool(0x30 <= code && code <= 0x39);
+    }
+
+    /// <summary>
+    /// Builtin implementation of <c>Char.isOctDigit</c> (code points <c>'0'</c>..<c>'7'</c>).
+    /// </summary>
+    private static PineValueInProcess? ResolveCharIsOctDigit(IReadOnlyList<PineValueInProcess> arguments)
+    {
+        if (arguments.Count is not 1 || !TryGetCharCode(arguments[0].Evaluate(), out var code))
+        {
+            return null;
+        }
+
+        return PineValueInProcess.CreateBool(0x30 <= code && code <= 0x37);
+    }
+
+    /// <summary>
+    /// Builtin implementation of <c>Char.isHexDigit</c> (code points <c>'0'</c>..<c>'9'</c>,
+    /// <c>'a'</c>..<c>'f'</c>, or <c>'A'</c>..<c>'F'</c>).
+    /// </summary>
+    private static PineValueInProcess? ResolveCharIsHexDigit(IReadOnlyList<PineValueInProcess> arguments)
+    {
+        if (arguments.Count is not 1 || !TryGetCharCode(arguments[0].Evaluate(), out var code))
+        {
+            return null;
+        }
+
+        return
+            PineValueInProcess.CreateBool(
+                (0x30 <= code && code <= 0x39) ||
+                (0x41 <= code && code <= 0x46) ||
+                (0x61 <= code && code <= 0x66));
+    }
+
+    /// <summary>
+    /// Builtin implementation of <c>Char.isUpper</c> (code points <c>'A'</c>..<c>'Z'</c>).
+    /// </summary>
+    private static PineValueInProcess? ResolveCharIsUpper(IReadOnlyList<PineValueInProcess> arguments)
+    {
+        if (arguments.Count is not 1 || !TryGetCharCode(arguments[0].Evaluate(), out var code))
+        {
+            return null;
+        }
+
+        return PineValueInProcess.CreateBool(0x41 <= code && code <= 0x5A);
+    }
+
+    /// <summary>
+    /// Builtin implementation of <c>Char.isLower</c> (code points <c>'a'</c>..<c>'z'</c>).
+    /// </summary>
+    private static PineValueInProcess? ResolveCharIsLower(IReadOnlyList<PineValueInProcess> arguments)
+    {
+        if (arguments.Count is not 1 || !TryGetCharCode(arguments[0].Evaluate(), out var code))
+        {
+            return null;
+        }
+
+        return PineValueInProcess.CreateBool(0x61 <= code && code <= 0x7A);
+    }
+
+    /// <summary>
+    /// Builtin implementation of <c>Char.isAlpha</c> (upper- or lower-case ASCII letters),
+    /// mirroring the two range checks in <c>elm-kernel-modules/Char.elm</c>.
+    /// </summary>
+    private static PineValueInProcess? ResolveCharIsAlpha(IReadOnlyList<PineValueInProcess> arguments)
+    {
+        if (arguments.Count is not 1 || !TryGetCharCode(arguments[0].Evaluate(), out var code))
+        {
+            return null;
+        }
+
+        return
+            PineValueInProcess.CreateBool(
+                (0x41 <= code && code <= 0x5A) ||
+                (0x61 <= code && code <= 0x7A));
+    }
+
+    /// <summary>
+    /// Builtin implementation of <c>Char.isAlphaNum</c> (ASCII letters or digits), mirroring the
+    /// three range checks in <c>elm-kernel-modules/Char.elm</c>. This is one of the hottest
+    /// functions in the Elm-syntax parser, so serving it directly removes the nested kernel
+    /// applications (<c>take</c>, <c>concat</c>, <c>int_is_sorted_asc</c>) the interpreter would
+    /// otherwise dispatch for every character.
+    /// </summary>
+    private static PineValueInProcess? ResolveCharIsAlphaNum(IReadOnlyList<PineValueInProcess> arguments)
+    {
+        if (arguments.Count is not 1 || !TryGetCharCode(arguments[0].Evaluate(), out var code))
+        {
+            return null;
+        }
+
+        return
+            PineValueInProcess.CreateBool(
+                (0x41 <= code && code <= 0x5A) ||
+                (0x61 <= code && code <= 0x7A) ||
+                (0x30 <= code && code <= 0x39));
     }
 }

@@ -1,6 +1,6 @@
 using Pine.Core.CommonEncodings;
 using Pine.Core.Internal;
-using System.Collections.Immutable;
+using System.Collections.Generic;
 using System.Numerics;
 
 namespace Pine.Core.Elm.ElmSyntax;
@@ -106,7 +106,7 @@ public partial class ElmSyntaxInterpreter
     /// UTF-32 (four-byte big-endian) code points of the supplied characters blob and produces the
     /// corresponding UTF-8 encoded blob.
     /// </summary>
-    private static PineValueInProcess? ResolveBytesEncodeEncodeCharsAsBlob(ImmutableList<PineValueInProcess> arguments)
+    private static PineValueInProcess? ResolveBytesEncodeEncodeCharsAsBlob(IReadOnlyList<PineValueInProcess> arguments)
     {
         if (arguments.Count is not 1)
         {
@@ -142,7 +142,7 @@ public partial class ElmSyntaxInterpreter
     /// model, mirroring <c>elm-kernel-modules/Bytes/Encode.elm</c>: recursively renders an
     /// <c>Encoder</c> value into the raw bytes blob it represents.
     /// </summary>
-    private static PineValueInProcess? ResolveBytesEncodeEncodeBlob(ImmutableList<PineValueInProcess> arguments)
+    private static PineValueInProcess? ResolveBytesEncodeEncodeBlob(IReadOnlyList<PineValueInProcess> arguments)
     {
         if (arguments.Count is not 1)
         {
@@ -363,7 +363,7 @@ public partial class ElmSyntaxInterpreter
     /// accumulator (<c>chars</c>) and finally producing <c>String.fromList (List.reverse chars)</c>.
     /// </summary>
     private static PineValueInProcess? ResolveBytesDecodeDecodeBlobAsCharsRec(
-        ImmutableList<PineValueInProcess> arguments)
+        IReadOnlyList<PineValueInProcess> arguments)
     {
         if (arguments.Count is not 3)
         {
@@ -504,7 +504,7 @@ public partial class ElmSyntaxInterpreter
     /// model, mirroring <c>src/Base64/Encode.elm</c>: decodes a base64-encoded string into the raw
     /// <c>Bytes</c> it represents, yielding <c>Nothing</c> for malformed input.
     /// </summary>
-    private static PineValueInProcess? ResolveBase64EncodeToBytes(ImmutableList<PineValueInProcess> arguments)
+    private static PineValueInProcess? ResolveBase64EncodeToBytes(IReadOnlyList<PineValueInProcess> arguments)
     {
         if (arguments.Count is not 1)
         {
@@ -617,7 +617,7 @@ public partial class ElmSyntaxInterpreter
     /// padded base64 <c>String</c>. The Elm function always succeeds for in-range offsets, so this
     /// always yields <c>Just</c>.
     /// </summary>
-    private static PineValueInProcess? ResolveBase64DecodeFromBytes(ImmutableList<PineValueInProcess> arguments)
+    private static PineValueInProcess? ResolveBase64DecodeFromBytes(IReadOnlyList<PineValueInProcess> arguments)
     {
         if (arguments.Count is not 1)
         {

@@ -1,5 +1,6 @@
 using Pine.Core.CommonEncodings;
 using Pine.Core.Internal;
+using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Numerics;
 
@@ -86,7 +87,7 @@ public partial class ElmSyntaxInterpreter
     /// <c>( Result String Value, Int )</c>. Defers (returns null) when the arguments are not a
     /// blob / integer, so the user-defined implementation handles any unexpected shapes.
     /// </summary>
-    private static PineValueInProcess? ResolveJsonDecodeParseValue(ImmutableList<PineValueInProcess> arguments)
+    private static PineValueInProcess? ResolveJsonDecodeParseValue(IReadOnlyList<PineValueInProcess> arguments)
     {
         if (arguments.Count is not 2)
         {

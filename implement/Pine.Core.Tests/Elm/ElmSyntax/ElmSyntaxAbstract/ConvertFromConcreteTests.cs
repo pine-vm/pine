@@ -320,7 +320,7 @@ public class ConvertFromConcreteTests
         var charPattern = converted.Should().BeOfType<Abstract.Pattern.CharPattern>().Subject;
 
         charPattern.Value.Should().Be('a');
-        charPattern.ValueAsPineValue.Should().Be(Core.Elm.ElmValueEncoding.ElmCharAsPineValue('a'));
+        charPattern.ValueAsPineValue.Should().Be(ElmValueEncoding.ElmCharAsPineValue('a'));
     }
 
     [Fact]
@@ -332,7 +332,7 @@ public class ConvertFromConcreteTests
         var stringPattern = converted.Should().BeOfType<Abstract.Pattern.StringPattern>().Subject;
 
         stringPattern.Value.Should().Be("hello");
-        stringPattern.ValueAsPineValue.Should().Be(Core.Elm.ElmValueEncoding.StringAsPineValue("hello"));
+        stringPattern.ValueAsPineValue.Should().Be(ElmValueEncoding.StringAsPineValue("hello"));
     }
 
     [Fact]

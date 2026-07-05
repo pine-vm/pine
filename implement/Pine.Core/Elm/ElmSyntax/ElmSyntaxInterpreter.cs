@@ -244,7 +244,7 @@ public partial class ElmSyntaxInterpreter
     /// </summary>
     public record Application(
         DeclQualifiedName FunctionName,
-        ImmutableList<PineValueInProcess> Arguments,
+        IReadOnlyList<PineValueInProcess> Arguments,
         ApplicationContext Context);
 
     /// <summary>
@@ -974,7 +974,7 @@ public partial class ElmSyntaxInterpreter
         IInvocationLogger? invocationLogger = null)
     {
         var kstack = new Stack<Kont>();
-        invocationLogger ??= new InvocationCounter();
+        invocationLogger ??= t_ambientInvocationLogger.Value ?? new InvocationCounter();
 
         // Either: (currentExpr, currentEnv) is the next thing to evaluate ("Eval" mode),
         // or currentValue holds the value about to be returned to the top kont ("Return" mode).
@@ -1304,7 +1304,7 @@ public partial class ElmSyntaxInterpreter
 
                             var prepareResult =
                                 PrepareLetGroupAndSortNonFunctionDecls(
-                                    decls: decls,
+                                    letExpression: letExpression,
                                     extended: extended,
                                     outerTopLevel: currentEnv.CurrentTopLevel,
                                     kstack: kstack);
@@ -1664,7 +1664,7 @@ public partial class ElmSyntaxInterpreter
                             var applyResult =
                                 ApplyFunctionOrValue(
                                     functionOrValue: buildArgs.FunctionOrValue,
-                                    arguments: [.. buildArgs.Accumulated],
+                                    arguments: buildArgs.Accumulated,
                                     env: buildArgs.Env,
                                     resolveApplication: resolveApplication,
                                     kstack: kstack,
@@ -2198,7 +2198,7 @@ public partial class ElmSyntaxInterpreter
 
     private static Result<ElmInterpretationError, ApplyCallOutcome> ApplyFunctionOrValue(
         ElmSyntaxAbstract.Expression.FunctionOrValue functionOrValue,
-        ImmutableList<PineValueInProcess> arguments,
+        IReadOnlyList<PineValueInProcess> arguments,
         ApplicationContext env,
         System.Func<Application, ApplicationResolution> resolveApplication,
         Stack<Kont> kstack,
@@ -2206,10 +2206,11 @@ public partial class ElmSyntaxInterpreter
     {
         var application =
             new Application(
-                FunctionName:
-                DeclQualifiedName.Create(
-                    namespaces: [.. functionOrValue.QualifiedName.Namespaces],
-                    declName: functionOrValue.QualifiedName.DeclName),
+                // Reuse the already-constructed DeclQualifiedName from the syntax node instead of
+                // rebuilding it. This is a hot path (one call per function application) and the
+                // previous `[.. Namespaces]` copy plus DeclQualifiedName.Create (which re-runs
+                // string.Join for FullName) dominated RunTrampoline's self time.
+                FunctionName: functionOrValue.QualifiedName,
                 Arguments: arguments,
                 Context: env);
 
@@ -2323,18 +2324,10 @@ public partial class ElmSyntaxInterpreter
                         }
                     }
 
-                    var innerBindings =
-                        new Dictionary<string, PineValueInProcess>(bindings.Count);
-
-                    foreach (var (boundName, boundValue) in bindings)
-                    {
-                        innerBindings[boundName] = boundValue;
-                    }
-
                     var innerContext =
                         new ApplicationContext(
                             CurrentTopLevel: bodyTopLevel,
-                            LocalBindings: innerBindings);
+                            LocalBindings: bindings);
 
                     if (extraArgs is not null)
                     {
@@ -2966,14 +2959,118 @@ public partial class ElmSyntaxInterpreter
     /// </summary>
     private static Result<ElmInterpretationError, IReadOnlyList<ElmSyntaxAbstract.LetDeclaration>>
         PrepareLetGroupAndSortNonFunctionDecls(
-        IReadOnlyList<ElmSyntaxAbstract.LetDeclaration> decls,
+        ElmSyntaxAbstract.Expression.LetExpression letExpression,
         Dictionary<string, PineValueInProcess> extended,
         DeclQualifiedName outerTopLevel,
         Stack<Kont> kstack)
     {
+        // The classification of declarations (parameterised functions vs. non-function
+        // bindings) and the topological ordering of the non-function bindings are a pure
+        // function of the immutable let AST, so compute them once per let node and reuse
+        // the result on every subsequent evaluation (let groups are re-entered every time
+        // the enclosing function is called). This avoids rebuilding hash sets, walking the
+        // right-hand sides to collect free names, and re-running the topological sort on
+        // each evaluation.
+        var plan =
+            s_letGroupPlanCache.GetValue(
+                letExpression,
+                static le => ComputeLetGroupPlan(le.Declarations));
+
+        if (plan.CycleErrorMessage is { } cycleErrorMessage)
+        {
+            return MakeRuntimeError(cycleErrorMessage, kstack);
+        }
+
+        // Pre-build closures for every parameterised LetFunction. These do not participate
+        // in the dependency ordering; their bodies are not evaluated here.
+        foreach (var letFunction in plan.ParameterisedFunctions)
+        {
+            var functionImpl = letFunction.Function.Declaration;
+
+            var bindingName = functionImpl.Name;
+
+            // Synthesise a DeclQualifiedName for the closure so over-application,
+            // stack traces, and the infinite-recursion detector all surface a useful
+            // identifier. The name is namespaced under the surrounding top-level
+            // declaration so two let-bound functions of the same simple name from
+            // different surrounding functions don't accidentally compare equal.
+            var qualifiedName =
+                DeclQualifiedName.Create(
+                    namespaces: [.. outerTopLevel.Namespaces, outerTopLevel.DeclName, "<let>"],
+                    declName: bindingName);
+
+            extended[bindingName] =
+                new ElmClosureInProcess(
+                    source:
+                    new ElmClosureInProcess.SourceRef.Declared(
+                        Name: qualifiedName,
+                        Implementation: functionImpl),
+                    parameterCount: functionImpl.Arguments.Count,
+                    argumentsAlreadyCollected: [],
+                    // Capture `extended` itself (not a snapshot): future additions to the
+                    // dictionary as the let group is populated will be visible to the
+                    // closure when it is later invoked.
+                    capturedBindings: extended,
+                    capturedTopLevel: outerTopLevel);
+        }
+
+        return Result<ElmInterpretationError, IReadOnlyList<ElmSyntaxAbstract.LetDeclaration>>
+            .ok(plan.SortedNonFunctionDecls);
+    }
+
+    /// <summary>
+    /// Cache of the static (AST-only) analysis produced by <see cref="ComputeLetGroupPlan"/>,
+    /// keyed by the <see cref="ElmSyntaxAbstract.Expression.LetExpression"/> node's reference
+    /// identity. The plan is independent of the runtime environment, so it is safe to reuse
+    /// across every evaluation of the same let node.
+    /// </summary>
+    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<
+        ElmSyntaxAbstract.Expression.LetExpression, LetGroupPlan> s_letGroupPlanCache = new();
+
+    /// <summary>
+    /// Result of the static analysis of a <c>let</c> binding group. All fields are derived
+    /// purely from the immutable let AST and are therefore reusable across evaluations.
+    /// </summary>
+    /// <param name="ParameterisedFunctions">
+    /// The parameterised <see cref="ElmSyntaxAbstract.LetDeclaration.LetFunction"/> bindings, in
+    /// source order, for which a closure must be materialised at evaluation time.
+    /// </param>
+    /// <param name="SortedNonFunctionDecls">
+    /// The non-function bindings (zero-arg <c>LetFunction</c> and <c>LetDestructuring</c>) in
+    /// dependency (topological) order. Empty when <paramref name="CycleErrorMessage"/> is set.
+    /// </param>
+    /// <param name="CycleErrorMessage">
+    /// Non-null when the non-function bindings contain a dependency cycle; carries the
+    /// (static) diagnostic message to surface as a runtime error.
+    /// </param>
+    private sealed record LetGroupPlan(
+        IReadOnlyList<ElmSyntaxAbstract.LetDeclaration.LetFunction> ParameterisedFunctions,
+        IReadOnlyList<ElmSyntaxAbstract.LetDeclaration> SortedNonFunctionDecls,
+        string? CycleErrorMessage);
+
+    /// <summary>
+    /// Computes the reusable <see cref="LetGroupPlan"/> for a <c>let</c> binding group:
+    /// <list type="number">
+    ///   <item>
+    ///   Identifies the parameterised <see cref="SyntaxModel.Expression.LetDeclaration.LetFunction"/>
+    ///   bindings, which are materialised as closures at evaluation time (supporting full
+    ///   mutual recursion and forward references between let-bound functions and siblings).
+    ///   </item>
+    ///   <item>
+    ///   Computes the dependency graph among the remaining non-function bindings (zero-arg
+    ///   <see cref="SyntaxModel.Expression.LetDeclaration.LetFunction"/> and every
+    ///   <see cref="SyntaxModel.Expression.LetDeclaration.LetDestructuring"/>) and returns
+    ///   them in topological order. A cycle among those non-function dependencies is reported
+    ///   via <see cref="LetGroupPlan.CycleErrorMessage"/> — matching Elm's behaviour where only
+    ///   function bindings can participate in mutual recursion.
+    ///   </item>
+    /// </list>
+    /// </summary>
+    private static LetGroupPlan ComputeLetGroupPlan(
+        IReadOnlyList<ElmSyntaxAbstract.LetDeclaration> decls)
+    {
         // Collect, per declaration, the set of names it introduces.
         var introducedByDecl = new HashSet<string>[decls.Count];
-        var letGroupNames = new HashSet<string>();
 
         for (var i = 0; i < decls.Count; i++)
         {
@@ -2991,15 +3088,13 @@ public partial class ElmSyntaxInterpreter
             }
 
             introducedByDecl[i] = introduced;
-
-            foreach (var name in introduced)
-            {
-                letGroupNames.Add(name);
-            }
         }
 
-        // Pre-build closures for every parameterised LetFunction. These do not participate
-        // in the dependency analysis below; their bodies are not evaluated here.
+        // Separate the parameterised LetFunction bindings (materialised as closures at
+        // evaluation time) from the non-function bindings (which need dependency ordering).
+        var parameterisedFunctions =
+            new List<ElmSyntaxAbstract.LetDeclaration.LetFunction>();
+
         var nonFunctionDecls =
             new List<ElmSyntaxAbstract.LetDeclaration>(decls.Count);
 
@@ -3010,34 +3105,7 @@ public partial class ElmSyntaxInterpreter
             if (decls[i] is ElmSyntaxAbstract.LetDeclaration.LetFunction letFunction
                 && letFunction.Function.Declaration.Arguments.Count is not 0)
             {
-                var functionImpl = letFunction.Function.Declaration;
-
-                var bindingName = functionImpl.Name;
-
-                // Synthesise a DeclQualifiedName for the closure so over-application,
-                // stack traces, and the infinite-recursion detector all surface a useful
-                // identifier. The name is namespaced under the surrounding top-level
-                // declaration so two let-bound functions of the same simple name from
-                // different surrounding functions don't accidentally compare equal.
-                var qualifiedName =
-                    DeclQualifiedName.Create(
-                        namespaces: [.. outerTopLevel.Namespaces, outerTopLevel.DeclName, "<let>"],
-                        declName: bindingName);
-
-                extended[bindingName] =
-                    new ElmClosureInProcess(
-                        source:
-                        new ElmClosureInProcess.SourceRef.Declared(
-                            Name: qualifiedName,
-                            Implementation: functionImpl),
-                        parameterCount: functionImpl.Arguments.Count,
-                        argumentsAlreadyCollected: [],
-                        // Capture `extended` itself (not a snapshot): future additions to the
-                        // dictionary as the let group is populated will be visible to the
-                        // closure when it is later invoked.
-                        capturedBindings: extended,
-                        capturedTopLevel: outerTopLevel);
-
+                parameterisedFunctions.Add(letFunction);
                 continue;
             }
 
@@ -3046,12 +3114,17 @@ public partial class ElmSyntaxInterpreter
         }
 
         if (nonFunctionDecls.Count is 0)
-            return nonFunctionDecls;
+        {
+            return new LetGroupPlan(
+                ParameterisedFunctions: parameterisedFunctions,
+                SortedNonFunctionDecls: nonFunctionDecls,
+                CycleErrorMessage: null);
+        }
 
         // Build the dependency graph among non-function bindings: index i depends on
         // index j when binding i's RHS contains a free reference to a name introduced
-        // by binding j. References to names already in `extended` (function closures
-        // and outer bindings) are not considered dependencies — those are resolvable
+        // by binding j. References to names not introduced within this group (function
+        // closures and outer bindings) are not dependencies — those are resolvable
         // immediately at evaluation time.
         var nonFunctionNameToIndex = new Dictionary<string, int>();
 
@@ -3159,11 +3232,18 @@ public partial class ElmSyntaxInterpreter
                             pathNames.Reverse();
                             pathNames.Add(string.Join("/", nonFunctionIntroduced[dep]));
 
-                            return
-                                MakeRuntimeError(
+                            // Dispose any enumerators still on the stack before returning.
+                            while (dfsStack.Count > 0)
+                            {
+                                dfsStack.Pop().deps.Dispose();
+                            }
+
+                            return new LetGroupPlan(
+                                ParameterisedFunctions: parameterisedFunctions,
+                                SortedNonFunctionDecls: [],
+                                CycleErrorMessage:
                                     "Cyclic let binding detected among non-function bindings: "
-                                    + string.Join(" -> ", pathNames),
-                                    kstack);
+                                    + string.Join(" -> ", pathNames));
                         }
 
                         if (state[dep] is StateUnvisited)
@@ -3184,7 +3264,7 @@ public partial class ElmSyntaxInterpreter
             catch
             {
                 // Dispose any enumerators still on the stack to avoid leaking IDisposable
-                // references on the abnormal-exit path (cycle detection raises here).
+                // references on the abnormal-exit path.
                 while (dfsStack.Count > 0)
                 {
                     dfsStack.Pop().deps.Dispose();
@@ -3194,7 +3274,10 @@ public partial class ElmSyntaxInterpreter
             }
         }
 
-        return sorted;
+        return new LetGroupPlan(
+            ParameterisedFunctions: parameterisedFunctions,
+            SortedNonFunctionDecls: sorted,
+            CycleErrorMessage: null);
     }
 
     /// <summary>
@@ -3808,7 +3891,7 @@ public partial class ElmSyntaxInterpreter
         PineBuiltinResolver(application, s_pineBuiltinModuleNamesDefault);
 
     public static System.Func<Application, ApplicationResolution?> ApplicationResolver(
-        IReadOnlyDictionary<DeclQualifiedName, System.Func<ImmutableList<PineValueInProcess>, PineValueInProcess?>> functionResolvers)
+        IReadOnlyDictionary<DeclQualifiedName, System.Func<IReadOnlyList<PineValueInProcess>, PineValueInProcess?>> functionResolvers)
     {
         ApplicationResolution? TryResolve(Application application)
         {
@@ -4191,7 +4274,7 @@ public partial class ElmSyntaxInterpreter
                                             typeName: declName,
                                             tagName: constructor.Name,
                                             totalArity: ctorArity,
-                                            arguments: application.Arguments));
+                                            arguments: [.. application.Arguments]));
                             }
                         }
 
@@ -4297,12 +4380,12 @@ public partial class ElmSyntaxInterpreter
     /// </summary>
     public static System.Func<Application, ApplicationResolution> BuildResolvers(
         IReadOnlyDictionary<DeclQualifiedName, SyntaxModel.Declaration> declarations,
-        IReadOnlyDictionary<DeclQualifiedName, System.Func<ImmutableList<PineValueInProcess>, PineValueInProcess?>>? customFunctionResolvers = null)
+        IReadOnlyDictionary<DeclQualifiedName, System.Func<IReadOnlyList<PineValueInProcess>, PineValueInProcess?>>? customFunctionResolvers = null)
     {
         return
             CombineResolvers(
                 [
-                ApplicationResolver(customFunctionResolvers ?? ImmutableDictionary<DeclQualifiedName, System.Func<ImmutableList<PineValueInProcess>, PineValueInProcess?>>.Empty),
+                ApplicationResolver(customFunctionResolvers ?? ImmutableDictionary<DeclQualifiedName, System.Func<IReadOnlyList<PineValueInProcess>, PineValueInProcess?>>.Empty),
                 PineBuiltinResolver,
                 app => UserDefinedResolver(app, declarations)
                 ]);
@@ -4322,12 +4405,12 @@ public partial class ElmSyntaxInterpreter
     /// </summary>
     public static System.Func<Application, ApplicationResolution> BuildResolvers(
         IReadOnlyDictionary<DeclQualifiedName, ElmSyntaxAbstract.Declaration> declarations,
-        IReadOnlyDictionary<DeclQualifiedName, System.Func<ImmutableList<PineValueInProcess>, PineValueInProcess?>>? customFunctionResolvers)
+        IReadOnlyDictionary<DeclQualifiedName, System.Func<IReadOnlyList<PineValueInProcess>, PineValueInProcess?>>? customFunctionResolvers)
     {
         return
             CombineResolvers(
                 [
-                ApplicationResolver(customFunctionResolvers ?? ImmutableDictionary<DeclQualifiedName, System.Func<ImmutableList<PineValueInProcess>, PineValueInProcess?>>.Empty),
+                ApplicationResolver(customFunctionResolvers ?? ImmutableDictionary<DeclQualifiedName, System.Func<IReadOnlyList<PineValueInProcess>, PineValueInProcess?>>.Empty),
                 PineBuiltinResolver,
                 app => UserDefinedResolver(app, declarations)
                 ]);
