@@ -222,7 +222,7 @@ public class ConvertToConcreteTests
         var abstractExpression =
             new Abstract.Expression.RecordAccessFunction(
                 "field",
-                PopularEncodings.StringEncoding.ValueFromString("field"));
+                Core.CommonEncodings.StringEncoding.ValueFromString("field"));
 
         var concrete = Abstract.ConvertToConcrete.ToExpression(abstractExpression);
 

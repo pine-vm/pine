@@ -35,7 +35,7 @@ public class ValuesEqualInProcessTests
         PineValueInProcess.CreateList(items);
 
     private static PineValueInProcess TagNameValue(string tagName) =>
-        PineValueInProcess.Create(PopularEncodings.StringEncoding.ValueFromString(tagName));
+        PineValueInProcess.Create(StringEncoding.ValueFromString(tagName));
 
     private static DeclQualifiedName Name(string declName) =>
         DeclQualifiedName.Create([], declName);
@@ -52,7 +52,7 @@ public class ValuesEqualInProcessTests
                 [],
                 new AbstractExpr.Integer(
                     literal,
-                    PopularEncodings.IntegerEncoding.EncodeSignedInteger(literal))));
+                    IntegerEncoding.EncodeSignedInteger(literal))));
 
     private static ElmInterpreter.ElmClosureInProcess Closure(
         ElmInterpreter.ElmClosureInProcess.SourceRef source,
