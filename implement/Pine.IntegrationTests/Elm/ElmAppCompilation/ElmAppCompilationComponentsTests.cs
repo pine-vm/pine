@@ -9,9 +9,9 @@ using System.Collections.Generic;
 using System.Linq;
 using Xunit;
 
-namespace Pine.IntegrationTests.Elm;
+namespace Pine.IntegrationTests.Elm.ElmAppCompilation;
 
-public class ElmAppCompilationTests
+public class ElmAppCompilationComponentsTests
 {
     private static readonly string s_elmAppCompilerElmJsonString =
         """"
