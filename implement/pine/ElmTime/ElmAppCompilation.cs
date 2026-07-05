@@ -5,10 +5,9 @@ using Pine.Core.CodeAnalysis;
 using Pine.Core.CommonEncodings;
 using Pine.Core.Elm;
 using Pine.Core.Files;
-using Pine.Core.Interpreter.IntermediateVM;
+using Pine.Core.Internal;
 using Pine.Core.Json;
 using Pine.Elm;
-using Pine.IntermediateVM;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
@@ -61,13 +60,6 @@ namespace ElmTime
             IReadOnlyList<string> workingDirectoryRelative,
             ElmAppInterfaceConfig interfaceConfig)
         {
-            var pineVMCache = new InvocationCache();
-
-            var pineVM =
-                SetupVM.Create(evalCache: pineVMCache);
-
-            var parseCache = new PineVMParseCache();
-
             var elmCompilerCache = new ElmCompilerCache();
 
             return
@@ -75,8 +67,6 @@ namespace ElmTime
                     sourceFiles,
                     workingDirectoryRelative,
                     interfaceConfig,
-                    pineVM,
-                    parseCache,
                     elmCompilerCache);
         }
 
@@ -84,21 +74,9 @@ namespace ElmTime
             IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> sourceFiles,
             IReadOnlyList<string> workingDirectoryRelative,
             ElmAppInterfaceConfig interfaceConfig,
-            Pine.Core.PineVM.IPineVM pineVM,
-            PineVMParseCache parseCache,
             ElmCompilerCache elmCompilerCache)
         {
             var clock = System.Diagnostics.Stopwatch.StartNew();
-
-
-            var elmCompilerFromBundle =
-                BundledElmEnvironments.BundledElmCompilerCompiledEnvValue()
-                ??
-                throw new Exception("Failed to load Elm compiler from bundle.");
-
-            var elmCompiler =
-                ElmCompilerInElm.ElmCompilerFromEnvValue(elmCompilerFromBundle)
-                .Extract(err => throw new Exception(err));
 
             var sourceFilesHash =
                 Convert.ToHexStringLower(
@@ -124,9 +102,6 @@ namespace ElmTime
                     workingDirectoryRelative: workingDirectoryRelative,
                     compilationRootFilePath: interfaceConfig.CompilationRootFilePath,
                     interfaceToHostRootModuleName: [.. InterfaceToHostRootModuleName.Split('.')],
-                    elmCompiler,
-                    parseCache,
-                    pineVM,
                     elmCompilerCache);
 
             (CompilationResult compilationResult, TimeSpan lastUseTime) BuildNextCacheEntry(
@@ -166,9 +141,6 @@ namespace ElmTime
             IReadOnlyList<string> workingDirectoryRelative,
             IReadOnlyList<string> compilationRootFilePath,
             IReadOnlyList<string> interfaceToHostRootModuleName,
-            ElmCompilerInElm elmCompiler,
-            PineVMParseCache parseCache,
-            Pine.Core.PineVM.IPineVM pineVM,
             ElmCompilerCache elmCompilerCache) =>
             AsCompletelyLoweredElmApp(
                 sourceFiles,
@@ -176,9 +148,6 @@ namespace ElmTime
                 compilationRootFilePath: compilationRootFilePath,
                 interfaceToHostRootModuleName,
                 ImmutableStack<StackFrame>.Empty,
-                elmCompiler,
-                parseCache,
-                pineVM,
                 elmCompilerCache);
 
         private static CompilationResult AsCompletelyLoweredElmApp(
@@ -187,9 +156,6 @@ namespace ElmTime
             IReadOnlyList<string> compilationRootFilePath,
             IReadOnlyList<string> interfaceToHostRootModuleName,
             IImmutableStack<StackFrame> stack,
-            ElmCompilerInElm elmCompiler,
-            PineVMParseCache parseCache,
-            Pine.Core.PineVM.IPineVM pineVM,
             ElmCompilerCache elmCompilerCache)
         {
             if (10 < stack.Count())
@@ -208,14 +174,10 @@ namespace ElmTime
 
             var (compilationResult, compilationReport) =
                 CachedElmAppCompilationIteration(
-                    compilerElmProgramCodeFiles: compilerElmProgramCodeFiles,
                     sourceFiles: sourceFiles,
                     compilationRootFilePath: compilationRootFilePath,
                     interfaceToHostRootModuleName: interfaceToHostRootModuleName,
                     dependencies: dependencies,
-                    elmCompiler: elmCompiler,
-                    parseCache,
-                    pineVM,
                     elmCompilerCache)
                 .Extract(error => throw new Exception(error));
 
@@ -413,23 +375,16 @@ namespace ElmTime
                                 compilationRootFilePath: compilationRootFilePath,
                                 interfaceToHostRootModuleName: interfaceToHostRootModuleName,
                                 stack: stack.Push(newStackFrame),
-                                elmCompiler,
-                                parseCache,
-                                pineVM,
                                 elmCompilerCache);
                     });
         }
 
         private static Result<string, (CompilationIterationResult, CompilationIterationCompilationReport report)>
             CachedElmAppCompilationIteration(
-            IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> compilerElmProgramCodeFiles,
             IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> sourceFiles,
             IReadOnlyList<string> compilationRootFilePath,
             IReadOnlyList<string> interfaceToHostRootModuleName,
             IReadOnlyList<(CompilerSerialInterface.DependencyKey key, ReadOnlyMemory<byte> value)> dependencies,
-            ElmCompilerInElm elmCompiler,
-            PineVMParseCache parseCache,
-            Pine.Core.PineVM.IPineVM pineVM,
             ElmCompilerCache elmCompilerCache)
         {
             var totalStopwatch = System.Diagnostics.Stopwatch.StartNew();
@@ -526,26 +481,6 @@ namespace ElmTime
 
              * */
 
-            var parseLowerElmAppResult =
-                ElmInteractiveEnvironment.ParseFunctionFromElmModule(
-                    interactiveEnvironment: elmCompiler.CompilerEnvironment,
-                    moduleName: "CompileElmAppMain",
-                    declarationName: "asCompletelyLoweredElmApp",
-                    parseCache);
-
-            {
-                if (parseLowerElmAppResult.IsErrOrNull() is { } err)
-                {
-                    return "Failed parsing function to lower Elm app: " + err;
-                }
-            }
-
-            if (parseLowerElmAppResult.IsOkOrNullable() is not { } lowerElmAppDecl)
-            {
-                throw new NotImplementedException(
-                    "Unexpected result type: " + parseLowerElmAppResult.GetType());
-            }
-
             var sourceFilesValues =
                 sourceFiles
                 .Select(
@@ -598,24 +533,38 @@ namespace ElmTime
                         ]),
                 ];
 
-            var applyResult =
-                ElmInteractiveEnvironment.ApplyFunction(
-                    pineVM: pineVM,
-                    functionRecord: lowerElmAppDecl.functionRecord,
-                    arguments: arguments);
+            var argumentsInProcess =
+                arguments.Select(PineValueInProcess.Create).ToList();
+
+            var interpretResult =
+                Pine.Core.Elm.ElmSyntax.ElmSyntaxInterpreter.Interpret(
+                    DeclQualifiedName.Create(
+                        ["CompileElmAppMain"],
+                        "asCompletelyLoweredElmApp"),
+                    argumentsInProcess,
+                    CompilerModulesPreparedForInterpreter.Value);
 
             {
-                if (applyResult.IsErrOrNull() is { } err)
+                if (interpretResult.IsErrOrNull() is { } err)
                 {
-                    return "Failed applying function to lower Elm app: " + err;
+                    var callStackNames =
+                        string.Join(
+                            "\n  at ",
+                            err.CallStack.Select(frame => frame.FunctionName.FullName));
+
+                    return
+                        "Failed interpreting function to lower Elm app: " + err.Message +
+                        (err.CallStack.Count is 0 ? "" : "\n  at " + callStackNames);
                 }
             }
 
-            if (applyResult.IsOkOrNull() is not { } applyResultValue)
+            if (interpretResult.IsOkOrNull() is not { } interpretResultValue)
             {
                 throw new NotImplementedException(
-                    "Unexpected result type: " + applyResult.GetType());
+                    "Unexpected result type: " + interpretResult.GetType());
             }
+
+            var applyResultValue = interpretResultValue.Evaluate();
 
             var compilationResult =
                 ParseCompilationResult(
@@ -1378,6 +1327,61 @@ namespace ElmTime
 
         public static readonly Lazy<Result<string, IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>>>> CachedCompilerElmProgramCodeFilesForElmBackend =
             new(LoadCompilerElmProgramCodeFilesForElmBackend);
+
+        /// <summary>
+        /// The Elm compiler modules (the <c>CompileElmAppMain</c> program and its transitive
+        /// dependencies) parsed and canonicalized for evaluation with
+        /// <see cref="Pine.Core.Elm.ElmSyntax.ElmSyntaxInterpreter"/>. This replaces the previous
+        /// approach of applying the compiled compiler environment from
+        /// <see cref="BundledElmEnvironments"/> via <see cref="ElmCompilerInElm"/>.
+        /// </summary>
+        public static readonly Lazy<Pine.Core.Elm.ElmSyntax.ElmSyntaxInterpreter.Prepared> CompilerModulesPreparedForInterpreter =
+            new(PrepareCompilerModulesForInterpreter);
+
+        private static Pine.Core.Elm.ElmSyntax.ElmSyntaxInterpreter.Prepared PrepareCompilerModulesForInterpreter()
+        {
+            var containerTree =
+                Pine.Core.Elm.ElmInElm.BundledFiles.CompilerSourceContainerFilesDefault.Value;
+
+            var kernelTree =
+                Pine.Core.Elm.ElmInElm.BundledFiles.ElmKernelModulesDefault.Value;
+
+            static IEnumerable<string> EnumerateElmModuleTexts(Pine.Core.Files.FileTree tree) =>
+                tree.EnumerateFilesTransitive()
+                .Where(file => file.path.Count > 0 && file.path[^1].EndsWith(".elm", StringComparison.OrdinalIgnoreCase))
+                .Select(file => Encoding.UTF8.GetString(file.fileContent.Span));
+
+            var rootModuleText =
+                Encoding.UTF8.GetString(
+                    (containerTree.GetNodeAtPath(["src", "CompileElmAppMain.elm"])
+                    as Pine.Core.Files.FileTree.FileNode
+                    ?? throw new Exception("Did not find src/CompileElmAppMain.elm in bundled compiler source."))
+                    .Bytes.Span);
+
+            // The compiler program depends on the elm-kernel-modules standard library as well as
+            // the modules shipped inside the compiler-source container (elm-syntax, Base64, and the
+            // 'src' compiler modules). The 'tests' modules are excluded because they are not part of
+            // the compiler program and can introduce conflicting/duplicate module names.
+            var availableModulesTexts =
+                EnumerateElmModuleTexts(kernelTree)
+                .Concat(
+                    containerTree.EnumerateFilesTransitive()
+                    .Where(file =>
+                        file.path.Count > 0 &&
+                        file.path[^1].EndsWith(".elm", StringComparison.OrdinalIgnoreCase) &&
+                        file.path[0] is not "tests")
+                    .Select(file => Encoding.UTF8.GetString(file.fileContent.Span)))
+                .ToImmutableArray();
+
+            var orderedModulesTexts =
+                Pine.Core.Elm.ElmSyntax.ElmModule.ModulesTextOrderedForCompilationByDependencies(
+                    rootModulesTexts: [rootModuleText],
+                    availableModulesTexts: availableModulesTexts);
+
+            return
+                Pine.Core.Elm.ElmSyntax.ElmSyntaxInterpreter.PrepareModules(orderedModulesTexts)
+                .Extract(err => throw new Exception("Failed preparing compiler modules for interpreter: " + err));
+        }
 
         public static Result<string, IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>>> LoadCompilerElmProgramCodeFilesForElmBackend() =>
             Pine.Core.Elm.ElmInElm.BundledFiles.LoadElmCompilerSourceCodeFiles();
