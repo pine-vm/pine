@@ -3787,6 +3787,16 @@ public partial class ElmSyntaxInterpreter
             return PineValueInProcess.Concat(input);
         }
 
+        if (functionName is nameof(KernelFunction.reverse))
+        {
+            return PineValueInProcess.Reverse(input);
+        }
+
+        if (functionName is nameof(KernelFunction.head))
+        {
+            return PineValueInProcess.Head(input);
+        }
+
         if (functionName is nameof(KernelFunction.skip))
         {
             if (input.GetLength() is not 2)

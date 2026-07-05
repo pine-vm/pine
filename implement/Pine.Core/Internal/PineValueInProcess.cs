@@ -591,8 +591,81 @@ public class PineValueInProcess
     }
 
     /// <summary>
+    /// Analog to <see cref="KernelFunction.reverse(PineValue)"/>.
+    /// </summary>
+    /// <remarks>
+    /// For list values the reversal is built structurally over the in-process child items so that
+    /// specialized child instances that lack a concrete <see cref="PineValue"/> encoding (for
+    /// example interpreter closures) are preserved rather than being forced through
+    /// <see cref="Evaluate"/>. The blob path reuses the concrete kernel implementation.
+    /// </remarks>
+    public static PineValueInProcess Reverse(PineValueInProcess input)
+    {
+        if (input.IsList())
+        {
+            var length = input.GetLength();
+
+            if (length <= 1)
+                return input;
+
+            var structuralItems = input.UnevaluatedStructuralItemsOrNull();
+
+            var reversed = new PineValueInProcess[length];
+
+            if (structuralItems is not null)
+            {
+                for (var i = 0; i < length; ++i)
+                {
+                    reversed[length - 1 - i] = structuralItems[i];
+                }
+            }
+            else
+            {
+                for (var i = 0; i < length; ++i)
+                {
+                    reversed[length - 1 - i] = input.GetElementAt(i);
+                }
+            }
+
+            return CreateList(reversed);
+        }
+
+        // Blob (or other concrete) path: no specialized children can be embedded.
+        return Create(KernelFunction.reverse(input.Evaluate()));
+    }
+
+    /// <summary>
+    /// Analog to <see cref="KernelFunction.head(PineValue)"/>.
+    /// </summary>
+    /// <remarks>
+    /// For list values the first in-process child item is returned without forcing evaluation, so
+    /// that a specialized child instance that lacks a concrete <see cref="PineValue"/> encoding
+    /// (for example an interpreter closure) is preserved.
+    /// </remarks>
+    public static PineValueInProcess Head(PineValueInProcess input)
+    {
+        if (input.IsList())
+        {
+            if (input.GetLength() is 0)
+                return EmptyList;
+
+            return input.GetElementAt(0);
+        }
+
+        // Blob (or other concrete) path.
+        return Create(KernelFunction.head(input.Evaluate()));
+    }
+
+    /// <summary>
     /// Analog to <see cref="KernelFunction.concat(PineValue)"/>
     /// </summary>
+    /// <remarks>
+    /// When the inputs are lists, the concatenation is built structurally over the in-process
+    /// child items so that specialized child instances that lack a concrete
+    /// <see cref="PineValue"/> encoding (for example interpreter closures) are preserved rather
+    /// than being forced through <see cref="Evaluate"/>. The blob path keeps the previous lazy
+    /// behavior because blobs cannot embed such specialized children.
+    /// </remarks>
     public static PineValueInProcess Concat(PineValueInProcess input)
     {
         if (!input.IsList())
@@ -606,12 +679,89 @@ public class PineValueInProcess
         if (length is 1)
             return input.GetElementAt(0);
 
+        // Skip over any leading empty lists, mirroring KernelFunctionSpecialized.concat, so that
+        // the first remaining part determines whether this is a list or blob concatenation.
+        var firstNonEmptyIndex = 0;
+
+        while (firstNonEmptyIndex < length)
+        {
+            var item = input.GetElementAt(firstNonEmptyIndex);
+
+            if (item.IsList() && item.GetLength() is 0)
+            {
+                ++firstNonEmptyIndex;
+                continue;
+            }
+
+            break;
+        }
+
+        if (firstNonEmptyIndex >= length)
+            return EmptyList;
+
+        var head = input.GetElementAt(firstNonEmptyIndex);
+
+        if (firstNonEmptyIndex == length - 1)
+            return head;
+
+        if (head.IsList())
+        {
+            // List concatenation: preserve the in-process child items so embedded specialized
+            // instances (such as interpreter closures) are not forced to a concrete PineValue.
+            var items = new List<PineValueInProcess>();
+
+            for (var i = firstNonEmptyIndex; i < length; ++i)
+            {
+                var part = input.GetElementAt(i);
+
+                if (!part.IsList())
+                {
+                    // Mirror the kernel: a non-list part among lists yields the empty list.
+                    return EmptyList;
+                }
+
+                AppendListItems(part, items);
+            }
+
+            return CreateList(items);
+        }
+
+        // Blob path: keep the existing lazy behavior. Blobs cannot embed specialized children.
         if (length is 2)
         {
             return ConcatBinary(input.GetElementAt(0), input.GetElementAt(1));
         }
 
         return Create(KernelFunction.concat(input.Evaluate()));
+    }
+
+    /// <summary>
+    /// Appends the in-process child items of the list value <paramref name="listValue"/> to
+    /// <paramref name="destination"/> without forcing evaluation, so that specialized child
+    /// instances that lack a concrete <see cref="PineValue"/> encoding are preserved.
+    /// </summary>
+    private static void AppendListItems(
+        PineValueInProcess listValue,
+        List<PineValueInProcess> destination)
+    {
+        var structuralItems = listValue.UnevaluatedStructuralItemsOrNull();
+
+        if (structuralItems is not null)
+        {
+            for (var i = 0; i < structuralItems.Count; ++i)
+            {
+                destination.Add(structuralItems[i]);
+            }
+
+            return;
+        }
+
+        var length = listValue.GetLength();
+
+        for (var i = 0; i < length; ++i)
+        {
+            destination.Add(listValue.GetElementAt(i));
+        }
     }
 
     /// <summary>
