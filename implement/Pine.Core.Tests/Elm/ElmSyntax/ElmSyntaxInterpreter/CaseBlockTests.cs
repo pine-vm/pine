@@ -540,9 +540,12 @@ public class CaseBlockTests
                 fromOk: _ => throw new System.Exception("Expected error but got a value."));
 
         errorText.Should().Be(
-            "Case expression did not match any arm.\n"
-            + "Scrutinee value: Nothing\n"
-            + "Elm call stack (innermost first):\n"
-            + "  at classify Nothing");
+            """
+            Case expression did not match any arm.
+            Scrutinee value: Nothing
+            Scrutinee expression: FunctionOrValue { QualifiedName = m }
+            Elm call stack (innermost first):
+              at classify Nothing
+            """);
     }
 }

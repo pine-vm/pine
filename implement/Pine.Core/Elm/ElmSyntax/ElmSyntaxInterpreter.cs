@@ -882,8 +882,8 @@ public partial class ElmSyntaxInterpreter
         /// performs no computation on return (the returned value simply bubbles up).
         /// <see cref="Arguments"/> holds the values the function was called with — used
         /// both to render runtime-error stack traces as Elm-style function applications
-        /// and to detect infinite recursion (a repeated <c>(SourceIdentity, Arguments)</c>
-        /// pair on the kont stack).
+        /// and to detect infinite recursion (a repeated
+        /// <c>(SourceIdentity, CapturedEnv, Arguments)</c> triple on the kont stack).
         /// <para>
         /// <see cref="SourceIdentity"/> is an opaque, reference-comparable handle on the
         /// AST node the call originated from — a <see cref="SyntaxModel.FunctionImplementation"/>
@@ -895,20 +895,41 @@ public partial class ElmSyntaxInterpreter
         /// name collapses to <c>&lt;lambda@1:1&gt;</c>) are then correctly treated as
         /// distinct frames as long as they are distinct AST nodes.
         /// </para>
+        /// <para>
+        /// <see cref="CapturedBindings"/> and <see cref="CapturedTopLevel"/> capture the
+        /// closure environment the body evaluates under. They are part of the recursion
+        /// identity because a single lambda AST node is shared by every closure built from
+        /// it: two combinator closures (for example distinct <c>ParserFast.map2</c>
+        /// applications) share the same <see cref="SourceIdentity"/> but capture different
+        /// free variables. Ignoring the captured environment made deeply nested parses
+        /// spuriously trip the detector once two such closures were invoked with equal
+        /// arguments. A genuine self-recursive call re-enters the same body under an equal
+        /// captured environment and is still detected.
+        /// </para>
         /// </summary>
         public sealed record CallFrame(
             DeclQualifiedName FunctionName,
             object SourceIdentity,
-            IReadOnlyList<PineValueInProcess> Arguments) : Kont;
+            IReadOnlyList<PineValueInProcess> Arguments,
+            IReadOnlyDictionary<string, PineValueInProcess> CapturedBindings,
+            DeclQualifiedName CapturedTopLevel) : Kont;
+
 
         /// <summary>
         /// After evaluating the scrutinee of a <c>case … of</c> expression, try the
         /// arms in source order and evaluate the first one whose pattern matches the
         /// returned value. If no arm matches, a runtime error is raised.
+        /// <para>
+        /// <see cref="ScrutineeExpr"/> is the source expression whose value is being
+        /// matched. It is retained purely to enrich the "did not match any arm" runtime
+        /// error with the originating expression, making such failures easier to locate
+        /// when debugging interpreted Elm programs.
+        /// </para>
         /// </summary>
         public sealed record MatchCase(
             IReadOnlyList<ElmSyntaxAbstract.Case> Cases,
-            ApplicationContext Env) : Kont;
+            ApplicationContext Env,
+            ElmSyntaxAbstract.Expression? ScrutineeExpr = null) : Kont;
 
         /// <summary>
         /// After evaluating the record-position expression of a record-access
@@ -1139,7 +1160,9 @@ public partial class ElmSyntaxInterpreter
                             // otherwise it's a nullary application which is handled by the same path
                             // as a full application with zero arguments.
                             if (functionOrValue.QualifiedName.Namespaces.Count is 0
-                                && currentEnv.LocalBindings.TryGetValue(functionOrValue.QualifiedName.DeclName, out var localValue))
+                                && currentEnv.LocalBindings.TryGetValue(
+                                    functionOrValue.QualifiedName.DeclName,
+                                    out var localValue))
                             {
                                 currentValue = localValue;
                                 currentExpr = null;
@@ -1342,7 +1365,8 @@ public partial class ElmSyntaxInterpreter
                         kstack.Push(
                             new Kont.MatchCase(
                                 Cases: caseExpression.Cases,
-                                Env: currentEnv));
+                                Env: currentEnv,
+                                ScrutineeExpr: caseExpression.Expression));
 
                         currentExpr = caseExpression.Expression;
                         break;
@@ -1618,6 +1642,21 @@ public partial class ElmSyntaxInterpreter
                                                 $"Unknown ApplyCallOutcome: {localOutcome.GetType().FullName}");
                                     }
                                 }
+                                else
+                                {
+                                    // The call produced a runtime error (for example an
+                                    // infinite-recursion report). Propagate it instead of
+                                    // silently dropping it: swallowing it here would leave
+                                    // the just-pushed CallFrame on the stack with a stale
+                                    // currentValue, so the frame would pop returning the
+                                    // call's argument, surfacing later as a confusing
+                                    // "Case expression did not match any arm" error.
+                                    if (localResult.IsErrOrNull() is { } localErr)
+                                        return localErr;
+
+                                    throw new System.NotImplementedException(
+                                        $"ApplyFunctionValue returned a result that is neither Ok nor Err: {localResult.GetType().FullName}");
+                                }
 
                                 break;
                             }
@@ -1883,10 +1922,18 @@ public partial class ElmSyntaxInterpreter
                                 var renderedValue =
                                     RenderArgumentForError(value).rendered;
 
+                                var scrutineeExprText =
+                                    matchCase.ScrutineeExpr is { } scrutineeExpr
+                                    ?
+                                    "\nScrutinee expression: " + scrutineeExpr
+                                    :
+                                    "";
+
                                 return
                                     MakeRuntimeError(
                                         "Case expression did not match any arm.\nScrutinee value: "
-                                        + renderedValue,
+                                        + renderedValue
+                                        + scrutineeExprText,
                                         kstack);
                             }
 
@@ -2312,7 +2359,9 @@ public partial class ElmSyntaxInterpreter
                         new Kont.CallFrame(
                             application.FunctionName,
                             functionImpl,
-                            saturatingArgs));
+                            saturatingArgs,
+                            ImmutableDictionary<string, PineValueInProcess>.Empty,
+                            bodyTopLevel));
 
                     if (invocationLogger.IncrementUserCallDepth() % InfiniteRecursionCheckInterval is 0)
                     {
@@ -2626,7 +2675,9 @@ public partial class ElmSyntaxInterpreter
             new Kont.CallFrame(
                 callFrameName,
                 callFrameSourceIdentity,
-                saturatingArgs));
+                saturatingArgs,
+                closure.CapturedBindings,
+                closure.CapturedTopLevel));
 
         if (invocationLogger.IncrementUserCallDepth() % InfiniteRecursionCheckInterval is 0)
         {
@@ -2677,8 +2728,10 @@ public partial class ElmSyntaxInterpreter
 
     /// <summary>
     /// Walks the kont stack looking for two <see cref="Kont.CallFrame"/> entries with the same
-    /// <see cref="Kont.CallFrame.SourceIdentity"/> (compared by reference) and structurally
-    /// equal <see cref="Kont.CallFrame.Arguments"/>. If such a pair is found, infinite
+    /// <see cref="Kont.CallFrame.SourceIdentity"/> (compared by reference), an equal captured
+    /// environment (<see cref="Kont.CallFrame.CapturedTopLevel"/> and
+    /// <see cref="Kont.CallFrame.CapturedBindings"/>), and structurally equal
+    /// <see cref="Kont.CallFrame.Arguments"/>. If such a pair is found, infinite
     /// recursion is raised as an <see cref="ElmInterpretationException"/> whose
     /// <see cref="ElmInterpretationError.CallStack"/> is the stack truncated to the first
     /// cycle: the innermost (just-pushed) frame at index 0, followed by the frames between
@@ -2688,8 +2741,16 @@ public partial class ElmSyntaxInterpreter
     /// <see cref="Kont.CallFrame.FunctionName"/> — avoids false positives when two distinct
     /// anonymous lambdas happen to share a synthetic name (e.g. <c>ParserFast</c> combinator
     /// chains where every lambda's <c>BackslashLocation</c> collapses to row 1, column 1
-    /// because the generated source has no line information). A genuine self-recursive
-    /// call always re-uses the same AST node and is detected as before.
+    /// because the generated source has no line information).
+    /// </para>
+    /// <para>
+    /// The captured environment is compared as well because a single lambda AST node backs
+    /// every closure built from it: distinct combinator closures (for example separate
+    /// <c>ParserFast.map2</c> applications) share one <see cref="Kont.CallFrame.SourceIdentity"/>
+    /// yet capture different free variables. Comparing only <c>(SourceIdentity, Arguments)</c>
+    /// made deeply nested parses spuriously trip the detector once two such closures were
+    /// invoked with equal argument values. A genuine self-recursive call re-enters the same
+    /// body under an equal captured environment and is still detected.
     /// </para>
     /// </summary>
     private static ElmInterpretationError? CheckForInfiniteRecursion(Stack<Kont> kstack)
@@ -2726,6 +2787,8 @@ public partial class ElmSyntaxInterpreter
             }
 
             if (ReferenceEquals(callFrame.SourceIdentity, topCallFrame.SourceIdentity) &&
+                callFrame.CapturedTopLevel.Equals(topCallFrame.CapturedTopLevel) &&
+                CapturedBindingsEqual(callFrame.CapturedBindings, topCallFrame.CapturedBindings) &&
                 ArgumentListsEqual(callFrame.Arguments, topCallFrame.Arguments))
             {
                 return
@@ -2736,6 +2799,35 @@ public partial class ElmSyntaxInterpreter
         }
 
         return null;
+    }
+
+    /// <summary>
+    /// Structural equality of two captured-binding environments: same set of names, each
+    /// bound to a <see cref="ValuesEqualInProcess"/>-equal value. Part of the recursion
+    /// identity so that two distinct closures built from the same lambda AST node but
+    /// capturing different free variables (for example separate <c>ParserFast</c> combinator
+    /// applications) are not mistaken for a single self-recursive call.
+    /// </summary>
+    private static bool CapturedBindingsEqual(
+        IReadOnlyDictionary<string, PineValueInProcess> left,
+        IReadOnlyDictionary<string, PineValueInProcess> right)
+    {
+        if (ReferenceEquals(left, right))
+            return true;
+
+        if (left.Count != right.Count)
+            return false;
+
+        foreach (var (name, leftValue) in left)
+        {
+            if (!right.TryGetValue(name, out var rightValue))
+                return false;
+
+            if (!ValuesEqualInProcess(leftValue, rightValue))
+                return false;
+        }
+
+        return true;
     }
 
     private static bool ArgumentListsEqual(
