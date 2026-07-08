@@ -146,6 +146,11 @@ public class CodeAnalysisTests
             """"
             module Test exposing (..)
 
+            type Dict k v
+                = RBEmpty_elm_builtin
+                | RBNode_elm_builtin Int k v (Dict k v) (Dict k v)
+
+
             dictToShuffledList : Dict k v -> List ( k, v )
             dictToShuffledList dict =
                 case dict of

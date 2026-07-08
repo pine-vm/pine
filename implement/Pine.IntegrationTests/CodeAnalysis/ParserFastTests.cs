@@ -69,6 +69,8 @@ public class ParserFastTests
             """"
             module ParserFastTest exposing (..)
 
+            import Range exposing (Range)
+
 
             type Parser a
                 = Parser (State -> PStep a)
@@ -313,6 +315,7 @@ public class ParserFastTests
 
             import Node exposing (Node)
             import ParserFastTest
+            import Rope exposing (Rope)
 
 
             type Pattern
