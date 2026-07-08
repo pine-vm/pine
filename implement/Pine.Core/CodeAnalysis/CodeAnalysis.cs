@@ -704,6 +704,14 @@ public class CodeAnalysis
     {
         var skippedForRecursion = new HashSet<Expression>();
 
+        // Normalize the "generic function application" emission format, in which the encoded
+        // part of an application is a runtime construction of an encoded Pine expression
+        // (for example List["ParseAndEval", [Literal(body), <environment construction>]]).
+        // Such constructions are decoded to their equivalent expressions so that the inlining
+        // and parsing below only ever see the ordinary application shapes (literal- or
+        // path-encoded ParseAndEval).
+        expression = NormalizeConstructedApplications(expression, parseCache);
+
         var reducedExpression =
             ReducePineExpression.TransformPineExpressionWithOptionalReplacement(
                 findReplacement:
@@ -785,6 +793,62 @@ public class CodeAnalysis
 
         return
             (reducedExpression, skippedForRecursion.ToImmutableHashSet());
+    }
+
+    /// <summary>
+    /// Normalizes applications emitted in the "generic function application" form, in which the
+    /// <see cref="Expression.ParseAndEval.Encoded"/> part is an <see cref="Expression.List"/> that
+    /// constructs an encoded Pine expression at runtime (for example
+    /// <c>List["ParseAndEval", [Literal(body), &lt;environment construction&gt;]]</c>).
+    /// Each such application is replaced by the equivalent expression computed via
+    /// <see cref="ReducePineExpression.TryDecodeApplicationOfConstructedEncoding(Expression, Expression, PineVMParseCache)"/>.
+    /// The transformation is applied repeatedly until a fixpoint is reached, so nested
+    /// constructions revealed by an outer decoding are normalized as well.
+    /// <para>
+    /// Only the <see cref="Expression.List"/> construction shape is decoded here; the ordinary
+    /// literal-encoded and path-encoded applications (including nested
+    /// <see cref="Expression.ParseAndEval"/> chains) are left untouched for the existing
+    /// inlining and consolidation logic to handle.
+    /// </para>
+    /// </summary>
+    static Expression NormalizeConstructedApplications(
+        Expression expression,
+        PineVMParseCache parseCache)
+    {
+        var current = expression;
+
+        // Bound the number of iterations defensively; each iteration strictly decodes at least
+        // one construction layer into an ordinary expression, so convergence is expected quickly.
+        for (var iteration = 0; iteration < 1000; ++iteration)
+        {
+            var transformed =
+                ReducePineExpression.TransformPineExpressionWithOptionalReplacement(
+                    findReplacement:
+                    expr =>
+                    {
+                        if (expr is not Expression.ParseAndEval parseAndEval)
+                            return null;
+
+                        if (parseAndEval.Encoded is not Expression.List)
+                            return null;
+
+                        return
+                            ReducePineExpression.TryDecodeApplicationOfConstructedEncoding(
+                                parseAndEval.Encoded,
+                                parseAndEval.Environment,
+                                parseCache);
+                    },
+                    current).expr;
+
+            if (transformed == current)
+            {
+                return current;
+            }
+
+            current = transformed;
+        }
+
+        return current;
     }
 
     static Result<string, StaticExpressionGen> ParseAsStaticExpression(
