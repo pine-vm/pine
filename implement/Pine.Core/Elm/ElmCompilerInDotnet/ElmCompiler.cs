@@ -129,6 +129,7 @@ public class ElmCompiler
         FrozenSet.Create(
             [
             "Basics",
+            "Debug",
             ]);
 
     /// <summary>

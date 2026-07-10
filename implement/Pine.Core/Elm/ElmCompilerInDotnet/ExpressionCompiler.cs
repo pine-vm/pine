@@ -249,6 +249,13 @@ public class ExpressionCompiler
             }
         }
 
+        if (expr.QualifiedName.Namespaces.Count is 1 &&
+            expr.QualifiedName.Namespaces[0] is "Debug" &&
+            expr.QualifiedName.DeclName is "toString")
+        {
+            return Expression.LiteralInstance(CoreLibraryModule.CoreDebug.ToString_FunctionValue());
+        }
+
         // Handle List.cons used as a value reference (the :: operator after canonicalization)
         // This handles cases like passing (::) as a function value: `applyFunc (::) 1 [2, 3]`
         if (expr.QualifiedName.Namespaces.Count is 1 && expr.QualifiedName.Namespaces[0] is "List" &&
@@ -332,6 +339,14 @@ public class ExpressionCompiler
         // Check if this is a function application or choice type tag application
         if (functionExpr is SyntaxTypes.Expression.FunctionOrValue funcRef)
         {
+            if (funcRef.QualifiedName.Namespaces.Count is 1 &&
+                funcRef.QualifiedName.Namespaces[0] is "Debug" &&
+                funcRef.QualifiedName.DeclName is "toString" &&
+                compiledArguments.Length is 1)
+            {
+                return CoreLibraryModule.CoreDebug.ToString(compiledArguments[0]);
+            }
+
             // Check if this is a record type alias constructor application
             // Record type alias constructors also have uppercase names, so check this first
             var qualifiedConstructorName =

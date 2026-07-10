@@ -11,7 +11,7 @@ namespace Pine.Core;
 
 
 /// <summary>
-/// Pine kernel functions: the primitive operations of the Pine expression language.
+/// Pine builtin functions: the primitive operations of the Pine language.
 /// Pine’s value model has only two forms: blobs (byte sequences) and lists (heterogeneous sequences).
 /// All primitives are invoked by name with a single <see cref="PineValue"/> argument that may be a list
 /// encoding multiple logical parameters (e.g. <c>[ count, sequence ]</c> for <c>skip</c>/<c>take</c>).
