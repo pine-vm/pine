@@ -116,15 +116,9 @@ public class ApplyChoiceTypeTagTests
             testModule.moduleContent.FunctionDeclarations
             .FirstOrDefault(decl => decl.Key is "getTagAsFunction");
 
-        var invokeGetTagAsFunction =
-            ElmCompilerTestHelper.CreateFunctionValueInvocationDelegate(getTagAsFunctionDecl.Value, parseCache);
-
-        // Call with 0 arguments to get the function value
-        var (functionValue, _) = invokeGetTagAsFunction([]);
-
         // Now apply the argument to the function value
         var (result, _) =
-            ElmCompilerTestHelper.CreateFunctionValueInvocationDelegate(functionValue, parseCache)
+            ElmCompilerTestHelper.CreateFunctionValueInvocationDelegate(getTagAsFunctionDecl.Value, parseCache)
             ([IntegerEncoding.EncodeSignedInteger(42)]);
 
         var resultRendered =
@@ -363,15 +357,9 @@ public class ApplyChoiceTypeTagTests
             testModule.moduleContent.FunctionDeclarations
             .FirstOrDefault(decl => decl.Key is "getTagAsFunction");
 
-        var invokeGetTagAsFunction =
-            ElmCompilerTestHelper.CreateFunctionValueInvocationDelegate(getTagAsFunctionDecl.Value, parseCache);
-
-        // Call with 0 arguments to get the function value
-        var (functionValue, _) = invokeGetTagAsFunction([]);
-
         // Now apply the argument to the function value
         var (result, _) =
-            ElmCompilerTestHelper.CreateFunctionValueInvocationDelegate(functionValue, parseCache)
+            ElmCompilerTestHelper.CreateFunctionValueInvocationDelegate(getTagAsFunctionDecl.Value, parseCache)
             ([IntegerEncoding.EncodeSignedInteger(42)]);
 
         var resultRendered =

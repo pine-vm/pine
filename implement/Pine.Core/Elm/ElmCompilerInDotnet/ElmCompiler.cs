@@ -1058,22 +1058,36 @@ public class ElmCompiler
             compilationContext = compileSccOk;
         }
 
-        // Optional: replace selected zero-parameter root declarations with their plain
-        // evaluated values, so the module value embeds the result directly instead of a
-        // function-record wrapper. This lets consumers (e.g. CommandLineAppConfig.runRoot)
-        // read a record value straight from the declaration without spinning up a VM.
+        // Zero-parameter declarations represent Elm values, so the module value embeds
+        // their evaluated results directly instead of a function-record wrapper.
+        // This lets consumers read the declaration value without first evaluating it.
+        var declarationsAsPlainValues =
+            compilationContext.CompiledFunctionsCache
+            .Where(entry => entry.Value.ParameterCount is 0)
+            .Select(entry => entry.Key)
+            .ToHashSet();
+
         if (rootDeclarationsAsPlainValues is { Count: > 0 } rootDeclsAsPlainValues)
+        {
+            foreach (var rootDecl in rootDeclsAsPlainValues)
+            {
+                declarationsAsPlainValues.Add(
+                    QualifiedNameHelper.FromQualifiedNameString(rootDecl.FullName));
+            }
+        }
+
+        if (declarationsAsPlainValues.Count > 0)
         {
             var plainValueParseCache = new PineVMParseCache();
 
             var plainValueInterpreter =
                 new Interpreter.DirectInterpreter(plainValueParseCache, evalCache: null);
 
-            foreach (var rootDecl in rootDeclsAsPlainValues)
+            foreach (var qualifiedName in declarationsAsPlainValues)
             {
-                var qualifiedNameStr = rootDecl.FullName;
+                var qualifiedNameStr = qualifiedName.ToString();
 
-                var compiledInfo = compilationContext.TryGetCompiledFunctionInfo(qualifiedNameStr);
+                var compiledInfo = compilationContext.TryGetCompiledFunctionInfo(qualifiedName);
 
                 if (compiledInfo is null)
                 {

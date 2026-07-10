@@ -1,5 +1,7 @@
 using AwesomeAssertions;
 using Pine.Core.CodeAnalysis;
+using Pine.Core.CommonEncodings;
+using System.Linq;
 using Xunit;
 
 namespace Pine.Core.Tests.Elm.ElmCompilerInDotnet.ElmCompilerTests;
@@ -37,6 +39,30 @@ public class SimpleValueDeclarationTests
 
             """"
             .Trim());
+    }
+
+    [Fact]
+    public void Simple_integer_value_declaration_is_emitted_as_plain_value()
+    {
+        var elmModuleText =
+            """
+            module Test exposing (..)
+            
+            alfa = 123
+            
+            """;
+
+        var (parsedEnv, _) =
+            ElmCompilerTestHelper.CompileElmModules(
+                [elmModuleText],
+                disableInlining: true);
+
+        var value =
+            parsedEnv.Modules
+            .Single(module => module.moduleName is "Test")
+            .moduleContent.FunctionDeclarations["alfa"];
+
+        value.Should().Be(IntegerEncoding.EncodeSignedInteger(123));
     }
 
     [Fact]
