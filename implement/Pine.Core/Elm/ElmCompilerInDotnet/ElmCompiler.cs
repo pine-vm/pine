@@ -398,7 +398,7 @@ public class ElmCompiler
         // Step 1: Parse all modules, building a map from file path to module name.
         var successfullyParsedModules = new Dictionary<string, SyntaxTypes.File>();
 
-        var parseFailures = new HashSet<string>();
+        var parseFailures = new Dictionary<string, string>();
 
         var filePathToModuleName =
             new Dictionary<IReadOnlyList<string>, string>(
@@ -439,9 +439,9 @@ public class ElmCompiler
             var parseResult =
                 ElmSyntax.ElmSyntaxParser.ParseModuleText(moduleText);
 
-            if (parseResult.IsErrOrNullable() is not null)
+            if (parseResult.IsErrOrNullable() is { } parseErr)
             {
-                parseFailures.Add(moduleNameFlattened);
+                parseFailures.Add(moduleNameFlattened, ElmSyntax.ElmSyntaxParseError.RenderDisplayString(parseErr));
                 continue;
             }
 
@@ -449,6 +449,14 @@ public class ElmCompiler
             {
                 throw new NotImplementedException(
                     "Unexpected parse result type: " + parseResult.GetType().Name);
+            }
+
+            if (parseModuleOk.IncompleteDeclarations.Count is not 0)
+            {
+                var firstIncompleteDeclaration = parseModuleOk.IncompleteDeclarations[0];
+
+                parseFailures.Add(moduleNameFlattened, ElmSyntax.ElmSyntaxParseError.RenderDisplayString(firstIncompleteDeclaration.Value.ParseError));
+                continue;
             }
 
             var parseModuleAst =
@@ -502,13 +510,14 @@ public class ElmCompiler
                         if (s_nativelyImplementedModuleNames.Contains(importedName))
                             continue; // Natively implemented in .NET; not a compilation dep.
 
-                        if (parseFailures.Contains(importedName))
+                        if (parseFailures.TryGetValue(importedName, out var parseErr))
                         {
                             // A module in the dep graph depends on a module that failed to parse.
+
                             return
                                 "Module '" + importedName +
                                 "' is required by '" + moduleName +
-                                "' but failed to parse.";
+                                "' but failed to parse: " + parseErr;
                         }
 
                         // Unknown modules (not in our file tree) are external packages; skip.
