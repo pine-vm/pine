@@ -13,7 +13,7 @@ namespace Pine.Core.Tests.Elm.ElmSyntax.ElmSyntaxInterpreter;
 
 /// <summary>
 /// Exercises the ambient instrumentation hook
-/// (<see cref="ElmInterpreter.BeginInstrumentationScope(Pine.Core.Elm.ElmSyntax.IInvocationLogger)"/>)
+/// (<see cref="ElmInterpreter.BeginInstrumentationScope(Core.Elm.ElmSyntax.IInvocationLogger)"/>)
 /// together with <see cref="FunctionStepCountingInvocationLogger"/>. The scope makes it
 /// possible to attribute interpreter steps to individual functions even for entry points that
 /// don't otherwise thread a logger through their signature — which is how the hottest

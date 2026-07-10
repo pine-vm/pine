@@ -192,7 +192,7 @@ public class ElmFormatCommandRenderingTests
     [Fact]
     public void RenderOverviewHeader_uses_delegate()
     {
-        var lines = new System.Collections.Generic.List<string>();
+        var lines = new List<string>();
 
         ElmFormatCommand.RenderOverviewHeader(
             writeLine: lines.Add,
@@ -210,7 +210,7 @@ public class ElmFormatCommandRenderingTests
     [Fact]
     public void RenderFilesWithErrors_uses_delegate()
     {
-        var lines = new System.Collections.Generic.List<string>();
+        var lines = new List<string>();
 
         var errors =
             ImmutableDictionary<string, ElmFormatFileResult.ParseError>.Empty
@@ -228,7 +228,7 @@ public class ElmFormatCommandRenderingTests
     [Fact]
     public void RenderFilesNeedingFormatting_uses_delegate()
     {
-        var lines = new System.Collections.Generic.List<string>();
+        var lines = new List<string>();
 
         var files =
             ImmutableDictionary<string, ElmFormatFileResult.FormatChanged>.Empty
@@ -246,7 +246,7 @@ public class ElmFormatCommandRenderingTests
     [Fact]
     public void RenderSuccessMessage_uses_delegate()
     {
-        var lines = new System.Collections.Generic.List<string>();
+        var lines = new List<string>();
 
         ElmFormatCommand.RenderSuccessMessage(
             writeLine: lines.Add,

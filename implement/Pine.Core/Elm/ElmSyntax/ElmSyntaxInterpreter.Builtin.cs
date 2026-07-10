@@ -13,7 +13,7 @@ namespace Pine.Core.Elm.ElmSyntax;
 /// Each entry maps a fully-qualified declaration name to a delegate that computes the
 /// function's result directly on the interpreter's value model
 /// (<see cref="PineValueInProcess"/>). The interpreter consults these builtins (via
-/// <see cref="ApplicationResolver(System.Collections.Generic.IReadOnlyDictionary{DeclQualifiedName, System.Func{ImmutableList{PineValueInProcess}, PineValueInProcess}})"/>)
+/// <see cref="ApplicationResolver(IReadOnlyDictionary{DeclQualifiedName, System.Func{IReadOnlyList{PineValueInProcess}, PineValueInProcess?}})"/>)
 /// before falling back to the user-defined Elm declarations, so a registered builtin
 /// short-circuits the recursive Elm implementation while preserving its observable
 /// semantics. This keeps the dispatch general enough to add further builtins (for example
@@ -376,7 +376,7 @@ public partial class ElmSyntaxInterpreter
     /// </summary>
     private static PineValue DictToListPine(PineValue dict)
     {
-        var pairs = new System.Collections.Generic.List<PineValue>();
+        var pairs = new List<PineValue>();
 
         CollectDictPairsPine(dict, pairs);
 
@@ -385,7 +385,7 @@ public partial class ElmSyntaxInterpreter
 
     private static void CollectDictPairsPine(
         PineValue dict,
-        System.Collections.Generic.List<PineValue> accumulator)
+        List<PineValue> accumulator)
     {
         if (dict is not PineValue.ListValue { Items: { Length: 2 } items } ||
             items.Span[0] != ElmValue.ElmDictNotEmptyTagNameAsValue)
@@ -411,7 +411,7 @@ public partial class ElmSyntaxInterpreter
     /// </summary>
     private static PineValue DictKeysPine(PineValue dict)
     {
-        var keys = new System.Collections.Generic.List<PineValue>();
+        var keys = new List<PineValue>();
 
         CollectDictKeysPine(dict, keys);
 
@@ -420,7 +420,7 @@ public partial class ElmSyntaxInterpreter
 
     private static void CollectDictKeysPine(
         PineValue dict,
-        System.Collections.Generic.List<PineValue> accumulator)
+        List<PineValue> accumulator)
     {
         if (dict is not PineValue.ListValue { Items: { Length: 2 } items } ||
             items.Span[0] != ElmValue.ElmDictNotEmptyTagNameAsValue)
@@ -660,7 +660,7 @@ public partial class ElmSyntaxInterpreter
 
         var charsBytes = AsStringCharsBytes(arguments[0].Evaluate(), "String.toList");
 
-        var chars = new System.Collections.Generic.List<PineValueInProcess>(charsBytes.Length / 4);
+        var chars = new List<PineValueInProcess>(charsBytes.Length / 4);
 
         for (var offset = 0; offset + 4 <= charsBytes.Length; offset += 4)
         {
@@ -751,7 +751,7 @@ public partial class ElmSyntaxInterpreter
         var separatorBytes = AsStringCharsBytes(arguments[0].Evaluate(), "String.split");
         var stringBytes = AsStringCharsBytes(arguments[1].Evaluate(), "String.split");
 
-        var segments = new System.Collections.Generic.List<PineValueInProcess>();
+        var segments = new List<PineValueInProcess>();
 
         if (separatorBytes.Length is 0)
         {
@@ -1052,7 +1052,7 @@ public partial class ElmSyntaxInterpreter
 
         var span = charsBytes.Span;
 
-        var lines = new System.Collections.Generic.List<PineValueInProcess>();
+        var lines = new List<PineValueInProcess>();
 
         var currentLineStart = 0;
         var offset = 0;
@@ -1444,11 +1444,11 @@ public partial class ElmSyntaxInterpreter
     /// Splits the UTF-32 characters blob at every occurrence of the given (single) code point,
     /// mirroring <c>splitHelperOnBlob</c> for a one-character separator (empty segments are kept).
     /// </summary>
-    private static System.Collections.Generic.List<System.ReadOnlyMemory<byte>> SplitOnCodePoint(
+    private static List<System.ReadOnlyMemory<byte>> SplitOnCodePoint(
         System.ReadOnlyMemory<byte> charsBytes,
         uint codePoint)
     {
-        var segments = new System.Collections.Generic.List<System.ReadOnlyMemory<byte>>();
+        var segments = new List<System.ReadOnlyMemory<byte>>();
 
         var span = charsBytes.Span;
 
@@ -1871,7 +1871,7 @@ public partial class ElmSyntaxInterpreter
             return null;
         }
 
-        var collected = new System.Collections.Generic.List<PineValueInProcess>();
+        var collected = new List<PineValueInProcess>();
 
         CollectDictValues(arguments[0], collected);
 
@@ -1880,7 +1880,7 @@ public partial class ElmSyntaxInterpreter
 
     private static void CollectDictValues(
         PineValueInProcess dict,
-        System.Collections.Generic.List<PineValueInProcess> accumulator)
+        List<PineValueInProcess> accumulator)
     {
         if (AsDictNode(dict, "Dict.values") is not { } node)
         {
@@ -1909,7 +1909,7 @@ public partial class ElmSyntaxInterpreter
             return null;
         }
 
-        var collected = new System.Collections.Generic.List<PineValueInProcess>();
+        var collected = new List<PineValueInProcess>();
 
         CollectDictPairs(arguments[0], collected);
 
@@ -1918,7 +1918,7 @@ public partial class ElmSyntaxInterpreter
 
     private static void CollectDictPairs(
         PineValueInProcess dict,
-        System.Collections.Generic.List<PineValueInProcess> accumulator)
+        List<PineValueInProcess> accumulator)
     {
         if (AsDictNode(dict, "Dict.toList") is not { } node)
         {
@@ -2093,7 +2093,7 @@ public partial class ElmSyntaxInterpreter
     {
         System.Numerics.BigInteger count = 0;
 
-        var pending = new System.Collections.Generic.Stack<PineValueInProcess>();
+        var pending = new Stack<PineValueInProcess>();
 
         pending.Push(dict);
 

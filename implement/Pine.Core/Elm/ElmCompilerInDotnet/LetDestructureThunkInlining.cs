@@ -67,7 +67,7 @@ namespace Pine.Core.Elm.ElmCompilerInDotnet;
 ///   <item><description>
 ///     Off by default. Wired conditionally through the
 ///     <c>inlineLetDestructureThunks</c> knob on
-///     <see cref="ElmCompiler.CompileInteractiveEnvironment{LoweredT}(Pine.Core.Files.FileTree, IReadOnlyList{ModuleName}, System.Func{ImmutableDictionary{DeclQualifiedName, SyntaxTypes.Declaration}, ImmutableHashSet{DeclQualifiedName}, Pine.Core.Result{string, LoweredT}}, System.Func{LoweredT, ImmutableDictionary{DeclQualifiedName, SyntaxTypes.Declaration}}, bool, IReadOnlyList{DeclQualifiedName}?, bool)"/>
+///     <see cref="ElmCompiler.CompileInteractiveEnvironment{LoweredT}(Files.FileTree, IReadOnlyList{ModuleName}, System.Func{ImmutableDictionary{DeclQualifiedName, SyntaxTypes.Declaration}, ImmutableHashSet{DeclQualifiedName}, Result{string, LoweredT}}, System.Func{LoweredT, ImmutableDictionary{DeclQualifiedName, SyntaxTypes.Declaration}}, bool, IReadOnlyList{DeclQualifiedName}?, bool)"/>
 ///     to limit blast radius until validated against the full
 ///     <c>Pine.Core.Tests</c> suite. See §H of the same analysis doc.
 ///   </description></item>

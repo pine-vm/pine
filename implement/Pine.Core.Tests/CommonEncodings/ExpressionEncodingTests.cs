@@ -119,7 +119,7 @@ public class ExpressionEncodingTests
         var encoded =
             ExpressionEncoding.EncodeExpressionAsValue(nested);
 
-        var parseCache = new Pine.Core.CodeAnalysis.PineVMParseCache();
+        var parseCache = new Core.CodeAnalysis.PineVMParseCache();
 
         var decoded =
             parseCache.ParseExpression(encoded)

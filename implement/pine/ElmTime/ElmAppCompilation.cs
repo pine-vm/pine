@@ -1346,7 +1346,7 @@ namespace ElmTime
             var kernelTree =
                 Pine.Core.Elm.ElmInElm.BundledFiles.ElmKernelModulesDefault.Value;
 
-            static IEnumerable<string> EnumerateElmModuleTexts(Pine.Core.Files.FileTree tree) =>
+            static IEnumerable<string> EnumerateElmModuleTexts(FileTree tree) =>
                 tree.EnumerateFilesTransitive()
                 .Where(file => file.path.Count > 0 && file.path[^1].EndsWith(".elm", StringComparison.OrdinalIgnoreCase))
                 .Select(file => Encoding.UTF8.GetString(file.fileContent.Span));
@@ -1354,7 +1354,7 @@ namespace ElmTime
             var rootModuleText =
                 Encoding.UTF8.GetString(
                     (containerTree.GetNodeAtPath(["src", "CompileElmAppMain.elm"])
-                    as Pine.Core.Files.FileTree.FileNode
+                    as FileTree.FileNode
                     ?? throw new Exception("Did not find src/CompileElmAppMain.elm in bundled compiler source."))
                     .Bytes.Span);
 

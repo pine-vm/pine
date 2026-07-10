@@ -14,7 +14,7 @@ public partial class ElmSyntaxInterpreter
     /// <c>RunTrampoline</c> when no explicit logger is passed. This makes it possible to
     /// instrument entry points that don't otherwise thread a logger through their
     /// signature — most importantly the direct-call
-    /// <see cref="Interpret(DeclQualifiedName, System.Collections.Generic.IReadOnlyList{PineValueInProcess}, Prepared)"/>
+    /// <see cref="Interpret(DeclQualifiedName, IReadOnlyList{PineValueInProcess}, Prepared)"/>
     /// overload used by the Elm-app compilation pipeline — without changing their public
     /// contract. Instrumentation is opt-in: the field is only non-null while a scope opened
     /// by <see cref="BeginInstrumentationScope(IInvocationLogger)"/> is active.
@@ -31,7 +31,7 @@ public partial class ElmSyntaxInterpreter
     /// Installs <paramref name="logger"/> as the <see cref="AmbientInvocationLogger"/> for
     /// the duration of the returned scope. Any interpretation started on the same async flow
     /// while the scope is open — including the direct-call
-    /// <see cref="Interpret(DeclQualifiedName, System.Collections.Generic.IReadOnlyList{PineValueInProcess}, Prepared)"/>
+    /// <see cref="Interpret(DeclQualifiedName, IReadOnlyList{PineValueInProcess}, Prepared)"/>
     /// overload — reports its function applications to <paramref name="logger"/>. Disposing
     /// the scope restores the previously-installed logger (scopes nest).
     /// </summary>

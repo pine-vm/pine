@@ -144,9 +144,9 @@ public class RecordPatternFieldsJsonConverter
 /// <para>
 /// A <see cref="PineValue.ListValue"/> is encoded as a JSON array of its items; a
 /// <see cref="PineValue.BlobValue"/> is encoded as a JSON object with a single <c>"Blob"</c> property holding
-/// the bytes in base64. Unlike <see cref="Pine.Core.Json.JsonConverterForPineValue"/>, this converter leaves the
+/// the bytes in base64. Unlike <see cref="Json.JsonConverterForPineValue"/>, this converter leaves the
 /// reader positioned on the last token of the value it read, as required by
-/// <see cref="System.Text.Json.JsonSerializer"/> for value converters nested in object/collection converters.
+/// <see cref="JsonSerializer"/> for value converters nested in object/collection converters.
 /// </para>
 /// </summary>
 public class PineValueJsonConverter : JsonConverter<PineValue>
@@ -240,7 +240,7 @@ public class PineValueJsonConverter : JsonConverter<PineValue>
 /// <summary>
 /// JSON converter for <see cref="System.Numerics.BigInteger"/>.
 /// <para>
-/// <see cref="System.Text.Json.JsonSerializer"/> has no built-in support for
+/// <see cref="JsonSerializer"/> has no built-in support for
 /// <see cref="System.Numerics.BigInteger"/>, so the abstract Elm syntax model (whose integer and float
 /// literals carry arbitrary-precision integers) needs this converter. The value is encoded as its decimal
 /// string representation to preserve arbitrary precision losslessly.
