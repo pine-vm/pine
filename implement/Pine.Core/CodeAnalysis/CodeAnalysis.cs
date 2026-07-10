@@ -109,7 +109,8 @@ public class CodeAnalysis
             var parseRootResult =
                 ParseAsStaticMonomorphicProgram(
                     rootDecl.Value,
-                    parseCache);
+                    parseCache,
+                    namesForDecl);
 
             if (parseRootResult.IsErrOrNull() is { } err)
             {
@@ -322,7 +323,8 @@ public class CodeAnalysis
     public static Result<string, ParsedFromSingleRoot>
         ParseAsStaticMonomorphicProgram(
         FunctionRecord functionRecord,
-        PineVMParseCache parseCache)
+        PineVMParseCache parseCache,
+        Func<PineValue, PineValueClass, IReadOnlyList<DeclQualifiedName>?>? namesForDecl = null)
     {
         var (_, appliedExpr, appliedEnv) =
             NamesFromCompiledEnv.BuildApplicationFromFunctionRecord(functionRecord, arguments: [], parseCache);
@@ -331,7 +333,8 @@ public class CodeAnalysis
             ParseAsStaticMonomorphicProgram(
                 rootExpression: appliedExpr,
                 rootEnvValueClass: appliedEnv,
-                parseCache: parseCache);
+                parseCache: parseCache,
+                namesForDecl: namesForDecl);
     }
 
     public record ParsedFromSingleRoot(
@@ -342,7 +345,8 @@ public class CodeAnalysis
         ParseAsStaticMonomorphicProgram(
         Expression rootExpression,
         PineValueClass rootEnvValueClass,
-        PineVMParseCache parseCache)
+        PineVMParseCache parseCache,
+        Func<PineValue, PineValueClass, IReadOnlyList<DeclQualifiedName>?>? namesForDecl = null)
     {
         /*
          * The analysis below recurses once per expression tree level across several helpers
@@ -356,7 +360,8 @@ public class CodeAnalysis
                 () => ParseAsStaticMonomorphicProgramLessStackGuard(
                     rootExpression,
                     rootEnvValueClass,
-                    parseCache));
+                    parseCache,
+                    namesForDecl));
     }
 
     /// <summary>
@@ -414,7 +419,8 @@ public class CodeAnalysis
         ParseAsStaticMonomorphicProgramLessStackGuard(
         Expression rootExpression,
         PineValueClass rootEnvValueClass,
-        PineVMParseCache parseCache)
+        PineVMParseCache parseCache,
+        Func<PineValue, PineValueClass, IReadOnlyList<DeclQualifiedName>?>? namesForDecl)
     {
         var observedSetInitial =
             new List<(Expression origExpr, Expression inlinedExpr, PineValueClass constraint)>();
@@ -435,7 +441,8 @@ public class CodeAnalysis
                 InlineParseAndEvalUsingLiteralFunctionRecursive(
                     current.expr,
                     current.envValueClass,
-                    parseCache);
+                    parseCache,
+                    namesForDecl);
 
             observedSetInitial.Add((current.expr, currentExprInlined, current.envValueClass));
 
@@ -685,13 +692,15 @@ public class CodeAnalysis
     static Expression InlineParseAndEvalUsingLiteralFunctionRecursive(
         Expression expression,
         PineValueClass envConstraint,
-        PineVMParseCache parseCache)
+        PineVMParseCache parseCache,
+        Func<PineValue, PineValueClass, IReadOnlyList<DeclQualifiedName>?>? namesForDecl = null)
     {
         return
             InlineParseAndEvalUsingLiteralFunctionRecursive(
                 expression,
                 envConstraint,
                 parseCache,
+                namesForDecl,
                 alreadyInlined: [])
             .expr;
     }
@@ -700,6 +709,7 @@ public class CodeAnalysis
         Expression expression,
         PineValueClass envValueClass,
         PineVMParseCache parseCache,
+        Func<PineValue, PineValueClass, IReadOnlyList<DeclQualifiedName>?>? namesForDecl,
         ImmutableHashSet<Expression> alreadyInlined)
     {
         var skippedForRecursion = new HashSet<Expression>();
@@ -745,6 +755,21 @@ public class CodeAnalysis
                         return null;
                     }
 
+                    if (namesForDecl is not null &&
+                        namesForDecl(childExprValue, childEnvValueClass) is { Count: > 0 })
+                    {
+                        /*
+                         * This callee corresponds to a named top-level declaration in the compiled
+                         * environment. Keep it as a separate call instead of inlining it, so that it
+                         * is emitted as its own function (matching the new emission convention which
+                         * does not inline non-recursive named callees). The surrounding analysis
+                         * enumerates the remaining parse&eval expression and parses the callee as a
+                         * standalone function.
+                         * */
+
+                        return null;
+                    }
+
                     if (alreadyInlined.Contains(childExpr))
                     {
                         // Prevent infinite recursion on self-referential parse&eval expressions.
@@ -778,6 +803,7 @@ public class CodeAnalysis
                             expression: inlinedExprReduced,
                             envValueClass: childEnvValueClass,
                             parseCache: parseCache,
+                            namesForDecl: namesForDecl,
                             alreadyInlined: alreadyInlined.Add(childExpr));
 
                     if (recursionResult.skippedForRecursion.Contains(childExpr))
