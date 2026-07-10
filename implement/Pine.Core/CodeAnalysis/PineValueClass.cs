@@ -526,11 +526,14 @@ public record PineValueClass
     ///   if the path resolves in <paramref name="envClass"/>, returns an equality constraint to that value;
     ///   otherwise returns the projection of <paramref name="envClass"/> under that path via <see cref="PartUnderPath"/>.
     /// - <see cref="Expression.List"/>: maps each item recursively and combines constraints under their list indices.
-    /// Other expression kinds are not handled and yield null.
+    /// Other expression kinds (for example a value computed via <see cref="Expression.KernelApplication"/>,
+    /// as emitted for environments that transform values at runtime) carry no static equality constraints
+    /// and yield an empty (unconstrained) class, mirroring how unrecognized items inside a
+    /// <see cref="Expression.List"/> contribute no constraints.
     /// </param>
     /// <returns>
     /// A <see cref="PineValueClass"/> describing the values the expression can take under
-    /// <paramref name="envClass"/>, or null if no useful constraint can be inferred.
+    /// <paramref name="envClass"/>; an empty class when no useful constraint can be inferred.
     /// </returns>
     public static PineValueClass? MapValueClass(
         PineValueClass envClass,
@@ -590,6 +593,12 @@ public record PineValueClass
             return Create(itemsFlattened);
         }
 
-        return null;
+        /*
+         * Other expression kinds (e.g. a value computed via kernel applications) do not expose any
+         * statically-known values at fixed paths. Such an environment is simply unconstrained, so we
+         * return an empty class instead of failing. This mirrors the handling of unrecognized items
+         * inside a List above, which contribute no constraints.
+         * */
+        return Empty;
     }
 }

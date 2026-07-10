@@ -48,26 +48,26 @@ public class CodeAnalysisTests
 
         wholeProgramText.Trim().Should().Be(
             """"
-            Test.fibonacci param_1_0 =
+            Test.fibonacci param_1 =
                 if
                     Pine_kernel.int_is_sorted_asc
-                        [ param_1_0
+                        [ param_1
                         , 2
                         ]
                 then
-                    param_1_0
+                    param_1
 
                 else
                     Pine_kernel.int_add
                         [ Test.fibonacci
                             (Pine_kernel.int_add
-                                [ param_1_0
+                                [ param_1
                                 , -2
                                 ]
                             )
                         , Test.fibonacci
                             (Pine_kernel.int_add
-                                [ param_1_0
+                                [ param_1
                                 , -1
                                 ]
                             )
@@ -112,10 +112,10 @@ public class CodeAnalysisTests
 
         wholeProgramText.Trim().Should().Be(
             """"
-            Test.factorial param_1_0 =
+            Test.factorial param_1 =
                 if
                     Pine_kernel.int_is_sorted_asc
-                        [ param_1_0
+                        [ param_1
                         , 1
                         ]
                 then
@@ -125,11 +125,11 @@ public class CodeAnalysisTests
                     Pine_kernel.int_mul
                         [ Test.factorial
                             (Pine_kernel.int_add
-                                [ param_1_0
+                                [ param_1
                                 , -1
                                 ]
                             )
-                        , param_1_0
+                        , param_1
                         ]
             """".Trim());
     }
@@ -177,35 +177,26 @@ public class CodeAnalysisTests
 
         wholeProgramText.Trim().Should().Be(
             """"
-            Test.dictToShuffledList param_1_0 =
+            Test.dictToShuffledList param_1_1 =
                 if
                     Pine_kernel.equal
-                        [ RBEmpty_elm_builtin
-                        , param_1_0[0]
+                        [ []
+                        , Dict.empty
                         ]
                 then
                     []
 
-                else if
-                    Pine_kernel.equal
-                        [ RBNode_elm_builtin
-                        , param_1_0[0]
-                        ]
-                then
+                else
                     Pine_kernel.concat
                         [ Test.dictToShuffledList
-                            param_1_0[1][3]
+                            param_1_1[3][1]
                         , Test.dictToShuffledList
-                            param_1_0[1][4]
-                        , [ [ param_1_0[1][1]
-                            , param_1_0[1][2]
+                            param_1_1[4][1]
+                        , [ [ param_1_1[1]
+                            , param_1_1[2]
                             ]
                           ]
                         ]
-
-                else
-                    <always_crash>
-
             """"
             .Trim());
     }
@@ -264,23 +255,23 @@ public class CodeAnalysisTests
 
         wholeProgramText.Trim().Should().Be(
             """"
-            Test.convert0OrMore_base3 param_1_0 param_1_1 param_1_2 =
+            Test.convert0OrMore_base3 param_1 param_2 param_3 =
                 if
                     Pine_kernel.equal
                         [ Pine_kernel.length
                             (Pine_kernel.take
                                 [ 4
                                 , Pine_kernel.skip
-                                    [ param_1_1
-                                    , param_1_2
+                                    [ param_2
+                                    , param_3
                                     ]
                                 ]
                             )
                         , 0
                         ]
                 then
-                    [ param_1_0
-                    , param_1_1
+                    [ param_1
+                    , param_2
                     ]
 
                 else if
@@ -288,8 +279,8 @@ public class CodeAnalysisTests
                         [ Pine_kernel.take
                             [ 4
                             , Pine_kernel.skip
-                                [ param_1_1
-                                , param_1_2
+                                [ param_2
+                                , param_3
                                 ]
                             ]
                         , '0'
@@ -297,24 +288,24 @@ public class CodeAnalysisTests
                 then
                     Test.convert0OrMore_base3
                         (Pine_kernel.int_mul
-                            [ param_1_0
+                            [ param_1
                             , 3
                             ]
                         )
                         (Pine_kernel.int_add
-                            [ param_1_1
+                            [ param_2
                             , 4
                             ]
                         )
-                        param_1_2
+                        param_3
 
                 else if
                     Pine_kernel.equal
                         [ Pine_kernel.take
                             [ 4
                             , Pine_kernel.skip
-                                [ param_1_1
-                                , param_1_2
+                                [ param_2
+                                , param_3
                                 ]
                             ]
                         , '1'
@@ -323,26 +314,26 @@ public class CodeAnalysisTests
                     Test.convert0OrMore_base3
                         (Pine_kernel.int_add
                             [ Pine_kernel.int_mul
-                                [ param_1_0
+                                [ param_1
                                 , 3
                                 ]
                             , 1
                             ]
                         )
                         (Pine_kernel.int_add
-                            [ param_1_1
+                            [ param_2
                             , 4
                             ]
                         )
-                        param_1_2
+                        param_3
 
                 else if
                     Pine_kernel.equal
                         [ Pine_kernel.take
                             [ 4
                             , Pine_kernel.skip
-                                [ param_1_1
-                                , param_1_2
+                                [ param_2
+                                , param_3
                                 ]
                             ]
                         , '2'
@@ -351,18 +342,18 @@ public class CodeAnalysisTests
                     Test.convert0OrMore_base3
                         (Pine_kernel.int_add
                             [ Pine_kernel.int_mul
-                                [ param_1_0
+                                [ param_1
                                 , 3
                                 ]
                             , 2
                             ]
                         )
                         (Pine_kernel.int_add
-                            [ param_1_1
+                            [ param_2
                             , 4
                             ]
                         )
-                        param_1_2
+                        param_3
 
                 else
                     [ 0, -1 ]
@@ -860,10 +851,10 @@ public class CodeAnalysisTests
 
         wholeProgramText.Trim().Should().Be(
             """"
-            Test.idiv param_1_0 param_1_1 =
+            Test.idiv param_1 param_2 =
                 if
                     Pine_kernel.equal
-                        [ param_1_1
+                        [ param_2
                         , 0
                         ]
                 then
@@ -874,7 +865,7 @@ public class CodeAnalysisTests
                         [ if
                             Pine_kernel.int_is_sorted_asc
                                 [ 0
-                                , param_1_0
+                                , param_1
                                 ]
                           then
                             False
@@ -884,7 +875,7 @@ public class CodeAnalysisTests
                         , if
                             Pine_kernel.int_is_sorted_asc
                                 [ 0
-                                , param_1_1
+                                , param_2
                                 ]
                           then
                             False
@@ -897,27 +888,27 @@ public class CodeAnalysisTests
                         if
                             Pine_kernel.int_is_sorted_asc
                                 [ 0
-                                , param_1_0
+                                , param_1
                                 ]
                         then
-                            param_1_0
+                            param_1
 
                         else
                             Pine_kernel.int_mul
-                                [ param_1_0
+                                [ param_1
                                 , -1
                                 ]
                         if
                             Pine_kernel.int_is_sorted_asc
                                 [ 0
-                                , param_1_1
+                                , param_2
                                 ]
                         then
-                            param_1_1
+                            param_2
 
                         else
                             Pine_kernel.int_mul
-                                [ param_1_1
+                                [ param_2
                                 , -1
                                 ]
                         0
@@ -928,27 +919,27 @@ public class CodeAnalysisTests
                             if
                                 Pine_kernel.int_is_sorted_asc
                                     [ 0
-                                    , param_1_0
+                                    , param_1
                                     ]
                             then
-                                param_1_0
+                                param_1
 
                             else
                                 Pine_kernel.int_mul
-                                    [ param_1_0
+                                    [ param_1
                                     , -1
                                     ]
                             if
                                 Pine_kernel.int_is_sorted_asc
                                     [ 0
-                                    , param_1_1
+                                    , param_2
                                     ]
                             then
-                                param_1_1
+                                param_2
 
                             else
                                 Pine_kernel.int_mul
-                                    [ param_1_1
+                                    [ param_2
                                     , -1
                                     ]
                             0
@@ -956,22 +947,22 @@ public class CodeAnalysisTests
                         ]
 
 
-            Test.idivHelper param_1_0 param_1_1 param_1_2 =
+            Test.idivHelper param_1 param_2 param_3 =
                 if
                     Pine_kernel.int_is_sorted_asc
                         [ Pine_kernel.int_mul
-                            [ param_1_1
+                            [ param_2
                             , 17
                             ]
-                        , param_1_0
+                        , param_1
                         ]
                 then
                     Pine_kernel.int_add
                         [ Pine_kernel.int_mul
                             [ Test.idivHelper
-                                param_1_0
+                                param_1
                                 (Pine_kernel.int_mul
-                                    [ param_1_1
+                                    [ param_2
                                     , 17
                                     ]
                                 )
@@ -980,50 +971,49 @@ public class CodeAnalysisTests
                             ]
                         , Test.idivHelper
                             (Pine_kernel.int_add
-                                [ param_1_0
+                                [ param_1
                                 , Pine_kernel.int_mul
                                     [ -17
                                     , Test.idivHelper
-                                        param_1_0
+                                        param_1
                                         (Pine_kernel.int_mul
-                                            [ param_1_1
+                                            [ param_2
                                             , 17
                                             ]
                                         )
                                         0
-                                    , param_1_1
+                                    , param_2
                                     ]
                                 ]
                             )
-                            param_1_1
+                            param_2
                             0
                         ]
 
                 else if
                     Pine_kernel.int_is_sorted_asc
-                        [ param_1_1
-                        , param_1_0
+                        [ param_2
+                        , param_1
                         ]
                 then
                     Test.idivHelper
                         (Pine_kernel.int_add
-                            [ param_1_0
+                            [ param_1
                             , Pine_kernel.int_mul
-                                [ param_1_1
+                                [ param_2
                                 , -1
                                 ]
                             ]
                         )
-                        param_1_1
+                        param_2
                         (Pine_kernel.int_add
-                            [ param_1_2
+                            [ param_3
                             , 1
                             ]
                         )
 
                 else
-                    param_1_2
-            
+                    param_3
             """"
             .Trim());
     }
@@ -1857,221 +1847,341 @@ public class CodeAnalysisTests
 
         wholeProgramText.Trim().Should().Be(
             """"
-            Test.charToHex param_1_0 =
-                if
-                    Pine_kernel.equal
-                        [ param_1_0
-                        , '0'
-                        ]
-                then
-                    0
-
-                else if
-                    Pine_kernel.equal
-                        [ param_1_0
-                        , '1'
-                        ]
-                then
-                    1
-
-                else if
-                    Pine_kernel.equal
-                        [ param_1_0
-                        , '2'
-                        ]
-                then
-                    2
-
-                else if
-                    Pine_kernel.equal
-                        [ param_1_0
-                        , '3'
-                        ]
-                then
-                    3
-
-                else if
-                    Pine_kernel.equal
-                        [ param_1_0
-                        , '4'
-                        ]
-                then
-                    4
-
-                else if
-                    Pine_kernel.equal
-                        [ param_1_0
-                        , '5'
-                        ]
-                then
-                    5
-
-                else if
-                    Pine_kernel.equal
-                        [ param_1_0
-                        , '6'
-                        ]
-                then
-                    6
-
-                else if
-                    Pine_kernel.equal
-                        [ param_1_0
-                        , '7'
-                        ]
-                then
-                    7
-
-                else if
-                    Pine_kernel.equal
-                        [ param_1_0
-                        , '8'
-                        ]
-                then
-                    8
-
-                else if
-                    Pine_kernel.equal
-                        [ param_1_0
-                        , '9'
-                        ]
-                then
-                    9
-
-                else if
-                    Pine_kernel.equal
-                        [ param_1_0
-                        , 'a'
-                        ]
-                then
-                    10
-
-                else if
-                    Pine_kernel.equal
-                        [ param_1_0
-                        , 'b'
-                        ]
-                then
-                    11
-
-                else if
-                    Pine_kernel.equal
-                        [ param_1_0
-                        , 'c'
-                        ]
-                then
-                    12
-
-                else if
-                    Pine_kernel.equal
-                        [ param_1_0
-                        , 'd'
-                        ]
-                then
-                    13
-
-                else if
-                    Pine_kernel.equal
-                        [ param_1_0
-                        , 'e'
-                        ]
-                then
-                    14
-
-                else if
-                    Pine_kernel.equal
-                        [ param_1_0
-                        , 'f'
-                        ]
-                then
-                    15
-
-                else if
-                    Pine_kernel.equal
-                        [ param_1_0
-                        , 'A'
-                        ]
-                then
-                    10
-
-                else if
-                    Pine_kernel.equal
-                        [ param_1_0
-                        , 'B'
-                        ]
-                then
-                    11
-
-                else if
-                    Pine_kernel.equal
-                        [ param_1_0
-                        , 'C'
-                        ]
-                then
-                    12
-
-                else if
-                    Pine_kernel.equal
-                        [ param_1_0
-                        , 'D'
-                        ]
-                then
-                    13
-
-                else if
-                    Pine_kernel.equal
-                        [ param_1_0
-                        , 'E'
-                        ]
-                then
-                    14
-
-                else
-                    15
-
-
-            Test.hexStringBytesToInt param_1_0 param_1_1 param_1_2 =
+            Test.hexStringBytesToInt param_1 param_2 param_3 =
                 if
                     Pine_kernel.equal
                         [ Pine_kernel.length
                             (Pine_kernel.take
                                 [ 4
                                 , Pine_kernel.skip
-                                    [ param_1_0
-                                    , param_1_2
+                                    [ param_1
+                                    , param_3
                                     ]
                                 ]
                             )
                         , 0
                         ]
                 then
-                    param_1_1
+                    param_2
 
                 else
                     Test.hexStringBytesToInt
                         (Pine_kernel.int_add
-                            [ param_1_0
+                            [ param_1
                             , 4
                             ]
                         )
                         (Pine_kernel.int_add
                             [ Pine_kernel.int_mul
                                 [ 16
-                                , param_1_1
+                                , param_2
                                 ]
-                            , Test.charToHex
-                                (Pine_kernel.take
-                                    [ 4
-                                    , Pine_kernel.skip
-                                        [ param_1_0
-                                        , param_1_2
+                            , if
+                                Pine_kernel.equal
+                                    [ Pine_kernel.take
+                                        [ 4
+                                        , Pine_kernel.skip
+                                            [ param_1
+                                            , param_3
+                                            ]
                                         ]
+                                    , '0'
                                     ]
-                                )
+                              then
+                                0
+
+                              else if
+                                Pine_kernel.equal
+                                    [ Pine_kernel.take
+                                        [ 4
+                                        , Pine_kernel.skip
+                                            [ param_1
+                                            , param_3
+                                            ]
+                                        ]
+                                    , '1'
+                                    ]
+                              then
+                                1
+
+                              else if
+                                Pine_kernel.equal
+                                    [ Pine_kernel.take
+                                        [ 4
+                                        , Pine_kernel.skip
+                                            [ param_1
+                                            , param_3
+                                            ]
+                                        ]
+                                    , '2'
+                                    ]
+                              then
+                                2
+
+                              else if
+                                Pine_kernel.equal
+                                    [ Pine_kernel.take
+                                        [ 4
+                                        , Pine_kernel.skip
+                                            [ param_1
+                                            , param_3
+                                            ]
+                                        ]
+                                    , '3'
+                                    ]
+                              then
+                                3
+
+                              else if
+                                Pine_kernel.equal
+                                    [ Pine_kernel.take
+                                        [ 4
+                                        , Pine_kernel.skip
+                                            [ param_1
+                                            , param_3
+                                            ]
+                                        ]
+                                    , '4'
+                                    ]
+                              then
+                                4
+
+                              else if
+                                Pine_kernel.equal
+                                    [ Pine_kernel.take
+                                        [ 4
+                                        , Pine_kernel.skip
+                                            [ param_1
+                                            , param_3
+                                            ]
+                                        ]
+                                    , '5'
+                                    ]
+                              then
+                                5
+
+                              else if
+                                Pine_kernel.equal
+                                    [ Pine_kernel.take
+                                        [ 4
+                                        , Pine_kernel.skip
+                                            [ param_1
+                                            , param_3
+                                            ]
+                                        ]
+                                    , '6'
+                                    ]
+                              then
+                                6
+
+                              else if
+                                Pine_kernel.equal
+                                    [ Pine_kernel.take
+                                        [ 4
+                                        , Pine_kernel.skip
+                                            [ param_1
+                                            , param_3
+                                            ]
+                                        ]
+                                    , '7'
+                                    ]
+                              then
+                                7
+
+                              else if
+                                Pine_kernel.equal
+                                    [ Pine_kernel.take
+                                        [ 4
+                                        , Pine_kernel.skip
+                                            [ param_1
+                                            , param_3
+                                            ]
+                                        ]
+                                    , '8'
+                                    ]
+                              then
+                                8
+
+                              else if
+                                Pine_kernel.equal
+                                    [ Pine_kernel.take
+                                        [ 4
+                                        , Pine_kernel.skip
+                                            [ param_1
+                                            , param_3
+                                            ]
+                                        ]
+                                    , '9'
+                                    ]
+                              then
+                                9
+
+                              else if
+                                Pine_kernel.equal
+                                    [ Pine_kernel.take
+                                        [ 4
+                                        , Pine_kernel.skip
+                                            [ param_1
+                                            , param_3
+                                            ]
+                                        ]
+                                    , 'a'
+                                    ]
+                              then
+                                10
+
+                              else if
+                                Pine_kernel.equal
+                                    [ Pine_kernel.take
+                                        [ 4
+                                        , Pine_kernel.skip
+                                            [ param_1
+                                            , param_3
+                                            ]
+                                        ]
+                                    , 'b'
+                                    ]
+                              then
+                                11
+
+                              else if
+                                Pine_kernel.equal
+                                    [ Pine_kernel.take
+                                        [ 4
+                                        , Pine_kernel.skip
+                                            [ param_1
+                                            , param_3
+                                            ]
+                                        ]
+                                    , 'c'
+                                    ]
+                              then
+                                12
+
+                              else if
+                                Pine_kernel.equal
+                                    [ Pine_kernel.take
+                                        [ 4
+                                        , Pine_kernel.skip
+                                            [ param_1
+                                            , param_3
+                                            ]
+                                        ]
+                                    , 'd'
+                                    ]
+                              then
+                                13
+
+                              else if
+                                Pine_kernel.equal
+                                    [ Pine_kernel.take
+                                        [ 4
+                                        , Pine_kernel.skip
+                                            [ param_1
+                                            , param_3
+                                            ]
+                                        ]
+                                    , 'e'
+                                    ]
+                              then
+                                14
+
+                              else if
+                                Pine_kernel.equal
+                                    [ Pine_kernel.take
+                                        [ 4
+                                        , Pine_kernel.skip
+                                            [ param_1
+                                            , param_3
+                                            ]
+                                        ]
+                                    , 'f'
+                                    ]
+                              then
+                                15
+
+                              else if
+                                Pine_kernel.equal
+                                    [ Pine_kernel.take
+                                        [ 4
+                                        , Pine_kernel.skip
+                                            [ param_1
+                                            , param_3
+                                            ]
+                                        ]
+                                    , 'A'
+                                    ]
+                              then
+                                10
+
+                              else if
+                                Pine_kernel.equal
+                                    [ Pine_kernel.take
+                                        [ 4
+                                        , Pine_kernel.skip
+                                            [ param_1
+                                            , param_3
+                                            ]
+                                        ]
+                                    , 'B'
+                                    ]
+                              then
+                                11
+
+                              else if
+                                Pine_kernel.equal
+                                    [ Pine_kernel.take
+                                        [ 4
+                                        , Pine_kernel.skip
+                                            [ param_1
+                                            , param_3
+                                            ]
+                                        ]
+                                    , 'C'
+                                    ]
+                              then
+                                12
+
+                              else if
+                                Pine_kernel.equal
+                                    [ Pine_kernel.take
+                                        [ 4
+                                        , Pine_kernel.skip
+                                            [ param_1
+                                            , param_3
+                                            ]
+                                        ]
+                                    , 'D'
+                                    ]
+                              then
+                                13
+
+                              else if
+                                Pine_kernel.equal
+                                    [ Pine_kernel.take
+                                        [ 4
+                                        , Pine_kernel.skip
+                                            [ param_1
+                                            , param_3
+                                            ]
+                                        ]
+                                    , 'E'
+                                    ]
+                              then
+                                14
+
+                              else
+                                15
                             ]
                         )
-                        param_1_2
-            
+                        param_3
+
+
+            Test.hexStringToInt param_1_1 =
+                Test.hexStringBytesToInt
+                    0
+                    0
+                    param_1_1[0]
             """"
             .Trim());
     }
@@ -2130,40 +2240,46 @@ public class CodeAnalysisTests
 
         wholeProgramText.Trim().Should().Be(
             """"
-            Test.listRepeatMultiply param_1_0 param_1_1 =
-                TestList.repeatHelp
+            List.repeat param_1 param_2 =
+                List.repeatHelp
                     []
-                    (Pine_kernel.int_mul
-                        [ param_1_0
-                        , 7
-                        ]
-                    )
-                    param_1_1
+                    param_1
+                    param_2
 
 
-            TestList.repeatHelp param_1_0 param_1_1 param_1_2 =
+            List.repeatHelp param_1 param_2 param_3 =
                 if
                     Pine_kernel.int_is_sorted_asc
-                        [ param_1_1
+                        [ param_2
                         , 0
                         ]
                 then
-                    param_1_0
+                    param_1
 
                 else
-                    TestList.repeatHelp
+                    List.repeatHelp
                         (Pine_kernel.concat
-                            [ [ param_1_2
+                            [ [ param_3
                               ]
-                            , param_1_0
+                            , param_1
                             ]
                         )
                         (Pine_kernel.int_add
-                            [ param_1_1
+                            [ param_2
                             , -1
                             ]
                         )
-                        param_1_2
+                        param_3
+
+
+            Test.listRepeatMultiply param_1 param_2 =
+                List.repeat
+                    (Pine_kernel.int_mul
+                        [ param_1
+                        , 7
+                        ]
+                    )
+                    param_2
             
             """"
             .Trim());

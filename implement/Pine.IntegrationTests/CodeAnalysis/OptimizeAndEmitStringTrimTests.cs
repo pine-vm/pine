@@ -13,8 +13,8 @@ public class OptimizeAndEmitStringTrimTests
         var parseCache = new PineVMParseCache();
 
         var (parsedEnv, staticProgram, functionMetadata) =
-            CodeAnalysisTestHelper.StaticProgramFromElmModules(
-                [],
+            CodeAnalysisTestHelper.StaticProgramFromElmKernelModules(
+                ["String.elm"],
                 includeDeclaration:
                 declName =>
                 {
@@ -42,9 +42,9 @@ public class OptimizeAndEmitStringTrimTests
             """"
             public static class String
             {
-                public static PineValue trim(PineValue param_1_0)
+                public static PineValue trim(PineValue param_1_1)
                 {
-                    PineValue local_000 = PineValueExtension.ValueFromPathOrEmptyList(param_1_0, [1, 0]);
+                    PineValue local_000 = PineValueExtension.ValueFromPathOrEmptyList(param_1_1, [0]);
 
                     return
                         PineValue.List(
@@ -53,13 +53,103 @@ public class OptimizeAndEmitStringTrimTests
                             PineValue.List(
                                 [
                                 KernelFunctionFused.TakeAndSkip(
-                                    skipCountValue:
-                                    Global_Anonymous.zzz_anon_7b433b8b_d4fe90b2(CommonReusedValues.Blob_Int_0, local_000),
-                                    takeCountValue:
-                                    Global_Anonymous.zzz_anon_627f403e_dca18c16(KernelFunction.length(local_000), local_000),
+                                    skipCountValue: String.trimLeftCountBytesTrimmed(CommonReusedValues.Blob_Int_0, local_000),
+                                    takeCountValue: String.trimRightCountBytesRemaining(KernelFunction.length(local_000), local_000),
                                     argument: local_000)
                                 ])
                             ]);
+                }
+
+                public static PineValue trimLeftCountBytesTrimmed(PineValue param_1, PineValue param_2)
+                {
+                    PineValue local_param_1 = param_1;
+                    PineValue local_param_2 = param_2;
+
+                    while (true)
+                    {
+                        PineValue local_000 =
+                            KernelFunctionFused.SkipAndTake(takeCount: 4, skipCountValue: local_param_1, argument: local_param_2);
+
+                        if (KernelFunctionSpecialized.length_as_int(local_000) == 0)
+                        {
+                            return local_param_1;
+                        }
+
+                        if (local_000 == CommonReusedValues.Blob_Char_space
+                        ?
+                        true
+                        :
+                        (local_000 == CommonReusedValues.Blob_Char_tab
+                        ?
+                        true
+                        :
+                        (local_000 == CommonReusedValues.Blob_Char_newline
+                        ?
+                        true
+                        :
+                        (local_000 == CommonReusedValues.Blob_Char_carriagereturn
+                        ?
+                        true
+                        :
+                        (local_000 == CommonReusedValues.Blob_Char_nobreakspace ? true : false)))))
+                        {
+                            {
+                                PineValue local_param_1_temp = KernelFunctionSpecialized.int_add(4, local_param_1);
+                                local_param_1 = local_param_1_temp;
+                            }
+
+                            continue;
+                        }
+
+                        return local_param_1;
+                    }
+                }
+
+                public static PineValue trimRightCountBytesRemaining(PineValue param_1, PineValue param_2)
+                {
+                    PineValue local_param_1 = param_1;
+                    PineValue local_param_2 = param_2;
+
+                    while (true)
+                    {
+                        if (local_param_1 == CommonReusedValues.Blob_Int_0)
+                        {
+                            return CommonReusedValues.Blob_Int_0;
+                        }
+
+                        PineValue local_000 = KernelFunctionSpecialized.int_add(-4, local_param_1);
+
+                        PineValue local_001 =
+                            KernelFunctionFused.SkipAndTake(takeCount: 4, skipCountValue: local_000, argument: local_param_2);
+
+                        if (local_001 == CommonReusedValues.Blob_Char_space
+                        ?
+                        true
+                        :
+                        (local_001 == CommonReusedValues.Blob_Char_tab
+                        ?
+                        true
+                        :
+                        (local_001 == CommonReusedValues.Blob_Char_newline
+                        ?
+                        true
+                        :
+                        (local_001 == CommonReusedValues.Blob_Char_carriagereturn
+                        ?
+                        true
+                        :
+                        (local_001 == CommonReusedValues.Blob_Char_nobreakspace ? true : false)))))
+                        {
+                            {
+                                PineValue local_param_1_temp = local_000;
+                                local_param_1 = local_param_1_temp;
+                            }
+
+                            continue;
+                        }
+
+                        return local_param_1;
+                    }
                 }
             }
             """".Trim());
@@ -68,98 +158,6 @@ public class OptimizeAndEmitStringTrimTests
             """"
             public static class Global_Anonymous
             {
-                public static PineValue zzz_anon_627f403e_dca18c16(PineValue param_1_0, PineValue param_1_1)
-                {
-                    PineValue local_param_1_0 = param_1_0;
-                    PineValue local_param_1_1 = param_1_1;
-
-                    while (true)
-                    {
-                        if (local_param_1_0 == CommonReusedValues.Blob_Int_0)
-                        {
-                            return CommonReusedValues.Blob_Int_0;
-                        }
-
-                        if (Global_Anonymous.zzz_anon_d97a2014_dda26649(
-                            KernelFunctionFused.SkipAndTake(
-                                takeCount: 4,
-                                skipCountValue: KernelFunctionSpecialized.int_add(-4, local_param_1_0),
-                                argument: local_param_1_1)) ==
-                            PineKernelValues.TrueValue)
-                        {
-                            {
-                                PineValue local_param_1_0_temp = KernelFunctionSpecialized.int_add(-4, local_param_1_0);
-                                local_param_1_0 = local_param_1_0_temp;
-                            }
-
-                            continue;
-                        }
-
-                        return local_param_1_0;
-                    }
-                }
-
-                public static PineValue zzz_anon_7b433b8b_d4fe90b2(PineValue param_1_0, PineValue param_1_1)
-                {
-                    PineValue local_param_1_0 = param_1_0;
-                    PineValue local_param_1_1 = param_1_1;
-
-                    while (true)
-                    {
-                        PineValue local_000 =
-                            KernelFunctionFused.SkipAndTake(
-                                takeCount: 4,
-                                skipCountValue: local_param_1_0,
-                                argument: local_param_1_1);
-
-                        if (KernelFunctionSpecialized.length_as_int(local_000) == 0)
-                        {
-                            return local_param_1_0;
-                        }
-
-                        if (Global_Anonymous.zzz_anon_d97a2014_dda26649(local_000) == PineKernelValues.TrueValue)
-                        {
-                            {
-                                PineValue local_param_1_0_temp = KernelFunctionSpecialized.int_add(4, local_param_1_0);
-                                local_param_1_0 = local_param_1_0_temp;
-                            }
-
-                            continue;
-                        }
-
-                        return local_param_1_0;
-                    }
-                }
-
-                public static PineValue zzz_anon_d97a2014_dda26649(PineValue param_1_0)
-                {
-                    if (param_1_0 == CommonReusedValues.Blob_Char_space)
-                    {
-                        return PineKernelValues.TrueValue;
-                    }
-
-                    if (param_1_0 == CommonReusedValues.Blob_Char_tab)
-                    {
-                        return PineKernelValues.TrueValue;
-                    }
-
-                    if (param_1_0 == CommonReusedValues.Blob_Char_newline)
-                    {
-                        return PineKernelValues.TrueValue;
-                    }
-
-                    if (param_1_0 == CommonReusedValues.Blob_Char_carriagereturn)
-                    {
-                        return PineKernelValues.TrueValue;
-                    }
-
-                    if (param_1_0 == CommonReusedValues.Blob_Char_nobreakspace)
-                    {
-                        return PineKernelValues.TrueValue;
-                    }
-
-                    return PineKernelValues.FalseValue;
-                }
             }
             """".Trim());
     }

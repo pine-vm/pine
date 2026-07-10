@@ -382,32 +382,29 @@ public class OptimizeAndEmitJsonEncodeTests
             """"
             public static class Test
             {
-                public static PineValue advanceUtf32OffsetForSimpleChars(PineValue param_1_0, PineValue param_1_1)
+                public static PineValue advanceUtf32OffsetForSimpleChars(PineValue param_1, PineValue param_2)
                 {
-                    PineValue local_param_1_0 = param_1_0;
-                    PineValue local_param_1_1 = param_1_1;
+                    PineValue local_param_1 = param_1;
+                    PineValue local_param_2 = param_2;
 
                     while (true)
                     {
                         PineValue local_000 =
-                            KernelFunctionFused.SkipAndTake(
-                                takeCount: 4,
-                                skipCountValue: local_param_1_1,
-                                argument: local_param_1_0);
+                            KernelFunctionFused.SkipAndTake(takeCount: 4, skipCountValue: local_param_2, argument: local_param_1);
 
                         if (KernelFunctionSpecialized.length_as_int(local_000) == 0)
                         {
-                            return local_param_1_1;
+                            return local_param_2;
                         }
 
                         if (local_000 == CommonReusedValues.Blob_Char_doublequote)
                         {
-                            return local_param_1_1;
+                            return local_param_2;
                         }
 
                         if (local_000 == CommonReusedValues.Blob_Char_backslash)
                         {
-                            return local_param_1_1;
+                            return local_param_2;
                         }
 
                         if (KernelFunctionSpecialized.int_is_sorted_asc(
@@ -417,277 +414,274 @@ public class OptimizeAndEmitJsonEncodeTests
                             PineKernelValues.TrueValue)
                         {
                             {
-                                PineValue local_param_1_1_temp = KernelFunctionSpecialized.int_add(4, local_param_1_1);
-                                local_param_1_1 = local_param_1_1_temp;
+                                PineValue local_param_2_temp = KernelFunctionSpecialized.int_add(4, local_param_2);
+                                local_param_2 = local_param_2_temp;
                             }
 
                             continue;
                         }
 
-                        return local_param_1_1;
+                        return local_param_2;
                     }
                 }
 
-                public static PineValue encodeStringUtf32ChunksFromBytes(
-                    PineValue param_1_0,
-                    PineValue param_1_1,
-                    PineValue param_1_2)
+                public static PineValue encodeStringUtf32ChunksFromBytes(PineValue param_1, PineValue param_2, PineValue param_3)
                 {
-                    PineValue local_param_1_0 = param_1_0;
-                    ImmutableConcatBuilder local_param_1_1 = ImmutableConcatBuilder.Create([param_1_1]);
-                    PineValue local_param_1_2 = param_1_2;
+                    PineValue local_param_1 = param_1;
+                    ImmutableConcatBuilder local_param_2 = ImmutableConcatBuilder.Create([param_2]);
+                    PineValue local_param_3 = param_3;
 
                     while (true)
                     {
-                        PineValue local_000 = Test.advanceUtf32OffsetForSimpleChars(local_param_1_2, local_param_1_0);
+                        PineValue local_000 = Test.advanceUtf32OffsetForSimpleChars(local_param_3, local_param_1);
 
                         PineValue local_001 =
-                            KernelFunctionSpecialized.int_add(local_000, KernelFunctionSpecialized.int_mul(-1, local_param_1_0));
+                            KernelFunctionSpecialized.int_add(local_000, KernelFunctionSpecialized.int_mul(-1, local_param_1));
 
-                        PineValue local_003 = KernelFunction.ValueFromBool(local_001 == CommonReusedValues.Blob_Int_0);
+                        PineValue local_002 =
+                            KernelFunctionFused.SkipAndTake(takeCount: 4, skipCountValue: local_000, argument: local_param_3);
 
-                        PineValue local_004 =
-                            KernelFunctionFused.SkipAndTake(takeCount: 4, skipCountValue: local_000, argument: local_param_1_2);
+                        PineValue local_004 = KernelFunction.ValueFromBool(local_001 == CommonReusedValues.Blob_Int_0);
 
-                        if (KernelFunctionSpecialized.length_as_int(local_004) == 0)
+                        if (KernelFunctionSpecialized.length_as_int(local_002) == 0)
                         {
-                            if (local_003 == PineKernelValues.TrueValue)
+                            if (local_004 == PineKernelValues.TrueValue)
                             {
-                                return local_param_1_1.Evaluate();
+                                return local_param_2.Evaluate();
                             }
 
                             return
                                 KernelFunctionFused.ListAppendItem(
-                                    prefix: local_param_1_1.Evaluate(),
+                                    prefix: local_param_2.Evaluate(),
                                     itemToAppend: KernelFunctionFused.SkipAndTake(
                                         takeCountValue: local_001,
-                                        skipCountValue: local_param_1_0,
-                                        argument: local_param_1_2));
+                                        skipCountValue: local_param_1,
+                                        argument: local_param_3));
                         }
 
                         PineValue local_007 = KernelFunctionSpecialized.int_add(4, local_000);
 
-                        if (local_004 == CommonReusedValues.Blob_f063beda)
+                        if (local_002 == CommonReusedValues.Blob_f063beda)
                         {
                             {
-                                PineValue local_param_1_0_temp = local_007;
+                                PineValue local_param_1_temp = local_007;
 
-                                local_param_1_1 =
-                                    local_param_1_1.AppendItems(
+                                local_param_2 =
+                                    local_param_2.AppendItems(
                                         [
-                                        !(local_003 == PineKernelValues.TrueValue)
+                                        !(local_004 == PineKernelValues.TrueValue)
                                         ?
                                         PineValue.List(
                                             [
                                             KernelFunctionFused.SkipAndTake(
                                                 takeCountValue: local_001,
-                                                skipCountValue: local_param_1_0,
-                                                argument: local_param_1_2)
+                                                skipCountValue: local_param_1,
+                                                argument: local_param_3)
                                             ])
                                         :
                                         PineValue.EmptyList,
                                         CommonReusedValues.List_11431555
                                         ]);
 
-                                local_param_1_0 = local_param_1_0_temp;
+                                local_param_1 = local_param_1_temp;
                             }
 
                             continue;
                         }
 
-                        if (local_004 == CommonReusedValues.Blob_Char_tab)
+                        if (local_002 == CommonReusedValues.Blob_Char_tab)
                         {
                             {
-                                PineValue local_param_1_0_temp = local_007;
+                                PineValue local_param_1_temp = local_007;
 
-                                local_param_1_1 =
-                                    local_param_1_1.AppendItems(
+                                local_param_2 =
+                                    local_param_2.AppendItems(
                                         [
-                                        !(local_003 == PineKernelValues.TrueValue)
+                                        !(local_004 == PineKernelValues.TrueValue)
                                         ?
                                         PineValue.List(
                                             [
                                             KernelFunctionFused.SkipAndTake(
                                                 takeCountValue: local_001,
-                                                skipCountValue: local_param_1_0,
-                                                argument: local_param_1_2)
+                                                skipCountValue: local_param_1,
+                                                argument: local_param_3)
                                             ])
                                         :
                                         PineValue.EmptyList,
                                         CommonReusedValues.List_6859d43a
                                         ]);
 
-                                local_param_1_0 = local_param_1_0_temp;
+                                local_param_1 = local_param_1_temp;
                             }
 
                             continue;
                         }
 
-                        if (local_004 == CommonReusedValues.Blob_Char_newline)
+                        if (local_002 == CommonReusedValues.Blob_Char_newline)
                         {
                             {
-                                PineValue local_param_1_0_temp = local_007;
+                                PineValue local_param_1_temp = local_007;
 
-                                local_param_1_1 =
-                                    local_param_1_1.AppendItems(
+                                local_param_2 =
+                                    local_param_2.AppendItems(
                                         [
-                                        !(local_003 == PineKernelValues.TrueValue)
+                                        !(local_004 == PineKernelValues.TrueValue)
                                         ?
                                         PineValue.List(
                                             [
                                             KernelFunctionFused.SkipAndTake(
                                                 takeCountValue: local_001,
-                                                skipCountValue: local_param_1_0,
-                                                argument: local_param_1_2)
+                                                skipCountValue: local_param_1,
+                                                argument: local_param_3)
                                             ])
                                         :
                                         PineValue.EmptyList,
                                         CommonReusedValues.List_8cc957f8
                                         ]);
 
-                                local_param_1_0 = local_param_1_0_temp;
+                                local_param_1 = local_param_1_temp;
                             }
 
                             continue;
                         }
 
-                        if (local_004 == CommonReusedValues.Blob_Char_formfeed)
+                        if (local_002 == CommonReusedValues.Blob_Char_formfeed)
                         {
                             {
-                                PineValue local_param_1_0_temp = local_007;
+                                PineValue local_param_1_temp = local_007;
 
-                                local_param_1_1 =
-                                    local_param_1_1.AppendItems(
+                                local_param_2 =
+                                    local_param_2.AppendItems(
                                         [
-                                        !(local_003 == PineKernelValues.TrueValue)
+                                        !(local_004 == PineKernelValues.TrueValue)
                                         ?
                                         PineValue.List(
                                             [
                                             KernelFunctionFused.SkipAndTake(
                                                 takeCountValue: local_001,
-                                                skipCountValue: local_param_1_0,
-                                                argument: local_param_1_2)
+                                                skipCountValue: local_param_1,
+                                                argument: local_param_3)
                                             ])
                                         :
                                         PineValue.EmptyList,
                                         CommonReusedValues.List_21f12336
                                         ]);
 
-                                local_param_1_0 = local_param_1_0_temp;
+                                local_param_1 = local_param_1_temp;
                             }
 
                             continue;
                         }
 
-                        if (local_004 == CommonReusedValues.Blob_Char_carriagereturn)
+                        if (local_002 == CommonReusedValues.Blob_Char_carriagereturn)
                         {
                             {
-                                PineValue local_param_1_0_temp = local_007;
+                                PineValue local_param_1_temp = local_007;
 
-                                local_param_1_1 =
-                                    local_param_1_1.AppendItems(
+                                local_param_2 =
+                                    local_param_2.AppendItems(
                                         [
-                                        !(local_003 == PineKernelValues.TrueValue)
+                                        !(local_004 == PineKernelValues.TrueValue)
                                         ?
                                         PineValue.List(
                                             [
                                             KernelFunctionFused.SkipAndTake(
                                                 takeCountValue: local_001,
-                                                skipCountValue: local_param_1_0,
-                                                argument: local_param_1_2)
+                                                skipCountValue: local_param_1,
+                                                argument: local_param_3)
                                             ])
                                         :
                                         PineValue.EmptyList,
                                         CommonReusedValues.List_4495e748
                                         ]);
 
-                                local_param_1_0 = local_param_1_0_temp;
+                                local_param_1 = local_param_1_temp;
                             }
 
                             continue;
                         }
 
-                        if (local_004 == CommonReusedValues.Blob_Char_doublequote)
+                        if (local_002 == CommonReusedValues.Blob_Char_doublequote)
                         {
                             {
-                                PineValue local_param_1_0_temp = local_007;
+                                PineValue local_param_1_temp = local_007;
 
-                                local_param_1_1 =
-                                    local_param_1_1.AppendItems(
+                                local_param_2 =
+                                    local_param_2.AppendItems(
                                         [
-                                        !(local_003 == PineKernelValues.TrueValue)
+                                        !(local_004 == PineKernelValues.TrueValue)
                                         ?
                                         PineValue.List(
                                             [
                                             KernelFunctionFused.SkipAndTake(
                                                 takeCountValue: local_001,
-                                                skipCountValue: local_param_1_0,
-                                                argument: local_param_1_2)
+                                                skipCountValue: local_param_1,
+                                                argument: local_param_3)
                                             ])
                                         :
                                         PineValue.EmptyList,
                                         CommonReusedValues.List_0593a027
                                         ]);
 
-                                local_param_1_0 = local_param_1_0_temp;
+                                local_param_1 = local_param_1_temp;
                             }
 
                             continue;
                         }
 
-                        if (local_004 == CommonReusedValues.Blob_Char_backslash)
+                        if (local_002 == CommonReusedValues.Blob_Char_backslash)
                         {
                             {
-                                PineValue local_param_1_0_temp = local_007;
+                                PineValue local_param_1_temp = local_007;
 
-                                local_param_1_1 =
-                                    local_param_1_1.AppendItems(
+                                local_param_2 =
+                                    local_param_2.AppendItems(
                                         [
-                                        !(local_003 == PineKernelValues.TrueValue)
+                                        !(local_004 == PineKernelValues.TrueValue)
                                         ?
                                         PineValue.List(
                                             [
                                             KernelFunctionFused.SkipAndTake(
                                                 takeCountValue: local_001,
-                                                skipCountValue: local_param_1_0,
-                                                argument: local_param_1_2)
+                                                skipCountValue: local_param_1,
+                                                argument: local_param_3)
                                             ])
                                         :
                                         PineValue.EmptyList,
                                         CommonReusedValues.List_67fa5ac0
                                         ]);
 
-                                local_param_1_0 = local_param_1_0_temp;
+                                local_param_1 = local_param_1_temp;
                             }
 
                             continue;
                         }
 
-                        PineValue local_010 = KernelFunctionFused.BlobPrependByte(byteToPrepend: 4, suffix: local_004);
+                        PineValue local_009 = KernelFunctionFused.BlobPrependByte(byteToPrepend: 4, suffix: local_002);
 
-                        PineValue local_011 =
-                            KernelFunctionFused.CanonicalIntegerFromUnsigned(signIsPositive: true, unsignedValue: local_004);
+                        PineValue local_010 =
+                            KernelFunctionFused.CanonicalIntegerFromUnsigned(signIsPositive: true, unsignedValue: local_002);
 
                         {
-                            PineValue local_param_1_0_temp = local_007;
+                            PineValue local_param_1_temp = local_007;
 
-                            local_param_1_1 =
-                                local_param_1_1.AppendItems(
+                            local_param_2 =
+                                local_param_2.AppendItems(
                                     [
-                                    !(local_003 == PineKernelValues.TrueValue)
+                                    !(local_004 == PineKernelValues.TrueValue)
                                     ?
                                     PineValue.List(
                                         [
                                         KernelFunctionFused.SkipAndTake(
                                             takeCountValue: local_001,
-                                            skipCountValue: local_param_1_0,
-                                            argument: local_param_1_2)
+                                            skipCountValue: local_param_1,
+                                            argument: local_param_3)
                                         ])
                                     :
                                     PineValue.EmptyList,
-                                    KernelFunctionSpecialized.int_is_sorted_asc(0, local_011, 65_535) == PineKernelValues.TrueValue
+                                    KernelFunctionSpecialized.int_is_sorted_asc(0, local_010, 65_535) == PineKernelValues.TrueValue
                                     ?
-                                    KernelFunctionSpecialized.concat(CommonReusedValues.List_599c92a7, Test.hex4(local_011))
+                                    KernelFunctionSpecialized.concat(CommonReusedValues.List_599c92a7, Test.hex4(local_010))
                                     :
                                     KernelFunction.concat(
                                         PineValue.List(
@@ -698,126 +692,388 @@ public class OptimizeAndEmitJsonEncodeTests
                                                     55_296,
                                                     KernelFunctionSpecialized.bit_shift_right(
                                                         10,
-                                                        KernelFunctionSpecialized.int_add(-65_536, local_010)))),
+                                                        KernelFunctionSpecialized.int_add(-65_536, local_009)))),
                                             CommonReusedValues.List_599c92a7,
                                             Test.hex4(
                                                 KernelFunctionSpecialized.int_add(
                                                     56_320,
                                                     KernelFunctionSpecialized.bit_and(
                                                         IntegerEncoding.EncodeSignedInteger(1_023),
-                                                        KernelFunctionSpecialized.int_add(-65_536, local_010))))
+                                                        KernelFunctionSpecialized.int_add(-65_536, local_009))))
                                             ]))
                                     ]);
 
-                            local_param_1_0 = local_param_1_0_temp;
+                            local_param_1 = local_param_1_temp;
                         }
 
                         continue;
                     }
                 }
 
-                public static PineValue hex4(PineValue param_1_0)
+                public static PineValue hex4(PineValue param_1)
                 {
-                    PineValue local_000 = KernelFunctionSpecialized.skip(1, param_1_0);
+                    PineValue local_000 = KernelFunctionSpecialized.skip(1, param_1);
+                    PineValue local_001 = KernelFunctionSpecialized.bit_and(CommonReusedValues.Blob_2d8b523c, local_000);
+
+                    PineValue local_002 =
+                        KernelFunctionSpecialized.bit_and(
+                            CommonReusedValues.Blob_2d8b523c,
+                            KernelFunctionSpecialized.bit_shift_right(4, local_000));
+
+                    PineValue local_003 =
+                        KernelFunctionSpecialized.bit_and(
+                            CommonReusedValues.Blob_2d8b523c,
+                            KernelFunctionSpecialized.bit_shift_right(8, local_000));
+
+                    PineValue local_004 =
+                        KernelFunctionSpecialized.bit_and(
+                            CommonReusedValues.Blob_2d8b523c,
+                            KernelFunctionSpecialized.bit_shift_right(12, local_000));
 
                     return
                         PineValue.List(
                             [
-                            Test.hexDigitCharFromNibble(
-                                KernelFunctionSpecialized.bit_and(
-                                    CommonReusedValues.Blob_2d8b523c,
-                                    KernelFunctionSpecialized.bit_shift_right(12, local_000))),
-                            Test.hexDigitCharFromNibble(
-                                KernelFunctionSpecialized.bit_and(
-                                    CommonReusedValues.Blob_2d8b523c,
-                                    KernelFunctionSpecialized.bit_shift_right(8, local_000))),
-                            Test.hexDigitCharFromNibble(
-                                KernelFunctionSpecialized.bit_and(
-                                    CommonReusedValues.Blob_2d8b523c,
-                                    KernelFunctionSpecialized.bit_shift_right(4, local_000))),
-                            Test.hexDigitCharFromNibble(
-                                KernelFunctionSpecialized.bit_and(CommonReusedValues.Blob_2d8b523c, local_000))
+                            local_004 == CommonReusedValues.Blob_449e9b79
+                            ?
+                            CommonReusedValues.Blob_Char_digit_0
+                            :
+                            (local_004 == CommonReusedValues.Blob_50453b36
+                            ?
+                            CommonReusedValues.Blob_Char_digit_1
+                            :
+                            (local_004 == PineKernelValues.FalseValue
+                            ?
+                            CommonReusedValues.Blob_Char_digit_2
+                            :
+                            (local_004 == CommonReusedValues.Blob_bd557c82
+                            ?
+                            CommonReusedValues.Blob_Char_digit_3
+                            :
+                            (local_004 == PineKernelValues.TrueValue
+                            ?
+                            CommonReusedValues.Blob_Char_digit_4
+                            :
+                            (local_004 == CommonReusedValues.Blob_7732e8fd
+                            ?
+                            CommonReusedValues.Blob_Char_digit_5
+                            :
+                            (local_004 == CommonReusedValues.Blob_4c5dc722
+                            ?
+                            CommonReusedValues.Blob_Char_digit_6
+                            :
+                            (local_004 == CommonReusedValues.Blob_735edfdb
+                            ?
+                            CommonReusedValues.Blob_Char_digit_7
+                            :
+                            (local_004 == CommonReusedValues.Blob_8db117dc
+                            ?
+                            CommonReusedValues.Blob_Char_digit_8
+                            :
+                            (local_004 == CommonReusedValues.Blob_fb88d96b
+                            ?
+                            CommonReusedValues.Blob_Char_digit_9
+                            :
+                            (local_004 == CommonReusedValues.Blob_4c0d52d1
+                            ?
+                            CommonReusedValues.Blob_Char_letter_A
+                            :
+                            (local_004 == CommonReusedValues.Blob_40896845
+                            ?
+                            CommonReusedValues.Blob_Char_letter_B
+                            :
+                            (local_004 == CommonReusedValues.Blob_02334608
+                            ?
+                            CommonReusedValues.Blob_Char_letter_C
+                            :
+                            (local_004 == CommonReusedValues.Blob_015f2803
+                            ?
+                            CommonReusedValues.Blob_Char_letter_D
+                            :
+                            (local_004 == CommonReusedValues.Blob_63e02745
+                            ?
+                            CommonReusedValues.Blob_Char_letter_E
+                            :
+                            (local_004 == CommonReusedValues.Blob_2d8b523c
+                            ?
+                            CommonReusedValues.Blob_Char_letter_F
+                            :
+                            CommonReusedValues.Blob_Char_question))))))))))))))),
+                            local_003 == CommonReusedValues.Blob_449e9b79
+                            ?
+                            CommonReusedValues.Blob_Char_digit_0
+                            :
+                            (local_003 == CommonReusedValues.Blob_50453b36
+                            ?
+                            CommonReusedValues.Blob_Char_digit_1
+                            :
+                            (local_003 == PineKernelValues.FalseValue
+                            ?
+                            CommonReusedValues.Blob_Char_digit_2
+                            :
+                            (local_003 == CommonReusedValues.Blob_bd557c82
+                            ?
+                            CommonReusedValues.Blob_Char_digit_3
+                            :
+                            (local_003 == PineKernelValues.TrueValue
+                            ?
+                            CommonReusedValues.Blob_Char_digit_4
+                            :
+                            (local_003 == CommonReusedValues.Blob_7732e8fd
+                            ?
+                            CommonReusedValues.Blob_Char_digit_5
+                            :
+                            (local_003 == CommonReusedValues.Blob_4c5dc722
+                            ?
+                            CommonReusedValues.Blob_Char_digit_6
+                            :
+                            (local_003 == CommonReusedValues.Blob_735edfdb
+                            ?
+                            CommonReusedValues.Blob_Char_digit_7
+                            :
+                            (local_003 == CommonReusedValues.Blob_8db117dc
+                            ?
+                            CommonReusedValues.Blob_Char_digit_8
+                            :
+                            (local_003 == CommonReusedValues.Blob_fb88d96b
+                            ?
+                            CommonReusedValues.Blob_Char_digit_9
+                            :
+                            (local_003 == CommonReusedValues.Blob_4c0d52d1
+                            ?
+                            CommonReusedValues.Blob_Char_letter_A
+                            :
+                            (local_003 == CommonReusedValues.Blob_40896845
+                            ?
+                            CommonReusedValues.Blob_Char_letter_B
+                            :
+                            (local_003 == CommonReusedValues.Blob_02334608
+                            ?
+                            CommonReusedValues.Blob_Char_letter_C
+                            :
+                            (local_003 == CommonReusedValues.Blob_015f2803
+                            ?
+                            CommonReusedValues.Blob_Char_letter_D
+                            :
+                            (local_003 == CommonReusedValues.Blob_63e02745
+                            ?
+                            CommonReusedValues.Blob_Char_letter_E
+                            :
+                            (local_003 == CommonReusedValues.Blob_2d8b523c
+                            ?
+                            CommonReusedValues.Blob_Char_letter_F
+                            :
+                            CommonReusedValues.Blob_Char_question))))))))))))))),
+                            local_002 == CommonReusedValues.Blob_449e9b79
+                            ?
+                            CommonReusedValues.Blob_Char_digit_0
+                            :
+                            (local_002 == CommonReusedValues.Blob_50453b36
+                            ?
+                            CommonReusedValues.Blob_Char_digit_1
+                            :
+                            (local_002 == PineKernelValues.FalseValue
+                            ?
+                            CommonReusedValues.Blob_Char_digit_2
+                            :
+                            (local_002 == CommonReusedValues.Blob_bd557c82
+                            ?
+                            CommonReusedValues.Blob_Char_digit_3
+                            :
+                            (local_002 == PineKernelValues.TrueValue
+                            ?
+                            CommonReusedValues.Blob_Char_digit_4
+                            :
+                            (local_002 == CommonReusedValues.Blob_7732e8fd
+                            ?
+                            CommonReusedValues.Blob_Char_digit_5
+                            :
+                            (local_002 == CommonReusedValues.Blob_4c5dc722
+                            ?
+                            CommonReusedValues.Blob_Char_digit_6
+                            :
+                            (local_002 == CommonReusedValues.Blob_735edfdb
+                            ?
+                            CommonReusedValues.Blob_Char_digit_7
+                            :
+                            (local_002 == CommonReusedValues.Blob_8db117dc
+                            ?
+                            CommonReusedValues.Blob_Char_digit_8
+                            :
+                            (local_002 == CommonReusedValues.Blob_fb88d96b
+                            ?
+                            CommonReusedValues.Blob_Char_digit_9
+                            :
+                            (local_002 == CommonReusedValues.Blob_4c0d52d1
+                            ?
+                            CommonReusedValues.Blob_Char_letter_A
+                            :
+                            (local_002 == CommonReusedValues.Blob_40896845
+                            ?
+                            CommonReusedValues.Blob_Char_letter_B
+                            :
+                            (local_002 == CommonReusedValues.Blob_02334608
+                            ?
+                            CommonReusedValues.Blob_Char_letter_C
+                            :
+                            (local_002 == CommonReusedValues.Blob_015f2803
+                            ?
+                            CommonReusedValues.Blob_Char_letter_D
+                            :
+                            (local_002 == CommonReusedValues.Blob_63e02745
+                            ?
+                            CommonReusedValues.Blob_Char_letter_E
+                            :
+                            (local_002 == CommonReusedValues.Blob_2d8b523c
+                            ?
+                            CommonReusedValues.Blob_Char_letter_F
+                            :
+                            CommonReusedValues.Blob_Char_question))))))))))))))),
+                            local_001 == CommonReusedValues.Blob_449e9b79
+                            ?
+                            CommonReusedValues.Blob_Char_digit_0
+                            :
+                            (local_001 == CommonReusedValues.Blob_50453b36
+                            ?
+                            CommonReusedValues.Blob_Char_digit_1
+                            :
+                            (local_001 == PineKernelValues.FalseValue
+                            ?
+                            CommonReusedValues.Blob_Char_digit_2
+                            :
+                            (local_001 == CommonReusedValues.Blob_bd557c82
+                            ?
+                            CommonReusedValues.Blob_Char_digit_3
+                            :
+                            (local_001 == PineKernelValues.TrueValue
+                            ?
+                            CommonReusedValues.Blob_Char_digit_4
+                            :
+                            (local_001 == CommonReusedValues.Blob_7732e8fd
+                            ?
+                            CommonReusedValues.Blob_Char_digit_5
+                            :
+                            (local_001 == CommonReusedValues.Blob_4c5dc722
+                            ?
+                            CommonReusedValues.Blob_Char_digit_6
+                            :
+                            (local_001 == CommonReusedValues.Blob_735edfdb
+                            ?
+                            CommonReusedValues.Blob_Char_digit_7
+                            :
+                            (local_001 == CommonReusedValues.Blob_8db117dc
+                            ?
+                            CommonReusedValues.Blob_Char_digit_8
+                            :
+                            (local_001 == CommonReusedValues.Blob_fb88d96b
+                            ?
+                            CommonReusedValues.Blob_Char_digit_9
+                            :
+                            (local_001 == CommonReusedValues.Blob_4c0d52d1
+                            ?
+                            CommonReusedValues.Blob_Char_letter_A
+                            :
+                            (local_001 == CommonReusedValues.Blob_40896845
+                            ?
+                            CommonReusedValues.Blob_Char_letter_B
+                            :
+                            (local_001 == CommonReusedValues.Blob_02334608
+                            ?
+                            CommonReusedValues.Blob_Char_letter_C
+                            :
+                            (local_001 == CommonReusedValues.Blob_015f2803
+                            ?
+                            CommonReusedValues.Blob_Char_letter_D
+                            :
+                            (local_001 == CommonReusedValues.Blob_63e02745
+                            ?
+                            CommonReusedValues.Blob_Char_letter_E
+                            :
+                            (local_001 == CommonReusedValues.Blob_2d8b523c
+                            ?
+                            CommonReusedValues.Blob_Char_letter_F
+                            :
+                            CommonReusedValues.Blob_Char_question)))))))))))))))
                             ]);
                 }
 
-                public static PineValue hexDigitCharFromNibble(PineValue param_1_0)
+                public static PineValue hexDigitCharFromNibble(PineValue param_1)
                 {
-                    if (param_1_0 == CommonReusedValues.Blob_449e9b79)
+                    if (param_1 == CommonReusedValues.Blob_449e9b79)
                     {
                         return CommonReusedValues.Blob_Char_digit_0;
                     }
 
-                    if (param_1_0 == CommonReusedValues.Blob_50453b36)
+                    if (param_1 == CommonReusedValues.Blob_50453b36)
                     {
                         return CommonReusedValues.Blob_Char_digit_1;
                     }
 
-                    if (param_1_0 == PineKernelValues.FalseValue)
+                    if (param_1 == PineKernelValues.FalseValue)
                     {
                         return CommonReusedValues.Blob_Char_digit_2;
                     }
 
-                    if (param_1_0 == CommonReusedValues.Blob_bd557c82)
+                    if (param_1 == CommonReusedValues.Blob_bd557c82)
                     {
                         return CommonReusedValues.Blob_Char_digit_3;
                     }
 
-                    if (param_1_0 == PineKernelValues.TrueValue)
+                    if (param_1 == PineKernelValues.TrueValue)
                     {
                         return CommonReusedValues.Blob_Char_digit_4;
                     }
 
-                    if (param_1_0 == CommonReusedValues.Blob_7732e8fd)
+                    if (param_1 == CommonReusedValues.Blob_7732e8fd)
                     {
                         return CommonReusedValues.Blob_Char_digit_5;
                     }
 
-                    if (param_1_0 == CommonReusedValues.Blob_4c5dc722)
+                    if (param_1 == CommonReusedValues.Blob_4c5dc722)
                     {
                         return CommonReusedValues.Blob_Char_digit_6;
                     }
 
-                    if (param_1_0 == CommonReusedValues.Blob_735edfdb)
+                    if (param_1 == CommonReusedValues.Blob_735edfdb)
                     {
                         return CommonReusedValues.Blob_Char_digit_7;
                     }
 
-                    if (param_1_0 == CommonReusedValues.Blob_8db117dc)
+                    if (param_1 == CommonReusedValues.Blob_8db117dc)
                     {
                         return CommonReusedValues.Blob_Char_digit_8;
                     }
 
-                    if (param_1_0 == CommonReusedValues.Blob_fb88d96b)
+                    if (param_1 == CommonReusedValues.Blob_fb88d96b)
                     {
                         return CommonReusedValues.Blob_Char_digit_9;
                     }
 
-                    if (param_1_0 == CommonReusedValues.Blob_4c0d52d1)
+                    if (param_1 == CommonReusedValues.Blob_4c0d52d1)
                     {
                         return CommonReusedValues.Blob_Char_letter_A;
                     }
 
-                    if (param_1_0 == CommonReusedValues.Blob_40896845)
+                    if (param_1 == CommonReusedValues.Blob_40896845)
                     {
                         return CommonReusedValues.Blob_Char_letter_B;
                     }
 
-                    if (param_1_0 == CommonReusedValues.Blob_02334608)
+                    if (param_1 == CommonReusedValues.Blob_02334608)
                     {
                         return CommonReusedValues.Blob_Char_letter_C;
                     }
 
-                    if (param_1_0 == CommonReusedValues.Blob_015f2803)
+                    if (param_1 == CommonReusedValues.Blob_015f2803)
                     {
                         return CommonReusedValues.Blob_Char_letter_D;
                     }
 
-                    if (param_1_0 == CommonReusedValues.Blob_63e02745)
+                    if (param_1 == CommonReusedValues.Blob_63e02745)
                     {
                         return CommonReusedValues.Blob_Char_letter_E;
                     }
 
-                    if (param_1_0 == CommonReusedValues.Blob_2d8b523c)
+                    if (param_1 == CommonReusedValues.Blob_2d8b523c)
                     {
                         return CommonReusedValues.Blob_Char_letter_F;
                     }
@@ -825,6 +1081,7 @@ public class OptimizeAndEmitJsonEncodeTests
                     return CommonReusedValues.Blob_Char_question;
                 }
             }
+            
             """".Trim());
 
         moduleGlobalAnonymousText.Trim().Should().Be(
@@ -832,7 +1089,6 @@ public class OptimizeAndEmitJsonEncodeTests
             public static class Global_Anonymous
             {
             }
-
             """".Trim());
 
         // Verify compilation to assembly works

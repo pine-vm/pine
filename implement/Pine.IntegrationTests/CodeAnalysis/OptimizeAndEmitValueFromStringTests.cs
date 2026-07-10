@@ -96,80 +96,123 @@ public class OptimizeAndEmitValueFromStringTests
             """"
             public static class Test
             {
-                public static PineValue blobBytesFromChar(PineValue param_1_0)
+                public static PineValue blobBytesFromChar(PineValue param_1)
                 {
-                    PineValue local_000 =
-                        KernelFunctionFused.CanonicalIntegerFromUnsigned(signIsPositive: true, unsignedValue: param_1_0);
+                    PineValue local_001 = KernelFunctionFused.BlobPrependByte(byteToPrepend: 4, suffix: param_1);
 
-                    PineValue local_001 = IntegerEncoding.EncodeSignedInteger(KernelFunctionSpecialized.length_as_int(local_000));
+                    PineValue local_003 =
+                        KernelFunctionFused.CanonicalIntegerFromUnsigned(signIsPositive: true, unsignedValue: param_1);
 
-                    PineValue local_002 =
-                        KernelFunction.ValueFromBool(KernelFunctionSpecialized.int_is_sorted_asc_as_boolean(2, local_001));
+                    PineValue local_005 =
+                        KernelFunction.ValueFromBool(KernelFunctionSpecialized.int_is_sorted_asc_as_boolean(0, local_003));
+
+                    PineValue local_006 =
+                        local_005 == PineKernelValues.TrueValue ? local_003 : KernelFunctionSpecialized.int_mul(-1, local_003);
+
+                    PineValue local_013 =
+                        Global_Anonymous.zzz_anon_c6fe385e_7644d2b7(
+                            local_006,
+                            CommonReusedValues.Blob_Int_256,
+                            CommonReusedValues.Blob_Int_0);
+
+                    PineValue local_014 =
+                        Global_Anonymous.zzz_anon_c6fe385e_7644d2b7(
+                            local_006,
+                            CommonReusedValues.Blob_Int_65536,
+                            CommonReusedValues.Blob_Int_0);
+
+                    PineValue local_015 =
+                        Global_Anonymous.zzz_anon_c6fe385e_7644d2b7(
+                            local_006,
+                            CommonReusedValues.Blob_Int_16777216,
+                            CommonReusedValues.Blob_Int_0);
+
+                    PineValue local_016 =
+                        local_005 == PineKernelValues.TrueValue ? local_013 : KernelFunctionSpecialized.int_mul(-1, local_013);
+
+                    PineValue local_017 =
+                        local_005 == PineKernelValues.TrueValue ? local_014 : KernelFunctionSpecialized.int_mul(-1, local_014);
+
+                    PineValue local_018 =
+                        local_005 == PineKernelValues.TrueValue ? local_015 : KernelFunctionSpecialized.int_mul(-1, local_015);
+
+                    PineValue local_019 = PineValue.List([local_016]);
+                    PineValue local_020 = PineValue.List([local_017]);
+                    PineValue local_021 = PineValue.List([local_018]);
+                    PineValue local_026 = KernelFunctionSpecialized.int_mul(-256, local_016);
+                    PineValue local_027 = Global_Anonymous.zzz_anon_8314032e_dda26649(local_019, CommonReusedValues.Blob_Int_256);
+                    PineValue local_028 = Global_Anonymous.zzz_anon_8314032e_dda26649(local_020, CommonReusedValues.Blob_Int_256);
+                    PineValue local_029 = Global_Anonymous.zzz_anon_8314032e_dda26649(local_021, CommonReusedValues.Blob_Int_256);
+                    PineValue local_033 = KernelFunctionSpecialized.int_mul(-256, local_027);
+                    PineValue local_034 = KernelFunctionSpecialized.int_mul(-256, local_028);
+                    PineValue local_035 = KernelFunctionSpecialized.int_mul(-256, local_029);
+
+                    PineValue local_036 =
+                        KernelFunction.int_add(PineValue.List([local_001, IntegerEncoding.EncodeSignedInteger(0), local_026]));
+
+                    PineValue local_037 = KernelFunctionSpecialized.int_add(local_016, local_033);
+                    PineValue local_038 = KernelFunctionSpecialized.int_add(local_017, local_034);
+                    PineValue local_039 = KernelFunctionSpecialized.int_add(local_018, local_035);
 
                     return
                         PineValue.List(
                             [
-                            Basics.modBy(
-                                CommonReusedValues.Blob_Int_256,
-                                Basics.idiv(local_000, CommonReusedValues.Blob_Int_16777216)),
-                            Basics.modBy(
-                                CommonReusedValues.Blob_Int_256,
-                                local_002 == PineKernelValues.TrueValue
-                                ?
-                                (KernelFunctionSpecialized.int_is_sorted_asc_as_boolean(4, local_001)
-                                ?
-                                KernelFunctionFused.SkipLast(skipCount: 2, value: local_000)
-                                :
-                                CommonReusedValues.Blob_Int_0)
-                                :
-                                PineValue.EmptyList),
-                            Basics.modBy(
-                                CommonReusedValues.Blob_Int_256,
-                                local_002 == PineKernelValues.TrueValue
-                                ?
-                                (KernelFunctionSpecialized.int_is_sorted_asc_as_boolean(3, local_001)
-                                ?
-                                KernelFunctionFused.SkipLast(skipCount: 1, value: local_000)
-                                :
-                                CommonReusedValues.Blob_Int_0)
-                                :
-                                PineValue.EmptyList),
-                            Basics.modBy(CommonReusedValues.Blob_Int_256, local_000)
+                            KernelFunctionSpecialized.int_is_sorted_asc_as_boolean(0, local_039)
+                            ?
+                            local_039
+                            :
+                            KernelFunction.int_add(
+                                PineValue.List([local_018, local_035, IntegerEncoding.EncodeSignedInteger(256)])),
+                            KernelFunctionSpecialized.int_is_sorted_asc_as_boolean(0, local_038)
+                            ?
+                            local_038
+                            :
+                            KernelFunction.int_add(
+                                PineValue.List([local_017, local_034, IntegerEncoding.EncodeSignedInteger(256)])),
+                            KernelFunctionSpecialized.int_is_sorted_asc_as_boolean(0, local_037)
+                            ?
+                            local_037
+                            :
+                            KernelFunction.int_add(
+                                PineValue.List([local_016, local_033, IntegerEncoding.EncodeSignedInteger(256)])),
+                            KernelFunctionSpecialized.int_is_sorted_asc_as_boolean(0, local_036)
+                            ?
+                            local_036
+                            :
+                            KernelFunction.int_add(
+                                PineValue.List([IntegerEncoding.EncodeSignedInteger(256), local_001, local_026]))
                             ]);
                 }
 
-                public static PineValue blobBytesFromChars(PineValue param_1_0, PineValue param_1_1)
+                public static PineValue blobBytesFromChars(PineValue param_1, PineValue param_2_0)
                 {
-                    ImmutableConcatBuilder local_param_1_0 = ImmutableConcatBuilder.Create([param_1_0]);
-                    ImmutableSliceBuilder local_param_1_1 = ImmutableSliceBuilder.Create(param_1_1);
+                    ImmutableConcatBuilder local_param_1 = ImmutableConcatBuilder.Create([param_1]);
+                    PineValue local_param_2_0 = param_2_0;
 
                     while (true)
                     {
-                        if (local_param_1_1.IsEmptyList())
+                        if (KernelFunctionSpecialized.length_as_int(PineValue.EmptyList) == 0)
                         {
-                            return local_param_1_0.EvaluateReverse();
+                            return local_param_1.EvaluateReverse();
                         }
 
-                        if (!(local_param_1_1.GetLength() == 0))
                         {
-                            {
-                                local_param_1_0 =
-                                    local_param_1_0.PrependItems(
-                                        [
-                                        PineValue.List([Test.blobBytesFromChar(local_param_1_1.GetHead())])
-                                        ]);
+                            PineValue local_param_2_0_temp =
+                                PineValueExtension.ValueFromPathOrEmptyList(
+                                    KernelFunctionSpecialized.skip(1, PineValue.EmptyList),
+                                    [
+                                    0
+                                    ]);
 
-                                local_param_1_1 = local_param_1_1.Skip(1);
-                            }
-
-                            continue;
+                            local_param_1 = local_param_1.PrependItems([PineValue.List([Test.blobBytesFromChar(local_param_2_0)])]);
+                            local_param_2_0 = local_param_2_0_temp;
                         }
 
-                        throw new ParseExpressionException("TODO: Include details from encoded and env subexpressions");
+                        continue;
                     }
                 }
 
-                public static PineValue computeValueFromString(PineValue param_1_0)
+                public static PineValue computeValueFromString()
                 {
                     return
                         PineValue.List(
@@ -180,50 +223,62 @@ public class OptimizeAndEmitValueFromStringTests
                                 KernelFunction.concat(
                                     Test.blobBytesFromChars(
                                         PineValue.EmptyList,
-                                        Global_Anonymous.zzz_anon_2badf312_841a88e3(
-                                            CommonReusedValues.Blob_Int_0,
-                                            PineValue.EmptyList,
-                                            PineValueExtension.ValueFromPathOrEmptyList(param_1_0, [1, 0]))))
+                                        PineValueExtension.ValueFromPathOrEmptyList(
+                                            String.toList(PineValueExtension.ValueFromPathOrEmptyList(PineValue.EmptyList, [1])),
+                                            [
+                                            0
+                                            ])))
                                 ])
                             ]);
                 }
             }
+            
             """".Trim());
 
         moduleGlobalAnonymousText.Trim().Should().Be(
             """"
             public static class Global_Anonymous
             {
-                public static PineValue zzz_anon_2badf312_841a88e3(PineValue param_1_0, PineValue param_1_1, PineValue param_1_2)
+                public static PineValue zzz_anon_8314032e_dda26649(PineValue param_0, PineValue param_1)
                 {
-                    PineValue local_param_1_0 = param_1_0;
-                    ImmutableConcatBuilder local_param_1_1 = ImmutableConcatBuilder.Create([param_1_1]);
-                    PineValue local_param_1_2 = param_1_2;
+                    PineValue local_000 =
+                        KernelFunctionFused.ListPrependItem(
+                            itemToPrepend: PineValue.EmptyList,
+                            suffix: KernelFunctionFused.ListAppendItem(prefix: param_0, itemToAppend: param_1));
 
-                    while (true)
+                    PineValue local_001 = PineValueExtension.ValueFromPathOrEmptyList(local_000, [2]);
+
+                    if (local_001 == CommonReusedValues.Blob_Int_0)
                     {
-                        PineValue local_000 =
-                            KernelFunctionFused.SkipAndTake(
-                                takeCount: 4,
-                                skipCountValue: local_param_1_0,
-                                argument: local_param_1_2);
-
-                        if (KernelFunctionSpecialized.length_as_int(local_000) == 0)
-                        {
-                            return local_param_1_1.Evaluate();
-                        }
-
-                        {
-                            PineValue local_param_1_0_temp = KernelFunctionSpecialized.int_add(4, local_param_1_0);
-                            local_param_1_1 = local_param_1_1.AppendItems([PineValue.List([local_000])]);
-                            local_param_1_0 = local_param_1_0_temp;
-                        }
-
-                        continue;
+                        return CommonReusedValues.Blob_Int_0;
                     }
+
+                    PineValue local_004 = PineValueExtension.ValueFromPathOrEmptyList(local_000, [1]);
+
+                    PineValue local_007 =
+                        KernelFunction.ValueFromBool(KernelFunctionSpecialized.int_is_sorted_asc_as_boolean(0, local_004));
+
+                    PineValue local_008 =
+                        KernelFunction.ValueFromBool(KernelFunctionSpecialized.int_is_sorted_asc_as_boolean(0, local_001));
+
+                    PineValue local_009 =
+                        local_007 == PineKernelValues.TrueValue ? local_004 : KernelFunctionSpecialized.int_mul(-1, local_004);
+
+                    PineValue local_010 =
+                        local_008 == PineKernelValues.TrueValue ? local_001 : KernelFunctionSpecialized.int_mul(-1, local_001);
+
+                    PineValue local_013 =
+                        Global_Anonymous.zzz_anon_c6fe385e_7644d2b7(local_009, local_010, CommonReusedValues.Blob_Int_0);
+
+                    if (local_007 == local_008)
+                    {
+                        return local_013;
+                    }
+
+                    return KernelFunctionSpecialized.int_mul(-1, local_013);
                 }
 
-                public static PineValue zzz_anon_6dc95117_ab4922f9(PineValue param_1_0, PineValue param_1_1, PineValue param_1_2)
+                public static PineValue zzz_anon_c6fe385e_7644d2b7(PineValue param_1_0, PineValue param_1_1, PineValue param_1_2)
                 {
                     PineValue local_param_1_0 = param_1_0;
                     PineValue local_param_1_1 = param_1_1;
@@ -236,7 +291,7 @@ public class OptimizeAndEmitValueFromStringTests
                         if (KernelFunctionSpecialized.int_is_sorted_asc_as_boolean(local_000, local_param_1_0))
                         {
                             PineValue local_001 =
-                                Global_Anonymous.zzz_anon_6dc95117_ab4922f9(
+                                Global_Anonymous.zzz_anon_c6fe385e_7644d2b7(
                                     local_param_1_0,
                                     local_000,
                                     CommonReusedValues.Blob_Int_0);
@@ -244,10 +299,12 @@ public class OptimizeAndEmitValueFromStringTests
                             return
                                 KernelFunctionSpecialized.int_add(
                                     KernelFunctionSpecialized.int_mul(16, local_001),
-                                    Global_Anonymous.zzz_anon_6dc95117_ab4922f9(
+                                    Global_Anonymous.zzz_anon_c6fe385e_7644d2b7(
                                         KernelFunctionSpecialized.int_add(
                                             local_param_1_0,
-                                            KernelFunctionSpecialized.int_mul(local_001, local_param_1_1, -16)),
+                                            KernelFunctionSpecialized.int_mul(
+                                                local_001,
+                                                KernelFunctionSpecialized.int_mul(-1, local_000))),
                                         local_param_1_1,
                                         CommonReusedValues.Blob_Int_0));
                         }
@@ -272,6 +329,7 @@ public class OptimizeAndEmitValueFromStringTests
                     }
                 }
             }
+            
             """".Trim());
 
         var compileToAssemblyResult =

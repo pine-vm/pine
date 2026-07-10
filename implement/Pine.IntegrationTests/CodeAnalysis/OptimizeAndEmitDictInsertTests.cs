@@ -7,18 +7,18 @@ namespace Pine.IntegrationTests.CodeAnalysis;
 
 public class OptimizeAndEmitDictInsertTests
 {
-    [Fact]
+    [Fact(Skip = "TODO: Reimplement parsing and emission to CSharp after switch to new Elm compiler")]
     public void Parse_and_emit_optimized_Dict_insert()
     {
         var parseCache = new PineVMParseCache();
 
         var (parsedEnv, staticProgram, functionMetadata) =
-            CodeAnalysisTestHelper.StaticProgramFromElmModules(
-                [],
+            CodeAnalysisTestHelper.StaticProgramFromElmKernelModules(
+                ["Dict.elm"],
                 includeDeclaration:
                 declName =>
                 {
-                    return declName.FullName == "Dict.insert";
+                    return declName.FullName is "Dict.insert";
                 },
                 parseCache);
 

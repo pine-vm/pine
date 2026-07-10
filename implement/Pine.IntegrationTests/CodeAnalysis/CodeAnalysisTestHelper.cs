@@ -5,9 +5,9 @@ using Pine.Core;
 using Pine.Core.CodeAnalysis;
 using Pine.Core.CommonEncodings;
 using Pine.Core.DotNet;
+using Pine.Core.Elm.ElmCompilerInDotnet;
 using Pine.Core.Internal;
 using Pine.Core.PineVM;
-using Pine.Elm;
 using System.Collections.Generic;
 using System.Linq;
 
@@ -75,15 +75,49 @@ public class CodeAnalysisTestHelper
             .ToList();
 
         var compiledEnv =
-            ElmCompilerInElm.CompileInteractiveEnvironment(
+            ElmCompiler.CompileInteractiveEnvironment(
                 appCodeTree,
                 rootFilePaths: rootFilePaths,
-                skipLowering: true,
-                skipFilteringForSourceDirs: false)
+                new ElmSyntaxOptimizationConfig.SyntaxOptimizationDisabled())
             .Extract(err => throw new System.Exception(err));
 
         var parsedEnv =
-            ElmInteractiveEnvironment.ParseInteractiveEnvironment(compiledEnv)
+            ElmInteractiveEnvironment.ParseInteractiveEnvironment(compiledEnv.compiledEnvValue)
+            .Extract(err => throw new System.Exception("Failed parsing interactive environment: " + err));
+
+        var (staticProgram, functionMetadata) =
+            ParseAsStaticMonomorphicProgramAndCrashOnAnyFailure(
+                parsedEnv,
+                includeDeclaration: includeDeclaration,
+                parseCache);
+
+        return (parsedEnv, staticProgram, functionMetadata);
+    }
+
+    public static (ElmInteractiveEnvironment.ParsedInteractiveEnvironment parsedEnv, StaticProgram<DeclQualifiedName> staticProgram, IReadOnlyDictionary<DeclQualifiedName, StaticProgramFunctionMetadata> functionMetadata)
+        StaticProgramFromElmKernelModules(
+        IReadOnlyList<string> rootModuleFileNames,
+        System.Func<DeclQualifiedName, bool> includeDeclaration,
+        PineVMParseCache parseCache)
+    {
+        var appCodeTree =
+            Core.Elm.ElmInElm.BundledFiles.ElmKernelModulesDefault.Value;
+
+        var rootFilePaths =
+            appCodeTree.EnumerateFilesTransitive()
+            .Where(b => rootModuleFileNames.Any(n => b.path[^1].Equals(n, System.StringComparison.OrdinalIgnoreCase)))
+            .Select(b => (IReadOnlyList<string>)b.path)
+            .ToList();
+
+        var compiledEnv =
+            ElmCompiler.CompileInteractiveEnvironment(
+                appCodeTree,
+                rootFilePaths: rootFilePaths,
+                new ElmSyntaxOptimizationConfig.SyntaxOptimizationDisabled())
+            .Extract(err => throw new System.Exception(err));
+
+        var parsedEnv =
+            ElmInteractiveEnvironment.ParseInteractiveEnvironment(compiledEnv.compiledEnvValue)
             .Extract(err => throw new System.Exception("Failed parsing interactive environment: " + err));
 
         var (staticProgram, functionMetadata) =

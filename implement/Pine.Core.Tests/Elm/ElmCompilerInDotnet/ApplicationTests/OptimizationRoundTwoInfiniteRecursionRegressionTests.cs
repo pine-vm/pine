@@ -215,7 +215,7 @@ public class OptimizationRoundTwoInfiniteRecursionRegressionTests
     /// <c>maxOptimizationRounds=1</c>. This confirms that the bug is specifically
     /// introduced by Round 1 of optimization (i.e., the second iteration).
     /// </summary>
-    [Fact(Skip = "Speedup")]
+    [Fact]
     public void String_literal_parsing_with_maxOptimizationRounds_1_succeeds()
     {
         var env = BuildEnv(maxOptimizationRounds: 1);

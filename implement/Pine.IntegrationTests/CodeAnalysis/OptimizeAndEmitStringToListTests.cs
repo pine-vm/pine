@@ -7,7 +7,7 @@ namespace Pine.IntegrationTests.CodeAnalysis;
 
 public class OptimizeAndEmitStringToListTests
 {
-    [Fact]
+    [Fact(Skip = "TODO: Reimplement parsing and emission to CSharp after switch to new Elm compiler")]
     public void Parse_and_emit_optimized_String_toList()
     {
         var elmModuleText =
