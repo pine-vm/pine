@@ -2337,7 +2337,7 @@ type alias LoadDependencyStruct =
             ElmTime.ElmInteractive.InteractiveSessionPine.CompileInteractiveEnvironment(
                 appCodeTree: compilationUnitsPrepared.files,
                 overrideSkipLowering: true,
-                entryPointsFilePaths: null,
+                entryPointsFilePaths: [["src", "Backend", "InterfaceToHost_Root.elm"]],
                 skipFilteringForSourceDirs: false,
                 elmCompiler: elmCompiler)
             .Extract(err => throw new Exception("Failed to compile interactive environment: " + err));
