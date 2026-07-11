@@ -89,7 +89,8 @@ public class PrecompiledLeavesEffectivenessTests
                     treeWithTest.EnumerateFilesTransitive()
                     .Where(
                         b =>
-                        b.path[^1].Equals("PrecompiledLeavesTestModule.elm", StringComparison.OrdinalIgnoreCase))
+                        b.path[^1].Equals("PrecompiledLeavesTestModule.elm", StringComparison.OrdinalIgnoreCase) ||
+                        b.path[^1].Equals("Dict.elm", StringComparison.OrdinalIgnoreCase))
                     .Select(b => (IReadOnlyList<string>)b.path)
                     .ToList();
 

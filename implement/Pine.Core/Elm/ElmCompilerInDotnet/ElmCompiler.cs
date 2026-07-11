@@ -767,9 +767,19 @@ public class ElmCompiler
             var declarationsAfterLowering =
                 optimizationResults.AfterLowering.RenderAsFlatDictionary();
 
+
+            bool IncludeDeclarationAsRoot(DeclQualifiedName declQualifiedName)
+            {
+                // Temp addition to account for some platform interfaces depending on additional function declarations.
+                if (TempIncludedRootDeclarations.Contains(declQualifiedName))
+                    return true;
+
+                return rootModuleNames.Contains(string.Join('.', declQualifiedName.Namespaces));
+            }
+
             var rootDeclarations =
                 declarationsAfterLowering
-                .Where(kv => rootModuleNames.Contains(string.Join('.', kv.Key.Namespaces)))
+                .Where(kv => IncludeDeclarationAsRoot(kv.Key))
                 .ToImmutableDictionary();
 
             var reachableFromEntryPoints =
@@ -790,6 +800,13 @@ public class ElmCompiler
                 FilteredDeclarations: filteredDeclarations),
             optimizationResults?.Iterations);
     }
+
+    internal static readonly ImmutableHashSet<DeclQualifiedName> TempIncludedRootDeclarations =
+        ImmutableHashSet<DeclQualifiedName>.Empty
+        .Add(DeclQualifiedName.Create(["Json", "Encode"], "encode"))
+        .Add(DeclQualifiedName.Create(["Json", "Decode"], "value"))
+        .Add(DeclQualifiedName.Create(["Json", "Decode"], "decodeValue"))
+        .Add(DeclQualifiedName.Create(["Json", "Decode"], "decodeString"));
 
     public static Result<string, (PineValue compiledEnvValue, CompilationPipelineStageResults<DefaultLoweredResults> pipelineStageResults)> CompileInteractiveEnvironment(
         FileTree appCodeTree,
@@ -2788,19 +2805,25 @@ public class ElmCompiler
             {
                 var declName = GetDeclarationName(declNode.Value);
 
-                if (declName is not null)
-                {
-                    var qualifiedName =
-                        DeclQualifiedName.Create(
-                            moduleName,
-                            declName);
+                if (declName is null)
+                    continue;
 
-                    if (flatDecls.TryGetValue(qualifiedName, out var replacementDecl))
-                    {
-                        newDeclarations.Add(declNode with { Value = replacementDecl });
-                        placedKeys.Add(qualifiedName);
-                        continue;
-                    }
+                var qualifiedName =
+                    DeclQualifiedName.Create(
+                        moduleName,
+                        declName);
+
+                if (flatDecls.TryGetValue(qualifiedName, out var replacementDecl))
+                {
+                    newDeclarations.Add(declNode with { Value = replacementDecl });
+                    placedKeys.Add(qualifiedName);
+                    continue;
+                }
+
+                if (declNode.Value is SyntaxTypes.Declaration.FunctionDeclaration)
+                {
+                    // Function declarations are only kept if appearing in the dependency tree from the entry points.
+                    continue;
                 }
 
                 // Declaration not in the flat dict (e.g., was removed or is unknown type).

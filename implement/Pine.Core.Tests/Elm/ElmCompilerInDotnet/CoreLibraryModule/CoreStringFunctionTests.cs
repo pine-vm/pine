@@ -23,7 +23,8 @@ public class CoreStringFunctionTests
                     kernelModulesTree.EnumerateFilesTransitive()
                     .Where(
                         b =>
-                        b.path[^1].Equals("String.elm", StringComparison.OrdinalIgnoreCase))
+                        b.path[^1].Equals("String.elm", StringComparison.OrdinalIgnoreCase) ||
+                        b.path[^1].Equals("Char.elm", StringComparison.OrdinalIgnoreCase))
                     .Select(b => (IReadOnlyList<string>)b.path)
                     .ToList();
 
