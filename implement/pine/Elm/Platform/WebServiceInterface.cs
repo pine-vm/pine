@@ -1207,6 +1207,13 @@ type alias LoadDependencyStruct =
         {
             if (parseRecordResult.IsErrOrNull() is { } err)
             {
+                parseRecordResult = ElmValueEncoding.ParsePineValueAsRecordTagged(pineValue);
+            }
+        }
+
+        {
+            if (parseRecordResult.IsErrOrNull() is { } err)
+            {
                 return "Failed to parse as record: " + err;
             }
         }
@@ -1796,6 +1803,13 @@ type alias LoadDependencyStruct =
         {
             if (asRecordResult.IsErrOrNull() is { } err)
             {
+                asRecordResult = ElmValueEncoding.ParsePineValueAsRecordTagged(pineValue);
+            }
+        }
+
+        {
+            if (asRecordResult.IsErrOrNull() is { } err)
+            {
                 return "Failed to parse as record: " + err;
             }
         }
@@ -1892,6 +1906,13 @@ type alias LoadDependencyStruct =
         PineVMParseCache parseCache)
     {
         var asRecordResult = ElmValueEncoding.ParsePineValueAsRecordTagged_2025(pineValue);
+
+        {
+            if (asRecordResult.IsErrOrNull() is { } err)
+            {
+                asRecordResult = ElmValueEncoding.ParsePineValueAsRecordTagged(pineValue);
+            }
+        }
 
         {
             if (asRecordResult.IsErrOrNull() is { } err)
@@ -1993,6 +2014,13 @@ type alias LoadDependencyStruct =
         PineVMParseCache parseCache)
     {
         var asRecordResult = ElmValueEncoding.ParsePineValueAsRecordTagged_2025(pineValue);
+
+        {
+            if (asRecordResult.IsErrOrNull() is { } err)
+            {
+                asRecordResult = ElmValueEncoding.ParsePineValueAsRecordTagged(pineValue);
+            }
+        }
 
         {
             if (asRecordResult.IsErrOrNull() is { } err)

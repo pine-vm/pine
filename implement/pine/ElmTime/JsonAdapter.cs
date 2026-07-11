@@ -515,6 +515,14 @@ public class ElmTimeJsonAdapter
             {
                 if (parseDescAndHandlerRecordResult.IsErrOrNull() is { } err)
                 {
+                    parseDescAndHandlerRecordResult =
+                        ElmValueEncoding.ParsePineValueAsRecordTagged(exposedFunctionDescriptionAndHandlerValue);
+                }
+            }
+
+            {
+                if (parseDescAndHandlerRecordResult.IsErrOrNull() is { } err)
+                {
                     return "Failed to parse exposed function description and handler: " + err;
                 }
             }
@@ -579,13 +587,11 @@ public class ElmTimeJsonAdapter
             }
 
             return
-                Result<string, KeyValuePair<string, ExposedFunction>>
-                .ok(
-                    KeyValuePair.Create(
-                        declName.Value,
-                        new ExposedFunction(
-                            Description: parseDescriptionOk,
-                            Handler: parseHandlerOk)));
+                KeyValuePair.Create(
+                    declName.Value,
+                    new ExposedFunction(
+                        Description: parseDescriptionOk,
+                        Handler: parseHandlerOk));
         }
 
         public static Result<string, ExposedFunctionDescription> ParseExposedFunctionDescription(
@@ -1250,6 +1256,14 @@ public class ElmTimeJsonAdapter
         */
 
         var asRecordResult = ElmValueEncoding.ParsePineValueAsRecordTagged_2025(applyResponse);
+
+        {
+            if (asRecordResult.IsErrOrNull() is { } err)
+            {
+                asRecordResult =
+                    ElmValueEncoding.ParsePineValueAsRecordTagged(applyResponse);
+            }
+        }
 
         {
             if (asRecordResult.IsErrOrNull() is { } err)
