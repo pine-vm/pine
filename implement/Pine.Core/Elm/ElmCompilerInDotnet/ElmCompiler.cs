@@ -2858,7 +2858,8 @@ public class ElmCompiler
             infixDecl.Infix.Operator.Value,
 
             _ =>
-            null
+            throw new NotImplementedException(
+                "Unexpected declaration type: " + decl.GetType()),
         };
 
     /// <summary>
