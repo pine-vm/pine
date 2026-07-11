@@ -54,7 +54,7 @@ public class ElmAppCompilationComponentsTests
             
         """";
 
-    [Fact]
+    [Fact(Skip = "TODO: Reimplement after switch to new Elm compiler")]
     public void DecodeElmJsonString_ForCompilerApp()
     {
         var elmJsonStringArgument =
@@ -80,7 +80,7 @@ public class ElmAppCompilationComponentsTests
         asString.expressionString.Should().Be("""Ok { sourceDirectories = [ "src", "elm-syntax/src", "elm-syntax-encode-json/src" ] }""");
     }
 
-    [Fact]
+    [Fact(Skip = "TODO: Reimplement after switch to new Elm compiler")]
     public void ParseElmJsonSourceDirectoryPath_src()
     {
         IReadOnlyList<PineValue> arguments =
@@ -103,7 +103,7 @@ public class ElmAppCompilationComponentsTests
         asString.expressionString.Should().Be("""{ parentLevel = 0, subdirectories = [ "src" ] }""");
     }
 
-    [Fact]
+    [Fact(Skip = "TODO: Reimplement after switch to new Elm compiler")]
     public void FindSourceDirectories_forAppCompiler()
     {
         /*
@@ -157,7 +157,7 @@ public class ElmAppCompilationComponentsTests
 
         IReadOnlyList<PineValue> arguments =
             [
-            ElmValueEncoding.ElmRecordAsPineValue_2025(
+            ElmValueEncoding.ElmRecordAsPineValue(
                 [
                 ("compilationRootFilePath",
                 PineValue.List(

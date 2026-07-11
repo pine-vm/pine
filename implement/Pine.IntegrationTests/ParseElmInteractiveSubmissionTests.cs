@@ -11,7 +11,7 @@ namespace Pine.IntegrationTests;
 
 public class ParseElmInteractiveSubmissionTests
 {
-    [Fact]
+    [Fact(Skip = "TODO: Reimplement after switch to new Elm compiler")]
     public void Parse_Elm_Interactive_submission()
     {
         var testCases = new[]

@@ -373,8 +373,7 @@ public class ElmCompilerInElm
                 AppCompilationUnits.WithoutPackages(appCodeFilteredForRoots),
                 overrideSkipLowering: true,
                 entryPointsFilePaths: rootFilePaths,
-                skipFilteringForSourceDirs: skipFilteringForSourceDirs,
-                elmCompiler: defaultCompiler);
+                skipFilteringForSourceDirs: skipFilteringForSourceDirs);
     }
 
     public static Result<string, ElmCompilerInElm> ElmCompilerFromEnvValue(PineValue compiledEnv)

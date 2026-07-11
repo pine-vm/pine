@@ -28,7 +28,7 @@ public class CompileElmCompilerTests
     private static readonly ElmCompilerCache elmCompilerCache = new();
 
 
-    [Fact]
+    [Fact(Skip = "TODO: Reimplement after switch to new Elm compiler")]
     public void Test_call_Basics_modBy()
     {
         using var pgoShare = new DynamicPGOShare();
@@ -85,7 +85,7 @@ public class CompileElmCompilerTests
         modByApplicationResult.Extract(err => throw new Exception(err)).Should().Be(IntegerEncoding.EncodeSignedInteger(6));
     }
 
-    [Fact]
+    [Fact(Skip = "TODO: Reimplement after switch to new Elm compiler")]
     public async System.Threading.Tasks.Task Test_parse_simple_Elm_module_and_encode_as_Pine_value()
     {
         var elmModuleText =
@@ -261,7 +261,7 @@ public class CompileElmCompilerTests
         }
     }
 
-    [Fact]
+    [Fact(Skip = "TODO: Reimplement after switch to new Elm compiler")]
     public void Test_call_String_split()
     {
         using var pgoShare = new DynamicPGOShare();

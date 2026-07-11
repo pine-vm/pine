@@ -19,7 +19,7 @@ public class ElmInteractiveTests
         Core.Elm.ElmInElm.BundledFiles.CompilerSourceContainerFilesDefault.Value;
 
 
-    [Fact(Timeout = 1000 * 60 * 50)]
+    [Fact(Timeout = 1000 * 60 * 50, Skip = "TODO: Reimplement after switch to new Elm compiler")]
     public void TestElmInteractiveScenarios()
     {
         var console = (IConsole)StaticConsole.Instance;

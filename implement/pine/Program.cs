@@ -2125,15 +2125,6 @@ public class Program
                     FileTree.FromSetOfFilesWithStringPath(sourceFilesAfterLowering),
                     entryPointFilePath: pathToFileWithElmEntryPoint);
 
-            var elmCompilerFromBundle =
-                BundledElmEnvironments.BundledElmCompilerCompiledEnvValue()
-                ??
-                throw new Exception("Failed to load Elm compiler from bundle.");
-
-            var elmCompiler =
-                ElmCompilerInElm.ElmCompilerFromEnvValue(elmCompilerFromBundle)
-                .Extract(err => throw new Exception(err));
-
             var pineVMCache = new InvocationCache();
 
             var pineVM =
@@ -2148,8 +2139,7 @@ public class Program
                     appCodeTree: sourceFilesWithMergedPackages.files,
                     overrideSkipLowering: true,
                     entryPointsFilePaths: [pathToFileWithElmEntryPoint],
-                    skipFilteringForSourceDirs: false,
-                    elmCompiler: elmCompiler);
+                    skipFilteringForSourceDirs: false);
 
             if (compileResult.IsErrOrNull() is { } compileErr)
             {

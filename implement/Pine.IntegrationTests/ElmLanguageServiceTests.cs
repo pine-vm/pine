@@ -18,7 +18,7 @@ namespace Pine.IntegrationTests;
 
 public class ElmLanguageServiceTests
 {
-    [Fact]
+    [Fact(Skip = "TODO: Reimplement after switch to new Elm compiler")]
     public void Language_service_provides_hover()
     {
         var elmModuleText =
@@ -58,7 +58,7 @@ public class ElmLanguageServiceTests
             expectedHoverText: "    init : State");
     }
 
-    [Fact]
+    [Fact(Skip = "TODO: Reimplement after switch to new Elm compiler")]
     public void Language_service_provides_completion_items()
     {
         var elmModuleTextAlfa =

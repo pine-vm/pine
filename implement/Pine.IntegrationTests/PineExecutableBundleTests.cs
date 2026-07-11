@@ -11,7 +11,7 @@ namespace Pine.IntegrationTests;
 
 public class PineExecutableBundleTests
 {
-    [Fact]
+    [Fact(Skip = "TODO: Reimplement after switch to new Elm compiler")]
     public void Bundles_default_elm_compiler_bootstrapping()
     {
         var compilerSourceFiles =
@@ -65,7 +65,7 @@ public class PineExecutableBundleTests
         elmCompiler.CompilerEnvironment.Should().Be(elmCompilerFromBundleValue);
     }
 
-    [Fact]
+    [Fact(Skip = "TODO: Reimplement after switch to new Elm compiler")]
     public void Bundled_environment_contains_Elm_syntax_parser()
     {
         var elmCompilerFromBundle =

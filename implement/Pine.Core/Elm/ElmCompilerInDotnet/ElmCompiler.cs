@@ -803,6 +803,7 @@ public class ElmCompiler
 
     internal static readonly ImmutableHashSet<DeclQualifiedName> TempIncludedRootDeclarations =
         ImmutableHashSet<DeclQualifiedName>.Empty
+        .Add(DeclQualifiedName.Create(["Backend", "MigrateState"], "migrate"))
         .Add(DeclQualifiedName.Create(["Json", "Encode"], "encode"))
         .Add(DeclQualifiedName.Create(["Json", "Decode"], "value"))
         .Add(DeclQualifiedName.Create(["Json", "Decode"], "decodeValue"))

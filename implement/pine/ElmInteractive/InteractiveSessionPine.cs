@@ -2,7 +2,7 @@ using Pine.Core;
 using Pine.Core.Addressing;
 using Pine.Core.CommonEncodings;
 using Pine.Core.Elm;
-using Pine.Core.Elm.Elm019;
+using Pine.Core.Elm.ElmCompilerInDotnet;
 using Pine.Core.Elm.ElmSyntax;
 using Pine.Core.Files;
 using Pine.Core.Interpreter.IntermediateVM;
@@ -168,57 +168,12 @@ public class InteractiveSessionPine : IInteractiveSession
                 reportFunctionApplication: null);
     }
 
-
-    private Result<string, PineValue> CompileInteractiveEnvironment(
+    public static Result<string, PineValue>
+        CompileInteractiveEnvironment(
         AppCompilationUnits? appCodeTree,
         bool? overrideSkipLowering,
         IReadOnlyList<IReadOnlyList<string>>? entryPointsFilePaths,
         bool skipFilteringForSourceDirs)
-    {
-        if (_buildCompilerResult.IsOkOrNull() is not { } elmCompiler)
-        {
-            if (_buildCompilerResult.IsErrOrNull() is { } err)
-            {
-                return "Failed to build Elm compiler: " + err;
-            }
-
-            throw new NotImplementedException(
-                "Unexpected compiler result type: " + _buildCompilerResult.GetType());
-        }
-
-        return
-            CompileInteractiveEnvironment(
-                appCodeTree,
-                overrideSkipLowering: overrideSkipLowering,
-                entryPointsFilePaths: entryPointsFilePaths,
-                skipFilteringForSourceDirs: skipFilteringForSourceDirs,
-                elmCompiler,
-                s_compileEnvPineVM);
-    }
-
-    public static Result<string, PineValue>
-        CompileInteractiveEnvironment(
-        AppCompilationUnits? appCodeTree,
-        bool? overrideSkipLowering,
-        IReadOnlyList<IReadOnlyList<string>>? entryPointsFilePaths,
-        bool skipFilteringForSourceDirs,
-        ElmCompilerInElm elmCompiler) =>
-        CompileInteractiveEnvironment(
-            appCodeTree,
-            overrideSkipLowering: overrideSkipLowering,
-            entryPointsFilePaths: entryPointsFilePaths,
-            skipFilteringForSourceDirs: skipFilteringForSourceDirs,
-            elmCompiler,
-            s_compileEnvPineVM);
-
-    public static Result<string, PineValue>
-        CompileInteractiveEnvironment(
-        AppCompilationUnits? appCodeTree,
-        bool? overrideSkipLowering,
-        IReadOnlyList<IReadOnlyList<string>>? entryPointsFilePaths,
-        bool skipFilteringForSourceDirs,
-        ElmCompilerInElm elmCompiler,
-        IPineVM pineVM)
     {
         var skipLowering =
             overrideSkipLowering ??
@@ -226,14 +181,6 @@ public class InteractiveSessionPine : IInteractiveSession
 
         var appSourceFiles =
             appCodeTree ?? AppCompilationUnits.WithoutPackages(FileTree.EmptyTree);
-
-        var initialStateElmValue =
-            ElmValueInterop.PineValueEncodedAsInElmCompiler(PineValue.EmptyList);
-
-        var initialStateElmValueInCompiler =
-            ElmValueEncoding.ElmValueAsPineValue_2025(initialStateElmValue);
-
-        var compiledNewEnvInCompiler = initialStateElmValueInCompiler;
 
         var defaultKernelModulesTree =
             ElmCompilerInElm.ElmCoreAndKernelModuleFilesDefault.Value;
@@ -300,64 +247,6 @@ public class InteractiveSessionPine : IInteractiveSession
                     kernelBlob =>
                     kernelBlob.fileContent.Span.SequenceEqual(blob.fileContent.Span))));
 
-        var compileKernelModulesResult =
-            CompileInteractiveEnvironmentUnitEncodedInCompiler(
-                compiledNewEnvInCompiler,
-                mergedKernelModulesTree,
-                entryPointsFilePaths: null,
-                elmCompiler,
-                pineVM: pineVM);
-
-        if (compileKernelModulesResult.IsErrOrNull() is { } compileKernelModulesErr)
-        {
-            return "Failed to compile kernel modules: " + compileKernelModulesErr;
-        }
-
-        if (compileKernelModulesResult.IsOkOrNull() is not { } compiledNewEnvInCompilerUnit)
-        {
-            throw new NotImplementedException(
-                "Unexpected result type: " + compileKernelModulesResult.GetType());
-        }
-
-        compiledNewEnvInCompiler = compiledNewEnvInCompilerUnit;
-
-        foreach (var package in appSourceFiles.Packages)
-        {
-            var packageName = package.elmJson.Name;
-
-            if (packageName is
-                "elm/core" or
-                "elm/json" or
-                "elm/bytes" or
-                "elm/parser" or
-                "elm/url" or
-                "elm/time")
-            {
-                continue;
-            }
-
-            var compilePackageResult =
-                CompileInteractiveEnvironmentPackageEncodedInCompiler(
-                    compiledNewEnvInCompiler,
-                    package.files,
-                    package.elmJson,
-                    elmCompiler,
-                    pineVM: pineVM);
-
-            if (compilePackageResult.IsErrOrNull() is { } compilePackageErr)
-            {
-                return "Compiling package " + package.elmJson.Name + " failed: " + compilePackageErr;
-            }
-
-            if (compilePackageResult.IsOkOrNull() is not { } compilePackageOk)
-            {
-                throw new NotImplementedException(
-                    "Unexpected result type: " + compilePackageResult.GetType());
-            }
-
-            compiledNewEnvInCompiler = compilePackageOk;
-        }
-
         var orderedModules =
             AppSourceFileTreesForIncrementalCompilation(
                 appFilesAfterKernelModules,
@@ -367,213 +256,40 @@ public class InteractiveSessionPine : IInteractiveSession
                 skipFilteringForSourceDirs: skipFilteringForSourceDirs)
             .ToImmutableArray();
 
-        foreach (var compilationIncrement in orderedModules)
-        {
-            var parseResult =
-                CachedTryParseModuleText(
-                    compilationIncrement.sourceModule.ModuleText,
-                    elmCompiler,
-                    pineVM);
+        var appSourceFilesTree =
+            appCodeTree is null
+            ?
+            FileTree.EmptyTree
+            :
+            appCodeTree.Packages.Aggregate(
+                seed: appCodeTree.AppFiles,
+                func: (files, pkg) => FileTree.MergeFiles(files, pkg.files));
 
-            if (parseResult.IsErrOrNull() is { } parseErr)
-            {
-                return
-                    "Failed parsing module " +
-                    string.Join(".", compilationIncrement.sourceModule.ModuleName) + ": " + parseErr;
-            }
-
-            if (parseResult.IsOkOrNullable() is not { } parsedModule)
-            {
-                throw new NotImplementedException(
-                    "Unexpected parse result type: " + parseResult.GetType());
-            }
-
-            var parsedModuleNameFlat = string.Join(".", parsedModule.Key);
-
-            var compileModuleResult =
-                CompileOneElmModule(
-                    compiledNewEnvInCompiler,
-                    compilationIncrement.sourceModule.ModuleText,
-                    parsedModule.Value,
-                    elmCompiler,
-                    pineVM: pineVM);
-
-            if (compileModuleResult.IsOkOrNull() is not { } compileModuleOk)
-            {
-                return
-                    "Compiling module " + parsedModuleNameFlat + " failed: " +
-                    compileModuleResult.Unpack(fromErr: err => err, fromOk: _ => "no err");
-            }
-
-            compiledNewEnvInCompiler = compileModuleOk;
-        }
-
-        var asElmValueResult =
-            elmCompilerCache.PineValueDecodedAsElmValue(compiledNewEnvInCompiler);
-
-        if (asElmValueResult.IsErrOrNull() is { } asElmValueErr)
-        {
-            return "Failed to decode environment from compiler as Elm value: " + asElmValueErr;
-        }
-
-        if (asElmValueResult.IsOkOrNull() is not { } compiledNewEnvInCompilerElm)
-        {
-            throw new NotImplementedException(
-                "Unexpected result type: " + asElmValueResult.GetType());
-        }
-
-        var compiledNewEnvValueResult =
-            elmCompilerCache.DecodeElmValueFromCompiler(compiledNewEnvInCompilerElm);
-
-        if (compiledNewEnvValueResult.IsErrOrNull() is { } compiledNewEnvValueErr)
-        {
-            return "Failed to decode environment from Elm value: " + compiledNewEnvValueErr;
-        }
-
-        if (compiledNewEnvValueResult.IsOkOrNull() is not { } compiledNewEnvValue)
-        {
-            throw new NotImplementedException(
-                "Unexpected result type: " + compiledNewEnvValueResult.GetType());
-        }
-
-        return compiledNewEnvValue;
-    }
-
-
-    public static Result<string, PineValue>
-        CompileInteractiveEnvironmentPackageEncodedInCompiler(
-        PineValue initialStateElmValueInCompiler,
-        FileTree packageFiles,
-        ElmJsonStructure elmJson,
-        ElmCompilerInElm elmCompiler,
-        IPineVM pineVM)
-    {
-        IReadOnlyDictionary<string, IReadOnlyList<string>> fileNameFromModuleName =
-            packageFiles.EnumerateFilesTransitive()
-            .Where(blob => blob.path.Last().EndsWith(".elm", StringComparison.OrdinalIgnoreCase))
-            .Select(blob =>
-            {
-                var moduleText = System.Text.Encoding.UTF8.GetString(blob.fileContent.Span);
-                var moduleName =
-                ElmModule.ParseModuleName(moduleText)
-                .Extract(err => throw new Exception("Failed parsing module name: " + err));
-
-                return new KeyValuePair<string, IReadOnlyList<string>>(
-                    string.Join(".", moduleName),
-                    blob.path);
-            })
-            .ToImmutableDictionary();
-
-        var entryPointsFilePaths =
-            elmJson.ExposedModules
-            .Select((moduleNameFlat) => fileNameFromModuleName[moduleNameFlat])
-            .ToImmutableHashSet(EnumerableExtensions.EqualityComparer<IReadOnlyList<string>>());
-
-        var compilationUnitResult =
-            CompileInteractiveEnvironmentUnitEncodedInCompiler(
-                initialStateElmValueInCompiler,
-                packageFiles,
-                entryPointsFilePaths: entryPointsFilePaths,
-                elmCompiler,
-                pineVM);
-
-        if (compilationUnitResult.IsErrOrNull() is { } compilationUnitErr)
-        {
-            return "Failed to compile package: " + compilationUnitErr;
-        }
-
-        if (compilationUnitResult.IsOkOrNull() is not { } compiledNewEnvInCompilerUnit)
-        {
-            throw new NotImplementedException(
-                "Unexpected result type: " + compilationUnitResult.GetType());
-        }
-
-        // TODO: Filter non-exposed modules.
-
-        return compiledNewEnvInCompilerUnit;
-    }
-
-
-    public static Result<string, PineValue>
-        CompileInteractiveEnvironmentUnitEncodedInCompiler(
-        PineValue initialStateElmValueInCompiler,
-        FileTree sourceFiles,
-        IReadOnlySet<IReadOnlyList<string>>? entryPointsFilePaths,
-        ElmCompilerInElm elmCompiler,
-        IPineVM pineVM)
-    {
-        var compiledNewEnvInCompiler = initialStateElmValueInCompiler;
-
-        var modulesToCompile =
-            ElmInteractive.ModulesFilePathsAndTextsFromAppCodeTree(
-                sourceFiles,
-                skipLowering: true,
-                entryPointsFilePaths: entryPointsFilePaths,
-                skipFilteringForSourceDirs: true,
-                mergeKernelModules: false);
-
-        var modulesToCompileTexts =
-            modulesToCompile
-            .Where(sm => !ElmInteractive.ShouldIgnoreSourceFile(sm.filePath, sm.fileContent))
-            .Select(sm => sm.moduleText)
+        entryPointsFilePaths ??=
+            appSourceFilesTree.EnumerateFilesTransitive()
+            .Select(blob => blob.path)
             .ToImmutableArray();
 
-        var modulesTextsOrdered =
-            ElmModule.ModulesTextOrderedForCompilationByDependencies(
-                rootModulesTexts: modulesToCompileTexts,
-                availableModulesTexts: []);
+        var compileResult =
+            ElmCompiler.CompileInteractiveEnvironment(
+                appSourceFilesTree,
+                rootFilePaths: entryPointsFilePaths,
+                syntaxOptimization: null);
 
-        var modulesToCompileOrdered =
-            modulesTextsOrdered
-            .Select(mt => modulesToCompile.First(c => c.moduleText == mt))
-            .ToImmutableArray();
-
-        foreach (var compilationIncrement in modulesToCompileOrdered)
         {
-            var moduleName =
-                ElmModule.ParseModuleName(compilationIncrement.moduleText)
-                .Extract(err => throw new Exception("Failed parsing module name: " + err));
-
-            var parseResult =
-                CachedTryParseModuleText(
-                    compilationIncrement.moduleText,
-                    elmCompiler,
-                    pineVM);
-
-            if (parseResult.IsErrOrNull() is { } parseErr)
+            if (compileResult.IsErrOrNull() is { } compileErr)
             {
-                return
-                    "Failed parsing module " +
-                    string.Join(".", moduleName) + ": " + parseErr;
+                return "Failed to compile interactive environment: " + compileErr;
             }
-
-            if (parseResult.IsOkOrNullable() is not { } parsedModule)
-            {
-                throw new NotImplementedException(
-                    "Unexpected parse result type: " + parseResult.GetType());
-            }
-
-            var parsedModuleNameFlat = string.Join(".", parsedModule.Key);
-
-            var compileModuleResult =
-                CompileOneElmModule(
-                    compiledNewEnvInCompiler,
-                    compilationIncrement.moduleText,
-                    parsedModule.Value,
-                    elmCompiler,
-                    pineVM: pineVM);
-
-            if (compileModuleResult.IsOkOrNull() is not { } compileModuleOk)
-            {
-                return
-                    "Compiling module " + parsedModuleNameFlat + " failed: " +
-                    compileModuleResult.Unpack(fromErr: err => err, fromOk: _ => "no err");
-            }
-
-            compiledNewEnvInCompiler = compileModuleOk;
         }
 
-        return compiledNewEnvInCompiler;
+        if (compileResult.IsOkOrNullable() is not { } compileOk)
+        {
+            throw new NotImplementedException(
+                "Unexpected result type: " + compileResult.GetType());
+        }
+
+        return compileOk.compiledEnvValue;
     }
 
     public static FileTree MergeDefaultElmCoreAndKernelModules(
@@ -753,7 +469,7 @@ public class InteractiveSessionPine : IInteractiveSession
                 // the legacy nested layout, so the AST handed to it must use the same layout.
                 // Once the Elm-in-Elm compiler is migrated, switch back to ElmValueAsPineValue.
                 var asPineValue =
-                    ElmValueEncoding.ElmValueAsPineValue_2025(parsedOk);
+                    ElmValueEncoding.ElmValueAsPineValue(parsedOk);
 
                 return
                     new KeyValuePair<IReadOnlyList<string>, PineValue>(
@@ -782,87 +498,6 @@ public class InteractiveSessionPine : IInteractiveSession
 
         return new KeyValuePair<IReadOnlyList<string>, PineValue>(moduleName, parsedModule);
     }
-
-    public static Result<string, PineValue> CompileOneElmModule(
-        PineValue prevEnvValue,
-        string moduleText,
-        PineValue parsedModuleValue,
-        ElmCompilerInElm elmCompiler,
-        IPineVM pineVM)
-    {
-        var applyFunctionResult =
-            Pine.Core.CodeAnalysis.ElmInteractiveEnvironment.ApplyFunction(
-                pineVM,
-                elmCompiler.ExpandElmInteractiveEnvironmentWithModules,
-                arguments:
-                [
-                    prevEnvValue,
-                    PineValue.List([ParsedElmFileRecordValue(moduleText, parsedModuleValue)])
-                ]
-                );
-
-        if (applyFunctionResult.IsErrOrNull() is { } applyErr)
-            return "Failed to apply function: " + applyErr;
-
-        if (applyFunctionResult.IsOkOrNull() is not { } applyFunctionOk)
-            throw new Exception("Unexpected result type: " + applyFunctionResult.GetType().FullName);
-
-        var parseAsTagResult = ElmValueEncoding.ParseAsTag(applyFunctionOk);
-
-        if (parseAsTagResult.IsErrOrNull() is { } parseAsTagErr)
-            return "Failed to parse result as tag: " + parseAsTagErr;
-
-        if (parseAsTagResult.IsOkOrNullable() is not { } parseAsTagOk)
-            throw new Exception("Unexpected result type: " + parseAsTagResult.GetType().FullName);
-
-        if (parseAsTagOk.tagName is not "Ok")
-        {
-            return
-                "Failed to extract environment: Tag not 'Ok': " +
-                elmCompilerCache.PineValueDecodedAsElmValue(applyFunctionOk)
-                .Unpack(
-                    fromErr: err => "Failed to parse as Elm value: " + err,
-                    fromOk: elmValue => ElmValue.RenderAsElmExpression(elmValue).expressionString);
-        }
-
-        if (parseAsTagOk.tagArguments.Length is not 1)
-        {
-            return
-                "Failed to extract environment: Expected one element in the list, got " +
-                parseAsTagOk.tagArguments.Length;
-        }
-
-        var parseAsRecordResult =
-            // Elm-in-Elm still emits records in the legacy nested layout, so use the legacy parser here.
-            ElmValueEncoding.ParsePineValueAsRecordTagged_2025(parseAsTagOk.tagArguments.Span[0]);
-
-        if (parseAsRecordResult.IsErrOrNull() is { } parseAsRecordError)
-            return "Failed to parse as record: " + parseAsRecordError;
-
-        if (parseAsRecordResult.IsOkOrNull() is not { } recordFields)
-            throw new Exception("Unexpected result type: " + parseAsRecordResult.GetType().FullName);
-
-        var environmentValueField =
-            recordFields
-            .SingleOrDefault(f => f.fieldName is "environment")
-            .fieldValue;
-
-        if (environmentValueField is not PineValue environmentValue)
-            return "Failed to extract environment: not a Pine value: " + environmentValueField;
-
-        return environmentValue;
-    }
-
-    static PineValue ParsedElmFileRecordValue(
-        string fileText,
-        PineValue parsedModuleValue) =>
-        // Legacy nested layout: the bundled Elm-in-Elm compiler that consumes this record
-        // still expects the pre-2025 record encoding.
-        ElmValueEncoding.ElmRecordAsPineValue_2025(
-            [
-            ("fileText", ElmValueEncoding.ElmValueAsPineValue_2025(ElmValue.StringInstance(fileText)))
-            ,("parsedModule", parsedModuleValue)
-            ]);
 
     public Result<string, SubmissionResponse> Submit(string submission)
     {

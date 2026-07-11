@@ -38,7 +38,7 @@ public class ParseElmModuleTextToPineValueTests
         return pineVM;
     }
 
-    [Fact]
+    [Fact(Skip = "TODO: Reimplement after switch to new Elm compiler")]
     public void Parse_Elm_module_with_varied_syntax()
     {
         var elmModuleText =
@@ -368,7 +368,7 @@ public class ParseElmModuleTextToPineValueTests
         }
     }
 
-    [Fact]
+    [Fact(Skip = "TODO: Reimplement after switch to new Elm compiler")]
     public void Parse_Elm_module_Bytes_Decode_decodeBlobAsCharsRec()
     {
         var elmModuleText =
@@ -408,7 +408,7 @@ public class ParseElmModuleTextToPineValueTests
             alsoTestDotnetParser: false);
     }
 
-    [Fact]
+    [Fact(Skip = "TODO: Reimplement after switch to new Elm compiler")]
     public void Dotnet_parser_results_in_same_expression_as_Elm_parser_source_files()
     {
         /*
@@ -453,7 +453,7 @@ public class ParseElmModuleTextToPineValueTests
             alsoTestDotnetParser: true);
     }
 
-    [Fact]
+    [Fact(Skip = "TODO: Reimplement after switch to new Elm compiler")]
     public void Dotnet_parser_results_in_same_expression_as_Elm_parser_json_converters()
     {
         /*

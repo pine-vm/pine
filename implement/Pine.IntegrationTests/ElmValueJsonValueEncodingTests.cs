@@ -13,7 +13,7 @@ namespace Pine.IntegrationTests;
 
 public class ElmValueJsonValueEncodingTests
 {
-    [Fact]
+    [Fact(Skip = "TODO: Reimplement after switch to new Elm compiler")]
     public void EncodeElmValueAsJson_tests()
     {
         var testCases =

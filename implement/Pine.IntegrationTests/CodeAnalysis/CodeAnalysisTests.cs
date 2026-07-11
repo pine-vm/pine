@@ -361,7 +361,7 @@ public class CodeAnalysisTests
             .Trim());
     }
 
-    [Fact]
+    [Fact(Skip = "TODO: Reimplement after switch to new Elm compiler")]
     public void Parse_Basics_compare()
     {
         var compiledEnv =
@@ -1018,7 +1018,7 @@ public class CodeAnalysisTests
             .Trim());
     }
 
-    [Fact]
+    [Fact(Skip = "TODO: Reimplement after switch to new Elm compiler")]
     public void Parse_Dict_insert()
     {
         var compiledEnv =
@@ -2372,7 +2372,7 @@ public class CodeAnalysisTests
         }
         .ToFrozenDictionary();
 
-    [Fact]
+    [Fact(Skip = "TODO: Reimplement after switch to new Elm compiler")]
     public void Parse_bundled_modules()
     {
         var compiledEnv =

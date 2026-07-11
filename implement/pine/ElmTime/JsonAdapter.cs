@@ -1126,7 +1126,7 @@ public class ElmTimeJsonAdapter
         config_exposedFunctions =
          * */
 
-        PineValue functionArgument()
+        PineValue FunctionArgument()
         {
             if (appStateBefore is null)
             {
@@ -1135,18 +1135,18 @@ public class ElmTimeJsonAdapter
             }
 
             var appStateIncludingShim =
-                ElmValueEncoding.ElmRecordAsPineValue_2025(
+                ElmValueEncoding.ElmRecordAsPineValue(
                     [
                     ("nextTaskIndex", IntegerEncoding.EncodeSignedInteger(0)),
                     ("posixTimeMilli", IntegerEncoding.EncodeSignedInteger(posixTimeMilli)),
-                    ("createVolatileProcessTasks", EmptyDictAsPineValue),
-                    ("requestToVolatileProcessTasks", EmptyDictAsPineValue),
-                    ("terminateVolatileProcessTasks", EmptyDictAsPineValue),
+                    ("createVolatileProcessTasks", s_emptyDictAsPineValue),
+                    ("requestToVolatileProcessTasks", s_emptyDictAsPineValue),
+                    ("terminateVolatileProcessTasks", s_emptyDictAsPineValue),
                     ("stateLessFramework", appStateBefore)
                     ]);
 
             return
-                ElmValueEncoding.ElmRecordAsPineValue_2025(
+                ElmValueEncoding.ElmRecordAsPineValue(
                     [
                     ("stateArgument",
                     ElmValueEncoding.TagAsPineValue(
@@ -1162,7 +1162,7 @@ public class ElmTimeJsonAdapter
             ElmInteractiveEnvironment.ApplyFunction(
                 pineVM,
                 exposedFunction.Handler,
-                [functionArgument()]);
+                [FunctionArgument()]);
 
         {
             if (applyResult.IsErrOrNull() is { } err)
@@ -1290,8 +1290,8 @@ public class ElmTimeJsonAdapter
         return Result<string, PineValue>.ok(stateLessFrameworkField);
     }
 
-    private static readonly PineValue EmptyDictAsPineValue =
-        ElmValueEncoding.ElmValueAsPineValue_2025(ElmValue.EmptyDict);
+    private static readonly PineValue s_emptyDictAsPineValue =
+        ElmValueEncoding.ElmValueAsPineValue(ElmValue.EmptyDict);
 
     /// <summary>
     /// The original lowering implementation added a 'main' declaration to account for DCE.

@@ -1,6 +1,5 @@
 using Pine;
 using Pine.Core;
-using Pine.Core.CodeAnalysis;
 using Pine.Core.Elm;
 using Pine.Core.Files;
 using Pine.Elm;
@@ -58,6 +57,8 @@ public class Program
         BuildAndSaveValueDictionary(
             elmCompilers: []);
 
+        /*
+         * 
         var elmCompilerValue = BuildElmCompiler();
 
         BuildAndSaveValueDictionary(
@@ -90,6 +91,7 @@ public class Program
                 "Completed compilation to C# and .NET bundle assembly.dll in " +
                 clock.Elapsed.TotalSeconds.ToString("0.00") + " seconds");
         }
+        */
     }
 
     public static void BuildAndSaveValueDictionary(

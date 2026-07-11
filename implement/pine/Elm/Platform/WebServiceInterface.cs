@@ -320,7 +320,7 @@ type alias LoadDependencyStruct =
             PineValue posixTimeIsPastValue)
         {
             var posixTimeIsPastElmRecord =
-                ElmValueEncoding.ParsePineValueAsRecordTagged_2025(posixTimeIsPastValue)
+                ElmValueEncoding.ParsePineValueAsRecordTagged(posixTimeIsPastValue)
                 .Extract(err => throw new Exception("Failed parsing posixTimeIsPast value as Elm record: " + err));
 
             var minimumPosixTimeMilliField =
@@ -641,7 +641,7 @@ type alias LoadDependencyStruct =
                 ("request", EncodeHttpRequestProperties(httpRequest.Request))
                 ]);
 
-        return ElmValueEncoding.ElmValueAsPineValue_2025(asElmValue);
+        return ElmValueEncoding.ElmValueAsPineValue(asElmValue);
     }
 
     public static ElmValue EncodeHttpRequestContext(HttpRequestContext requestContext)
@@ -726,7 +726,7 @@ type alias LoadDependencyStruct =
                 ElmValue.TagInstance("Just", [ElmValue.StringInstance(record.OsPlatform)]))
                 ]);
 
-        return ElmValueEncoding.ElmValueAsPineValue_2025(asElmValue);
+        return ElmValueEncoding.ElmValueAsPineValue(asElmValue);
     }
 
     public static PineValue EncodeResult<ErrT, OkT>(
@@ -772,7 +772,7 @@ type alias LoadDependencyStruct =
                 ("exceptionToString", ElmValue.StringInstance(error.ExceptionToString))
                 ]);
 
-        return ElmValueEncoding.ElmValueAsPineValue_2025(asElmValue);
+        return ElmValueEncoding.ElmValueAsPineValue(asElmValue);
     }
 
     public static PineValue EncodeCreateVolatileProcessComplete(
@@ -784,7 +784,7 @@ type alias LoadDependencyStruct =
                 ("processId", ElmValue.StringInstance(complete.ProcessId))
                 ]);
 
-        return ElmValueEncoding.ElmValueAsPineValue_2025(asElmValue);
+        return ElmValueEncoding.ElmValueAsPineValue(asElmValue);
     }
 
     public static PineValue EncodeRequestToVolatileProcessResult(
@@ -804,7 +804,7 @@ type alias LoadDependencyStruct =
             EncodeResult(
                 result,
                 encodeErr: EncodeRequestToVolatileProcessError,
-                encodeOk: _ => ElmValueEncoding.ElmValueAsPineValue_2025(ElmValue.TagInstance("Ok", [])));
+                encodeOk: _ => ElmValueEncoding.ElmValueAsPineValue(ElmValue.TagInstance("Ok", [])));
     }
 
     public static PineValue EncodeRequestToVolatileProcessError(
@@ -813,11 +813,11 @@ type alias LoadDependencyStruct =
         return error switch
         {
             RequestToVolatileProcessError.ProcessNotFound =>
-            ElmValueEncoding.ElmValueAsPineValue_2025(
+            ElmValueEncoding.ElmValueAsPineValue(
                 ElmValue.TagInstance(nameof(RequestToVolatileProcessError.ProcessNotFound), [])),
 
             RequestToVolatileProcessError.RequestToVolatileProcessOtherError otherError =>
-            ElmValueEncoding.ElmValueAsPineValue_2025(
+            ElmValueEncoding.ElmValueAsPineValue(
                 ElmValue.TagInstance(
                     nameof(RequestToVolatileProcessError.RequestToVolatileProcessOtherError),
                     [
@@ -853,7 +853,7 @@ type alias LoadDependencyStruct =
                 ("durationInMilliseconds", ElmValue.Integer(complete.DurationInMilliseconds))
                 ]);
 
-        return ElmValueEncoding.ElmValueAsPineValue_2025(asElmValue);
+        return ElmValueEncoding.ElmValueAsPineValue(asElmValue);
     }
 
     public static PineValue EncodeEncodeReadAllFromVolatileProcessNativeResult(
@@ -882,7 +882,7 @@ type alias LoadDependencyStruct =
                 ElmValue.TagInstance("Just", [ElmValue.Integer(complete.ExitCode.Value)]))
                 ]);
 
-        return ElmValueEncoding.ElmValueAsPineValue_2025(asElmValue);
+        return ElmValueEncoding.ElmValueAsPineValue(asElmValue);
     }
 
     public static Result<string, WebServiceEventResponse> ParseWebServiceConfigInit(
@@ -2352,22 +2352,12 @@ type alias LoadDependencyStruct =
                 caching: true,
                 autoPGO: null);
 
-        var elmCompilerFromBundle =
-            BundledElmEnvironments.BundledElmCompilerCompiledEnvValue()
-            ??
-            throw new Exception("Failed to load Elm compiler from bundle.");
-
-        var elmCompiler =
-            ElmCompilerInElm.ElmCompilerFromEnvValue(elmCompilerFromBundle)
-            .Extract(err => throw new Exception("Failed to load Elm compiler: " + err));
-
         return
             ElmTime.ElmInteractive.InteractiveSessionPine.CompileInteractiveEnvironment(
                 appCodeTree: compilationUnitsPrepared.files,
                 overrideSkipLowering: true,
-                entryPointsFilePaths: [["src", "Backend", "InterfaceToHost_Root.elm"]],
-                skipFilteringForSourceDirs: false,
-                elmCompiler: elmCompiler)
+                entryPointsFilePaths: [["src", "Backend", "InterfaceToHost_Root.elm"], entryFileName],
+                skipFilteringForSourceDirs: false)
             .Extract(err => throw new Exception("Failed to compile interactive environment: " + err));
     }
 
