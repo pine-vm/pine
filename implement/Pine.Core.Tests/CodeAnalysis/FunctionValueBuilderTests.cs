@@ -641,6 +641,37 @@ public class FunctionValueBuilderTests
     }
 
     [Fact]
+    public void ParseFunctionRecord_ThreeParameters_AfterFirstApplication_ParsesCollectedArgument()
+    {
+        var innerExpression =
+            Expression.ListInstance(
+                [
+                BuildExpressionForPathInEnvironment([1]),
+                BuildExpressionForPathInEnvironment([2]),
+                BuildExpressionForPathInEnvironment([3])
+                ]);
+
+        var functionValue =
+            FunctionValueBuilder.EmitFunctionValueWithEnvFunctions(
+                innerExpression,
+                parameterCount: 3,
+                envFunctions: []);
+
+        var firstArgument = PineValue.Blob([42]);
+        var partiallyAppliedFunction = EvaluateEncodedExpression(functionValue, firstArgument);
+
+        var parseResult =
+            FunctionRecord.ParseFunctionRecordTagged(partiallyAppliedFunction, s_parseCache);
+
+        parseResult.IsOkOrNull().Should().NotBeNull();
+        var record = parseResult.IsOkOrNull()!;
+
+        record.ParameterCount.Should().Be(3);
+        record.EnvFunctions.Length.Should().Be(0);
+        record.ArgumentsAlreadyCollected.Span.ToArray().Should().Equal(firstArgument);
+    }
+
+    [Fact]
     public void ParseFunctionRecord_FourParameters_ParsesParameterCount()
     {
         var innerExpression =

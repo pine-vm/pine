@@ -450,17 +450,6 @@ public record FunctionRecord(
             return "Failed to extract inner expression";
         }
 
-        // Check if the inner expression is another wrapper level (intermediate partially-applied wrapper).
-        // Wrapper levels are List expressions that construct expression encodings, starting with a tag literal
-        // like "ParseAndEval" or "List". Real function bodies don't start with such tag literals.
-        if (innerExpression is Expression.List innerList &&
-            innerList.Items.Count is 2 &&
-            innerList.Items[0] is Expression.Literal tagLit &&
-            StringEncoding.StringFromValue(tagLit.Value).IsOkOrNull() is "ParseAndEval" or "List")
-        {
-            return "Inner expression appears to be another wrapper level, not a function body";
-        }
-
         // Extract env functions from the environment structure
         // Environment structure: [envFuncs] for 0 params, [envFuncs, Environment] for 1 param
         if (outerParseAndEval.Environment is not Expression.List envList || envList.Items.Count is 0)
@@ -481,6 +470,37 @@ public record FunctionRecord(
         if (envFunctionsResult.IsOkOrNull() is not { } envFunctions)
         {
             return "Failed to extract env functions";
+        }
+
+        // A partially applied multi-parameter function has another wrapper level in Encoded,
+        // while the first environment item contains the arguments collected so far.
+        if (innerExpression is Expression.List innerList &&
+            innerList.Items.Count is 2 &&
+            innerList.Items[0] is Expression.Literal tagLit &&
+            StringEncoding.StringFromValue(tagLit.Value).IsOkOrNull() is "ParseAndEval" or "List" &&
+            envList.Items.Count is 2 &&
+            envList.Items[0] is Expression.Literal { Value: PineValue.ListValue collectedArguments } &&
+            envList.Items[1] is Expression.Environment)
+        {
+            var remainingFunctionResult =
+                ParseFunctionRecordTagged(encodedLiteral.Value, parseCache);
+
+            if (remainingFunctionResult.IsErrOrNull() is { } remainingFunctionErr)
+            {
+                return "Failed to parse remaining function wrapper: " + remainingFunctionErr;
+            }
+
+            if (remainingFunctionResult.IsOkOrNull() is not { } remainingFunction)
+            {
+                return "Failed to extract remaining function wrapper";
+            }
+
+            return
+                remainingFunction with
+                {
+                    ParameterCount = remainingFunction.ParameterCount + collectedArguments.Items.Length,
+                    ArgumentsAlreadyCollected = collectedArguments.Items.ToArray()
+                };
         }
 
         // Determine parameter count from remaining items
