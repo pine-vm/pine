@@ -16,6 +16,7 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
+
 using static ElmTime.ElmInteractive.IInteractiveSession;
 
 namespace ElmTime.ElmInteractive;
@@ -945,19 +946,11 @@ public class InteractiveSessionPine : IInteractiveSession
                     "Unexpected parse submission result type: " + parseSubmissionResult.GetType());
             }
 
-            var parseSubmissionAsElmValueResult =
-                elmCompilerCache.PineValueDecodedAsElmValue(parsedSubmissionOk);
-
-            if (parseSubmissionAsElmValueResult.IsErrOrNull() is { } parseSubmissionAsElmValueErr)
-            {
-                return "Failed parsing submission response as Elm value: " + parseSubmissionAsElmValueErr;
-            }
-
-            if (parseSubmissionAsElmValueResult.IsOkOrNull() is not { } parsedSubmissionAsElmValue)
-            {
-                throw new NotImplementedException(
-                    "Unexpected parse submission as Elm value result type: " + parseSubmissionAsElmValueResult.GetType());
-            }
+            var parsedSubmissionAsElmValueLazy =
+                new Lazy<ElmValue>(
+                    () =>
+                    elmCompilerCache.PineValueDecodedAsElmValue(parsedSubmissionOk)
+                    .Extract(decodeErr => throw new Exception("Failed decoding submission as Elm value: " + decodeErr)));
 
             LogDuration("parse");
 
@@ -982,15 +975,18 @@ public class InteractiveSessionPine : IInteractiveSession
 
             if (compileParsedResult.IsErrOrNull() is { } compileParsedErr)
             {
-                return "Failed compiling parsed submission (" +
-                    parsedSubmissionAsElmValue + "): " + compileParsedErr;
+                return
+                    "Failed compiling parsed submission (" +
+                    ElmValue.RenderAsElmExpression(parsedSubmissionAsElmValueLazy.Value) +
+                    "): " + compileParsedErr;
             }
 
             if (compileParsedResult.IsOkOrNull() is not { } compileParsedOk)
             {
                 return
                     "Failed compiling parsed submission (" +
-                    parsedSubmissionAsElmValue + "): " +
+                    ElmValue.RenderAsElmExpression(parsedSubmissionAsElmValueLazy.Value) +
+                    "): " +
                     compileParsedResult.Unpack(err => err, ok => "Not an err");
             }
 
