@@ -1,3 +1,4 @@
+using Pine.Core.CodeGen;
 using Pine.Core.CommonEncodings;
 using Pine.Core.Json;
 using System;
@@ -1250,7 +1251,7 @@ public abstract record Expression
                         ListInstance(
                             [
                             LiteralInstance(PineValue.BlobSingleByte(4)),
-                            CodeAnalysis.ExpressionBuilder.BuildExpressionForPathInExpression([i], EnvironmentInstance)
+                            ExpressionBuilder.BuildExpressionForPathInExpression([i], EnvironmentInstance)
                             ]));
 
                 yield return concatPrependPlusSign;
@@ -1264,7 +1265,7 @@ public abstract record Expression
                         ListInstance(
                             [
                             LiteralInstance(PineValue.BlobSingleByte(4)),
-                            CodeAnalysis.ExpressionBuilder.BuildExpressionForPathInExpression([i, j], EnvironmentInstance)
+                            ExpressionBuilder.BuildExpressionForPathInExpression([i, j], EnvironmentInstance)
                             ]));
 
                 yield return concatPrependPlusSign;

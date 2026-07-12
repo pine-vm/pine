@@ -1,11 +1,12 @@
 using AwesomeAssertions;
 using Pine.Core.CodeAnalysis;
+using Pine.Core.CodeGen;
 using Pine.Core.CommonEncodings;
 using System;
 using System.Collections.Immutable;
 using Xunit;
 
-namespace Pine.Core.Tests.CodeAnalysis;
+namespace Pine.Core.Tests.CodeGen;
 
 using PineVM = Core.Interpreter.IntermediateVM.PineVM;
 

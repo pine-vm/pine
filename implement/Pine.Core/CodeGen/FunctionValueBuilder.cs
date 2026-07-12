@@ -1,7 +1,7 @@
 using Pine.Core.CommonEncodings;
 using System.Collections.Generic;
 
-namespace Pine.Core.CodeAnalysis;
+namespace Pine.Core.CodeGen;
 
 /// <summary>
 /// Creates nested wrappers for generic and partial application of Elm functions.

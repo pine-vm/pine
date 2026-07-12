@@ -37,7 +37,7 @@ namespace Pine.Core.Tests.Elm.ElmCompilerInDotnet.Inlining;
 /// Nested form (<c>Application[Application[h, a], b]</c>): the inner
 /// Application is recognized as a partial application of <c>h</c> with
 /// arity 2 and only one supplied argument, forcing
-/// <see cref="Core.CodeAnalysis.FunctionValueBuilder"/>
+/// <see cref="CodeGen.FunctionValueBuilder"/>
 /// to emit a function-value wrapper that is then dispatched generically
 /// by the outer Application — a closure allocation and a generic
 /// dispatch that the direct-call path would have skipped entirely.

@@ -1,8 +1,9 @@
+using Pine.Core.CodeAnalysis;
 using Pine.Core.CommonEncodings;
 using System;
 using System.Collections.Generic;
 
-namespace Pine.Core.CodeAnalysis;
+namespace Pine.Core.CodeGen;
 
 /// <summary>
 /// Shared utility methods for building Pine expressions.
