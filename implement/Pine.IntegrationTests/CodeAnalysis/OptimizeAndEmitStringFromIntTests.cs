@@ -113,7 +113,7 @@ public class OptimizeAndEmitStringFromIntTests
                             :
                             (local_param_2_0 == CommonReusedValues.Blob_Str_RBNode_elm_builtin
                             ?
-                            (Global_Anonymous.zzz_anon_86577041_f98963a1(
+                            (Global_Anonymous.zzz_anon_0460788b_b36022e5(
                                 PineValueExtension.ValueFromPathOrEmptyList(PineValue.EmptyList, [0]),
                                 PineValueExtension.ValueFromPathOrEmptyList(PineValue.EmptyList, [1])) ==
                             PineValue.EmptyList
@@ -124,7 +124,7 @@ public class OptimizeAndEmitStringFromIntTests
                             :
                             (local_param_2_0 == CommonReusedValues.Blob_Str_Set_elm_builtin
                             ?
-                            (Global_Anonymous.zzz_anon_977ad014_a3ad329c(
+                            (Global_Anonymous.zzz_anon_74ecdc38_c78bed40(
                                 PineValueExtension.ValueFromPathOrEmptyList(
                                     PineValueExtension.ValueFromPathOrEmptyList(local_param_2_1, [0]),
                                     [
@@ -141,7 +141,7 @@ public class OptimizeAndEmitStringFromIntTests
                             :
                             PineKernelValues.FalseValue)
                             :
-                            Global_Anonymous.zzz_anon_a6410b38_40117551(PineValue.EmptyList, PineValue.EmptyList))))
+                            Global_Anonymous.zzz_anon_42a24045_77105bd2(PineValue.EmptyList, PineValue.EmptyList))))
                             :
                             PineKernelValues.FalseValue)))) ==
                                 PineKernelValues.TrueValue)
@@ -163,7 +163,7 @@ public class OptimizeAndEmitStringFromIntTests
                             KernelFunctionSpecialized.int_mul(-1, local_param_1);
 
                         PineValue local_005 =
-                            Global_Anonymous.zzz_anon_c6fe385e_7644d2b7(
+                            Global_Anonymous.zzz_anon_38e6937c_a50db278(
                                 local_002,
                                 CommonReusedValues.Blob_Int_10,
                                 CommonReusedValues.Blob_Int_0);
@@ -270,14 +270,173 @@ public class OptimizeAndEmitStringFromIntTests
                     }
                 }
             }
-            
+
             """".Trim());
 
         moduleGlobalAnonymousText.Trim().Should().Be(
             """"
             public static class Global_Anonymous
             {
-                public static PineValue zzz_anon_4f01025b_09a7779a(PineValue param_1_0, PineValue param_1_1)
+                public static PineValue zzz_anon_0460788b_b36022e5(PineValue param_1_0, PineValue param_1_1)
+                {
+                    if (param_1_0 == CommonReusedValues.Blob_Str_RBNode_elm_builtin)
+                    {
+                        return
+                            KernelFunction.concat(
+                                PineValue.List(
+                                    [
+                                    Global_Anonymous.zzz_anon_0460788b_b36022e5(
+                                        PineValueExtension.ValueFromPathOrEmptyList(
+                                            PineValueExtension.ValueFromPathOrEmptyList(param_1_1, [3]),
+                                            [
+                                            0
+                                            ]),
+                                        PineValueExtension.ValueFromPathOrEmptyList(
+                                            PineValueExtension.ValueFromPathOrEmptyList(param_1_1, [3]),
+                                            [
+                                            1
+                                            ])),
+                                    PineValue.List(
+                                        [
+                                        PineValue.List(
+                                            [
+                                            PineValueExtension.ValueFromPathOrEmptyList(param_1_1, [1]),
+                                            PineValueExtension.ValueFromPathOrEmptyList(param_1_1, [2])
+                                            ])
+                                        ]),
+                                    Global_Anonymous.zzz_anon_0460788b_b36022e5(
+                                        PineValueExtension.ValueFromPathOrEmptyList(
+                                            PineValueExtension.ValueFromPathOrEmptyList(param_1_1, [4]),
+                                            [
+                                            0
+                                            ]),
+                                        PineValueExtension.ValueFromPathOrEmptyList(
+                                            PineValueExtension.ValueFromPathOrEmptyList(param_1_1, [4]),
+                                            [
+                                            1
+                                            ]))
+                                    ]));
+                    }
+
+                    return PineValue.List([]);
+                }
+
+                public static PineValue zzz_anon_38e6937c_a50db278(PineValue param_1_0, PineValue param_1_1, PineValue param_1_2)
+                {
+                    PineValue local_param_1_0 = param_1_0;
+                    PineValue local_param_1_1 = param_1_1;
+                    PineValue local_param_1_2 = param_1_2;
+
+                    while (true)
+                    {
+                        PineValue local_000 = KernelFunctionSpecialized.int_mul(16, local_param_1_1);
+
+                        if (KernelFunctionSpecialized.int_is_sorted_asc_as_boolean(local_000, local_param_1_0))
+                        {
+                            PineValue local_001 =
+                                Global_Anonymous.zzz_anon_38e6937c_a50db278(
+                                    local_param_1_0,
+                                    local_000,
+                                    CommonReusedValues.Blob_Int_0);
+
+                            return
+                                KernelFunctionSpecialized.int_add(
+                                    KernelFunctionSpecialized.int_mul(16, local_001),
+                                    Global_Anonymous.zzz_anon_38e6937c_a50db278(
+                                        KernelFunctionSpecialized.int_add(
+                                            local_param_1_0,
+                                            KernelFunctionSpecialized.int_mul(
+                                                local_001,
+                                                KernelFunctionSpecialized.int_mul(-1, local_000))),
+                                        local_param_1_1,
+                                        CommonReusedValues.Blob_Int_0));
+                        }
+
+                        if (KernelFunctionSpecialized.int_is_sorted_asc_as_boolean(local_param_1_1, local_param_1_0))
+                        {
+                            {
+                                PineValue local_param_1_0_temp =
+                                    KernelFunctionSpecialized.int_add(
+                                        local_param_1_0,
+                                        KernelFunctionSpecialized.int_mul(-1, local_param_1_1));
+
+                                PineValue local_param_1_2_temp = KernelFunctionSpecialized.int_add(1, local_param_1_2);
+                                local_param_1_0 = local_param_1_0_temp;
+                                local_param_1_2 = local_param_1_2_temp;
+                            }
+
+                            continue;
+                        }
+
+                        return local_param_1_2;
+                    }
+                }
+
+                public static PineValue zzz_anon_42a24045_77105bd2(PineValue param_1_0, PineValue param_1_1)
+                {
+                    ImmutableSliceBuilder local_param_1_0 = ImmutableSliceBuilder.Create(param_1_0);
+                    ImmutableSliceBuilder local_param_1_1 = ImmutableSliceBuilder.Create(param_1_1);
+
+                    while (true)
+                    {
+                        if (local_param_1_0.Evaluate() == PineValue.List([]))
+                        {
+                            return PineKernelValues.TrueValue;
+                        }
+
+                        if (Global_Anonymous.zzz_anon_821c863b_0f659626(local_param_1_0.GetHead(), local_param_1_1.GetHead()) ==
+                            PineKernelValues.TrueValue)
+                        {
+                            {
+                                local_param_1_0 = local_param_1_0.Skip(1);
+                                local_param_1_1 = local_param_1_1.Skip(1);
+                            }
+
+                            continue;
+                        }
+
+                        return PineKernelValues.FalseValue;
+                    }
+                }
+
+                public static PineValue zzz_anon_74ecdc38_c78bed40(PineValue param_1_0, PineValue param_1_1)
+                {
+                    if (param_1_0 == CommonReusedValues.Blob_Str_RBNode_elm_builtin)
+                    {
+                        return
+                            KernelFunction.concat(
+                                PineValue.List(
+                                    [
+                                    Global_Anonymous.zzz_anon_74ecdc38_c78bed40(
+                                        PineValueExtension.ValueFromPathOrEmptyList(
+                                            PineValueExtension.ValueFromPathOrEmptyList(param_1_1, [3]),
+                                            [
+                                            0
+                                            ]),
+                                        PineValueExtension.ValueFromPathOrEmptyList(
+                                            PineValueExtension.ValueFromPathOrEmptyList(param_1_1, [3]),
+                                            [
+                                            1
+                                            ])),
+                                    PineValue.List([PineValueExtension.ValueFromPathOrEmptyList(param_1_1, [1])]),
+                                    Global_Anonymous.zzz_anon_74ecdc38_c78bed40(
+                                        PineValueExtension.ValueFromPathOrEmptyList(
+                                            PineValueExtension.ValueFromPathOrEmptyList(param_1_1, [4]),
+                                            [
+                                            0
+                                            ]),
+                                        PineValueExtension.ValueFromPathOrEmptyList(
+                                            PineValueExtension.ValueFromPathOrEmptyList(param_1_1, [4]),
+                                            [
+                                            1
+                                            ]))
+                                    ]));
+                    }
+
+                    return PineValue.List([]);
+                }
+
+                public static PineValue zzz_anon_821c863b_0f659626(PineValue param_1_0, PineValue param_1_1)
                 {
                     if (param_1_0 == param_1_1)
                     {
@@ -355,10 +514,10 @@ public class OptimizeAndEmitStringFromIntTests
 
                         if (local_001 == CommonReusedValues.Blob_Str_RBNode_elm_builtin)
                         {
-                            if (Global_Anonymous.zzz_anon_86577041_f98963a1(
+                            if (Global_Anonymous.zzz_anon_0460788b_b36022e5(
                                 PineValueExtension.ValueFromPathOrEmptyList(param_1_0, [0]),
                                 PineValueExtension.ValueFromPathOrEmptyList(param_1_0, [1])) ==
-                                Global_Anonymous.zzz_anon_86577041_f98963a1(
+                                Global_Anonymous.zzz_anon_0460788b_b36022e5(
                                     PineValueExtension.ValueFromPathOrEmptyList(param_1_1, [0]),
                                     PineValueExtension.ValueFromPathOrEmptyList(param_1_1, [1])))
                             {
@@ -370,7 +529,7 @@ public class OptimizeAndEmitStringFromIntTests
 
                         if (local_001 == CommonReusedValues.Blob_Str_Set_elm_builtin)
                         {
-                            if (Global_Anonymous.zzz_anon_977ad014_a3ad329c(
+                            if (Global_Anonymous.zzz_anon_74ecdc38_c78bed40(
                                 PineValueExtension.ValueFromPathOrEmptyList(
                                     PineValueExtension.ValueFromPathOrEmptyList(param_1_0, [1, 0]),
                                     [
@@ -381,7 +540,7 @@ public class OptimizeAndEmitStringFromIntTests
                                     [
                                     1
                                     ])) ==
-                                Global_Anonymous.zzz_anon_977ad014_a3ad329c(
+                                Global_Anonymous.zzz_anon_74ecdc38_c78bed40(
                                     PineValueExtension.ValueFromPathOrEmptyList(
                                         PineValueExtension.ValueFromPathOrEmptyList(param_1_1, [1, 0]),
                                         [
@@ -399,172 +558,12 @@ public class OptimizeAndEmitStringFromIntTests
                             return PineKernelValues.FalseValue;
                         }
 
-                        return Global_Anonymous.zzz_anon_a6410b38_40117551(param_1_0, param_1_1);
+                        return Global_Anonymous.zzz_anon_42a24045_77105bd2(param_1_0, param_1_1);
                     }
 
                     return PineKernelValues.FalseValue;
                 }
-
-                public static PineValue zzz_anon_86577041_f98963a1(PineValue param_1_0, PineValue param_1_1)
-                {
-                    if (param_1_0 == CommonReusedValues.Blob_Str_RBNode_elm_builtin)
-                    {
-                        return
-                            KernelFunction.concat(
-                                PineValue.List(
-                                    [
-                                    Global_Anonymous.zzz_anon_86577041_f98963a1(
-                                        PineValueExtension.ValueFromPathOrEmptyList(
-                                            PineValueExtension.ValueFromPathOrEmptyList(param_1_1, [3]),
-                                            [
-                                            0
-                                            ]),
-                                        PineValueExtension.ValueFromPathOrEmptyList(
-                                            PineValueExtension.ValueFromPathOrEmptyList(param_1_1, [3]),
-                                            [
-                                            1
-                                            ])),
-                                    PineValue.List(
-                                        [
-                                        PineValue.List(
-                                            [
-                                            PineValueExtension.ValueFromPathOrEmptyList(param_1_1, [1]),
-                                            PineValueExtension.ValueFromPathOrEmptyList(param_1_1, [2])
-                                            ])
-                                        ]),
-                                    Global_Anonymous.zzz_anon_86577041_f98963a1(
-                                        PineValueExtension.ValueFromPathOrEmptyList(
-                                            PineValueExtension.ValueFromPathOrEmptyList(param_1_1, [4]),
-                                            [
-                                            0
-                                            ]),
-                                        PineValueExtension.ValueFromPathOrEmptyList(
-                                            PineValueExtension.ValueFromPathOrEmptyList(param_1_1, [4]),
-                                            [
-                                            1
-                                            ]))
-                                    ]));
-                    }
-
-                    return PineValue.List([]);
-                }
-
-                public static PineValue zzz_anon_977ad014_a3ad329c(PineValue param_1_0, PineValue param_1_1)
-                {
-                    if (param_1_0 == CommonReusedValues.Blob_Str_RBNode_elm_builtin)
-                    {
-                        return
-                            KernelFunction.concat(
-                                PineValue.List(
-                                    [
-                                    Global_Anonymous.zzz_anon_977ad014_a3ad329c(
-                                        PineValueExtension.ValueFromPathOrEmptyList(
-                                            PineValueExtension.ValueFromPathOrEmptyList(param_1_1, [3]),
-                                            [
-                                            0
-                                            ]),
-                                        PineValueExtension.ValueFromPathOrEmptyList(
-                                            PineValueExtension.ValueFromPathOrEmptyList(param_1_1, [3]),
-                                            [
-                                            1
-                                            ])),
-                                    PineValue.List([PineValueExtension.ValueFromPathOrEmptyList(param_1_1, [1])]),
-                                    Global_Anonymous.zzz_anon_977ad014_a3ad329c(
-                                        PineValueExtension.ValueFromPathOrEmptyList(
-                                            PineValueExtension.ValueFromPathOrEmptyList(param_1_1, [4]),
-                                            [
-                                            0
-                                            ]),
-                                        PineValueExtension.ValueFromPathOrEmptyList(
-                                            PineValueExtension.ValueFromPathOrEmptyList(param_1_1, [4]),
-                                            [
-                                            1
-                                            ]))
-                                    ]));
-                    }
-
-                    return PineValue.List([]);
-                }
-
-                public static PineValue zzz_anon_a6410b38_40117551(PineValue param_1_0, PineValue param_1_1)
-                {
-                    ImmutableSliceBuilder local_param_1_0 = ImmutableSliceBuilder.Create(param_1_0);
-                    ImmutableSliceBuilder local_param_1_1 = ImmutableSliceBuilder.Create(param_1_1);
-
-                    while (true)
-                    {
-                        if (local_param_1_0.Evaluate() == PineValue.List([]))
-                        {
-                            return PineKernelValues.TrueValue;
-                        }
-
-                        if (Global_Anonymous.zzz_anon_4f01025b_09a7779a(local_param_1_0.GetHead(), local_param_1_1.GetHead()) ==
-                            PineKernelValues.TrueValue)
-                        {
-                            {
-                                local_param_1_0 = local_param_1_0.Skip(1);
-                                local_param_1_1 = local_param_1_1.Skip(1);
-                            }
-
-                            continue;
-                        }
-
-                        return PineKernelValues.FalseValue;
-                    }
-                }
-
-                public static PineValue zzz_anon_c6fe385e_7644d2b7(PineValue param_1_0, PineValue param_1_1, PineValue param_1_2)
-                {
-                    PineValue local_param_1_0 = param_1_0;
-                    PineValue local_param_1_1 = param_1_1;
-                    PineValue local_param_1_2 = param_1_2;
-
-                    while (true)
-                    {
-                        PineValue local_000 = KernelFunctionSpecialized.int_mul(16, local_param_1_1);
-
-                        if (KernelFunctionSpecialized.int_is_sorted_asc_as_boolean(local_000, local_param_1_0))
-                        {
-                            PineValue local_001 =
-                                Global_Anonymous.zzz_anon_c6fe385e_7644d2b7(
-                                    local_param_1_0,
-                                    local_000,
-                                    CommonReusedValues.Blob_Int_0);
-
-                            return
-                                KernelFunctionSpecialized.int_add(
-                                    KernelFunctionSpecialized.int_mul(16, local_001),
-                                    Global_Anonymous.zzz_anon_c6fe385e_7644d2b7(
-                                        KernelFunctionSpecialized.int_add(
-                                            local_param_1_0,
-                                            KernelFunctionSpecialized.int_mul(
-                                                local_001,
-                                                KernelFunctionSpecialized.int_mul(-1, local_000))),
-                                        local_param_1_1,
-                                        CommonReusedValues.Blob_Int_0));
-                        }
-
-                        if (KernelFunctionSpecialized.int_is_sorted_asc_as_boolean(local_param_1_1, local_param_1_0))
-                        {
-                            {
-                                PineValue local_param_1_0_temp =
-                                    KernelFunctionSpecialized.int_add(
-                                        local_param_1_0,
-                                        KernelFunctionSpecialized.int_mul(-1, local_param_1_1));
-
-                                PineValue local_param_1_2_temp = KernelFunctionSpecialized.int_add(1, local_param_1_2);
-                                local_param_1_0 = local_param_1_0_temp;
-                                local_param_1_2 = local_param_1_2_temp;
-                            }
-
-                            continue;
-                        }
-
-                        return local_param_1_2;
-                    }
-                }
             }
-            
             """".Trim());
 
 

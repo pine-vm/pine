@@ -927,6 +927,12 @@ public abstract record Expression
         public string Tag { get; }
 
         /// <summary>
+        /// The Pine value representing the label.
+        /// </summary>
+        [JsonIgnore]
+        public PineValue LabelValue { get; }
+
+        /// <summary>
         /// Fully determines the value returned by this expression.
         /// </summary>
         public Expression Tagged { get; }
@@ -957,8 +963,21 @@ public abstract record Expression
         public StringTag(
             string tag,
             Expression tagged)
+            : this(StringEncoding.ValueFromString(tag), tagged)
         {
-            Tag = tag;
+        }
+
+        /// <summary>
+        /// Creates a new tag expression with an arbitrary Pine value as its label.
+        /// </summary>
+        public StringTag(
+            PineValue labelValue,
+            Expression tagged)
+        {
+            LabelValue = labelValue;
+            Tag =
+                StringEncoding.StringFromValue(labelValue).IsOkOrNull() ??
+                labelValue.ToString();
             Tagged = tagged;
 
             SubexpressionCount = tagged.SubexpressionCount + 1;
@@ -968,7 +987,7 @@ public abstract record Expression
             BuiltinCount = tagged.BuiltinCount;
             MaxDepth = tagged.MaxDepth + 1;
 
-            _slimHashCode = HashCode.Combine(tag, tagged);
+            _slimHashCode = HashCode.Combine(labelValue, tagged);
         }
 
         /// <inheritdoc/>
@@ -986,7 +1005,7 @@ public abstract record Expression
 
             return
                 other._slimHashCode == _slimHashCode &&
-                other.Tag == Tag &&
+                other.LabelValue == LabelValue &&
                 other.Tagged == Tagged;
         }
     }

@@ -22,11 +22,11 @@ namespace Pine.Core.CodeAnalysis;
 /// </summary>
 public static class FunctionValueBuilder
 {
-    private static readonly Expression s_parseAndEvalTag =
-        Expression.LiteralInstance(StringEncoding.ValueFromString("ParseAndEval"));
+    private static readonly Expression s_evalTag =
+        Expression.LiteralInstance(StringEncoding.ValueFromString("Eval"));
 
-    private static readonly Expression s_literalTag =
-        Expression.LiteralInstance(StringEncoding.ValueFromString("Literal"));
+    private static readonly Expression s_litralTag =
+        Expression.LiteralInstance(StringEncoding.ValueFromString("Litral"));
 
     private static readonly Expression s_listTag =
         Expression.LiteralInstance(StringEncoding.ValueFromString("List"));
@@ -34,8 +34,14 @@ public static class FunctionValueBuilder
     private static readonly Expression s_environmentTag =
         Expression.LiteralInstance(StringEncoding.ValueFromString("Environment"));
 
-    private static readonly Expression s_kernelApplicationTag =
-        Expression.LiteralInstance(StringEncoding.ValueFromString("KernelApplication"));
+    private static readonly Expression s_builtinTag =
+        Expression.LiteralInstance(StringEncoding.ValueFromString("Builtin"));
+
+    private static readonly Expression s_conditionTag =
+        Expression.LiteralInstance(StringEncoding.ValueFromString("Condition"));
+
+    private static readonly Expression s_labelTag =
+        Expression.LiteralInstance(StringEncoding.ValueFromString("Label"));
 
     private static readonly Expression s_concatTag =
         Expression.LiteralInstance(StringEncoding.ValueFromString("concat"));
@@ -99,7 +105,7 @@ public static class FunctionValueBuilder
         int parameterCount,
         IReadOnlyList<Expression> envFunctionsExprs)
     {
-        var innerExprEncoded = ExpressionEncoding.EncodeExpressionAsValue(innerExpression);
+        var innerExprEncoded = ExpressionEncoding2026.EncodeExpressionAsValue(innerExpression);
 
         return
             EmitFunctionExpressionFromEncodedBody(
@@ -143,217 +149,45 @@ public static class FunctionValueBuilder
     }
 
     /// <summary>
-    /// Builds the wrapper level encoding directly. This produces the same result as
-    /// EncodeExpressionAsListExpression(BuildWrapperExpressionForLevel(...)) but without
-    /// encoding the nextLevelEncodingExpr - it's embedded directly.
+    /// Builds the compact encoding of a wrapper level, embedding the expression that produces
+    /// the next level's encoded value.
     /// </summary>
     private static Expression BuildWrapperLevelEncodingDirect(Expression nextLevelEncodingExpr, int level)
     {
-        // The wrapper expression structure is:
-        // List([parseAndEvalTag, List([nextLevelLiteral, envStructure])])
-        //
-        // When encoded, this becomes:
-        // ["List", [[["Literal", ["ParseAndEval"]], ["List", [[nextLevelLiteralEnc, envStructureEnc]]]]]]
-        //
-        // nextLevelLiteralEnc = ["List", [[["Literal", ["Literal"]], ["List", [[nextLevelEncodingExpr]]]]]]
-        // Note: nextLevelEncodingExpr is wrapped in ["List", [[...]]] not ["Literal", [...]] because
-        // it's already an expression that produces an encoding value, not a value to be embedded.
+        var envStructureEncoding =
+            level is 0
+            ?
+            s_level0EnvStructureEncodingStatic
+            :
+            s_levelNEnvStructureEncodingStatic;
 
-        // Build nextLevelLiteral encoding
-        // Original: List([literalTag, List([Literal(nextLevelEncoded)])])
-        // What we want: the encoding of this, where Literal(nextLevelEncoded) becomes the result of nextLevelEncodingExpr
-        //
-        // encode(List([literalTag, List([Literal(nextLevelEncoded)])])) =
-        //   ["List", [[encode(literalTag), encode(List([Literal(nextLevelEncoded)]))]]]
-        //   = ["List", [[["Literal", ["Literal"]], ["List", [[encode(Literal(nextLevelEncoded))]]]]]]
-        //   = ["List", [[["Literal", ["Literal"]], ["List", [[["Literal", [nextLevelEncoded]]]]]]]
-        //
-        // To make nextLevelEncoded dynamic, we need to wrap it so nextLevelEncodingExpr produces the value:
-        //   ["List", [[["Literal", ["Literal"]], ["List", [[["Literal", [EVAL(nextLevelEncodingExpr)]]]]]]]
-        //
-        // The ["Literal", [EVAL(nextLevelEncodingExpr)]] is achieved by: ["Literal", [nextLevelEncodingExpr]]
-        // which evaluates nextLevelEncodingExpr at overall expr time.
-
-        // ["Literal", ["Literal"]]
-        var literalTagEncoding =
-            Expression.ListInstance(
-                [
-                s_literalTag,
-                Expression.ListInstance([s_literalTag])
-                ]);
-
-        // ["Literal", [nextLevelEncodingExpr]] - evaluates to ["Literal", [nextLevelValue]]
-        var nextLevelValueLiteralEncoding =
-            Expression.ListInstance(
-                [
-                s_literalTag,
-                Expression.ListInstance([nextLevelEncodingExpr])
-                ]);
-
-        // ["List", [[nextLevelValueLiteralEncoding]]]
-        var nextLevelValueListEncoding =
-            Expression.ListInstance(
-                [
-                s_listTag,
-                Expression.ListInstance([Expression.ListInstance([nextLevelValueLiteralEncoding])])
-                ]);
-
-        // ["List", [[literalTagEncoding, nextLevelValueListEncoding]]]
         var nextLevelLiteralEncoding =
-            Expression.ListInstance(
+            EncodeList(
                 [
-                s_listTag,
-                Expression.ListInstance([Expression.ListInstance([literalTagEncoding, nextLevelValueListEncoding])])
+                EncodeLitral(s_litralTag),
+                EncodeLitral(nextLevelEncodingExpr)
                 ]);
 
-        // Build envStructure encoding based on level
-        Expression envStructureEncoding;
-
-        if (level is 0)
-        {
-            envStructureEncoding = s_level0EnvStructureEncodingStatic;
-        }
-        else
-        {
-            envStructureEncoding = s_levelNEnvStructureEncodingStatic;
-        }
-
-        // ["Literal", ["ParseAndEval"]]
-        var parseAndEvalTagEncoding =
-            Expression.ListInstance(
-                [
-                s_literalTag,
-                Expression.ListInstance([s_parseAndEvalTag])
-                ]);
-
-        // ["List", [[nextLevelLiteralEncoding, envStructureEncoding]]]
-        var innerListEncoding =
-            Expression.ListInstance(
-                [
-                s_listTag,
-                Expression.ListInstance([Expression.ListInstance([nextLevelLiteralEncoding, envStructureEncoding])])
-                ]);
-
-        // ["List", [[parseAndEvalTagEncoding, innerListEncoding]]]
-        return
-            Expression.ListInstance(
-                [
-                s_listTag,
-                Expression.ListInstance([Expression.ListInstance([parseAndEvalTagEncoding, innerListEncoding])])
-                ]);
+        return EncodeList(
+            [
+            EncodeLitral(s_evalTag),
+            nextLevelLiteralEncoding,
+            EncodeExpressionAsListExpression(envStructureEncoding)
+            ]);
     }
 
     /// <summary>
     /// Builds the static encoding of level 0 env structure.
-    /// At level 0 runtime, env = arg0, so envStructure = ["List", [[["Literal", [[arg0]]], ["Environment", []]]]]
+    /// At level 0 runtime, env = arg0, so the environment contains the captured argument
+    /// and the environment of the next wrapper.
     /// </summary>
     private static Expression BuildLevel0EnvStructureEncodingStatic()
     {
-        // envStructure expression: List([listTag, List([List([capturedLiteral, envLiteral])])])
-        // where capturedLiteral = List([literalTag, List([List([env])])])
-        //       envLiteral = List([envTag, List([])])
-        //
-        // We encode this statically since it doesn't depend on envFuncExprs
-
-        // Build capturedLiteral encoding
-        // encode(List([literalTag, List([List([env])])])) = 
-        //   ["List", [[["Literal", ["Literal"]], ["List", [[["List", [[["Environment", []]]]]]]]]]
-
-        var literalTagEncoding =
-            Expression.ListInstance(
-                [
-                s_literalTag,
-                Expression.ListInstance([s_literalTag])
-                ]);
-
-        // encode(env) = ["Environment", []]
-        var environmentEncoding =
-            Expression.ListInstance(
-                [
-                s_environmentTag,
-                Expression.EmptyList
-                ]);
-
-        // encode(List([env])) = ["List", [[["Environment", []]]]]
-        var listOfEnvEncoding =
-            Expression.ListInstance(
-                [
-                s_listTag,
-                Expression.ListInstance([Expression.ListInstance([environmentEncoding])])
-                ]);
-
-        // encode(List([List([env])])) = ["List", [[listOfEnvEncoding]]]
-        var listOfListOfEnvEncoding =
-            Expression.ListInstance(
-                [
-                s_listTag,
-                Expression.ListInstance([Expression.ListInstance([listOfEnvEncoding])])
-                ]);
-
-        // encode(capturedLiteral) = ["List", [[literalTagEncoding, listOfListOfEnvEncoding]]]
-        var capturedLiteralEncoding =
-            Expression.ListInstance(
-                [
-                s_listTag,
-                Expression.ListInstance([Expression.ListInstance([literalTagEncoding, listOfListOfEnvEncoding])])
-                ]);
-
-        // Build envLiteral encoding
-        // encode(List([envTag, List([])])) = ["List", [[["Literal", ["Environment"]], ["List", [[]]]]]]
-
-        var envTagEncoding =
-            Expression.ListInstance(
-                [
-                s_literalTag,
-                Expression.ListInstance([s_environmentTag])
-                ]);
-
-        var emptyListEncoding =
-            Expression.ListInstance(
-                [
-                s_listTag,
-                Expression.ListInstance([Expression.EmptyList])
-                ]);
-
-        var envLiteralEncoding =
-            Expression.ListInstance(
-                [
-                s_listTag,
-                Expression.ListInstance([Expression.ListInstance([envTagEncoding, emptyListEncoding])])
-                ]);
-
-        // Build innerList encoding
-        // encode(List([List([capturedLiteral, envLiteral])])) = ["List", [[["List", [[capturedEnc, envEnc]]]]]]
-
-        var innerPairEncoding =
-            Expression.ListInstance(
-                [
-                s_listTag,
-                Expression.ListInstance([Expression.ListInstance([capturedLiteralEncoding, envLiteralEncoding])])
-                ]);
-
-        var innerListEncoding =
-            Expression.ListInstance(
-                [
-                s_listTag,
-                Expression.ListInstance([Expression.ListInstance([innerPairEncoding])])
-                ]);
-
-        // Build listTag encoding
-        var listTagEncoding =
-            Expression.ListInstance(
-                [
-                s_literalTag,
-                Expression.ListInstance([s_listTag])
-                ]);
-
-        // encode(envStructure) = ["List", [[listTagEncoding, innerListEncoding]]]
-        return
-            Expression.ListInstance(
-                [
-                s_listTag,
-                Expression.ListInstance([Expression.ListInstance([listTagEncoding, innerListEncoding])])
-                ]);
+        return EncodeList(
+            [
+            EncodeLitral(Expression.ListInstance([Expression.EnvironmentInstance])),
+            EncodeEnvironment()
+            ]);
     }
 
     /// <summary>
@@ -362,99 +196,22 @@ public static class FunctionValueBuilder
     /// </summary>
     private static Expression BuildLevelNEnvStructureEncodingStatic()
     {
-        // newCaptured = concat(env[0], [env[1]])
         var capturedSoFarExpr =
             ExpressionBuilder.BuildExpressionForPathInExpression([0], Expression.EnvironmentInstance);
 
         var currentArgExpr = ExpressionBuilder.BuildExpressionForPathInExpression([1], Expression.EnvironmentInstance);
         var newCapturedExpr = BuiltinAppConcatBinary(capturedSoFarExpr, Expression.ListInstance([currentArgExpr]));
 
-        // Use standard encoding for newCapturedExpr - it doesn't contain envFuncExprs, only references
-        // to the level N environment (captured so far and current arg), which are correctly evaluated
-        // when level N runs.
-        var newCapturedEncoding = EncodeExpressionAsListExpression(newCapturedExpr);
-
-        // capturedLiteral = List([literalTag, List([newCaptured])])
-        // encode: ["List", [[["Literal", ["Literal"]], ["List", [[newCapturedEncoding]]]]]]
-
-        var literalTagEncoding =
-            Expression.ListInstance(
-                [
-                s_literalTag,
-                Expression.ListInstance([s_literalTag])
-                ]);
-
-        var newCapturedListEncoding =
-            Expression.ListInstance(
-                [
-                s_listTag,
-                Expression.ListInstance([Expression.ListInstance([newCapturedEncoding])])
-                ]);
-
-        var capturedLiteralEncoding =
-            Expression.ListInstance(
-                [
-                s_listTag,
-                Expression.ListInstance([Expression.ListInstance([literalTagEncoding, newCapturedListEncoding])])
-                ]);
-
-        // envLiteral encoding (same as level 0)
-        var envTagEncoding =
-            Expression.ListInstance(
-                [
-                s_literalTag,
-                Expression.ListInstance([s_environmentTag])
-                ]);
-
-        var emptyListEncoding =
-            Expression.ListInstance(
-                [
-                s_listTag,
-                Expression.ListInstance([Expression.EmptyList])
-                ]);
-
-        var envLiteralEncoding =
-            Expression.ListInstance(
-                [
-                s_listTag,
-                Expression.ListInstance([Expression.ListInstance([envTagEncoding, emptyListEncoding])])
-                ]);
-
-        // innerList encoding
-        var innerPairEncoding =
-            Expression.ListInstance(
-                [
-                s_listTag,
-                Expression.ListInstance([Expression.ListInstance([capturedLiteralEncoding, envLiteralEncoding])])
-                ]);
-
-        var innerListEncoding =
-            Expression.ListInstance(
-                [
-                s_listTag,
-                Expression.ListInstance([Expression.ListInstance([innerPairEncoding])])
-                ]);
-
-        // listTag encoding
-        var listTagEncoding =
-            Expression.ListInstance(
-                [
-                s_literalTag,
-                Expression.ListInstance([s_listTag])
-                ]);
-
-        // envStructure encoding
-        return
-            Expression.ListInstance(
-                [
-                s_listTag,
-                Expression.ListInstance([Expression.ListInstance([listTagEncoding, innerListEncoding])])
-                ]);
+        return EncodeList(
+            [
+            EncodeLitral(newCapturedExpr),
+            EncodeEnvironment()
+            ]);
     }
 
     /// <summary>
     /// Builds a List expression that, when evaluated, produces the encoding of the given expression.
-    /// This is like ExpressionEncoding.EncodeExpressionAsValue, but returns an Expression
+    /// This is like ExpressionEncoding2026.EncodeExpressionAsValue, but returns an Expression
     /// that produces the encoding when evaluated (allowing dynamic values from sub-expressions).
     /// </summary>
     private static Expression EncodeExpressionAsListExpression(Expression expression)
@@ -462,48 +219,39 @@ public static class FunctionValueBuilder
         return expression switch
         {
             Expression.Literal literal =>
-            // ["Literal", [value]]
-            Expression.ListInstance(
-                [
-                s_literalTag,
-                Expression.ListInstance([Expression.LiteralInstance(literal.Value)])
-                ]),
+            EncodeLitral(Expression.LiteralInstance(literal.Value)),
 
             Expression.Environment =>
-            // ["Environment", []]
-            Expression.ListInstance([s_environmentTag, Expression.EmptyList]),
+            EncodeEnvironment(),
 
             Expression.List list =>
-            // ["List", [[item0_encoded, item1_encoded, ...]]]
             EncodeListExpressionAsListExpression(list),
 
             Expression.ParseAndEval parseAndEval =>
-            // ["ParseAndEval", [encoded_encoded, environment_encoded]]
-            Expression.ListInstance(
-                [
-                s_parseAndEvalTag,
-                Expression.ListInstance(
-                    [
-                    EncodeExpressionAsListExpression(parseAndEval.Encoded),
-                    EncodeExpressionAsListExpression(parseAndEval.Environment)
-                    ])
-                ]),
+            EncodeEval(
+                EncodeExpressionAsListExpression(parseAndEval.Encoded),
+                EncodeExpressionAsListExpression(parseAndEval.Environment)),
 
             Expression.KernelApplication kernelApp =>
-            // ["KernelApplication", [function_name, input_encoded]]
-            Expression.ListInstance(
-                [
-                s_kernelApplicationTag,
-                Expression.ListInstance(
-                    [
-                    Expression.LiteralInstance(StringEncoding.ValueFromString(kernelApp.Function)),
-                    EncodeExpressionAsListExpression(kernelApp.Input)
-                    ])
-                ]),
+            EncodeBuiltin(
+                Expression.LiteralInstance(StringEncoding.ValueFromString(kernelApp.Function)),
+                EncodeExpressionAsListExpression(kernelApp.Input)),
+
+            Expression.Conditional conditional =>
+            EncodeCondition(
+                EncodeExpressionAsListExpression(conditional.Condition),
+                EncodeExpressionAsListExpression(conditional.FalseBranch),
+                EncodeExpressionAsListExpression(conditional.TrueBranch)),
+
+            Expression.StringTag stringTag =>
+            EncodeLabel(
+                Expression.LiteralInstance(stringTag.LabelValue),
+                EncodeExpressionAsListExpression(stringTag.Tagged)),
 
             _ =>
-            throw new System.NotSupportedException(
-                $"EncodeExpressionAsListExpression does not support {expression.GetType().Name}")
+            throw new System.NotImplementedException(
+                "EncodeExpressionAsListExpression does not handle expression variant: " +
+                expression.GetType().Name)
         };
     }
 
@@ -512,7 +260,6 @@ public static class FunctionValueBuilder
     /// </summary>
     private static Expression EncodeListExpressionAsListExpression(Expression.List list)
     {
-        // ["List", [[item0_encoded, item1_encoded, ...]]]
         var encodedItems = new Expression[list.Items.Count];
 
         for (var i = 0; i < list.Items.Count; i++)
@@ -520,13 +267,44 @@ public static class FunctionValueBuilder
             encodedItems[i] = EncodeExpressionAsListExpression(list.Items[i]);
         }
 
-        return
-            Expression.ListInstance(
-                [
-                s_listTag,
-                Expression.ListInstance([Expression.ListInstance(encodedItems)])
-                ]);
+        return EncodeList(encodedItems);
     }
+
+    private static Expression EncodeLitral(Expression value) =>
+        Expression.ListInstance([s_litralTag, value]);
+
+    private static Expression EncodeList(IReadOnlyList<Expression> encodedItems)
+    {
+        var items = new Expression[encodedItems.Count + 1];
+
+        items[0] = s_listTag;
+
+        for (var i = 0; i < encodedItems.Count; ++i)
+            items[i + 1] = encodedItems[i];
+
+        return Expression.ListInstance(items);
+    }
+
+    private static Expression EncodeBuiltin(Expression functionName, Expression encodedInput) =>
+        Expression.ListInstance([s_builtinTag, functionName, encodedInput]);
+
+    private static Expression EncodeCondition(
+        Expression encodedCondition,
+        Expression encodedFalseBranch,
+        Expression encodedTrueBranch) =>
+        Expression.ListInstance(
+            [s_conditionTag, encodedCondition, encodedFalseBranch, encodedTrueBranch]);
+
+    private static Expression EncodeEnvironment() =>
+        Expression.ListInstance([s_environmentTag]);
+
+    private static Expression EncodeEval(
+        Expression encodedExpression,
+        Expression encodedEnvironment) =>
+        Expression.ListInstance([s_evalTag, encodedExpression, encodedEnvironment]);
+
+    private static Expression EncodeLabel(Expression label, Expression encodedLabeled) =>
+        Expression.ListInstance([s_labelTag, label, encodedLabeled]);
 
     /// <summary>
     /// Creates a wrapper for a zero-parameter function - immediate invocation.
@@ -543,10 +321,10 @@ public static class FunctionValueBuilder
         var invocationExpr =
             new Expression.ParseAndEval(
                 encoded:
-                Expression.LiteralInstance(ExpressionEncoding.EncodeExpressionAsValue(innerExpression, encodeExprCache)),
+                Expression.LiteralInstance(EncodeExpressionAsValue2026(innerExpression, encodeExprCache)),
                 environment: invocationEnv);
 
-        return ExpressionEncoding.EncodeExpressionAsValue(invocationExpr, encodeExprCache);
+        return EncodeExpressionAsValue2026(invocationExpr, encodeExprCache);
     }
 
     /// <summary>
@@ -566,10 +344,10 @@ public static class FunctionValueBuilder
         var invocationExpr =
             new Expression.ParseAndEval(
                 encoded:
-                Expression.LiteralInstance(ExpressionEncoding.EncodeExpressionAsValue(innerExpression, encodeExprCache)),
+                Expression.LiteralInstance(EncodeExpressionAsValue2026(innerExpression, encodeExprCache)),
                 environment: invocationEnv);
 
-        return ExpressionEncoding.EncodeExpressionAsValue(invocationExpr, encodeExprCache);
+        return EncodeExpressionAsValue2026(invocationExpr, encodeExprCache);
     }
 
     /// <summary>
@@ -597,7 +375,7 @@ public static class FunctionValueBuilder
         var innermostExpr = BuildInnermostExpression(innerExpression, envFunctions, encodeExprCache);
 
         // Build outer levels from N-2 down to 0
-        PineValue currentEncoded = ExpressionEncoding.EncodeExpressionAsValue(innermostExpr, encodeExprCache);
+        PineValue currentEncoded = EncodeExpressionAsValue2026(innermostExpr, encodeExprCache);
 
         for (var level = parameterCount - 2; level >= 0; level--)
         {
@@ -644,7 +422,7 @@ public static class FunctionValueBuilder
         return
             new Expression.ParseAndEval(
                 encoded:
-                Expression.LiteralInstance(ExpressionEncoding.EncodeExpressionAsValue(innerExpression, encodeExprCache)),
+                Expression.LiteralInstance(EncodeExpressionAsValue2026(innerExpression, encodeExprCache)),
                 environment: invocationEnv);
     }
 
@@ -672,7 +450,7 @@ public static class FunctionValueBuilder
             // And uses [[arg0]] as its captured args (arg0 embedded from this level's env)
 
             // The expression we build returns:
-            // ParseAndEval(nextLevel, [[Literal([env])], ["Environment", []]]]
+            // ParseAndEval(nextLevel, [Literal([env]), Environment])
             wrapperExpr = BuildLevel0Expression(nextLevelEncoded);
         }
         else
@@ -682,7 +460,7 @@ public static class FunctionValueBuilder
             wrapperExpr = BuildLevelNExpression(nextLevelEncoded);
         }
 
-        return ExpressionEncoding.EncodeExpressionAsValue(wrapperExpr);
+        return ExpressionEncoding2026.EncodeExpressionAsValue(wrapperExpr);
     }
 
     /// <summary>
@@ -693,61 +471,16 @@ public static class FunctionValueBuilder
     /// </summary>
     private static Expression BuildLevel0Expression(PineValue nextLevelEncoded)
     {
-        // We need to return an encoded expression (a value).
-        // That value encodes: ParseAndEval(nextLevel, [[[arg0]], env_of_returned_expr])
-        // 
-        // At this level: env = arg0
-        // The returned expr will be evaluated later with env = arg1
-        // The returned expr needs to have [[arg0]] baked in (as literal)
-        //
-        // Build a List expression that constructs the encoding:
-        // ["ParseAndEval", [Literal(nextLevel), [[Literal([[env]])], ["Environment", []]]]]
-        //
-        // Using list operations to construct the Pine expression encoding dynamically
-
-        // Encode the next level as a literal: ["Literal", [nextLevelValue]]
         var nextLevelLiteralEncoded =
-            Expression.ListInstance(
-                [
-                s_literalTag,
-                Expression.ListInstance([Expression.LiteralInstance(nextLevelEncoded)])
-                ]);
+            EncodeLitral(Expression.LiteralInstance(nextLevelEncoded));
 
-        // Encode Environment expression: ["Environment", []]
-        var environmentEncoded =
-            Expression.ListInstance(
-                [
-                s_environmentTag,
-                Expression.EmptyList
-                ]);
-
-        // Encode captured args [arg0]:
-        // At this level, env = arg0 directly
-        // We need to build Literal([env]) which when evaluated produces [arg0]
-        // capturedArgsEncoded = ["Literal", [[env]]]
         var capturedArgsEncoded =
-            Expression.ListInstance(
-                [
-                s_literalTag,
-                Expression.ListInstance([Expression.ListInstance([Expression.EnvironmentInstance])])
-                ]);
+            EncodeLitral(Expression.ListInstance([Expression.EnvironmentInstance]));
 
-        // Encode the full env structure: ["List", [[capturedArgsEncoded, environmentEncoded]]]
-        // This produces [[captured_args], next_env] when evaluated
         var envStructureEncoded =
-            Expression.ListInstance(
-                [
-                s_listTag,
-                Expression.ListInstance([Expression.ListInstance([capturedArgsEncoded, environmentEncoded])])
-                ]);
+            EncodeList([capturedArgsEncoded, EncodeEnvironment()]);
 
-        // Final ParseAndEval encoding: ["ParseAndEval", [nextLevelLiteralEncoded, envStructureEncoded]]
-        return
-            Expression.ListInstance(
-                [
-                s_parseAndEvalTag,
-                Expression.ListInstance([nextLevelLiteralEncoded, envStructureEncoded])
-                ]);
+        return EncodeEval(nextLevelLiteralEncoded, envStructureEncoded);
     }
 
     /// <summary>
@@ -758,65 +491,37 @@ public static class FunctionValueBuilder
     /// </summary>
     private static Expression BuildLevelNExpression(PineValue nextLevelEncoded)
     {
-        // Environment at this level: [[captured_so_far], current_arg]
-        // env[0] = [captured_so_far], env[1] = current_arg
-        // new_captured = concat(captured_so_far, [current_arg])
-        //
-        // Return encoded: ParseAndEval(nextLevel, [[new_captured], env_of_returned_expr])
-
-        // Get captured_so_far and current_arg from environment
         var capturedSoFar =
             ExpressionBuilder.BuildExpressionForPathInExpression([0], Expression.EnvironmentInstance);
 
         var currentArg =
             ExpressionBuilder.BuildExpressionForPathInExpression([1], Expression.EnvironmentInstance);
 
-        // new_captured = concat(captured_so_far, [current_arg])
         var newCapturedExpr =
             BuiltinAppConcatBinary(
                 capturedSoFar,
                 Expression.ListInstance([currentArg]));
 
-        // Encode nextLevel as literal
         var nextLevelLiteralEncoded =
-            Expression.ListInstance(
-                [
-                s_literalTag,
-                Expression.ListInstance([Expression.LiteralInstance(nextLevelEncoded)])
-                ]);
+            EncodeLitral(Expression.LiteralInstance(nextLevelEncoded));
 
-        // Encode Environment for the returned expression
-        var environmentEncoded =
-            Expression.ListInstance(
-                [s_environmentTag, Expression.EmptyList]);
-
-        // Encode captured as literal: ["Literal", [newCaptured]]
-        // Note: newCapturedExpr is evaluated at THIS level's eval time
-        // This produces [new_captured] when evaluated
         var capturedLiteralEncoded =
-            Expression.ListInstance(
-                [
-                s_literalTag,
-                Expression.ListInstance([newCapturedExpr])
-                ]);
+            EncodeLitral(newCapturedExpr);
 
-        // Encode env structure: ["List", [[capturedLiteralEncoded, environmentEncoded]]]
-        // This produces [[new_captured], next_env] when evaluated
         var envStructureEncoded =
-            Expression.ListInstance(
-                [
-                s_listTag,
-                Expression.ListInstance([Expression.ListInstance([capturedLiteralEncoded, environmentEncoded])])
-                ]);
+            EncodeList([capturedLiteralEncoded, EncodeEnvironment()]);
 
-        // Final: ["ParseAndEval", [nextLevelLiteralEncoded, envStructureEncoded]]
-        return
-            Expression.ListInstance(
-                [
-                s_parseAndEvalTag,
-                Expression.ListInstance([nextLevelLiteralEncoded, envStructureEncoded])
-                ]);
+        return EncodeEval(nextLevelLiteralEncoded, envStructureEncoded);
     }
+
+    private static PineValue.ListValue EncodeExpressionAsValue2026(
+        Expression expression,
+        PineExpressionEncodingCache? cache) =>
+        cache is null
+        ?
+        ExpressionEncoding2026.EncodeExpressionAsValue(expression)
+        :
+        cache.EncodeExpressionAsValue(expression);
 
     /// <summary>
     /// Creates a literal List expression containing the given values.
@@ -841,52 +546,17 @@ public static class FunctionValueBuilder
         Expression encodedBodyExpr,
         IReadOnlyList<Expression> envFunctionsExprs)
     {
-        // Build the encoding: ["ParseAndEval", [Literal(innerExpr), [envFuncs]]]
-        // The encoded body comes from encodedBodyExpr instead of being encoded here
-
-        // Build: ["Literal", [encodedBodyExpr]] - evaluated at runtime
         var encodedExprLiteralEncoding =
-            Expression.ListInstance(
-                [
-                s_literalTag,
-                Expression.ListInstance([encodedBodyExpr])
-                ]);
+            EncodeLitral(encodedBodyExpr);
 
-        // Build env functions list encoding: ["List", [[envFunc0, envFunc1, ...]]]
-        var envFuncEncodings = new Expression[envFunctionsExprs.Count];
-
-        for (var i = 0; i < envFunctionsExprs.Count; i++)
-        {
-            envFuncEncodings[i] =
-                Expression.ListInstance(
-                    [
-                    s_literalTag,
-                    Expression.ListInstance([envFunctionsExprs[i]])
-                    ]);
-        }
-
+        var envFuncEncodings = EncodeLitrals(envFunctionsExprs);
         var envFuncsListEncoding =
-            Expression.ListInstance(
-                [
-                s_listTag,
-                Expression.ListInstance([Expression.ListInstance(envFuncEncodings)])
-                ]);
+            EncodeList(envFuncEncodings);
 
-        // Build invocation env: ["List", [[envFuncsListEncoding]]]
         var invocationEnvEncoding =
-            Expression.ListInstance(
-                [
-                s_listTag,
-                Expression.ListInstance([Expression.ListInstance([envFuncsListEncoding])])
-                ]);
+            EncodeList([envFuncsListEncoding]);
 
-        // Final: ["ParseAndEval", [encodedExprLiteralEncoding, invocationEnvEncoding]]
-        return
-            Expression.ListInstance(
-                [
-                s_parseAndEvalTag,
-                Expression.ListInstance([encodedExprLiteralEncoding, invocationEnvEncoding])
-                ]);
+        return EncodeEval(encodedExprLiteralEncoding, invocationEnvEncoding);
     }
 
     /// <summary>
@@ -897,59 +567,17 @@ public static class FunctionValueBuilder
         Expression encodedBodyExpr,
         IReadOnlyList<Expression> envFunctionsExprs)
     {
-        // Build the encoding: ["ParseAndEval", [Literal(innerExpr), [envFuncs, Environment]]]
-
-        // Build: ["Literal", [encodedBodyExpr]] - evaluated at runtime
         var encodedExprLiteralEncoding =
-            Expression.ListInstance(
-                [
-                s_literalTag,
-                Expression.ListInstance([encodedBodyExpr])
-                ]);
+            EncodeLitral(encodedBodyExpr);
 
-        // Build env functions list encoding
-        var envFuncEncodings = new Expression[envFunctionsExprs.Count];
-
-        for (var i = 0; i < envFunctionsExprs.Count; i++)
-        {
-            envFuncEncodings[i] =
-                Expression.ListInstance(
-                    [
-                    s_literalTag,
-                    Expression.ListInstance([envFunctionsExprs[i]])
-                    ]);
-        }
-
+        var envFuncEncodings = EncodeLitrals(envFunctionsExprs);
         var envFuncsListEncoding =
-            Expression.ListInstance(
-                [
-                s_listTag,
-                Expression.ListInstance([Expression.ListInstance(envFuncEncodings)])
-                ]);
+            EncodeList(envFuncEncodings);
 
-        // Build Environment encoding: ["Environment", []]
-        var environmentExprEncoding =
-            Expression.ListInstance(
-                [
-                s_environmentTag,
-                Expression.EmptyList
-                ]);
-
-        // Build invocation env: ["List", [[envFuncsListEncoding, environmentExprEncoding]]]
         var invocationEnvEncoding =
-            Expression.ListInstance(
-                [
-                s_listTag,
-                Expression.ListInstance([Expression.ListInstance([envFuncsListEncoding, environmentExprEncoding])])
-                ]);
+            EncodeList([envFuncsListEncoding, EncodeEnvironment()]);
 
-        // Final: ["ParseAndEval", [encodedExprLiteralEncoding, invocationEnvEncoding]]
-        return
-            Expression.ListInstance(
-                [
-                s_parseAndEvalTag,
-                Expression.ListInstance([encodedExprLiteralEncoding, invocationEnvEncoding])
-                ]);
+        return EncodeEval(encodedExprLiteralEncoding, invocationEnvEncoding);
     }
 
     /// <summary>
@@ -984,37 +612,13 @@ public static class FunctionValueBuilder
         Expression encodedBodyExpr,
         IReadOnlyList<Expression> envFunctionsExprs)
     {
-        // ["Literal", [encodedBodyExpr]] - evaluated at runtime
         var innerExprLiteralEncoding =
-            Expression.ListInstance(
-                [
-                s_literalTag,
-                Expression.ListInstance([encodedBodyExpr])
-                ]);
+            EncodeLitral(encodedBodyExpr);
 
-        // Build env functions list encoding with Literal wrappers
-        var envFuncEncodings = new Expression[envFunctionsExprs.Count];
-
-        for (var i = 0; i < envFunctionsExprs.Count; i++)
-        {
-            // ["Literal", [envFuncExpr]] - evaluated at overall expr time
-            envFuncEncodings[i] =
-                Expression.ListInstance(
-                    [
-                    s_literalTag,
-                    Expression.ListInstance([envFunctionsExprs[i]])
-                    ]);
-        }
-
-        // ["List", [[envFuncEncodings...]]]
+        var envFuncEncodings = EncodeLitrals(envFunctionsExprs);
         var envFuncsListEncoding =
-            Expression.ListInstance(
-                [
-                s_listTag,
-                Expression.ListInstance([Expression.ListInstance(envFuncEncodings)])
-                ]);
+            EncodeList(envFuncEncodings);
 
-        // Build fullArgs encoding: concat(env[0], [env[1]])
         var capturedArgsExpr =
             ExpressionBuilder.BuildExpressionForPathInExpression([0], Expression.EnvironmentInstance);
 
@@ -1028,40 +632,26 @@ public static class FunctionValueBuilder
 
         var fullArgsEncoding = EncodeExpressionAsListExpression(fullArgsExpr);
 
-        // Build invocation env: concat([envFuncs], fullArgs)
-        // Encoding: ["KernelApplication", ["concat", ["List", [[["List", [[envFuncsListEncoding]]], fullArgsEncoding]]]]]
         var envFuncsWrappedEncoding =
-            Expression.ListInstance(
-                [
-                s_listTag,
-                Expression.ListInstance([Expression.ListInstance([envFuncsListEncoding])])
-                ]);
+            EncodeList([envFuncsListEncoding]);
 
         var concatInputEncoding =
-            Expression.ListInstance(
-                [
-                s_listTag,
-                Expression.ListInstance([Expression.ListInstance([envFuncsWrappedEncoding, fullArgsEncoding])])
-                ]);
+            EncodeList([envFuncsWrappedEncoding, fullArgsEncoding]);
 
         var invocationEnvEncoding =
-            Expression.ListInstance(
-                [
-                s_kernelApplicationTag,
-                Expression.ListInstance(
-                    [
-                    s_concatTag,
-                    concatInputEncoding
-                    ])
-                ]);
+            EncodeBuiltin(s_concatTag, concatInputEncoding);
 
-        // ["ParseAndEval", [innerExprLiteralEncoding, invocationEnvEncoding]]
-        return
-            Expression.ListInstance(
-                [
-                s_parseAndEvalTag,
-                Expression.ListInstance([innerExprLiteralEncoding, invocationEnvEncoding])
-                ]);
+        return EncodeEval(innerExprLiteralEncoding, invocationEnvEncoding);
+    }
+
+    private static Expression[] EncodeLitrals(IReadOnlyList<Expression> valueExpressions)
+    {
+        var encoded = new Expression[valueExpressions.Count];
+
+        for (var i = 0; i < valueExpressions.Count; ++i)
+            encoded[i] = EncodeLitral(valueExpressions[i]);
+
+        return encoded;
     }
 
     #endregion

@@ -1847,17 +1847,23 @@ public class ReducePineExpression
             return null;
         }
 
-        if (constructionList.Items.Count is not 2)
-        {
-            return null;
-        }
-
-        if (constructionList.Items[0] is not Expression.Literal tagLiteral)
+        if (constructionList.Items.Count is 0 ||
+            constructionList.Items[0] is not Expression.Literal tagLiteral)
         {
             return null;
         }
 
         if (StringEncoding.StringFromValue(tagLiteral.Value).IsOkOrNull() is not { } tag)
+        {
+            return null;
+        }
+
+        if (TryDecodeConstructedEncoding2026(constructionList, tag, envArg, parseCache) is { } decoded2026)
+        {
+            return decoded2026;
+        }
+
+        if (constructionList.Items.Count is not 2)
         {
             return null;
         }
@@ -1983,6 +1989,130 @@ public class ReducePineExpression
                     }
 
                     return Expression.KernelApplicationInstance(functionName, decodedInput);
+                }
+
+            default:
+                return null;
+        }
+    }
+
+    private static Expression? TryDecodeConstructedEncoding2026(
+        Expression.List construction,
+        string tag,
+        Expression envArg,
+        PineVMParseCache parseCache)
+    {
+        switch (tag)
+        {
+            case "Litral":
+                return
+                    construction.Items.Count is 2
+                    ?
+                    construction.Items[1]
+                    :
+                    null;
+
+            case "Environment":
+                return
+                    construction.Items.Count is 1
+                    ?
+                    envArg
+                    :
+                    null;
+
+            case "List":
+                {
+                    var decodedItems = new Expression[construction.Items.Count - 1];
+
+                    for (var i = 1; i < construction.Items.Count; ++i)
+                    {
+                        if (TryDecodeApplicationOfConstructedEncoding(
+                                construction.Items[i],
+                                envArg,
+                                parseCache) is not { } decodedItem)
+                        {
+                            return null;
+                        }
+
+                        decodedItems[i - 1] = decodedItem;
+                    }
+
+                    return Expression.ListInstance(decodedItems);
+                }
+
+            case "Builtin":
+                {
+                    if (construction.Items.Count is not 3 ||
+                        construction.Items[1] is not Expression.Literal functionLiteral ||
+                        StringEncoding.StringFromValue(functionLiteral.Value).IsOkOrNull() is not { } functionName ||
+                        TryDecodeApplicationOfConstructedEncoding(
+                            construction.Items[2],
+                            envArg,
+                            parseCache) is not { } decodedInput)
+                    {
+                        return null;
+                    }
+
+                    return Expression.KernelApplicationInstance(functionName, decodedInput);
+                }
+
+            case "Condition":
+                {
+                    if (construction.Items.Count is not 4 ||
+                        TryDecodeApplicationOfConstructedEncoding(
+                            construction.Items[1],
+                            envArg,
+                            parseCache) is not { } decodedCondition ||
+                        TryDecodeApplicationOfConstructedEncoding(
+                            construction.Items[2],
+                            envArg,
+                            parseCache) is not { } decodedFalseBranch ||
+                        TryDecodeApplicationOfConstructedEncoding(
+                            construction.Items[3],
+                            envArg,
+                            parseCache) is not { } decodedTrueBranch)
+                    {
+                        return null;
+                    }
+
+                    return
+                        Expression.ConditionalInstance(
+                            decodedCondition,
+                            decodedFalseBranch,
+                            decodedTrueBranch);
+                }
+
+            case "Eval":
+                {
+                    if (construction.Items.Count is not 3 ||
+                        TryDecodeApplicationOfConstructedEncoding(
+                            construction.Items[1],
+                            envArg,
+                            parseCache) is not { } decodedEncoded ||
+                        TryDecodeApplicationOfConstructedEncoding(
+                            construction.Items[2],
+                            envArg,
+                            parseCache) is not { } decodedEnvironment)
+                    {
+                        return null;
+                    }
+
+                    return new Expression.ParseAndEval(decodedEncoded, decodedEnvironment);
+                }
+
+            case "Label":
+                {
+                    if (construction.Items.Count is not 3 ||
+                        construction.Items[1] is not Expression.Literal labelLiteral ||
+                        TryDecodeApplicationOfConstructedEncoding(
+                            construction.Items[2],
+                            envArg,
+                            parseCache) is not { } decodedLabeled)
+                    {
+                        return null;
+                    }
+
+                    return new Expression.StringTag(labelLiteral.Value, decodedLabeled);
                 }
 
             default:

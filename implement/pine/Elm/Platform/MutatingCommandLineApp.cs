@@ -195,20 +195,6 @@ public record CommandLineAppConfig(
             ElmValueEncoding.ParsePineValueAsRecordTagged(runRootDeclValue)
             .Extract(err => throw new Exception("Failed parsing runRoot record: " + err));
 
-        var initValue =
-            runRootRecord
-            .First(field => field.fieldName is "init").fieldValue;
-
-        if (initValue is not PineValue.ListValue initList)
-        {
-            throw new Exception("Expected init to be a list.");
-        }
-
-        if (initList.Items.Length is not 2)
-        {
-            throw new Exception("Expected init list to have two elements.");
-        }
-
         var runRootInitFunctionValue =
             runRootRecord
             .First(field => field.fieldName is "init").fieldValue;

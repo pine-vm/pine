@@ -116,38 +116,21 @@ public record FunctionRecord(
     {
         var parseTaggedResult = ElmInteractiveEnvironment.ParseTagged(pineValue);
 
-        if (parseTaggedResult.IsOkOrNullable() is { } taggedFunctionDeclaration)
+        if (parseTaggedResult.IsOkOrNullable() is { name: "Function" } taggedFunctionDeclaration)
         {
-            if (taggedFunctionDeclaration.name is "Function")
-            {
-                return ParseFunctionRecord(taggedFunctionDeclaration.value, parseCache);
-            }
+            return ParseFunctionRecord(taggedFunctionDeclaration.value, parseCache);
+        }
 
-            // Check for nested wrapper form (ParseAndEval expression for 0/1 params)
-            if (taggedFunctionDeclaration.name is "ParseAndEval")
-            {
-                var nestedResult = ParseNestedWrapperForm(pineValue, parseCache);
+        var parseExpressionResult = parseCache.ParseExpression(pineValue);
 
-                if (nestedResult.IsOkOrNull() is { } nestedRecord)
-                {
-                    return nestedRecord;
-                }
+        if (parseExpressionResult.IsOkOrNull() is Expression.ParseAndEval)
+        {
+            return ParseNestedWrapperForm(pineValue, parseCache);
+        }
 
-                return nestedResult;
-            }
-
-            // Check for multi-parameter nested wrapper form (List expression that builds encoding dynamically)
-            if (taggedFunctionDeclaration.name is "List")
-            {
-                var multiResult = ParseMultiParamNestedWrapperForm(pineValue, parseCache);
-
-                if (multiResult.IsOkOrNull() is { } multiRecord)
-                {
-                    return multiRecord;
-                }
-
-                return multiResult;
-            }
+        if (parseExpressionResult.IsOkOrNull() is Expression.List)
+        {
+            return ParseMultiParamNestedWrapperForm(pineValue, parseCache);
         }
 
         /*
@@ -475,9 +458,7 @@ public record FunctionRecord(
         // A partially applied multi-parameter function has another wrapper level in Encoded,
         // while the first environment item contains the arguments collected so far.
         if (innerExpression is Expression.List innerList &&
-            innerList.Items.Count is 2 &&
-            innerList.Items[0] is Expression.Literal tagLit &&
-            StringEncoding.StringFromValue(tagLit.Value).IsOkOrNull() is "ParseAndEval" or "List" &&
+            IsWrapperBuilderExpression(innerList) &&
             envList.Items.Count is 2 &&
             envList.Items[0] is Expression.Literal { Value: PineValue.ListValue collectedArguments } &&
             envList.Items[1] is Expression.Environment)
@@ -540,6 +521,19 @@ public record FunctionRecord(
                 UsesNestedArgFormat: usesNestedArgFormat);
     }
 
+    private static bool IsWrapperBuilderExpression(Expression.List expression)
+    {
+        if (expression.Items.Count is not (2 or 3) ||
+            expression.Items[0] is not Expression.Literal tagLiteral)
+        {
+            return false;
+        }
+
+        return
+            StringEncoding.StringFromValue(tagLiteral.Value).IsOkOrNull()
+            is "ParseAndEval" or "List" or "Eval";
+    }
+
     /// <summary>
     /// Parses env functions from an expression. Supports two forms:
     /// 1. Single Literal containing a ListValue of env functions
@@ -586,8 +580,8 @@ public record FunctionRecord(
     /// Multi-parameter wrappers use List expressions that build encoding dynamically.
     /// 
     /// Expected structure matches what FunctionValueBuilder.EmitFunctionValueWithEnvFunctions produces:
-    /// - Level 0: List expression producing ["ParseAndEval", [Literal(level1), ...]]
-    /// - Level 1..N-2: List expression producing ["ParseAndEval", [Literal(levelN), ...]]
+    /// - Level 0: List expression producing ["Eval", Litral(level1), ...]
+    /// - Level 1..N-2: List expression producing ["Eval", Litral(levelN), ...]
     /// - Level N-1 (innermost): ParseAndEval(innerExpr, [envFuncs, ...])
     /// </summary>
     private static Result<string, FunctionRecord> ParseMultiParamNestedWrapperForm(
@@ -637,7 +631,7 @@ public record FunctionRecord(
         PineVMParseCache parseCache)
     {
         // Multi-param wrappers have structure:
-        // Level 0: List expression ["ParseAndEval", [Literal(level1), envStructure]]
+        // Level 0: List expression ["Eval", Litral(level1), envStructure]
         //   where envStructure builds [[Literal([env])], Environment]
         // Level 1..N-2: List expression with similar structure, using concat for captured args
         // Level N-1 (innermost): ParseAndEval(innerExpr, [envFuncs, concat(captured, [env])])
@@ -655,8 +649,7 @@ public record FunctionRecord(
             }
 
             // Find the Literal in the structure that contains the next level
-            // The structure is ["ParseAndEval", [Literal(nextLevel), ...]]
-            // So we expect items[0] = "ParseAndEval" tag, items[1] = [encoded, env]
+            // The structure builds ["Eval", Litral(nextLevel), ...].
             var nextLevelResult = ExtractNextLevelFromListExpression(currentList, parseCache);
 
             if (nextLevelResult.IsErrOrNull() is { } extractErr)
@@ -753,28 +746,21 @@ public record FunctionRecord(
 
     /// <summary>
     /// Extracts the next level value from a List expression that represents a wrapper level.
-    /// The structure is: ["ParseAndEval", [[Literal(nextLevel), envStructure]]]
+    /// The structure builds an Eval encoding containing a literal next-level value.
     /// We need to find the Literal containing the next level.
     /// </summary>
     private static Result<string, PineValue> ExtractNextLevelFromListExpression(
         Expression.List listExpr,
         PineVMParseCache parseCache)
     {
-        // The List expression builds ["ParseAndEval", [encoded, env]]
-        // We need to find the Literal that contains the next level
-        // Expected structure: items[0] = ParseAndEvalTag, items[1] = [inner items]
-        // Where inner items[0][0] = Literal containing next level
+        // Find the Literal that contains the next encoded wrapper.
 
-        if (listExpr.Items.Count is 2)
+        foreach (var item in listExpr.Items)
         {
-            var secondItem = listExpr.Items[1];
-
-            var literalResult = FindFirstValidNextLevelLiteral(secondItem, parseCache);
+            var literalResult = FindFirstValidNextLevelLiteral(item, parseCache);
 
             if (literalResult.IsOkOrNull() is { } nextLevel)
-            {
                 return nextLevel;
-            }
         }
 
         return "Could not find next level Literal in wrapper List expression";

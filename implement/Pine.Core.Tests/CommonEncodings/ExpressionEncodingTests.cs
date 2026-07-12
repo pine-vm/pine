@@ -7,6 +7,33 @@ namespace Pine.Core.Tests.CommonEncodings;
 public class ExpressionEncodingTests
 {
     [Fact]
+    public void ExpressionEncoding_emits_2026_and_parses_2024()
+    {
+        var expression =
+            Expression.KernelApplicationInstance(
+                nameof(KernelFunction.length),
+                Expression.LiteralInstance(StringEncoding.ValueFromString("input")));
+
+        ExpressionEncoding.EncodeExpressionAsValue(expression)
+            .Should().Be(ExpressionEncoding2026.EncodeExpressionAsValue(expression));
+
+        var encoded2024 = ExpressionEncoding2024.EncodeExpressionAsValue(expression);
+
+        ExpressionEncoding.ParseExpressionFromValue(encoded2024)
+            .Extract(error => throw new System.Exception(error))
+            .Should().Be(expression);
+
+        new Core.CodeAnalysis.PineVMParseCache()
+            .ParseExpression(encoded2024)
+            .Extract(error => throw new System.Exception(error))
+            .Should().Be(expression);
+
+        new PineExpressionEncodingCache()
+            .EncodeExpressionAsValue(expression)
+            .Should().Be(ExpressionEncoding2026.EncodeExpressionAsValue(expression));
+    }
+
+    [Fact]
     public void ExpressionEncoding_Decoding_Symmetry()
     {
         var testCases =
