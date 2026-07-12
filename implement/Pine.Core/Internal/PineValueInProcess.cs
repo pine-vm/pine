@@ -9,14 +9,15 @@ using System.Numerics;
 namespace Pine.Core.Internal;
 
 /// <summary>
-/// Representation of a <see cref="PineValue"/> optimized for the most frequent operations in larger computations.
+/// Representation of a <see cref="PineValue"/> optimizing for runtime efficiency mainly by deferred materialization.
 /// <para>
 /// While the general implementation of <see cref="PineValue"/> is optimized for cheap equality checks and addressing,
 /// this representation is optimized to improve the runtime efficiency of programs that compose and transform values.
-/// Some typical optimizations here are caching of popular derivations and lazy evaluation of chained applications of kernel functions.
+/// Some typical optimizations here are caching of popular derivations and deferred materialization of chained applications of builtin functions.
 /// </para>
 /// <para>
-/// While this particular implementation illustrates how basic optimization via specialized representations can look like, we expect the majority of representations to be learned by profiling on training workloads (similar to Maps/Hidden Classes in V8)
+/// While this particular implementation illustrates how basic optimization via specialized representations can look like,
+/// we expect the majority of representations to be learned by profiling on training workloads (similar to Maps/Hidden Classes in V8)
 /// </para>
 /// </summary>
 public class PineValueInProcess
