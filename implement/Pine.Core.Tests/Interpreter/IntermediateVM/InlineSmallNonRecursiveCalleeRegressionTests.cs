@@ -95,12 +95,12 @@ public class InlineSmallNonRecursiveCalleeRegressionTests
 
         var codeExpr =
             Expression.KernelApplicationInstance(
-                function: nameof(KernelFunction.concat),
+                function: nameof(BuiltinFunction.concat),
                 input:
                 Expression.ListInstance(
                     [
                     Expression.KernelApplicationInstance(
-                        function: nameof(KernelFunction.take),
+                        function: nameof(BuiltinFunction.take),
                         input:
                         Expression.ListInstance(
                             [
@@ -112,7 +112,7 @@ public class InlineSmallNonRecursiveCalleeRegressionTests
 
         var upperRange =
             Expression.KernelApplicationInstance(
-                function: nameof(KernelFunction.int_is_sorted_asc),
+                function: nameof(BuiltinFunction.int_is_sorted_asc),
                 input:
                 Expression.ListInstance(
                     [
@@ -123,7 +123,7 @@ public class InlineSmallNonRecursiveCalleeRegressionTests
 
         var lowerRange =
             Expression.KernelApplicationInstance(
-                function: nameof(KernelFunction.int_is_sorted_asc),
+                function: nameof(BuiltinFunction.int_is_sorted_asc),
                 input:
                 Expression.ListInstance(
                     [
@@ -175,13 +175,13 @@ public class InlineSmallNonRecursiveCalleeRegressionTests
 
         var nextChar =
             Expression.KernelApplicationInstance(
-                function: nameof(KernelFunction.take),
+                function: nameof(BuiltinFunction.take),
                 input:
                 Expression.ListInstance(
                     [
                     Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(1)),
                     Expression.KernelApplicationInstance(
-                        function: nameof(KernelFunction.skip),
+                        function: nameof(BuiltinFunction.skip),
                         input:
                         Expression.ListInstance(
                             [
@@ -192,12 +192,12 @@ public class InlineSmallNonRecursiveCalleeRegressionTests
 
         var endOfInputCheck =
             Expression.KernelApplicationInstance(
-                function: nameof(KernelFunction.equal),
+                function: nameof(BuiltinFunction.equal),
                 input:
                 Expression.ListInstance(
                     [
                     Expression.KernelApplicationInstance(
-                        function: nameof(KernelFunction.length),
+                        function: nameof(BuiltinFunction.length),
                         input: nextChar),
                     Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(0)),
                     ]));
@@ -209,7 +209,7 @@ public class InlineSmallNonRecursiveCalleeRegressionTests
 
         var offsetPlusOne =
             Expression.KernelApplicationInstance(
-                function: nameof(KernelFunction.int_add),
+                function: nameof(BuiltinFunction.int_add),
                 input:
                 Expression.ListInstance(
                     [

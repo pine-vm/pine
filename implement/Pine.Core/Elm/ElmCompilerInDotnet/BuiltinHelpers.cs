@@ -27,7 +27,7 @@ public static class BuiltinHelpers
     /// </summary>
     public static Expression ApplyBuiltinSkip(int count, Expression expr) =>
         Expression.KernelApplicationInstance(
-            nameof(KernelFunction.skip),
+            nameof(BuiltinFunction.skip),
             Expression.ListInstance(
                 [
                 Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(count)),
@@ -40,7 +40,7 @@ public static class BuiltinHelpers
     /// </summary>
     public static Expression ApplyBuiltinHead(Expression expr) =>
         Expression.KernelApplicationInstance(
-            nameof(KernelFunction.head),
+            nameof(BuiltinFunction.head),
             expr);
 
     /// <summary>
@@ -49,7 +49,7 @@ public static class BuiltinHelpers
     /// </summary>
     public static Expression ApplyBuiltinEqualBinary(Expression left, Expression right) =>
         Expression.KernelApplicationInstance(
-            nameof(KernelFunction.equal),
+            nameof(BuiltinFunction.equal),
             Expression.ListInstance([left, right]));
 
     /// <summary>
@@ -58,7 +58,7 @@ public static class BuiltinHelpers
     /// </summary>
     public static Expression ApplyBuiltinLength(Expression expr) =>
         Expression.KernelApplicationInstance(
-            nameof(KernelFunction.length),
+            nameof(BuiltinFunction.length),
             expr);
 
     /// <summary>
@@ -67,7 +67,7 @@ public static class BuiltinHelpers
     /// </summary>
     public static Expression ApplyBuiltinIntAdd(IReadOnlyList<Expression> operands) =>
         Expression.KernelApplicationInstance(
-            nameof(KernelFunction.int_add),
+            nameof(BuiltinFunction.int_add),
             Expression.ListInstance(operands));
 
     /// <summary>
@@ -76,7 +76,7 @@ public static class BuiltinHelpers
     /// </summary>
     public static Expression ApplyBuiltinIntMul(IReadOnlyList<Expression> operands) =>
         Expression.KernelApplicationInstance(
-            nameof(KernelFunction.int_mul),
+            nameof(BuiltinFunction.int_mul),
             Expression.ListInstance(operands));
 
     /// <summary>
@@ -85,7 +85,7 @@ public static class BuiltinHelpers
     /// </summary>
     public static Expression ApplyBuiltinSkip(Expression countExpr, Expression expr) =>
         Expression.KernelApplicationInstance(
-            nameof(KernelFunction.skip),
+            nameof(BuiltinFunction.skip),
             Expression.ListInstance([countExpr, expr]));
 
     /// <summary>
@@ -94,7 +94,7 @@ public static class BuiltinHelpers
     /// </summary>
     public static Expression ApplyBuiltinTake(int count, Expression expr) =>
         Expression.KernelApplicationInstance(
-            nameof(KernelFunction.take),
+            nameof(BuiltinFunction.take),
             Expression.ListInstance(
                 [
                 Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(count)),
@@ -107,6 +107,6 @@ public static class BuiltinHelpers
     /// </summary>
     public static Expression ApplyBuiltinConcat(IReadOnlyList<Expression> items) =>
         Expression.KernelApplicationInstance(
-            nameof(KernelFunction.concat),
+            nameof(BuiltinFunction.concat),
             Expression.ListInstance(items));
 }

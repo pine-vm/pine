@@ -112,7 +112,7 @@ public class InfiniteCycleDetectionTests
         //   target      = ParseAndEval(encoded = head env, environment = env)
         var headOfEnv =
             Expression.KernelApplicationInstance(
-                function: nameof(KernelFunction.head),
+                function: nameof(BuiltinFunction.head),
                 input: Expression.EnvironmentInstance);
 
         var selfRecursiveExpression =
@@ -166,15 +166,15 @@ public class InfiniteCycleDetectionTests
         // cycle of length 2 invocations of the same expression.
         var selfReference =
             Expression.KernelApplicationInstance(
-                function: nameof(KernelFunction.head),
+                function: nameof(BuiltinFunction.head),
                 input: Expression.EnvironmentInstance);
 
         var argReference =
             Expression.KernelApplicationInstance(
-                function: nameof(KernelFunction.head),
+                function: nameof(BuiltinFunction.head),
                 input:
                 Expression.KernelApplicationInstance(
-                    function: nameof(KernelFunction.skip),
+                    function: nameof(BuiltinFunction.skip),
                     input:
                     Expression.ListInstance(
                         [
@@ -185,13 +185,13 @@ public class InfiniteCycleDetectionTests
         // toggledArg = 1 + (-1) * argReference  =  1 - argReference
         var toggledArg =
             Expression.KernelApplicationInstance(
-                function: nameof(KernelFunction.int_add),
+                function: nameof(BuiltinFunction.int_add),
                 input:
                 Expression.ListInstance(
                     [
                     Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(1)),
                     Expression.KernelApplicationInstance(
-                        function: nameof(KernelFunction.negate),
+                        function: nameof(BuiltinFunction.negate),
                         input: argReference),
                     ]));
 
@@ -258,15 +258,15 @@ public class InfiniteCycleDetectionTests
         // length 2.
         var headOfEnv =
             Expression.KernelApplicationInstance(
-                function: nameof(KernelFunction.head),
+                function: nameof(BuiltinFunction.head),
                 input: Expression.EnvironmentInstance);
 
         var headOfSkipOneEnv =
             Expression.KernelApplicationInstance(
-                function: nameof(KernelFunction.head),
+                function: nameof(BuiltinFunction.head),
                 input:
                 Expression.KernelApplicationInstance(
-                    function: nameof(KernelFunction.skip),
+                    function: nameof(BuiltinFunction.skip),
                     input:
                     Expression.ListInstance(
                         [

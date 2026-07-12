@@ -196,15 +196,15 @@ public enum StackInstructionKind
     Equal_Generic,
 
     /// <summary>
-    /// An application of <see cref="KernelFunction.equal(PineValue)"/> which checks if the top value is a list.
-    /// One way compilers form such a test is to <see cref="KernelFunction.take(PineValue)"/> zero items from the value and
+    /// An application of <see cref="BuiltinFunction.equal(PineValue)"/> which checks if the top value is a list.
+    /// One way compilers form such a test is to <see cref="BuiltinFunction.take(PineValue)"/> zero items from the value and
     /// then compare that to an empty list.
     /// </summary>
     Is_List_Value,
 
     /// <summary>
-    /// An application of <see cref="KernelFunction.equal(PineValue)"/> which checks if the top value is a blob.
-    /// One way compilers form such a test is to <see cref="KernelFunction.take(PineValue)"/> zero items from the value and
+    /// An application of <see cref="BuiltinFunction.equal(PineValue)"/> which checks if the top value is a blob.
+    /// One way compilers form such a test is to <see cref="BuiltinFunction.take(PineValue)"/> zero items from the value and
     /// then compare that to an empty blob.
     /// </summary>
     Is_Blob_Value,

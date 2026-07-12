@@ -9,7 +9,7 @@ namespace Pine.Core.Tests.Elm.ElmSyntax.ElmSyntaxInterpreter;
 /// <summary>
 /// Covers the class of scenarios where the interpreter only needs the <c>Pine_builtin</c> /
 /// <c>Pine_kernel</c> resolver to evaluate an expression composed of literals forwarded to
-/// <see cref="KernelFunction"/> operations and converted back to <see cref="ElmValue"/>.
+/// <see cref="BuiltinFunction"/> operations and converted back to <see cref="ElmValue"/>.
 /// </summary>
 public class PineBuiltinLiteralsTests
 {

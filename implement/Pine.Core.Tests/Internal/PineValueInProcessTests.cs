@@ -260,7 +260,7 @@ public class PineValueInProcessTests
         var evaluated = result.Evaluate();
 
         var expected =
-            KernelFunction.skip(
+            BuiltinFunction.skip(
                 PineValue.List([IntegerEncoding.EncodeSignedInteger(2), originalValue]));
 
         evaluated.Should().Be(expected);
@@ -277,7 +277,7 @@ public class PineValueInProcessTests
         var evaluated = result.Evaluate();
 
         var expected =
-            KernelFunction.skip(
+            BuiltinFunction.skip(
                 PineValue.List([IntegerEncoding.EncodeSignedInteger(2), originalValue]));
 
         evaluated.Should().Be(expected);
@@ -304,7 +304,7 @@ public class PineValueInProcessTests
         var evaluated = result.Evaluate();
 
         var expected =
-            KernelFunction.skip(
+            BuiltinFunction.skip(
                 PineValue.List([IntegerEncoding.EncodeSignedInteger(3), originalValue]));
 
         evaluated.Should().Be(expected);
@@ -329,7 +329,7 @@ public class PineValueInProcessTests
         var evaluated = result.Evaluate();
 
         var expected =
-            KernelFunction.take(
+            BuiltinFunction.take(
                 PineValue.List([IntegerEncoding.EncodeSignedInteger(2), originalValue]));
 
         evaluated.Should().Be(expected);
@@ -346,7 +346,7 @@ public class PineValueInProcessTests
         var evaluated = result.Evaluate();
 
         var expected =
-            KernelFunction.take(
+            BuiltinFunction.take(
                 PineValue.List([IntegerEncoding.EncodeSignedInteger(3), originalValue]));
 
         evaluated.Should().Be(expected);
@@ -363,7 +363,7 @@ public class PineValueInProcessTests
         var evaluated = result.Evaluate();
 
         var expected =
-            KernelFunction.take(
+            BuiltinFunction.take(
                 PineValue.List([IntegerEncoding.EncodeSignedInteger(0), originalValue]));
 
         evaluated.Should().Be(expected);
@@ -389,11 +389,11 @@ public class PineValueInProcessTests
         var evaluated = result.Evaluate();
 
         var afterSkip =
-            KernelFunction.skip(
+            BuiltinFunction.skip(
                 PineValue.List([IntegerEncoding.EncodeSignedInteger(1), originalValue]));
 
         var expected =
-            KernelFunction.take(
+            BuiltinFunction.take(
                 PineValue.List([IntegerEncoding.EncodeSignedInteger(3), afterSkip]));
 
         evaluated.Should().Be(expected);
@@ -410,7 +410,7 @@ public class PineValueInProcessTests
         var evaluated = result.Evaluate();
 
         var expected =
-            KernelFunction.concat(
+            BuiltinFunction.concat(
                 PineValue.List([PineValue.Blob([1, 2, 3]), PineValue.Blob([4, 5])]));
 
         evaluated.Should().Be(expected);
@@ -428,7 +428,7 @@ public class PineValueInProcessTests
         var result = PineValueInProcess.ConcatBinary(left, right);
         var evaluated = result.Evaluate();
 
-        var expected = KernelFunction.concat(PineValue.List([leftValue, rightValue]));
+        var expected = BuiltinFunction.concat(PineValue.List([leftValue, rightValue]));
 
         evaluated.Should().Be(expected);
         VerifyConsistencyOfDerivedProperties(result);
@@ -446,7 +446,7 @@ public class PineValueInProcessTests
         var evaluated = result.Evaluate();
 
         var expected =
-            KernelFunction.concat(
+            BuiltinFunction.concat(
                 PineValue.List(
                     [
                     PineValue.Blob([1, 2]),
@@ -468,7 +468,7 @@ public class PineValueInProcessTests
         var evaluated = result.Evaluate();
 
         var expected =
-            KernelFunction.concat(
+            BuiltinFunction.concat(
                 PineValue.List([PineValue.EmptyBlob, PineValue.Blob([1, 2])]));
 
         evaluated.Should().Be(expected);
@@ -600,15 +600,15 @@ public class PineValueInProcessTests
         var evaluated = concatenated.Evaluate();
 
         var afterSkip =
-            KernelFunction.skip(
+            BuiltinFunction.skip(
                 PineValue.List([IntegerEncoding.EncodeSignedInteger(1), originalValue]));
 
         var afterTake =
-            KernelFunction.take(
+            BuiltinFunction.take(
                 PineValue.List([IntegerEncoding.EncodeSignedInteger(3), afterSkip]));
 
         var expected =
-            KernelFunction.concat(
+            BuiltinFunction.concat(
                 PineValue.List([afterTake, PineValue.List([PineValue.Blob([6])])]));
 
         evaluated.Should().Be(expected);
@@ -641,11 +641,11 @@ public class PineValueInProcessTests
                 [.. Enumerable.Range(0, 1000).Select(i => PineValue.Blob([(byte)(i % 256)]))]);
 
         var afterSkip =
-            KernelFunction.skip(
+            BuiltinFunction.skip(
                 PineValue.List([IntegerEncoding.EncodeSignedInteger(100), originalValue]));
 
         var expected =
-            KernelFunction.take(
+            BuiltinFunction.take(
                 PineValue.List([IntegerEncoding.EncodeSignedInteger(500), afterSkip]));
 
         evaluated.Should().Be(expected);
@@ -682,7 +682,7 @@ public class PineValueInProcessTests
         var evaluated = result.Evaluate();
 
         var expected =
-            KernelFunction.skip(
+            BuiltinFunction.skip(
                 PineValue.List([IntegerEncoding.EncodeSignedInteger(10), originalValue]));
 
         evaluated.Should().Be(expected);
@@ -705,7 +705,7 @@ public class PineValueInProcessTests
         var evaluated = result.Evaluate();
 
         var expected =
-            KernelFunction.take(
+            BuiltinFunction.take(
                 PineValue.List([IntegerEncoding.EncodeSignedInteger(100), originalValue]));
 
         evaluated.Should().Be(expected);
@@ -779,7 +779,7 @@ public class PineValueInProcessTests
 
             var length = inProcess.GetLength();
             var evaluated = inProcess.Evaluate();
-            var expectedLength = KernelFunctionSpecialized.length_as_int(evaluated);
+            var expectedLength = BuiltinFunctionSpecialized.length_as_int(evaluated);
 
             length.Should().Be(expectedLength);
         }
@@ -819,11 +819,11 @@ public class PineValueInProcessTests
                 ]);
 
         var afterSkip =
-            KernelFunction.skip(
+            BuiltinFunction.skip(
                 PineValue.List([IntegerEncoding.EncodeSignedInteger(1), originalValue]));
 
         var expected =
-            KernelFunction.take(
+            BuiltinFunction.take(
                 PineValue.List([IntegerEncoding.EncodeSignedInteger(3), afterSkip]));
 
         evaluated.Should().Be(expected);
@@ -846,7 +846,7 @@ public class PineValueInProcessTests
         var evaluated = finalConcat.Evaluate();
 
         var expected =
-            KernelFunction.concat(
+            BuiltinFunction.concat(
                 PineValue.List(
                     [
                     PineValue.Blob([1]),
@@ -910,7 +910,7 @@ public class PineValueInProcessTests
         var evaluated = skipped2.Evaluate();
 
         var expected =
-            KernelFunction.skip(
+            BuiltinFunction.skip(
                 PineValue.List([IntegerEncoding.EncodeSignedInteger(2), originalValue]));
 
         evaluated.Should().Be(expected);
@@ -938,11 +938,11 @@ public class PineValueInProcessTests
         var evaluated = taken2.Evaluate();
 
         var afterTake1 =
-            KernelFunction.take(
+            BuiltinFunction.take(
                 PineValue.List([IntegerEncoding.EncodeSignedInteger(3), originalValue]));
 
         var expected =
-            KernelFunction.take(
+            BuiltinFunction.take(
                 PineValue.List([IntegerEncoding.EncodeSignedInteger(2), afterTake1]));
 
         evaluated.Should().Be(expected);
@@ -2258,10 +2258,10 @@ public class PineValueInProcessTests
         }
 
         // Verify that GetLength matches the kernel function's length
-        var expectedLength = KernelFunctionSpecialized.length_as_int(evaluated);
+        var expectedLength = BuiltinFunctionSpecialized.length_as_int(evaluated);
 
         length.Should().Be(
             expectedLength,
-            "GetLength should match KernelFunctionSpecialized.length_as_int");
+            "GetLength should match BuiltinFunctionSpecialized.length_as_int");
     }
 }

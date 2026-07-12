@@ -15,18 +15,20 @@ namespace Pine.Core;
 /// Pine’s value model has only two forms: blobs (byte sequences) and lists (heterogeneous sequences).
 /// All primitives are invoked by name with a single <see cref="PineValue"/> argument that may be a list
 /// encoding multiple logical parameters (e.g. <c>[ count, sequence ]</c> for <c>skip</c>/<c>take</c>).
+/// <para>
+/// For the specifications of built-in functions, see the file 'pine-language.md'</para>
 /// </summary>
-public static class KernelFunction
+public static class BuiltinFunction
 {
     /// <summary>
-    /// Evaluates a Pine kernel function by name with the given input value.
+    /// Evaluates a Pine built-in function by name with the given input value.
     /// Dispatches to the corresponding primitive operation based on the function name.
     /// </summary>
-    /// <param name="function">The name of the kernel function to evaluate.</param>
-    /// <param name="inputValue">The input value to the kernel function.</param>
-    /// <returns>The result of evaluating the kernel function with the provided input value.</returns>
+    /// <param name="function">The name of the built-in function to evaluate.</param>
+    /// <param name="inputValue">The input value to the built-in function.</param>
+    /// <returns>The result of evaluating the built-in function with the provided input value.</returns>
     /// <exception cref="InvalidOperationException">Thrown if the function name is unknown.</exception>
-    public static PineValue ApplyKernelFunctionGeneric(
+    public static PineValue ApplyFunctionGeneric(
         string function,
         PineValue inputValue)
     {
@@ -85,7 +87,7 @@ public static class KernelFunction
 
             _ =>
             throw new InvalidOperationException(
-                "Unknown kernel function '" + function + "'")
+                "Unknown built-in function '" + function + "'")
         };
     }
 
@@ -206,7 +208,7 @@ public static class KernelFunction
             return PineValue.EmptyList;
         }
 
-        return Internal.KernelFunctionSpecialized.skip(count, listValue.Items.Span[1]);
+        return Internal.BuiltinFunctionSpecialized.skip(count, listValue.Items.Span[1]);
     }
 
     /// <summary>
@@ -224,7 +226,7 @@ public static class KernelFunction
             SignedIntegerFromValueRelaxed(listValue.Items.Span[0]) switch
             {
                 { } count =>
-                Internal.KernelFunctionSpecialized.take(count, listValue.Items.Span[1]),
+                Internal.BuiltinFunctionSpecialized.take(count, listValue.Items.Span[1]),
 
                 _ =>
                 PineValue.EmptyList
@@ -290,7 +292,7 @@ public static class KernelFunction
             return PineValue.EmptyList;
         }
 
-        return Internal.KernelFunctionSpecialized.concat(listValue.Items.Span);
+        return Internal.BuiltinFunctionSpecialized.concat(listValue.Items.Span);
     }
 
     public static PineValue head(PineValue value)
@@ -320,13 +322,13 @@ public static class KernelFunction
     }
 
     public static PineValue int_add(PineValue value) =>
-        KernelFunctionExpectingListOfBigIntAndProducingBigInt(
+        FunctionExpectingListOfBigIntAndProducingBigInt(
             integers =>
             integers.Aggregate(seed: BigInteger.Zero, func: (aggregate, next) => aggregate + next),
             value);
 
     public static PineValue int_mul(PineValue value) =>
-        KernelFunctionExpectingListOfBigIntAndProducingBigInt(
+        FunctionExpectingListOfBigIntAndProducingBigInt(
             integers =>
             integers.Aggregate(seed: BigInteger.One, func: (aggregate, next) => aggregate * next),
             value);
@@ -407,7 +409,7 @@ public static class KernelFunction
                 return PineValue.EmptyList;
             }
 
-            merged = Internal.KernelFunctionSpecialized.bit_and(merged, blobValue);
+            merged = Internal.BuiltinFunctionSpecialized.bit_and(merged, blobValue);
         }
 
         return merged;
@@ -446,7 +448,7 @@ public static class KernelFunction
                 return PineValue.EmptyList;
             }
 
-            merged = Internal.KernelFunctionSpecialized.bit_or(merged, blobValue);
+            merged = Internal.BuiltinFunctionSpecialized.bit_or(merged, blobValue);
         }
 
         return merged;
@@ -485,7 +487,7 @@ public static class KernelFunction
                 return PineValue.EmptyList;
             }
 
-            merged = Internal.KernelFunctionSpecialized.bit_xor(merged, blobValue);
+            merged = Internal.BuiltinFunctionSpecialized.bit_xor(merged, blobValue);
         }
 
         return merged;
@@ -539,7 +541,7 @@ public static class KernelFunction
             return PineValue.EmptyList;
         }
 
-        return Internal.KernelFunctionSpecialized.bit_shift_left(shiftCount, blobValue);
+        return Internal.BuiltinFunctionSpecialized.bit_shift_left(shiftCount, blobValue);
     }
 
     /// <summary>
@@ -573,25 +575,25 @@ public static class KernelFunction
             return PineValue.EmptyList;
         }
 
-        return Internal.KernelFunctionSpecialized.bit_shift_right(shiftCount, blobValue);
+        return Internal.BuiltinFunctionSpecialized.bit_shift_right(shiftCount, blobValue);
     }
 
     private static bool BlobAllBytesEqual(ReadOnlyMemory<byte> readOnlyMemory) =>
         readOnlyMemory.IsEmpty ||
         !readOnlyMemory.Span.ContainsAnyExcept(readOnlyMemory.Span[0]);
 
-    private static PineValue KernelFunctionExpectingListOfBigIntAndProducingBigInt(
+    private static PineValue FunctionExpectingListOfBigIntAndProducingBigInt(
         Func<IReadOnlyList<BigInteger>, BigInteger> aggregate,
         PineValue value) =>
-        KernelFunctionExpectingListOfBigInt(
+        FunctionExpectingListOfBigInt(
             aggregate:
             listOfIntegers => IntegerEncoding.EncodeSignedInteger(aggregate(listOfIntegers)),
             value);
 
-    private static PineValue KernelFunctionExpectingListOfBigInt(
+    private static PineValue FunctionExpectingListOfBigInt(
         Func<IReadOnlyList<BigInteger>, PineValue> aggregate,
         PineValue value) =>
-        KernelFunctionExpectingList(
+        FunctionExpectingList(
             value,
             list =>
             {
@@ -719,7 +721,7 @@ public static class KernelFunction
             new BigInteger(blobBytes, isUnsigned: true, isBigEndian: true);
     }
 
-    private static PineValue KernelFunctionExpectingList(
+    private static PineValue FunctionExpectingList(
         PineValue value,
         Func<ReadOnlyMemory<PineValue>, PineValue> continueWithList) =>
         value switch

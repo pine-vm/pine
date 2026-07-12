@@ -42,7 +42,7 @@ public class ReducePineExpressionTests
         // kernel length([x,y]) -> 2
         var lengthOfList =
             Expression.KernelApplicationInstance(
-                nameof(KernelFunction.length),
+                nameof(BuiltinFunction.length),
                 list);
 
         var lengthValue =
@@ -105,7 +105,7 @@ public class ReducePineExpressionTests
                 Expression.EnvironmentInstance,
 
                 Expression.KernelApplicationInstance(
-                    nameof(KernelFunction.head),
+                    nameof(BuiltinFunction.head),
                     Expression.LiteralInstance(
                         PineValue.List(
                             [
@@ -143,7 +143,7 @@ public class ReducePineExpressionTests
 
         var skip =
             Expression.KernelApplicationInstance(
-                nameof(KernelFunction.skip),
+                nameof(BuiltinFunction.skip),
                 Expression.ListInstance(
                     [
                     Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(2)),
@@ -173,7 +173,7 @@ public class ReducePineExpressionTests
         ReducePineExpression
             .IsKnownBooleanExpression(
             Expression.KernelApplicationInstance(
-                nameof(KernelFunction.equal),
+                nameof(BuiltinFunction.equal),
                 Expression.ListInstance(
                     [
                     Expression.EnvironmentInstance,
@@ -184,7 +184,7 @@ public class ReducePineExpressionTests
         ReducePineExpression
             .IsKnownBooleanExpression(
             Expression.KernelApplicationInstance(
-                nameof(KernelFunction.int_is_sorted_asc),
+                nameof(BuiltinFunction.int_is_sorted_asc),
                 Expression.LiteralInstance(PineValue.EmptyList)))
             .Should().BeTrue();
     }
@@ -207,7 +207,7 @@ public class ReducePineExpressionTests
         ReducePineExpression
             .IsKnownBooleanExpression(
             Expression.KernelApplicationInstance(
-                nameof(KernelFunction.skip),
+                nameof(BuiltinFunction.skip),
                 Expression.ListInstance(
                     [
                     Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(1)),
@@ -219,7 +219,7 @@ public class ReducePineExpressionTests
         ReducePineExpression
             .IsKnownBooleanExpression(
             Expression.KernelApplicationInstance(
-                nameof(KernelFunction.int_add),
+                nameof(BuiltinFunction.int_add),
                 Expression.LiteralInstance(PineValue.EmptyList)))
             .Should().BeFalse();
     }
@@ -239,7 +239,7 @@ public class ReducePineExpressionTests
 
         var nibble =
             Expression.KernelApplicationInstance(
-                nameof(KernelFunction.skip),
+                nameof(BuiltinFunction.skip),
                 Expression.ListInstance(
                     [
                     Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(1)),
@@ -252,7 +252,7 @@ public class ReducePineExpressionTests
             Expression.ConditionalInstance(
                 condition:
                 Expression.KernelApplicationInstance(
-                    nameof(KernelFunction.equal),
+                    nameof(BuiltinFunction.equal),
                     Expression.ListInstance([nibble, byteLiteralTwo])),
                 falseBranch: Expression.LiteralInstance(PineValue.Blob([0x07])),
                 trueBranch: Expression.LiteralInstance(PineValue.Blob([0x09])));
@@ -265,7 +265,7 @@ public class ReducePineExpressionTests
         var reducedConditional = reduced.Should().BeOfType<Expression.Conditional>().Subject;
 
         reducedConditional.Condition.Should().BeOfType<Expression.KernelApplication>()
-            .Which.Function.Should().Be(nameof(KernelFunction.equal));
+            .Which.Function.Should().Be(nameof(BuiltinFunction.equal));
 
         reducedConditional.TrueBranch.Should().BeOfType<Expression.Literal>()
             .Which.Value.Should().Be(PineValue.Blob([0x09]));

@@ -177,7 +177,7 @@ public class PartialApplicationConsolidationTests
         {
             current =
                 Expression.KernelApplicationInstance(
-                    nameof(KernelFunction.skip),
+                    nameof(BuiltinFunction.skip),
                     Expression.ListInstance(
                         [
                         Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(1)),
@@ -185,7 +185,7 @@ public class PartialApplicationConsolidationTests
                         ]));
         }
 
-        return Expression.KernelApplicationInstance(nameof(KernelFunction.head), current);
+        return Expression.KernelApplicationInstance(nameof(BuiltinFunction.head), current);
     }
 
     /// <summary>

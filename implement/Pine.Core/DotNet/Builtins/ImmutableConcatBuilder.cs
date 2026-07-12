@@ -5,7 +5,7 @@ using System.Linq;
 namespace Pine.Core.DotNet.Builtins;
 
 /// <summary>
-/// Tracks a sequence of <see cref="KernelFunction.concat"/> applications to enable evaluation at a later time.
+/// Tracks a sequence of <see cref="BuiltinFunction.concat"/> applications to enable evaluation at a later time.
 /// This immutable variant creates a new builder instance on each append operation, avoiding mutation.
 /// Its suitable for scenarios where we cannot prove sufficient constraints to employ opportunistic mutation.
 /// </summary>
@@ -40,7 +40,7 @@ public abstract record ImmutableConcatBuilder
     protected abstract int PrecomputedLength { get; }
 
     /// <summary>
-    /// Predict the length from <see cref="KernelFunction.length(PineValue)"/> used on the value from <see cref="Evaluate"/>.
+    /// Predict the length from <see cref="BuiltinFunction.length(PineValue)"/> used on the value from <see cref="Evaluate"/>.
     /// </summary>
     public int PredictLength() => PrecomputedLength;
 
@@ -51,7 +51,7 @@ public abstract record ImmutableConcatBuilder
     {
         var flattenedItems = Flatten(this);
 
-        return Internal.KernelFunctionSpecialized.concat(flattenedItems.Span);
+        return Internal.BuiltinFunctionSpecialized.concat(flattenedItems.Span);
     }
 
 
@@ -63,7 +63,7 @@ public abstract record ImmutableConcatBuilder
     {
         var flattenedItems = Flatten(this);
 
-        return Internal.KernelFunctionFused.ConcatAndReverse(flattenedItems.Span);
+        return Internal.BuiltinFunctionFused.ConcatAndReverse(flattenedItems.Span);
     }
 
     /// <summary>
@@ -267,13 +267,13 @@ public abstract record ImmutableConcatBuilder
     }
 
     /// <summary>
-    /// Leaf node holding a concrete list of values given to <see cref="KernelFunction.concat(PineValue)"/>
+    /// Leaf node holding a concrete list of values given to <see cref="BuiltinFunction.concat(PineValue)"/>
     /// </summary>
     public sealed record Leaf
         : ImmutableConcatBuilder
     {
         /// <summary>
-        /// Items contained in the list given to <see cref="KernelFunction.concat(PineValue)"/>
+        /// Items contained in the list given to <see cref="BuiltinFunction.concat(PineValue)"/>
         /// </summary>
         public ReadOnlyMemory<PineValue> Values { get; }
 

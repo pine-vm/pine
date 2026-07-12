@@ -109,7 +109,7 @@ public class StaticExpressionInterpreterTests
 
         var expr =
             KernelApp(
-                nameof(KernelFunction.int_add),
+                nameof(BuiltinFunction.int_add),
                 ListExpr(Literal(10), Literal(32)));
 
         var result = interpreter.Evaluate(expr, PineValue.EmptyList);
@@ -124,7 +124,7 @@ public class StaticExpressionInterpreterTests
 
         var exprEqual =
             KernelApp(
-                nameof(KernelFunction.equal),
+                nameof(BuiltinFunction.equal),
                 ListExpr(Literal(5), Literal(5)));
 
         interpreter.Evaluate(exprEqual, PineValue.EmptyList)
@@ -132,7 +132,7 @@ public class StaticExpressionInterpreterTests
 
         var exprNotEqual =
             KernelApp(
-                nameof(KernelFunction.equal),
+                nameof(BuiltinFunction.equal),
                 ListExpr(Literal(5), Literal(6)));
 
         interpreter.Evaluate(exprNotEqual, PineValue.EmptyList)
@@ -204,7 +204,7 @@ public class StaticExpressionInterpreterTests
         // When called, Arguments is evaluated to produce the function's environment value.
         var addOneBody =
             KernelApp(
-                nameof(KernelFunction.int_add),
+                nameof(BuiltinFunction.int_add),
                 ListExpr(Env, Literal(1)));
 
         var functions =
@@ -234,12 +234,12 @@ public class StaticExpressionInterpreterTests
 
         var doubleBody =
             KernelApp(
-                nameof(KernelFunction.int_mul),
+                nameof(BuiltinFunction.int_mul),
                 ListExpr(Env, Literal(2)));
 
         var addTenBody =
             KernelApp(
-                nameof(KernelFunction.int_add),
+                nameof(BuiltinFunction.int_add),
                 ListExpr(Env, Literal(10)));
 
         var functions =
@@ -269,15 +269,15 @@ public class StaticExpressionInterpreterTests
         var factorialBody =
             Conditional(
                 condition: KernelApp(
-                    nameof(KernelFunction.int_is_sorted_asc),
+                    nameof(BuiltinFunction.int_is_sorted_asc),
                     ListExpr(Env, Literal(1))),
                 trueBranch: Literal(1),
                 falseBranch: KernelApp(
-                    nameof(KernelFunction.int_mul),
+                    nameof(BuiltinFunction.int_mul),
                     ListExpr(
                         FuncApp(
                             factorialId,
-                            KernelApp(nameof(KernelFunction.int_add), ListExpr(Env, Literal(-1)))),
+                            KernelApp(nameof(BuiltinFunction.int_add), ListExpr(Env, Literal(-1)))),
                         Env)));
 
         var functions =
@@ -315,18 +315,18 @@ public class StaticExpressionInterpreterTests
         var fibBody =
             Conditional(
                 condition: KernelApp(
-                    nameof(KernelFunction.int_is_sorted_asc),
+                    nameof(BuiltinFunction.int_is_sorted_asc),
                     ListExpr(Env, Literal(1))),
                 trueBranch: Env,
                 falseBranch: KernelApp(
-                    nameof(KernelFunction.int_add),
+                    nameof(BuiltinFunction.int_add),
                     ListExpr(
                         FuncApp(
                             fibId,
-                            KernelApp(nameof(KernelFunction.int_add), ListExpr(Env, Literal(-2)))),
+                            KernelApp(nameof(BuiltinFunction.int_add), ListExpr(Env, Literal(-2)))),
                         FuncApp(
                             fibId,
-                            KernelApp(nameof(KernelFunction.int_add), ListExpr(Env, Literal(-1)))))));
+                            KernelApp(nameof(BuiltinFunction.int_add), ListExpr(Env, Literal(-1)))))));
 
         var functions =
             new Dictionary<StaticFunctionIdentifier, StaticExpression<StaticFunctionIdentifier>>
@@ -372,19 +372,19 @@ public class StaticExpressionInterpreterTests
 
         var isEvenBody =
             Conditional(
-                condition: KernelApp(nameof(KernelFunction.equal), ListExpr(Env, Literal(0))),
+                condition: KernelApp(nameof(BuiltinFunction.equal), ListExpr(Env, Literal(0))),
                 trueBranch: Literal(PineKernelValues.TrueValue),
                 falseBranch: FuncApp(
                     isOddId,
-                    KernelApp(nameof(KernelFunction.int_add), ListExpr(Env, Literal(-1)))));
+                    KernelApp(nameof(BuiltinFunction.int_add), ListExpr(Env, Literal(-1)))));
 
         var isOddBody =
             Conditional(
-                condition: KernelApp(nameof(KernelFunction.equal), ListExpr(Env, Literal(0))),
+                condition: KernelApp(nameof(BuiltinFunction.equal), ListExpr(Env, Literal(0))),
                 trueBranch: Literal(PineKernelValues.FalseValue),
                 falseBranch: FuncApp(
                     isEvenId,
-                    KernelApp(nameof(KernelFunction.int_add), ListExpr(Env, Literal(-1)))));
+                    KernelApp(nameof(BuiltinFunction.int_add), ListExpr(Env, Literal(-1)))));
 
         var functions =
             new Dictionary<StaticFunctionIdentifier, StaticExpression<StaticFunctionIdentifier>>
@@ -419,7 +419,7 @@ public class StaticExpressionInterpreterTests
 
         var sumBody =
             KernelApp(
-                nameof(KernelFunction.int_add),
+                nameof(BuiltinFunction.int_add),
                 ListExpr(EnvPath(0), EnvPath(1)));
 
         var functions =
@@ -446,9 +446,9 @@ public class StaticExpressionInterpreterTests
         // if (equal [5, 5]) then (if (equal [3, 4]) then 100 else 200) else 300
         var expr =
             Conditional(
-                condition: KernelApp(nameof(KernelFunction.equal), ListExpr(Literal(5), Literal(5))),
+                condition: KernelApp(nameof(BuiltinFunction.equal), ListExpr(Literal(5), Literal(5))),
                 trueBranch: Conditional(
-                    condition: KernelApp(nameof(KernelFunction.equal), ListExpr(Literal(3), Literal(4))),
+                    condition: KernelApp(nameof(BuiltinFunction.equal), ListExpr(Literal(3), Literal(4))),
                     trueBranch: Literal(100),
                     falseBranch: Literal(200)),
                 falseBranch: Literal(300));

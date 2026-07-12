@@ -15,7 +15,7 @@ public class StaticExpressionExtensionsTests
         var expr =
             StaticExpression<string>.ConditionalInstance(
                 condition: StaticExpression<string>.KernelApplicationInstance(
-                    nameof(KernelFunction.length),
+                    nameof(BuiltinFunction.length),
                     StaticExpression<string>.ListInstance([])),
                 falseBranch: StaticExpression<string>.FunctionApplicationInstance(
                     "F",
@@ -51,7 +51,7 @@ public class StaticExpressionExtensionsTests
                 [
                 StaticExpression<string>.EnvironmentInstance,
                 StaticExpression<string>.KernelApplicationInstance(
-                    nameof(KernelFunction.head),
+                    nameof(BuiltinFunction.head),
                     StaticExpression<string>.ListInstance([]))
                 ]);
 
@@ -82,7 +82,7 @@ public class StaticExpressionExtensionsTests
                 [
                 StaticExpression<string>.LiteralInstance(PineValue.EmptyList),
                 StaticExpression<string>.KernelApplicationInstance(
-                    nameof(KernelFunction.length),
+                    nameof(BuiltinFunction.length),
                     StaticExpression<string>.LiteralInstance(PineValue.EmptyList))
                 ]);
 

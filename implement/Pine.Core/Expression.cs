@@ -267,7 +267,7 @@ public abstract record Expression
 
             if (Value is PineValue.BlobValue blobValue && 0 < blobValue.Bytes.Length)
             {
-                if (KernelFunction.SignedIntegerFromValueRelaxed(Value) is { } intValue)
+                if (BuiltinFunction.SignedIntegerFromValueRelaxed(Value) is { } intValue)
                 {
                     valueInterpretationString = "int " + intValue;
                 }
@@ -1171,7 +1171,7 @@ public abstract record Expression
                 EnvironmentInstance
                 :
                 KernelApplicationInstance(
-                    nameof(KernelFunction.skip),
+                    nameof(BuiltinFunction.skip),
                     ListInstance(
                         [
                         LiteralInstance(IntegerEncoding.EncodeSignedInteger(i)),
@@ -1183,7 +1183,7 @@ public abstract record Expression
 
             var level0SkipHead =
                 KernelApplicationInstance(
-                    nameof(KernelFunction.head),
+                    nameof(BuiltinFunction.head),
                     level0Skip);
 
             yield return level0SkipHead;
@@ -1196,7 +1196,7 @@ public abstract record Expression
                     level0SkipHead
                     :
                     KernelApplicationInstance(
-                        nameof(KernelFunction.skip),
+                        nameof(BuiltinFunction.skip),
                         ListInstance(
                             [
                             LiteralInstance(IntegerEncoding.EncodeSignedInteger(j)),
@@ -1208,7 +1208,7 @@ public abstract record Expression
 
                 var level1SkipHead =
                     KernelApplicationInstance(
-                        nameof(KernelFunction.head),
+                        nameof(BuiltinFunction.head),
                         level1Skip);
 
                 yield return level1SkipHead;
@@ -1221,7 +1221,7 @@ public abstract record Expression
                         level1SkipHead
                         :
                         KernelApplicationInstance(
-                            nameof(KernelFunction.skip),
+                            nameof(BuiltinFunction.skip),
                             ListInstance(
                                 [
                                 LiteralInstance(IntegerEncoding.EncodeSignedInteger(k)),
@@ -1233,7 +1233,7 @@ public abstract record Expression
 
                     var level2SkipHead =
                         KernelApplicationInstance(
-                            nameof(KernelFunction.head),
+                            nameof(BuiltinFunction.head),
                             level2Skip);
 
                     yield return level2SkipHead;
@@ -1246,7 +1246,7 @@ public abstract record Expression
             {
                 var concatPrependPlusSign =
                     KernelApplicationInstance(
-                        nameof(KernelFunction.concat),
+                        nameof(BuiltinFunction.concat),
                         ListInstance(
                             [
                             LiteralInstance(PineValue.BlobSingleByte(4)),
@@ -1260,7 +1260,7 @@ public abstract record Expression
             {
                 var concatPrependPlusSign =
                     KernelApplicationInstance(
-                        nameof(KernelFunction.concat),
+                        nameof(BuiltinFunction.concat),
                         ListInstance(
                             [
                             LiteralInstance(PineValue.BlobSingleByte(4)),

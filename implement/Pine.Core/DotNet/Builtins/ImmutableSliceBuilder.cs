@@ -42,7 +42,7 @@ public record ImmutableSliceBuilder(
             FinalValue: null);
 
     /// <summary>
-    /// Apply <see cref="KernelFunction.skip(PineValue)"/> on the value resulting from the previous operations.
+    /// Apply <see cref="BuiltinFunction.skip(PineValue)"/> on the value resulting from the previous operations.
     /// </summary>
     /// <param name="count">The number of additional elements to skip.</param>
     /// <returns>A new builder with the skip count increased by <paramref name="count"/>.</returns>
@@ -84,7 +84,7 @@ public record ImmutableSliceBuilder(
     }
 
     /// <summary>
-    /// Apply <see cref="KernelFunction.take(PineValue)"/> on the value resulting from the previous operations.
+    /// Apply <see cref="BuiltinFunction.take(PineValue)"/> on the value resulting from the previous operations.
     /// </summary>
     /// <param name="count">The maximum number of elements to include in the result.</param>
     /// <returns>A new builder with the take count set to the minimum of the current take count and <paramref name="count"/>.</returns>
@@ -120,7 +120,7 @@ public record ImmutableSliceBuilder(
     }
 
     /// <summary>
-    /// Apply <see cref="KernelFunction.skip(PineValue)"/> on the value resulting from the previous operations,
+    /// Apply <see cref="BuiltinFunction.skip(PineValue)"/> on the value resulting from the previous operations,
     /// trying to parse the skip count from a <see cref="PineValue"/>.
     /// </summary>
     /// <param name="skipCountValue">A <see cref="PineValue"/> representing the number of elements to skip.</param>
@@ -134,7 +134,7 @@ public record ImmutableSliceBuilder(
     /// </remarks>
     public ImmutableSliceBuilder Skip(PineValue skipCountValue)
     {
-        if (KernelFunction.SignedIntegerFromValueRelaxed(skipCountValue) is not { } skipCount)
+        if (BuiltinFunction.SignedIntegerFromValueRelaxed(skipCountValue) is not { } skipCount)
         {
             return
                 new(
@@ -153,7 +153,7 @@ public record ImmutableSliceBuilder(
     }
 
     /// <summary>
-    /// Apply <see cref="KernelFunction.take(PineValue)"/> on the value resulting from the previous operations,
+    /// Apply <see cref="BuiltinFunction.take(PineValue)"/> on the value resulting from the previous operations,
     /// trying to parse the take count from a <see cref="PineValue"/>.
     /// </summary>
     /// <param name="takeCountValue">A <see cref="PineValue"/> representing the maximum number of elements to take.</param>
@@ -167,7 +167,7 @@ public record ImmutableSliceBuilder(
     /// </remarks>
     public ImmutableSliceBuilder Take(PineValue takeCountValue)
     {
-        if (KernelFunction.SignedIntegerFromValueRelaxed(takeCountValue) is not { } takeCount)
+        if (BuiltinFunction.SignedIntegerFromValueRelaxed(takeCountValue) is not { } takeCount)
         {
             return
                 new(
@@ -264,7 +264,7 @@ public record ImmutableSliceBuilder(
     /// </remarks>
     public ImmutableSliceBuilder TakeLast(PineValue takeCountValue)
     {
-        if (KernelFunction.SignedIntegerFromValueRelaxed(takeCountValue) is not { } takeCount)
+        if (BuiltinFunction.SignedIntegerFromValueRelaxed(takeCountValue) is not { } takeCount)
         {
             return
                 new(
@@ -312,13 +312,13 @@ public record ImmutableSliceBuilder(
     }
 
     /// <summary>
-    /// Predict the length from <see cref="KernelFunction.length(PineValue)"/> used on the value from <see cref="Evaluate"/>.
+    /// Predict the length from <see cref="BuiltinFunction.length(PineValue)"/> used on the value from <see cref="Evaluate"/>.
     /// </summary>
     public int GetLength()
     {
         if (FinalValue is { } finalValue)
         {
-            return Internal.KernelFunctionSpecialized.length_as_int(finalValue);
+            return Internal.BuiltinFunctionSpecialized.length_as_int(finalValue);
         }
 
         return
@@ -379,7 +379,7 @@ public record ImmutableSliceBuilder(
     }
 
     /// <summary>
-    /// Application of <see cref="KernelFunction.head(PineValue)"/> on the value from <see cref="Evaluate"/>
+    /// Application of <see cref="BuiltinFunction.head(PineValue)"/> on the value from <see cref="Evaluate"/>
     /// </summary>
     /// <returns>
     /// For list values: the first element of the slice, or <see cref="PineValue.EmptyList"/> if empty.
@@ -395,8 +395,8 @@ public record ImmutableSliceBuilder(
     }
 
     /// <summary>
-    /// Fused application of the kernel functions <see cref="KernelFunction.skip(PineValue)"/> and
-    /// <see cref="KernelFunction.head(PineValue)"/> on the value from <see cref="Evaluate"/>
+    /// Fused application of the kernel functions <see cref="BuiltinFunction.skip(PineValue)"/> and
+    /// <see cref="BuiltinFunction.head(PineValue)"/> on the value from <see cref="Evaluate"/>
     /// </summary>
     /// <param name="index">The zero-based index of the element to retrieve from the slice.</param>
     /// <returns>
@@ -439,8 +439,8 @@ public record ImmutableSliceBuilder(
         if (FinalValue is { } finalValue)
         {
             return
-                KernelFunction.head(
-                    Internal.KernelFunctionFused.SkipAndTake(
+                BuiltinFunction.head(
+                    Internal.BuiltinFunctionFused.SkipAndTake(
                         takeCount: 1,
                         skipCount: index,
                         finalValue));
@@ -451,8 +451,8 @@ public record ImmutableSliceBuilder(
         var actualSkipCount = checked(SkipCount + index);
 
         return
-            KernelFunction.head(
-                Internal.KernelFunctionFused.SkipAndTake(
+            BuiltinFunction.head(
+                Internal.BuiltinFunctionFused.SkipAndTake(
                     takeCount: 1,
                     skipCount: actualSkipCount,
                     Original));
@@ -469,7 +469,7 @@ public record ImmutableSliceBuilder(
     /// value is returned immediately.
     /// </para>
     /// <para>
-    /// Otherwise, the method delegates to <see cref="Internal.KernelFunctionFused.SkipAndTake(int, int, PineValue)"/>
+    /// Otherwise, the method delegates to <see cref="Internal.BuiltinFunctionFused.SkipAndTake(int, int, PineValue)"/>
     /// to perform the actual slicing operation on the original value.
     /// </para>
     /// </remarks>
@@ -491,13 +491,13 @@ public record ImmutableSliceBuilder(
             }
 
             return
-                Internal.KernelFunctionSpecialized.skip(
+                Internal.BuiltinFunctionSpecialized.skip(
                     skipCount,
                     Original);
         }
 
         return
-            Internal.KernelFunctionFused.SkipAndTake(
+            Internal.BuiltinFunctionFused.SkipAndTake(
                 takeCount: takeCount,
                 skipCount: SkipCount,
                 Original);

@@ -39,7 +39,7 @@ public class StaticProgramParserConsolidatedFormTests
             FunctionValueBuilder.EmitFunctionValueWithEnvFunctions(
                 innerExpression:
                 Expression.KernelApplicationInstance(
-                    function: nameof(KernelFunction.int_add),
+                    function: nameof(BuiltinFunction.int_add),
                     input:
                     Expression.ListInstance(
                         [
@@ -61,7 +61,7 @@ public class StaticProgramParserConsolidatedFormTests
             FunctionValueBuilder.EmitFunctionValueWithEnvFunctions(
                 innerExpression:
                 Expression.KernelApplicationInstance(
-                    function: nameof(KernelFunction.int_add),
+                    function: nameof(BuiltinFunction.int_add),
                     input:
                     Expression.ListInstance(
                         [

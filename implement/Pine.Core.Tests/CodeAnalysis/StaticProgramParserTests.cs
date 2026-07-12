@@ -196,7 +196,7 @@ public class StaticProgramParserTests
                 Expression.ListInstance(
                     [
                     Expression.KernelApplicationInstance(
-                        function: nameof(KernelFunction.int_add),
+                        function: nameof(BuiltinFunction.int_add),
                         input:
                         Expression.ListInstance(
                             [
@@ -223,7 +223,7 @@ public class StaticProgramParserTests
             StaticExpression<string>.ListInstance(
                 [
                 StaticExpression<string>.KernelApplicationInstance(
-                    function: nameof(KernelFunction.int_add),
+                    function: nameof(BuiltinFunction.int_add),
                     input:
                     StaticExpression<string>.ListInstance(
                         [
@@ -243,7 +243,7 @@ public class StaticProgramParserTests
                 Expression.ListInstance(
                     [
                     Expression.KernelApplicationInstance(
-                        function: nameof(KernelFunction.int_add),
+                        function: nameof(BuiltinFunction.int_add),
                         input:
                         Expression.ListInstance(
                             [
@@ -319,7 +319,7 @@ public class StaticProgramParserTests
                 Expression.ListInstance(
                     [
                     Expression.KernelApplicationInstance(
-                        function: nameof(KernelFunction.int_add),
+                        function: nameof(BuiltinFunction.int_add),
                         input:
                         Expression.ListInstance(
                             [
@@ -420,7 +420,7 @@ public class StaticProgramParserTests
                 Expression.ListInstance(
                     [
                     Expression.KernelApplicationInstance(
-                        function: nameof(KernelFunction.int_add),
+                        function: nameof(BuiltinFunction.int_add),
                         input:
                         Expression.ListInstance(
                             [
@@ -508,7 +508,7 @@ public class StaticProgramParserTests
                 Expression.ListInstance(
                     [
                     Expression.KernelApplicationInstance(
-                        function: nameof(KernelFunction.int_add),
+                        function: nameof(BuiltinFunction.int_add),
                         input:
                         Expression.ListInstance(
                             [
@@ -587,7 +587,7 @@ public class StaticProgramParserTests
                 Expression.ListInstance(
                     [
                     Expression.KernelApplicationInstance(
-                        function: nameof(KernelFunction.int_add),
+                        function: nameof(BuiltinFunction.int_add),
                         input:
                         Expression.ListInstance(
                             [

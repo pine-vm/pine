@@ -190,7 +190,7 @@ public class InvokeStackFrameConstTests
             Expression.ConditionalInstance(
                 condition:
                 Expression.KernelApplicationInstance(
-                    function: nameof(KernelFunction.int_is_sorted_asc),
+                    function: nameof(BuiltinFunction.int_is_sorted_asc),
                     input:
                     Expression.ListInstance(
                         [
@@ -201,7 +201,7 @@ public class InvokeStackFrameConstTests
                 Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(1)),
                 falseBranch:
                 Expression.KernelApplicationInstance(
-                    function: nameof(KernelFunction.int_mul),
+                    function: nameof(BuiltinFunction.int_mul),
                     input:
                     Expression.ListInstance(
                         [
@@ -212,7 +212,7 @@ public class InvokeStackFrameConstTests
                                 [
                                 EnvironmentPathExpression([0]),
                                 Expression.KernelApplicationInstance(
-                                    function: nameof(KernelFunction.int_add),
+                                    function: nameof(BuiltinFunction.int_add),
                                     input:
                                     Expression.ListInstance(
                                         [
@@ -307,7 +307,7 @@ public class InvokeStackFrameConstTests
             Expression.ConditionalInstance(
                 condition:
                 Expression.KernelApplicationInstance(
-                    function: nameof(KernelFunction.int_is_sorted_asc),
+                    function: nameof(BuiltinFunction.int_is_sorted_asc),
                     input:
                     Expression.ListInstance(
                         [
@@ -318,7 +318,7 @@ public class InvokeStackFrameConstTests
                 EnvironmentPathExpression([1]),
                 falseBranch:
                 Expression.KernelApplicationInstance(
-                    function: nameof(KernelFunction.int_add),
+                    function: nameof(BuiltinFunction.int_add),
                     input:
                     Expression.ListInstance(
                         [
@@ -329,7 +329,7 @@ public class InvokeStackFrameConstTests
                                 [
                                 EnvironmentPathExpression([0]),
                                 Expression.KernelApplicationInstance(
-                                    function: nameof(KernelFunction.int_add),
+                                    function: nameof(BuiltinFunction.int_add),
                                     input:
                                     Expression.ListInstance(
                                         [
@@ -344,7 +344,7 @@ public class InvokeStackFrameConstTests
                                 [
                                 EnvironmentPathExpression([0]),
                                 Expression.KernelApplicationInstance(
-                                    function: nameof(KernelFunction.int_add),
+                                    function: nameof(BuiltinFunction.int_add),
                                     input:
                                     Expression.ListInstance(
                                         [
@@ -820,13 +820,13 @@ public class InvokeStackFrameConstTests
     private static Expression LengthExpression(
         Expression expression) =>
         Expression.KernelApplicationInstance(
-            function: nameof(KernelFunction.length),
+            function: nameof(BuiltinFunction.length),
             input: expression);
 
     private static Expression IncrementExpression(
         Expression expression) =>
         Expression.KernelApplicationInstance(
-            function: nameof(KernelFunction.int_add),
+            function: nameof(BuiltinFunction.int_add),
             input:
             Expression.ListInstance(
                 [

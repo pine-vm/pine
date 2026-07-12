@@ -45,7 +45,7 @@ public class ExpressionCompiledCallbackTests
 
         var expression =
             Expression.KernelApplicationInstance(
-                nameof(KernelFunction.int_add),
+                nameof(BuiltinFunction.int_add),
                 Expression.ListInstance(
                     [
                     Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(3)),
@@ -100,7 +100,7 @@ public class ExpressionCompiledCallbackTests
 
         var exprA =
             Expression.KernelApplicationInstance(
-                nameof(KernelFunction.int_add),
+                nameof(BuiltinFunction.int_add),
                 Expression.ListInstance(
                     [
                     Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(1)),
@@ -109,7 +109,7 @@ public class ExpressionCompiledCallbackTests
 
         var exprB =
             Expression.KernelApplicationInstance(
-                nameof(KernelFunction.int_mul),
+                nameof(BuiltinFunction.int_mul),
                 Expression.ListInstance(
                     [
                     Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(3)),

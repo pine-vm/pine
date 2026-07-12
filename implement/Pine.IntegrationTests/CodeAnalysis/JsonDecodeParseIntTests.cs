@@ -835,17 +835,17 @@ public class JsonDecodeParseIntTests
             {
                 public static PineValue parseInt(PineValue param_1, PineValue param_2)
                 {
-                    if (KernelFunctionFused.SkipAndTake(takeCount: 4, skipCountValue: param_2, argument: param_1) ==
+                    if (BuiltinFunctionFused.SkipAndTake(takeCount: 4, skipCountValue: param_2, argument: param_1) ==
                         CommonReusedValues.Blob_Char_hyphen)
                     {
-                        PineValue local_001 = KernelFunctionSpecialized.int_add(4, param_2);
+                        PineValue local_001 = BuiltinFunctionSpecialized.int_add(4, param_2);
                         PineValue local_003 = Test.parseUnsignedInt(param_1, local_001);
                         PineValue local_004 = PineValueExtension.ValueFromPathOrEmptyList(local_003, [0]);
                         PineValue local_008 = PineValueExtension.ValueFromPathOrEmptyList(local_003, [1]);
                         PineValue local_010 = PineValueExtension.ValueFromPathOrEmptyList(local_004, [1]);
                         PineValue local_011 = PineValueExtension.ValueFromPathOrEmptyList(local_010, [0]);
 
-                        if ((KernelFunctionSpecialized.length_as_int(local_010) == 1) &&
+                        if ((BuiltinFunctionSpecialized.length_as_int(local_010) == 1) &&
                             (PineValueExtension.ValueFromPathOrEmptyList(local_004, [0]) == CommonReusedValues.Blob_Str_Ok))
                         {
                             return
@@ -854,7 +854,7 @@ public class JsonDecodeParseIntTests
                                     PineValue.List(
                                         [
                                         CommonReusedValues.Blob_Str_Ok,
-                                        PineValue.List([KernelFunctionSpecialized.int_mul(-1, local_011)])
+                                        PineValue.List([BuiltinFunctionSpecialized.int_mul(-1, local_011)])
                                         ]),
                                     local_008
                                     ]);
@@ -873,11 +873,12 @@ public class JsonDecodeParseIntTests
 
                 public static PineValue parseUnsignedInt(PineValue param_1, PineValue param_2)
                 {
-                    PineValue local_000 = KernelFunctionFused.SkipAndTake(takeCount: 4, skipCountValue: param_2, argument: param_1);
+                    PineValue local_000 =
+                        BuiltinFunctionFused.SkipAndTake(takeCount: 4, skipCountValue: param_2, argument: param_1);
 
                     if (local_000 == CommonReusedValues.Blob_Char_digit_0)
                     {
-                        return PineValue.List([CommonReusedValues.List_c3304aab, KernelFunctionSpecialized.int_add(4, param_2)]);
+                        return PineValue.List([CommonReusedValues.List_c3304aab, BuiltinFunctionSpecialized.int_add(4, param_2)]);
                     }
 
                     if (local_000 == CommonReusedValues.Blob_Char_digit_1)
@@ -886,7 +887,7 @@ public class JsonDecodeParseIntTests
                             Test.parseUnsignedIntRec(
                                 CommonReusedValues.Blob_Int_1,
                                 param_1,
-                                KernelFunctionSpecialized.int_add(4, param_2));
+                                BuiltinFunctionSpecialized.int_add(4, param_2));
                     }
 
                     if (local_000 == CommonReusedValues.Blob_Char_digit_2)
@@ -895,7 +896,7 @@ public class JsonDecodeParseIntTests
                             Test.parseUnsignedIntRec(
                                 CommonReusedValues.Blob_Int_2,
                                 param_1,
-                                KernelFunctionSpecialized.int_add(4, param_2));
+                                BuiltinFunctionSpecialized.int_add(4, param_2));
                     }
 
                     if (local_000 == CommonReusedValues.Blob_Char_digit_3)
@@ -904,7 +905,7 @@ public class JsonDecodeParseIntTests
                             Test.parseUnsignedIntRec(
                                 CommonReusedValues.Blob_Int_3,
                                 param_1,
-                                KernelFunctionSpecialized.int_add(4, param_2));
+                                BuiltinFunctionSpecialized.int_add(4, param_2));
                     }
 
                     if (local_000 == CommonReusedValues.Blob_Char_digit_4)
@@ -913,7 +914,7 @@ public class JsonDecodeParseIntTests
                             Test.parseUnsignedIntRec(
                                 CommonReusedValues.Blob_Int_4,
                                 param_1,
-                                KernelFunctionSpecialized.int_add(4, param_2));
+                                BuiltinFunctionSpecialized.int_add(4, param_2));
                     }
 
                     if (local_000 == CommonReusedValues.Blob_Char_digit_5)
@@ -922,7 +923,7 @@ public class JsonDecodeParseIntTests
                             Test.parseUnsignedIntRec(
                                 CommonReusedValues.Blob_Int_5,
                                 param_1,
-                                KernelFunctionSpecialized.int_add(4, param_2));
+                                BuiltinFunctionSpecialized.int_add(4, param_2));
                     }
 
                     if (local_000 == CommonReusedValues.Blob_Char_digit_6)
@@ -931,7 +932,7 @@ public class JsonDecodeParseIntTests
                             Test.parseUnsignedIntRec(
                                 CommonReusedValues.Blob_Int_6,
                                 param_1,
-                                KernelFunctionSpecialized.int_add(4, param_2));
+                                BuiltinFunctionSpecialized.int_add(4, param_2));
                     }
 
                     if (local_000 == CommonReusedValues.Blob_Char_digit_7)
@@ -940,7 +941,7 @@ public class JsonDecodeParseIntTests
                             Test.parseUnsignedIntRec(
                                 CommonReusedValues.Blob_Int_7,
                                 param_1,
-                                KernelFunctionSpecialized.int_add(4, param_2));
+                                BuiltinFunctionSpecialized.int_add(4, param_2));
                     }
 
                     if (local_000 == CommonReusedValues.Blob_Char_digit_8)
@@ -949,7 +950,7 @@ public class JsonDecodeParseIntTests
                             Test.parseUnsignedIntRec(
                                 CommonReusedValues.Blob_Int_8,
                                 param_1,
-                                KernelFunctionSpecialized.int_add(4, param_2));
+                                BuiltinFunctionSpecialized.int_add(4, param_2));
                     }
 
                     if (local_000 == CommonReusedValues.Blob_Char_digit_9)
@@ -958,7 +959,7 @@ public class JsonDecodeParseIntTests
                             Test.parseUnsignedIntRec(
                                 CommonReusedValues.Blob_Int_9,
                                 param_1,
-                                KernelFunctionSpecialized.int_add(4, param_2));
+                                BuiltinFunctionSpecialized.int_add(4, param_2));
                     }
 
                     return PineValue.List([CommonReusedValues.List_ae45bd54, param_2]);
@@ -973,13 +974,13 @@ public class JsonDecodeParseIntTests
                     while (true)
                     {
                         PineValue local_000 =
-                            KernelFunctionFused.SkipAndTake(takeCount: 4, skipCountValue: local_param_3, argument: local_param_2);
+                            BuiltinFunctionFused.SkipAndTake(takeCount: 4, skipCountValue: local_param_3, argument: local_param_2);
 
                         if (local_000 == CommonReusedValues.Blob_Char_digit_0)
                         {
                             {
-                                PineValue local_param_1_temp = KernelFunctionSpecialized.int_mul(10, local_param_1);
-                                PineValue local_param_3_temp = KernelFunctionSpecialized.int_add(4, local_param_3);
+                                PineValue local_param_1_temp = BuiltinFunctionSpecialized.int_mul(10, local_param_1);
+                                PineValue local_param_3_temp = BuiltinFunctionSpecialized.int_add(4, local_param_3);
                                 local_param_1 = local_param_1_temp;
                                 local_param_3 = local_param_3_temp;
                             }
@@ -991,9 +992,9 @@ public class JsonDecodeParseIntTests
                         {
                             {
                                 PineValue local_param_1_temp =
-                                    KernelFunctionSpecialized.int_add(1, KernelFunctionSpecialized.int_mul(10, local_param_1));
+                                    BuiltinFunctionSpecialized.int_add(1, BuiltinFunctionSpecialized.int_mul(10, local_param_1));
 
-                                PineValue local_param_3_temp = KernelFunctionSpecialized.int_add(4, local_param_3);
+                                PineValue local_param_3_temp = BuiltinFunctionSpecialized.int_add(4, local_param_3);
                                 local_param_1 = local_param_1_temp;
                                 local_param_3 = local_param_3_temp;
                             }
@@ -1005,9 +1006,9 @@ public class JsonDecodeParseIntTests
                         {
                             {
                                 PineValue local_param_1_temp =
-                                    KernelFunctionSpecialized.int_add(2, KernelFunctionSpecialized.int_mul(10, local_param_1));
+                                    BuiltinFunctionSpecialized.int_add(2, BuiltinFunctionSpecialized.int_mul(10, local_param_1));
 
-                                PineValue local_param_3_temp = KernelFunctionSpecialized.int_add(4, local_param_3);
+                                PineValue local_param_3_temp = BuiltinFunctionSpecialized.int_add(4, local_param_3);
                                 local_param_1 = local_param_1_temp;
                                 local_param_3 = local_param_3_temp;
                             }
@@ -1019,9 +1020,9 @@ public class JsonDecodeParseIntTests
                         {
                             {
                                 PineValue local_param_1_temp =
-                                    KernelFunctionSpecialized.int_add(3, KernelFunctionSpecialized.int_mul(10, local_param_1));
+                                    BuiltinFunctionSpecialized.int_add(3, BuiltinFunctionSpecialized.int_mul(10, local_param_1));
 
-                                PineValue local_param_3_temp = KernelFunctionSpecialized.int_add(4, local_param_3);
+                                PineValue local_param_3_temp = BuiltinFunctionSpecialized.int_add(4, local_param_3);
                                 local_param_1 = local_param_1_temp;
                                 local_param_3 = local_param_3_temp;
                             }
@@ -1033,9 +1034,9 @@ public class JsonDecodeParseIntTests
                         {
                             {
                                 PineValue local_param_1_temp =
-                                    KernelFunctionSpecialized.int_add(4, KernelFunctionSpecialized.int_mul(10, local_param_1));
+                                    BuiltinFunctionSpecialized.int_add(4, BuiltinFunctionSpecialized.int_mul(10, local_param_1));
 
-                                PineValue local_param_3_temp = KernelFunctionSpecialized.int_add(4, local_param_3);
+                                PineValue local_param_3_temp = BuiltinFunctionSpecialized.int_add(4, local_param_3);
                                 local_param_1 = local_param_1_temp;
                                 local_param_3 = local_param_3_temp;
                             }
@@ -1047,9 +1048,9 @@ public class JsonDecodeParseIntTests
                         {
                             {
                                 PineValue local_param_1_temp =
-                                    KernelFunctionSpecialized.int_add(5, KernelFunctionSpecialized.int_mul(10, local_param_1));
+                                    BuiltinFunctionSpecialized.int_add(5, BuiltinFunctionSpecialized.int_mul(10, local_param_1));
 
-                                PineValue local_param_3_temp = KernelFunctionSpecialized.int_add(4, local_param_3);
+                                PineValue local_param_3_temp = BuiltinFunctionSpecialized.int_add(4, local_param_3);
                                 local_param_1 = local_param_1_temp;
                                 local_param_3 = local_param_3_temp;
                             }
@@ -1061,9 +1062,9 @@ public class JsonDecodeParseIntTests
                         {
                             {
                                 PineValue local_param_1_temp =
-                                    KernelFunctionSpecialized.int_add(6, KernelFunctionSpecialized.int_mul(10, local_param_1));
+                                    BuiltinFunctionSpecialized.int_add(6, BuiltinFunctionSpecialized.int_mul(10, local_param_1));
 
-                                PineValue local_param_3_temp = KernelFunctionSpecialized.int_add(4, local_param_3);
+                                PineValue local_param_3_temp = BuiltinFunctionSpecialized.int_add(4, local_param_3);
                                 local_param_1 = local_param_1_temp;
                                 local_param_3 = local_param_3_temp;
                             }
@@ -1075,9 +1076,9 @@ public class JsonDecodeParseIntTests
                         {
                             {
                                 PineValue local_param_1_temp =
-                                    KernelFunctionSpecialized.int_add(7, KernelFunctionSpecialized.int_mul(10, local_param_1));
+                                    BuiltinFunctionSpecialized.int_add(7, BuiltinFunctionSpecialized.int_mul(10, local_param_1));
 
-                                PineValue local_param_3_temp = KernelFunctionSpecialized.int_add(4, local_param_3);
+                                PineValue local_param_3_temp = BuiltinFunctionSpecialized.int_add(4, local_param_3);
                                 local_param_1 = local_param_1_temp;
                                 local_param_3 = local_param_3_temp;
                             }
@@ -1089,9 +1090,9 @@ public class JsonDecodeParseIntTests
                         {
                             {
                                 PineValue local_param_1_temp =
-                                    KernelFunctionSpecialized.int_add(8, KernelFunctionSpecialized.int_mul(10, local_param_1));
+                                    BuiltinFunctionSpecialized.int_add(8, BuiltinFunctionSpecialized.int_mul(10, local_param_1));
 
-                                PineValue local_param_3_temp = KernelFunctionSpecialized.int_add(4, local_param_3);
+                                PineValue local_param_3_temp = BuiltinFunctionSpecialized.int_add(4, local_param_3);
                                 local_param_1 = local_param_1_temp;
                                 local_param_3 = local_param_3_temp;
                             }
@@ -1103,9 +1104,9 @@ public class JsonDecodeParseIntTests
                         {
                             {
                                 PineValue local_param_1_temp =
-                                    KernelFunctionSpecialized.int_add(9, KernelFunctionSpecialized.int_mul(10, local_param_1));
+                                    BuiltinFunctionSpecialized.int_add(9, BuiltinFunctionSpecialized.int_mul(10, local_param_1));
 
-                                PineValue local_param_3_temp = KernelFunctionSpecialized.int_add(4, local_param_3);
+                                PineValue local_param_3_temp = BuiltinFunctionSpecialized.int_add(4, local_param_3);
                                 local_param_1 = local_param_1_temp;
                                 local_param_3 = local_param_3_temp;
                             }
@@ -1751,7 +1752,7 @@ public class SketchContainer
                     ]);
             }
 
-            if (KernelFunction.SignedIntegerFromValueRelaxed(param_1_1) is not { } param_1_1_int)
+            if (BuiltinFunction.SignedIntegerFromValueRelaxed(param_1_1) is not { } param_1_1_int)
             {
                 return
                     PineValue.List
@@ -2183,18 +2184,18 @@ public class SketchContainer
             PineValue param_1_0,
             PineValue param_1_1)
         {
-            if (KernelFunctionFused.SkipAndTake(takeCount: 4, skipCountValue: param_1_1, argument: param_1_0) == CommonReusedValues.Blob_37f21fcb)
+            if (BuiltinFunctionFused.SkipAndTake(takeCount: 4, skipCountValue: param_1_1, argument: param_1_0) == CommonReusedValues.Blob_37f21fcb)
             {
                 PineValue local_000 =
                     Test.parseUnsignedInt(
                         param_1_0,
-                        KernelFunctionSpecialized.int_add(4, param_1_1));
+                        BuiltinFunctionSpecialized.int_add(4, param_1_1));
 
                 PineValue local_001 =
-                    KernelFunction.head(local_000);
+                    BuiltinFunction.head(local_000);
 
                 PineValue local_002 =
-                    KernelFunction.head(local_001);
+                    BuiltinFunction.head(local_001);
 
                 if (CommonReusedValues.Blob_Str_Ok == local_002)
                 {
@@ -2206,15 +2207,15 @@ public class SketchContainer
                                     CommonReusedValues.Blob_Str_Ok,
                                     PineValue.List(
                                         [
-                                            KernelFunctionSpecialized.int_mul(
+                                            BuiltinFunctionSpecialized.int_mul(
                                                 -1,
-                                                KernelFunction.head(
-                                                    KernelFunction.head(
-                                                        KernelFunctionSpecialized.skip(1, local_001))))
+                                                BuiltinFunction.head(
+                                                    BuiltinFunction.head(
+                                                        BuiltinFunctionSpecialized.skip(1, local_001))))
                                         ])
                                 ]),
-                            KernelFunction.head(
-                                KernelFunctionSpecialized.skip(1, local_000))
+                            BuiltinFunction.head(
+                                BuiltinFunctionSpecialized.skip(1, local_000))
                             ]);
                 }
 
@@ -2228,13 +2229,13 @@ public class SketchContainer
                                     CommonReusedValues.Blob_Str_Err,
                                     PineValue.List(
                                         [
-                                            KernelFunction.head(
-                                                KernelFunction.head(
-                                                    KernelFunctionSpecialized.skip(1, local_001)))
+                                            BuiltinFunction.head(
+                                                BuiltinFunction.head(
+                                                    BuiltinFunctionSpecialized.skip(1, local_001)))
                                         ])
                                 ]),
-                            KernelFunction.head(
-                                KernelFunctionSpecialized.skip(1, local_000))
+                            BuiltinFunction.head(
+                                BuiltinFunctionSpecialized.skip(1, local_000))
                             ]);
                 }
 
@@ -2250,7 +2251,7 @@ public class SketchContainer
             PineValue param_1_1)
         {
             PineValue local_000 =
-                KernelFunctionFused.SkipAndTake(takeCount: 4, skipCountValue: param_1_1, argument: param_1_0);
+                BuiltinFunctionFused.SkipAndTake(takeCount: 4, skipCountValue: param_1_1, argument: param_1_0);
 
             if (local_000 == CommonReusedValues.Blob_Str_0)
             {
@@ -2258,7 +2259,7 @@ public class SketchContainer
                     PineValue.List(
                         [
                             CommonReusedValues.List_c3304aab,
-                        KernelFunctionSpecialized.int_add(4, param_1_1)
+                        BuiltinFunctionSpecialized.int_add(4, param_1_1)
                         ]);
             }
 
@@ -2268,7 +2269,7 @@ public class SketchContainer
                     Test.parseUnsignedIntRec(
                         CommonReusedValues.Blob_Int_1,
                         param_1_0,
-                        KernelFunctionSpecialized.int_add(4, param_1_1));
+                        BuiltinFunctionSpecialized.int_add(4, param_1_1));
             }
 
             if (local_000 == CommonReusedValues.Blob_Str_2)
@@ -2277,7 +2278,7 @@ public class SketchContainer
                     Test.parseUnsignedIntRec(
                         CommonReusedValues.Blob_Int_2,
                         param_1_0,
-                        KernelFunctionSpecialized.int_add(4, param_1_1));
+                        BuiltinFunctionSpecialized.int_add(4, param_1_1));
             }
 
             if (local_000 == CommonReusedValues.Blob_Str_3)
@@ -2286,7 +2287,7 @@ public class SketchContainer
                     Test.parseUnsignedIntRec(
                         CommonReusedValues.Blob_Int_3,
                         param_1_0,
-                        KernelFunctionSpecialized.int_add(4, param_1_1));
+                        BuiltinFunctionSpecialized.int_add(4, param_1_1));
             }
 
             if (local_000 == CommonReusedValues.Blob_Str_4)
@@ -2295,7 +2296,7 @@ public class SketchContainer
                     Test.parseUnsignedIntRec(
                         CommonReusedValues.Blob_Int_4,
                         param_1_0,
-                        KernelFunctionSpecialized.int_add(4, param_1_1));
+                        BuiltinFunctionSpecialized.int_add(4, param_1_1));
             }
 
             if (local_000 == CommonReusedValues.Blob_Str_5)
@@ -2304,7 +2305,7 @@ public class SketchContainer
                     Test.parseUnsignedIntRec(
                         CommonReusedValues.Blob_Int_5,
                         param_1_0,
-                        KernelFunctionSpecialized.int_add(4, param_1_1));
+                        BuiltinFunctionSpecialized.int_add(4, param_1_1));
             }
 
             if (local_000 == CommonReusedValues.Blob_Str_6)
@@ -2313,7 +2314,7 @@ public class SketchContainer
                     Test.parseUnsignedIntRec(
                         CommonReusedValues.Blob_Int_6,
                         param_1_0,
-                        KernelFunctionSpecialized.int_add(4, param_1_1));
+                        BuiltinFunctionSpecialized.int_add(4, param_1_1));
             }
 
             if (local_000 == CommonReusedValues.Blob_Str_7)
@@ -2322,7 +2323,7 @@ public class SketchContainer
                     Test.parseUnsignedIntRec(
                         CommonReusedValues.Blob_Int_7,
                         param_1_0,
-                        KernelFunctionSpecialized.int_add(4, param_1_1));
+                        BuiltinFunctionSpecialized.int_add(4, param_1_1));
             }
 
             if (local_000 == CommonReusedValues.Blob_Str_8)
@@ -2331,7 +2332,7 @@ public class SketchContainer
                     Test.parseUnsignedIntRec(
                         CommonReusedValues.Blob_Int_8,
                         param_1_0,
-                        KernelFunctionSpecialized.int_add(4, param_1_1));
+                        BuiltinFunctionSpecialized.int_add(4, param_1_1));
             }
 
             if (local_000 == CommonReusedValues.Blob_Str_9)
@@ -2340,7 +2341,7 @@ public class SketchContainer
                     Test.parseUnsignedIntRec(
                         CommonReusedValues.Blob_Int_9,
                         param_1_0,
-                        KernelFunctionSpecialized.int_add(4, param_1_1));
+                        BuiltinFunctionSpecialized.int_add(4, param_1_1));
             }
 
             return
@@ -2366,15 +2367,15 @@ public class SketchContainer
             while (true)
             {
                 PineValue local_000 =
-                    KernelFunctionFused.SkipAndTake(takeCount: 4, skipCountValue: local_param_1_2, argument: local_param_1_1);
+                    BuiltinFunctionFused.SkipAndTake(takeCount: 4, skipCountValue: local_param_1_2, argument: local_param_1_1);
 
                 if (local_000 == CommonReusedValues.Blob_Str_0)
                 {
                     local_param_1_0 =
-                        KernelFunctionSpecialized.int_mul(10, local_param_1_0);
+                        BuiltinFunctionSpecialized.int_mul(10, local_param_1_0);
 
                     local_param_1_2 =
-                        KernelFunctionSpecialized.int_add(4, local_param_1_2);
+                        BuiltinFunctionSpecialized.int_add(4, local_param_1_2);
 
                     continue;
                 }
@@ -2382,12 +2383,12 @@ public class SketchContainer
                 if (local_000 == CommonReusedValues.Blob_Str_1)
                 {
                     local_param_1_0 =
-                        KernelFunctionSpecialized.int_add(
+                        BuiltinFunctionSpecialized.int_add(
                             1,
-                            KernelFunctionSpecialized.int_mul(10, local_param_1_0));
+                            BuiltinFunctionSpecialized.int_mul(10, local_param_1_0));
 
                     local_param_1_2 =
-                        KernelFunctionSpecialized.int_add(4, local_param_1_2);
+                        BuiltinFunctionSpecialized.int_add(4, local_param_1_2);
 
                     continue;
                 }
@@ -2395,12 +2396,12 @@ public class SketchContainer
                 if (local_000 == CommonReusedValues.Blob_Str_2)
                 {
                     local_param_1_0 =
-                        KernelFunctionSpecialized.int_add(
+                        BuiltinFunctionSpecialized.int_add(
                             2,
-                            KernelFunctionSpecialized.int_mul(10, local_param_1_0));
+                            BuiltinFunctionSpecialized.int_mul(10, local_param_1_0));
 
                     local_param_1_2 =
-                        KernelFunctionSpecialized.int_add(4, local_param_1_2);
+                        BuiltinFunctionSpecialized.int_add(4, local_param_1_2);
 
                     continue;
                 }
@@ -2408,12 +2409,12 @@ public class SketchContainer
                 if (local_000 == CommonReusedValues.Blob_Str_3)
                 {
                     local_param_1_0 =
-                        KernelFunctionSpecialized.int_add(
+                        BuiltinFunctionSpecialized.int_add(
                             3,
-                            KernelFunctionSpecialized.int_mul(10, local_param_1_0));
+                            BuiltinFunctionSpecialized.int_mul(10, local_param_1_0));
 
                     local_param_1_2 =
-                        KernelFunctionSpecialized.int_add(4, local_param_1_2);
+                        BuiltinFunctionSpecialized.int_add(4, local_param_1_2);
 
                     continue;
                 }
@@ -2421,12 +2422,12 @@ public class SketchContainer
                 if (local_000 == CommonReusedValues.Blob_Str_4)
                 {
                     local_param_1_0 =
-                        KernelFunctionSpecialized.int_add(
+                        BuiltinFunctionSpecialized.int_add(
                             4,
-                            KernelFunctionSpecialized.int_mul(10, local_param_1_0));
+                            BuiltinFunctionSpecialized.int_mul(10, local_param_1_0));
 
                     local_param_1_2 =
-                        KernelFunctionSpecialized.int_add(4, local_param_1_2);
+                        BuiltinFunctionSpecialized.int_add(4, local_param_1_2);
 
                     continue;
                 }
@@ -2434,12 +2435,12 @@ public class SketchContainer
                 if (local_000 == CommonReusedValues.Blob_Str_5)
                 {
                     local_param_1_0 =
-                        KernelFunctionSpecialized.int_add(
+                        BuiltinFunctionSpecialized.int_add(
                             5,
-                            KernelFunctionSpecialized.int_mul(10, local_param_1_0));
+                            BuiltinFunctionSpecialized.int_mul(10, local_param_1_0));
 
                     local_param_1_2 =
-                        KernelFunctionSpecialized.int_add(4, local_param_1_2);
+                        BuiltinFunctionSpecialized.int_add(4, local_param_1_2);
 
                     continue;
                 }
@@ -2447,12 +2448,12 @@ public class SketchContainer
                 if (local_000 == CommonReusedValues.Blob_Str_6)
                 {
                     local_param_1_0 =
-                        KernelFunctionSpecialized.int_add(
+                        BuiltinFunctionSpecialized.int_add(
                             6,
-                            KernelFunctionSpecialized.int_mul(10, local_param_1_0));
+                            BuiltinFunctionSpecialized.int_mul(10, local_param_1_0));
 
                     local_param_1_2 =
-                        KernelFunctionSpecialized.int_add(4, local_param_1_2);
+                        BuiltinFunctionSpecialized.int_add(4, local_param_1_2);
 
                     continue;
                 }
@@ -2460,12 +2461,12 @@ public class SketchContainer
                 if (local_000 == CommonReusedValues.Blob_Str_7)
                 {
                     local_param_1_0 =
-                        KernelFunctionSpecialized.int_add(
+                        BuiltinFunctionSpecialized.int_add(
                             7,
-                            KernelFunctionSpecialized.int_mul(10, local_param_1_0));
+                            BuiltinFunctionSpecialized.int_mul(10, local_param_1_0));
 
                     local_param_1_2 =
-                        KernelFunctionSpecialized.int_add(4, local_param_1_2);
+                        BuiltinFunctionSpecialized.int_add(4, local_param_1_2);
 
                     continue;
                 }
@@ -2473,12 +2474,12 @@ public class SketchContainer
                 if (local_000 == CommonReusedValues.Blob_Str_8)
                 {
                     local_param_1_0 =
-                        KernelFunctionSpecialized.int_add(
+                        BuiltinFunctionSpecialized.int_add(
                             8,
-                            KernelFunctionSpecialized.int_mul(10, local_param_1_0));
+                            BuiltinFunctionSpecialized.int_mul(10, local_param_1_0));
 
                     local_param_1_2 =
-                        KernelFunctionSpecialized.int_add(4, local_param_1_2);
+                        BuiltinFunctionSpecialized.int_add(4, local_param_1_2);
 
                     continue;
                 }
@@ -2486,12 +2487,12 @@ public class SketchContainer
                 if (local_000 == CommonReusedValues.Blob_Str_9)
                 {
                     local_param_1_0 =
-                        KernelFunctionSpecialized.int_add(
+                        BuiltinFunctionSpecialized.int_add(
                             9,
-                            KernelFunctionSpecialized.int_mul(10, local_param_1_0));
+                            BuiltinFunctionSpecialized.int_mul(10, local_param_1_0));
 
                     local_param_1_2 =
-                        KernelFunctionSpecialized.int_add(4, local_param_1_2);
+                        BuiltinFunctionSpecialized.int_add(4, local_param_1_2);
 
                     continue;
                 }

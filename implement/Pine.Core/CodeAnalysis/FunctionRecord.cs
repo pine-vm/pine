@@ -349,7 +349,7 @@ public record FunctionRecord(
                 //   where the first item of the concat input is a list containing env functions
 
                 if (parseAndEval.Environment is Expression.KernelApplication kernelApp &&
-                    kernelApp.Function is nameof(KernelFunction.concat))
+                    kernelApp.Function is nameof(BuiltinFunction.concat))
                 {
                     // WithEnvFunctions: concat([[envFuncs], fullArgs]) where fullArgs = concat(captured, [lastArg])
                     //   -> input is List with 2 items: first is List([envFuncsExpr]), second is fullArgs
@@ -696,7 +696,7 @@ public record FunctionRecord(
                 // Extract env functions from environment structure
                 // With flat layout: environment is concat([envFuncs], fullArgs) - a KernelApplication
                 if (parseAndEval.Environment is Expression.KernelApplication concatApp &&
-                    concatApp.Function is nameof(KernelFunction.concat) &&
+                    concatApp.Function is nameof(BuiltinFunction.concat) &&
                     concatApp.Input is Expression.List concatInputList &&
                     concatInputList.Items.Count is 2 &&
                     concatInputList.Items[0] is Expression.List envFuncsList &&

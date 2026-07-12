@@ -113,16 +113,16 @@ public class CompileKernelFunctionApplication
 
         {
             // Variant: Fuse take(skip(seq))
-            if (kernelApp.Function is nameof(KernelFunction.take) &&
+            if (kernelApp.Function is nameof(BuiltinFunction.take) &&
                 kernelApp.Input is StaticExpression<DeclQualifiedName>.List takeArgsList &&
                 takeArgsList.Items.Count is 2 &&
                 takeArgsList.Items[1] is StaticExpression<DeclQualifiedName>.KernelApplication skipApp &&
-                skipApp.Function is nameof(KernelFunction.skip) &&
+                skipApp.Function is nameof(BuiltinFunction.skip) &&
                 skipApp.Input is StaticExpression<DeclQualifiedName>.List skipArgsList &&
                 skipArgsList.Items.Count is 2)
             {
                 if (takeArgsList.Items[0] is StaticExpression<DeclQualifiedName>.Literal takeCountLiteral &&
-                    KernelFunction.SignedIntegerFromValueRelaxed(takeCountLiteral.Value) is { } takeCountBI &&
+                    BuiltinFunction.SignedIntegerFromValueRelaxed(takeCountLiteral.Value) is { } takeCountBI &&
                     takeCountBI >= int.MinValue && takeCountBI <= int.MaxValue)
                 {
                     // Case 1: take count is a compile-time integer literal
@@ -136,13 +136,13 @@ public class CompileKernelFunctionApplication
                             skipArgsList.Items[0],
                             emitEnv);
 
-                    // Build fully-qualified invocation: Pine.Core.Internal.KernelFunctionFused.SkipAndTake(argument: ..., skipCountValue: ..., takeCount: ...)
+                    // Build fully-qualified invocation: Pine.Core.Internal.BuiltinFunctionFused.SkipAndTake(argument: ..., skipCountValue: ..., takeCount: ...)
                     var genericCSharpExpr =
                         SyntaxFactory.InvocationExpression(
                             SyntaxFactory.MemberAccessExpression(
                                 SyntaxKind.SimpleMemberAccessExpression,
-                                TypeSyntaxFromType(typeof(KernelFunctionFused)),
-                                SyntaxFactory.IdentifierName(nameof(KernelFunctionFused.SkipAndTake))))
+                                TypeSyntaxFromType(typeof(BuiltinFunctionFused)),
+                                SyntaxFactory.IdentifierName(nameof(BuiltinFunctionFused.SkipAndTake))))
                         .WithArgumentList(
                             SyntaxFactory.ArgumentList(
                                 SyntaxFactory.SeparatedList<ArgumentSyntax>(
@@ -185,13 +185,13 @@ public class CompileKernelFunctionApplication
                             skipArgsList.Items[0],
                             emitEnv);
 
-                    // Build fully-qualified invocation: Pine.Core.Internal.KernelFunctionFused.SkipAndTake(takeCountValue: ..., skipCountValue: ..., argument: ...)
+                    // Build fully-qualified invocation: Pine.Core.Internal.BuiltinFunctionFused.SkipAndTake(takeCountValue: ..., skipCountValue: ..., argument: ...)
                     var genericCSharpExpr =
                         SyntaxFactory.InvocationExpression(
                             SyntaxFactory.MemberAccessExpression(
                                 SyntaxKind.SimpleMemberAccessExpression,
-                                TypeSyntaxFromType(typeof(KernelFunctionFused)),
-                                SyntaxFactory.IdentifierName(nameof(KernelFunctionFused.SkipAndTake))))
+                                TypeSyntaxFromType(typeof(BuiltinFunctionFused)),
+                                SyntaxFactory.IdentifierName(nameof(BuiltinFunctionFused.SkipAndTake))))
                         .WithArgumentList(
                             SyntaxFactory.ArgumentList(
                                 SyntaxFactory.SeparatedList<ArgumentSyntax>(
@@ -227,11 +227,11 @@ public class CompileKernelFunctionApplication
                 PineValue argument)
          * */
 
-        if (kernelApp.Function is nameof(KernelFunction.skip) &&
+        if (kernelApp.Function is nameof(BuiltinFunction.skip) &&
             kernelApp.Input is StaticExpression<DeclQualifiedName>.List skipArgsList2 &&
             skipArgsList2.Items.Count is 2 &&
             skipArgsList2.Items[1] is StaticExpression<DeclQualifiedName>.KernelApplication takeApp2 &&
-            takeApp2.Function is nameof(KernelFunction.take) &&
+            takeApp2.Function is nameof(BuiltinFunction.take) &&
             takeApp2.Input is StaticExpression<DeclQualifiedName>.List takeArgsList2 &&
             takeArgsList2.Items.Count is 2)
         {
@@ -250,13 +250,13 @@ public class CompileKernelFunctionApplication
                     skipArgsList2.Items[0],
                     emitEnv);
 
-            // Build fully-qualified invocation: Pine.Core.Internal.KernelFunctionFused.TakeAndSkip(skipCountValue: ..., takeCountValue: ..., argument: ...)
+            // Build fully-qualified invocation: Pine.Core.Internal.BuiltinFunctionFused.TakeAndSkip(skipCountValue: ..., takeCountValue: ..., argument: ...)
             var genericCSharpExpr =
                 SyntaxFactory.InvocationExpression(
                     SyntaxFactory.MemberAccessExpression(
                         SyntaxKind.SimpleMemberAccessExpression,
-                        TypeSyntaxFromType(typeof(KernelFunctionFused)),
-                        SyntaxFactory.IdentifierName(nameof(KernelFunctionFused.TakeAndSkip))))
+                        TypeSyntaxFromType(typeof(BuiltinFunctionFused)),
+                        SyntaxFactory.IdentifierName(nameof(BuiltinFunctionFused.TakeAndSkip))))
                 .WithArgumentList(
                     SyntaxFactory.ArgumentList(
                         SyntaxFactory.SeparatedList<ArgumentSyntax>(
@@ -282,21 +282,21 @@ public class CompileKernelFunctionApplication
             yield return CompiledCSharpExpression.Generic(genericCSharpExpr);
         }
 
-        if (kernelApp.Function is nameof(KernelFunction.reverse))
+        if (kernelApp.Function is nameof(BuiltinFunction.reverse))
         {
             var outerReverseInput = kernelApp.Input;
 
             {
-                // Variant: Fuse reverse(take(n, reverse(seq))) => KernelFunctionFused.TakeLast(n, seq)
+                // Variant: Fuse reverse(take(n, reverse(seq))) => BuiltinFunctionFused.TakeLast(n, seq)
                 if (outerReverseInput is StaticExpression<DeclQualifiedName>.KernelApplication takeApp &&
-                    takeApp.Function is nameof(KernelFunction.take) &&
+                    takeApp.Function is nameof(BuiltinFunction.take) &&
                     takeApp.Input is StaticExpression<DeclQualifiedName>.List takeArgs &&
                     takeArgs.Items.Count is 2 &&
                     takeArgs.Items[0] is StaticExpression<DeclQualifiedName>.Literal takeLastCountLiteral &&
-                    KernelFunction.SignedIntegerFromValueRelaxed(takeLastCountLiteral.Value) is { } takeLastCountBI &&
+                    BuiltinFunction.SignedIntegerFromValueRelaxed(takeLastCountLiteral.Value) is { } takeLastCountBI &&
                     takeLastCountBI >= int.MinValue && takeLastCountBI <= int.MaxValue &&
                     takeArgs.Items[1] is StaticExpression<DeclQualifiedName>.KernelApplication innerReverseApp &&
-                    innerReverseApp.Function is nameof(KernelFunction.reverse))
+                    innerReverseApp.Function is nameof(BuiltinFunction.reverse))
                 {
                     // seq expression is the input to the inner reverse
                     var seqExpr =
@@ -304,13 +304,13 @@ public class CompileKernelFunctionApplication
                             innerReverseApp.Input,
                             emitEnv);
 
-                    // Build fully-qualified invocation: Pine.Core.Internal.KernelFunctionFused.TakeLast(takeCount: n, value: seq)
+                    // Build fully-qualified invocation: Pine.Core.Internal.BuiltinFunctionFused.TakeLast(takeCount: n, value: seq)
                     var genericCSharpExpr =
                         SyntaxFactory.InvocationExpression(
                             SyntaxFactory.MemberAccessExpression(
                                 SyntaxKind.SimpleMemberAccessExpression,
-                                TypeSyntaxFromType(typeof(KernelFunctionFused)),
-                                SyntaxFactory.IdentifierName(nameof(KernelFunctionFused.TakeLast))))
+                                TypeSyntaxFromType(typeof(BuiltinFunctionFused)),
+                                SyntaxFactory.IdentifierName(nameof(BuiltinFunctionFused.TakeLast))))
                         .WithArgumentList(
                             SyntaxFactory.ArgumentList(
                                 SyntaxFactory.SeparatedList<ArgumentSyntax>(
@@ -333,7 +333,7 @@ public class CompileKernelFunctionApplication
             }
 
             {
-                // Variant: Fuse reverse(skip(n, reverse(seq))) => KernelFunctionFused.SkipLast(n, seq)
+                // Variant: Fuse reverse(skip(n, reverse(seq))) => BuiltinFunctionFused.SkipLast(n, seq)
                 /*
                     public static PineValue SkipLast(
                         int skipCount,
@@ -341,14 +341,14 @@ public class CompileKernelFunctionApplication
                  * */
 
                 if (outerReverseInput is StaticExpression<DeclQualifiedName>.KernelApplication skipApp &&
-                    skipApp.Function is nameof(KernelFunction.skip) &&
+                    skipApp.Function is nameof(BuiltinFunction.skip) &&
                     skipApp.Input is StaticExpression<DeclQualifiedName>.List skipArgs &&
                     skipArgs.Items.Count is 2 &&
                     skipArgs.Items[0] is StaticExpression<DeclQualifiedName>.Literal skipLastCountLiteral &&
-                    KernelFunction.SignedIntegerFromValueRelaxed(skipLastCountLiteral.Value) is { } skipLastCountBI &&
+                    BuiltinFunction.SignedIntegerFromValueRelaxed(skipLastCountLiteral.Value) is { } skipLastCountBI &&
                     skipLastCountBI >= int.MinValue && skipLastCountBI <= int.MaxValue &&
                     skipArgs.Items[1] is StaticExpression<DeclQualifiedName>.KernelApplication innerReverseApp &&
-                    innerReverseApp.Function is nameof(KernelFunction.reverse))
+                    innerReverseApp.Function is nameof(BuiltinFunction.reverse))
                 {
                     // seq expression is the input to the inner reverse
                     var seqExpr =
@@ -356,13 +356,13 @@ public class CompileKernelFunctionApplication
                             innerReverseApp.Input,
                             emitEnv);
 
-                    // Build fully-qualified invocation: Pine.Core.Internal.KernelFunctionFused.SkipLast(skipCount: n, value: seq)
+                    // Build fully-qualified invocation: Pine.Core.Internal.BuiltinFunctionFused.SkipLast(skipCount: n, value: seq)
                     var genericCSharpExpr =
                         SyntaxFactory.InvocationExpression(
                             SyntaxFactory.MemberAccessExpression(
                                 SyntaxKind.SimpleMemberAccessExpression,
-                                TypeSyntaxFromType(typeof(KernelFunctionFused)),
-                                SyntaxFactory.IdentifierName(nameof(KernelFunctionFused.SkipLast))))
+                                TypeSyntaxFromType(typeof(BuiltinFunctionFused)),
+                                SyntaxFactory.IdentifierName(nameof(BuiltinFunctionFused.SkipLast))))
                         .WithArgumentList(
                             SyntaxFactory.ArgumentList(
                                 SyntaxFactory.SeparatedList<ArgumentSyntax>(
@@ -393,7 +393,7 @@ public class CompileKernelFunctionApplication
                 PineValue itemToAppend)
              * */
 
-            if (kernelApp.Function is nameof(KernelFunction.concat) &&
+            if (kernelApp.Function is nameof(BuiltinFunction.concat) &&
                 kernelApp.Input is StaticExpression<DeclQualifiedName>.List concatArgsList &&
                 concatArgsList.Items.Count is 2 &&
                 concatArgsList.Items[1] is StaticExpression<DeclQualifiedName>.List itemToAppendList &&
@@ -409,13 +409,13 @@ public class CompileKernelFunctionApplication
                         itemToAppendList.Items[0],
                         emitEnv);
 
-                // Build fully-qualified invocation: Pine.Core.Internal.KernelFunctionFused.ListAppendItem(prefix: ..., itemToAppend: ...)
+                // Build fully-qualified invocation: Pine.Core.Internal.BuiltinFunctionFused.ListAppendItem(prefix: ..., itemToAppend: ...)
                 var genericCSharpExpr =
                     SyntaxFactory.InvocationExpression(
                         SyntaxFactory.MemberAccessExpression(
                             SyntaxKind.SimpleMemberAccessExpression,
-                            TypeSyntaxFromType(typeof(KernelFunctionFused)),
-                            SyntaxFactory.IdentifierName(nameof(KernelFunctionFused.ListAppendItem))))
+                            TypeSyntaxFromType(typeof(BuiltinFunctionFused)),
+                            SyntaxFactory.IdentifierName(nameof(BuiltinFunctionFused.ListAppendItem))))
                     .WithArgumentList(
                         SyntaxFactory.ArgumentList(
                             SyntaxFactory.SeparatedList<ArgumentSyntax>(
@@ -457,13 +457,13 @@ public class CompileKernelFunctionApplication
                         suffix,
                         emitEnv);
 
-                // Build fully-qualified invocation: Pine.Core.Internal.KernelFunctionFused.ListPrependItem(itemToPrepend: ..., suffix: ...)
+                // Build fully-qualified invocation: Pine.Core.Internal.BuiltinFunctionFused.ListPrependItem(itemToPrepend: ..., suffix: ...)
                 return
                     SyntaxFactory.InvocationExpression(
                         SyntaxFactory.MemberAccessExpression(
                             SyntaxKind.SimpleMemberAccessExpression,
-                            TypeSyntaxFromType(typeof(KernelFunctionFused)),
-                            SyntaxFactory.IdentifierName(nameof(KernelFunctionFused.ListPrependItem))))
+                            TypeSyntaxFromType(typeof(BuiltinFunctionFused)),
+                            SyntaxFactory.IdentifierName(nameof(BuiltinFunctionFused.ListPrependItem))))
                     .WithArgumentList(
                         SyntaxFactory.ArgumentList(
                             SyntaxFactory.SeparatedList<ArgumentSyntax>(
@@ -495,13 +495,13 @@ public class CompileKernelFunctionApplication
                         suffix,
                         emitEnv);
 
-                // Build fully-qualified invocation: Pine.Core.Internal.KernelFunctionFused.BlobPrependByte(byteToPrepend: ..., suffix: ...)
+                // Build fully-qualified invocation: Pine.Core.Internal.BuiltinFunctionFused.BlobPrependByte(byteToPrepend: ..., suffix: ...)
                 return
                     SyntaxFactory.InvocationExpression(
                         SyntaxFactory.MemberAccessExpression(
                             SyntaxKind.SimpleMemberAccessExpression,
-                            TypeSyntaxFromType(typeof(KernelFunctionFused)),
-                            SyntaxFactory.IdentifierName(nameof(KernelFunctionFused.BlobPrependByte))))
+                            TypeSyntaxFromType(typeof(BuiltinFunctionFused)),
+                            SyntaxFactory.IdentifierName(nameof(BuiltinFunctionFused.BlobPrependByte))))
                     .WithArgumentList(
                         SyntaxFactory.ArgumentList(
                             SyntaxFactory.SeparatedList<ArgumentSyntax>(
@@ -519,7 +519,7 @@ public class CompileKernelFunctionApplication
                                 })));
             }
 
-            if (kernelApp.Function is nameof(KernelFunction.concat) &&
+            if (kernelApp.Function is nameof(BuiltinFunction.concat) &&
                 kernelApp.Input is StaticExpression<DeclQualifiedName>.List concatArgsList &&
                 concatArgsList.Items.Count is 2)
             {
@@ -564,7 +564,7 @@ public class CompileKernelFunctionApplication
         CompiledCSharpExpression? AddingZero(StaticExpression<DeclQualifiedName> otherArgument)
         {
             if (otherArgument is StaticExpression<DeclQualifiedName>.KernelApplication innerKernelApp &&
-                innerKernelApp.Function is nameof(KernelFunction.concat) &&
+                innerKernelApp.Function is nameof(BuiltinFunction.concat) &&
                 innerKernelApp.Input is StaticExpression<DeclQualifiedName>.List concatList &&
                 concatList.Items.Count is 2 &&
                 concatList.Items[0] is StaticExpression<DeclQualifiedName>.Literal prefixLiteral &&
@@ -601,12 +601,12 @@ public class CompileKernelFunctionApplication
         }
 
         {
-            if (kernelApp.Function is nameof(KernelFunction.int_add) &&
+            if (kernelApp.Function is nameof(BuiltinFunction.int_add) &&
                 kernelApp.Input is StaticExpression<DeclQualifiedName>.List addArgsList &&
                 addArgsList.Items.Count is 2)
             {
                 if (addArgsList.Items[0] is StaticExpression<DeclQualifiedName>.Literal intLiteral &&
-                    KernelFunction.SignedIntegerFromValueRelaxed(intLiteral.Value) is { } intBI &&
+                    BuiltinFunction.SignedIntegerFromValueRelaxed(intLiteral.Value) is { } intBI &&
                     intBI == 0)
                 {
                     if (AddingZero(addArgsList.Items[1]) is { } expr)
@@ -616,7 +616,7 @@ public class CompileKernelFunctionApplication
                 }
 
                 if (addArgsList.Items[1] is StaticExpression<DeclQualifiedName>.Literal intLiteral2 &&
-                    KernelFunction.SignedIntegerFromValueRelaxed(intLiteral2.Value) is { } intBI2 &&
+                    BuiltinFunction.SignedIntegerFromValueRelaxed(intLiteral2.Value) is { } intBI2 &&
                     intBI2 == 0)
                 {
                     if (AddingZero(addArgsList.Items[0]) is { } expr)
@@ -643,8 +643,8 @@ public class CompileKernelFunctionApplication
             SyntaxFactory.InvocationExpression(
                 SyntaxFactory.MemberAccessExpression(
                     SyntaxKind.SimpleMemberAccessExpression,
-                    CompileTypeSyntax.TypeSyntaxFromType(typeof(KernelFunctionFused), declarationSyntaxContext),
-                    SyntaxFactory.IdentifierName(nameof(KernelFunctionFused.CanonicalIntegerFromUnsigned))))
+                    CompileTypeSyntax.TypeSyntaxFromType(typeof(BuiltinFunctionFused), declarationSyntaxContext),
+                    SyntaxFactory.IdentifierName(nameof(BuiltinFunctionFused.CanonicalIntegerFromUnsigned))))
             .WithArgumentList(
                 SyntaxFactory.ArgumentList(
                     SyntaxFactory.SeparatedList<ArgumentSyntax>(

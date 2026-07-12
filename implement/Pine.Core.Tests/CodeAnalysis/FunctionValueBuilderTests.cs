@@ -263,14 +263,14 @@ public class FunctionValueBuilderTests
         // Create product expression: arg0 * arg1
         var productExpr =
             Expression.KernelApplicationInstance(
-                function: nameof(KernelFunction.int_mul),
+                function: nameof(BuiltinFunction.int_mul),
                 input: Expression.ListInstance([arg0Access, arg1Access]));
 
         // Create sum expression: (arg0 * arg1) + arg2
 
         var sumExpr =
             Expression.KernelApplicationInstance(
-                function: nameof(KernelFunction.int_add),
+                function: nameof(BuiltinFunction.int_add),
                 input: Expression.ListInstance([productExpr, arg2Access]));
 
         // Return [envFunc0, envFunc1, product]
@@ -387,7 +387,7 @@ public class FunctionValueBuilderTests
         // sum = arg0 + arg1
         var sumExpr =
             Expression.KernelApplicationInstance(
-                function: nameof(KernelFunction.int_add),
+                function: nameof(BuiltinFunction.int_add),
                 input: Expression.ListInstance([arg0Access, arg1Access]));
 
         var innerExpression = Expression.ListInstance([envFunc0Access, envFunc1Access, sumExpr]);
@@ -477,7 +477,7 @@ public class FunctionValueBuilderTests
 
         var innerExpression =
             Expression.KernelApplicationInstance(
-                function: nameof(KernelFunction.int_add),
+                function: nameof(BuiltinFunction.int_add),
                 input: Expression.ListInstance([arg0, arg1]));
 
         var functionValue =
@@ -1056,14 +1056,14 @@ public class FunctionValueBuilderTests
         // Create product expression: arg0 * arg1
         var productExpr =
             Expression.KernelApplicationInstance(
-                function: nameof(KernelFunction.int_mul),
+                function: nameof(BuiltinFunction.int_mul),
                 input: Expression.ListInstance([arg0Access, arg1Access]));
 
         // Create sum expression: (arg0 * arg1) + arg2
 
         var sumExpr =
             Expression.KernelApplicationInstance(
-                function: nameof(KernelFunction.int_add),
+                function: nameof(BuiltinFunction.int_add),
                 input: Expression.ListInstance([productExpr, arg2Access]));
 
         // Return [envFunc0, sum, envFunc1]
@@ -1135,7 +1135,7 @@ public class FunctionValueBuilderTests
         // sum = arg0 + arg1
         var sumExpr =
             Expression.KernelApplicationInstance(
-                function: nameof(KernelFunction.int_add),
+                function: nameof(BuiltinFunction.int_add),
                 input: Expression.ListInstance([arg0Access, arg1Access]));
 
         var innerExpression = Expression.ListInstance([envFunc0Access, envFunc1Access, sumExpr]);
@@ -1350,7 +1350,7 @@ public class FunctionValueBuilderTests
 
         var innerExpression =
             Expression.KernelApplicationInstance(
-                function: nameof(KernelFunction.int_add),
+                function: nameof(BuiltinFunction.int_add),
                 input: Expression.ListInstance([arg0Access, arg1Access]));
 
         var envFunc = PineValue.Blob([100]);

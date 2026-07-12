@@ -36,7 +36,7 @@ public class PineVMInstructionTraceTests
 
         var expression =
             Expression.KernelApplicationInstance(
-                nameof(KernelFunction.int_add),
+                nameof(BuiltinFunction.int_add),
                 Expression.ListInstance(
                     [
                     Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(3)),

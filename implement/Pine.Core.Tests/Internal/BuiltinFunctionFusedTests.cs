@@ -5,7 +5,7 @@ using Xunit;
 
 namespace Pine.Core.Tests.Internal;
 
-public class KernelFunctionFusedTests
+public class BuiltinFunctionFusedTests
 {
     [Fact]
     public void ConcatAndReverse_SymmetricBehavior()
@@ -52,11 +52,11 @@ public class KernelFunctionFusedTests
             var inputValues = testCases[i];
 
             var referenceResult =
-                KernelFunction.reverse(
-                    KernelFunction.concat(
+                BuiltinFunction.reverse(
+                    BuiltinFunction.concat(
                         PineValue.List(inputValues)));
 
-            var testResult = KernelFunctionFused.ConcatAndReverse(inputValues);
+            var testResult = BuiltinFunctionFused.ConcatAndReverse(inputValues);
 
             testResult.Should().Be(referenceResult);
         }

@@ -7,7 +7,7 @@ namespace Pine.Core.CommonEncodings;
 /// <summary>
 /// Standard encoding of integers in Pine.
 /// <para>
-/// This integer encoding corresponds to kernel functions like <see cref="KernelFunction.int_add(PineValue)"/> and <see cref="KernelFunction.skip(PineValue)"/>.
+/// This integer encoding corresponds to kernel functions like <see cref="BuiltinFunction.int_add(PineValue)"/> and <see cref="BuiltinFunction.skip(PineValue)"/>.
 /// </para>
 /// <para>
 /// When parsing, the 'strict' variant means we only accept the canonical encodings as produced by the encoding functions.

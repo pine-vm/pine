@@ -141,7 +141,7 @@ public class ExpressionEncodingDelegateConsultationTests
 
         var root =
             Expression.KernelApplicationInstance(
-                function: nameof(KernelFunction.length),
+                function: nameof(BuiltinFunction.length),
                 input: input);
 
         var recorder = new RecordingDelegate();
@@ -188,7 +188,7 @@ public class ExpressionEncodingDelegateConsultationTests
 
         Expression falseBranch =
             Expression.KernelApplicationInstance(
-                function: nameof(KernelFunction.length),
+                function: nameof(BuiltinFunction.length),
                 input: kaInput);
 
         Expression trueBranch = Expression.LiteralInstance(StringEncoding.ValueFromString("true"));

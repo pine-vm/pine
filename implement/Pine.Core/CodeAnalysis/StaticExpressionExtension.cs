@@ -11,7 +11,7 @@ namespace Pine.Core.CodeAnalysis;
 /// - discovering implicit parameters (environment paths),
 /// - generic depth-first traversal,
 /// - safe tree transformations with selective node replacement, and
-/// - parsing/constructing paths encoded via <see cref="KernelFunction.head"/>/<see cref="KernelFunction.skip"/>.
+/// - parsing/constructing paths encoded via <see cref="BuiltinFunction.head"/>/<see cref="BuiltinFunction.skip"/>.
 /// </summary>
 public static class StaticExpressionExtension
 {
@@ -315,7 +315,7 @@ public static class StaticExpressionExtension
 
 
     /// <summary>
-    /// Attempts to parse a chain of nested <see cref="KernelFunction.head"/> (and optional <see cref="KernelFunction.skip"/>) kernel applications
+    /// Attempts to parse a chain of nested <see cref="BuiltinFunction.head"/> (and optional <see cref="BuiltinFunction.skip"/>) kernel applications
     /// representing a path from an arbitrary starting expression back to a designated <paramref name="pathEndExpression"/>.
     /// </summary>
     /// <param name="expression">The root expression that potentially encodes a path.</param>
@@ -327,7 +327,7 @@ public static class StaticExpressionExtension
     /// </returns>
     /// <remarks>
     /// The recognized shape is a (possibly empty) sequence of kernel applications with the outermost node being
-    /// a <see cref="KernelFunction.head"/>. A non-zero offset step is represented as <c>head (skip N NEXT)</c>, while a zero offset is
+    /// a <see cref="BuiltinFunction.head"/>. A non-zero offset step is represented as <c>head (skip N NEXT)</c>, while a zero offset is
     /// simply <c>head NEXT</c>. Parsing stops successfully when <paramref name="pathEndExpression"/> is reached.
     /// Any deviation from this pattern causes the method to return <c>null</c>.
     /// </remarks>
@@ -349,7 +349,7 @@ public static class StaticExpressionExtension
             }
 
             if (current is not StaticExpression<TFunctionName>.KernelApplication outerKernelApp ||
-                outerKernelApp.Function is not nameof(KernelFunction.head))
+                outerKernelApp.Function is not nameof(BuiltinFunction.head))
             {
                 return null;
             }
@@ -358,11 +358,11 @@ public static class StaticExpressionExtension
             var offset = 0;
 
             if (next is StaticExpression<TFunctionName>.KernelApplication innerKernelApp &&
-                innerKernelApp.Function is nameof(KernelFunction.skip) &&
+                innerKernelApp.Function is nameof(BuiltinFunction.skip) &&
                 innerKernelApp.Input is StaticExpression<TFunctionName>.List skipList &&
                 skipList.Items.Count is 2 &&
                 skipList.Items[0] is StaticExpression<TFunctionName>.Literal skipLiteral &&
-                KernelFunction.SignedIntegerFromValueRelaxed(skipLiteral.Value) is { } skipInteger)
+                BuiltinFunction.SignedIntegerFromValueRelaxed(skipLiteral.Value) is { } skipInteger)
             {
                 offset = (int)skipInteger;
                 next = skipList.Items[1];
@@ -378,7 +378,7 @@ public static class StaticExpressionExtension
     /// static expression tree. Leading offsets that index directly into existing <see cref="StaticExpression{TFunctionName}.List"/> nodes are consumed and
     /// the traversal advances into the corresponding child. Once the traversal can no longer continue (because the current
     /// node is not a <see cref="StaticExpression{TFunctionName}.List"/> or an offset is out of range), the remaining suffix of the path is re-encoded as
-    /// kernel applications (using <see cref="KernelFunction.head"/> / <see cref="KernelFunction.skip"/>) starting from the last resolved expression.
+    /// kernel applications (using <see cref="BuiltinFunction.head"/> / <see cref="BuiltinFunction.skip"/>) starting from the last resolved expression.
     /// </summary>
     /// <param name="path">Full sequence of integer offsets describing a path toward <paramref name="pathEndExpression"/>.</param>
     /// <param name="pathEndExpression">The starting (deepest) expression the path ultimately points to; usually the function environment.</param>
@@ -422,7 +422,7 @@ public static class StaticExpressionExtension
     }
 
     /// <summary>
-    /// Builds an expression that encodes a path as a chain of <see cref="KernelFunction.head"/> (and optional <see cref="KernelFunction.skip"/>) kernel applications
+    /// Builds an expression that encodes a path as a chain of <see cref="BuiltinFunction.head"/> (and optional <see cref="BuiltinFunction.skip"/>) kernel applications
     /// terminating at <paramref name="pathEndExpression"/>.
     /// </summary>
     /// <param name="path">Sequence of integer offsets describing steps from the start toward the end expression. Order must match that returned by <see cref="TryParseAsPathToExpression"/>.</param>
@@ -448,16 +448,16 @@ public static class StaticExpressionExtension
             {
                 current =
                     StaticExpression<TFunctionName>.KernelApplicationInstance(
-                        nameof(KernelFunction.head),
+                        nameof(BuiltinFunction.head),
                         current);
             }
             else
             {
                 current =
                     StaticExpression<TFunctionName>.KernelApplicationInstance(
-                        nameof(KernelFunction.head),
+                        nameof(BuiltinFunction.head),
                         StaticExpression<TFunctionName>.KernelApplicationInstance(
-                            nameof(KernelFunction.skip),
+                            nameof(BuiltinFunction.skip),
                             StaticExpression<TFunctionName>.ListInstance(
                                 [
                                 StaticExpression<TFunctionName>.LiteralInstance(
@@ -479,7 +479,7 @@ public static class StaticExpressionExtension
     /// <returns>
     /// A sequence of paths (lists of integer offsets) pointing to occurrences of
     /// <see cref="StaticExpression{TFuncId}.Environment"/> encoded via
-    /// <see cref="KernelFunction.head"/>/<see cref="KernelFunction.skip"/>. Only occurrences that are
+    /// <see cref="BuiltinFunction.head"/>/<see cref="BuiltinFunction.skip"/>. Only occurrences that are
     /// outside any <see cref="StaticExpression{TFuncId}.FunctionApplication"/> are returned.
     /// </returns>
     /// <remarks>
@@ -661,7 +661,7 @@ public static class StaticExpressionExtension
         }
 
         if (expr is StaticExpression<TFunctionName>.KernelApplication kernelApp &&
-            kernelApp.Function is nameof(KernelFunction.concat) &&
+            kernelApp.Function is nameof(BuiltinFunction.concat) &&
             kernelApp.Input is StaticExpression<TFunctionName>.List concatInputList)
         {
             for (var itemIndex = 0; itemIndex < concatInputList.Items.Count; ++itemIndex)
@@ -809,7 +809,7 @@ public static class StaticExpressionExtension
     /// <returns>
     /// A <see cref="ConcatComposition{TFunctionName}"/> describing whether items are appended or prepended relative to
     /// <paramref name="paramPath"/>, or <c>null</c> if the expression does not match the expected
-    /// <see cref="KernelFunction.concat"/> shape.
+    /// <see cref="BuiltinFunction.concat"/> shape.
     /// </returns>
     public static ConcatComposition<TFunctionName>?
         ParseParamPathAsConcatBuilderMutationInFunctionApplication<TFunctionName>(
@@ -829,7 +829,7 @@ public static class StaticExpressionExtension
             return null;
         }
 
-        if (kernelApp.Function is not nameof(KernelFunction.concat))
+        if (kernelApp.Function is not nameof(BuiltinFunction.concat))
         {
             return null;
         }
@@ -909,7 +909,7 @@ public static class StaticExpressionExtension
     }
 
     /// <summary>
-    /// Iteratively peels a chain of <see cref="KernelFunction.head"/> (and optional <see cref="KernelFunction.skip"/>)
+    /// Iteratively peels a chain of <see cref="BuiltinFunction.head"/> (and optional <see cref="BuiltinFunction.skip"/>)
     /// applications and yields the progressively decoded subexpression together with the path built so far.
     /// </summary>
     /// <typeparam name="TFunctionName">Type of user-defined function identifiers.</typeparam>
@@ -928,7 +928,7 @@ public static class StaticExpressionExtension
 
         while (currentExpr is StaticExpression<TFunctionName>.KernelApplication currentKernelApp)
         {
-            if (currentKernelApp.Function is not nameof(KernelFunction.head))
+            if (currentKernelApp.Function is not nameof(BuiltinFunction.head))
                 break;
 
             var currentOffset = 0;
@@ -936,12 +936,12 @@ public static class StaticExpressionExtension
             currentExpr = currentKernelApp.Input;
 
             if (currentExpr is StaticExpression<TFunctionName>.KernelApplication inputKernelApp &&
-                inputKernelApp.Function is nameof(KernelFunction.skip) &&
+                inputKernelApp.Function is nameof(BuiltinFunction.skip) &&
                 inputKernelApp.Input is StaticExpression<TFunctionName>.List skipInputList &&
                 skipInputList.Items.Count is 2)
             {
                 if (skipInputList.Items[0] is StaticExpression<TFunctionName>.Literal skipCountLiteral &&
-                    KernelFunction.SignedIntegerFromValueRelaxed(skipCountLiteral.Value) is { } skipCount)
+                    BuiltinFunction.SignedIntegerFromValueRelaxed(skipCountLiteral.Value) is { } skipCount)
                 {
                     currentOffset = (int)skipCount;
 
@@ -1033,7 +1033,7 @@ public static class StaticExpressionExtension
         if (expr is not StaticExpression<TFunctionName>.KernelApplication kernelApp)
             return null;
 
-        if (kernelApp.Function is not nameof(KernelFunction.equal))
+        if (kernelApp.Function is not nameof(BuiltinFunction.equal))
             return null;
 
         if (kernelApp.Input is not StaticExpression<TFunctionName>.List inputList ||

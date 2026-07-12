@@ -9,7 +9,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 
-using KernelFunctionSpecialized = Pine.Core.Internal.KernelFunctionSpecialized;
+using BuiltinFunctionSpecialized = Pine.Core.Internal.BuiltinFunctionSpecialized;
 
 namespace Pine.Core.Interpreter.IntermediateVM;
 
@@ -2016,7 +2016,7 @@ public class PineVM : IPineVM
                         {
                             var listValue = currentFrame.PopTopmostFromStack().Evaluate();
 
-                            var concatenated = KernelFunction.concat(listValue);
+                            var concatenated = BuiltinFunction.concat(listValue);
 
                             currentFrame.PushInstructionResult(PineValueInProcess.Create(concatenated));
 
@@ -2079,7 +2079,7 @@ public class PineVM : IPineVM
                         {
                             var listValue = currentFrame.PopTopmostFromStack().Evaluate();
 
-                            var reversed = KernelFunction.reverse(listValue);
+                            var reversed = BuiltinFunction.reverse(listValue);
 
                             currentFrame.PushInstructionResult(PineValueInProcess.Create(reversed));
 
@@ -2168,7 +2168,7 @@ public class PineVM : IPineVM
 
                             var resultValue = PineValueInProcess.EmptyList;
 
-                            if (KernelFunction.UnsignedIntegerFromValueRelaxed(leftValue) is { } leftInt)
+                            if (BuiltinFunction.UnsignedIntegerFromValueRelaxed(leftValue) is { } leftInt)
                             {
                                 resultValue = PineValueInProcess.CreateInteger(leftInt + rightInt);
                             }
@@ -2340,7 +2340,7 @@ public class PineVM : IPineVM
 
                             var resultValue = PineValueInProcess.EmptyList;
 
-                            if (KernelFunction.UnsignedIntegerFromValueRelaxed(left) is { } leftInt)
+                            if (BuiltinFunction.UnsignedIntegerFromValueRelaxed(left) is { } leftInt)
                             {
                                 resultValue =
                                     PineValueInProcess.CreateBool(leftInt <= right);
@@ -2384,7 +2384,7 @@ public class PineVM : IPineVM
 
                             var resultValue = PineValueInProcess.EmptyList;
 
-                            if (KernelFunction.UnsignedIntegerFromValueRelaxed(left) is { } leftInt)
+                            if (BuiltinFunction.UnsignedIntegerFromValueRelaxed(left) is { } leftInt)
                             {
                                 resultValue =
                                     PineValueInProcess.CreateBool(leftInt >= right);
@@ -2399,7 +2399,7 @@ public class PineVM : IPineVM
                         {
                             var value = currentFrame.PopTopmostFromStack().Evaluate();
 
-                            var resultValue = KernelFunction.negate(value);
+                            var resultValue = BuiltinFunction.negate(value);
 
                             currentFrame.PushInstructionResult(PineValueInProcess.Create(resultValue));
 
@@ -2426,7 +2426,7 @@ public class PineVM : IPineVM
                         {
                             var genericValue = currentFrame.PopTopmostFromStack().Evaluate();
 
-                            var resultValue = KernelFunction.skip(genericValue);
+                            var resultValue = BuiltinFunction.skip(genericValue);
 
                             currentFrame.PushInstructionResult(PineValueInProcess.Create(resultValue));
 
@@ -2437,7 +2437,7 @@ public class PineVM : IPineVM
                         {
                             var genericValue = currentFrame.PopTopmostFromStack().Evaluate();
 
-                            var resultValue = KernelFunction.take(genericValue);
+                            var resultValue = BuiltinFunction.take(genericValue);
 
                             currentFrame.PushInstructionResult(PineValueInProcess.Create(resultValue));
 
@@ -2448,7 +2448,7 @@ public class PineVM : IPineVM
                         {
                             var listValue = currentFrame.PopTopmostFromStack().Evaluate();
 
-                            var isSorted = KernelFunction.int_is_sorted_asc(listValue);
+                            var isSorted = BuiltinFunction.int_is_sorted_asc(listValue);
 
                             currentFrame.PushInstructionResult(PineValueInProcess.Create(isSorted));
 
@@ -2625,7 +2625,7 @@ public class PineVM : IPineVM
                             var left = currentFrame.PopTopmostFromStack().Evaluate();
 
                             var resultValue =
-                                KernelFunctionSpecialized.bit_and(left, right);
+                                BuiltinFunctionSpecialized.bit_and(left, right);
 
                             currentFrame.PushInstructionResult(PineValueInProcess.Create(resultValue));
 
@@ -2642,7 +2642,7 @@ public class PineVM : IPineVM
                             var left = currentFrame.PopTopmostFromStack().Evaluate();
 
                             var resultValue =
-                                KernelFunctionSpecialized.bit_and(left, right);
+                                BuiltinFunctionSpecialized.bit_and(left, right);
 
                             currentFrame.PushInstructionResult(PineValueInProcess.Create(resultValue));
 
@@ -2655,7 +2655,7 @@ public class PineVM : IPineVM
                             var left = currentFrame.PopTopmostFromStack().Evaluate();
 
                             var resultValue =
-                                KernelFunctionSpecialized.bit_or(left, right);
+                                BuiltinFunctionSpecialized.bit_or(left, right);
 
                             currentFrame.PushInstructionResult(PineValueInProcess.Create(resultValue));
 
@@ -2672,7 +2672,7 @@ public class PineVM : IPineVM
                             var left = currentFrame.PopTopmostFromStack().Evaluate();
 
                             var resultValue =
-                                KernelFunctionSpecialized.bit_or(left, right);
+                                BuiltinFunctionSpecialized.bit_or(left, right);
 
                             currentFrame.PushInstructionResult(PineValueInProcess.Create(resultValue));
 
@@ -2685,7 +2685,7 @@ public class PineVM : IPineVM
                             var left = currentFrame.PopTopmostFromStack().Evaluate();
 
                             var resultValue =
-                                KernelFunctionSpecialized.bit_xor(left, right);
+                                BuiltinFunctionSpecialized.bit_xor(left, right);
 
                             currentFrame.PushInstructionResult(PineValueInProcess.Create(resultValue));
 
@@ -2696,7 +2696,7 @@ public class PineVM : IPineVM
                         {
                             var value = currentFrame.PopTopmostFromStack().Evaluate();
 
-                            var resultValue = KernelFunction.bit_not(value);
+                            var resultValue = BuiltinFunction.bit_not(value);
 
                             currentFrame.PushInstructionResult(PineValueInProcess.Create(resultValue));
 
@@ -2710,10 +2710,10 @@ public class PineVM : IPineVM
 
                             PineValue resultValue = PineValue.EmptyList;
 
-                            if (KernelFunction.SignedIntegerFromValueRelaxed(shiftValue) is { } shiftCount)
+                            if (BuiltinFunction.SignedIntegerFromValueRelaxed(shiftValue) is { } shiftCount)
                             {
                                 resultValue =
-                                    KernelFunctionSpecialized.bit_shift_left(shiftCount, value);
+                                    BuiltinFunctionSpecialized.bit_shift_left(shiftCount, value);
                             }
 
                             currentFrame.PushInstructionResult(PineValueInProcess.Create(resultValue));
@@ -2731,7 +2731,7 @@ public class PineVM : IPineVM
                             var value = currentFrame.PopTopmostFromStack().Evaluate();
 
                             var resultValue =
-                                KernelFunctionSpecialized.bit_shift_left(shiftCount, value);
+                                BuiltinFunctionSpecialized.bit_shift_left(shiftCount, value);
 
                             currentFrame.PushInstructionResult(PineValueInProcess.Create(resultValue));
 
@@ -2750,7 +2750,7 @@ public class PineVM : IPineVM
                             {
                                 resultValue =
                                     PineValueInProcess.Create(
-                                        KernelFunctionSpecialized.bit_shift_right(shiftCount, prevValue));
+                                        BuiltinFunctionSpecialized.bit_shift_right(shiftCount, prevValue));
                             }
 
                             currentFrame.PushInstructionResult(resultValue);
@@ -2768,7 +2768,7 @@ public class PineVM : IPineVM
                             var value = currentFrame.PopTopmostFromStack().Evaluate();
 
                             var resultValue =
-                                KernelFunctionSpecialized.bit_shift_right(shiftCount, value);
+                                BuiltinFunctionSpecialized.bit_shift_right(shiftCount, value);
 
                             currentFrame.PushInstructionResult(PineValueInProcess.Create(resultValue));
 
@@ -2779,7 +2779,7 @@ public class PineVM : IPineVM
                         {
                             var listValue = currentFrame.PopTopmostFromStack().Evaluate();
 
-                            var sumValue = KernelFunction.int_add(listValue);
+                            var sumValue = BuiltinFunction.int_add(listValue);
 
                             currentFrame.PushInstructionResult(PineValueInProcess.Create(sumValue));
 
@@ -2790,7 +2790,7 @@ public class PineVM : IPineVM
                         {
                             var listValue = currentFrame.PopTopmostFromStack().Evaluate();
 
-                            var productValue = KernelFunction.int_mul(listValue);
+                            var productValue = BuiltinFunction.int_mul(listValue);
 
                             currentFrame.PushInstructionResult(PineValueInProcess.Create(productValue));
 
@@ -3119,7 +3119,7 @@ public class PineVM : IPineVM
 
         if (expression is Expression.KernelApplication builtinExpr)
         {
-            if (builtinExpr.Function is nameof(KernelFunction.length))
+            if (builtinExpr.Function is nameof(BuiltinFunction.length))
             {
                 var argumentValue = EvalDirect(builtinExpr.Input, envValue, ref performanceCounters);
 
@@ -3131,7 +3131,7 @@ public class PineVM : IPineVM
                 return PineValueInProcess.CreateInteger(argumentValue.GetLength());
             }
 
-            if (builtinExpr.Function is nameof(KernelFunction.equal))
+            if (builtinExpr.Function is nameof(BuiltinFunction.equal))
             {
                 if (builtinExpr.Input is Expression.List equalList)
                 {
@@ -3174,7 +3174,7 @@ public class PineVM : IPineVM
 
                 if (inputValue.IsBlob())
                 {
-                    return PineValueInProcess.Create(KernelFunction.equal(inputValue.Evaluate()));
+                    return PineValueInProcess.Create(BuiltinFunction.equal(inputValue.Evaluate()));
                 }
 
                 if (inputValue.GetLength() < 2)
@@ -3195,10 +3195,10 @@ public class PineVM : IPineVM
                 return PineValueInProcess.KernelTrueValue;
             }
 
-            if (builtinExpr.Function is nameof(KernelFunction.head))
+            if (builtinExpr.Function is nameof(BuiltinFunction.head))
             {
                 if (builtinExpr.Input is Expression.KernelApplication innerBuiltinExpr &&
-                    innerBuiltinExpr.Function is nameof(KernelFunction.skip))
+                    innerBuiltinExpr.Function is nameof(BuiltinFunction.skip))
                 {
                     var skipInputValue = EvalDirect(innerBuiltinExpr.Input, envValue, ref performanceCounters);
 
@@ -3209,7 +3209,7 @@ public class PineVM : IPineVM
 
                     if (innerBuiltinExpr.Input is Expression.Literal skipCountLiteral)
                     {
-                        if (KernelFunction.SignedIntegerFromValueRelaxed(skipCountLiteral.Value) is { } skipCountValue)
+                        if (BuiltinFunction.SignedIntegerFromValueRelaxed(skipCountLiteral.Value) is { } skipCountValue)
                         {
                             skipCount = (int)skipCountValue;
                         }
@@ -3241,7 +3241,7 @@ public class PineVM : IPineVM
                 return inputValue.GetElementAt(0);
             }
 
-            if (builtinExpr.Function is nameof(KernelFunction.skip))
+            if (builtinExpr.Function is nameof(BuiltinFunction.skip))
             {
                 if (builtinExpr.Input is Expression.List skipListExpr &&
                     skipListExpr.Items.Count is 2)
@@ -3255,7 +3255,7 @@ public class PineVM : IPineVM
 
                     if (skipListExpr.Items[0] is Expression.Literal skipCountLiteral)
                     {
-                        if (KernelFunction.SignedIntegerFromValueRelaxed(skipCountLiteral.Value) is { } skipCountValue)
+                        if (BuiltinFunction.SignedIntegerFromValueRelaxed(skipCountLiteral.Value) is { } skipCountValue)
                         {
                             skipCount = (int)skipCountValue;
                         }
@@ -3283,7 +3283,7 @@ public class PineVM : IPineVM
                 }
             }
 
-            if (builtinExpr.Function is nameof(KernelFunction.take))
+            if (builtinExpr.Function is nameof(BuiltinFunction.take))
             {
                 if (builtinExpr.Input is Expression.List skipListExpr &&
                     skipListExpr.Items.Count is 2)
@@ -3297,7 +3297,7 @@ public class PineVM : IPineVM
 
                     if (skipListExpr.Items[0] is Expression.Literal takeCountLiteral)
                     {
-                        if (KernelFunction.SignedIntegerFromValueRelaxed(takeCountLiteral.Value) is { } takeCountValue)
+                        if (BuiltinFunction.SignedIntegerFromValueRelaxed(takeCountLiteral.Value) is { } takeCountValue)
                         {
                             takeCount = (int)takeCountValue;
                         }
@@ -3325,7 +3325,7 @@ public class PineVM : IPineVM
                 }
             }
 
-            if (builtinExpr.Function is nameof(KernelFunction.concat))
+            if (builtinExpr.Function is nameof(BuiltinFunction.concat))
             {
                 if (builtinExpr.Input is Expression.List concatList && concatList.Items.Count is 2)
                 {
@@ -3350,38 +3350,38 @@ public class PineVM : IPineVM
                 }
             }
 
-            if (builtinExpr.Function is nameof(KernelFunction.int_is_sorted_asc))
+            if (builtinExpr.Function is nameof(BuiltinFunction.int_is_sorted_asc))
             {
                 var inputValue = EvalDirect(builtinExpr.Input, envValue, ref performanceCounters);
 
                 if (inputValue is null)
                     return null;
 
-                var plainValue = KernelFunction.int_is_sorted_asc(inputValue.Evaluate());
+                var plainValue = BuiltinFunction.int_is_sorted_asc(inputValue.Evaluate());
 
                 return PineValueInProcess.Create(plainValue);
             }
 
-            if (builtinExpr.Function is nameof(KernelFunction.int_add))
+            if (builtinExpr.Function is nameof(BuiltinFunction.int_add))
             {
                 var inputValue = EvalDirect(builtinExpr.Input, envValue, ref performanceCounters);
 
                 if (inputValue is null)
                     return null;
 
-                var plainValue = KernelFunction.int_add(inputValue.Evaluate());
+                var plainValue = BuiltinFunction.int_add(inputValue.Evaluate());
 
                 return PineValueInProcess.Create(plainValue);
             }
 
-            if (builtinExpr.Function is nameof(KernelFunction.int_mul))
+            if (builtinExpr.Function is nameof(BuiltinFunction.int_mul))
             {
                 var inputValue = EvalDirect(builtinExpr.Input, envValue, ref performanceCounters);
 
                 if (inputValue is null)
                     return null;
 
-                var plainValue = KernelFunction.int_mul(inputValue.Evaluate());
+                var plainValue = BuiltinFunction.int_mul(inputValue.Evaluate());
 
                 return PineValueInProcess.Create(plainValue);
             }

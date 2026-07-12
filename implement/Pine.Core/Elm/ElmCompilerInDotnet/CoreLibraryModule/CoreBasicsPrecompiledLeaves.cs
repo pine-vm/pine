@@ -108,15 +108,15 @@ public static class CoreBasicsPrecompiledLeaves
             var numB = bTagArgs.ValueFromPathOrEmptyList([0]);
             var denomB = bTagArgs.ValueFromPathOrEmptyList([1]);
 
-            var leftProduct = KernelFunctionSpecialized.int_mul(numA, denomB);
-            var rightProduct = KernelFunctionSpecialized.int_mul(numB, denomA);
+            var leftProduct = BuiltinFunctionSpecialized.int_mul(numA, denomB);
+            var rightProduct = BuiltinFunctionSpecialized.int_mul(numB, denomA);
 
             if (leftProduct == rightProduct)
             {
                 return Tag_EQ_Value;
             }
 
-            if (KernelFunction.int_is_sorted_asc(PineValue.List([leftProduct, rightProduct])) ==
+            if (BuiltinFunction.int_is_sorted_asc(PineValue.List([leftProduct, rightProduct])) ==
                 PineKernelValues.TrueValue)
             {
                 return Tag_LT_Value;
@@ -132,14 +132,14 @@ public static class CoreBasicsPrecompiledLeaves
             var numA = aTagArgs.ValueFromPathOrEmptyList([0]);
             var denomA = aTagArgs.ValueFromPathOrEmptyList([1]);
 
-            var rightProduct = KernelFunctionSpecialized.int_mul(denomA, b);
+            var rightProduct = BuiltinFunctionSpecialized.int_mul(denomA, b);
 
             if (numA == rightProduct)
             {
                 return Tag_EQ_Value;
             }
 
-            if (KernelFunction.int_is_sorted_asc(PineValue.List([numA, rightProduct])) == PineKernelValues.TrueValue)
+            if (BuiltinFunction.int_is_sorted_asc(PineValue.List([numA, rightProduct])) == PineKernelValues.TrueValue)
             {
                 return Tag_LT_Value;
             }
@@ -154,14 +154,14 @@ public static class CoreBasicsPrecompiledLeaves
             var numB = bTagArgs.ValueFromPathOrEmptyList([0]);
             var denomB = bTagArgs.ValueFromPathOrEmptyList([1]);
 
-            var leftProduct = KernelFunctionSpecialized.int_mul(a, denomB);
+            var leftProduct = BuiltinFunctionSpecialized.int_mul(a, denomB);
 
             if (leftProduct == numB)
             {
                 return Tag_EQ_Value;
             }
 
-            if (KernelFunction.int_is_sorted_asc(PineValue.List([leftProduct, numB])) == PineKernelValues.TrueValue)
+            if (BuiltinFunction.int_is_sorted_asc(PineValue.List([leftProduct, numB])) == PineKernelValues.TrueValue)
             {
                 return Tag_LT_Value;
             }
@@ -174,7 +174,7 @@ public static class CoreBasicsPrecompiledLeaves
             return CompareLists(a, b);
         }
 
-        if (KernelFunction.int_is_sorted_asc(PineValue.List([a, b])) == PineKernelValues.TrueValue)
+        if (BuiltinFunction.int_is_sorted_asc(PineValue.List([a, b])) == PineKernelValues.TrueValue)
         {
             return Tag_LT_Value;
         }
@@ -287,7 +287,7 @@ public static class CoreBasicsPrecompiledLeaves
             ?
             Tag_EQ_Value
             :
-            KernelFunction.int_is_sorted_asc(PineValue.List([stringA, stringB])) == PineKernelValues.TrueValue
+            BuiltinFunction.int_is_sorted_asc(PineValue.List([stringA, stringB])) == PineKernelValues.TrueValue
             ?
             Tag_LT_Value
             :

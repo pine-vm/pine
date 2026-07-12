@@ -21,9 +21,9 @@ public class CodeAnalysisTestHelper
     {
         var usingDirectivesTypes = new[]
         {
-            typeof(KernelFunction),
-            typeof(KernelFunctionSpecialized),
-            typeof(KernelFunctionFused),
+            typeof(BuiltinFunction),
+            typeof(BuiltinFunctionSpecialized),
+            typeof(BuiltinFunctionFused),
             typeof(PineKernelValues),
             typeof(IReadOnlyDictionary<,>),
             typeof(IntegerEncoding),

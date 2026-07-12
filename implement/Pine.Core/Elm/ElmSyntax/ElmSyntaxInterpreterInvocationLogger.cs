@@ -77,7 +77,7 @@ public interface IInvocationLogger
 
     /// <summary>
     /// Called when an application is resolved to a built-in (<c>Pine_builtin</c> /
-    /// <c>Pine_kernel</c>) function and forwarded to <see cref="KernelFunction"/>.
+    /// <c>Pine_kernel</c>) function and forwarded to <see cref="BuiltinFunction"/>.
     /// </summary>
     void OnPineBuiltinInvocation(ElmSyntaxInterpreter.Application application);
 

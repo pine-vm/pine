@@ -2408,7 +2408,7 @@ public class CoreBasics
     {
         return
             Expression.KernelApplicationInstance(
-                function: nameof(KernelFunction.int_is_sorted_asc),
+                function: nameof(BuiltinFunction.int_is_sorted_asc),
                 input:
                 Expression.ListInstance(
                     [

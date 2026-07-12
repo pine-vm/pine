@@ -390,9 +390,9 @@ public class OptimizeAndEmitJsonEncodeTests
                     while (true)
                     {
                         PineValue local_000 =
-                            KernelFunctionFused.SkipAndTake(takeCount: 4, skipCountValue: local_param_2, argument: local_param_1);
+                            BuiltinFunctionFused.SkipAndTake(takeCount: 4, skipCountValue: local_param_2, argument: local_param_1);
 
-                        if (KernelFunctionSpecialized.length_as_int(local_000) == 0)
+                        if (BuiltinFunctionSpecialized.length_as_int(local_000) == 0)
                         {
                             return local_param_2;
                         }
@@ -407,14 +407,14 @@ public class OptimizeAndEmitJsonEncodeTests
                             return local_param_2;
                         }
 
-                        if (KernelFunctionSpecialized.int_is_sorted_asc(
+                        if (BuiltinFunctionSpecialized.int_is_sorted_asc(
                             32,
-                            KernelFunctionFused.BlobPrependByte(byteToPrepend: 4, suffix: local_000),
+                            BuiltinFunctionFused.BlobPrependByte(byteToPrepend: 4, suffix: local_000),
                             1_114_111) ==
                             PineKernelValues.TrueValue)
                         {
                             {
-                                PineValue local_param_2_temp = KernelFunctionSpecialized.int_add(4, local_param_2);
+                                PineValue local_param_2_temp = BuiltinFunctionSpecialized.int_add(4, local_param_2);
                                 local_param_2 = local_param_2_temp;
                             }
 
@@ -436,14 +436,14 @@ public class OptimizeAndEmitJsonEncodeTests
                         PineValue local_000 = Test.advanceUtf32OffsetForSimpleChars(local_param_3, local_param_1);
 
                         PineValue local_001 =
-                            KernelFunctionSpecialized.int_add(local_000, KernelFunctionSpecialized.int_mul(-1, local_param_1));
+                            BuiltinFunctionSpecialized.int_add(local_000, BuiltinFunctionSpecialized.int_mul(-1, local_param_1));
 
                         PineValue local_002 =
-                            KernelFunctionFused.SkipAndTake(takeCount: 4, skipCountValue: local_000, argument: local_param_3);
+                            BuiltinFunctionFused.SkipAndTake(takeCount: 4, skipCountValue: local_000, argument: local_param_3);
 
-                        PineValue local_004 = KernelFunction.ValueFromBool(local_001 == CommonReusedValues.Blob_Int_0);
+                        PineValue local_004 = BuiltinFunction.ValueFromBool(local_001 == CommonReusedValues.Blob_Int_0);
 
-                        if (KernelFunctionSpecialized.length_as_int(local_002) == 0)
+                        if (BuiltinFunctionSpecialized.length_as_int(local_002) == 0)
                         {
                             if (local_004 == PineKernelValues.TrueValue)
                             {
@@ -451,15 +451,15 @@ public class OptimizeAndEmitJsonEncodeTests
                             }
 
                             return
-                                KernelFunctionFused.ListAppendItem(
+                                BuiltinFunctionFused.ListAppendItem(
                                     prefix: local_param_2.Evaluate(),
-                                    itemToAppend: KernelFunctionFused.SkipAndTake(
+                                    itemToAppend: BuiltinFunctionFused.SkipAndTake(
                                         takeCountValue: local_001,
                                         skipCountValue: local_param_1,
                                         argument: local_param_3));
                         }
 
-                        PineValue local_007 = KernelFunctionSpecialized.int_add(4, local_000);
+                        PineValue local_007 = BuiltinFunctionSpecialized.int_add(4, local_000);
 
                         if (local_002 == CommonReusedValues.Blob_f063beda)
                         {
@@ -473,7 +473,7 @@ public class OptimizeAndEmitJsonEncodeTests
                                         ?
                                         PineValue.List(
                                             [
-                                            KernelFunctionFused.SkipAndTake(
+                                            BuiltinFunctionFused.SkipAndTake(
                                                 takeCountValue: local_001,
                                                 skipCountValue: local_param_1,
                                                 argument: local_param_3)
@@ -501,7 +501,7 @@ public class OptimizeAndEmitJsonEncodeTests
                                         ?
                                         PineValue.List(
                                             [
-                                            KernelFunctionFused.SkipAndTake(
+                                            BuiltinFunctionFused.SkipAndTake(
                                                 takeCountValue: local_001,
                                                 skipCountValue: local_param_1,
                                                 argument: local_param_3)
@@ -529,7 +529,7 @@ public class OptimizeAndEmitJsonEncodeTests
                                         ?
                                         PineValue.List(
                                             [
-                                            KernelFunctionFused.SkipAndTake(
+                                            BuiltinFunctionFused.SkipAndTake(
                                                 takeCountValue: local_001,
                                                 skipCountValue: local_param_1,
                                                 argument: local_param_3)
@@ -557,7 +557,7 @@ public class OptimizeAndEmitJsonEncodeTests
                                         ?
                                         PineValue.List(
                                             [
-                                            KernelFunctionFused.SkipAndTake(
+                                            BuiltinFunctionFused.SkipAndTake(
                                                 takeCountValue: local_001,
                                                 skipCountValue: local_param_1,
                                                 argument: local_param_3)
@@ -585,7 +585,7 @@ public class OptimizeAndEmitJsonEncodeTests
                                         ?
                                         PineValue.List(
                                             [
-                                            KernelFunctionFused.SkipAndTake(
+                                            BuiltinFunctionFused.SkipAndTake(
                                                 takeCountValue: local_001,
                                                 skipCountValue: local_param_1,
                                                 argument: local_param_3)
@@ -613,7 +613,7 @@ public class OptimizeAndEmitJsonEncodeTests
                                         ?
                                         PineValue.List(
                                             [
-                                            KernelFunctionFused.SkipAndTake(
+                                            BuiltinFunctionFused.SkipAndTake(
                                                 takeCountValue: local_001,
                                                 skipCountValue: local_param_1,
                                                 argument: local_param_3)
@@ -641,7 +641,7 @@ public class OptimizeAndEmitJsonEncodeTests
                                         ?
                                         PineValue.List(
                                             [
-                                            KernelFunctionFused.SkipAndTake(
+                                            BuiltinFunctionFused.SkipAndTake(
                                                 takeCountValue: local_001,
                                                 skipCountValue: local_param_1,
                                                 argument: local_param_3)
@@ -657,10 +657,10 @@ public class OptimizeAndEmitJsonEncodeTests
                             continue;
                         }
 
-                        PineValue local_009 = KernelFunctionFused.BlobPrependByte(byteToPrepend: 4, suffix: local_002);
+                        PineValue local_009 = BuiltinFunctionFused.BlobPrependByte(byteToPrepend: 4, suffix: local_002);
 
                         PineValue local_010 =
-                            KernelFunctionFused.CanonicalIntegerFromUnsigned(signIsPositive: true, unsignedValue: local_002);
+                            BuiltinFunctionFused.CanonicalIntegerFromUnsigned(signIsPositive: true, unsignedValue: local_002);
 
                         {
                             PineValue local_param_1_temp = local_007;
@@ -672,34 +672,35 @@ public class OptimizeAndEmitJsonEncodeTests
                                     ?
                                     PineValue.List(
                                         [
-                                        KernelFunctionFused.SkipAndTake(
+                                        BuiltinFunctionFused.SkipAndTake(
                                             takeCountValue: local_001,
                                             skipCountValue: local_param_1,
                                             argument: local_param_3)
                                         ])
                                     :
                                     PineValue.EmptyList,
-                                    KernelFunctionSpecialized.int_is_sorted_asc(0, local_010, 65_535) == PineKernelValues.TrueValue
+                                    BuiltinFunctionSpecialized.int_is_sorted_asc(0, local_010, 65_535) ==
+                                    PineKernelValues.TrueValue
                                     ?
-                                    KernelFunctionSpecialized.concat(CommonReusedValues.List_599c92a7, Test.hex4(local_010))
+                                    BuiltinFunctionSpecialized.concat(CommonReusedValues.List_599c92a7, Test.hex4(local_010))
                                     :
-                                    KernelFunction.concat(
+                                    BuiltinFunction.concat(
                                         PineValue.List(
                                             [
                                             CommonReusedValues.List_599c92a7,
                                             Test.hex4(
-                                                KernelFunctionSpecialized.int_add(
+                                                BuiltinFunctionSpecialized.int_add(
                                                     55_296,
-                                                    KernelFunctionSpecialized.bit_shift_right(
+                                                    BuiltinFunctionSpecialized.bit_shift_right(
                                                         10,
-                                                        KernelFunctionSpecialized.int_add(-65_536, local_009)))),
+                                                        BuiltinFunctionSpecialized.int_add(-65_536, local_009)))),
                                             CommonReusedValues.List_599c92a7,
                                             Test.hex4(
-                                                KernelFunctionSpecialized.int_add(
+                                                BuiltinFunctionSpecialized.int_add(
                                                     56_320,
-                                                    KernelFunctionSpecialized.bit_and(
+                                                    BuiltinFunctionSpecialized.bit_and(
                                                         IntegerEncoding.EncodeSignedInteger(1_023),
-                                                        KernelFunctionSpecialized.int_add(-65_536, local_009))))
+                                                        BuiltinFunctionSpecialized.int_add(-65_536, local_009))))
                                             ]))
                                     ]);
 
@@ -712,23 +713,23 @@ public class OptimizeAndEmitJsonEncodeTests
 
                 public static PineValue hex4(PineValue param_1)
                 {
-                    PineValue local_000 = KernelFunctionSpecialized.skip(1, param_1);
-                    PineValue local_001 = KernelFunctionSpecialized.bit_and(CommonReusedValues.Blob_2d8b523c, local_000);
+                    PineValue local_000 = BuiltinFunctionSpecialized.skip(1, param_1);
+                    PineValue local_001 = BuiltinFunctionSpecialized.bit_and(CommonReusedValues.Blob_2d8b523c, local_000);
 
                     PineValue local_002 =
-                        KernelFunctionSpecialized.bit_and(
+                        BuiltinFunctionSpecialized.bit_and(
                             CommonReusedValues.Blob_2d8b523c,
-                            KernelFunctionSpecialized.bit_shift_right(4, local_000));
+                            BuiltinFunctionSpecialized.bit_shift_right(4, local_000));
 
                     PineValue local_003 =
-                        KernelFunctionSpecialized.bit_and(
+                        BuiltinFunctionSpecialized.bit_and(
                             CommonReusedValues.Blob_2d8b523c,
-                            KernelFunctionSpecialized.bit_shift_right(8, local_000));
+                            BuiltinFunctionSpecialized.bit_shift_right(8, local_000));
 
                     PineValue local_004 =
-                        KernelFunctionSpecialized.bit_and(
+                        BuiltinFunctionSpecialized.bit_and(
                             CommonReusedValues.Blob_2d8b523c,
-                            KernelFunctionSpecialized.bit_shift_right(12, local_000));
+                            BuiltinFunctionSpecialized.bit_shift_right(12, local_000));
 
                     return
                         PineValue.List(
@@ -1081,7 +1082,6 @@ public class OptimizeAndEmitJsonEncodeTests
                     return CommonReusedValues.Blob_Char_question;
                 }
             }
-            
             """".Trim());
 
         moduleGlobalAnonymousText.Trim().Should().Be(

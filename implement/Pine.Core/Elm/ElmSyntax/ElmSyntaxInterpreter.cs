@@ -2159,7 +2159,7 @@ public partial class ElmSyntaxInterpreter
 
         /// <summary>
         /// Number of applications resolved by <see cref="PineBuiltinResolver(Application)"/>
-        /// (i.e. forwarded to <see cref="KernelFunction"/>).
+        /// (i.e. forwarded to <see cref="BuiltinFunction"/>).
         /// </summary>
         public long _pineBuiltinInvocationCount;
 
@@ -3884,7 +3884,7 @@ public partial class ElmSyntaxInterpreter
 
     /// <summary>
     /// Default <c>Pine_builtin</c> / <c>Pine_kernel</c> resolver: forwards applications whose
-    /// module name is <c>Pine_builtin</c> or <c>Pine_kernel</c> to <see cref="KernelFunction.ApplyKernelFunctionGeneric(string, PineValue)"/>.
+    /// module name is <c>Pine_builtin</c> or <c>Pine_kernel</c> to <see cref="BuiltinFunction.ApplyFunctionGeneric(string, PineValue)"/>.
     /// </summary>
     public static ApplicationResolution? PineBuiltinResolver(
         Application application) =>
@@ -3914,7 +3914,7 @@ public partial class ElmSyntaxInterpreter
 
     /// <summary>
     /// Resolver that forwards applications whose module name matches one of the supplied
-    /// <paramref name="pineBuiltinPseudoModuleNames"/> to <see cref="KernelFunction.ApplyKernelFunctionGeneric(string, PineValue)"/>.
+    /// <paramref name="pineBuiltinPseudoModuleNames"/> to <see cref="BuiltinFunction.ApplyFunctionGeneric(string, PineValue)"/>.
     /// Each Elm argument is encoded as a <see cref="PineValue"/> prior to the kernel invocation and the
     /// kernel's return value is decoded back to an <see cref="ElmValue"/>.
     /// </summary>
@@ -3957,22 +3957,22 @@ public partial class ElmSyntaxInterpreter
         string functionName,
         PineValueInProcess input)
     {
-        if (functionName is nameof(KernelFunction.concat))
+        if (functionName is nameof(BuiltinFunction.concat))
         {
             return PineValueInProcess.Concat(input);
         }
 
-        if (functionName is nameof(KernelFunction.reverse))
+        if (functionName is nameof(BuiltinFunction.reverse))
         {
             return PineValueInProcess.Reverse(input);
         }
 
-        if (functionName is nameof(KernelFunction.head))
+        if (functionName is nameof(BuiltinFunction.head))
         {
             return PineValueInProcess.Head(input);
         }
 
-        if (functionName is nameof(KernelFunction.skip))
+        if (functionName is nameof(BuiltinFunction.skip))
         {
             if (input.GetLength() is not 2)
             {
@@ -4008,7 +4008,7 @@ public partial class ElmSyntaxInterpreter
             return PineValueInProcess.Skip((int)count, source);
         }
 
-        if (functionName is nameof(KernelFunction.take))
+        if (functionName is nameof(BuiltinFunction.take))
         {
             if (input.GetLength() is not 2)
             {
@@ -4044,7 +4044,7 @@ public partial class ElmSyntaxInterpreter
             return PineValueInProcess.Take((int)count, source);
         }
 
-        var resultPine = KernelFunction.ApplyKernelFunctionGeneric(functionName, input.Evaluate());
+        var resultPine = BuiltinFunction.ApplyFunctionGeneric(functionName, input.Evaluate());
 
         return PineValueInProcess.Create(resultPine);
     }

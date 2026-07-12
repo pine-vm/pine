@@ -66,7 +66,7 @@ public class StaticExpressionInterpreter(
             var inputValue = Evaluate(kernelApp.Input, environment);
 
             return
-                KernelFunction.ApplyKernelFunctionGeneric(
+                BuiltinFunction.ApplyFunctionGeneric(
                     function: kernelApp.Function,
                     inputValue: inputValue);
         }

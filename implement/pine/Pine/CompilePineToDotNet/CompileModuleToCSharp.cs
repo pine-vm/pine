@@ -169,8 +169,8 @@ public static class CompileModuleToCSharp
                 SyntaxFactory.InvocationExpression(
                     SyntaxFactory.MemberAccessExpression(
                         SyntaxKind.SimpleMemberAccessExpression,
-                        SyntaxFactory.IdentifierName(nameof(KernelFunction)),
-                        SyntaxFactory.IdentifierName(nameof(KernelFunction.skip))))
+                        SyntaxFactory.IdentifierName(nameof(BuiltinFunction)),
+                        SyntaxFactory.IdentifierName(nameof(BuiltinFunction.skip))))
                 .WithArgumentList(
                     SyntaxFactory.ArgumentList(
                         SyntaxFactory.SeparatedList<ArgumentSyntax>(
@@ -187,8 +187,8 @@ public static class CompileModuleToCSharp
                 SyntaxFactory.InvocationExpression(
                     SyntaxFactory.MemberAccessExpression(
                         SyntaxKind.SimpleMemberAccessExpression,
-                        SyntaxFactory.IdentifierName(nameof(KernelFunction)),
-                        SyntaxFactory.IdentifierName(nameof(KernelFunction.head))))
+                        SyntaxFactory.IdentifierName(nameof(BuiltinFunction)),
+                        SyntaxFactory.IdentifierName(nameof(BuiltinFunction.head))))
                 .WithArgumentList(
                     SyntaxFactory.ArgumentList(
                         SyntaxFactory.SeparatedList<ArgumentSyntax>(
@@ -475,9 +475,9 @@ public static class CompileModuleToCSharp
                                     SyntaxFactory.MemberAccessExpression(
                                         SyntaxKind.SimpleMemberAccessExpression,
                                         SyntaxFactory.IdentifierName(
-                                            nameof(KernelFunction)),
+                                            nameof(BuiltinFunction)),
                                         SyntaxFactory.IdentifierName(
-                                            nameof(KernelFunction.SignedIntegerFromValueRelaxed))))
+                                            nameof(BuiltinFunction.SignedIntegerFromValueRelaxed))))
                                 .WithArgumentList(
                                     SyntaxFactory.ArgumentList(
                                         SyntaxFactory.SingletonSeparatedList(
@@ -574,8 +574,8 @@ public static class CompileModuleToCSharp
                 SyntaxFactory.InvocationExpression(
                     SyntaxFactory.MemberAccessExpression(
                         SyntaxKind.SimpleMemberAccessExpression,
-                        SyntaxFactory.IdentifierName(nameof(KernelFunction)),
-                        SyntaxFactory.IdentifierName(nameof(KernelFunction.skip))))
+                        SyntaxFactory.IdentifierName(nameof(BuiltinFunction)),
+                        SyntaxFactory.IdentifierName(nameof(BuiltinFunction.skip))))
                 .WithArgumentList(
                     SyntaxFactory.ArgumentList(
                         SyntaxFactory.SeparatedList<ArgumentSyntax>(
@@ -599,8 +599,8 @@ public static class CompileModuleToCSharp
                 SyntaxFactory.InvocationExpression(
                     SyntaxFactory.MemberAccessExpression(
                         SyntaxKind.SimpleMemberAccessExpression,
-                        SyntaxFactory.IdentifierName(nameof(KernelFunction)),
-                        SyntaxFactory.IdentifierName(nameof(KernelFunction.head))))
+                        SyntaxFactory.IdentifierName(nameof(BuiltinFunction)),
+                        SyntaxFactory.IdentifierName(nameof(BuiltinFunction.head))))
                 .WithArgumentList(
                     SyntaxFactory.ArgumentList(
                         SyntaxFactory.SingletonSeparatedList(

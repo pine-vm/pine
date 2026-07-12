@@ -20,18 +20,23 @@ The Pine expression model consists of seven kinds of expressions:
 
 ```Elm
 type Expression
+
     = LitralExpression Value
+
     | ListExpression (List Expression)
+
     | EvalExpression
         -- Encoded expression
         Expression
         -- Environment
         Expression
+
     | BuiltinExpression
         -- Built-in function name
-        String
+        BuiltinFunctionName
         -- Input value
         Expression
+
     | ConditionalExpression
         -- Condition
         Expression
@@ -39,7 +44,9 @@ type Expression
         Expression
         -- True Branch
         Expression
+
     | EnvironmentExpression
+
     | LabelExpression Value Expression
 ```
 

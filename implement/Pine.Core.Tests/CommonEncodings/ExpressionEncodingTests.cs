@@ -11,7 +11,7 @@ public class ExpressionEncodingTests
     {
         var expression =
             Expression.KernelApplicationInstance(
-                nameof(KernelFunction.length),
+                nameof(BuiltinFunction.length),
                 Expression.LiteralInstance(StringEncoding.ValueFromString("input")));
 
         ExpressionEncoding.EncodeExpressionAsValue(expression)
@@ -60,7 +60,7 @@ public class ExpressionEncodingTests
                     environment: Expression.LiteralInstance(StringEncoding.ValueFromString("environment"))),
 
                 Expression.KernelApplicationInstance(
-                    function: nameof(KernelFunction.length),
+                    function: nameof(BuiltinFunction.length),
                     input: Expression.LiteralInstance(StringEncoding.ValueFromString("kernel app arg"))),
 
                 new Expression.StringTag(
@@ -96,7 +96,7 @@ public class ExpressionEncodingTests
         {
             nested =
                 Expression.KernelApplicationInstance(
-                    function: nameof(KernelFunction.length),
+                    function: nameof(BuiltinFunction.length),
                     input: nested);
         }
 
@@ -115,7 +115,7 @@ public class ExpressionEncodingTests
         {
             var kernelApplication = current.Should().BeOfType<Expression.KernelApplication>().Subject;
 
-            kernelApplication.Function.Should().Be(nameof(KernelFunction.length));
+            kernelApplication.Function.Should().Be(nameof(BuiltinFunction.length));
 
             current = kernelApplication.Input;
         }
@@ -139,7 +139,7 @@ public class ExpressionEncodingTests
         {
             nested =
                 Expression.KernelApplicationInstance(
-                    function: nameof(KernelFunction.length),
+                    function: nameof(BuiltinFunction.length),
                     input: nested);
         }
 
@@ -160,7 +160,7 @@ public class ExpressionEncodingTests
         {
             var kernelApplication = current.Should().BeOfType<Expression.KernelApplication>().Subject;
 
-            kernelApplication.Function.Should().Be(nameof(KernelFunction.length));
+            kernelApplication.Function.Should().Be(nameof(BuiltinFunction.length));
 
             current = kernelApplication.Input;
         }

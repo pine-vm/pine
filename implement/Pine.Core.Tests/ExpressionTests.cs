@@ -115,31 +115,31 @@ public class ExpressionTests
                 Expression.EnvironmentInstance),
 
             Expression.KernelApplicationInstance(
-                nameof(KernelFunction.int_add),
+                nameof(BuiltinFunction.int_add),
                 Expression.KernelApplicationInstance(
-                    nameof(KernelFunction.int_mul),
+                    nameof(BuiltinFunction.int_mul),
                     Expression.LiteralInstance(PineValue.EmptyList))),
 
             Expression.ListInstance(
                 [
                 Expression.KernelApplicationInstance(
-                    nameof(KernelFunction.int_add),
+                    nameof(BuiltinFunction.int_add),
                     Expression.LiteralInstance(PineValue.EmptyList)),
 
                 Expression.KernelApplicationInstance(
-                    nameof(KernelFunction.int_add),
+                    nameof(BuiltinFunction.int_add),
                     Expression.LiteralInstance(PineValue.EmptyList)),
                 ]),
 
             Expression.ConditionalInstance(
                 Expression.KernelApplicationInstance(
-                    nameof(KernelFunction.int_add),
+                    nameof(BuiltinFunction.int_add),
                     Expression.LiteralInstance(PineValue.EmptyList)),
                 Expression.KernelApplicationInstance(
-                    nameof(KernelFunction.int_add),
+                    nameof(BuiltinFunction.int_add),
                     Expression.LiteralInstance(PineValue.EmptyList)),
                 Expression.KernelApplicationInstance(
-                    nameof(KernelFunction.int_add),
+                    nameof(BuiltinFunction.int_add),
                     Expression.LiteralInstance(PineValue.EmptyList))),
 
             ];

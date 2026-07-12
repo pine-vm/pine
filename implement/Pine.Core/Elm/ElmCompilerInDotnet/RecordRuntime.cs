@@ -81,7 +81,7 @@ public static class RecordRuntime
         // concat([tag], updatedFields)
         return
             Expression.KernelApplicationInstance(
-                nameof(KernelFunction.concat),
+                nameof(BuiltinFunction.concat),
                 Expression.ListInstance(
                     [
                     Expression.ListInstance([recordTagExpr]),
@@ -159,7 +159,7 @@ public static class RecordRuntime
         // recurse with [self, newUpdates, newProcessed, restRemaining]
         var processedWithUpdate =
             Expression.KernelApplicationInstance(
-                nameof(KernelFunction.concat),
+                nameof(BuiltinFunction.concat),
                 Expression.ListInstance(
                     [
                     processedExpr,
@@ -184,7 +184,7 @@ public static class RecordRuntime
         // recurse with [self, updates, newProcessed, restRemaining]
         var processedWithOriginal =
             Expression.KernelApplicationInstance(
-                nameof(KernelFunction.concat),
+                nameof(BuiltinFunction.concat),
                 Expression.ListInstance(
                     [
                     processedExpr,

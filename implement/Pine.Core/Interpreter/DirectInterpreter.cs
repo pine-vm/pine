@@ -183,10 +183,10 @@ public class DirectInterpreter(
         PineValue environment,
         Expression.KernelApplication application)
     {
-        if (application.Function is nameof(KernelFunction.head) &&
+        if (application.Function is nameof(BuiltinFunction.head) &&
             application.Input is Expression.KernelApplication innerKernelApplication)
         {
-            if (innerKernelApplication.Function is nameof(KernelFunction.skip) &&
+            if (innerKernelApplication.Function is nameof(BuiltinFunction.skip) &&
                 innerKernelApplication.Input is Expression.List skipListExpr &&
                 skipListExpr.Items.Count is 2)
             {
@@ -195,7 +195,7 @@ public class DirectInterpreter(
                         skipListExpr.Items[0],
                         environment);
 
-                if (KernelFunction.SignedIntegerFromValueRelaxed(skipValue) is { } skipCount)
+                if (BuiltinFunction.SignedIntegerFromValueRelaxed(skipValue) is { } skipCount)
                 {
                     if (EvaluateExpressionDefault(
                         skipListExpr.Items[1],
@@ -231,7 +231,7 @@ public class DirectInterpreter(
             EvaluateExpressionDefault(application.Input, environment);
 
         return
-            KernelFunction.ApplyKernelFunctionGeneric(
+            BuiltinFunction.ApplyFunctionGeneric(
                 function: application.Function,
                 inputValue: inputValue);
     }

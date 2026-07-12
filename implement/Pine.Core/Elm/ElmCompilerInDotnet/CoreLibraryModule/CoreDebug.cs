@@ -209,7 +209,7 @@ public static class CoreDebug
 
         var hasListItems =
             Expression.KernelApplicationInstance(
-                nameof(KernelFunction.int_is_sorted_asc),
+                nameof(BuiltinFunction.int_is_sorted_asc),
                 Expression.ListInstance(
                     [
                     LiteralInt(1),
@@ -244,7 +244,7 @@ public static class CoreDebug
 
         var blobHasIntegerLength =
             Expression.KernelApplicationInstance(
-                nameof(KernelFunction.int_is_sorted_asc),
+                nameof(BuiltinFunction.int_is_sorted_asc),
                 Expression.ListInstance([LiteralInt(2), blobLength]));
 
         var blobSign =

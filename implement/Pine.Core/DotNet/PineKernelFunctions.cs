@@ -68,10 +68,10 @@ public class PineKernelFunctions
     private static FrozenDictionary<string, KernelFunctionInfo> ReadKernelFunctionsInfoViaReflection()
     {
         var kernelFunctionContainerType =
-            typeof(KernelFunction);
+            typeof(BuiltinFunction);
 
         var kernelFunctionSpecializedContainerType =
-            typeof(Internal.KernelFunctionSpecialized);
+            typeof(Internal.BuiltinFunctionSpecialized);
 
         var genericMethodsInfos =
             kernelFunctionContainerType.GetMethods(BindingFlags.Static | BindingFlags.Public);

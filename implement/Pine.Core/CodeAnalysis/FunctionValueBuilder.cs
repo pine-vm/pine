@@ -533,7 +533,7 @@ public static class FunctionValueBuilder
 
     private static Expression.KernelApplication BuiltinAppConcatBinary(Expression left, Expression right) =>
         Expression.KernelApplicationInstance(
-            function: nameof(KernelFunction.concat),
+            function: nameof(BuiltinFunction.concat),
             input: Expression.ListInstance([left, right]));
 
     #region FromEncodedBody variants

@@ -232,7 +232,7 @@ public class ExpressionEncoding2026Tests
         Expression nested = s_literal;
 
         for (var i = 0; i < depth; ++i)
-            nested = Expression.KernelApplicationInstance(nameof(KernelFunction.length), nested);
+            nested = Expression.KernelApplicationInstance(nameof(BuiltinFunction.length), nested);
 
         var encoded = ExpressionEncoding2026.EncodeExpressionAsValue(nested);
         var decoded =
@@ -245,7 +245,7 @@ public class ExpressionEncoding2026Tests
         {
             var builtin = current.Should().BeOfType<Expression.KernelApplication>().Subject;
 
-            builtin.Function.Should().Be(nameof(KernelFunction.length));
+            builtin.Function.Should().Be(nameof(BuiltinFunction.length));
             current = builtin.Input;
         }
 

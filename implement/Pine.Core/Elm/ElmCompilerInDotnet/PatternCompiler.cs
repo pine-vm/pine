@@ -1028,7 +1028,7 @@ public class PatternCompiler
                 BuiltinHelpers.ApplyBuiltinEqualBinary(
                     BuiltinHelpers.ApplyBuiltinLength(scrutinee),
                     Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(0))),
-                Expression.LiteralInstance(KernelFunction.ValueFromBool(false))),
+                Expression.LiteralInstance(BuiltinFunction.ValueFromBool(false))),
 
             PatternCondition.ItemCondition itemCondition =>
             CompileConditionToExpression(itemCondition.SubCondition, itemCondition.Accessor(scrutinee)),
@@ -1065,7 +1065,7 @@ public class PatternCompiler
                     Expression.ConditionalInstance(
                         condition: conditionExpr,
                         trueBranch: result,
-                        falseBranch: Expression.LiteralInstance(KernelFunction.ValueFromBool(false)));
+                        falseBranch: Expression.LiteralInstance(BuiltinFunction.ValueFromBool(false)));
             }
         }
 

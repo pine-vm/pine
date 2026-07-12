@@ -52,9 +52,10 @@ public class OptimizeAndEmitStringTrimTests
                             CommonReusedValues.Blob_Str_String,
                             PineValue.List(
                                 [
-                                KernelFunctionFused.TakeAndSkip(
+                                BuiltinFunctionFused.TakeAndSkip(
                                     skipCountValue: String.trimLeftCountBytesTrimmed(CommonReusedValues.Blob_Int_0, local_000),
-                                    takeCountValue: String.trimRightCountBytesRemaining(KernelFunction.length(local_000), local_000),
+                                    takeCountValue:
+                                    String.trimRightCountBytesRemaining(BuiltinFunction.length(local_000), local_000),
                                     argument: local_000)
                                 ])
                             ]);
@@ -68,9 +69,9 @@ public class OptimizeAndEmitStringTrimTests
                     while (true)
                     {
                         PineValue local_000 =
-                            KernelFunctionFused.SkipAndTake(takeCount: 4, skipCountValue: local_param_1, argument: local_param_2);
+                            BuiltinFunctionFused.SkipAndTake(takeCount: 4, skipCountValue: local_param_1, argument: local_param_2);
 
-                        if (KernelFunctionSpecialized.length_as_int(local_000) == 0)
+                        if (BuiltinFunctionSpecialized.length_as_int(local_000) == 0)
                         {
                             return local_param_1;
                         }
@@ -94,7 +95,7 @@ public class OptimizeAndEmitStringTrimTests
                         (local_000 == CommonReusedValues.Blob_Char_nobreakspace ? true : false)))))
                         {
                             {
-                                PineValue local_param_1_temp = KernelFunctionSpecialized.int_add(4, local_param_1);
+                                PineValue local_param_1_temp = BuiltinFunctionSpecialized.int_add(4, local_param_1);
                                 local_param_1 = local_param_1_temp;
                             }
 
@@ -117,10 +118,10 @@ public class OptimizeAndEmitStringTrimTests
                             return CommonReusedValues.Blob_Int_0;
                         }
 
-                        PineValue local_000 = KernelFunctionSpecialized.int_add(-4, local_param_1);
+                        PineValue local_000 = BuiltinFunctionSpecialized.int_add(-4, local_param_1);
 
                         PineValue local_001 =
-                            KernelFunctionFused.SkipAndTake(takeCount: 4, skipCountValue: local_000, argument: local_param_2);
+                            BuiltinFunctionFused.SkipAndTake(takeCount: 4, skipCountValue: local_000, argument: local_param_2);
 
                         if (local_001 == CommonReusedValues.Blob_Char_space
                         ?

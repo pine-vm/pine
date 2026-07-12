@@ -16,7 +16,7 @@ public class ImmutableConcatBuilderTests
         var builder = ImmutableConcatBuilder.Create(items);
 
         var result = builder.Evaluate();
-        var expected = KernelFunction.concat(PineValue.List(items));
+        var expected = BuiltinFunction.concat(PineValue.List(items));
 
         result.Should().Be(expected);
         builder.AggregateItemsCount.Should().Be(0);
@@ -30,7 +30,7 @@ public class ImmutableConcatBuilderTests
         var builder = ImmutableConcatBuilder.Create(items);
 
         var result = builder.Evaluate();
-        var expected = KernelFunction.concat(PineValue.List(items));
+        var expected = BuiltinFunction.concat(PineValue.List(items));
 
         result.Should().Be(expected);
         builder.AggregateItemsCount.Should().Be(1);
@@ -47,7 +47,7 @@ public class ImmutableConcatBuilderTests
         var builder = ImmutableConcatBuilder.Create(items);
 
         var result = builder.Evaluate();
-        var expected = KernelFunction.concat(PineValue.List(items));
+        var expected = BuiltinFunction.concat(PineValue.List(items));
 
         result.Should().Be(expected);
         builder.AggregateItemsCount.Should().Be(3);
@@ -64,7 +64,7 @@ public class ImmutableConcatBuilderTests
             .AppendItem(list2);
 
         var result = builder.Evaluate();
-        var expected = KernelFunction.concat(PineValue.List([list1, list2]));
+        var expected = BuiltinFunction.concat(PineValue.List([list1, list2]));
 
         result.Should().Be(expected);
         builder.AggregateItemsCount.Should().Be(2);
@@ -82,7 +82,7 @@ public class ImmutableConcatBuilderTests
             .AppendItems([list2, list3]);
 
         var result = builder.Evaluate();
-        var expected = KernelFunction.concat(PineValue.List([list1, list2, list3]));
+        var expected = BuiltinFunction.concat(PineValue.List([list1, list2, list3]));
 
         result.Should().Be(expected);
         builder.AggregateItemsCount.Should().Be(3);
@@ -98,7 +98,7 @@ public class ImmutableConcatBuilderTests
             .AppendItems([]);
 
         var result = builder.Evaluate();
-        var expected = KernelFunction.concat(PineValue.List([list1]));
+        var expected = BuiltinFunction.concat(PineValue.List([list1]));
 
         result.Should().Be(expected);
         builder.AggregateItemsCount.Should().Be(1);
@@ -115,7 +115,7 @@ public class ImmutableConcatBuilderTests
             .PrependItem(list2);
 
         var result = builder.Evaluate();
-        var expected = KernelFunction.concat(PineValue.List([list2, list1]));
+        var expected = BuiltinFunction.concat(PineValue.List([list2, list1]));
 
         result.Should().Be(expected);
         builder.AggregateItemsCount.Should().Be(2);
@@ -133,7 +133,7 @@ public class ImmutableConcatBuilderTests
             .PrependItems([list2, list3]);
 
         var result = builder.Evaluate();
-        var expected = KernelFunction.concat(PineValue.List([list2, list3, list1]));
+        var expected = BuiltinFunction.concat(PineValue.List([list2, list3, list1]));
 
         result.Should().Be(expected);
         builder.AggregateItemsCount.Should().Be(3);
@@ -149,7 +149,7 @@ public class ImmutableConcatBuilderTests
             .PrependItems([]);
 
         var result = builder.Evaluate();
-        var expected = KernelFunction.concat(PineValue.List([list1]));
+        var expected = BuiltinFunction.concat(PineValue.List([list1]));
 
         result.Should().Be(expected);
         builder.AggregateItemsCount.Should().Be(1);
@@ -170,7 +170,7 @@ public class ImmutableConcatBuilderTests
             .AppendItem(list4);
 
         var result = builder.Evaluate();
-        var expected = KernelFunction.concat(PineValue.List([list1, list2, list3, list4]));
+        var expected = BuiltinFunction.concat(PineValue.List([list1, list2, list3, list4]));
 
         result.Should().Be(expected);
         builder.AggregateItemsCount.Should().Be(4);
@@ -191,7 +191,7 @@ public class ImmutableConcatBuilderTests
             .PrependItem(list4);
 
         var result = builder.Evaluate();
-        var expected = KernelFunction.concat(PineValue.List([list4, list3, list2, list1]));
+        var expected = BuiltinFunction.concat(PineValue.List([list4, list3, list2, list1]));
 
         result.Should().Be(expected);
         builder.AggregateItemsCount.Should().Be(4);
@@ -214,7 +214,7 @@ public class ImmutableConcatBuilderTests
             .AppendItem(list5);
 
         var result = builder.Evaluate();
-        var expected = KernelFunction.concat(PineValue.List([list4, list2, list1, list3, list5]));
+        var expected = BuiltinFunction.concat(PineValue.List([list4, list2, list1, list3, list5]));
 
         result.Should().Be(expected);
         builder.AggregateItemsCount.Should().Be(5);
@@ -232,8 +232,8 @@ public class ImmutableConcatBuilderTests
         var originalResult = original.Evaluate();
         var modifiedResult = modified.Evaluate();
 
-        var originalExpected = KernelFunction.concat(PineValue.List([list1]));
-        var modifiedExpected = KernelFunction.concat(PineValue.List([list1, list2]));
+        var originalExpected = BuiltinFunction.concat(PineValue.List([list1]));
+        var modifiedExpected = BuiltinFunction.concat(PineValue.List([list1, list2]));
 
         originalResult.Should().Be(originalExpected);
         modifiedResult.Should().Be(modifiedExpected);
@@ -253,8 +253,8 @@ public class ImmutableConcatBuilderTests
         var originalResult = original.Evaluate();
         var modifiedResult = modified.Evaluate();
 
-        var originalExpected = KernelFunction.concat(PineValue.List([list1]));
-        var modifiedExpected = KernelFunction.concat(PineValue.List([list2, list1]));
+        var originalExpected = BuiltinFunction.concat(PineValue.List([list1]));
+        var modifiedExpected = BuiltinFunction.concat(PineValue.List([list2, list1]));
 
         originalResult.Should().Be(originalExpected);
         modifiedResult.Should().Be(modifiedExpected);
@@ -276,7 +276,7 @@ public class ImmutableConcatBuilderTests
         }
 
         var result = builder.Evaluate();
-        var expected = KernelFunction.concat(PineValue.List([.. items]));
+        var expected = BuiltinFunction.concat(PineValue.List([.. items]));
 
         result.Should().Be(expected);
         builder.AggregateItemsCount.Should().Be(1000);
@@ -298,7 +298,7 @@ public class ImmutableConcatBuilderTests
         }
 
         var result = builder.Evaluate();
-        var expected = KernelFunction.concat(PineValue.List([.. items]));
+        var expected = BuiltinFunction.concat(PineValue.List([.. items]));
 
         result.Should().Be(expected);
         builder.AggregateItemsCount.Should().Be(10);
@@ -316,7 +316,7 @@ public class ImmutableConcatBuilderTests
         var leaf = new ImmutableConcatBuilder.Leaf(items);
 
         var result = leaf.Evaluate();
-        var expected = KernelFunction.concat(PineValue.List(items));
+        var expected = BuiltinFunction.concat(PineValue.List(items));
 
         result.Should().Be(expected);
         leaf.AggregateItemsCount.Should().Be(5);
@@ -331,7 +331,7 @@ public class ImmutableConcatBuilderTests
 
         var result = node.Evaluate();
         PineValue[] items = [item];
-        var expected = KernelFunction.concat(PineValue.List(items));
+        var expected = BuiltinFunction.concat(PineValue.List(items));
 
         result.Should().Be(expected);
         node.AggregateItemsCount.Should().Be(1);
@@ -353,7 +353,7 @@ public class ImmutableConcatBuilderTests
         var node = new ImmutableConcatBuilder.Node([leaf1, leaf2]);
 
         var result = node.Evaluate();
-        var expected = KernelFunction.concat(PineValue.List(items));
+        var expected = BuiltinFunction.concat(PineValue.List(items));
 
         result.Should().Be(expected);
         node.AggregateItemsCount.Should().Be(4);
@@ -377,7 +377,7 @@ public class ImmutableConcatBuilderTests
         var node2 = new ImmutableConcatBuilder.Node([node1, leaf3]);
 
         var result = node2.Evaluate();
-        var expected = KernelFunction.concat(PineValue.List(items));
+        var expected = BuiltinFunction.concat(PineValue.List(items));
 
         result.Should().Be(expected);
         node2.AggregateItemsCount.Should().Be(3);
@@ -389,7 +389,7 @@ public class ImmutableConcatBuilderTests
         var leaf = new ImmutableConcatBuilder.Leaf((PineValue[])[]);
 
         var result = leaf.Evaluate();
-        var expected = KernelFunction.concat(PineValue.EmptyList);
+        var expected = BuiltinFunction.concat(PineValue.EmptyList);
 
         result.Should().Be(expected);
         leaf.AggregateItemsCount.Should().Be(0);
@@ -404,7 +404,7 @@ public class ImmutableConcatBuilderTests
         var builder = ImmutableConcatBuilder.Create([list1, list2]);
 
         var result = builder.Evaluate();
-        var expected = KernelFunction.concat(PineValue.List([list1, list2]));
+        var expected = BuiltinFunction.concat(PineValue.List([list1, list2]));
 
         result.Should().Be(expected);
         builder.AggregateItemsCount.Should().Be(2);
@@ -440,7 +440,7 @@ public class ImmutableConcatBuilderTests
 
         // Build the expected list by concatenating all items in the correct order
         PineValue[] allItems = [.. toPrepend.Concat(initial).Concat(toAppend)];
-        var expected = KernelFunction.concat(PineValue.List(allItems));
+        var expected = BuiltinFunction.concat(PineValue.List(allItems));
 
         result.Should().Be(expected);
         builder.AggregateItemsCount.Should().Be(30);
@@ -457,7 +457,7 @@ public class ImmutableConcatBuilderTests
         var builder = ImmutableConcatBuilder.Create(items);
 
         var result = builder.Evaluate();
-        var expected = KernelFunction.concat(PineValue.List(items));
+        var expected = BuiltinFunction.concat(PineValue.List(items));
 
         result.Should().Be(expected);
         builder.AggregateItemsCount.Should().Be(3);
@@ -472,7 +472,7 @@ public class ImmutableConcatBuilderTests
         var builder = ImmutableConcatBuilder.Create(items);
 
         var result = builder.Evaluate();
-        var expected = KernelFunction.concat(PineValue.List(items));
+        var expected = BuiltinFunction.concat(PineValue.List(items));
 
         result.Should().Be(expected);
         builder.AggregateItemsCount.Should().Be(1);
@@ -485,7 +485,7 @@ public class ImmutableConcatBuilderTests
         var builder = ImmutableConcatBuilder.Create([item]);
 
         var result = builder.EvaluateReverse();
-        var expected = KernelFunction.concat(PineValue.List([item]));
+        var expected = BuiltinFunction.concat(PineValue.List([item]));
 
         result.Should().Be(expected);
     }
@@ -502,7 +502,7 @@ public class ImmutableConcatBuilderTests
 
         var result = builder.EvaluateReverse();
 
-        var expected = KernelFunction.concat(PineValue.List([list3, list2, list1]));
+        var expected = BuiltinFunction.concat(PineValue.List([list3, list2, list1]));
 
         result.Should().Be(expected);
     }
@@ -521,7 +521,7 @@ public class ImmutableConcatBuilderTests
 
         var result = builder.EvaluateReverse();
 
-        var expected = KernelFunction.concat(PineValue.List([list3, list2, list1]));
+        var expected = BuiltinFunction.concat(PineValue.List([list3, list2, list1]));
 
         result.Should().Be(expected);
     }
@@ -539,7 +539,7 @@ public class ImmutableConcatBuilderTests
             .PrependItem(list3);
 
         var result = builder.EvaluateReverse();
-        var expected = KernelFunction.concat(PineValue.List([list1, list2, list3]));
+        var expected = BuiltinFunction.concat(PineValue.List([list1, list2, list3]));
 
         result.Should().Be(expected);
     }
@@ -557,7 +557,7 @@ public class ImmutableConcatBuilderTests
             .AppendItem(list3);
 
         var result = builder.EvaluateReverse();
-        var expected = KernelFunction.concat(PineValue.List([list3, list1, list2]));
+        var expected = BuiltinFunction.concat(PineValue.List([list3, list1, list2]));
 
         result.Should().Be(expected);
     }
@@ -568,7 +568,7 @@ public class ImmutableConcatBuilderTests
         var builder = ImmutableConcatBuilder.Create([]);
 
         var result = builder.EvaluateReverse();
-        var expected = KernelFunction.concat(PineValue.EmptyList);
+        var expected = BuiltinFunction.concat(PineValue.EmptyList);
 
         result.Should().Be(expected);
     }
@@ -586,7 +586,7 @@ public class ImmutableConcatBuilderTests
             .AppendItems([list3, list4]);
 
         var result = builder.EvaluateReverse();
-        var expected = KernelFunction.concat(PineValue.List([list4, list3, list2, list1]));
+        var expected = BuiltinFunction.concat(PineValue.List([list4, list3, list2, list1]));
 
         result.Should().Be(expected);
     }
@@ -605,7 +605,7 @@ public class ImmutableConcatBuilderTests
 
         var evaluateReverse = builder.EvaluateReverse();
         var evaluate = builder.Evaluate();
-        var reverseOfEvaluate = KernelFunction.reverse(evaluate);
+        var reverseOfEvaluate = BuiltinFunction.reverse(evaluate);
 
         evaluateReverse.Should().Be(reverseOfEvaluate);
     }
@@ -778,7 +778,7 @@ public class ImmutableConcatBuilderTests
             .Select(i => PineValue.List([PineValue.Blob([(byte)i])]))
             ];
 
-        var expected = KernelFunction.concat(PineValue.List(expectedItems));
+        var expected = BuiltinFunction.concat(PineValue.List(expectedItems));
 
         result.Should().Be(expected);
         builder.AggregateItemsCount.Should().Be(10);
@@ -810,7 +810,7 @@ public class ImmutableConcatBuilderTests
             .Select(i => PineValue.List([PineValue.Blob([(byte)i])]))
             ];
 
-        var expected = KernelFunction.concat(PineValue.List(expectedItems));
+        var expected = BuiltinFunction.concat(PineValue.List(expectedItems));
 
         result.Should().Be(expected);
         builder.AggregateItemsCount.Should().Be(10);
@@ -844,7 +844,7 @@ public class ImmutableConcatBuilderTests
             .Select(i => PineValue.List([PineValue.Blob([(byte)i])]))
             ];
 
-        var expected = KernelFunction.concat(PineValue.List(expectedItems));
+        var expected = BuiltinFunction.concat(PineValue.List(expectedItems));
 
         result.Should().Be(expected);
         newBuilder.AggregateItemsCount.Should().Be(33);
@@ -874,10 +874,10 @@ public class ImmutableConcatBuilderTests
             .AppendItem(list3);
 
         var referenceStep_0 =
-            KernelFunction.concat(PineValue.List(largeItems));
+            BuiltinFunction.concat(PineValue.List(largeItems));
 
         var referenceStep_1 =
-            KernelFunction.concat(
+            BuiltinFunction.concat(
                 PineValue.List(
                     [
                     referenceStep_0,
@@ -886,7 +886,7 @@ public class ImmutableConcatBuilderTests
                     ]));
 
         var expected =
-            KernelFunction.concat(
+            BuiltinFunction.concat(
                 PineValue.List(
                     [
                     referenceStep_1,
@@ -927,13 +927,13 @@ public class ImmutableConcatBuilderTests
         var result = builder.Evaluate();
 
         var reference_step_0 =
-            KernelFunction.concat(
+            BuiltinFunction.concat(
                 PineValue.List(
                     [
                     ]));
 
         var reference_step_1 =
-            KernelFunction.concat(
+            BuiltinFunction.concat(
                 PineValue.List(
                     [
                     reference_step_0,
@@ -941,7 +941,7 @@ public class ImmutableConcatBuilderTests
                     ]));
 
         var reference_step_2 =
-            KernelFunction.concat(
+            BuiltinFunction.concat(
                 PineValue.List(
                     [
                     reference_step_1,
@@ -949,7 +949,7 @@ public class ImmutableConcatBuilderTests
                     ]));
 
         var reference_step_3 =
-            KernelFunction.concat(
+            BuiltinFunction.concat(
                 PineValue.List(
                     [
                     reference_step_2,
@@ -957,7 +957,7 @@ public class ImmutableConcatBuilderTests
                     ]));
 
         var expected =
-            KernelFunction.concat(
+            BuiltinFunction.concat(
                 PineValue.List(
                     [
                     reference_step_3,
@@ -1001,7 +1001,7 @@ public class ImmutableConcatBuilderTests
         var builder = ImmutableConcatBuilder.Create([blob1]).AppendItem(list1);
 
         var result = builder.Evaluate();
-        var expected = KernelFunction.concat(PineValue.List([blob1, list1]));
+        var expected = BuiltinFunction.concat(PineValue.List([blob1, list1]));
 
         result.Should().Be(expected);
 
@@ -1023,7 +1023,7 @@ public class ImmutableConcatBuilderTests
         var builder = ImmutableConcatBuilder.Create([list1]).AppendItem(blob1);
 
         var result = builder.Evaluate();
-        var expected = KernelFunction.concat(PineValue.List([list1, blob1]));
+        var expected = BuiltinFunction.concat(PineValue.List([list1, blob1]));
 
         result.Should().Be(expected);
 
@@ -1048,7 +1048,7 @@ public class ImmutableConcatBuilderTests
             .AppendItem(blob2);
 
         var result = builder.Evaluate();
-        var expected = KernelFunction.concat(PineValue.List([blob1, emptyList, blob2]));
+        var expected = BuiltinFunction.concat(PineValue.List([blob1, emptyList, blob2]));
 
         result.Should().Be(expected);
         VerifyConsistencyOfDerivedProperties(builder);
@@ -1064,7 +1064,7 @@ public class ImmutableConcatBuilderTests
 
         (isList != isBlob).Should().BeTrue();
 
-        predictedLength.Should().Be(KernelFunctionSpecialized.length_as_int(evaluated));
+        predictedLength.Should().Be(BuiltinFunctionSpecialized.length_as_int(evaluated));
 
         // Verify the type checks match the evaluated result
         (evaluated is PineValue.ListValue).Should().Be(isList);

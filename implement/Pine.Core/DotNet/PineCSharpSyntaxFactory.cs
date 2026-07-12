@@ -242,7 +242,7 @@ public static class PineCSharpSyntaxFactory
         ExpressionSyntax expressionSyntax,
         DeclarationSyntaxContext declarationSyntaxContext) =>
         InvocationExpressionOnPineVMKernelFunctionClass(
-            nameof(KernelFunction.ValueFromBool),
+            nameof(BuiltinFunction.ValueFromBool),
             declarationSyntaxContext)
         .WithArgumentList(
             SyntaxFactory.ArgumentList(
@@ -255,7 +255,7 @@ public static class PineCSharpSyntaxFactory
         SyntaxFactory.InvocationExpression(
             SyntaxFactory.MemberAccessExpression(
                 SyntaxKind.SimpleMemberAccessExpression,
-                CompileTypeSyntax.TypeSyntaxFromType(typeof(KernelFunction), declarationSyntaxContext),
+                CompileTypeSyntax.TypeSyntaxFromType(typeof(BuiltinFunction), declarationSyntaxContext),
                 SyntaxFactory.IdentifierName(memberIdentifierName)));
 
     /// <summary>

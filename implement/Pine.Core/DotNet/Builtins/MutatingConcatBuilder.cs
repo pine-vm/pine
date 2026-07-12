@@ -3,7 +3,7 @@ using System.Collections.Generic;
 namespace Pine.Core.DotNet.Builtins;
 
 /// <summary>
-/// Tracks a sequence of <see cref="KernelFunction.concat"/> applications to enable evaluation at a later time.
+/// Tracks a sequence of <see cref="BuiltinFunction.concat"/> applications to enable evaluation at a later time.
 /// This mutating variant offers cheaper appending on average, compared to <see cref="ImmutableConcatBuilder"/>.
 /// Use this variant only when you can guarantee single-owner append-only usage until evaluation.
 /// </summary>
@@ -63,11 +63,11 @@ public class MutatingConcatBuilder
     }
 
     /// <summary>
-    /// Evaluates this builder into a single <see cref="PineValue"/> by applying all <see cref="KernelFunction.concat"/> operations."/>
+    /// Evaluates this builder into a single <see cref="PineValue"/> by applying all <see cref="BuiltinFunction.concat"/> operations."/>
     /// </summary>
     public PineValue Evaluate()
     {
-        return Internal.KernelFunctionSpecialized.concat(_values.ToArray());
+        return Internal.BuiltinFunctionSpecialized.concat(_values.ToArray());
     }
 
     /// <inheritdoc/>

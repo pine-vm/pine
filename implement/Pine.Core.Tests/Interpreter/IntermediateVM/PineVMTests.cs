@@ -58,7 +58,7 @@ public class PineVMTests
 
                             Expression.KernelApplicationInstance
                             (
-                                function: nameof(KernelFunction.head),
+                                function: nameof(BuiltinFunction.head),
                                 input: Expression.EnvironmentInstance),
 
                             new Expression.ParseAndEval(
@@ -67,7 +67,7 @@ public class PineVMTests
                                     ExpressionEncoding.EncodeExpressionAsValue(
                                         Expression.KernelApplicationInstance
                                         (
-                                            function: nameof(KernelFunction.head),
+                                            function: nameof(BuiltinFunction.head),
                                             input: Expression.EnvironmentInstance))),
                                 environment:
                                 Expression.KernelApplicationInstance
@@ -129,7 +129,7 @@ public class PineVMTests
                             encoded:
                             Expression.KernelApplicationInstance
                             (
-                                function: nameof(KernelFunction.head),
+                                function: nameof(BuiltinFunction.head),
                                 input:
                                 Expression.KernelApplicationInstance
                                 (
@@ -153,7 +153,7 @@ public class PineVMTests
                         ExpressionEncoding.EncodeExpressionAsValue(
                             Expression.KernelApplicationInstance
                             (
-                                function: nameof(KernelFunction.head),
+                                function: nameof(BuiltinFunction.head),
                                 input: Expression.EnvironmentInstance))
                         ]),
 
@@ -174,7 +174,7 @@ public class PineVMTests
                             encoded:
                             Expression.KernelApplicationInstance
                             (
-                                function: nameof(KernelFunction.head),
+                                function: nameof(BuiltinFunction.head),
                                 input: Expression.EnvironmentInstance),
                             Expression.EnvironmentInstance),
                         trueBranch:
@@ -201,7 +201,7 @@ public class PineVMTests
                             encoded:
                             Expression.KernelApplicationInstance
                             (
-                                function: nameof(KernelFunction.head),
+                                function: nameof(BuiltinFunction.head),
                                 input:
                                 Expression.KernelApplicationInstance
                                 (
@@ -223,7 +223,7 @@ public class PineVMTests
                         ExpressionEncoding.EncodeExpressionAsValue(
                             Expression.KernelApplicationInstance
                             (
-                                function: nameof(KernelFunction.head),
+                                function: nameof(BuiltinFunction.head),
                                 input: Expression.EnvironmentInstance))
                         ]),
 

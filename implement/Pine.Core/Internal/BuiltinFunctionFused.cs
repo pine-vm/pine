@@ -3,7 +3,7 @@ using System.Collections.Generic;
 
 namespace Pine.Core.Internal;
 
-public class KernelFunctionFused
+public class BuiltinFunctionFused
 {
     public static PineValue ListAppendItem(
         PineValue prefix,
@@ -210,7 +210,7 @@ public class KernelFunctionFused
         PineValue skipCountValue,
         PineValue argument)
     {
-        if (KernelFunction.SignedIntegerFromValueRelaxed(skipCountValue) is not { } skipCount)
+        if (BuiltinFunction.SignedIntegerFromValueRelaxed(skipCountValue) is not { } skipCount)
         {
             return PineValue.EmptyList;
         }
@@ -223,12 +223,12 @@ public class KernelFunctionFused
         PineValue skipCountValue,
         PineValue argument)
     {
-        if (KernelFunction.SignedIntegerFromValueRelaxed(takeCountValue) is not { } takeCount)
+        if (BuiltinFunction.SignedIntegerFromValueRelaxed(takeCountValue) is not { } takeCount)
         {
             return PineValue.EmptyList;
         }
 
-        if (KernelFunction.SignedIntegerFromValueRelaxed(skipCountValue) is not { } skipCount)
+        if (BuiltinFunction.SignedIntegerFromValueRelaxed(skipCountValue) is not { } skipCount)
         {
             return PineValue.EmptyList;
         }
@@ -305,12 +305,12 @@ public class KernelFunctionFused
         PineValue takeCountValue,
         PineValue argument)
     {
-        if (KernelFunction.SignedIntegerFromValueRelaxed(skipCountValue) is not { } skipCount)
+        if (BuiltinFunction.SignedIntegerFromValueRelaxed(skipCountValue) is not { } skipCount)
         {
             return PineValue.EmptyList;
         }
 
-        if (KernelFunction.SignedIntegerFromValueRelaxed(takeCountValue) is not { } takeCount)
+        if (BuiltinFunction.SignedIntegerFromValueRelaxed(takeCountValue) is not { } takeCount)
         {
             return PineValue.EmptyList;
         }
@@ -471,11 +471,11 @@ public class KernelFunctionFused
     }
 
     /// <summary>
-    /// Combination of <see cref="KernelFunction.reverse"/> applied to result from <see cref="KernelFunction.concat"/> 
+    /// Combination of <see cref="BuiltinFunction.reverse"/> applied to result from <see cref="BuiltinFunction.concat"/> 
     /// </summary>
     public static PineValue ConcatAndReverse(ReadOnlySpan<PineValue> listBeforeSkipEmpty)
     {
-        // First, perform the concat operation (following the semantics of KernelFunction.concat)
+        // First, perform the concat operation (following the semantics of BuiltinFunction.concat)
         // Skip over any empty lists at the start.
 
         var firstNonEmptyIndex = 0;
@@ -504,8 +504,8 @@ public class KernelFunctionFused
 
         if (list.Length is 1)
         {
-            // Single element: just reverse it (following KernelFunction.reverse semantics)
-            return KernelFunction.reverse(head);
+            // Single element: just reverse it (following BuiltinFunction.reverse semantics)
+            return BuiltinFunction.reverse(head);
         }
 
         if (head is PineValue.ListValue)

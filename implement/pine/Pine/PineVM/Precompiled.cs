@@ -1708,7 +1708,7 @@ public class Precompiled
             return null;
         }
 
-        if (KernelFunction.SignedIntegerFromValueRelaxed(argOffsetValue) is not { } argOffset)
+        if (BuiltinFunction.SignedIntegerFromValueRelaxed(argOffsetValue) is not { } argOffset)
         {
             return null;
         }
@@ -2384,15 +2384,15 @@ public class Precompiled
             var numB = bTagArgs.ValueFromPathOrEmptyList([0]);
             var denomB = bTagArgs.ValueFromPathOrEmptyList([1]);
 
-            var leftProduct = KernelFunctionSpecialized.int_mul(numA, denomB);
-            var rightProduct = KernelFunctionSpecialized.int_mul(numB, denomA);
+            var leftProduct = BuiltinFunctionSpecialized.int_mul(numA, denomB);
+            var rightProduct = BuiltinFunctionSpecialized.int_mul(numB, denomA);
 
             if (leftProduct == rightProduct)
             {
                 return Tag_EQ_Value;
             }
 
-            if (KernelFunction.int_is_sorted_asc(PineValue.List([leftProduct, rightProduct])) == PineKernelValues.TrueValue)
+            if (BuiltinFunction.int_is_sorted_asc(PineValue.List([leftProduct, rightProduct])) == PineKernelValues.TrueValue)
             {
                 return Tag_LT_Value;
             }
@@ -2407,14 +2407,14 @@ public class Precompiled
             var numA = aTagArgs.ValueFromPathOrEmptyList([0]);
             var denomA = aTagArgs.ValueFromPathOrEmptyList([1]);
 
-            var rightProduct = KernelFunctionSpecialized.int_mul(denomA, b);
+            var rightProduct = BuiltinFunctionSpecialized.int_mul(denomA, b);
 
             if (numA == rightProduct)
             {
                 return Tag_EQ_Value;
             }
 
-            if (KernelFunction.int_is_sorted_asc(PineValue.List([numA, rightProduct])) == PineKernelValues.TrueValue)
+            if (BuiltinFunction.int_is_sorted_asc(PineValue.List([numA, rightProduct])) == PineKernelValues.TrueValue)
             {
                 return Tag_LT_Value;
             }
@@ -2429,14 +2429,14 @@ public class Precompiled
             var numB = bTagArgs.ValueFromPathOrEmptyList([0]);
             var denomB = bTagArgs.ValueFromPathOrEmptyList([1]);
 
-            var leftProduct = KernelFunctionSpecialized.int_mul(a, denomB);
+            var leftProduct = BuiltinFunctionSpecialized.int_mul(a, denomB);
 
             if (leftProduct == numB)
             {
                 return Tag_EQ_Value;
             }
 
-            if (KernelFunction.int_is_sorted_asc(PineValue.List([leftProduct, numB])) == PineKernelValues.TrueValue)
+            if (BuiltinFunction.int_is_sorted_asc(PineValue.List([leftProduct, numB])) == PineKernelValues.TrueValue)
             {
                 return Tag_LT_Value;
             }
@@ -2449,7 +2449,7 @@ public class Precompiled
             return CompareLists(a, b);
         }
 
-        if (KernelFunction.int_is_sorted_asc(PineValue.List([a, b])) == PineKernelValues.TrueValue)
+        if (BuiltinFunction.int_is_sorted_asc(PineValue.List([a, b])) == PineKernelValues.TrueValue)
         {
             return Tag_LT_Value;
         }
@@ -2597,7 +2597,7 @@ public class Precompiled
         return
             stringA == stringB
             ? Tag_EQ_Value
-            : KernelFunction.int_is_sorted_asc(PineValue.List([stringA, stringB])) == PineKernelValues.TrueValue
+            : BuiltinFunction.int_is_sorted_asc(PineValue.List([stringA, stringB])) == PineKernelValues.TrueValue
             ? Tag_LT_Value
             : Tag_GT_Value;
     }
@@ -2924,7 +2924,7 @@ public class Precompiled
                             Tag_Just_Value(
                                 PineValue.List(
                                 [
-                                    KernelFunctionSpecialized.int_add(index, IntegerEncoding.EncodeSignedInteger(i)),
+                                    BuiltinFunctionSpecialized.int_add(index, IntegerEncoding.EncodeSignedInteger(i)),
                                     itemListValue
                                 ])),
                         StackFrameCount: itemEqStackFrameCount);
@@ -3652,7 +3652,7 @@ public class Precompiled
         }
 
         var mappedReversed =
-            KernelFunction.reverse(argumentMappedItems);
+            BuiltinFunction.reverse(argumentMappedItems);
 
         if (argumentRemainingItems is not PineValue.ListValue remainingItemsListValue)
         {
@@ -3718,7 +3718,7 @@ public class Precompiled
             }
 
             var resultValue =
-                KernelFunctionSpecialized.concat(mappedReversed, PineValue.List(itemsResults));
+                BuiltinFunctionSpecialized.concat(mappedReversed, PineValue.List(itemsResults));
 
             return new ApplyStepwise.StepResult.Complete(PineValueInProcess.Create(resultValue));
         }
@@ -3804,7 +3804,7 @@ public class Precompiled
                         Callback: Step);
             }
 
-            var concatResult = KernelFunction.concat(PineValue.List(itemsResults));
+            var concatResult = BuiltinFunction.concat(PineValue.List(itemsResults));
 
             return new ApplyStepwise.StepResult.Complete(PineValueInProcess.Create(concatResult));
         }
@@ -3946,7 +3946,7 @@ public class Precompiled
         }
 
         var accumulatedReversed =
-            KernelFunction.reverse(argumentAccumulated);
+            BuiltinFunction.reverse(argumentAccumulated);
 
         if (itemsList.Items.Length < 1)
         {
@@ -4013,7 +4013,7 @@ public class Precompiled
             }
 
             var resultValue =
-                KernelFunctionSpecialized.concat(
+                BuiltinFunctionSpecialized.concat(
                     accumulatedReversed,
                     PineValue.List(includedItems[..includedItemCount]));
 
@@ -4066,7 +4066,7 @@ public class Precompiled
         }
 
         var accumulatedReversed =
-            KernelFunction.reverse(argumentAccumulated);
+            BuiltinFunction.reverse(argumentAccumulated);
 
         if (itemsList.Items.Length < 1)
         {
@@ -4148,7 +4148,7 @@ public class Precompiled
             }
 
             var resultValue =
-                KernelFunctionSpecialized.concat(
+                BuiltinFunctionSpecialized.concat(
                     accumulatedReversed,
                     PineValue.List(includedItems[..includedItemCount]));
 
@@ -4392,7 +4392,7 @@ public class Precompiled
                     StackFrameCount: 0);
         }
 
-        if (KernelFunction.SignedIntegerFromValueRelaxed(offsetValue) is not { } offset)
+        if (BuiltinFunction.SignedIntegerFromValueRelaxed(offsetValue) is not { } offset)
         {
             return null;
         }
@@ -4762,7 +4762,7 @@ public class Precompiled
                 ]));
 
         var finalValue =
-            KernelFunctionSpecialized.concat(
+            BuiltinFunctionSpecialized.concat(
                 currentLinesValue, PineValue.List([.. linesValues]));
 
         return
@@ -4838,7 +4838,7 @@ public class Precompiled
         }
 
         var finalValue =
-            KernelFunctionSpecialized.concat(
+            BuiltinFunctionSpecialized.concat(
                 mappedCharsValue, PineValue.List([.. charsItems]));
 
         return () => new PrecompiledResult.FinalValue(finalValue, StackFrameCount: 0);
@@ -4915,7 +4915,7 @@ public class Precompiled
         var stringBytesValue =
             environment.ValueFromPathOrEmptyList([1, 4]);
 
-        if (KernelFunction.SignedIntegerFromValueRelaxed(offsetValue) is not { } offset)
+        if (BuiltinFunction.SignedIntegerFromValueRelaxed(offsetValue) is not { } offset)
         {
             return null;
         }
@@ -4935,7 +4935,7 @@ public class Precompiled
             return null;
         }
 
-        if (KernelFunction.SignedIntegerFromValueRelaxed(lastStartValue) is not { } lastStart)
+        if (BuiltinFunction.SignedIntegerFromValueRelaxed(lastStartValue) is not { } lastStart)
         {
             return null;
         }
@@ -5037,7 +5037,7 @@ public class Precompiled
             return null;
         }
 
-        if (KernelFunction.SignedIntegerFromValueRelaxed(offsetValue) is not { } offset)
+        if (BuiltinFunction.SignedIntegerFromValueRelaxed(offsetValue) is not { } offset)
         {
             return null;
         }
@@ -5762,7 +5762,7 @@ public class Precompiled
                     functionRecordList.GetElementAt(3).Evaluate();
 
                 var argsAvailableSum =
-                    KernelFunctionSpecialized.length_as_int(alreadyCollectedArgsValue) +
+                    BuiltinFunctionSpecialized.length_as_int(alreadyCollectedArgsValue) +
                     remainingArgsCount;
 
                 if (paramCountValue.AsInteger() is { } paramCount && paramCount <= argsAvailableSum)
@@ -5826,9 +5826,9 @@ public class Precompiled
                 // Need to collect more arguments
 
                 var aggregateArgsList =
-                    KernelFunctionSpecialized.concat(
+                    BuiltinFunctionSpecialized.concat(
                         alreadyCollectedArgsValue,
-                        KernelFunctionSpecialized.skip(consumedArgsCount, rootArgumentsList));
+                        BuiltinFunctionSpecialized.skip(consumedArgsCount, rootArgumentsList));
 
                 var newFunctionRecordValue =
                     PineValueInProcess.CreateList(
@@ -5927,7 +5927,7 @@ public class Precompiled
             return null;
         }
 
-        if (KernelFunction.SignedIntegerFromValueRelaxed(offsetArg) is not { } offset)
+        if (BuiltinFunction.SignedIntegerFromValueRelaxed(offsetArg) is not { } offset)
         {
             return null;
         }

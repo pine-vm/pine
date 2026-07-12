@@ -6,7 +6,7 @@ using System.Collections.Immutable;
 using System.Linq;
 using System.Numerics;
 
-using KernelFunctionSpecialized = Pine.Core.Internal.KernelFunctionSpecialized;
+using BuiltinFunctionSpecialized = Pine.Core.Internal.BuiltinFunctionSpecialized;
 
 namespace Pine.Core.CodeAnalysis;
 
@@ -284,7 +284,7 @@ public class ReducePineExpression
 
     /// <summary>
     /// Attempts to evaluate a kernel function application independently.
-    /// The input is first evaluated, then dispatched to <see cref="KernelFunction.ApplyKernelFunctionGeneric(string, PineValue)"/>.
+    /// The input is first evaluated, then dispatched to <see cref="BuiltinFunction.ApplyFunctionGeneric(string, PineValue)"/>.
     /// </summary>
     /// <param name="kernelApplication">The kernel application expression.</param>
     /// <param name="parseCache">Cache used when parsing encoded expressions.</param>
@@ -308,7 +308,7 @@ public class ReducePineExpression
                 "Unexpected result type from evaluating kernel application input: " + evalInputResult);
         }
 
-        return KernelFunction.ApplyKernelFunctionGeneric(kernelApplication.Function, inputOk);
+        return BuiltinFunction.ApplyFunctionGeneric(kernelApplication.Function, inputOk);
     }
 
     /// <summary>
@@ -379,7 +379,7 @@ public class ReducePineExpression
 
                 switch (rootKernelApp.Function)
                 {
-                    case nameof(KernelFunction.equal):
+                    case nameof(BuiltinFunction.equal):
                         {
                             if (rootKernelApp.Input is Expression.List inputList)
                             {
@@ -470,7 +470,7 @@ public class ReducePineExpression
                             return AttemptReduceViaEval();
                         }
 
-                    case nameof(KernelFunction.head):
+                    case nameof(BuiltinFunction.head):
                         {
                             if (ApplyKernelFunctionHeadToAllBranches(rootKernelApp.Input) is { } reducedBranches)
                                 return reducedBranches;
@@ -478,7 +478,7 @@ public class ReducePineExpression
                             return AttemptReduceViaEval();
                         }
 
-                    case nameof(KernelFunction.skip):
+                    case nameof(BuiltinFunction.skip):
                         {
                             if (rootKernelApp.Input is Expression.List inputList && inputList.Items.Count is 2)
                             {
@@ -486,7 +486,7 @@ public class ReducePineExpression
                                 var seqExpr = inputList.Items[1];
 
                                 if (TryEvaluateExpressionIndependent(countExpr, parseCache).IsOkOrNull() is { } okSkipCountValue &&
-                                    KernelFunction.SignedIntegerFromValueRelaxed(okSkipCountValue) is { } okSkipCount)
+                                    BuiltinFunction.SignedIntegerFromValueRelaxed(okSkipCountValue) is { } okSkipCount)
                                 {
                                     if (ApplyKernelFunctionSkipToAllBranches((int)(okSkipCount < 0 ? 0 : okSkipCount), seqExpr) is { } reducedSkip)
                                     {
@@ -500,7 +500,7 @@ public class ReducePineExpression
                             return AttemptReduceViaEval();
                         }
 
-                    case nameof(KernelFunction.take):
+                    case nameof(BuiltinFunction.take):
                         {
                             if (rootKernelApp.Input is Expression.List takeInput && takeInput.Items.Count is 2)
                             {
@@ -508,7 +508,7 @@ public class ReducePineExpression
                                 var srcExpr = takeInput.Items[1];
 
                                 if (TryEvaluateExpressionIndependent(countExpr, parseCache).IsOkOrNull() is { } okTakeCountValue &&
-                                    KernelFunction.SignedIntegerFromValueRelaxed(okTakeCountValue) is { } okTakeCount)
+                                    BuiltinFunction.SignedIntegerFromValueRelaxed(okTakeCountValue) is { } okTakeCount)
                                 {
                                     if (ApplyKernelFunctionTakeToAllBranches((int)okTakeCount, srcExpr) is { } reducedTake)
                                     {
@@ -522,7 +522,7 @@ public class ReducePineExpression
                             return AttemptReduceViaEval();
                         }
 
-                    case nameof(KernelFunction.reverse):
+                    case nameof(BuiltinFunction.reverse):
                         {
                             if (ApplyKernelFunctionReverseToAllBranches(rootKernelApp.Input) is { } reducedRev)
                             {
@@ -532,7 +532,7 @@ public class ReducePineExpression
                             return AttemptReduceViaEval();
                         }
 
-                    case nameof(KernelFunction.concat):
+                    case nameof(BuiltinFunction.concat):
                         {
                             if (rootKernelApp.Input is Expression.List inputList)
                             {
@@ -618,7 +618,7 @@ public class ReducePineExpression
                             return AttemptReduceViaEval();
                         }
 
-                    case nameof(KernelFunction.length):
+                    case nameof(BuiltinFunction.length):
                         {
                             if (rootKernelApp.Input is Expression.List inputList)
                             {
@@ -629,7 +629,7 @@ public class ReducePineExpression
 
                             if (rootKernelApp.Input is Expression.KernelApplication lengthInputKernelApp)
                             {
-                                if (lengthInputKernelApp.Function is nameof(KernelFunction.concat) &&
+                                if (lengthInputKernelApp.Function is nameof(BuiltinFunction.concat) &&
                                     lengthInputKernelApp.Input is Expression.List lengthConcatList)
                                 {
                                     int? aggregateLength = 0;
@@ -671,13 +671,13 @@ public class ReducePineExpression
                             return AttemptReduceViaEval();
                         }
 
-                    case nameof(KernelFunction.int_add):
+                    case nameof(BuiltinFunction.int_add):
                         {
                             if (rootKernelApp.Input is Expression.List addInputList)
                             {
                                 var reducedKernelApplication =
                                     ReduceFlattenedIntegerKernelApplication(
-                                        nameof(KernelFunction.int_add),
+                                        nameof(BuiltinFunction.int_add),
                                         addInputList.Items,
                                         parseCache);
 
@@ -690,13 +690,13 @@ public class ReducePineExpression
                             return AttemptReduceViaEval();
                         }
 
-                    case nameof(KernelFunction.int_mul):
+                    case nameof(BuiltinFunction.int_mul):
                         {
                             if (rootKernelApp.Input is Expression.List mulInputList)
                             {
                                 var reducedKernelApplication =
                                     ReduceFlattenedIntegerKernelApplication(
-                                        nameof(KernelFunction.int_mul),
+                                        nameof(BuiltinFunction.int_mul),
                                         mulInputList.Items,
                                         parseCache);
 
@@ -828,8 +828,8 @@ public class ReducePineExpression
             Expression.KernelApplication kernelApp =>
             kernelApp.Function switch
             {
-                nameof(KernelFunction.equal) => true,
-                nameof(KernelFunction.int_is_sorted_asc) => true,
+                nameof(BuiltinFunction.equal) => true,
+                nameof(BuiltinFunction.int_is_sorted_asc) => true,
 
                 _ =>
                 false,
@@ -904,8 +904,8 @@ public class ReducePineExpression
             var foldedConstant =
                 functionName switch
                 {
-                    nameof(KernelFunction.int_add) => BigInteger.Zero,
-                    nameof(KernelFunction.int_mul) => BigInteger.One,
+                    nameof(BuiltinFunction.int_add) => BigInteger.Zero,
+                    nameof(BuiltinFunction.int_mul) => BigInteger.One,
 
                     _ =>
                     throw new NotSupportedException($"Unsupported integer kernel application: {functionName}")
@@ -916,8 +916,8 @@ public class ReducePineExpression
                 foldedConstant =
                     functionName switch
                     {
-                        nameof(KernelFunction.int_add) => foldedConstant + constant,
-                        nameof(KernelFunction.int_mul) => foldedConstant * constant,
+                        nameof(BuiltinFunction.int_add) => foldedConstant + constant,
+                        nameof(BuiltinFunction.int_mul) => foldedConstant * constant,
 
                         _ =>
                         throw new NotSupportedException($"Unsupported integer kernel application: {functionName}")
@@ -1055,7 +1055,7 @@ public class ReducePineExpression
 
         if (expression is Expression.KernelApplication kernelApp)
         {
-            if (kernelApp.Function is nameof(KernelFunction.skip) &&
+            if (kernelApp.Function is nameof(BuiltinFunction.skip) &&
                 kernelApp.Input is Expression.List skipInputList && skipInputList.Items.Count is 2)
             {
                 if (TryEvaluateExpressionIndependent(skipInputList.Items[0], parseCache).IsOkOrNull() is { } okSkipCountValue)
@@ -1487,7 +1487,7 @@ public class ReducePineExpression
                 parseCache,
                 reducedExpressionCache);
 
-        if (kernelApp.Function is nameof(KernelFunction.int_mul) &&
+        if (kernelApp.Function is nameof(BuiltinFunction.int_mul) &&
             reducedArg is Expression.List operandList)
         {
             var constants = CollectConstantIntegers(operandList.Items);
@@ -1513,7 +1513,7 @@ public class ReducePineExpression
             }
         }
 
-        if (kernelApp.Function is nameof(KernelFunction.int_add) &&
+        if (kernelApp.Function is nameof(BuiltinFunction.int_add) &&
             reducedArg is Expression.List addendList)
         {
             var constants = CollectConstantIntegers(addendList.Items);
@@ -1554,7 +1554,7 @@ public class ReducePineExpression
         for (var i = 0; i < items.Count; i++)
         {
             if (items[i] is Expression.Literal literal &&
-                KernelFunction.SignedIntegerFromValueRelaxed(literal.Value) is { } intValue)
+                BuiltinFunction.SignedIntegerFromValueRelaxed(literal.Value) is { } intValue)
             {
                 constants.Add(intValue);
             }
@@ -2227,11 +2227,11 @@ public class ReducePineExpression
                 }
 
             case Expression.Literal literal:
-                return Expression.LiteralInstance(KernelFunction.reverse(literal.Value));
+                return Expression.LiteralInstance(BuiltinFunction.reverse(literal.Value));
 
             case Expression.KernelApplication innerKernelApp:
                 {
-                    if (innerKernelApp.Function is nameof(KernelFunction.reverse))
+                    if (innerKernelApp.Function is nameof(BuiltinFunction.reverse))
                     {
                         return innerKernelApp.Input;
                     }
@@ -2303,14 +2303,14 @@ public class ReducePineExpression
                 }
 
             case Expression.Literal literal:
-                return Expression.LiteralInstance(KernelFunctionSpecialized.skip(countClamped, literal.Value));
+                return Expression.LiteralInstance(BuiltinFunctionSpecialized.skip(countClamped, literal.Value));
 
             case Expression.KernelApplication innerSkip:
                 {
-                    if (innerSkip.Function is nameof(KernelFunction.skip) &&
+                    if (innerSkip.Function is nameof(BuiltinFunction.skip) &&
                         innerSkip.Input is Expression.List args && args.Items.Count is 2 &&
                         args.Items[0] is Expression.Literal litCount &&
-                        KernelFunction.SignedIntegerFromValueRelaxed(litCount.Value) is { } innerCount)
+                        BuiltinFunction.SignedIntegerFromValueRelaxed(litCount.Value) is { } innerCount)
                     {
                         var innerCountClamped =
                             innerCount < 0 ? 0 : (int)innerCount;
@@ -2383,15 +2383,15 @@ public class ReducePineExpression
                 }
 
             case Expression.Literal literal:
-                return Expression.LiteralInstance(KernelFunctionSpecialized.take(countClamped, literal.Value));
+                return Expression.LiteralInstance(BuiltinFunctionSpecialized.take(countClamped, literal.Value));
 
             case Expression.KernelApplication innerTake:
 
                 {
-                    if (innerTake.Function is nameof(KernelFunction.take) &&
+                    if (innerTake.Function is nameof(BuiltinFunction.take) &&
                         innerTake.Input is Expression.List args && args.Items.Count is 2 &&
                         args.Items[0] is Expression.Literal litCount &&
-                        KernelFunction.SignedIntegerFromValueRelaxed(litCount.Value) is { } innerCount)
+                        BuiltinFunction.SignedIntegerFromValueRelaxed(litCount.Value) is { } innerCount)
                     {
                         var innerCountClamped =
                             innerCount < 0 ? 0 : (int)innerCount;

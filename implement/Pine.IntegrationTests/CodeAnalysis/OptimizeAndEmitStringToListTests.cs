@@ -88,18 +88,18 @@ public class OptimizeAndEmitStringToListTests
                     while (true)
                     {
                         PineValue local_000 =
-                            KernelFunctionFused.SkipAndTake(
+                            BuiltinFunctionFused.SkipAndTake(
                                 takeCount: 4,
                                 skipCountValue: local_param_1_0,
                                 argument: local_param_1_2);
 
-                        if (KernelFunctionSpecialized.length_as_int(local_000) == 0)
+                        if (BuiltinFunctionSpecialized.length_as_int(local_000) == 0)
                         {
                             return local_param_1_1.Evaluate();
                         }
 
                         {
-                            PineValue local_param_1_0_temp = KernelFunctionSpecialized.int_add(4, local_param_1_0);
+                            PineValue local_param_1_0_temp = BuiltinFunctionSpecialized.int_add(4, local_param_1_0);
                             local_param_1_1 = local_param_1_1.AppendItems([PineValue.List([local_000])]);
                             local_param_1_0 = local_param_1_0_temp;
                         }

@@ -547,7 +547,7 @@ public class PineIRCompiler
 
         while (conditionExpression is Expression.KernelApplication condKernelApp)
         {
-            if (condKernelApp.Function is nameof(KernelFunction.equal) &&
+            if (condKernelApp.Function is nameof(BuiltinFunction.equal) &&
                 condKernelApp.Input is Expression.List equalList && equalList.Items.Count is 2)
             {
                 if (jumpLiteralValue == PineKernelValues.TrueValue)
@@ -570,7 +570,7 @@ public class PineIRCompiler
                 break;
             }
 
-            if (condKernelApp.Function is nameof(KernelFunction.negate))
+            if (condKernelApp.Function is nameof(BuiltinFunction.negate))
             {
                 conditionExpression = condKernelApp.Input;
 
@@ -727,7 +727,7 @@ public class PineIRCompiler
         return
             kernelApplication.Function switch
             {
-                nameof(KernelFunction.length) =>
+                nameof(BuiltinFunction.length) =>
                 CompileExpressionTransitive(
                     kernelApplication.Input,
                     context,
@@ -735,112 +735,112 @@ public class PineIRCompiler
                     parseCache)
                 .AppendInstruction(StackInstruction.Length),
 
-                nameof(KernelFunction.negate) =>
+                nameof(BuiltinFunction.negate) =>
                 CompileKernelApplication_Negate(
                     kernelApplication.Input,
                     context,
                     prior,
                     parseCache),
 
-                nameof(KernelFunction.equal) =>
+                nameof(BuiltinFunction.equal) =>
                 CompileKernelApplication_Equal(
                     kernelApplication.Input,
                     context,
                     prior,
                     parseCache),
 
-                nameof(KernelFunction.head) =>
+                nameof(BuiltinFunction.head) =>
                 CompileKernelApplication_Head(
                     kernelApplication.Input,
                     context,
                     prior,
                     parseCache),
 
-                nameof(KernelFunction.skip) =>
+                nameof(BuiltinFunction.skip) =>
                 CompileKernelApplication_Skip(
                     kernelApplication.Input,
                     context,
                     prior,
                     parseCache),
 
-                nameof(KernelFunction.take) =>
+                nameof(BuiltinFunction.take) =>
                 CompileKernelApplication_Take(
                     kernelApplication.Input,
                     context,
                     prior,
                     parseCache),
 
-                nameof(KernelFunction.concat) =>
+                nameof(BuiltinFunction.concat) =>
                 CompileKernelApplication_Concat(
                     kernelApplication.Input,
                     context,
                     prior,
                     parseCache),
 
-                nameof(KernelFunction.reverse) =>
+                nameof(BuiltinFunction.reverse) =>
                 CompileKernelApplication_Reverse(
                     kernelApplication.Input,
                     context,
                     prior,
                     parseCache),
 
-                nameof(KernelFunction.int_add) =>
+                nameof(BuiltinFunction.int_add) =>
                 CompileKernelApplication_Int_Add(
                     kernelApplication.Input,
                     context,
                     prior,
                     parseCache),
 
-                nameof(KernelFunction.int_mul) =>
+                nameof(BuiltinFunction.int_mul) =>
                 CompileKernelApplication_Int_Mul(
                     kernelApplication.Input,
                     context,
                     prior,
                     parseCache),
 
-                nameof(KernelFunction.int_is_sorted_asc) =>
+                nameof(BuiltinFunction.int_is_sorted_asc) =>
                 CompileKernelApplication_Int_Is_Sorted_Asc(
                     kernelApplication.Input,
                     context,
                     prior,
                     parseCache),
 
-                nameof(KernelFunction.bit_and) =>
+                nameof(BuiltinFunction.bit_and) =>
                 CompileKernelApplication_Bit_And(
                     kernelApplication.Input,
                     context,
                     prior,
                     parseCache),
 
-                nameof(KernelFunction.bit_or) =>
+                nameof(BuiltinFunction.bit_or) =>
                 CompileKernelApplication_Bit_Or(
                     kernelApplication.Input,
                     context,
                     prior,
                     parseCache),
 
-                nameof(KernelFunction.bit_xor) =>
+                nameof(BuiltinFunction.bit_xor) =>
                 CompileKernelApplication_Bit_Xor(
                     kernelApplication.Input,
                     context,
                     prior,
                     parseCache),
 
-                nameof(KernelFunction.bit_not) =>
+                nameof(BuiltinFunction.bit_not) =>
                 CompileKernelApplication_Bit_Not(
                     kernelApplication.Input,
                     context,
                     prior,
                     parseCache),
 
-                nameof(KernelFunction.bit_shift_left) =>
+                nameof(BuiltinFunction.bit_shift_left) =>
                 CompileKernelApplication_Bit_Shift_Left(
                     kernelApplication.Input,
                     context,
                     prior,
                     parseCache),
 
-                nameof(KernelFunction.bit_shift_right) =>
+                nameof(BuiltinFunction.bit_shift_right) =>
                 CompileKernelApplication_Bit_Shift_Right(
                     kernelApplication.Input,
                     context,
@@ -865,7 +865,7 @@ public class PineIRCompiler
         if (KernelApplication_Equal_TryParse_Starting_With(input, parseCache) is { } startingWith)
         {
             if (startingWith.expr is Expression.KernelApplication startingWithKernelApp &&
-                startingWithKernelApp.Function is nameof(KernelFunction.skip) &&
+                startingWithKernelApp.Function is nameof(BuiltinFunction.skip) &&
                 startingWithKernelApp.Input is Expression.List skipList &&
                 skipList.Items.Count is 2)
             {
@@ -926,7 +926,7 @@ public class PineIRCompiler
         {
             if (IntegerEncoding.ParseSignedIntegerRelaxed(partConst).IsOkOrNullable() is { } constInteger &&
                 partVar is Expression.KernelApplication varKernelApp &&
-                varKernelApp.Function is nameof(KernelFunction.length))
+                varKernelApp.Function is nameof(BuiltinFunction.length))
             {
                 var afterVar =
                     CompileExpressionTransitive(
@@ -1127,14 +1127,14 @@ public class PineIRCompiler
             {
                 if (skipCount.IsOne &&
                     skipSourceExpr is Expression.KernelApplication skipSourceKernelApp &&
-                    skipSourceKernelApp.Function is nameof(KernelFunction.int_add) &&
+                    skipSourceKernelApp.Function is nameof(BuiltinFunction.int_add) &&
                     skipSourceKernelApp.Input is Expression.List skipSourceAddInputList &&
                     skipSourceAddInputList.Items.Count is 2)
                 {
                     NodeCompilationResult? ContinueForAddZeroOperand(Expression addZeroOperand)
                     {
                         if (addZeroOperand is Expression.KernelApplication addOperandKernelApp &&
-                            addOperandKernelApp.Function is nameof(KernelFunction.concat) &&
+                            addOperandKernelApp.Function is nameof(BuiltinFunction.concat) &&
                             addOperandKernelApp.Input is Expression.List concatList &&
                             concatList.Items.Count is 2 &&
                             TryEvalIndependent(concatList.Items[0], parseCache) is { } prependValue &&
@@ -1415,7 +1415,7 @@ public class PineIRCompiler
     {
         if (TryParse_KernelTake_Const(input, parseCache) is { } takeConst &&
             takeConst.sourceExpr is Expression.KernelApplication takeSourceKernelApp &&
-            takeSourceKernelApp.Function is nameof(KernelFunction.reverse))
+            takeSourceKernelApp.Function is nameof(BuiltinFunction.reverse))
         {
             var afterSource =
                 CompileExpressionTransitive(
@@ -1449,7 +1449,7 @@ public class PineIRCompiler
     {
         if (input is Expression.KernelApplication innerKernelApp)
         {
-            if (innerKernelApp.Function is nameof(KernelFunction.equal) &&
+            if (innerKernelApp.Function is nameof(BuiltinFunction.equal) &&
                 innerKernelApp.Input is Expression.List equalList && equalList.Items.Count is 2)
             {
                 if (equalList.Items[0] is Expression.Literal leftLiteralExpr)
@@ -1503,7 +1503,7 @@ public class PineIRCompiler
                 }
             }
 
-            if (innerKernelApp.Function is nameof(KernelFunction.int_is_sorted_asc) &&
+            if (innerKernelApp.Function is nameof(BuiltinFunction.int_is_sorted_asc) &&
                 innerKernelApp.Input is Expression.List isSortedAscList && isSortedAscList.Items.Count is 2)
             {
                 /*
@@ -1569,7 +1569,7 @@ public class PineIRCompiler
 
                 if (itemExpr is Expression.Literal literalExpr)
                 {
-                    if (KernelFunction.SignedIntegerFromValueRelaxed(literalExpr.Value) is not { } intValue)
+                    if (BuiltinFunction.SignedIntegerFromValueRelaxed(literalExpr.Value) is not { } intValue)
                     {
                         return
                             prior
@@ -1718,7 +1718,7 @@ public class PineIRCompiler
         PineVMParseCache parseCache)
     {
         if (expr is Expression.KernelApplication kernelApp &&
-            kernelApp.Function is nameof(KernelFunction.concat) &&
+            kernelApp.Function is nameof(BuiltinFunction.concat) &&
             kernelApp.Input is Expression.List inputList &&
             inputList.Items.Count is 2)
         {
@@ -1750,7 +1750,7 @@ public class PineIRCompiler
         PineVMParseCache parseCache)
     {
         if (expr is Expression.KernelApplication kernelApp &&
-            kernelApp.Function is nameof(KernelFunction.concat) &&
+            kernelApp.Function is nameof(BuiltinFunction.concat) &&
             kernelApp.Input is Expression.List inputList &&
             inputList.Items.Count is 2)
         {
@@ -1783,13 +1783,13 @@ public class PineIRCompiler
     {
         if (expr is Expression.KernelApplication kernelApp)
         {
-            if (kernelApp.Function is nameof(KernelFunction.negate))
+            if (kernelApp.Function is nameof(BuiltinFunction.negate))
             {
                 return kernelApp.Input;
             }
 
 
-            if (kernelApp.Function is nameof(KernelFunction.int_mul) &&
+            if (kernelApp.Function is nameof(BuiltinFunction.int_mul) &&
                 kernelApp.Input is Expression.List mulListExpr && mulListExpr.Items.Count is 2)
             {
                 {
@@ -1842,7 +1842,7 @@ public class PineIRCompiler
 
                 if (itemExpr is Expression.Literal literalExpr)
                 {
-                    if (KernelFunction.SignedIntegerFromValueRelaxed(literalExpr.Value) is not { } intValue)
+                    if (BuiltinFunction.SignedIntegerFromValueRelaxed(literalExpr.Value) is not { } intValue)
                     {
                         return
                             prior
@@ -2494,12 +2494,12 @@ public class PineIRCompiler
             return null;
         }
 
-        if (kernelApp.Function is nameof(KernelFunction.negate))
+        if (kernelApp.Function is nameof(BuiltinFunction.negate))
         {
             return kernelApp.Input;
         }
 
-        if (kernelApp.Function is nameof(KernelFunction.int_mul) &&
+        if (kernelApp.Function is nameof(BuiltinFunction.int_mul) &&
             kernelApp.Input is Expression.List mulList && mulList.Items.Count is 2)
         {
             if (TryParse_IndependentSignedIntegerRelaxed(mulList.Items[0], parseCache) is { } literalValue &&
@@ -2538,7 +2538,7 @@ public class PineIRCompiler
     private static (Expression skipCountExpr, Expression sourceExpr)? TryParse_KernelSkip(Expression expression)
     {
         if (expression is not Expression.KernelApplication kernelApp ||
-            kernelApp.Function is not nameof(KernelFunction.skip) ||
+            kernelApp.Function is not nameof(BuiltinFunction.skip) ||
             kernelApp.Input is not Expression.List skipList ||
             skipList.Items.Count is not 2)
         {
@@ -2572,7 +2572,7 @@ public class PineIRCompiler
         Expression expression)
     {
         if (expression is not Expression.KernelApplication kernelApp ||
-            kernelApp.Function is not nameof(KernelFunction.take) ||
+            kernelApp.Function is not nameof(BuiltinFunction.take) ||
             kernelApp.Input is not Expression.List takeList ||
             takeList.Items.Count is not 2)
         {
@@ -2595,7 +2595,7 @@ public class PineIRCompiler
             return null;
         }
 
-        return KernelFunction.SignedIntegerFromValueRelaxed(value);
+        return BuiltinFunction.SignedIntegerFromValueRelaxed(value);
     }
 
     private static PineValue? TryEvalIndependent(

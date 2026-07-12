@@ -213,7 +213,7 @@ public record StaticProgramCSharpClass(
             {
                 if (expr is StaticExpression<DeclQualifiedName>.KernelApplication kernelApp)
                 {
-                    if (kernelApp.Function is nameof(KernelFunction.length))
+                    if (kernelApp.Function is nameof(BuiltinFunction.length))
                     {
                         if (StaticExpressionExtension.TryParseAsPathToExpression(
                             kernelApp.Input,
@@ -233,7 +233,7 @@ public record StaticProgramCSharpClass(
                         }
                     }
 
-                    if (kernelApp.Function is nameof(KernelFunction.head))
+                    if (kernelApp.Function is nameof(BuiltinFunction.head))
                     {
                         if (StaticExpressionExtension.TryParseAsPathToExpression(
                             kernelApp.Input,
@@ -276,7 +276,7 @@ public record StaticProgramCSharpClass(
 
                 if (expr is StaticExpression<DeclQualifiedName>.KernelApplication reverseKernelApp)
                 {
-                    if (reverseKernelApp.Function is nameof(KernelFunction.reverse))
+                    if (reverseKernelApp.Function is nameof(BuiltinFunction.reverse))
                     {
                         // Check if the input is a reference to a concat builder (either parameter or local)
                         if (StaticExpressionExtension.TryParseAsPathToExpression(
@@ -445,7 +445,7 @@ public record StaticProgramCSharpClass(
                                 ExpressionSyntax countArgument;
 
                                 if (sliceOperation.CountExpression is StaticExpression<DeclQualifiedName>.Literal literal &&
-                                    KernelFunction.SignedIntegerFromValueRelaxed(literal.Value) is { } intValue &&
+                                    BuiltinFunction.SignedIntegerFromValueRelaxed(literal.Value) is { } intValue &&
                                     intValue >= int.MinValue &&
                                     intValue <= int.MaxValue)
                                 {
@@ -801,7 +801,7 @@ public record StaticProgramCSharpClass(
                     {
                         // Check for special case: the param appears directly inside an invocation of 'reverse'.
 
-                        if (kernelApp.Function is nameof(KernelFunction.reverse) &&
+                        if (kernelApp.Function is nameof(BuiltinFunction.reverse) &&
                             StaticExpressionExtension.TryParseAsPathToExpression(
                                 kernelApp.Input,
                                 StaticExpression<DeclQualifiedName>.EnvironmentInstance) is { } reverseEnvPath)
@@ -815,7 +815,7 @@ public record StaticProgramCSharpClass(
 
                     // Check for special case: concat that appends/prepends to the parameter.
                     // This is allowed even in non-tail position because it's part of the pattern we're optimizing.
-                    if (kernelApp.Function is nameof(KernelFunction.concat) &&
+                    if (kernelApp.Function is nameof(BuiltinFunction.concat) &&
                         kernelApp.Input is StaticExpression<DeclQualifiedName>.List concatInputList &&
                         concatInputList.Items.Count > 0)
                     {
@@ -1040,8 +1040,8 @@ public record StaticProgramCSharpClass(
             var kind =
                 kernelApp.Function switch
                 {
-                    nameof(KernelFunction.skip) => SliceOperationKind.Skip,
-                    nameof(KernelFunction.take) => SliceOperationKind.Take,
+                    nameof(BuiltinFunction.skip) => SliceOperationKind.Skip,
+                    nameof(BuiltinFunction.take) => SliceOperationKind.Take,
 
                     _ =>
                     (SliceOperationKind?)null,
@@ -1336,7 +1336,7 @@ public record StaticProgramCSharpClass(
 
         // Check for reverse(concat_builder) pattern with local concat builders
         if (expression is StaticExpression<DeclQualifiedName>.KernelApplication reverseKernelApp &&
-            reverseKernelApp.Function is nameof(KernelFunction.reverse))
+            reverseKernelApp.Function is nameof(BuiltinFunction.reverse))
         {
             // Check if the input is a concat builder local
             if (emitEnv.AlreadyDeclared.TryGetValue(reverseKernelApp.Input, out var builderLocal) &&
@@ -1867,7 +1867,7 @@ public record StaticProgramCSharpClass(
         StaticExpression<DeclQualifiedName>.KernelApplication kernelApp,
         ExpressionEmitEnv emitEnv)
     {
-        if (kernelApp.Function is nameof(KernelFunction.equal))
+        if (kernelApp.Function is nameof(BuiltinFunction.equal))
         {
             // Special case: Use '==' operator for equality.
 
@@ -1957,7 +1957,7 @@ public record StaticProgramCSharpClass(
             }
         }
 
-        if (kernelApp.Function is nameof(KernelFunction.negate))
+        if (kernelApp.Function is nameof(BuiltinFunction.negate))
         {
             if (kernelApp.Input is StaticExpression<DeclQualifiedName> inputExpr)
             {
@@ -2010,7 +2010,7 @@ public record StaticProgramCSharpClass(
                 case PineKernelFunctions.KernelFunctionParameterType.Integer:
                     {
                         if (argumentExpr is StaticExpression<DeclQualifiedName>.Literal literal &&
-                            KernelFunction.SignedIntegerFromValueRelaxed(literal.Value) is { } integer &&
+                            BuiltinFunction.SignedIntegerFromValueRelaxed(literal.Value) is { } integer &&
                             long.MinValue < integer && integer < long.MaxValue)
                         {
                             return
@@ -2025,7 +2025,7 @@ public record StaticProgramCSharpClass(
             }
         }
 
-        if (kernelApp.Function is nameof(KernelFunction.length))
+        if (kernelApp.Function is nameof(BuiltinFunction.length))
         {
             if (PineKernelFunctions.SpecializedInterfacesFromKernelFunctionName(kernelApp.Function) is { } specializedInterfaces)
             {
@@ -2050,12 +2050,12 @@ public record StaticProgramCSharpClass(
                 var isCommutative =
                     kernelApp.Function switch
                     {
-                        nameof(KernelFunction.int_add) => true,
-                        nameof(KernelFunction.int_mul) => true,
+                        nameof(BuiltinFunction.int_add) => true,
+                        nameof(BuiltinFunction.int_mul) => true,
 
-                        nameof(KernelFunction.bit_and) => true,
-                        nameof(KernelFunction.bit_or) => true,
-                        nameof(KernelFunction.bit_xor) => true,
+                        nameof(BuiltinFunction.bit_and) => true,
+                        nameof(BuiltinFunction.bit_or) => true,
+                        nameof(BuiltinFunction.bit_xor) => true,
 
                         _ =>
                         false,
@@ -2091,16 +2091,16 @@ public record StaticProgramCSharpClass(
                 yield return CompiledCSharpExpression.Generic(specializedInvocation);
             }
 
-            // Generic case: Invoke KernelFunction.ApplyKernelFunctionGeneric
+            // Generic case: Invoke BuiltinFunction.ApplyKernelFunctionGeneric
 
             var genericCSharpExpr =
                 SyntaxFactory.InvocationExpression(
                     SyntaxFactory.MemberAccessExpression(
                         SyntaxKind.SimpleMemberAccessExpression,
                         CompileTypeSyntax.TypeSyntaxFromType(
-                            typeof(KernelFunction),
+                            typeof(BuiltinFunction),
                             emitEnv.FunctionEnv.DeclarationSyntaxContext),
-                        SyntaxFactory.IdentifierName(nameof(KernelFunction.ApplyKernelFunctionGeneric))))
+                        SyntaxFactory.IdentifierName(nameof(BuiltinFunction.ApplyFunctionGeneric))))
                 .WithArgumentList(
                     SyntaxFactory.ArgumentList(
                         SyntaxFactory.SeparatedList(

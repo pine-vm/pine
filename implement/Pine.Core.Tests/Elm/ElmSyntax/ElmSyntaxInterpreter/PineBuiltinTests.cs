@@ -9,11 +9,11 @@ using ElmInterpreter = Pine.Core.Elm.ElmSyntax.ElmSyntaxInterpreter;
 namespace Pine.Core.Tests.Elm.ElmSyntax.ElmSyntaxInterpreter;
 
 /// <summary>
-/// Covers every <c>Pine_builtin</c> function exposed by <see cref="KernelFunction"/>.
+/// Covers every <c>Pine_builtin</c> function exposed by <see cref="BuiltinFunction"/>.
 ///
 /// Most tests express the call as an Elm source expression (with literal arguments) and feed it to
 /// <see cref="ElmInterpreter.ParseAndInterpret(string, System.Collections.Generic.IReadOnlyDictionary{DeclQualifiedName, Core.Elm.ElmSyntax.SyntaxModel.Declaration})"/>.
-/// Tests whose expected value is derived by driving <see cref="KernelFunction"/> directly keep a
+/// Tests whose expected value is derived by driving <see cref="BuiltinFunction"/> directly keep a
 /// thin Elm wrapper so that the same <see cref="ElmValue"/> argument instances are shared between
 /// the interpreter invocation and the kernel-function comparison.
 /// </summary>
@@ -296,7 +296,7 @@ public class PineBuiltinTests
         var result = Invoke("kernel_bit_xor", a, b);
 
         var expectedPineValue =
-            KernelFunction.bit_xor(
+            BuiltinFunction.bit_xor(
                 PineValue.List(
                     [
                     ElmValueEncoding.ElmValueAsPineValue(a),
@@ -318,7 +318,7 @@ public class PineBuiltinTests
         var result = Invoke("kernel_bit_xor", a, a);
 
         var expectedPineValue =
-            KernelFunction.bit_xor(
+            BuiltinFunction.bit_xor(
                 PineValue.List(
                     [
                     ElmValueEncoding.ElmValueAsPineValue(a),
@@ -346,7 +346,7 @@ public class PineBuiltinTests
         var result = Invoke("kernel_bit_not", argument);
 
         var expectedPineValue =
-            KernelFunction.bit_not(ElmValueEncoding.ElmValueAsPineValue(argument));
+            BuiltinFunction.bit_not(ElmValueEncoding.ElmValueAsPineValue(argument));
 
         var expected =
             ElmValueEncoding.PineValueAsElmValue(expectedPineValue, null, null)
@@ -368,7 +368,7 @@ public class PineBuiltinTests
         var result = Invoke("kernel_bit_shift_left", ElmValue.Integer(1), argument);
 
         var expectedPineValue =
-            KernelFunction.bit_shift_left(
+            BuiltinFunction.bit_shift_left(
                 PineValue.List(
                     [
                     ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(1)),
@@ -393,7 +393,7 @@ public class PineBuiltinTests
         var result = Invoke("kernel_bit_shift_right", ElmValue.Integer(2), argument);
 
         var expectedPineValue =
-            KernelFunction.bit_shift_right(
+            BuiltinFunction.bit_shift_right(
                 PineValue.List(
                     [
                     ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(2)),

@@ -102,7 +102,7 @@ public class ParseGenericFunctionApplicationTests
         // (for example when the function comes from a parameter).
         var funcExpr =
             Expression.KernelApplicationInstance(
-                nameof(KernelFunction.head),
+                nameof(BuiltinFunction.head),
                 Expression.EnvironmentInstance);
 
         var arg0 = Expression.LiteralInstance(PineValue.Blob([1]));
@@ -128,7 +128,7 @@ public class ParseGenericFunctionApplicationTests
 
         var arg1 =
             Expression.KernelApplicationInstance(
-                nameof(KernelFunction.head),
+                nameof(BuiltinFunction.head),
                 Expression.EnvironmentInstance);
 
         var arg2 = Expression.LiteralInstance(PineValue.Blob([0xCC]));

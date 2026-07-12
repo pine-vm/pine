@@ -29,7 +29,7 @@ namespace Pine.Core.Elm.ElmSyntax;
 /// </param>
 /// <param name="PineBuiltinInvocationCount">
 /// Number of times the <see cref="ElmSyntaxInterpreter.PineBuiltinResolver(ElmSyntaxInterpreter.Application)"/>
-/// resolved an application — i.e. forwarded an Elm call to <see cref="KernelFunction"/>
+/// resolved an application — i.e. forwarded an Elm call to <see cref="BuiltinFunction"/>
 /// because its module name is one of the recognised Pine pseudo-module names
 /// (<c>Pine_builtin</c> or <c>Pine_kernel</c>).
 /// </param>

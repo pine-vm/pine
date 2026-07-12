@@ -5,11 +5,11 @@ using System.Numerics;
 
 namespace Pine.Core.Internal;
 
-using static Core.KernelFunction;
+using static Core.BuiltinFunction;
 
 #pragma warning disable IDE1006
 
-public static class KernelFunctionSpecialized
+public static class BuiltinFunctionSpecialized
 {
     public static PineValue equal(
         PineValue left,

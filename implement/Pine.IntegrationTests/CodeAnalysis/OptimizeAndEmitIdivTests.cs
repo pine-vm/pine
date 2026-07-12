@@ -312,16 +312,16 @@ public class OptimizeAndEmitIdivTests
                     }
 
                     PineValue local_002 =
-                        KernelFunction.ValueFromBool(KernelFunctionSpecialized.int_is_sorted_asc_as_boolean(0, param_1));
+                        BuiltinFunction.ValueFromBool(BuiltinFunctionSpecialized.int_is_sorted_asc_as_boolean(0, param_1));
 
                     PineValue local_003 =
-                        KernelFunction.ValueFromBool(KernelFunctionSpecialized.int_is_sorted_asc_as_boolean(0, param_2));
+                        BuiltinFunction.ValueFromBool(BuiltinFunctionSpecialized.int_is_sorted_asc_as_boolean(0, param_2));
 
                     PineValue local_004 =
-                        local_002 == PineKernelValues.TrueValue ? param_1 : KernelFunctionSpecialized.int_mul(-1, param_1);
+                        local_002 == PineKernelValues.TrueValue ? param_1 : BuiltinFunctionSpecialized.int_mul(-1, param_1);
 
                     PineValue local_005 =
-                        local_003 == PineKernelValues.TrueValue ? param_2 : KernelFunctionSpecialized.int_mul(-1, param_2);
+                        local_003 == PineKernelValues.TrueValue ? param_2 : BuiltinFunctionSpecialized.int_mul(-1, param_2);
 
                     PineValue local_007 = Test.idivHelper(local_004, local_005, CommonReusedValues.Blob_Int_0);
 
@@ -331,7 +331,7 @@ public class OptimizeAndEmitIdivTests
                         return local_007;
                     }
 
-                    return KernelFunctionSpecialized.int_mul(-1, local_007);
+                    return BuiltinFunctionSpecialized.int_mul(-1, local_007);
                 }
 
                 public static PineValue idivHelper(PineValue param_1, PineValue param_2, PineValue param_3)
@@ -342,32 +342,32 @@ public class OptimizeAndEmitIdivTests
 
                     while (true)
                     {
-                        PineValue local_000 = KernelFunctionSpecialized.int_mul(17, local_param_2);
+                        PineValue local_000 = BuiltinFunctionSpecialized.int_mul(17, local_param_2);
 
-                        if (KernelFunctionSpecialized.int_is_sorted_asc_as_boolean(local_000, local_param_1))
+                        if (BuiltinFunctionSpecialized.int_is_sorted_asc_as_boolean(local_000, local_param_1))
                         {
                             PineValue local_001 = Test.idivHelper(local_param_1, local_000, CommonReusedValues.Blob_Int_0);
 
                             return
-                                KernelFunctionSpecialized.int_add(
-                                    KernelFunctionSpecialized.int_mul(17, local_001),
+                                BuiltinFunctionSpecialized.int_add(
+                                    BuiltinFunctionSpecialized.int_mul(17, local_001),
                                     Test.idivHelper(
-                                        KernelFunctionSpecialized.int_add(
+                                        BuiltinFunctionSpecialized.int_add(
                                             local_param_1,
-                                            KernelFunctionSpecialized.int_mul(local_001, local_param_2, -17)),
+                                            BuiltinFunctionSpecialized.int_mul(local_001, local_param_2, -17)),
                                         local_param_2,
                                         CommonReusedValues.Blob_Int_0));
                         }
 
-                        if (KernelFunctionSpecialized.int_is_sorted_asc_as_boolean(local_param_2, local_param_1))
+                        if (BuiltinFunctionSpecialized.int_is_sorted_asc_as_boolean(local_param_2, local_param_1))
                         {
                             {
                                 PineValue local_param_1_temp =
-                                    KernelFunctionSpecialized.int_add(
+                                    BuiltinFunctionSpecialized.int_add(
                                         local_param_1,
-                                        KernelFunctionSpecialized.int_mul(-1, local_param_2));
+                                        BuiltinFunctionSpecialized.int_mul(-1, local_param_2));
 
-                                PineValue local_param_3_temp = KernelFunctionSpecialized.int_add(1, local_param_3);
+                                PineValue local_param_3_temp = BuiltinFunctionSpecialized.int_add(1, local_param_3);
                                 local_param_1 = local_param_1_temp;
                                 local_param_3 = local_param_3_temp;
                             }

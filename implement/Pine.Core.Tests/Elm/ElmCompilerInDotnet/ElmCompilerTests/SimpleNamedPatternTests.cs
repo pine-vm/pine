@@ -361,7 +361,7 @@ public class SimpleNamedPatternTests
         {
             var result =
                 ApplyForArgumentAsExpressionString(
-                    KernelFunction.ValueFromBool(true));
+                    BuiltinFunction.ValueFromBool(true));
 
             result.Should().Be("10");
         }
@@ -370,7 +370,7 @@ public class SimpleNamedPatternTests
         {
             var result =
                 ApplyForArgumentAsExpressionString(
-                    KernelFunction.ValueFromBool(false));
+                    BuiltinFunction.ValueFromBool(false));
 
             result.Should().Be("20");
         }
@@ -448,7 +448,7 @@ public class SimpleNamedPatternTests
         {
             var result =
                 ApplyForArgumentAsExpressionString(
-                    ElmValueEncoding.TagAsPineValue("WrapBool", [KernelFunction.ValueFromBool(true)]));
+                    ElmValueEncoding.TagAsPineValue("WrapBool", [BuiltinFunction.ValueFromBool(true)]));
 
             result.Should().Be("10");
         }
@@ -457,7 +457,7 @@ public class SimpleNamedPatternTests
         {
             var result =
                 ApplyForArgumentAsExpressionString(
-                    ElmValueEncoding.TagAsPineValue("WrapBool", [KernelFunction.ValueFromBool(false)]));
+                    ElmValueEncoding.TagAsPineValue("WrapBool", [BuiltinFunction.ValueFromBool(false)]));
 
             result.Should().Be("20");
         }
@@ -532,7 +532,7 @@ public class SimpleNamedPatternTests
                 .expressionString;
         }
 
-        PineValue BoolVal(bool b) => KernelFunction.ValueFromBool(b);
+        PineValue BoolVal(bool b) => BuiltinFunction.ValueFromBool(b);
 
         // ( True, True ) -> 1
         {

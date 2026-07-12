@@ -14,7 +14,7 @@ public class ImmutableSliceBuilderTests
             source);
 
     private static PineValue KernelSkip(PineValue skipCount, PineValue source)
-        => KernelFunction.skip(PineValue.List([skipCount, source]));
+        => BuiltinFunction.skip(PineValue.List([skipCount, source]));
 
     private static PineValue KernelTake(int takeCount, PineValue source) =>
         KernelTake(
@@ -22,7 +22,7 @@ public class ImmutableSliceBuilderTests
             source);
 
     private static PineValue KernelTake(PineValue takeCount, PineValue source)
-        => KernelFunction.take(PineValue.List([takeCount, source]));
+        => BuiltinFunction.take(PineValue.List([takeCount, source]));
 
     [Fact]
     public void Create_initializes_with_full_range()
@@ -920,7 +920,7 @@ public class ImmutableSliceBuilderTests
 
         var head = builder.GetHead();
 
-        var expected = KernelFunction.head(PineValue.EmptyList);
+        var expected = BuiltinFunction.head(PineValue.EmptyList);
         head.Should().Be(expected);
     }
 

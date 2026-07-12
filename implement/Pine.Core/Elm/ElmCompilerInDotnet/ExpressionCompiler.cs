@@ -2017,7 +2017,7 @@ public class ExpressionCompiler
         ElmValueEncoding.ElmCharAsPineValue(value);
 
     internal static PineValue EmitBooleanLiteral(bool value) =>
-        KernelFunction.ValueFromBool(value);
+        BuiltinFunction.ValueFromBool(value);
 
     #endregion
 }

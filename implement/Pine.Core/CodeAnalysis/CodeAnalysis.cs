@@ -1667,7 +1667,7 @@ public class CodeAnalysis
             if (1 < path.Length)
                 return null;
 
-            return KernelFunctionSpecialized.skip(path[0], blobValue);
+            return BuiltinFunctionSpecialized.skip(path[0], blobValue);
         }
 
         if (environment is not PineValue.ListValue listValue)
@@ -1756,11 +1756,11 @@ public class CodeAnalysis
             if (currentExpression is not Expression.KernelApplication kernelApplication)
                 return null;
 
-            if (kernelApplication.Function is not nameof(KernelFunction.head))
+            if (kernelApplication.Function is not nameof(BuiltinFunction.head))
                 return null;
 
             if (kernelApplication.Input is Expression.KernelApplication inputKernelApplication &&
-                inputKernelApplication.Function is nameof(KernelFunction.skip))
+                inputKernelApplication.Function is nameof(BuiltinFunction.skip))
             {
                 if (inputKernelApplication.Input is not Expression.List skipInputList)
                     return null;
@@ -1771,7 +1771,7 @@ public class CodeAnalysis
                 if (skipInputList.Items[0] is not Expression.Literal skipCountLiteral)
                     return null;
 
-                if (KernelFunction.SignedIntegerFromValueRelaxed(skipCountLiteral.Value) is not { } skipValue)
+                if (BuiltinFunction.SignedIntegerFromValueRelaxed(skipCountLiteral.Value) is not { } skipValue)
                     return null;
 
                 pathSegments.Add((int)skipValue);

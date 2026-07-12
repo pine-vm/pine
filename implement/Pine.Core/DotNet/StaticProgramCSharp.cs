@@ -59,11 +59,11 @@ public record StaticProgramCSharp(
                 UsingDirectives:
                 [
                 UsingAliasForTypeDefault(typeof(PineValue)),
-                UsingAliasForTypeDefault(typeof(KernelFunction)),
+                UsingAliasForTypeDefault(typeof(BuiltinFunction)),
                 UsingAliasForTypeDefault(typeof(PineKernelValues)),
                 UsingAliasForTypeDefault(typeof(PineValueExtension)),
-                UsingAliasForTypeDefault(typeof(Internal.KernelFunctionFused)),
-                UsingAliasForTypeDefault(typeof(Internal.KernelFunctionSpecialized)),
+                UsingAliasForTypeDefault(typeof(Internal.BuiltinFunctionFused)),
+                UsingAliasForTypeDefault(typeof(Internal.BuiltinFunctionSpecialized)),
 
                 UsingAliasForTypeDefault(typeof(IntegerEncoding)),
                 UsingAliasForTypeDefault(typeof(StringEncoding)),

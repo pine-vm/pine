@@ -194,7 +194,7 @@ public class PineValueInProcess
     }
 
     /// <summary>
-    /// Representation of a boolean, as returned by kernel functions such as <see cref="KernelFunction.equal(PineValue)"/>.
+    /// Representation of a boolean, as returned by kernel functions such as <see cref="BuiltinFunction.equal(PineValue)"/>.
     /// </summary>
     /// <param name="boolean">The boolean value to represent.</param>
     public static PineValueInProcess CreateBool(bool boolean)
@@ -335,7 +335,7 @@ public class PineValueInProcess
 
         var asEvaluated = Evaluate();
 
-        _integer = KernelFunction.SignedIntegerFromValueRelaxed(asEvaluated);
+        _integer = BuiltinFunction.SignedIntegerFromValueRelaxed(asEvaluated);
 
         return _integer;
     }
@@ -408,13 +408,13 @@ public class PineValueInProcess
             return 2;
 
         if (_evaluated is not null)
-            return KernelFunctionSpecialized.length_as_int(_evaluated);
+            return BuiltinFunctionSpecialized.length_as_int(_evaluated);
 
         if (_integer.HasValue)
         {
             var asEncoded = IntegerEncoding.EncodeSignedInteger(_integer.Value);
 
-            return KernelFunctionSpecialized.length_as_int(asEncoded);
+            return BuiltinFunctionSpecialized.length_as_int(asEncoded);
         }
 
         if (_sliceBuilder is not null)
@@ -430,7 +430,7 @@ public class PineValueInProcess
     }
 
     /// <summary>
-    /// Analog to <see cref="KernelFunctionSpecialized.skip(BigInteger, PineValue)"/>
+    /// Analog to <see cref="BuiltinFunctionSpecialized.skip(BigInteger, PineValue)"/>
     /// </summary>
     /// <param name="skipCount">Number of elements/bytes to skip.</param>
     /// <param name="source">The source sequence value.</param>
@@ -495,7 +495,7 @@ public class PineValueInProcess
     }
 
     /// <summary>
-    /// Analog to <see cref="KernelFunctionSpecialized.take(BigInteger, PineValue)"/>
+    /// Analog to <see cref="BuiltinFunctionSpecialized.take(BigInteger, PineValue)"/>
     /// </summary>
     /// <param name="takeCount">Maximum number of elements/bytes to take.</param>
     /// <param name="source">The source sequence value.</param>
@@ -567,9 +567,9 @@ public class PineValueInProcess
 
     /// <summary>
     /// Analog to a combination of kernel functions as follows:
-    /// <see cref="KernelFunction.reverse(PineValue)"/>,
-    /// <see cref="KernelFunction.take(PineValue)"/>,
-    /// <see cref="KernelFunction.reverse(PineValue)"/>
+    /// <see cref="BuiltinFunction.reverse(PineValue)"/>,
+    /// <see cref="BuiltinFunction.take(PineValue)"/>,
+    /// <see cref="BuiltinFunction.reverse(PineValue)"/>
     /// </summary>
     public static PineValueInProcess TakeLast(int takeCount, PineValueInProcess source)
     {
@@ -592,7 +592,7 @@ public class PineValueInProcess
     }
 
     /// <summary>
-    /// Analog to <see cref="KernelFunction.reverse(PineValue)"/>.
+    /// Analog to <see cref="BuiltinFunction.reverse(PineValue)"/>.
     /// </summary>
     /// <remarks>
     /// For list values the reversal is built structurally over the in-process child items so that
@@ -632,11 +632,11 @@ public class PineValueInProcess
         }
 
         // Blob (or other concrete) path: no specialized children can be embedded.
-        return Create(KernelFunction.reverse(input.Evaluate()));
+        return Create(BuiltinFunction.reverse(input.Evaluate()));
     }
 
     /// <summary>
-    /// Analog to <see cref="KernelFunction.head(PineValue)"/>.
+    /// Analog to <see cref="BuiltinFunction.head(PineValue)"/>.
     /// </summary>
     /// <remarks>
     /// For list values the first in-process child item is returned without forcing evaluation, so
@@ -654,11 +654,11 @@ public class PineValueInProcess
         }
 
         // Blob (or other concrete) path.
-        return Create(KernelFunction.head(input.Evaluate()));
+        return Create(BuiltinFunction.head(input.Evaluate()));
     }
 
     /// <summary>
-    /// Analog to <see cref="KernelFunction.concat(PineValue)"/>
+    /// Analog to <see cref="BuiltinFunction.concat(PineValue)"/>
     /// </summary>
     /// <remarks>
     /// When the inputs are lists, the concatenation is built structurally over the in-process
@@ -680,7 +680,7 @@ public class PineValueInProcess
         if (length is 1)
             return input.GetElementAt(0);
 
-        // Skip over any leading empty lists, mirroring KernelFunctionSpecialized.concat, so that
+        // Skip over any leading empty lists, mirroring BuiltinFunctionSpecialized.concat, so that
         // the first remaining part determines whether this is a list or blob concatenation.
         var firstNonEmptyIndex = 0;
 
@@ -733,7 +733,7 @@ public class PineValueInProcess
             return ConcatBinary(input.GetElementAt(0), input.GetElementAt(1));
         }
 
-        return Create(KernelFunction.concat(input.Evaluate()));
+        return Create(BuiltinFunction.concat(input.Evaluate()));
     }
 
     /// <summary>
@@ -853,8 +853,8 @@ public class PineValueInProcess
     }
 
     /// <summary>
-    /// Fused application of the kernel functions <see cref="KernelFunction.skip(PineValue)"/> and
-    /// <see cref="KernelFunction.head(PineValue)"/> on the value from <see cref="Evaluate"/>
+    /// Fused application of the kernel functions <see cref="BuiltinFunction.skip(PineValue)"/> and
+    /// <see cref="BuiltinFunction.head(PineValue)"/> on the value from <see cref="Evaluate"/>
     /// </summary>
     /// <param name="index">The zero-based index of the element to retrieve.</param>
     /// <returns>
