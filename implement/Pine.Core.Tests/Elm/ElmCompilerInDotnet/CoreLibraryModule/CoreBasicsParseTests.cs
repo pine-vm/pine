@@ -381,8 +381,7 @@ public class CoreBasicsParseTests
             Test.alfa param_1_0 =
                 Basics.modBy
                     7
-                    [ param_1_0
-                    ]
+                    param_1_0
 
             """"
             .Trim());
@@ -466,8 +465,7 @@ public class CoreBasicsParseTests
             Test.alfa param_1_0 =
                 Basics.remainderBy
                     7
-                    [ param_1_0
-                    ]
+                    param_1_0
 
             """"
             .Trim());
@@ -629,8 +627,7 @@ public class CoreBasicsParseTests
             Test.alfa param_1_0 =
                 Basics.sub
                     100
-                    [ param_1_0
-                    ]
+                    param_1_0
 
             """"
             .Trim());

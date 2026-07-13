@@ -235,6 +235,21 @@ public class ExpressionCompiler
                             environment: crossSccCallEnvironment);
                 }
 
+                // For functions with paramCount > 0 the callee's function value
+                // can be emitted either as the cached wrapper (Form-B) or as the
+                // direct-evaluation template (the same shape produced by
+                // TryBuildCurriedFunctionValueAsTemplate). We prefer the template
+                // when it can be built, since the static encoded body and env
+                // functions are available here, and fall back to the wrapper
+                // otherwise.
+                if (FunctionValueBuilder.TryBuildCurriedFunctionValueAsTemplateFromEncodedBody(
+                    crossSccCalleeInfo.EncodedBody,
+                    crossSccCalleeInfo.ParameterCount,
+                    crossSccCalleeInfo.EnvFunctions) is { } crossSccTemplateValue)
+                {
+                    return Expression.LiteralInstance(crossSccTemplateValue);
+                }
+
                 return Expression.LiteralInstance(crossSccCalleeInfo.CompiledValue);
             }
         }
@@ -655,6 +670,54 @@ public class ExpressionCompiler
 
                 return fullApplicationResult;
             }
+
+            // Partial application (0 < argCount < paramCount): emit a compact
+            // template-based function value that nests only the remaining
+            // parameters and embeds the already-provided (leading) arguments
+            // directly, instead of falling back to the generic path that wraps
+            // the function value in one ParseAndEval per argument.
+            if (paramCount > 0)
+            {
+                if (cachedCalleeInfo is not null)
+                {
+                    // Cross-SCC callee case: the static encoded body and
+                    // env-functions list are available from the cached
+                    // compiled-function info, so embed them directly as
+                    // literals.
+
+                    return
+                        FunctionValueBuilder.EmitCurriedFunctionTemplateWithLeadingArgsFromEncodedBody(
+                            cachedCalleeInfo.EncodedBody,
+                            paramCount,
+                            compiledArguments,
+                            cachedCalleeInfo.EnvFunctions);
+                }
+
+                if (functionIndexOpt is { } functionIndex)
+                {
+                    // Same-SCC callee case: the encoded body and env-functions
+                    // list are not available as static values; read them from
+                    // the caller's runtime env (the encoded body at
+                    // [0, functionIndex], the shared env-functions list at [0])
+                    // and embed those runtime values into the emitted template.
+                    var encodedBodyExpression =
+                        ExpressionBuilder.BuildExpressionForPathInExpression(
+                            [0, functionIndex],
+                            Expression.EnvironmentInstance);
+
+                    var envFunctionsExpression =
+                        ExpressionBuilder.BuildExpressionForPathInExpression(
+                            [0],
+                            Expression.EnvironmentInstance);
+
+                    return
+                        FunctionValueBuilder.EmitCurriedFunctionTemplateWithLeadingArgsFromEncodedBodyExpression(
+                            encodedBodyExpression,
+                            paramCount,
+                            compiledArguments,
+                            envFunctionsExpression);
+                }
+            }
         }
 
         {
@@ -1044,10 +1107,13 @@ public class ExpressionCompiler
                 environment: callEnv);
 
         var functionValue =
-            FunctionValueBuilder.EmitFunctionValueWithEnvFunctions(
+            FunctionValueBuilder.TryBuildCurriedFunctionValueAsTemplate(
                 body,
                 parameterCount: 1,
-                envFunctions: []);
+                envFunctions: [])
+            ??
+            throw new NotImplementedException(
+                "Failed to build function value template for record access function.");
 
         return Expression.LiteralInstance(functionValue);
     }
@@ -1145,10 +1211,13 @@ public class ExpressionCompiler
                 [singletonList, tailExpr]);
 
         return
-            FunctionValueBuilder.EmitFunctionValueWithEnvFunctions(
+            FunctionValueBuilder.TryBuildCurriedFunctionValueAsTemplate(
                 body,
                 parameterCount: 2,
-                envFunctions: []);
+                envFunctions: [])
+            ??
+            throw new NotImplementedException(
+                "Failed to build function value template for cons (::) operator.");
     }
 
     private static Result<CompilationError, Expression> CompileNegation(
@@ -1718,11 +1787,12 @@ public class ExpressionCompiler
             }
         }
 
+        var envFuncsListExpr = Expression.ListInstance(envFunctionsExprs);
+
         if (paramCount <= 0)
         {
             // Zero-parameter value declaration: invoke the body immediately
             // to produce the actual value rather than returning an unevaluated function wrapper.
-            var envFuncsListExpr = Expression.ListInstance(envFunctionsExprs);
 
             var callEnvironment =
                 Expression.ListInstance([envFuncsListExpr]);
@@ -1735,10 +1805,11 @@ public class ExpressionCompiler
 
         // Emit the function value expression using FunctionValueBuilder
         return
-            FunctionValueBuilder.EmitFunctionExpressionFromEncodedBody(
+            FunctionValueBuilder.EmitCurriedFunctionTemplateWithLeadingArgsFromEncodedBodyExpression(
                 encodedBodyExpr,
                 paramCount,
-                envFunctionsExprs);
+                leadingArgExpressions: [],
+                envFuncsListExpr);
     }
 
     /// <summary>
@@ -1769,38 +1840,24 @@ public class ExpressionCompiler
                     ]);
         }
 
-        // Build the inner expression that constructs the choice type value.
-        // The inner expression expects flat env layout:
-        // - env[0] = captured args list (stored in "env functions" slot)
-        // - env[1..N] = remaining args
-        //
-        // We use FunctionValueBuilder with the captured args stored in the "env functions" slot.
-
         var tagNameLiteral = Expression.LiteralInstance(StringEncoding.ValueFromString(tagName));
 
-        // Build the inner expression that constructs [TagName, [capturedArg0, capturedArg1, ..., remainingArg0, remainingArg1, ...]]
-        // At invocation time, environment is [[capturedArgs], [remainingArgs]]
-        var allArgExpressions = new List<Expression>();
+        // Build the inner expression for the FULL tag arity. At invocation time the inner expression is
+        // evaluated with environment [envFunctions, arg_0, ..., arg_{totalArgCount-1}], i.e. arg_i is at
+        // path [1 + i]. This is the same inner expression used by the plain (zero captured args) function
+        // value, so the partial application below produces an intermediate value identical to applying the
+        // captured arguments to the plain function value.
+        var allArgExpressions = new Expression[totalArgCount];
 
-        // Build expression to get captured args from env[0]
-        for (var i = 0; i < capturedArgExpressions.Count; i++)
+        for (var i = 0; i < totalArgCount; i++)
         {
-            allArgExpressions.Add(
-                ExpressionBuilder.BuildExpressionForPathInExpression(
-                    [0, i],
-                    Expression.EnvironmentInstance));
-        }
-
-        // Build expressions to get remaining args from env (flat layout)
-        for (var i = 0; i < remainingArgCount; i++)
-        {
-            allArgExpressions.Add(
+            allArgExpressions[i] =
                 ExpressionBuilder.BuildExpressionForPathInExpression(
                     [1 + i],
-                    Expression.EnvironmentInstance));
+                    Expression.EnvironmentInstance);
         }
 
-        // Build the choice type value expression
+        // Build the choice type value expression for when all arguments are collected.
         var choiceTypeValueExpr =
             Expression.ListInstance(
                 [
@@ -1808,13 +1865,12 @@ public class ExpressionCompiler
                 Expression.ListInstance(allArgExpressions)
                 ]);
 
-        // Use EmitFunctionExpressionFromEncodedBody to build a function value with the captured args
-        // stored in the "env functions" slot. This allows the captured args to be evaluated at
-        // the point where the partial application expression is evaluated, not when it's compiled.
+        // Emit a compact template-based function value that only nests the remaining parameters and embeds
+        // the already available (captured) argument expressions directly.
         return
-            FunctionValueBuilder.EmitFunctionExpression(
+            FunctionValueBuilder.EmitCurriedFunctionTemplateWithLeadingArgs(
                 choiceTypeValueExpr,
-                remainingArgCount,
+                totalArgCount,
                 capturedArgExpressions);
     }
 
@@ -1851,10 +1907,12 @@ public class ExpressionCompiler
 
         // Build the function value that wraps this expression
         var functionValue =
-            FunctionValueBuilder.EmitFunctionValueWithEnvFunctions(
+            FunctionValueBuilder.TryBuildCurriedFunctionValueAsTemplate(
                 choiceTypeValueExpr,
-                argCount,
-                envFunctions: []);
+                argCount)
+            ??
+            throw new NotImplementedException(
+                "Failed to build function value template for choice tag function.");
 
         return Expression.LiteralInstance(functionValue);
     }
@@ -1920,10 +1978,12 @@ public class ExpressionCompiler
 
         // Build the function value that wraps this expression
         var functionValue =
-            FunctionValueBuilder.EmitFunctionValueWithEnvFunctions(
+            FunctionValueBuilder.TryBuildCurriedFunctionValueAsTemplate(
                 recordValueExpr,
-                argCount,
-                envFunctions: []);
+                argCount)
+            ??
+            throw new NotImplementedException(
+                "Failed to build function value template for record constructor function.");
 
         return Expression.LiteralInstance(functionValue);
     }
@@ -1943,36 +2003,33 @@ public class ExpressionCompiler
         var totalArgCount = fieldNamesInDeclOrder.Count;
         var remainingArgCount = totalArgCount - capturedArgExpressions.Count;
 
-        // Build the inner expression that constructs the record.
-        // At invocation time, flat env layout: env[0] = capturedArgs list, env[1..N] = remainingArgs
-        var allArgExpressions = new List<Expression>();
-
-        // Build expressions to get captured args from env[0]
-        for (var i = 0; i < capturedArgExpressions.Count; i++)
+        if (remainingArgCount <= 0)
         {
-            allArgExpressions.Add(
-                ExpressionBuilder.BuildExpressionForPathInExpression(
-                    [0, i],
-                    Expression.EnvironmentInstance));
+            // All arguments are already captured - just build the record value directly.
+            return BuildRecordValueExpression(fieldNamesInDeclOrder, capturedArgExpressions);
         }
 
-        // Build expressions to get remaining args from env (flat layout)
-        for (var i = 0; i < remainingArgCount; i++)
+        // Build the inner expression for the FULL constructor arity. At invocation time the inner expression
+        // is evaluated with environment [envFunctions, arg_0, ..., arg_{totalArgCount-1}], i.e. arg_i is at
+        // path [1 + i]. This is the same inner expression used by the plain (zero captured args) function
+        // value, so the partial application below produces an intermediate value identical to applying the
+        // captured arguments to the plain function value.
+        var allArgExpressions = new Expression[totalArgCount];
+
+        for (var i = 0; i < totalArgCount; i++)
         {
-            allArgExpressions.Add(
-                ExpressionBuilder.BuildExpressionForPathInExpression(
-                    [1 + i],
-                    Expression.EnvironmentInstance));
+            allArgExpressions[i] = BuiltinHelpers.BuildPathToParameter(i);
         }
 
         // Build the record value expression
         var recordValueExpr = BuildRecordValueExpression(fieldNamesInDeclOrder, allArgExpressions);
 
-        // Use EmitFunctionExpression to build a function value with the captured args
+        // Emit a compact template-based function value that only nests the remaining parameters and embeds
+        // the already available (captured) argument expressions directly.
         return
-            FunctionValueBuilder.EmitFunctionExpression(
+            FunctionValueBuilder.EmitCurriedFunctionTemplateWithLeadingArgs(
                 recordValueExpr,
-                remainingArgCount,
+                totalArgCount,
                 capturedArgExpressions);
     }
 

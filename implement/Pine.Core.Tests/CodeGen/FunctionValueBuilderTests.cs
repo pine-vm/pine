@@ -2,8 +2,11 @@ using AwesomeAssertions;
 using Pine.Core.CodeAnalysis;
 using Pine.Core.CodeGen;
 using Pine.Core.CommonEncodings;
+using Pine.Core.Elm;
 using System;
+using System.Collections.Generic;
 using System.Collections.Immutable;
+using System.Linq;
 using Xunit;
 
 namespace Pine.Core.Tests.CodeGen;
@@ -701,6 +704,54 @@ public class FunctionValueBuilderTests
         record.ArgumentsAlreadyCollected.Length.Should().Be(0);
     }
 
+    [Theory]
+    [InlineData(1, 0)]
+    [InlineData(2, 0)]
+    [InlineData(3, 0)]
+    [InlineData(3, 1)]
+    [InlineData(3, 2)]
+    public void ParseFunctionRecord_CurriedTemplate_ParsesCapturedArguments(
+        int parameterCount,
+        int capturedArgumentCount)
+    {
+        var innerExpression =
+            Expression.ListInstance(
+                Enumerable.Range(1, parameterCount)
+                .Select(index => BuildExpressionForPathInEnvironment([index]))
+                .ToArray());
+
+        var envFunction = PineValue.Blob([100]);
+
+        var functionValue =
+            FunctionValueBuilder.TryBuildCurriedFunctionValueAsTemplate(
+                innerExpression,
+                parameterCount,
+                envFunctions: [envFunction])
+            ??
+            throw new Exception("Failed to build curried function template");
+
+        var capturedArguments =
+            Enumerable.Range(0, capturedArgumentCount)
+            .Select(index => IntegerEncoding.EncodeSignedInteger(index + 10))
+            .ToArray();
+
+        foreach (var capturedArgument in capturedArguments)
+            functionValue = EvaluateEncodedExpression(functionValue, capturedArgument);
+
+        var parseResult =
+            FunctionRecord.ParseFunctionRecordTagged(functionValue, s_parseCache);
+
+        var record =
+            parseResult.IsOkOrNull()
+            ??
+            throw new Exception("Failed to parse curried function template: " + parseResult);
+
+        record.ParameterCount.Should().Be(parameterCount);
+        record.EnvFunctions.Span.ToArray().Should().Equal(envFunction);
+        record.ArgumentsAlreadyCollected.Span.ToArray().Should().Equal(capturedArguments);
+        record.UsesNestedArgFormat.Should().BeFalse();
+    }
+
     [Fact]
     public void ParseFunctionRecord_TwoParameters_WithMultipleEnvFunctions_ParsesCorrectly()
     {
@@ -1192,6 +1243,359 @@ public class FunctionValueBuilderTests
 
     #endregion
 
+
+    #region BuildCurriedFunctionValueAsTemplate Tests
+
+    [Fact]
+    public void BuildCurriedFunctionValueAsTemplate_OneParameter()
+    {
+        var innerExpr =
+            Expression.KernelApplicationInstance(
+                function: nameof(KernelFunction.int_add),
+                input: Expression.ListInstance(
+                    [
+                    Expression.KernelApplicationInstance(
+                        function: nameof(KernelFunction.int_mul),
+                        input: Expression.ListInstance(
+                            [
+                            BuildExpressionForPathInEnvironment([1]),
+                            Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(17))
+                            ])),
+
+                    Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(19))
+                    ]));
+
+        var templateValue =
+            FunctionValueBuilder.TryBuildCurriedFunctionValueAsTemplate(
+                innerExpr,
+                parameterCount: 1);
+
+        templateValue.Should().NotBeNull();
+
+        var parseFirstLevelResult =
+            ExpressionEncoding.ParseExpressionFromValue(templateValue);
+
+        if (parseFirstLevelResult.IsErrOrNull() is { } err)
+        {
+            throw new Exception($"Failed to parse template value: {err}");
+        }
+
+        var parseFirstLevelOk =
+            parseFirstLevelResult.IsOkOrNull()
+            ??
+            throw new NotImplementedException(
+                "Unexpected result type from parsing: " + parseFirstLevelResult);
+
+        parseFirstLevelOk.BuiltinCount.Should().Be(0);
+
+        var plainApplicationExpr =
+            new Expression.ParseAndEval(
+                encoded: Expression.LiteralInstance(templateValue),
+                environment: Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(41)));
+
+        var evaluated =
+            EvaluateExpression(plainApplicationExpr, PineValue.List([]));
+
+        evaluated.Should().NotBeNull();
+
+        var expectedValue =
+            IntegerEncoding.EncodeSignedInteger(17 * 41 + 19);
+
+        var expectedValueRendering =
+            RenderValueAsElmExpression(expectedValue);
+
+        var evaluatedRendering =
+            RenderValueAsElmExpression(evaluated);
+
+        evaluatedRendering.Should().Be(expectedValueRendering);
+    }
+
+    [Fact]
+    public void BuildCurriedFunctionValueAsTemplate_TwoParameters()
+    {
+        var innerExpr =
+            Expression.KernelApplicationInstance(
+                function: nameof(KernelFunction.int_add),
+                input: Expression.ListInstance(
+                    [
+                    Expression.KernelApplicationInstance(
+                        function: nameof(KernelFunction.int_mul),
+                        input: Expression.ListInstance(
+                            [
+                            BuildExpressionForPathInEnvironment([1]),
+                            Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(17))
+                            ])),
+
+                    Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(19)),
+
+                    BuildExpressionForPathInEnvironment([2]),
+                    ]));
+
+        var templateValue =
+            FunctionValueBuilder.TryBuildCurriedFunctionValueAsTemplate(
+                innerExpr,
+                parameterCount: 2);
+
+        templateValue.Should().NotBeNull();
+
+        {
+            // Assert template composition properties
+
+            var parseFirstLevelResult =
+                ExpressionEncoding.ParseExpressionFromValue(templateValue);
+
+            {
+                if (parseFirstLevelResult.IsErrOrNull() is { } err)
+                {
+                    throw new Exception($"Failed to parse template value: {err}");
+                }
+            }
+
+            var parseFirstLevelOk =
+                parseFirstLevelResult.IsOkOrNull()
+                ??
+                throw new NotImplementedException(
+                    "Unexpected result type from parsing: " + parseFirstLevelResult);
+
+            parseFirstLevelOk.BuiltinCount.Should().Be(0);
+            parseFirstLevelOk.ContainsParseAndEval.Should().BeFalse();
+
+            var simulateFirstApplication =
+                EvaluateExpression(
+                    parseFirstLevelOk,
+                    IntegerEncoding.EncodeSignedInteger(1234567));
+
+            var parseSecondLevelResult =
+                ExpressionEncoding.ParseExpressionFromValue(simulateFirstApplication);
+
+            {
+                if (parseSecondLevelResult.IsErrOrNull() is { } err)
+                {
+                    throw new Exception($"Failed to parse template value: {err}");
+                }
+            }
+
+            var parseSecondLevelOk =
+                parseSecondLevelResult.IsOkOrNull()
+                ??
+                throw new NotImplementedException(
+                    "Unexpected result type from parsing: " + parseSecondLevelResult);
+
+            parseSecondLevelOk.BuiltinCount.Should().Be(0);
+        }
+
+        var firstArgPlainApplicationExpr =
+            new Expression.ParseAndEval(
+                encoded: Expression.LiteralInstance(templateValue),
+                environment: Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(41)));
+
+        var secondArgPlainApplicationExpr =
+            new Expression.ParseAndEval(
+                encoded: firstArgPlainApplicationExpr,
+                environment: Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(43)));
+
+        var evaluated =
+            EvaluateExpression(secondArgPlainApplicationExpr, PineValue.List([]));
+
+        evaluated.Should().NotBeNull();
+
+        var expectedValue =
+            IntegerEncoding.EncodeSignedInteger(17 * 41 + 19 + 43);
+
+        var expectedValueRendering =
+            RenderValueAsElmExpression(expectedValue);
+
+        var evaluatedRendering =
+            RenderValueAsElmExpression(evaluated);
+
+        evaluatedRendering.Should().Be(expectedValueRendering);
+    }
+
+    [Fact]
+    public void BuildCurriedFunctionValueAsTemplate_OneParameter_WithEnvFunctions()
+    {
+        // env = [envFunctions, arg0]
+        // envFunctions[0] is at path [0, 0]; arg0 is at path [1].
+        var envFunc0 = IntegerEncoding.EncodeSignedInteger(100);
+
+        var innerExpr =
+            Expression.KernelApplicationInstance(
+                function: nameof(KernelFunction.int_add),
+                input: Expression.ListInstance(
+                    [
+                    Expression.KernelApplicationInstance(
+                        function: nameof(KernelFunction.int_mul),
+                        input: Expression.ListInstance(
+                            [
+                            BuildExpressionForPathInEnvironment([1]),
+                            Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(17))
+                            ])),
+
+                    Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(19)),
+
+                    BuildExpressionForPathInEnvironment([0, 0]),
+                    ]));
+
+        var templateValue =
+            FunctionValueBuilder.TryBuildCurriedFunctionValueAsTemplate(
+                innerExpr,
+                parameterCount: 1,
+                envFunctions: [envFunc0]);
+
+        templateValue.Should().NotBeNull();
+
+        var parseFirstLevelResult =
+            ExpressionEncoding.ParseExpressionFromValue(templateValue);
+
+        if (parseFirstLevelResult.IsErrOrNull() is { } err)
+        {
+            throw new Exception($"Failed to parse template value: {err}");
+        }
+
+        var parseFirstLevelOk =
+            parseFirstLevelResult.IsOkOrNull()
+            ??
+            throw new NotImplementedException(
+                "Unexpected result type from parsing: " + parseFirstLevelResult);
+
+        parseFirstLevelOk.BuiltinCount.Should().Be(0);
+
+        var plainApplicationExpr =
+            new Expression.ParseAndEval(
+                encoded: Expression.LiteralInstance(templateValue),
+                environment: Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(41)));
+
+        var evaluated =
+            EvaluateExpression(plainApplicationExpr, PineValue.List([]));
+
+        evaluated.Should().NotBeNull();
+
+        var expectedValue =
+            IntegerEncoding.EncodeSignedInteger(17 * 41 + 19 + 100);
+
+        var expectedValueRendering =
+            RenderValueAsElmExpression(expectedValue);
+
+        var evaluatedRendering =
+            RenderValueAsElmExpression(evaluated);
+
+        evaluatedRendering.Should().Be(expectedValueRendering);
+    }
+
+    [Fact]
+    public void BuildCurriedFunctionValueAsTemplate_TwoParameters_WithEnvFunctions()
+    {
+        // env = [envFunctions, arg0, arg1]
+        // envFunctions[0] is at path [0, 0]; envFunctions[1] is at path [0, 1];
+        // arg0 is at path [1]; arg1 is at path [2].
+        var envFunc0 = IntegerEncoding.EncodeSignedInteger(100);
+        var envFunc1 = IntegerEncoding.EncodeSignedInteger(200);
+
+        var innerExpr =
+            Expression.KernelApplicationInstance(
+                function: nameof(KernelFunction.int_add),
+                input: Expression.ListInstance(
+                    [
+                    Expression.KernelApplicationInstance(
+                        function: nameof(KernelFunction.int_mul),
+                        input: Expression.ListInstance(
+                            [
+                            BuildExpressionForPathInEnvironment([1]),
+                            Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(17))
+                            ])),
+
+                    Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(19)),
+
+                    BuildExpressionForPathInEnvironment([2]),
+
+                    BuildExpressionForPathInEnvironment([0, 0]),
+
+                    BuildExpressionForPathInEnvironment([0, 1]),
+                    ]));
+
+        var templateValue =
+            FunctionValueBuilder.TryBuildCurriedFunctionValueAsTemplate(
+                innerExpr,
+                parameterCount: 2,
+                envFunctions: [envFunc0, envFunc1]);
+
+        templateValue.Should().NotBeNull();
+
+        {
+            // Assert template composition properties
+
+            var parseFirstLevelResult =
+                ExpressionEncoding.ParseExpressionFromValue(templateValue);
+
+            {
+                if (parseFirstLevelResult.IsErrOrNull() is { } err)
+                {
+                    throw new Exception($"Failed to parse template value: {err}");
+                }
+            }
+
+            var parseFirstLevelOk =
+                parseFirstLevelResult.IsOkOrNull()
+                ??
+                throw new NotImplementedException(
+                    "Unexpected result type from parsing: " + parseFirstLevelResult);
+
+            parseFirstLevelOk.BuiltinCount.Should().Be(0);
+            parseFirstLevelOk.ContainsParseAndEval.Should().BeFalse();
+
+            var simulateFirstApplication =
+                EvaluateExpression(
+                    parseFirstLevelOk,
+                    IntegerEncoding.EncodeSignedInteger(1234567));
+
+            var parseSecondLevelResult =
+                ExpressionEncoding.ParseExpressionFromValue(simulateFirstApplication);
+
+            {
+                if (parseSecondLevelResult.IsErrOrNull() is { } err)
+                {
+                    throw new Exception($"Failed to parse template value: {err}");
+                }
+            }
+
+            var parseSecondLevelOk =
+                parseSecondLevelResult.IsOkOrNull()
+                ??
+                throw new NotImplementedException(
+                    "Unexpected result type from parsing: " + parseSecondLevelResult);
+
+            parseSecondLevelOk.BuiltinCount.Should().Be(0);
+        }
+
+        var firstArgPlainApplicationExpr =
+            new Expression.ParseAndEval(
+                encoded: Expression.LiteralInstance(templateValue),
+                environment: Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(41)));
+
+        var secondArgPlainApplicationExpr =
+            new Expression.ParseAndEval(
+                encoded: firstArgPlainApplicationExpr,
+                environment: Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(43)));
+
+        var evaluated =
+            EvaluateExpression(secondArgPlainApplicationExpr, PineValue.List([]));
+
+        evaluated.Should().NotBeNull();
+
+        var expectedValue =
+            IntegerEncoding.EncodeSignedInteger(17 * 41 + 19 + 43 + 100 + 200);
+
+        var expectedValueRendering =
+            RenderValueAsElmExpression(expectedValue);
+
+        var evaluatedRendering =
+            RenderValueAsElmExpression(evaluated);
+
+        evaluatedRendering.Should().Be(expectedValueRendering);
+    }
+
+    #endregion
+
     #region ParseFunctionValue Symmetry Tests
 
     [Fact]
@@ -1379,6 +1783,504 @@ public class FunctionValueBuilderTests
 
     #endregion
 
+
+    #region EmitCurriedFunctionTemplateWithLeadingArgs (partial application) Tests
+
+    // Distinct multipliers (primes) used to build a linear inner expression so that every argument
+    // (and the env function) contributes a uniquely identifiable amount to the final result. This makes
+    // accidental slot mix-ups observable in the computed value.
+    private static readonly long[] s_partialAppCoefficients = [3, 5, 7, 11, 13];
+
+    private const long s_partialAppConstant = 101;
+
+    private const long s_partialAppEnvFuncCoefficient = 17;
+
+    [Theory]
+    // No env functions; vary total parameter count (2..5) and the number of leading args available at
+    // the partial application site (0 .. parameterCount - 1).
+    [InlineData(2, 0)]
+    [InlineData(2, 1)]
+    [InlineData(3, 0)]
+    [InlineData(3, 1)]
+    [InlineData(3, 2)]
+    [InlineData(4, 0)]
+    [InlineData(4, 1)]
+    [InlineData(4, 2)]
+    [InlineData(4, 3)]
+    [InlineData(5, 0)]
+    [InlineData(5, 1)]
+    [InlineData(5, 2)]
+    [InlineData(5, 3)]
+    [InlineData(5, 4)]
+    public void EmitCurriedFunctionTemplateWithLeadingArgs_MatchesPlainPartialApplication(
+        int parameterCount,
+        int leadingCount)
+    {
+        AssertPartialApplicationConsistency(parameterCount, leadingCount, withEnvFunctions: false);
+    }
+
+    [Theory]
+    // Same coverage but with a non-empty env functions list placed at environment index 0.
+    [InlineData(2, 0)]
+    [InlineData(2, 1)]
+    [InlineData(3, 0)]
+    [InlineData(3, 1)]
+    [InlineData(3, 2)]
+    [InlineData(4, 0)]
+    [InlineData(4, 1)]
+    [InlineData(4, 2)]
+    [InlineData(4, 3)]
+    [InlineData(5, 0)]
+    [InlineData(5, 1)]
+    [InlineData(5, 2)]
+    [InlineData(5, 3)]
+    [InlineData(5, 4)]
+    public void EmitCurriedFunctionTemplateWithLeadingArgs_WithEnvFunctions_MatchesPlainPartialApplication(
+        int parameterCount,
+        int leadingCount)
+    {
+        AssertPartialApplicationConsistency(parameterCount, leadingCount, withEnvFunctions: true);
+    }
+
+    [Fact]
+    public void EmitCurriedFunctionTemplateWithLeadingArgs_EmbeddedArgsEvaluatedAtPartialApplicationSite()
+    {
+        // The leading argument expressions must be evaluated at the partial application site (i.e. against
+        // the environment in which the emitted expression is evaluated), not embedded as constants. Here we
+        // read the leading arguments out of the partial-application-site environment to confirm this.
+        const int parameterCount = 4;
+        const int leadingCount = 2;
+
+        var innerExpr = BuildLinearInnerExpr(parameterCount, withEnvFunctions: false);
+
+        var leadingValues = new[]
+        {
+            IntegerEncoding.EncodeSignedInteger(40),
+            IntegerEncoding.EncodeSignedInteger(41),
+        };
+
+        // The partial application site environment is the list [leadingArg0, leadingArg1]; the embedded
+        // argument expressions read items 0 and 1 from it.
+        var siteEnvironment = PineValue.List([.. leadingValues]);
+
+        var leadingArgExpressions = new Expression[]
+        {
+            ListItemFromIndex(0, Expression.EnvironmentInstance),
+            ListItemFromIndex(1, Expression.EnvironmentInstance),
+        };
+
+        var emittedExpr =
+            FunctionValueBuilder.EmitCurriedFunctionTemplateWithLeadingArgs(
+                innerExpr,
+                parameterCount,
+                leadingArgExpressions);
+
+        var emittedIntermediate =
+            EvaluateExpression(emittedExpr, siteEnvironment);
+
+        // Build the reference intermediate value by applying the same leading argument values, one at a
+        // time, to the plain (zero-arg) template function value.
+        var plainTemplate =
+            FunctionValueBuilder.TryBuildCurriedFunctionValueAsTemplate(innerExpr, parameterCount);
+
+        plainTemplate.Should().NotBeNull();
+
+        var referenceIntermediate = plainTemplate;
+
+        for (var i = 0; i < leadingCount; i++)
+        {
+            referenceIntermediate =
+                EvaluateEncodedExpression(referenceIntermediate, leadingValues[i]);
+        }
+
+        emittedIntermediate.Should().Be(referenceIntermediate);
+    }
+
+    /// <summary>
+    /// Verifies that the intermediate value emitted by
+    /// <see cref="FunctionValueBuilder.EmitCurriedFunctionTemplateWithLeadingArgs"/> for
+    /// <paramref name="leadingCount"/> leading arguments is identical to the intermediate value obtained by
+    /// applying those same arguments, one at a time, to the plain (zero captured args) template function
+    /// value produced by <see cref="FunctionValueBuilder.TryBuildCurriedFunctionValueAsTemplate"/>. It then
+    /// applies the remaining arguments to both intermediate values and checks that the fully applied result
+    /// matches the expected value computed independently.
+    /// </summary>
+    private static void AssertPartialApplicationConsistency(
+        int parameterCount,
+        int leadingCount,
+        bool withEnvFunctions)
+    {
+        leadingCount.Should().BeInRange(0, parameterCount - 1);
+        parameterCount.Should().BeLessThanOrEqualTo(s_partialAppCoefficients.Length);
+
+        var envFunctions =
+            withEnvFunctions
+            ? new[] { IntegerEncoding.EncodeSignedInteger(1000) }
+            : null;
+
+        var innerExpr = BuildLinearInnerExpr(parameterCount, withEnvFunctions);
+
+        // Concrete argument values, chosen distinct and non-trivial.
+        var argValues = new PineValue[parameterCount];
+
+        for (var i = 0; i < parameterCount; i++)
+        {
+            argValues[i] = IntegerEncoding.EncodeSignedInteger(50 + (i * 7) + 1);
+        }
+
+        // Reference intermediate: apply the leading arguments to the plain template, one at a time.
+        var plainTemplate =
+            FunctionValueBuilder.TryBuildCurriedFunctionValueAsTemplate(
+                innerExpr,
+                parameterCount,
+                envFunctions);
+
+        plainTemplate.Should().NotBeNull();
+
+        var referenceIntermediate = plainTemplate;
+
+        for (var i = 0; i < leadingCount; i++)
+        {
+            referenceIntermediate =
+                EvaluateEncodedExpression(referenceIntermediate, argValues[i]);
+        }
+
+        // Emitted intermediate: embed the leading arguments directly at emission time.
+        var leadingArgExpressions = new Expression[leadingCount];
+
+        for (var i = 0; i < leadingCount; i++)
+        {
+            leadingArgExpressions[i] = Expression.LiteralInstance(argValues[i]);
+        }
+
+        var emittedExpr =
+            FunctionValueBuilder.EmitCurriedFunctionTemplateWithLeadingArgs(
+                innerExpr,
+                parameterCount,
+                leadingArgExpressions,
+                envFunctions);
+
+        var emittedIntermediate =
+            EvaluateExpression(emittedExpr, PineValue.EmptyList);
+
+        // The core property: both ways of obtaining the intermediate value must agree exactly.
+        emittedIntermediate.Should().Be(
+            referenceIntermediate,
+            "the compact emission must produce the same intermediate value as applying the leading " +
+            "arguments to the plain template");
+
+        // The emitted intermediate must itself be a parseable expression with no builtin/kernel/eval nodes,
+        // i.e. it is a clean template just like the plain partial-application intermediate.
+        var parsedIntermediate =
+            ExpressionEncoding.ParseExpressionFromValue(emittedIntermediate)
+            .Extract(err => throw new InvalidOperationException($"Failed to parse intermediate: {err}"));
+
+        parsedIntermediate.BuiltinCount.Should().Be(0);
+
+        // Apply the remaining arguments to both intermediate values; both must reach the same final result,
+        // which must equal the independently computed expected value.
+        var expectedFinal =
+            IntegerEncoding.EncodeSignedInteger(
+                ComputeExpectedResult(parameterCount, argValues, withEnvFunctions));
+
+        var emittedFinal = emittedIntermediate;
+        var referenceFinal = referenceIntermediate;
+
+        for (var i = leadingCount; i < parameterCount; i++)
+        {
+            emittedFinal = EvaluateEncodedExpression(emittedFinal, argValues[i]);
+            referenceFinal = EvaluateEncodedExpression(referenceFinal, argValues[i]);
+        }
+
+        emittedFinal.Should().Be(expectedFinal);
+        referenceFinal.Should().Be(expectedFinal);
+    }
+
+    /// <summary>
+    /// Builds an inner function body computing a linear combination of the arguments (and optionally a
+    /// single env function), so that each argument contributes a distinct, identifiable amount:
+    /// <c>sum_i (arg_i * coeff_i) + constant [+ envFunc0 * envCoeff]</c>.
+    /// The environment layout is <c>[envFunctions, arg_0, ..., arg_{n-1}]</c>; arg_i is at path [1 + i] and
+    /// envFunc0 is at path [0, 0].
+    /// </summary>
+    private static Expression BuildLinearInnerExpr(int parameterCount, bool withEnvFunctions)
+    {
+        var terms = new List<Expression>(parameterCount + 2);
+
+        for (var i = 0; i < parameterCount; i++)
+        {
+            terms.Add(
+                Expression.KernelApplicationInstance(
+                    function: nameof(KernelFunction.int_mul),
+                    input: Expression.ListInstance(
+                        [
+                        BuildExpressionForPathInEnvironment([1 + i]),
+                        Expression.LiteralInstance(
+                            IntegerEncoding.EncodeSignedInteger(s_partialAppCoefficients[i]))
+                        ])));
+        }
+
+        if (withEnvFunctions)
+        {
+            terms.Add(
+                Expression.KernelApplicationInstance(
+                    function: nameof(KernelFunction.int_mul),
+                    input: Expression.ListInstance(
+                        [
+                        BuildExpressionForPathInEnvironment([0, 0]),
+                        Expression.LiteralInstance(
+                            IntegerEncoding.EncodeSignedInteger(s_partialAppEnvFuncCoefficient))
+                        ])));
+        }
+
+        terms.Add(Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(s_partialAppConstant)));
+
+        return
+            Expression.KernelApplicationInstance(
+                function: nameof(KernelFunction.int_add),
+                input: Expression.ListInstance(terms));
+    }
+
+    private static long ComputeExpectedResult(
+        int parameterCount,
+        IReadOnlyList<PineValue> argValues,
+        bool withEnvFunctions)
+    {
+        var sum = s_partialAppConstant;
+
+        for (var i = 0; i < parameterCount; i++)
+        {
+            var argInt =
+                IntegerEncoding.ParseSignedIntegerStrict(argValues[i])
+                .Extract(err => throw new InvalidOperationException($"Failed to parse arg: {err}"));
+
+            sum += (long)argInt * s_partialAppCoefficients[i];
+        }
+
+        if (withEnvFunctions)
+        {
+            sum += 1000 * s_partialAppEnvFuncCoefficient;
+        }
+
+        return sum;
+    }
+
+    [Theory]
+    // No env functions; vary total parameter count (2..5) and the number of leading args available at
+    // the partial application site (0 .. parameterCount - 1).
+    [InlineData(2, 0)]
+    [InlineData(2, 1)]
+    [InlineData(3, 0)]
+    [InlineData(3, 1)]
+    [InlineData(3, 2)]
+    [InlineData(4, 0)]
+    [InlineData(4, 1)]
+    [InlineData(4, 2)]
+    [InlineData(4, 3)]
+    [InlineData(5, 0)]
+    [InlineData(5, 1)]
+    [InlineData(5, 2)]
+    [InlineData(5, 3)]
+    [InlineData(5, 4)]
+    public void EmitCurriedFunctionTemplateFromEncodedBodyExpression_MatchesPlainPartialApplication(
+        int parameterCount,
+        int leadingCount)
+    {
+        AssertPartialApplicationFromExpressionConsistency(
+            parameterCount, leadingCount, withEnvFunctions: false);
+    }
+
+    [Theory]
+    // Same coverage but with a non-empty env functions list produced at environment index 0.
+    [InlineData(2, 0)]
+    [InlineData(2, 1)]
+    [InlineData(3, 0)]
+    [InlineData(3, 1)]
+    [InlineData(3, 2)]
+    [InlineData(4, 0)]
+    [InlineData(4, 1)]
+    [InlineData(4, 2)]
+    [InlineData(4, 3)]
+    [InlineData(5, 0)]
+    [InlineData(5, 1)]
+    [InlineData(5, 2)]
+    [InlineData(5, 3)]
+    [InlineData(5, 4)]
+    public void EmitCurriedFunctionTemplateFromEncodedBodyExpression_WithEnvFunctions_MatchesPlainPartialApplication(
+        int parameterCount,
+        int leadingCount)
+    {
+        AssertPartialApplicationFromExpressionConsistency(
+            parameterCount, leadingCount, withEnvFunctions: true);
+    }
+
+    [Fact]
+    public void EmitCurriedFunctionTemplateFromEncodedBodyExpression_EmbedsBodyAndEnvFunctionsFromSite()
+    {
+        // The encoded body and the env-functions list must be read at the partial application site (i.e.
+        // against the environment in which the emitted expression is evaluated), not embedded as constants
+        // at emission time. Here we read both out of the partial-application-site environment to confirm
+        // this, then verify the produced template behaves identically to the static (value-based) variant.
+        const int parameterCount = 3;
+        const int leadingCount = 1;
+
+        var innerExpr = BuildLinearInnerExpr(parameterCount, withEnvFunctions: true);
+
+        var innerExprEncoded = ExpressionEncoding.EncodeExpressionAsValue(innerExpr);
+
+        var envFunctionsValue =
+            PineValue.List([IntegerEncoding.EncodeSignedInteger(1000)]);
+
+        var argValues = new PineValue[parameterCount];
+
+        for (var i = 0; i < parameterCount; i++)
+        {
+            argValues[i] = IntegerEncoding.EncodeSignedInteger(50 + (i * 7) + 1);
+        }
+
+        var leadingArgExpressions = new Expression[leadingCount];
+
+        for (var i = 0; i < leadingCount; i++)
+        {
+            leadingArgExpressions[i] = Expression.LiteralInstance(argValues[i]);
+        }
+
+        // The partial-application-site environment is [encodedBody, envFunctionsList]; the body and
+        // env-functions expressions read items 0 and 1 from it.
+        var siteEnvironment = PineValue.List([innerExprEncoded, envFunctionsValue]);
+
+        var emittedExpr =
+            FunctionValueBuilder.EmitCurriedFunctionTemplateWithLeadingArgsFromEncodedBodyExpression(
+                ListItemFromIndex(0, Expression.EnvironmentInstance),
+                parameterCount,
+                leadingArgExpressions,
+                ListItemFromIndex(1, Expression.EnvironmentInstance));
+
+        var emittedIntermediate =
+            EvaluateExpression(emittedExpr, siteEnvironment);
+
+        // The static (value-based) variant fed the same body and env-functions values must produce the
+        // identical intermediate value.
+        var referenceExpr =
+            FunctionValueBuilder.EmitCurriedFunctionTemplateWithLeadingArgsFromEncodedBody(
+                innerExprEncoded,
+                parameterCount,
+                leadingArgExpressions,
+                [IntegerEncoding.EncodeSignedInteger(1000)]);
+
+        var referenceIntermediate =
+            EvaluateExpression(referenceExpr, PineValue.EmptyList);
+
+        emittedIntermediate.Should().Be(referenceIntermediate);
+    }
+
+    /// <summary>
+    /// Verifies that <see cref="FunctionValueBuilder.EmitCurriedFunctionTemplateWithLeadingArgsFromEncodedBodyExpression"/>
+    /// produces a clean template that, after applying the remaining arguments, reaches the same fully
+    /// applied result as the plain partial-application reference. The encoded body and the env-functions
+    /// list are supplied as expressions read from the partial-application-site environment (mirroring the
+    /// same-SCC case). When <paramref name="withEnvFunctions"/> is set, the produced intermediate is also
+    /// required to be structurally identical to the static (value-based) variant.
+    /// </summary>
+    private static void AssertPartialApplicationFromExpressionConsistency(
+        int parameterCount,
+        int leadingCount,
+        bool withEnvFunctions)
+    {
+        leadingCount.Should().BeInRange(0, parameterCount - 1);
+        parameterCount.Should().BeLessThanOrEqualTo(s_partialAppCoefficients.Length);
+
+        var envFunctions =
+            withEnvFunctions
+            ? new[] { IntegerEncoding.EncodeSignedInteger(1000) }
+            : null;
+
+        var innerExpr = BuildLinearInnerExpr(parameterCount, withEnvFunctions);
+
+        var innerExprEncoded = ExpressionEncoding.EncodeExpressionAsValue(innerExpr);
+
+        // Concrete argument values, chosen distinct and non-trivial.
+        var argValues = new PineValue[parameterCount];
+
+        for (var i = 0; i < parameterCount; i++)
+        {
+            argValues[i] = IntegerEncoding.EncodeSignedInteger(50 + (i * 7) + 1);
+        }
+
+        var leadingArgExpressions = new Expression[leadingCount];
+
+        for (var i = 0; i < leadingCount; i++)
+        {
+            leadingArgExpressions[i] = Expression.LiteralInstance(argValues[i]);
+        }
+
+        // Reference: the static (value-based) variant applied to the same leading arguments.
+        var referenceExpr =
+            FunctionValueBuilder.EmitCurriedFunctionTemplateWithLeadingArgsFromEncodedBody(
+                innerExprEncoded,
+                parameterCount,
+                leadingArgExpressions,
+                envFunctions);
+
+        var referenceIntermediate =
+            EvaluateExpression(referenceExpr, PineValue.EmptyList);
+
+        // Expression-based emission: the encoded body and the env-functions list are read from the
+        // partial-application-site environment instead of being embedded as static values.
+        var envFunctionsValue =
+            PineValue.List(envFunctions is null ? [] : [.. envFunctions]);
+
+        var siteEnvironment = PineValue.List([innerExprEncoded, envFunctionsValue]);
+
+        var emittedExpr =
+            FunctionValueBuilder.EmitCurriedFunctionTemplateWithLeadingArgsFromEncodedBodyExpression(
+                ListItemFromIndex(0, Expression.EnvironmentInstance),
+                parameterCount,
+                leadingArgExpressions,
+                ListItemFromIndex(1, Expression.EnvironmentInstance));
+
+        var emittedIntermediate =
+            EvaluateExpression(emittedExpr, siteEnvironment);
+
+        if (withEnvFunctions)
+        {
+            // With a non-empty env-functions list both variants embed the body and the env-functions list
+            // as Literal nodes, so the produced intermediate values are structurally identical.
+            emittedIntermediate.Should().Be(
+                referenceIntermediate,
+                "the expression-based emission must produce the same intermediate value as the static " +
+                "variant when both carry the body and env-functions as literals");
+        }
+
+        // The emitted intermediate must itself be a parseable expression with no builtin/kernel/eval nodes,
+        // i.e. it is a clean template just like the plain partial-application intermediate.
+        var parsedIntermediate =
+            ExpressionEncoding.ParseExpressionFromValue(emittedIntermediate)
+            .Extract(err => throw new InvalidOperationException($"Failed to parse intermediate: {err}"));
+
+        parsedIntermediate.BuiltinCount.Should().Be(0);
+
+        // Apply the remaining arguments; the fully applied result must equal the independently computed
+        // expected value, and must agree with the reference.
+        var expectedFinal =
+            IntegerEncoding.EncodeSignedInteger(
+                ComputeExpectedResult(parameterCount, argValues, withEnvFunctions));
+
+        var emittedFinal = emittedIntermediate;
+        var referenceFinal = referenceIntermediate;
+
+        for (var i = leadingCount; i < parameterCount; i++)
+        {
+            emittedFinal = EvaluateEncodedExpression(emittedFinal, argValues[i]);
+            referenceFinal = EvaluateEncodedExpression(referenceFinal, argValues[i]);
+        }
+
+        emittedFinal.Should().Be(expectedFinal);
+        referenceFinal.Should().Be(expectedFinal);
+    }
+
+    #endregion
+
     #region Helper Methods
 
     private static Expression BuildExpressionForPathInEnvironment(
@@ -1393,6 +2295,15 @@ public class FunctionValueBuilderTests
     /// </summary>
     private static Expression ListItemFromIndex(int index, Expression listExpr) =>
         ExpressionBuilder.BuildExpressionForPathInExpression([index], listExpr);
+
+    private static string RenderValueAsElmExpression(PineValue pineValue)
+    {
+        var asElmValue =
+            ElmValueEncoding.PineValueAsElmValue(pineValue, additionalReusableDecodings: null, reportNewDecoding: null)
+            .Extract(err => throw new InvalidOperationException($"Failed to convert PineValue to ElmValue: {err}"));
+
+        return ElmValue.RenderAsElmExpression(asElmValue).expressionString;
+    }
 
     /// <summary>
     /// Evaluates the given expression with the specified environment value.

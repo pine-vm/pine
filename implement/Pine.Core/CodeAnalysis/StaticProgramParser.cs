@@ -717,7 +717,8 @@ public class StaticProgramParser
             if (FunctionRecord.ParseFunctionRecordTagged(
                     resolvedFunction.functionValue,
                     parseCache).IsOkOrNull() is { } innerFunctionRecord &&
-                innerFunctionRecord.ParameterCount == collectedArgs.Count)
+                innerFunctionRecord.ParameterCount ==
+                innerFunctionRecord.ArgumentsAlreadyCollected.Length + collectedArgs.Count)
             {
                 var inlinedEnvFuncsItems = new Expression[innerFunctionRecord.EnvFunctions.Length];
 
@@ -728,29 +729,26 @@ public class StaticProgramParser
 
                 var inlinedEnvFuncsList = Expression.ListInstance(inlinedEnvFuncsItems);
 
-                var inlineCollectedArgs = new Expression[collectedArgs.Count];
+                var inlineCollectedArgs =
+                    new Expression[
+                        innerFunctionRecord.ArgumentsAlreadyCollected.Length + collectedArgs.Count];
+
+                for (var i = 0; i < innerFunctionRecord.ArgumentsAlreadyCollected.Length; i++)
+                {
+                    inlineCollectedArgs[i] =
+                        Expression.LiteralInstance(innerFunctionRecord.ArgumentsAlreadyCollected.Span[i]);
+                }
 
                 for (var i = 0; i < collectedArgs.Count; i++)
                 {
                     // collectedArgs is in reverse-application order; reverse to first..last.
-                    inlineCollectedArgs[i] = collectedArgs[collectedArgs.Count - 1 - i];
+                    inlineCollectedArgs[innerFunctionRecord.ArgumentsAlreadyCollected.Length + i] =
+                        collectedArgs[collectedArgs.Count - 1 - i];
                 }
 
                 Expression inlinedEnvironment;
 
                 if (innerFunctionRecord.UsesNestedArgFormat)
-                {
-                    var nestedEnvItems = new Expression[1 + inlineCollectedArgs.Length];
-                    nestedEnvItems[0] = inlinedEnvFuncsList;
-
-                    for (var i = 0; i < inlineCollectedArgs.Length; i++)
-                    {
-                        nestedEnvItems[1 + i] = inlineCollectedArgs[i];
-                    }
-
-                    inlinedEnvironment = Expression.ListInstance(nestedEnvItems);
-                }
-                else
                 {
                     inlinedEnvironment =
                         Expression.ListInstance(
@@ -758,6 +756,18 @@ public class StaticProgramParser
                             inlinedEnvFuncsList,
                             Expression.ListInstance(inlineCollectedArgs),
                             ]);
+                }
+                else
+                {
+                    var flatEnvItems = new Expression[1 + inlineCollectedArgs.Length];
+                    flatEnvItems[0] = inlinedEnvFuncsList;
+
+                    for (var i = 0; i < inlineCollectedArgs.Length; i++)
+                    {
+                        flatEnvItems[1 + i] = inlineCollectedArgs[i];
+                    }
+
+                    inlinedEnvironment = Expression.ListInstance(flatEnvItems);
                 }
 
                 var inlinedExpression =

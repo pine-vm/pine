@@ -1385,17 +1385,17 @@ public class CoreBasics
         // f = env[0][0], g = env[0][1], x = env[1]
         var fCaptured =
             ExpressionBuilder.BuildExpressionForPathInExpression(
-                [0, 0],
+                [1],
                 Expression.EnvironmentInstance);
 
         var gCaptured =
             ExpressionBuilder.BuildExpressionForPathInExpression(
-                [0, 1],
+                [2],
                 Expression.EnvironmentInstance);
 
         var xArg =
             ExpressionBuilder.BuildExpressionForPathInExpression(
-                [1],
+                [3],
                 Expression.EnvironmentInstance);
 
         // f(x)
@@ -1405,10 +1405,11 @@ public class CoreBasics
         var gfx = new Expression.ParseAndEval(encoded: gCaptured, environment: fx);
 
         return
-            FunctionValueBuilder.EmitFunctionExpression(
+            FunctionValueBuilder.EmitCurriedFunctionTemplateWithLeadingArgs(
                 gfx,
-                parameterCount: 1,
-                envFunctionsExprs: [f, g]);
+                parameterCount: 3,
+                envFunctions: [],
+                leadingArgExpressions: [f, g]);
     }
 
     /// <summary>
@@ -1427,17 +1428,17 @@ public class CoreBasics
         // g = env[0][0], f = env[0][1], x = env[1]
         var gCaptured =
             ExpressionBuilder.BuildExpressionForPathInExpression(
-                [0, 0],
+                [1],
                 Expression.EnvironmentInstance);
 
         var fCaptured =
             ExpressionBuilder.BuildExpressionForPathInExpression(
-                [0, 1],
+                [2],
                 Expression.EnvironmentInstance);
 
         var xArg =
             ExpressionBuilder.BuildExpressionForPathInExpression(
-                [1],
+                [3],
                 Expression.EnvironmentInstance);
 
         // f(x)
@@ -1447,10 +1448,11 @@ public class CoreBasics
         var gfx = new Expression.ParseAndEval(encoded: gCaptured, environment: fx);
 
         return
-            FunctionValueBuilder.EmitFunctionExpression(
+            FunctionValueBuilder.EmitCurriedFunctionTemplateWithLeadingArgs(
                 gfx,
-                parameterCount: 1,
-                envFunctionsExprs: [g, f]);
+                parameterCount: 3,
+                envFunctions: [],
+                leadingArgExpressions: [g, f]);
     }
 
     private static Expression Internal_Int_div(
@@ -2064,10 +2066,13 @@ public class CoreBasics
         var asExpr = Generic_Clamp(low, high, n);
 
         return
-            FunctionValueBuilder.EmitFunctionValueWithEnvFunctions(
+            FunctionValueBuilder.TryBuildCurriedFunctionValueAsTemplate(
                 asExpr,
                 parameterCount: 3,
-                envFunctions: []);
+                envFunctions: [])
+            ??
+            throw new System.NotImplementedException(
+                "Failed to build curried function value for clamp.");
     }
 
     private static Expression Internal_Generic_Add(
@@ -2353,10 +2358,13 @@ public class CoreBasics
             buildFunctionBody(leftExpr, rightExpr);
 
         var wrappedExpr =
-            FunctionValueBuilder.EmitFunctionValueWithEnvFunctions(
+            FunctionValueBuilder.TryBuildCurriedFunctionValueAsTemplate(
                 asExpr,
                 parameterCount: 2,
-                envFunctions: []);
+                envFunctions: [])
+            ??
+            throw new System.NotImplementedException(
+                "Failed to build function value template for binary function.");
 
         return wrappedExpr;
     }
@@ -2371,10 +2379,13 @@ public class CoreBasics
             buildFunctionBody(argExpr);
 
         var wrappedExpr =
-            FunctionValueBuilder.EmitFunctionValueWithEnvFunctions(
+            FunctionValueBuilder.TryBuildCurriedFunctionValueAsTemplate(
                 asExpr,
                 parameterCount: 1,
-                envFunctions: []);
+                envFunctions: [])
+            ??
+            throw new System.NotImplementedException(
+                "Failed to build function value template for unary function.");
 
         return wrappedExpr;
     }

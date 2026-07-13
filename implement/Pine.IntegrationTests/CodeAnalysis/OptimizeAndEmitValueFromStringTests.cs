@@ -136,51 +136,48 @@ public class OptimizeAndEmitValueFromStringTests
                     PineValue local_018 =
                         local_005 == PineKernelValues.TrueValue ? local_015 : BuiltinFunctionSpecialized.int_mul(-1, local_015);
 
-                    PineValue local_019 = PineValue.List([local_016]);
-                    PineValue local_020 = PineValue.List([local_017]);
-                    PineValue local_021 = PineValue.List([local_018]);
-                    PineValue local_026 = BuiltinFunctionSpecialized.int_mul(-256, local_016);
-                    PineValue local_027 = Global_Anonymous.zzz_anon_4c579ba7_dda26649(local_019, CommonReusedValues.Blob_Int_256);
-                    PineValue local_028 = Global_Anonymous.zzz_anon_4c579ba7_dda26649(local_020, CommonReusedValues.Blob_Int_256);
-                    PineValue local_029 = Global_Anonymous.zzz_anon_4c579ba7_dda26649(local_021, CommonReusedValues.Blob_Int_256);
-                    PineValue local_033 = BuiltinFunctionSpecialized.int_mul(-256, local_027);
-                    PineValue local_034 = BuiltinFunctionSpecialized.int_mul(-256, local_028);
-                    PineValue local_035 = BuiltinFunctionSpecialized.int_mul(-256, local_029);
+                    PineValue local_023 = BuiltinFunctionSpecialized.int_mul(-256, local_016);
+                    PineValue local_024 = Global_Anonymous.zzz_anon_66da43a6_dda26649(local_016, CommonReusedValues.Blob_Int_256);
+                    PineValue local_025 = Global_Anonymous.zzz_anon_66da43a6_dda26649(local_017, CommonReusedValues.Blob_Int_256);
+                    PineValue local_026 = Global_Anonymous.zzz_anon_66da43a6_dda26649(local_018, CommonReusedValues.Blob_Int_256);
+                    PineValue local_030 = BuiltinFunctionSpecialized.int_mul(-256, local_024);
+                    PineValue local_031 = BuiltinFunctionSpecialized.int_mul(-256, local_025);
+                    PineValue local_032 = BuiltinFunctionSpecialized.int_mul(-256, local_026);
 
-                    PineValue local_036 =
-                        BuiltinFunction.int_add(PineValue.List([local_001, IntegerEncoding.EncodeSignedInteger(0), local_026]));
+                    PineValue local_033 =
+                        BuiltinFunction.int_add(PineValue.List([local_001, IntegerEncoding.EncodeSignedInteger(0), local_023]));
 
-                    PineValue local_037 = BuiltinFunctionSpecialized.int_add(local_016, local_033);
-                    PineValue local_038 = BuiltinFunctionSpecialized.int_add(local_017, local_034);
-                    PineValue local_039 = BuiltinFunctionSpecialized.int_add(local_018, local_035);
+                    PineValue local_034 = BuiltinFunctionSpecialized.int_add(local_016, local_030);
+                    PineValue local_035 = BuiltinFunctionSpecialized.int_add(local_017, local_031);
+                    PineValue local_036 = BuiltinFunctionSpecialized.int_add(local_018, local_032);
 
                     return
                         PineValue.List(
                             [
-                            BuiltinFunctionSpecialized.int_is_sorted_asc_as_boolean(0, local_039)
-                            ?
-                            local_039
-                            :
-                            BuiltinFunction.int_add(
-                                PineValue.List([local_018, local_035, IntegerEncoding.EncodeSignedInteger(256)])),
-                            BuiltinFunctionSpecialized.int_is_sorted_asc_as_boolean(0, local_038)
-                            ?
-                            local_038
-                            :
-                            BuiltinFunction.int_add(
-                                PineValue.List([local_017, local_034, IntegerEncoding.EncodeSignedInteger(256)])),
-                            BuiltinFunctionSpecialized.int_is_sorted_asc_as_boolean(0, local_037)
-                            ?
-                            local_037
-                            :
-                            BuiltinFunction.int_add(
-                                PineValue.List([local_016, local_033, IntegerEncoding.EncodeSignedInteger(256)])),
                             BuiltinFunctionSpecialized.int_is_sorted_asc_as_boolean(0, local_036)
                             ?
                             local_036
                             :
                             BuiltinFunction.int_add(
-                                PineValue.List([IntegerEncoding.EncodeSignedInteger(256), local_001, local_026]))
+                                PineValue.List([local_018, local_032, IntegerEncoding.EncodeSignedInteger(256)])),
+                            BuiltinFunctionSpecialized.int_is_sorted_asc_as_boolean(0, local_035)
+                            ?
+                            local_035
+                            :
+                            BuiltinFunction.int_add(
+                                PineValue.List([local_017, local_031, IntegerEncoding.EncodeSignedInteger(256)])),
+                            BuiltinFunctionSpecialized.int_is_sorted_asc_as_boolean(0, local_034)
+                            ?
+                            local_034
+                            :
+                            BuiltinFunction.int_add(
+                                PineValue.List([local_016, local_030, IntegerEncoding.EncodeSignedInteger(256)])),
+                            BuiltinFunctionSpecialized.int_is_sorted_asc_as_boolean(0, local_033)
+                            ?
+                            local_033
+                            :
+                            BuiltinFunction.int_add(
+                                PineValue.List([IntegerEncoding.EncodeSignedInteger(256), local_001, local_023]))
                             ]);
                 }
 
@@ -232,7 +229,7 @@ public class OptimizeAndEmitValueFromStringTests
                             ]);
                 }
             }
-            
+
             """".Trim());
 
         moduleGlobalAnonymousText.Trim().Should().Be(
@@ -290,46 +287,37 @@ public class OptimizeAndEmitValueFromStringTests
                     }
                 }
 
-                public static PineValue zzz_anon_4c579ba7_dda26649(PineValue param_0, PineValue param_1)
+                public static PineValue zzz_anon_66da43a6_dda26649(PineValue param_1, PineValue param_2)
                 {
-                    PineValue local_000 =
-                        BuiltinFunctionFused.ListPrependItem(
-                            itemToPrepend: PineValue.EmptyList,
-                            suffix: BuiltinFunctionFused.ListAppendItem(prefix: param_0, itemToAppend: param_1));
-
-                    PineValue local_001 = PineValueExtension.ValueFromPathOrEmptyList(local_000, [2]);
-
-                    if (local_001 == CommonReusedValues.Blob_Int_0)
+                    if (param_2 == CommonReusedValues.Blob_Int_0)
                     {
                         return CommonReusedValues.Blob_Int_0;
                     }
 
-                    PineValue local_004 = PineValueExtension.ValueFromPathOrEmptyList(local_000, [1]);
+                    PineValue local_003 =
+                        BuiltinFunction.ValueFromBool(BuiltinFunctionSpecialized.int_is_sorted_asc_as_boolean(0, param_1));
 
-                    PineValue local_007 =
-                        BuiltinFunction.ValueFromBool(BuiltinFunctionSpecialized.int_is_sorted_asc_as_boolean(0, local_004));
+                    PineValue local_004 =
+                        BuiltinFunction.ValueFromBool(BuiltinFunctionSpecialized.int_is_sorted_asc_as_boolean(0, param_2));
 
-                    PineValue local_008 =
-                        BuiltinFunction.ValueFromBool(BuiltinFunctionSpecialized.int_is_sorted_asc_as_boolean(0, local_001));
+                    PineValue local_005 =
+                        local_003 == PineKernelValues.TrueValue ? param_1 : BuiltinFunctionSpecialized.int_mul(-1, param_1);
+
+                    PineValue local_006 =
+                        local_004 == PineKernelValues.TrueValue ? param_2 : BuiltinFunctionSpecialized.int_mul(-1, param_2);
 
                     PineValue local_009 =
-                        local_007 == PineKernelValues.TrueValue ? local_004 : BuiltinFunctionSpecialized.int_mul(-1, local_004);
+                        Global_Anonymous.zzz_anon_38e6937c_a50db278(local_005, local_006, CommonReusedValues.Blob_Int_0);
 
-                    PineValue local_010 =
-                        local_008 == PineKernelValues.TrueValue ? local_001 : BuiltinFunctionSpecialized.int_mul(-1, local_001);
-
-                    PineValue local_013 =
-                        Global_Anonymous.zzz_anon_38e6937c_a50db278(local_009, local_010, CommonReusedValues.Blob_Int_0);
-
-                    if (local_007 == local_008)
+                    if (local_003 == local_004)
                     {
-                        return local_013;
+                        return local_009;
                     }
 
-                    return BuiltinFunctionSpecialized.int_mul(-1, local_013);
+                    return BuiltinFunctionSpecialized.int_mul(-1, local_009);
                 }
             }
-            
+
             """".Trim());
 
         var compileToAssemblyResult =
