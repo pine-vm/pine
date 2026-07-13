@@ -1,5 +1,6 @@
 using Pine.Core.CodeGen;
 using Pine.Core.CommonEncodings;
+using Pine.Core.Interpreter;
 using System;
 using System.Collections.Generic;
 
@@ -126,11 +127,21 @@ public record FunctionRecord(
 
         if (parseExpressionResult.IsOkOrNull() is Expression.ParseAndEval)
         {
-            return ParseNestedWrapperForm(pineValue, parseCache);
+            var nestedWrapperResult = ParseNestedWrapperForm(pineValue, parseCache);
+
+            if (nestedWrapperResult.IsOkOrNull() is { } nestedWrapper)
+                return nestedWrapper;
+
+            return ParseCurriedTemplateForm(pineValue, parseCache);
         }
 
         if (parseExpressionResult.IsOkOrNull() is Expression.List)
         {
+            var curriedTemplateResult = ParseCurriedTemplateForm(pineValue, parseCache);
+
+            if (curriedTemplateResult.IsOkOrNull() is { } curriedTemplate)
+                return curriedTemplate;
+
             return ParseMultiParamNestedWrapperForm(pineValue, parseCache);
         }
 
@@ -520,6 +531,107 @@ public record FunctionRecord(
                 EnvFunctions: envFunctions,
                 ArgumentsAlreadyCollected: ReadOnlyMemory<PineValue>.Empty,
                 UsesNestedArgFormat: usesNestedArgFormat);
+    }
+
+    private static Result<string, FunctionRecord> ParseCurriedTemplateForm(
+        PineValue encodedWrapper,
+        PineVMParseCache parseCache)
+    {
+        var interpreter = new DirectInterpreter(parseCache, evalCache: null);
+        var probeArguments = new List<PineValue>();
+        var visitedValues = new HashSet<PineValue>();
+        var currentValue = encodedWrapper;
+
+        while (visitedValues.Add(currentValue))
+        {
+            var parseResult = parseCache.ParseExpression(currentValue);
+
+            if (parseResult.IsErrOrNull() is { } parseErr)
+                return "Failed to parse curried template level: " + parseErr;
+
+            if (parseResult.IsOkOrNull() is Expression.ParseAndEval terminal)
+                return ParseCurriedTemplateTerminal(terminal, probeArguments, parseCache);
+
+            if (parseResult.IsOkOrNull() is not Expression.List templateLevel)
+                return "Curried template level must be a List or ParseAndEval expression";
+
+            var probeArgument =
+                PineValue.List(
+                    [
+                    StringEncoding.ValueFromString("__pine_function_record_parser_probe__"),
+                    IntegerEncoding.EncodeSignedInteger(probeArguments.Count)
+                    ]);
+
+            var evaluationResult =
+                interpreter.EvaluateExpression(templateLevel, probeArgument);
+
+            if (evaluationResult.IsErrOrNull() is { } evaluationErr)
+                return "Failed to evaluate curried template level: " + evaluationErr;
+
+            if (evaluationResult.IsOkOrNull() is not { } nextValue)
+                throw new NotImplementedException("Unexpected evaluation result type: " + evaluationResult);
+
+            probeArguments.Add(probeArgument);
+            currentValue = nextValue;
+        }
+
+        return "Cycle detected while traversing curried template levels";
+    }
+
+    private static Result<string, FunctionRecord> ParseCurriedTemplateTerminal(
+        Expression.ParseAndEval terminal,
+        IReadOnlyList<PineValue> probeArguments,
+        PineVMParseCache parseCache)
+    {
+        if (terminal.Encoded is not Expression.Literal encodedBody)
+            return "Expected Literal in curried template ParseAndEval.Encoded";
+
+        if (parseCache.ParseExpression(encodedBody.Value).IsOkOrNull() is not { } innerFunction)
+            return "Failed to parse curried template inner expression";
+
+        if (terminal.Environment is not Expression.List environment ||
+            environment.Items.Count < 2 ||
+            environment.Items[^1] is not Expression.Environment)
+        {
+            return "Unexpected curried template environment structure";
+        }
+
+        if (ParseEnvFunctionsFromExpression(environment.Items[0]).IsOkOrNull() is not { } envFunctions)
+            return "Failed to parse curried template environment functions";
+
+        var parameterCount = environment.Items.Count - 1;
+        var capturedArgumentCount = parameterCount - probeArguments.Count - 1;
+
+        if (capturedArgumentCount < 0)
+            return "Curried template contains more wrapper levels than parameters";
+
+        var capturedArguments = new PineValue[capturedArgumentCount];
+
+        for (var argumentIndex = 0; argumentIndex < capturedArgumentCount; ++argumentIndex)
+        {
+            if (environment.Items[argumentIndex + 1] is not Expression.Literal capturedArgument)
+                return "Expected captured curried template argument to be a Literal";
+
+            capturedArguments[argumentIndex] = capturedArgument.Value;
+        }
+
+        for (var probeIndex = 0; probeIndex < probeArguments.Count; ++probeIndex)
+        {
+            var environmentIndex = capturedArgumentCount + probeIndex + 1;
+
+            if (environment.Items[environmentIndex] is not Expression.Literal probeLiteral ||
+                probeLiteral.Value != probeArguments[probeIndex])
+            {
+                return "Curried template did not preserve probe argument";
+            }
+        }
+
+        return
+            new FunctionRecord(
+                InnerFunction: innerFunction,
+                ParameterCount: parameterCount,
+                EnvFunctions: envFunctions,
+                ArgumentsAlreadyCollected: capturedArguments);
     }
 
     private static bool IsWrapperBuilderExpression(Expression.List expression)
