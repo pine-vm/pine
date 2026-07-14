@@ -7,26 +7,26 @@ namespace Pine.Elm;
 public class ElmCompilerCache
 {
 
-    private readonly Dictionary<PineValue, PineValue> encodedForCompilerCache = [];
+    private readonly Dictionary<PineValue, PineValue> _encodedForCompilerCache = [];
 
-    private readonly Dictionary<ElmValue, PineValue> elmValueAsPineValueCache = [];
+    private readonly Dictionary<ElmValue, PineValue> _elmValueAsPineValueCache = [];
 
-    private readonly Dictionary<PineValue, ElmValue> pineValueDecodedAsElmValueCache = [];
+    private readonly Dictionary<PineValue, ElmValue> _pineValueDecodedAsElmValueCache = [];
 
-    private readonly Dictionary<PineValue, ElmValue> pineValueEncodedAsInElmCompilerCache = [];
+    private readonly Dictionary<PineValue, ElmValue> _pineValueEncodedAsInElmCompilerCache = [];
 
-    private readonly Dictionary<ElmValue, PineValue> elmValueDecodedAsInElmCompilerCache = [];
+    private readonly Dictionary<ElmValue, PineValue> _elmValueDecodedAsInElmCompilerCache = [];
 
-    private readonly Dictionary<ElmValue, Expression> elmValueDecodedAsExpressionElmCompilerCache = [];
+    private readonly Dictionary<ElmValue, Expression> _elmValueDecodedAsExpressionElmCompilerCache = [];
 
-    private readonly System.Threading.Lock cachesLock = new();
+    private readonly System.Threading.Lock _cachesLock = new();
 
 
     public PineValue EncodeValueForCompiler(PineValue pineValue)
     {
-        lock (cachesLock)
+        lock (_cachesLock)
         {
-            if (encodedForCompilerCache.TryGetValue(pineValue, out var encoded))
+            if (_encodedForCompilerCache.TryGetValue(pineValue, out var encoded))
             {
                 return encoded;
             }
@@ -36,11 +36,11 @@ public class ElmCompilerCache
                     ElmValueInterop.PineValueEncodedAsInElmCompiler(
                         pineValue,
                         additionalReusableEncodings:
-                        pineValueEncodedAsInElmCompilerCache,
+                        _pineValueEncodedAsInElmCompilerCache,
                         reportNewEncoding:
-                        (pineValue, encoding) => pineValueEncodedAsInElmCompilerCache.TryAdd(pineValue, encoding)));
+                        (pineValue, encoding) => _pineValueEncodedAsInElmCompilerCache.TryAdd(pineValue, encoding)));
 
-            encodedForCompilerCache.TryAdd(pineValue, encoded);
+            _encodedForCompilerCache.TryAdd(pineValue, encoded);
 
             return encoded;
         }
@@ -48,9 +48,9 @@ public class ElmCompilerCache
 
     public PineValue ElmValueAsPineValue(ElmValue elmValue)
     {
-        lock (cachesLock)
+        lock (_cachesLock)
         {
-            if (elmValueAsPineValueCache.TryGetValue(elmValue, out var encoded))
+            if (_elmValueAsPineValueCache.TryGetValue(elmValue, out var encoded))
             {
                 return encoded;
             }
@@ -59,11 +59,11 @@ public class ElmCompilerCache
                 ElmValueEncoding.ElmValueAsPineValue(
                     elmValue,
                     additionalReusableEncodings:
-                    elmValueAsPineValueCache,
+                    _elmValueAsPineValueCache,
                     reportNewEncoding:
-                    (elmValue, encoded) => elmValueAsPineValueCache.TryAdd(elmValue, encoded));
+                    (elmValue, encoded) => _elmValueAsPineValueCache.TryAdd(elmValue, encoded));
 
-            elmValueAsPineValueCache.TryAdd(elmValue, encoded);
+            _elmValueAsPineValueCache.TryAdd(elmValue, encoded);
 
             return encoded;
         }
@@ -71,9 +71,9 @@ public class ElmCompilerCache
 
     public Result<string, ElmValue> PineValueDecodedAsElmValue(PineValue pineValue)
     {
-        lock (cachesLock)
+        lock (_cachesLock)
         {
-            if (pineValueDecodedAsElmValueCache.TryGetValue(pineValue, out var decoded))
+            if (_pineValueDecodedAsElmValueCache.TryGetValue(pineValue, out var decoded))
             {
                 return decoded;
             }
@@ -82,13 +82,13 @@ public class ElmCompilerCache
                 ElmValueEncoding.PineValueAsElmValue(
                     pineValue,
                     additionalReusableDecodings:
-                    pineValueDecodedAsElmValueCache,
+                    _pineValueDecodedAsElmValueCache,
                     reportNewDecoding:
-                    (pineValue, decoding) => pineValueDecodedAsElmValueCache.TryAdd(pineValue, decoding));
+                    (pineValue, decoding) => _pineValueDecodedAsElmValueCache.TryAdd(pineValue, decoding));
 
             if (decodeResult.IsOkOrNull() is { } decodedOk)
             {
-                pineValueDecodedAsElmValueCache.TryAdd(pineValue, decodedOk);
+                _pineValueDecodedAsElmValueCache.TryAdd(pineValue, decodedOk);
             }
 
             return decodeResult;
@@ -97,9 +97,9 @@ public class ElmCompilerCache
 
     public Result<string, PineValue> DecodeElmValueFromCompiler(ElmValue elmValue)
     {
-        lock (cachesLock)
+        lock (_cachesLock)
         {
-            if (elmValueDecodedAsInElmCompilerCache.TryGetValue(elmValue, out var decoded))
+            if (_elmValueDecodedAsInElmCompilerCache.TryGetValue(elmValue, out var decoded))
             {
                 return decoded;
             }
@@ -108,13 +108,13 @@ public class ElmCompilerCache
                 ElmValueInterop.ElmValueDecodedAsInElmCompiler(
                     elmValue,
                     additionalReusableDecodings:
-                    elmValueDecodedAsInElmCompilerCache,
+                    _elmValueDecodedAsInElmCompilerCache,
                     reportNewDecoding:
-                    (elmValue, decoded) => elmValueDecodedAsInElmCompilerCache.TryAdd(elmValue, decoded));
+                    (elmValue, decoded) => _elmValueDecodedAsInElmCompilerCache.TryAdd(elmValue, decoded));
 
             if (decodeResult.IsOkOrNull() is { } decodedOk)
             {
-                elmValueDecodedAsInElmCompilerCache.TryAdd(elmValue, decodedOk);
+                _elmValueDecodedAsInElmCompilerCache.TryAdd(elmValue, decodedOk);
             }
 
             return decodeResult;
@@ -124,21 +124,21 @@ public class ElmCompilerCache
     public Result<string, Expression> DecodeExpressionFromElmValue(
         ElmValue exprEncoded)
     {
-        lock (cachesLock)
+        lock (_cachesLock)
         {
             return
                 ElmValueInterop.ElmValueFromCompilerDecodedAsExpression(
                     exprEncoded,
                     additionalReusableDecodings:
-                    elmValueDecodedAsExpressionElmCompilerCache,
+                    _elmValueDecodedAsExpressionElmCompilerCache,
                     reportNewDecoding:
                     (elmValue, decoding) =>
-                    elmValueDecodedAsExpressionElmCompilerCache.TryAdd(elmValue, decoding),
+                    _elmValueDecodedAsExpressionElmCompilerCache.TryAdd(elmValue, decoding),
                     literalAdditionalReusableDecodings:
-                    elmValueDecodedAsInElmCompilerCache,
+                    _elmValueDecodedAsInElmCompilerCache,
                     literalReportNewDecoding:
                     (elmValue, decoding) =>
-                    elmValueDecodedAsInElmCompilerCache.TryAdd(elmValue, decoding));
+                    _elmValueDecodedAsInElmCompilerCache.TryAdd(elmValue, decoding));
         }
     }
 }

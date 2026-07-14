@@ -217,7 +217,7 @@ public class PrecompiledLeavesEffectivenessTests
         var complexB =
             IntList(
                 Enumerable.Range(0, 30)
-                .Select(i => i == 15 ? (long)i + 1 : (long)i));
+                .Select(i => i is 15 ? (long)i + 1 : i));
 
         var simpleNoLeaves = Apply(functionValue, simpleA, simpleB, vmWithoutLeaves);
         var complexNoLeaves = Apply(functionValue, complexA, complexB, vmWithoutLeaves);
@@ -291,7 +291,7 @@ public class PrecompiledLeavesEffectivenessTests
                 [
                 ..pairs.Select(
                     p =>
-                    (ElmValue)ElmValue.ListInstance(
+                    ElmValue.ListInstance(
                         [ElmValue.Integer(p.key), ElmValue.Integer(p.value)]))
                 ]);
 
@@ -407,7 +407,7 @@ public class PrecompiledLeavesEffectivenessTests
     /// </summary>
     private static ElmValue IntRecord(IEnumerable<(string name, long value)> fields) =>
         new ElmValue.ElmRecord(
-            [.. fields.Select(f => (f.name, (ElmValue)ElmValue.Integer(f.value)))]);
+            [.. fields.Select(f => (f.name, ElmValue.Integer(f.value)))]);
 
     /// <summary>
     /// Analog of <see cref="Basics_compare_leaf_short_circuits_recursion_in_lt"/> targeting
