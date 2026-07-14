@@ -49,31 +49,81 @@ public static class BuiltinFunctionSpecialized
         return skip(count, value);
     }
 
-    public static PineValue skip(BigInteger count, PineValue value)
+    public static PineValue skip(BigInteger skipCount, PineValue value)
     {
-        if (count <= 0)
+        if (skipCount <= 0)
             return value;
 
         if (value is PineValue.BlobValue blobValue)
         {
-            if (blobValue.Bytes.Length <= count)
+            var remainingCount = blobValue.Bytes.Length - (int)skipCount;
+
+            if (remainingCount <= 0)
                 return PineValue.EmptyBlob;
 
-            return PineValue.Blob(blobValue.Bytes[(int)count..]);
+            if (remainingCount is 1)
+            {
+                return PineValue.BlobSingleByte(blobValue.Bytes.Span[(int)skipCount]);
+            }
+
+            if (remainingCount is 2)
+            {
+                return
+                    PineValue.ReusedBlobTupleFromBytes(
+                        first: blobValue.Bytes.Span[(int)skipCount],
+                        second: blobValue.Bytes.Span[(int)skipCount + 1]);
+            }
+
+            if (remainingCount is 3)
+            {
+                var firstByte = blobValue.Bytes.Span[(int)skipCount];
+
+                if (firstByte is 2)
+                {
+                    return
+                        PineValue.ReusedBlobInteger3ByteNegativeFromBytes(
+                            second: blobValue.Bytes.Span[(int)skipCount + 1],
+                            third: blobValue.Bytes.Span[(int)skipCount + 2]);
+                }
+
+                if (firstByte is 4)
+                {
+                    return
+                        PineValue.ReusedBlobInteger3BytePositiveFromBytes(
+                            second: blobValue.Bytes.Span[(int)skipCount + 1],
+                            third: blobValue.Bytes.Span[(int)skipCount + 2]);
+                }
+            }
+
+            if (remainingCount is 4)
+            {
+                var firstByte = blobValue.Bytes.Span[(int)skipCount];
+                var secondByte = blobValue.Bytes.Span[(int)skipCount + 1];
+
+                if (firstByte is 0 && secondByte is 0)
+                {
+                    return
+                        PineValue.ReusedBlobCharFourByte(
+                            third: blobValue.Bytes.Span[(int)skipCount + 2],
+                            fourth: blobValue.Bytes.Span[(int)skipCount + 3]);
+                }
+            }
+
+            return PineValue.Blob(blobValue.Bytes[(int)skipCount..]);
         }
 
         if (value is PineValue.ListValue listValue)
         {
             var listItems = listValue.Items.Span;
 
-            var remainingCount = listItems.Length - (int)count;
+            var remainingCount = listItems.Length - (int)skipCount;
 
             if (remainingCount <= 0)
                 return PineValue.EmptyList;
 
             var skipped = new PineValue[remainingCount];
 
-            listItems[(int)count..].CopyTo(skipped);
+            listItems[(int)skipCount..].CopyTo(skipped);
 
             return PineValue.List(skipped);
         }
