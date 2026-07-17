@@ -347,7 +347,8 @@ public class ElmCompilerTestHelper
     /// Create a VM with all optimizations disabled, to support repeatable profiling.
     /// </summary>
     public static Core.Interpreter.IntermediateVM.PineVM PineVMForProfiling(
-        Action<EvaluationReport> reportFunctionApplication)
+        Action<EvaluationReport> reportFunctionApplication,
+        bool enableTailRecursionOptimization = false)
     {
         var vm =
             Core.Interpreter.IntermediateVM.PineVM.CreateCustom(
@@ -358,7 +359,7 @@ public class ElmCompilerTestHelper
                 disableReductionInCompilation: false,
                 selectPrecompiled: null,
                 skipInlineForExpression: _ => false,
-                enableTailRecursionOptimization: false,
+                enableTailRecursionOptimization: enableTailRecursionOptimization,
                 parseCache: null,
                 precompiledLeaves: ImmutableDictionary<PineValue, Func<PineValue, PineValue?>>.Empty,
                 reportEnterPrecompiledLeaf: null,

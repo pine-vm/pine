@@ -86,7 +86,7 @@ public static class SetupVM
         IReadOnlyDictionary<Expression, IReadOnlyList<PineValueClass>>? compilationEnvClasses = null,
         bool disableReductionInCompilation = false,
         bool disablePrecompiled = false,
-        bool enableTailRecursionOptimization = false,
+        bool enableTailRecursionOptimization = true,
         PineVMParseCache? parseCache = null,
         IReadOnlyDictionary<PineValue, Func<PineValue, PineValue?>>? precompiledLeaves = null,
         Action<PineValue, PineValue>? reportEnterPrecompiledLeaf = null,

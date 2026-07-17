@@ -483,7 +483,11 @@ public class ParserFastTests
         ElmValue argument)
     {
         var invocations = new List<EvaluationReport>();
-        var vm = ElmCompilerTestHelper.PineVMForProfiling(invocations.Add);
+
+        var vm =
+            ElmCompilerTestHelper.PineVMForProfiling(
+                invocations.Add,
+                enableTailRecursionOptimization: true);
 
         var (value, report) =
             CoreLibraryModule.CoreLibraryTestHelper.ApplyAndProfileUnary(
@@ -776,20 +780,24 @@ public class ParserFastTests
 
         value2.Should().Be(Integer(52));
 
+        report1.InvocationCount.Should().Be(report2.InvocationCount);
+        report1.LoopIterationCount.Should().BeGreaterThan(0);
+        report2.LoopIterationCount.Should().BeGreaterThan(report1.LoopIterationCount);
+
         PerformanceCountersFormatting.FormatCounts(report1).Should().Be(
             """
-            InvocationCount: 20
-            BuildListCount: 21
-            LoopIterationCount: 0
-            InstructionCount: 602
+            InvocationCount: 2
+            BuildListCount: 3
+            LoopIterationCount: 21
+            InstructionCount: 971
             """);
 
         PerformanceCountersFormatting.FormatCounts(report2).Should().Be(
             """
-            InvocationCount: 46
-            BuildListCount: 47
-            LoopIterationCount: 0
-            InstructionCount: 1_408
+            InvocationCount: 2
+            BuildListCount: 3
+            LoopIterationCount: 47
+            InstructionCount: 2_115
             """);
     }
 

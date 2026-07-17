@@ -238,7 +238,8 @@ public record ExpressionCompilation(
                 rootExprAlternativeForms: [rootExpression],
                 envClass: enableTailRecursionOptimization ? envConstraintId : null,
                 parametersAsLocals: parametersAsLocals,
-                parseCache)
+                parseCache,
+                enableTailRecursionOptimization)
             .ToArray();
 
         for (var instructionIndex = allInstructionsBeforeReturn.Length - 1; instructionIndex >= 0; instructionIndex--)
@@ -1065,7 +1066,8 @@ public record ExpressionCompilation(
         ImmutableHashSet<Expression> rootExprAlternativeForms,
         PineValueClass? envClass,
         StaticFunctionInterface parametersAsLocals,
-        PineVMParseCache parseCache)
+        PineVMParseCache parseCache,
+        bool enableTailRecursionOptimization = false)
     {
         return
             PineIRCompiler.CompileExpression(
@@ -1073,7 +1075,8 @@ public record ExpressionCompilation(
                 rootExprAlternativeForms: rootExprAlternativeForms,
                 envClass,
                 parametersAsLocals: parametersAsLocals,
-                parseCache)
+                parseCache,
+                enableTailRecursionOptimization)
             .Instructions;
     }
 

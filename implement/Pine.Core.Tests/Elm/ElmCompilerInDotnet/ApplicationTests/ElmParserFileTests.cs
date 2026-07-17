@@ -197,7 +197,9 @@ public class ElmParserFileTests
         .moduleContent.FunctionDeclarations[name];
 
     private static readonly Core.Interpreter.IntermediateVM.PineVM s_vm =
-        ElmCompilerTestHelper.PineVMForProfiling(_ => { });
+        ElmCompilerTestHelper.PineVMForProfiling(
+            reportFunctionApplication: _ => { },
+            enableTailRecursionOptimization: true);
 
     private static ElmValue ElmString(string text) =>
         ElmValue.StringInstance(text);
@@ -226,10 +228,10 @@ public class ElmParserFileTests
 
         result.counts.Should().Be(
             """
-            InvocationCount: 238
-            BuildListCount: 422
-            LoopIterationCount: 0
-            InstructionCount: 6_062
+            InvocationCount: 239
+            BuildListCount: 411
+            LoopIterationCount: 22
+            InstructionCount: 6_425
             """);
     }
 
@@ -244,10 +246,10 @@ public class ElmParserFileTests
 
         result.counts.Should().Be(
             """
-            InvocationCount: 357
-            BuildListCount: 618
-            LoopIterationCount: 0
-            InstructionCount: 9_521
+            InvocationCount: 347
+            BuildListCount: 598
+            LoopIterationCount: 41
+            InstructionCount: 10_200
             """);
     }
 
