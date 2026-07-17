@@ -58,15 +58,17 @@ public abstract record PineValue : IEquatable<PineValue>
             return s_reusedBlobChar4Byte[bytes.Span[2] * 256 + bytes.Span[3]];
         }
 
+        var asStruct = new BlobValue.BlobValueStruct(bytes);
+
         if (ReusedBlobInstances is { } reusedSet &&
-            reusedSet.TryGetValue(new BlobValue(bytes), out var reused))
+            reusedSet
+            .GetAlternateLookup<BlobValue.BlobValueStruct>()
+            .TryGetValue(asStruct, out var reused))
         {
             return reused;
         }
 
-        var newInstance = new BlobValue(bytes);
-
-        return newInstance;
+        return new BlobValue(asStruct);
     }
 
     /// <summary>
@@ -74,6 +76,46 @@ public abstract record PineValue : IEquatable<PineValue>
     /// </summary>
     public static BlobValue BlobSingleByte(byte value) =>
         s_reusedBlobSingle[value];
+
+    /// <summary>
+    /// Blob value with two bytes.
+    /// </summary>
+    public static BlobValue BlobTwoBytes(
+        byte first,
+        byte second) =>
+        s_reusedBlobTuple[first * 256 + second];
+
+    /// <summary>
+    /// Blob value with three bytes.
+    /// </summary>
+    public static BlobValue BlobThreeBytes(
+        byte first,
+        byte second,
+        byte third)
+    {
+        if (first is 2)
+            return s_reusedBlobInteger3ByteNegative[second * 256 + third];
+
+        if (first is 4)
+            return s_reusedBlobInteger3BytePositive[second * 256 + third];
+
+        return (BlobValue)Blob([first, second, third]);
+    }
+
+    /// <summary>
+    /// Blob value with four bytes.
+    /// </summary>
+    public static BlobValue BlobFourBytes(
+        byte first,
+        byte second,
+        byte third,
+        byte fourth)
+    {
+        if (first is 0 && second is 0)
+            return ReusedBlobCharFourByte(third, fourth);
+
+        return (BlobValue)Blob([first, second, third, fourth]);
+    }
 
     /// <summary>
     /// Construct a list value from a sequence of other values.
@@ -230,8 +272,9 @@ public abstract record PineValue : IEquatable<PineValue>
             ..s_reusedBlobInteger3BytePositive,
             ..s_reusedBlobChar4Byte,
             ..PopularValues.PopularStrings.Select(StringEncoding.BlobValueFromString)
-            ])
-        .ToFrozenSet();
+            ],
+            BlobValue.BlobValueEqualityComparer.Instance)
+        .ToFrozenSet(BlobValue.BlobValueEqualityComparer.Instance);
 
     /// <summary>
     /// A <see cref="PineValue"/> that is a list of <see cref="PineValue"/>s.
@@ -567,14 +610,82 @@ public abstract record PineValue : IEquatable<PineValue>
         /// used for efficient comparisons or storage in hash-based collections.</remarks>
         /// <param name="bytes">The read-only memory containing the byte data to initialize the blob value.</param>
         internal BlobValue(ReadOnlyMemory<byte> bytes)
+            : this(new BlobValueStruct(bytes))
         {
-            Bytes = bytes;
+        }
 
-            var hash = new HashCode();
+        internal BlobValue(BlobValueStruct blobValueStruct)
+        {
+            Bytes = blobValueStruct.Bytes;
 
-            hash.AddBytes(bytes.Span);
+            _slimHashCode = blobValueStruct.SlimHashCode;
+        }
 
-            _slimHashCode = hash.ToHashCode();
+        internal readonly record struct BlobValueStruct
+        {
+            internal readonly int SlimHashCode;
+
+            internal ReadOnlyMemory<byte> Bytes { get; }
+
+            internal BlobValueStruct(ReadOnlyMemory<byte> bytes)
+            {
+                Bytes = bytes;
+
+                var hash = new HashCode();
+
+                hash.AddBytes(bytes.Span);
+
+                SlimHashCode = hash.ToHashCode();
+            }
+
+            internal BlobValueStruct(BlobValue instance)
+            {
+                Bytes = instance.Bytes;
+                SlimHashCode = instance._slimHashCode;
+            }
+
+            internal bool Equals(BlobValue other) =>
+                SlimHashCode == other._slimHashCode &&
+                Bytes.Span.SequenceEqual(other.Bytes.Span);
+
+            public bool Equals(BlobValueStruct other) =>
+                SlimHashCode == other.SlimHashCode &&
+                Bytes.Span.SequenceEqual(other.Bytes.Span);
+
+            public override int GetHashCode() => SlimHashCode;
+        }
+
+        internal sealed class BlobValueEqualityComparer :
+            IEqualityComparer<BlobValue>,
+            IAlternateEqualityComparer<BlobValueStruct, BlobValue>
+        {
+            internal static readonly BlobValueEqualityComparer Instance = new();
+
+            private BlobValueEqualityComparer()
+            {
+            }
+
+            public bool Equals(BlobValue? left, BlobValue? right)
+            {
+                if (ReferenceEquals(left, right))
+                    return true;
+
+                if (left is null || right is null)
+                    return false;
+
+                return new BlobValueStruct(left).Equals(right);
+            }
+
+            public int GetHashCode(BlobValue value) => value._slimHashCode;
+
+            public bool Equals(BlobValueStruct alternate, BlobValue other) =>
+                alternate.Equals(other);
+
+            public int GetHashCode(BlobValueStruct alternate) =>
+                alternate.SlimHashCode;
+
+            public BlobValue Create(BlobValueStruct alternate) =>
+                new(alternate);
         }
 
         /// <inheritdoc/>

@@ -62,6 +62,78 @@ public class PineValueCompositionTests
     }
 
     [Fact]
+    public void String_blob_encoding_writes_utf32_big_endian()
+    {
+        var encoded = StringEncoding.BlobValueFromString("A✔😃");
+
+        encoded.Bytes.ToArray().Should().Equal(
+            0x00,
+            0x00,
+            0x00,
+            0x41,
+            0x00,
+            0x00,
+            0x27,
+            0x14,
+            0x00,
+            0x01,
+            0xF6,
+            0x03);
+    }
+
+    [Fact]
+    public void String_blob_encoding_allocates_only_result_array_and_blob()
+    {
+        const string Input = "allocation-check-😃-2026";
+        const int Iterations = 100;
+
+        var encodedBytesCount = StringEncoding.ToCodePoints(Input).Count * 4;
+
+        _ = StringEncoding.BlobValueFromString(Input);
+
+        var baselineBytes = new byte[encodedBytesCount];
+        baselineBytes[0] = 17;
+        _ = PineValue.Blob(baselineBytes);
+
+        var baselineAllocatedBefore = GC.GetAllocatedBytesForCurrentThread();
+
+        PineValue? baseline = null;
+
+        for (var i = 0; i < Iterations; ++i)
+        {
+            baselineBytes = new byte[encodedBytesCount];
+            baselineBytes[0] = 17;
+            baseline = PineValue.Blob(baselineBytes);
+        }
+
+        var baselineAllocatedBytes =
+            GC.GetAllocatedBytesForCurrentThread() - baselineAllocatedBefore;
+
+        var encodingAllocatedBefore = GC.GetAllocatedBytesForCurrentThread();
+
+        PineValue.BlobValue? encoded = null;
+
+        for (var i = 0; i < Iterations; ++i)
+            encoded = StringEncoding.BlobValueFromString(Input);
+
+        var encodingAllocatedBytes =
+            GC.GetAllocatedBytesForCurrentThread() - encodingAllocatedBefore;
+
+        GC.KeepAlive(baseline);
+        GC.KeepAlive(encoded);
+
+        encodingAllocatedBytes.Should().Be(baselineAllocatedBytes);
+    }
+
+    [Fact]
+    public void String_blob_encoding_rejects_unpaired_surrogate()
+    {
+        var act = () => StringEncoding.BlobValueFromString("\ud800");
+
+        act.Should().Throw<ArgumentException>();
+    }
+
+    [Fact]
     public void Signed_Integer_value_roundtrips()
     {
         var testCases =

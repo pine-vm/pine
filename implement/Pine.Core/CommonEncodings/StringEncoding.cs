@@ -60,15 +60,33 @@ public static class StringEncoding
         if (str.Length is 0)
             return PineValue.EmptyBlob;
 
-        var codePoints = ToCodePoints(str);
+        var codePointsCount = 0;
 
-        var bytes = new byte[codePoints.Count * 4];
-
-        for (var index = 0; index < codePoints.Count; index++)
+        for (var sourceIndex = 0; sourceIndex < str.Length; sourceIndex++)
         {
+            _ = char.ConvertToUtf32(str, sourceIndex);
+
+            codePointsCount++;
+
+            if (char.IsHighSurrogate(str[sourceIndex]))
+                sourceIndex++;
+        }
+
+        var bytes = new byte[codePointsCount * 4];
+        var destinationOffset = 0;
+
+        for (var sourceIndex = 0; sourceIndex < str.Length; sourceIndex++)
+        {
+            var codePoint = char.ConvertToUtf32(str, sourceIndex);
+
             System.Buffers.Binary.BinaryPrimitives.WriteUInt32BigEndian(
-                bytes.AsSpan(index * 4),
-                (uint)codePoints[index]);
+                bytes.AsSpan(destinationOffset, 4),
+                (uint)codePoint);
+
+            destinationOffset += 4;
+
+            if (char.IsHighSurrogate(str[sourceIndex]))
+                sourceIndex++;
         }
 
         return (PineValue.BlobValue)PineValue.Blob(bytes);

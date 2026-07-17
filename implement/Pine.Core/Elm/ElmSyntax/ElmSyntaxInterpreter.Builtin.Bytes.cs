@@ -63,10 +63,15 @@ public partial class ElmSyntaxInterpreter
     }
 
     /// <summary>Builds a <c>Bytes.Bytes</c> value (<c>Elm_Bytes blob</c>) from a raw bytes blob.</summary>
-    private static PineValueInProcess MakeElmBytes(System.ReadOnlyMemory<byte> bytes) =>
-        PineValueInProcess.CreateTagged(
-            s_bytesElmBytesTagName,
-            [PineValueInProcess.Create(PineValue.Blob(bytes))]);
+    private static PineValueInProcess MakeElmBytes(System.ReadOnlyMemory<byte> bytes)
+    {
+        var blobValue = PineValue.Blob(bytes);
+
+        return
+            PineValueInProcess.CreateTagged(
+                s_bytesElmBytesTagName,
+                [PineValueInProcess.Create(blobValue)]);
+    }
 
     /// <summary>
     /// Appends the UTF-8 encoding of the Unicode code point <paramref name="code"/> to

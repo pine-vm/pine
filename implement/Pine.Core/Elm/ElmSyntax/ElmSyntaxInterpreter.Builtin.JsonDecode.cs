@@ -260,7 +260,7 @@ public partial class ElmSyntaxInterpreter
 
     /// <summary>Builds an Elm <c>String</c> value from a .NET string.</summary>
     private static PineValueInProcess MakeElmStringFromDotnet(string value) =>
-        MakeElmString(StringEncoding.BlobValueFromString(value).Bytes);
+        MakeElmString(StringEncoding.BlobValueFromString(value));
 
     private static bool JsonIsDigit(System.ReadOnlyMemory<byte> nextChar)
     {

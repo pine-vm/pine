@@ -641,9 +641,13 @@ public partial class ElmSyntaxInterpreter
 
     /// <summary>Builds an Elm <c>String</c> value (<c>String charsBlob</c>) from a UTF-32 bytes blob.</summary>
     private static PineValueInProcess MakeElmString(System.ReadOnlyMemory<byte> charsBytes) =>
+        MakeElmString(PineValue.Blob(charsBytes));
+
+    /// <summary>Builds an Elm <c>String</c> value (<c>String charsBlob</c>) from a UTF-32 blob.</summary>
+    private static PineValueInProcess MakeElmString(PineValue.BlobValue charsBlob) =>
         PineValueInProcess.CreateTagged(
             s_stringTagName,
-            [PineValueInProcess.Create(PineValue.Blob(charsBytes))]);
+            [PineValueInProcess.Create(charsBlob)]);
 
     /// <summary>
     /// Builtin implementation of <c>String.toList</c> directly on the interpreter's value model,
@@ -855,7 +859,7 @@ public partial class ElmSyntaxInterpreter
         return
             MakeElmString(
                 StringEncoding.BlobValueFromString(
-                    integer.ToString(System.Globalization.CultureInfo.InvariantCulture)).Bytes);
+                    integer.ToString(System.Globalization.CultureInfo.InvariantCulture)));
     }
 
     /// <summary>
@@ -1558,7 +1562,7 @@ public partial class ElmSyntaxInterpreter
 
             return
                 MakeElmString(
-                    StringEncoding.BlobValueFromString(FromFloatDecimal(16, numerator, denominator)).Bytes);
+                    StringEncoding.BlobValueFromString(FromFloatDecimal(16, numerator, denominator)));
         }
 
         // A plain integer Float reduces to String.fromInt.
@@ -1571,7 +1575,7 @@ public partial class ElmSyntaxInterpreter
         return
             MakeElmString(
                 StringEncoding.BlobValueFromString(
-                    integer.ToString(System.Globalization.CultureInfo.InvariantCulture)).Bytes);
+                    integer.ToString(System.Globalization.CultureInfo.InvariantCulture)));
     }
 
     /// <summary>

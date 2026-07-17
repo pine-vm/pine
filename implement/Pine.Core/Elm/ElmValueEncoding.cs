@@ -859,13 +859,7 @@ public static class ElmValueEncoding
 
         var byte3 = (byte)charCode;
 
-        if (byte0 is 0 && byte1 is 0)
-        {
-            if (PineValue.ReusedBlobCharFourByte(third: byte2, fourth: byte3) is { } reused)
-                return reused;
-        }
-
-        return PineValue.Blob([byte0, byte1, byte2, byte3]);
+        return PineValue.BlobFourBytes(byte0, byte1, byte2, byte3);
     }
 
 

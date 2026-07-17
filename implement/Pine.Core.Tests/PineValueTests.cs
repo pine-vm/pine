@@ -6,6 +6,89 @@ namespace Pine.Core.Tests;
 public class PineValueTests
 {
     [Fact]
+    public void Blob_reused_instance_lookup_allocates_no_objects()
+    {
+        System.ReadOnlyMemory<byte> bytes =
+            new byte[]
+            {
+                0,
+                0,
+                0,
+                (byte)'P',
+                0,
+                0,
+                0,
+                (byte)'i',
+                0,
+                0,
+                0,
+                (byte)'n',
+                0,
+                0,
+                0,
+                (byte)'e'
+            };
+
+        var expected = PineValue.Blob(bytes);
+
+        PineValue.ReusedBlobInstances.Contains(expected).Should().BeTrue();
+
+        for (var i = 0; i < 10; ++i)
+            _ = PineValue.Blob(bytes);
+
+        var allocatedBefore = System.GC.GetAllocatedBytesForCurrentThread();
+
+        PineValue.BlobValue? actual = null;
+
+        for (var i = 0; i < 100; ++i)
+            actual = PineValue.Blob(bytes);
+
+        var allocatedBytes =
+            System.GC.GetAllocatedBytesForCurrentThread() - allocatedBefore;
+
+        ReferenceEquals(actual, expected).Should().BeTrue();
+        allocatedBytes.Should().Be(0);
+    }
+
+    [Fact]
+    public void Blob_unreused_instance_lookup_allocates_only_returned_instance()
+    {
+        System.ReadOnlyMemory<byte> bytes = new byte[] { 17, 31, 47, 63, 79 };
+
+        _ = new PineValue.BlobValue(bytes);
+        _ = PineValue.Blob(bytes);
+
+        const int Iterations = 100;
+
+        var directAllocatedBefore = System.GC.GetAllocatedBytesForCurrentThread();
+
+        PineValue.BlobValue? direct = null;
+
+        for (var i = 0; i < Iterations; ++i)
+            direct = new PineValue.BlobValue(bytes);
+
+        var directAllocatedBytes =
+            System.GC.GetAllocatedBytesForCurrentThread() - directAllocatedBefore;
+
+        var factoryAllocatedBefore = System.GC.GetAllocatedBytesForCurrentThread();
+
+        PineValue.BlobValue? fromFactory = null;
+
+        for (var i = 0; i < Iterations; ++i)
+            fromFactory = PineValue.Blob(bytes);
+
+        var factoryAllocatedBytes =
+            System.GC.GetAllocatedBytesForCurrentThread() - factoryAllocatedBefore;
+
+        System.GC.KeepAlive(direct);
+        System.GC.KeepAlive(fromFactory);
+
+        factoryAllocatedBytes.Should().Be(directAllocatedBytes);
+        ReferenceEquals(fromFactory, direct).Should().BeFalse();
+        fromFactory.Should().Be(direct);
+    }
+
+    [Fact]
     public void Pine_list_value_content_counts()
     {
         var testCases =

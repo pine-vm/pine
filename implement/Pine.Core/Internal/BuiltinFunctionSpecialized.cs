@@ -69,7 +69,7 @@ public static class BuiltinFunctionSpecialized
             if (remainingCount is 2)
             {
                 return
-                    PineValue.ReusedBlobTupleFromBytes(
+                    PineValue.BlobTwoBytes(
                         first: blobValue.Bytes.Span[(int)skipCount],
                         second: blobValue.Bytes.Span[(int)skipCount + 1]);
             }
@@ -77,36 +77,29 @@ public static class BuiltinFunctionSpecialized
             if (remainingCount is 3)
             {
                 var firstByte = blobValue.Bytes.Span[(int)skipCount];
+                var secondByte = blobValue.Bytes.Span[(int)skipCount + 1];
+                var thirdByte = blobValue.Bytes.Span[(int)skipCount + 2];
 
-                if (firstByte is 2)
-                {
-                    return
-                        PineValue.ReusedBlobInteger3ByteNegativeFromBytes(
-                            second: blobValue.Bytes.Span[(int)skipCount + 1],
-                            third: blobValue.Bytes.Span[(int)skipCount + 2]);
-                }
-
-                if (firstByte is 4)
-                {
-                    return
-                        PineValue.ReusedBlobInteger3BytePositiveFromBytes(
-                            second: blobValue.Bytes.Span[(int)skipCount + 1],
-                            third: blobValue.Bytes.Span[(int)skipCount + 2]);
-                }
+                return
+                    PineValue.BlobThreeBytes(
+                        first: firstByte,
+                        second: secondByte,
+                        third: thirdByte);
             }
 
             if (remainingCount is 4)
             {
                 var firstByte = blobValue.Bytes.Span[(int)skipCount];
                 var secondByte = blobValue.Bytes.Span[(int)skipCount + 1];
+                var thirdByte = blobValue.Bytes.Span[(int)skipCount + 2];
+                var fourthByte = blobValue.Bytes.Span[(int)skipCount + 3];
 
-                if (firstByte is 0 && secondByte is 0)
-                {
-                    return
-                        PineValue.ReusedBlobCharFourByte(
-                            third: blobValue.Bytes.Span[(int)skipCount + 2],
-                            fourth: blobValue.Bytes.Span[(int)skipCount + 3]);
-                }
+                return
+                    PineValue.BlobFourBytes(
+                        first: firstByte,
+                        second: secondByte,
+                        third: thirdByte,
+                        fourth: fourthByte);
             }
 
             return PineValue.Blob(blobValue.Bytes[(int)skipCount..]);
