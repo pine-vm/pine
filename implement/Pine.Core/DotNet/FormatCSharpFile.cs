@@ -805,8 +805,7 @@ public static class FormatCSharpFile
                 ThrowExpressionSyntax n => FormatThrowExpression(n, ctx),
                 ParenthesizedExpressionSyntax n => n.WithExpression((ExpressionSyntax)FormatNode(n.Expression, ctx)),
 
-                ConditionalAccessExpressionSyntax n =>
-                n.WithExpression((ExpressionSyntax)FormatNode(n.Expression, ctx)),
+                ConditionalAccessExpressionSyntax n => FormatConditionalAccessExpression(n, ctx),
 
                 CastExpressionSyntax n => FormatCastExpression(n, ctx),
                 AwaitExpressionSyntax n => n.WithExpression((ExpressionSyntax)FormatNode(n.Expression, ctx)),
@@ -1365,10 +1364,13 @@ public static class FormatCSharpFile
             decl = decl.WithVariables(decl.Variables.Replace(decl.Variables[0], newVar));
         }
         // If the declared type itself spans multiple lines (e.g. a generic type
-        // distributed across rows), put the variable identifier on its own line
-        // indented one level deeper than the field declaration. Otherwise put a
-        // single space between the type and the identifier.
-        if (decl.Variables.Count > 0 && SpansMultipleLines(decl.Type))
+        // distributed across rows), or the identifier was already on a separate
+        // line, put the variable identifier on its own line indented one level
+        // deeper than the field declaration. Otherwise put a single space between
+        // the type and the identifier.
+        if (decl.Variables.Count > 0 &&
+            (SpansMultipleLines(decl.Type) ||
+             LineOf(decl.Variables[0].Identifier) > EndLineOf(decl.Type)))
         {
             decl = decl.WithType(decl.Type.WithTrailingTrivia());
             var firstVar = decl.Variables[0];
@@ -3604,6 +3606,30 @@ public static class FormatCSharpFile
         return node.WithExpression(fmtExpr);
     }
 
+    /// <summary>Formats a conditional access expression, preserving a break before the operator.</summary>
+    private static ConditionalAccessExpressionSyntax FormatConditionalAccessExpression(
+        ConditionalAccessExpressionSyntax node,
+        FormatContext ctx)
+    {
+        var fmtExpr = (ExpressionSyntax)FormatNode(node.Expression, ctx);
+
+        if (EndLineOf(node.Expression) != LineOf(node.OperatorToken))
+        {
+            var operatorIndent = GetMemberAccessContinuationIndent(node, ctx);
+
+            return
+                node.WithExpression(
+                    fmtExpr.WithTrailingTrivia(
+                        EnsureSpaceBeforeComments(StripWhitespace(node.Expression.GetTrailingTrivia()))))
+                .WithOperatorToken(
+                    node.OperatorToken
+                    .WithLeadingTrivia(EnsureLeadingBreaks(node.OperatorToken.LeadingTrivia, 1, operatorIndent))
+                    .WithTrailingTrivia());
+        }
+
+        return node.WithExpression(fmtExpr);
+    }
+
     /// <summary>
     /// Returns true if any invocation in the given chain (a tree of nested
     /// MemberAccessExpression and InvocationExpression nodes) has an argument
@@ -3721,7 +3747,7 @@ public static class FormatCSharpFile
     /// nested under another continuation context align with that outer context.
     /// </summary>
     private static int GetMemberAccessContinuationIndent(
-        MemberAccessExpressionSyntax node,
+        ExpressionSyntax node,
         FormatContext ctx)
     {
         SyntaxNode chainTop = node;

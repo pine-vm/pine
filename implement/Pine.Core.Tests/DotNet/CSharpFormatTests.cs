@@ -6381,4 +6381,33 @@ public class CSharpFormatTests
 
         AssertFormattedSyntax(input, input, scriptMode: true);
     }
+
+    [Fact]
+    public void Preserve_conditional_access_on_new_line()
+    {
+        var input =
+            """"
+            internal static PineValue? JsonDecodeParseValue(PineValue source, PineValue offset) =>
+                ResolveJsonDecodeParseValue(
+                    [PineValueInProcess.Create(source), PineValueInProcess.Create(offset)])
+                ?.Evaluate();
+
+            """";
+
+        AssertFormattedSyntax(input, input, scriptMode: true);
+    }
+
+    [Fact]
+    public void Preserve_implicit_object_creation_on_new_line()
+    {
+        var input =
+            """"
+            private static readonly Lazy<IReadOnlyDictionary<string, (PineValue leafKey, PineValue envFunctionsValue)>>
+                s_dictLeafInfos =
+                new(BuildDictLeafInfos);
+
+            """";
+
+        AssertFormattedSyntax(input, input, scriptMode: true);
+    }
 }
