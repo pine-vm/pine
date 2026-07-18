@@ -158,8 +158,8 @@ public class ExpressionTests
             var anyNodeIsEnvironment =
                 rootAndSubexpressions.OfType<Expression.Environment>().Any();
 
-            var anyNodeIsParseAndEval =
-                rootAndSubexpressions.OfType<Expression.ParseAndEval>().Any();
+            var evalCount =
+                rootAndSubexpressions.OfType<Expression.ParseAndEval>().Count();
 
             var conditionCount =
                 rootAndSubexpressions.OfType<Expression.Conditional>().Count();
@@ -169,7 +169,7 @@ public class ExpressionTests
 
             testCase.SubexpressionCount.Should().Be(subexpressions.Count);
             testCase.ReferencesEnvironment.Should().Be(anyNodeIsEnvironment);
-            testCase.ContainsParseAndEval.Should().Be(anyNodeIsParseAndEval);
+            testCase.EvalCount.Should().Be(evalCount);
             testCase.ConditionCount.Should().Be(conditionCount);
             testCase.BuiltinCount.Should().Be(builtinCount);
         }

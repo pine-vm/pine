@@ -553,7 +553,7 @@ public static class FunctionValueBuilder
         if (expression.ReferencesEnvironment)
             throw new System.ArgumentException("Expression is not independent: " + expression);
 
-        if (expression.ContainsParseAndEval)
+        if (expression.EvalCount > 0)
             return null;
 
         if (abortForNode(expression))

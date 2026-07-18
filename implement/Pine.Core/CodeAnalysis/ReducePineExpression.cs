@@ -1662,20 +1662,9 @@ public class ReducePineExpression
         if (parseCache.ParseExpression(encodedExprValue).IsOkOrNull() is not { } innerExpr)
             return null;
 
-        var evalCountBefore = 0;
+        var evalCountBefore = evalExpr.Environment.EvalCount;
 
-        if (evalExpr.Environment.ContainsParseAndEval)
-        {
-            foreach (var descendant in Expression.EnumerateSelfAndDescendants(evalExpr.Environment))
-            {
-                if (descendant is Expression.ParseAndEval)
-                {
-                    evalCountBefore++;
-                }
-            }
-        }
-
-        if (innerExpr.ContainsParseAndEval)
+        if (innerExpr.EvalCount > 0)
         {
             foreach (var innerSubExpr in Expression.EnumerateSelfAndDescendants(innerExpr))
             {
@@ -1702,16 +1691,7 @@ public class ReducePineExpression
                 parseCache,
                 reducedExpressionCache);
 
-        var evalCountAfter = 0;
-
-        if (reducedViaEval.ContainsParseAndEval)
-        {
-            foreach (var descendant in Expression.EnumerateSelfAndDescendants(reducedViaEval))
-            {
-                if (descendant is Expression.ParseAndEval)
-                    evalCountAfter++;
-            }
-        }
+        var evalCountAfter = reducedViaEval.EvalCount;
 
         if (evalCountAfter > evalCountBefore)
         {

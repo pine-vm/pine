@@ -32,15 +32,9 @@ public abstract record Expression
     public abstract bool ReferencesEnvironment { get; }
 
     /// <summary>
-    /// True if the expression itself or any of its subexpressions is of type <see cref="ParseAndEval"/>.
-    /// <para>
-    /// An expression for which this is <c>false</c> evaluates in a single bounded pass (a finite
-    /// expression tree of kernel functions, conditionals, lists and environment accesses, all of
-    /// which terminate), so it can be evaluated directly without compiling it to an intermediate
-    /// representation and without risking unbounded recursion.
-    /// </para>
+    /// Number of subexpressions contained in this expression that are of type <see cref="ParseAndEval"/>, including the expression itself if it is an eval expression.
     /// </summary>
-    public abstract bool ContainsParseAndEval { get; }
+    public abstract long EvalCount { get; }
 
     /// <summary>
     /// Number of condition expressions (<see cref="Conditional"/>) contained in this expression, including the expression itself if it is a conditional.
@@ -248,9 +242,9 @@ public abstract record Expression
         public override bool ReferencesEnvironment { get; } = false;
 
         /// <summary>
-        /// Always returns false, as a <see cref="Literal"/> expression does not contain any subexpressions.
+        /// Always returns zero, as a <see cref="Literal"/> expression does not contain any subexpressions.
         /// </summary>
-        public override bool ContainsParseAndEval { get; } = false;
+        public override long EvalCount { get; } = 0;
 
         /// <inheritdoc/>
         public override long ConditionCount { get; } = 0;
@@ -302,7 +296,7 @@ public abstract record Expression
         public override bool ReferencesEnvironment { get; } = false;
 
         /// <inheritdoc/>
-        public override bool ContainsParseAndEval { get; } = false;
+        public override long EvalCount { get; } = 0;
 
         /// <inheritdoc/>
         public override long ConditionCount { get; } = 0;
@@ -345,8 +339,7 @@ public abstract record Expression
                 if (item.ReferencesEnvironment)
                     ReferencesEnvironment = true;
 
-                if (item.ContainsParseAndEval)
-                    ContainsParseAndEval = true;
+                EvalCount += item.EvalCount;
 
                 ConditionCount += item.ConditionCount;
 
@@ -586,7 +579,7 @@ public abstract record Expression
         /// <summary>
         /// Always returns true, as this expression is itself a <see cref="ParseAndEval"/>.
         /// </summary>
-        public override bool ContainsParseAndEval { get; } = true;
+        public override long EvalCount { get; }
 
         /// <inheritdoc/>
         public override long ConditionCount { get; } = 0;
@@ -620,6 +613,9 @@ public abstract record Expression
 
             BuiltinCount =
                 encoded.BuiltinCount + environment.BuiltinCount;
+
+            EvalCount =
+                encoded.EvalCount + environment.EvalCount + 1;
 
             MaxDepth =
                 Math.Max(encoded.MaxDepth, environment.MaxDepth) + 1;
@@ -675,7 +671,7 @@ public abstract record Expression
         public override bool ReferencesEnvironment { get; }
 
         /// <inheritdoc/>
-        public override bool ContainsParseAndEval { get; }
+        public override long EvalCount { get; }
 
         /// <inheritdoc/>
         public override long ConditionCount { get; } = 0;
@@ -702,7 +698,7 @@ public abstract record Expression
 
             SubexpressionCount = input.SubexpressionCount + 1;
             ReferencesEnvironment = input.ReferencesEnvironment;
-            ContainsParseAndEval = input.ContainsParseAndEval;
+            EvalCount = input.EvalCount;
             ConditionCount = input.ConditionCount;
             BuiltinCount = input.BuiltinCount + 1;
             MaxDepth = input.MaxDepth + 1;
@@ -760,7 +756,7 @@ public abstract record Expression
         public override bool ReferencesEnvironment { get; }
 
         /// <inheritdoc/>
-        public override bool ContainsParseAndEval { get; }
+        public override long EvalCount { get; }
 
         /// <inheritdoc/>
         public override long ConditionCount { get; } = 0;
@@ -800,10 +796,10 @@ public abstract record Expression
                 FalseBranch.ReferencesEnvironment ||
                 TrueBranch.ReferencesEnvironment;
 
-            ContainsParseAndEval =
-                Condition.ContainsParseAndEval ||
-                FalseBranch.ContainsParseAndEval ||
-                TrueBranch.ContainsParseAndEval;
+            EvalCount =
+                Condition.EvalCount +
+                FalseBranch.EvalCount +
+                TrueBranch.EvalCount;
 
             ConditionCount =
                 Condition.ConditionCount +
@@ -902,7 +898,7 @@ public abstract record Expression
         public override bool ReferencesEnvironment { get; } = true;
 
         /// <inheritdoc/>
-        public override bool ContainsParseAndEval { get; } = false;
+        public override long EvalCount { get; } = 0;
 
         /// <inheritdoc/>
         public override long ConditionCount { get; } = 0;
@@ -945,7 +941,7 @@ public abstract record Expression
         public override bool ReferencesEnvironment { get; }
 
         /// <inheritdoc/>
-        public override bool ContainsParseAndEval { get; }
+        public override long EvalCount { get; }
 
         /// <inheritdoc/>
         public override long ConditionCount { get; }
@@ -983,7 +979,7 @@ public abstract record Expression
 
             SubexpressionCount = tagged.SubexpressionCount + 1;
             ReferencesEnvironment = tagged.ReferencesEnvironment;
-            ContainsParseAndEval = tagged.ContainsParseAndEval;
+            EvalCount = tagged.EvalCount;
             ConditionCount = tagged.ConditionCount;
             BuiltinCount = tagged.BuiltinCount;
             MaxDepth = tagged.MaxDepth + 1;

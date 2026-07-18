@@ -1358,7 +1358,7 @@ public class FunctionValueBuilderTests
                     "Unexpected result type from parsing: " + parseFirstLevelResult);
 
             parseFirstLevelOk.BuiltinCount.Should().Be(0);
-            parseFirstLevelOk.ContainsParseAndEval.Should().BeFalse();
+            parseFirstLevelOk.EvalCount.Should().Be(0);
 
             var simulateFirstApplication =
                 EvaluateExpression(
@@ -1541,7 +1541,7 @@ public class FunctionValueBuilderTests
                     "Unexpected result type from parsing: " + parseFirstLevelResult);
 
             parseFirstLevelOk.BuiltinCount.Should().Be(0);
-            parseFirstLevelOk.ContainsParseAndEval.Should().BeFalse();
+            parseFirstLevelOk.EvalCount.Should().Be(0);
 
             var simulateFirstApplication =
                 EvaluateExpression(

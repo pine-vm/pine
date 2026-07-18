@@ -2995,7 +2995,7 @@ public class PineVM : IPineVM
         if (expression is not Expression.ParseAndEval evalExpr)
             return null;
 
-        if (evalExpr.Encoded.ContainsParseAndEval || evalExpr.Environment.ContainsParseAndEval)
+        if (evalExpr.Encoded.EvalCount > 0 || evalExpr.Environment.EvalCount > 0)
             return null;
 
         var encodedExprValue = EvalDirect(evalExpr.Encoded, envValue);
@@ -3021,7 +3021,7 @@ public class PineVM : IPineVM
         Expression expression,
         PineValueInProcess envValue)
     {
-        if (expression.ContainsParseAndEval)
+        if (expression.EvalCount > 0)
             return null;
 
         if (expression.BuiltinCount is not 0)
