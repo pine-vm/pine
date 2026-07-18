@@ -248,16 +248,24 @@ public record ReusedInstances(
                 tempEncodingDict.Values
                 .Concat(PopularValues.PopularElmValuesSource());
 
+            var sourceElmValuesByDepth =
+                GroupValuesByDepth(sourceElmValues)
+                .OrderBy(kvp => kvp.Key)
+                .ToList();
+
             var tempElmValueEncodingDict = new Dictionary<ElmValue, PineValue>();
 
-            foreach (var elmValue in sourceElmValues.OrderBy(ev => ev.ContainedNodesCount))
+            foreach (var depthGroup in sourceElmValuesByDepth)
             {
-                tempElmValueEncodingDict[elmValue] =
-                    Elm.ElmValueEncoding.ElmValueAsPineValue(
-                        elmValue,
-                        tempElmValueEncodingDict,
-                        reportNewEncoding:
-                        (elmValue, encoding) => tempElmValueEncodingDict.TryAdd(elmValue, encoding));
+                foreach (var elmValue in depthGroup.Value)
+                {
+                    tempElmValueEncodingDict[elmValue] =
+                        Elm.ElmValueEncoding.ElmValueAsPineValue(
+                            elmValue,
+                            tempElmValueEncodingDict,
+                            reportNewEncoding:
+                            (elmValue, encoding) => tempElmValueEncodingDict.TryAdd(elmValue, encoding));
+                }
             }
 
             var (allListsComponents, _) =
@@ -340,11 +348,22 @@ public record ReusedInstances(
                 keySelector: kvp => kvp.Value.Items.Span[0],
                 elementSelector: kvp => kvp.Value);
 
-        var valuesExpectedInCompilerSorted =
+        var blobValuesExpectedInCompiler =
             PineValue.ReusedBlobInstances
-            .Cast<PineValue>()
             .Concat(loadedPineListValues.ValuesExpectedInCompilerBlobs)
-            .Concat(loadedPineListValues.ValuesExpectedInCompilerLists.OrderBy(listValue => listValue.NodesCount))
+            .ToList();
+
+        var listValuesExpectedInCompilerByDepth =
+            loadedPineListValues.ValuesExpectedInCompilerLists
+            .Where(list => list.MaxDepth < 100 && list.NodesCount < 10_000)
+            .GroupBy(listValue => listValue.MaxDepth)
+            .OrderBy(g => g.Key)
+            .ToList();
+
+        var valuesExpectedInCompilerSorted =
+            blobValuesExpectedInCompiler
+            .Cast<PineValue>()
+            .Concat(listValuesExpectedInCompilerByDepth.SelectMany(g => g))
             .ToList();
 
         {
@@ -451,56 +470,59 @@ public record ReusedInstances(
                 CollectAllComponentsFromRoots(
                     ProduceElmValuesEncodedInCompiler(valuesExpectedInCompilerSorted));
 
-            var coveredElmValuesOrdered =
-                coveredElmValues
-                .OrderBy(elmValue => elmValue.ContainedNodesCount)
+            var coveredElmValuesByDepth =
+                GroupValuesByDepth(coveredElmValues)
+                .OrderBy(kvp => kvp.Key)
                 .ToList();
 
-            var reusedInstances = new Dictionary<ElmValue, ElmValue>();
+            var elmValueReusedInstances = new Dictionary<ElmValue, ElmValue>();
 
-            foreach (var elmValue in coveredElmValuesOrdered)
+            foreach (var depthGroup in coveredElmValuesByDepth)
             {
-                var rebuiltInstance =
-                    elmValue switch
-                    {
-                        ElmValue.ElmChar elmChar =>
-                        elmValue,
+                foreach (var elmValue in depthGroup.Value)
+                {
+                    var rebuiltInstance =
+                        elmValue switch
+                        {
+                            ElmValue.ElmChar elmChar =>
+                            elmValue,
 
-                        ElmValue.ElmInteger elmInteger =>
-                        ElmValue.Integer(elmInteger.Value),
+                            ElmValue.ElmInteger elmInteger =>
+                            ElmValue.Integer(elmInteger.Value),
 
-                        ElmValue.ElmString elmString =>
-                        ElmValue.StringInstance(elmString.Value),
+                            ElmValue.ElmString elmString =>
+                            ElmValue.StringInstance(elmString.Value),
 
-                        ElmValue.ElmList elmList =>
-                        new ElmValue.ElmList(
-                            [.. elmList.Items.Select(item => reusedInstances[item])]),
+                            ElmValue.ElmList elmList =>
+                            ElmValue.ListInstance(
+                                [.. elmList.Items.Select(item => elmValueReusedInstances[item])]),
 
-                        ElmValue.ElmRecord elmRecord =>
-                        new ElmValue.ElmRecord(
-                            [.. elmRecord.Fields.Select(kvp => (kvp.FieldName, reusedInstances[kvp.Value]))]),
+                            ElmValue.ElmRecord elmRecord =>
+                            new ElmValue.ElmRecord(
+                                [.. elmRecord.Fields.Select(kvp => (kvp.FieldName, elmValueReusedInstances[kvp.Value]))]),
 
-                        ElmValue.ElmTag elmTag =>
-                        ElmValue.TagInstance(
-                            tagName: elmTag.TagName,
-                            arguments: [.. elmTag.Arguments.Select(arg => reusedInstances[arg])]),
+                            ElmValue.ElmTag elmTag =>
+                            ElmValue.TagInstance(
+                                tagName: elmTag.TagName,
+                                arguments: [.. elmTag.Arguments.Select(arg => elmValueReusedInstances[arg])]),
 
-                        ElmValue.ElmInternal elmInternal =>
-                        elmValue,
+                            ElmValue.ElmInternal elmInternal =>
+                            elmValue,
 
-                        _ =>
-                        throw new System.NotImplementedException(
-                            "Unexpected ElmValue type: " + elmValue.GetType())
-                    };
+                            _ =>
+                            throw new System.NotImplementedException(
+                                "Unexpected ElmValue type: " + elmValue.GetType())
+                        };
 
-                reusedInstances[rebuiltInstance] = rebuiltInstance;
+                    elmValueReusedInstances[rebuiltInstance] = rebuiltInstance;
+                }
             }
 
             ElmValues =
-                reusedInstances.Values.ToFrozenSet();
+                elmValueReusedInstances.Values.ToFrozenSet();
 
             ElmTagValues =
-                reusedInstances.Values
+                elmValueReusedInstances.Values
                 .OfType<ElmValue.ElmTag>()
                 .ToFrozenDictionary(
                     keySelector: tag => new ElmValue.ElmTag.ElmTagStruct(tag.TagName, tag.Arguments),
@@ -558,19 +580,22 @@ public record ReusedInstances(
         {
             var encodedDict = new Dictionary<ElmValue, PineValue>();
 
-            var elmValuesSorted =
-                ElmValues
-                .OrderBy(ev => ev.ContainedNodesCount)
+            var elmValuesByDepth =
+                GroupValuesByDepth(ElmValues)
+                .OrderBy(kvp => kvp.Key)
                 .ToList();
 
-            foreach (var item in elmValuesSorted)
+            foreach (var depthGroup in elmValuesByDepth)
             {
-                encodedDict[item] =
-                    Elm.ElmValueEncoding.ElmValueAsPineValue(
-                        item,
-                        encodedDict,
-                        reportNewEncoding:
-                        (elmValue, encoding) => encodedDict.TryAdd(elmValue, encoding));
+                foreach (var elmValue in depthGroup.Value)
+                {
+                    encodedDict[elmValue] =
+                        Elm.ElmValueEncoding.ElmValueAsPineValue(
+                            elmValue,
+                            encodedDict,
+                            reportNewEncoding:
+                            (elmValue, encoding) => encodedDict.TryAdd(elmValue, encoding));
+                }
             }
 
             ElmValueEncoding =
@@ -582,6 +607,28 @@ public record ReusedInstances(
                     keySelector: kvp => kvp.Value,
                     elementSelector: kvp => kvp.Key);
         }
+    }
+
+    private static IReadOnlyDictionary<int, IReadOnlyList<ElmValue>> GroupValuesByDepth(IEnumerable<ElmValue> values)
+    {
+        var builderDict = new Dictionary<int, List<ElmValue>>();
+
+        foreach (var value in values)
+        {
+            if (!builderDict.TryGetValue(value.MaxDepth, out var builder))
+            {
+                builder = [];
+                builderDict[value.MaxDepth] = builder;
+            }
+
+            builder.Add(value);
+        }
+
+        return
+            builderDict
+            .ToDictionary(
+                kvp => kvp.Key,
+                kvp => (IReadOnlyList<ElmValue>)[.. kvp.Value]);
     }
 
     public static FrozenDictionary<PineValue.ListValue.ListValueStruct, PineValue.ListValue>
@@ -819,12 +866,20 @@ public record ReusedInstances(
         /*
          * Encode the smaller values first, so that the larger values can reuse the instances of smaller values.
          * */
-        var pineValuesSorted =
+
+        var pineBlobs =
             pineValues
-            .OrderBy(pineValue => pineValue is PineValue.ListValue listValue ? listValue.NodesCount : 0)
+            .OfType<PineValue.BlobValue>()
             .ToList();
 
-        foreach (var pineValue in pineValuesSorted)
+        var pineListsByDepth =
+            pineValues
+            .OfType<PineValue.ListValue>()
+            .GroupBy(listValue => listValue.MaxDepth)
+            .OrderBy(g => g.Key)
+            .ToList();
+
+        foreach (var pineValue in pineBlobs)
         {
             var pineValueEncoded =
                 ElmValueInterop.PineValueEncodedAsInElmCompiler(
@@ -834,6 +889,20 @@ public record ReusedInstances(
                     (pineValue, encoding) => encodedForCompilerDict.TryAdd(pineValue, encoding));
 
             encodedForCompilerDict[pineValue] = pineValueEncoded;
+        }
+
+        foreach (var depthGroup in pineListsByDepth)
+        {
+            foreach (var pineValue in depthGroup)
+            {
+                var pineValueEncoded =
+                    ElmValueInterop.PineValueEncodedAsInElmCompiler(
+                        pineValue,
+                        additionalReusableEncodings: encodedForCompilerDict,
+                        reportNewEncoding:
+                        (pineValue, encoding) => encodedForCompilerDict.TryAdd(pineValue, encoding));
+                encodedForCompilerDict[pineValue] = pineValueEncoded;
+            }
         }
 
         return encodedForCompilerDict.Values;

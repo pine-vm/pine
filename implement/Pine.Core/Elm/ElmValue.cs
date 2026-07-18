@@ -34,6 +34,11 @@ public abstract record ElmValue
     abstract public long ContainedNodesCount { get; }
 
     /// <summary>
+    /// The maximum depth of the ElmValue tree, the length of the longest path from this node to a leaf node.
+    /// </summary>
+    abstract public int MaxDepth { get; }
+
+    /// <summary>
     /// Corresponding to the Elm expression 'True'.
     /// </summary>
     public static readonly ElmValue TrueValue = TagInstance("True", []);
@@ -342,6 +347,9 @@ public abstract record ElmValue
         override public long ContainedNodesCount { get; } = 0;
 
         /// <inheritdoc/>
+        override public int MaxDepth { get; } = 0;
+
+        /// <inheritdoc/>
         public override string ToString()
         {
             return GetType().Name + " : " + Value.ToString();
@@ -369,6 +377,9 @@ public abstract record ElmValue
         /// <inheritdoc/>
         override public long ContainedNodesCount { get; }
 
+        /// <inheritdoc/>
+        override public int MaxDepth { get; }
+
         internal ElmTag(
             string tagName,
             IReadOnlyList<ElmValue> arguments)
@@ -389,6 +400,13 @@ public abstract record ElmValue
             for (var i = 0; i < Arguments.Count; i++)
             {
                 ContainedNodesCount += Arguments[i].ContainedNodesCount + 1;
+
+                var argumentMaxDepth = Arguments[i].MaxDepth + 1;
+
+                if (MaxDepth < argumentMaxDepth)
+                {
+                    MaxDepth = argumentMaxDepth;
+                }
             }
         }
 
@@ -405,6 +423,12 @@ public abstract record ElmValue
                 return false;
 
             if (TagName != otherTag.TagName)
+                return false;
+
+            if (ContainedNodesCount != otherTag.ContainedNodesCount)
+                return false;
+
+            if (MaxDepth != otherTag.MaxDepth)
                 return false;
 
             if (Arguments.Count != otherTag.Arguments.Count)
@@ -534,6 +558,9 @@ public abstract record ElmValue
         /// <inheritdoc/>
         public override long ContainedNodesCount { get; }
 
+        /// <inheritdoc/>
+        override public int MaxDepth { get; } = 0;
+
         /// <summary>
         /// Initializes a new instance of the <see cref="ElmList"/> class.
         /// </summary>
@@ -549,6 +576,13 @@ public abstract record ElmValue
             for (var i = 0; i < items.Count; i++)
             {
                 ContainedNodesCount += items[i].ContainedNodesCount + 1;
+
+                var itemMaxDepth = items[i].MaxDepth + 1;
+
+                if (MaxDepth < itemMaxDepth)
+                {
+                    MaxDepth = itemMaxDepth;
+                }
             }
         }
 
@@ -559,6 +593,12 @@ public abstract record ElmValue
                 return false;
 
             if (Items.Count != otherList.Items.Count)
+                return false;
+
+            if (ContainedNodesCount != otherList.ContainedNodesCount)
+                return false;
+
+            if (MaxDepth != otherList.MaxDepth)
                 return false;
 
             for (var i = 0; i < Items.Count; i++)
@@ -607,6 +647,9 @@ public abstract record ElmValue
         /// <inheritdoc/>
         public override long ContainedNodesCount { get; } = 0;
 
+        /// <inheritdoc/>
+        override public int MaxDepth { get; } = 0;
+
         internal ElmString(string value)
         {
             value = PopularValues.InternIfKnown(value);
@@ -624,6 +667,9 @@ public abstract record ElmValue
     {
         /// <inheritdoc/>
         public override long ContainedNodesCount { get; } = 0;
+
+        /// <inheritdoc/>
+        override public int MaxDepth { get; } = 0;
     }
 
     /// <summary>
@@ -638,12 +684,26 @@ public abstract record ElmValue
             Fields.Sum(field => field.Value.ContainedNodesCount) + Fields.Count;
 
         /// <inheritdoc/>
+        override public int MaxDepth { get; } =
+            Fields.Count is 0
+            ?
+            0
+            :
+            Fields.Max(field => field.Value.MaxDepth) + 1;
+
+        /// <inheritdoc/>
         public virtual bool Equals(ElmRecord? otherRecord)
         {
             if (otherRecord is null)
                 return false;
 
             if (Fields.Count != otherRecord.Fields.Count)
+                return false;
+
+            if (ContainedNodesCount != otherRecord.ContainedNodesCount)
+                return false;
+
+            if (MaxDepth != otherRecord.MaxDepth)
                 return false;
 
             for (var i = 0; i < Fields.Count; i++)
@@ -695,6 +755,9 @@ public abstract record ElmValue
         /// </summary>
         public override long ContainedNodesCount { get; } = 0;
 
+        /// <inheritdoc/>
+        override public int MaxDepth { get; } = 0;
+
 
         /// <inheritdoc/>
         public virtual bool Equals(ElmBytes? otherBytes)
@@ -735,6 +798,9 @@ public abstract record ElmValue
         /// The number of contained nodes is always zero for raw Pine blob values.
         /// </summary>
         public override long ContainedNodesCount { get; } = 0;
+
+        /// <inheritdoc/>
+        override public int MaxDepth { get; } = 0;
 
 
         /// <inheritdoc/>
@@ -842,6 +908,10 @@ public abstract record ElmValue
 
         /// <inheritdoc/>
         override public long ContainedNodesCount { get; } = 0;
+
+        /// <inheritdoc/>
+        override public int MaxDepth { get; } = 0;
+
     }
 
     /// <summary>
@@ -854,6 +924,9 @@ public abstract record ElmValue
     {
         /// <inheritdoc/>
         public override long ContainedNodesCount { get; } = 0;
+
+        /// <inheritdoc/>
+        override public int MaxDepth { get; } = 0;
     }
 
     /// <summary>
