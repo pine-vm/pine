@@ -508,7 +508,8 @@ public abstract record ElmValue
             }
 
             public override string ToString() =>
-                GetType().Name + " : " + ElmTagAsExpression(TagName, Arguments, DefaultPineBlobRenderer).expressionString;
+                GetType().Name + " : " +
+                ElmTagAsExpression(TagName, Arguments, DefaultPineBlobRenderer).expressionString;
         }
 
         /// <inheritdoc/>
@@ -925,75 +926,97 @@ public abstract record ElmValue
         if (overrideRender(elmValue) is { } overrideResult)
             return (overrideResult.expressionString, overrideResult.needsParens);
 
-        return
-            elmValue switch
+        if (elmValue is ElmInteger integer)
+            return (integer.Value.ToString(), needsParens: false);
+
+        if (elmValue is ElmChar charValue)
+            return ("'" + RenderCharAsElmExpression(charValue.Value) + "'", needsParens: false);
+
+        if (elmValue is ElmList list)
+        {
+            if (list.Items.Count is 0)
+                return ("[]", needsParens: false);
+
+            var itemsStrings = new string[list.Items.Count];
+
+            for (var i = 0; i < list.Items.Count; i++)
             {
-                ElmInteger integer =>
-                (integer.Value.ToString(), needsParens: false),
+                var item = list.Items[i];
 
-                ElmChar charValue =>
-                ("'" + RenderCharAsElmExpression(charValue.Value) + "'", needsParens: false),
+                var renderedItem = RenderAsElmExpression(item, overrideRender);
 
-                ElmList list =>
-                list.Items.Count is 0
-                ?
-                ("[]", needsParens: false)
-                :
-                ElmListItemsLookLikeTupleItems(list.Items) ?? false
-                ?
-                ("(" +
-                string.Join(
-                    ", ",
-                    list.Items.Select(item => RenderAsElmExpression(item, overrideRender).expressionString)) +
-                ")",
-                needsParens: false)
-                :
+                itemsStrings[i] = renderedItem.expressionString;
+            }
+
+            if (ElmListItemsLookLikeTupleItems(list.Items) ?? false)
+            {
+                return
+                    ("(" +
+                    string.Join(
+                        ", ",
+                        itemsStrings) +
+                    ")",
+                    needsParens: false);
+            }
+
+            return
                 ("[ " +
                 string.Join(
                     ", ",
-                    list.Items.Select(item => RenderAsElmExpression(item, overrideRender).expressionString)) +
+                    itemsStrings) +
                 " ]",
-                needsParens: false),
+                needsParens: false);
+        }
 
-                ElmString stringValue =>
-                (RenderElmDoubleQuotedStringExpression(stringValue.Value), needsParens: false),
+        if (elmValue is ElmString stringValue)
+            return (RenderElmDoubleQuotedStringExpression(stringValue.Value), needsParens: false);
 
-                ElmRecord record =>
-                record.Fields.Count < 1
-                ?
-                ("{}", needsParens: false)
-                :
+        if (elmValue is ElmRecord record)
+        {
+            if (record.Fields.Count < 1)
+                return ("{}", needsParens: false);
+
+            var fieldsStrings = new string[record.Fields.Count];
+
+            for (var i = 0; i < record.Fields.Count; i++)
+            {
+                var field = record.Fields[i];
+                var renderedFieldValue = RenderAsElmExpression(field.Value, overrideRender);
+                fieldsStrings[i] = field.FieldName + " = " + renderedFieldValue.expressionString;
+            }
+
+            return
                 ("{ " +
                 string.Join(
                     ", ",
-                    record.Fields.Select(
-                        field =>
-                        field.FieldName + " = " + RenderAsElmExpression(field.Value, overrideRender).expressionString)) +
+                    fieldsStrings) +
                 " }",
-                needsParens: false),
+                needsParens: false);
+        }
 
-                ElmTag tag =>
-                ElmTagAsExpression(tag.TagName, tag.Arguments, overrideRender),
+        if (elmValue is ElmTag tag)
+            return ElmTagAsExpression(tag.TagName, tag.Arguments, overrideRender);
 
-                ElmBytes bytes =>
-                ("<" + bytes.Value.Length + " bytes>", needsParens: false),
+        if (elmValue is ElmBytes bytes)
+            return ("<" + bytes.Value.Length + " bytes>", needsParens: false);
 
-                ElmPineBlob blob =>
-                ("<" + blob.Value.Length + " blob_bytes>", needsParens: false),
+        if (elmValue is ElmPineBlob blob)
+            return ("<" + blob.Value.Length + " blob_bytes>", needsParens: false);
 
-                ElmFloat elmFloat =>
+        if (elmValue is ElmFloat elmFloat)
+        {
+            return
                 (Convert.ToString(
                     (double)elmFloat.Numerator / (double)elmFloat.Denominator,
                     System.Globalization.CultureInfo.InvariantCulture),
-                needsParens: false),
+                needsParens: false);
+        }
 
-                ElmInternal internalValue =>
-                ("<" + internalValue.Value + ">", needsParens: false),
+        if (elmValue is ElmInternal internalValue)
+            return ("<" + internalValue.Value + ">", needsParens: false);
 
-                _ =>
-                throw new NotImplementedException(
-                    "Not implemented for value type: " + elmValue.GetType().FullName)
-            };
+        throw new NotImplementedException(
+            "Not implemented for value type: " + elmValue.GetType().FullName);
     }
 
     /// <summary>
@@ -1071,15 +1094,23 @@ public abstract record ElmValue
         IReadOnlyList<ElmValue> arguments,
         Func<ReadOnlyMemory<byte>, string> pineBlobRenderer)
     {
+        if (arguments.Count is 0)
+            return (tagName, needsParens: false);
+
+        var argumentsStrings = new string[arguments.Count];
+
+        for (var i = 0; i < arguments.Count; i++)
+        {
+            var argument = arguments[i];
+            var renderedArgument = RenderAsElmExpression(argument, OverrideRenderFromBlobRenderer(pineBlobRenderer));
+            argumentsStrings[i] = renderedArgument.expressionString;
+        }
+
         return
-            arguments.Count is 0
-            ?
-            (tagName, needsParens: false)
-            :
             (tagName + " " +
             string.Join(
                 " ",
-                arguments.Select(arg => RenderAsElmExpression(arg, OverrideRenderFromBlobRenderer(pineBlobRenderer)).expressionString)),
+                argumentsStrings),
             needsParens: true);
     }
 
@@ -1106,13 +1137,18 @@ public abstract record ElmValue
                 if (singleArgumentDictToList.Count is 0)
                     return ("Set.empty", needsParens: false);
 
-                var setItems = singleArgumentDictToList.Select(field => field.key).ToList();
+                var setItemsRendered = new string[singleArgumentDictToList.Count];
+
+                for (var i = 0; i < singleArgumentDictToList.Count; i++)
+                {
+                    var item = singleArgumentDictToList[i].key;
+
+                    setItemsRendered[i] = ApplyNeedsParens(RenderAsElmExpression(item, overrideRender));
+                }
 
                 return
                     ("Set.fromList [" +
-                    string.Join(
-                        ",",
-                        setItems.Select(item => RenderAsElmExpression(item, overrideRender)).Select(ApplyNeedsParens)) +
+                    string.Join(",", setItemsRendered) +
                     "]",
                     needsParens: true);
             }
@@ -1126,29 +1162,39 @@ public abstract record ElmValue
 
         if (dictToList.Count is 0)
         {
-            var (needsParens, argumentsString) =
-                arguments.Count switch
-                {
-                    0 =>
-                    (false, ""),
+            if (arguments.Count is 0)
+                return (tagName, needsParens: false);
 
-                    _ =>
-                    (true, " " + string.Join(" ", arguments.Select(arg => RenderAsElmExpression(arg, overrideRender)).Select(ApplyNeedsParens)))
-                };
+            var argumentsRendered = new string[arguments.Count];
 
-            return (tagName + argumentsString, needsParens);
+            for (var i = 0; i < arguments.Count; i++)
+            {
+                var item = arguments[i];
+
+                argumentsRendered[i] = ApplyNeedsParens(RenderAsElmExpression(item, overrideRender));
+            }
+
+            var argumentsString = string.Join(" ", argumentsRendered);
+
+            return (tagName + " " + argumentsString, needsParens: true);
+        }
+
+        var itemsRendered = new string[dictToList.Count];
+
+        for (var i = 0; i < dictToList.Count; i++)
+        {
+            var field = dictToList[i];
+
+            itemsRendered[i] =
+                "(" +
+                RenderAsElmExpression(field.key, overrideRender).expressionString + "," +
+                RenderAsElmExpression(field.value, overrideRender).expressionString +
+                ")";
         }
 
         return
             ("Dict.fromList [" +
-            string.Join(
-                ",",
-                dictToList
-                .Select(
-                    field =>
-                    "(" + RenderAsElmExpression(field.key, overrideRender).expressionString + "," +
-                    RenderAsElmExpression(field.value, overrideRender).expressionString +
-                    ")")) +
+            string.Join(",", itemsRendered) +
             "]",
             needsParens: true);
     }
@@ -1280,14 +1326,14 @@ public abstract record ElmValue
 
         if (valueA is ElmRecord recordA && valueB is ElmRecord recordB)
         {
-            var recordAFieldNames =
-                recordA.Fields.Select(field => field.FieldName).ToList();
-
-            var recordBFieldNames =
-                recordB.Fields.Select(field => field.FieldName).ToList();
-
-            if (!recordAFieldNames.OrderBy(name => name).SequenceEqual(recordBFieldNames))
+            if (recordA.Fields.Count != recordB.Fields.Count)
                 return false;
+
+            for (var i = 0; i < recordA.Fields.Count; i++)
+            {
+                if (recordA.Fields[i].FieldName != recordB.Fields[i].FieldName)
+                    return false;
+            }
 
             return null;
         }
