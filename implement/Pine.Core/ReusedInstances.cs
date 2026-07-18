@@ -221,6 +221,7 @@ public record ReusedInstances(
             listsFromElmSyntaxLocations
             .Concat(expressionRootsSource.Select(ExpressionEncoding.EncodeExpressionAsValue))
             .Concat(PopularExpression.BuildPopularValueDictionary().Values)
+            .Concat(PopularValuesFromElmPrecompiled())
             .OrderBy(pineValue => pineValue is PineValue.ListValue listValue ? listValue.NodesCount : 0)
             .ToList();
 
@@ -332,6 +333,15 @@ public record ReusedInstances(
     {
         BundledDeclarations =
             BundledDeclarations.LoadFromEmbedded(System.Reflection.Assembly.GetExecutingAssembly());
+
+        {
+            /*
+             * TODO: Temporary workaround to be removed when LoadPrecompiledFromEmbeddedOrDefault does
+             * not anymore (transitively) depend on `ReusedInstance`
+             * */
+
+            ListValues = FrozenDictionary<PineValue.ListValue.ListValueStruct, PineValue.ListValue>.Empty;
+        }
 
         var loadedPineListValues =
             LoadPrecompiledFromEmbeddedOrDefault(
@@ -477,7 +487,12 @@ public record ReusedInstances(
 
             var elmValueReusedInstances = new Dictionary<ElmValue, ElmValue>();
 
-            foreach (var depthGroup in coveredElmValuesByDepth)
+            foreach (var elmValue in coveredElmValuesByDepth[0].Value)
+            {
+                elmValueReusedInstances[elmValue] = elmValue;
+            }
+
+            foreach (var depthGroup in coveredElmValuesByDepth.Skip(1))
             {
                 foreach (var elmValue in depthGroup.Value)
                 {
@@ -907,5 +922,9 @@ public record ReusedInstances(
 
         return encodedForCompilerDict.Values;
     }
-}
 
+    private static IEnumerable<PineValue> PopularValuesFromElmPrecompiled()
+    {
+        return IntermediateVM.SetupVM.DefaultPrecompiledLeaves.Keys;
+    }
+}

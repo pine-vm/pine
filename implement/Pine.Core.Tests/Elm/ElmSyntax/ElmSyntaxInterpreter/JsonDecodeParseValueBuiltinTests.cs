@@ -1,4 +1,5 @@
 using AwesomeAssertions;
+using Pine.Core.CommonEncodings;
 using Pine.Core.Elm.ElmInElm;
 using Pine.Core.Elm.ElmSyntax;
 using System;
@@ -199,6 +200,20 @@ public class JsonDecodeParseValueBuiltinTests
         var depth = 40;
 
         var json = new string('[', depth) + "0" + new string(']', depth);
+
+        AssertBuiltinMatchesElm(json);
+    }
+
+    [Fact]
+    public void Builtin_matches_Elm_beyond_previous_native_nesting_limit()
+    {
+        var depth = 129;
+        var json = new string('[', depth) + "0" + new string(']', depth);
+
+        ElmInterpreter.JsonDecodeParseValue(
+            StringEncoding.ValueFromString(json),
+            IntegerEncoding.EncodeSignedInteger(0))
+            .Should().NotBeNull();
 
         AssertBuiltinMatchesElm(json);
     }

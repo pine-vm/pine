@@ -1,4 +1,3 @@
-using Pine.Core.Elm.ElmCompilerInDotnet.CoreLibraryModule;
 using Pine.Core.Elm.ElmCompilerInDotnet.PrecompiledLeaves;
 using System;
 using System.Collections.Generic;
@@ -16,25 +15,44 @@ public static class SetupVM
 {
     /// <summary>
     /// Precompiled-leaf entries contributed by <see cref="CoreBasicsPrecompiledLeaves"/>
-    /// (currently the short-circuit implementation of <c>Basics.compare</c>). Exposed
-    /// so that consumers building their own intermediate VM via
+    /// Exposed so that consumers building their own intermediate VM via
     /// <see cref="Interpreter.IntermediateVM.PineVM.CreateCustom"/> can pick the individual leaf packages they
     /// want to register without pulling in the full <see cref="DefaultPrecompiledLeaves"/>
     /// aggregate.
     /// </summary>
-    public static IReadOnlyDictionary<PineValue, Func<PineValue, PineValue?>> BasicsComparePrecompiledLeaves =>
+    public static IReadOnlyDictionary<PineValue, Func<PineValue, PineValue?>> BasicsPrecompiledLeaves =>
         CoreBasicsPrecompiledLeaves.DefaultLeaves;
 
     /// <summary>
     /// Precompiled-leaf entries contributed by <see cref="CoreDictPrecompiledLeaves"/>
-    /// (currently the short-circuit implementation of <c>Dict.get</c>). Exposed so
+    /// (short-circuit implementations of common recursive <c>Dict</c> operations). Exposed so
     /// that consumers building their own intermediate VM via
     /// <see cref="Interpreter.IntermediateVM.PineVM.CreateCustom"/> can pick the individual leaf packages they
     /// want to register without pulling in the full <see cref="DefaultPrecompiledLeaves"/>
     /// aggregate.
     /// </summary>
-    public static IReadOnlyDictionary<PineValue, Func<PineValue, PineValue?>> DictGetPrecompiledLeaves =>
+    public static IReadOnlyDictionary<PineValue, Func<PineValue, PineValue?>> DictPrecompiledLeaves =>
         CoreDictPrecompiledLeaves.DefaultLeaves;
+
+    /// <summary>
+    /// Precompiled-leaf entries contributed by <see cref="KernelJsonDecodePrecompiledLeaves"/>.
+    /// </summary>
+    public static IReadOnlyDictionary<PineValue, Func<PineValue, PineValue?>> JsonDecodePrecompiledLeaves =>
+        KernelJsonDecodePrecompiledLeaves.DefaultLeaves;
+
+    /// <summary>
+    /// Precompiled-leaf entries contributed by <see cref="CoreStringPrecompiledLeaves"/>
+    /// (short-circuit implementations of recursive <c>String</c> helpers).
+    /// </summary>
+    public static IReadOnlyDictionary<PineValue, Func<PineValue, PineValue?>> StringPrecompiledLeaves =>
+        CoreStringPrecompiledLeaves.DefaultLeaves;
+
+    /// <summary>
+    /// Precompiled-leaf entries contributed by <see cref="KernelBytesPrecompiledLeaves"/>
+    /// for recursive UTF-8 encoding and decoding in the kernel <c>Bytes</c> modules.
+    /// </summary>
+    public static IReadOnlyDictionary<PineValue, Func<PineValue, PineValue?>> BytesPrecompiledLeaves =>
+        KernelBytesPrecompiledLeaves.DefaultLeaves;
 
     /// <summary>
     /// Precompiled-leaf entries contributed by <see cref="CoreRecordPrecompiledLeaves"/>
@@ -61,7 +79,10 @@ public static class SetupVM
 
     /// <summary>
     /// Aggregate of the per-area precompiled-leaf dictionaries
-    /// (<see cref="BasicsComparePrecompiledLeaves"/>, <see cref="DictGetPrecompiledLeaves"/>,
+    /// (<see cref="BasicsPrecompiledLeaves"/>, <see cref="DictPrecompiledLeaves"/>,
+    /// <see cref="JsonDecodePrecompiledLeaves"/>,
+    /// <see cref="StringPrecompiledLeaves"/>,
+    /// <see cref="BytesPrecompiledLeaves"/>,
     /// <see cref="RecordAccessAndUpdatePrecompiledLeaves"/>,
     /// <see cref="Base64ConversionPrecompiledLeaves"/>)
     /// available from inside the <c>Pine.Core</c> project. The counterpart in
@@ -79,14 +100,38 @@ public static class SetupVM
     {
         var merged = new Dictionary<PineValue, Func<PineValue, PineValue?>>();
 
-        foreach (var entry in BasicsComparePrecompiledLeaves)
+        foreach (var entry in BasicsPrecompiledLeaves)
         {
             merged[entry.Key] = entry.Value;
         }
 
         // Entries already present (e.g. from earlier leaf packages) take
         // precedence over later contributions for the same key.
-        foreach (var entry in DictGetPrecompiledLeaves)
+        foreach (var entry in DictPrecompiledLeaves)
+        {
+            if (!merged.ContainsKey(entry.Key))
+            {
+                merged[entry.Key] = entry.Value;
+            }
+        }
+
+        foreach (var entry in JsonDecodePrecompiledLeaves)
+        {
+            if (!merged.ContainsKey(entry.Key))
+            {
+                merged[entry.Key] = entry.Value;
+            }
+        }
+
+        foreach (var entry in StringPrecompiledLeaves)
+        {
+            if (!merged.ContainsKey(entry.Key))
+            {
+                merged[entry.Key] = entry.Value;
+            }
+        }
+
+        foreach (var entry in BytesPrecompiledLeaves)
         {
             if (!merged.ContainsKey(entry.Key))
             {

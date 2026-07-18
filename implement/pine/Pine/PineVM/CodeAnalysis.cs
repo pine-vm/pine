@@ -475,7 +475,7 @@ public class CodeAnalysis
         int limitClassesPerExpression) =>
         EnvironmentClassesFromInvocationReports(
             invocationReports: invocationReports,
-            expressionsToIgnore: Precompiled.PrecompiledExpressions,
+            expressionsToIgnore: ImmutableHashSet<Expression>.Empty,
             limitInvocationSampleCount: limitInvocationSampleCount,
             limitSampleCountPerSample: limitSampleCountPerSample,
             classUsageCountMin: classUsageCountMin,

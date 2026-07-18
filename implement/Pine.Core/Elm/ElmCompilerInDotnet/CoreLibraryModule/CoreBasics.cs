@@ -274,6 +274,12 @@ public class CoreBasics
                 ],
                 args => Generic_Compare(args[0], args[1])),
 
+            // gcd : Int -> Int -> Int (internal Basics helper; see Generic_Gcd)
+            "gcd" =>
+            new CoreFunctionInfo(
+                [TypeInference.InferredType.Int(), TypeInference.InferredType.Int(), TypeInference.InferredType.Int()],
+                args => Generic_Gcd(args[0], args[1])),
+
             // (<) : comparable -> comparable -> Bool
             "lt" =>
             new CoreFunctionInfo(
@@ -777,6 +783,23 @@ public class CoreBasics
     }
 
     /// <summary>
+    /// Pine value encoding of the recursive inner helper function (<c>idivHelper</c>) used by
+    /// <see cref="Internal_Int_div"/> to compute <c>abs(dividend) / abs(divisor)</c>; see
+    /// <see cref="Int_divHelper"/> for the recursive body construction.
+    /// <para>
+    /// Every recursive re-entry into <c>idivHelper</c> targets this exact value with
+    /// environment shape <c>[[selfEncoded], [dividend, divisor, quotient]]</c>, so a single
+    /// precompiled leaf keyed on this value is sufficient to short-circuit the entire
+    /// scaling-based division recursion; see <c>CoreBasicsPrecompiledLeaves</c>.
+    /// </para>
+    /// </summary>
+    public static PineValue IdivHelper_InnerBodyEncodedValue =>
+        s_idivHelperInnerBodyEncodedValue.Value;
+
+    private static readonly System.Lazy<PineValue> s_idivHelperInnerBodyEncodedValue =
+        new(BuildIdivHelperEncodedBody);
+
+    /// <summary>
     /// modBy : Int -> Int -> Int
     /// <para>
     /// <see href="https://package.elm-lang.org/packages/elm/core/latest/Basics#modBy"/>
@@ -861,6 +884,25 @@ public class CoreBasics
     {
         return BinaryFunctionValue(Internal_Eq);
     }
+
+    /// <summary>
+    /// Pine value encoding of the recursive inner function (<c>eqDeep</c>) at the heart
+    /// of <see cref="Internal_Eq"/>, i.e. the expression targeted by every <c>ParseAndEval</c>
+    /// that recurses into deep structural equality (both the initial call built by
+    /// <see cref="Internal_Eq"/> and every recursive re-entry from within
+    /// <c>listsEqualRecursive</c>).
+    /// <para>
+    /// Every one of those <c>ParseAndEval</c> invocations shares the identical environment
+    /// shape <c>[[selfEncoded], [a, b]]</c>, so a single precompiled leaf keyed on this value
+    /// is sufficient to short-circuit the entire recursive equality check; see
+    /// <c>CoreBasicsPrecompiledLeaves</c>.
+    /// </para>
+    /// </summary>
+    public static PineValue Eq_InnerBodyEncodedValue =>
+        s_eqInnerBodyEncodedValue.Value;
+
+    private static readonly System.Lazy<PineValue> s_eqInnerBodyEncodedValue =
+        new(BuildEqEncodedBody);
 
     /// <summary>
     /// (/=) : a -> a -> Bool
@@ -950,6 +992,50 @@ public class CoreBasics
 
     private static readonly System.Lazy<PineValue> s_compareInnerBodyEncodedValue =
         new(() => ExpressionEncoding.EncodeExpressionAsValue(Compare_InnerBodyExpression()));
+
+    /// <summary>
+    /// gcd : Int -> Int -> Int
+    /// <para>
+    /// Computes the greatest common divisor of two integers using the Euclidean algorithm:
+    /// <c>gcd a b = if b == 0 then a else gcd b (modBy b a)</c>. Not part of the public
+    /// <c>elm/core</c> <c>Basics</c> API; added here to exercise the precompiled-leaf
+    /// mechanism with a genuinely recursive, self-contained kernel function.
+    /// </para>
+    /// </summary>
+    public static Expression Generic_Gcd(
+        Expression left,
+        Expression right)
+    {
+        return
+            BinaryApplication(
+                functionValue: Gcd_FunctionValue(),
+                left: left,
+                right: right);
+    }
+
+    /// <summary>
+    /// gcd : Int -> Int -> Int
+    /// </summary>
+    public static PineValue Gcd_FunctionValue()
+    {
+        return BinaryFunctionValue(Internal_Gcd);
+    }
+
+    /// <summary>
+    /// Pine value encoding of the recursive inner function body used by
+    /// <see cref="Internal_Gcd"/>; see <see cref="BuildGcdEncodedBody"/>.
+    /// <para>
+    /// Every recursive re-entry into <c>gcd</c> targets this exact value with environment
+    /// shape <c>[[selfEncoded], [a, b]]</c>, so a single precompiled leaf keyed on this
+    /// value is sufficient to short-circuit the entire Euclidean-algorithm recursion; see
+    /// <c>CoreBasicsPrecompiledLeaves</c>.
+    /// </para>
+    /// </summary>
+    public static PineValue Gcd_InnerBodyEncodedValue =>
+        s_gcdInnerBodyEncodedValue.Value;
+
+    private static readonly System.Lazy<PineValue> s_gcdInnerBodyEncodedValue =
+        new(BuildGcdEncodedBody);
 
     /// <summary>
     /// (&lt;) : comparable -> comparable -> Bool
@@ -1532,42 +1618,70 @@ public class CoreBasics
     /// </remarks>
     private static Expression Int_divHelper(Expression absDividend, Expression absDivisor)
     {
-        /*
-        idivHelper : Int -> Int -> Int -> Int
-        idivHelper dividend divisor quotient =
-            let
-                scaledDivisor =
-                    Pine_kernel.int_mul [ divisor, 16 ]
-            in
-            if Pine_kernel.int_is_sorted_asc [ scaledDivisor, dividend ] then
-                let
-                    scaledQuotient =
-                        idivHelper dividend scaledDivisor 0
+        var encodedBody = BuildIdivHelperEncodedBody();
 
-                    scaledQuotientSum =
-                        Pine_kernel.int_mul [ scaledQuotient, 16 ]
+        // Now we need to invoke this function with the initial arguments
+        // The function expects: [envFunctions, [dividend, divisor, quotient]]
+        // envFunctions[0] = the function itself
 
-                    remainder =
-                        Pine_kernel.int_add
-                            [ dividend
-                            , Pine_kernel.int_mul [ scaledQuotient, scaledDivisor, -1 ]
-                            ]
+        // Create a self-referential structure by putting the encoded body in envFunctions
+        var envFunctions = Expression.ListInstance([Expression.LiteralInstance(encodedBody)]);
 
-                    remainderQuotient =
-                        idivHelper remainder divisor 0
-                in
-                Pine_kernel.int_add [ scaledQuotientSum, remainderQuotient ]
+        var initialArgs = Expression.ListInstance([absDividend, absDivisor, LiteralInt(0)]);
+        var initialEnv = Expression.ListInstance([envFunctions, initialArgs]);
 
-            else if Pine_kernel.int_is_sorted_asc [ divisor, dividend ] then
-                idivHelper
-                    (Pine_kernel.int_add [ dividend, Pine_kernel.int_mul [ divisor, -1 ] ])
-                    divisor
-                    (Pine_kernel.int_add [ quotient, 1 ])
+        return
+            new Expression.ParseAndEval(
+                encoded: Expression.LiteralInstance(encodedBody),
+                environment: initialEnv);
+    }
 
-            else
-                quotient
-        */
-
+    /// <summary>
+    /// Builds the Pine value encoding of the recursive <c>idivHelper</c> function body used by
+    /// <see cref="Int_divHelper"/> to compute <c>abs(dividend) / abs(divisor)</c>:
+    /// <code>
+    /// idivHelper : Int -> Int -> Int -> Int
+    /// idivHelper dividend divisor quotient =
+    ///     let
+    ///         scaledDivisor =
+    ///             Pine_kernel.int_mul [ divisor, 16 ]
+    ///     in
+    ///     if Pine_kernel.int_is_sorted_asc [ scaledDivisor, dividend ] then
+    ///         let
+    ///             scaledQuotient =
+    ///                 idivHelper dividend scaledDivisor 0
+    ///
+    ///             scaledQuotientSum =
+    ///                 Pine_kernel.int_mul [ scaledQuotient, 16 ]
+    ///
+    ///             remainder =
+    ///                 Pine_kernel.int_add
+    ///                     [ dividend
+    ///                     , Pine_kernel.int_mul [ scaledQuotient, scaledDivisor, -1 ]
+    ///                     ]
+    ///
+    ///             remainderQuotient =
+    ///                 idivHelper remainder divisor 0
+    ///         in
+    ///         Pine_kernel.int_add [ scaledQuotientSum, remainderQuotient ]
+    ///
+    ///     else if Pine_kernel.int_is_sorted_asc [ divisor, dividend ] then
+    ///         idivHelper
+    ///             (Pine_kernel.int_add [ dividend, Pine_kernel.int_mul [ divisor, -1 ] ])
+    ///             divisor
+    ///             (Pine_kernel.int_add [ quotient, 1 ])
+    ///
+    ///     else
+    ///         quotient
+    /// </code>
+    /// <para>
+    /// The returned value does not depend on any call-site arguments: every recursive
+    /// re-entry into <c>idivHelper</c> targets this exact value with environment shape
+    /// <c>[[selfEncoded], [dividend, divisor, quotient]]</c>.
+    /// </para>
+    /// </summary>
+    private static PineValue BuildIdivHelperEncodedBody()
+    {
         // Build the recursive helper function using ParseAndEval
         // Environment structure: [envFunctions, [dividend, divisor, quotient]]
         // envFunctions[0] = the helper function itself (for recursion)
@@ -1668,23 +1782,7 @@ public class CoreBasics
                     trueBranch: subtractResult,
                     falseBranch: baseCase));
 
-        // Encode the function body as a value
-        var encodedBody = ExpressionEncoding.EncodeExpressionAsValue(innerBody);
-
-        // Now we need to invoke this function with the initial arguments
-        // The function expects: [envFunctions, [dividend, divisor, quotient]]
-        // envFunctions[0] = the function itself
-
-        // Create a self-referential structure by putting the encoded body in envFunctions
-        var envFunctions = Expression.ListInstance([Expression.LiteralInstance(encodedBody)]);
-
-        var initialArgs = Expression.ListInstance([absDividend, absDivisor, zero]);
-        var initialEnv = Expression.ListInstance([envFunctions, initialArgs]);
-
-        return
-            new Expression.ParseAndEval(
-                encoded: Expression.LiteralInstance(encodedBody),
-                environment: initialEnv);
+        return ExpressionEncoding.EncodeExpressionAsValue(innerBody);
     }
 
     /// <summary>
@@ -1789,6 +1887,96 @@ public class CoreBasics
                 condition: divisorIsOne,
                 trueBranch: zero,
                 falseBranch: remainder);
+    }
+
+    private static Expression Internal_Gcd(
+        Expression a,
+        Expression b)
+    {
+        /*
+        Matches the Elm kernel Basics.elm implementation of gcd (see
+        <see cref="BuildGcdEncodedBody"/> for the recursive body construction).
+
+        gcd is a self-recursive function that passes itself through the environment
+        (envFunctions[0] = self), the same pattern used by idivHelper.
+        */
+
+        var gcdEncodedBody = BuildGcdEncodedBody();
+
+        // Create envFunctions = [gcdEncodedBody] and call gcd(a, b)
+        var initialEnvFunctions =
+            Expression.ListInstance([Expression.LiteralInstance(gcdEncodedBody)]);
+
+        var initialEnv =
+            Expression.ListInstance(
+                [
+                initialEnvFunctions,
+                Expression.ListInstance([a, b])
+                ]);
+
+        return
+            new Expression.ParseAndEval(
+                encoded: Expression.LiteralInstance(gcdEncodedBody),
+                environment: initialEnv);
+    }
+
+    /// <summary>
+    /// Builds the Pine value encoding of the recursive <c>gcd</c> function body:
+    /// <code>
+    /// gcd : Int -> Int -> Int
+    /// gcd a b =
+    ///     if Pine_kernel.equal [ b, 0 ] then
+    ///         a
+    ///     else
+    ///         gcd b (modBy b a)
+    /// </code>
+    /// <para>
+    /// The returned value does not depend on any call-site arguments: every recursive
+    /// re-entry into <c>gcd</c> (whether the initial call from <see cref="Internal_Gcd"/> or a
+    /// recursive tail call) targets this exact value with environment shape
+    /// <c>[[selfEncoded], [a, b]]</c>.
+    /// </para>
+    /// </summary>
+    private static PineValue BuildGcdEncodedBody()
+    {
+        // env = [envFunctions, [a, b]]
+        // envFunctions[0] = self (gcd encoded body)
+        var selfExpr =
+            ExpressionBuilder.BuildExpressionForPathInExpression([0, 0], Expression.EnvironmentInstance);
+
+        var envFunctionsExpr =
+            ExpressionBuilder.BuildExpressionForPathInExpression([0], Expression.EnvironmentInstance);
+
+        var aExpr =
+            ExpressionBuilder.BuildExpressionForPathInExpression([1, 0], Expression.EnvironmentInstance);
+
+        var bExpr =
+            ExpressionBuilder.BuildExpressionForPathInExpression([1, 1], Expression.EnvironmentInstance);
+
+        var zero = LiteralInt(0);
+
+        var bIsZero = BuiltinHelpers.ApplyBuiltinEqualBinary(bExpr, zero);
+
+        // modBy b a
+        var modByResult = Int_modBy(bExpr, aExpr);
+
+        // Recursive call: self(b, modBy b a) with same envFunctions
+        var recursiveCall =
+            new Expression.ParseAndEval(
+                encoded: selfExpr,
+                environment: Expression.ListInstance(
+                    [
+                    envFunctionsExpr,
+                    Expression.ListInstance([bExpr, modByResult])
+                    ]));
+
+        var body =
+            Expression.ConditionalInstance(
+                condition: bIsZero,
+                trueBranch: aExpr,
+                falseBranch: recursiveCall);
+
+        return ExpressionEncoding.EncodeExpressionAsValue(body);
     }
 
     /// <summary>
@@ -2569,43 +2757,78 @@ public class CoreBasics
         Expression right)
     {
         /*
-        Matches the Elm kernel Basics.elm implementation of eq:
-
-        eq : a -> a -> Bool
-        eq a b =
-            if Pine_kernel.equal [ a, b ] then
-                True
-            else
-                case ( a, b ) of
-                    ( Elm_Float numA denomA, intB ) ->
-                        if Pine_kernel.equal [ numA, intB ] then
-                            Pine_kernel.equal [ denomA, 1 ]
-                        else False
-                    ( intA, Elm_Float numB denomB ) ->
-                        if Pine_kernel.equal [ intA, numB ] then
-                            Pine_kernel.equal [ denomB, 1 ]
-                        else False
-                    _ ->
-                        if isPineBlob a then False
-                        else if Pine_kernel.equal [ Pine_kernel.length a, Pine_kernel.length b ] then
-                            case a of
-                                String _ -> False
-                                RBNode_elm_builtin _ _ _ _ _ ->
-                                    Pine_kernel.equal [ dictToList a, dictToList b ]
-                                Set_elm_builtin dictA ->
-                                    Pine_kernel.equal [ dictKeys dictA, dictKeys dictB ]
-                                _ -> listsEqualRecursive a b
-                        else False
+        Matches the Elm kernel Basics.elm implementation of eq (see
+        <see cref="BuildEqEncodedBody"/> for the recursive body construction).
 
         We implement eq as a recursive function (eqDeep) that passes itself through the
         environment. listsEqualRecursive is a separate recursive function that calls eqDeep
         for element equality. The two are mutually recursive through the environment.
 
-        Step 1: Build listsEqualRecursive body (encoded independently, no circular dependency).
-        Step 2: Build eqDeep body that embeds the encoded listsEqHelper as a literal.
         Step 3: Return a ParseAndEval that sets up the recursive env and calls eqDeep.
         */
 
+        var eqEncodedBody = BuildEqEncodedBody();
+
+        // Create envFunctions = [eqEncodedBody] and call eqDeep(left, right)
+        var initialEnvFunctions =
+            Expression.ListInstance([Expression.LiteralInstance(eqEncodedBody)]);
+
+        var initialEnv =
+            Expression.ListInstance(
+                [
+                initialEnvFunctions,
+                Expression.ListInstance([left, right])
+                ]);
+
+        return
+            new Expression.ParseAndEval(
+                encoded: Expression.LiteralInstance(eqEncodedBody),
+                environment: initialEnv);
+    }
+
+    /// <summary>
+    /// Builds the Pine value encoding of the recursive <c>eqDeep</c> function body used by
+    /// <see cref="Internal_Eq"/>:
+    /// <code>
+    /// eq : a -> a -> Bool
+    /// eq a b =
+    ///     if Pine_kernel.equal [ a, b ] then
+    ///         True
+    ///     else
+    ///         case ( a, b ) of
+    ///             ( Elm_Float numA denomA, intB ) ->
+    ///                 if Pine_kernel.equal [ numA, intB ] then
+    ///                     Pine_kernel.equal [ denomA, 1 ]
+    ///                 else False
+    ///             ( intA, Elm_Float numB denomB ) ->
+    ///                 if Pine_kernel.equal [ intA, numB ] then
+    ///                     Pine_kernel.equal [ denomB, 1 ]
+    ///                 else False
+    ///             _ ->
+    ///                 if isPineBlob a then False
+    ///                 else if Pine_kernel.equal [ Pine_kernel.length a, Pine_kernel.length b ] then
+    ///                     case a of
+    ///                         String _ -> False
+    ///                         RBNode_elm_builtin _ _ _ _ _ ->
+    ///                             Pine_kernel.equal [ dictToList a, dictToList b ]
+    ///                         Set_elm_builtin dictA ->
+    ///                             Pine_kernel.equal [ dictKeys dictA, dictKeys dictB ]
+    ///                         _ -> listsEqualRecursive a b
+    ///                 else False
+    /// </code>
+    /// <para>
+    /// Step 1: Build listsEqualRecursive body (encoded independently, no circular dependency).
+    /// Step 2: Build eqDeep body that embeds the encoded listsEqHelper as a literal.
+    /// </para>
+    /// <para>
+    /// The returned value does not depend on any call-site arguments: every recursive
+    /// re-entry into <c>eqDeep</c> (whether the initial call from <see cref="Internal_Eq"/>
+    /// or a re-entry from within <c>listsEqualRecursive</c>) targets this exact value with
+    /// environment shape <c>[[selfEncoded], [a, b]]</c>.
+    /// </para>
+    /// </summary>
+    private static PineValue BuildEqEncodedBody()
+    {
         // === Step 1: Build listsEqualRecursive body ===
         // env = [envFunctions, [listA, listB]]
         // envFunctions[0] = self (listsEqHelper encoded body)
@@ -2841,24 +3064,7 @@ public class CoreBasics
                 trueBranch: s_trueValue,
                 falseBranch: eqFloatHandling);
 
-        var eqEncodedBody = ExpressionEncoding.EncodeExpressionAsValue(eqBody);
-
-        // === Step 3: Build the initial call ===
-        // Create envFunctions = [eqEncodedBody] and call eqDeep(left, right)
-        var initialEnvFunctions =
-            Expression.ListInstance([Expression.LiteralInstance(eqEncodedBody)]);
-
-        var initialEnv =
-            Expression.ListInstance(
-                [
-                initialEnvFunctions,
-                Expression.ListInstance([left, right])
-                ]);
-
-        return
-            new Expression.ParseAndEval(
-                encoded: Expression.LiteralInstance(eqEncodedBody),
-                environment: initialEnv);
+        return ExpressionEncoding.EncodeExpressionAsValue(eqBody);
     }
 
     private static Expression Internal_Neq(

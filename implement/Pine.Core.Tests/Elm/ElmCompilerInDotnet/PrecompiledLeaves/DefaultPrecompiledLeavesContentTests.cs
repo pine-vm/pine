@@ -1,5 +1,5 @@
 using AwesomeAssertions;
-using Pine.Core.Elm.ElmCompilerInDotnet.CoreLibraryModule;
+using Pine.Core.Elm.ElmCompilerInDotnet.PrecompiledLeaves;
 using System.Collections.Generic;
 using System.Linq;
 using Xunit;
@@ -32,10 +32,12 @@ public class DefaultPrecompiledLeavesContentTests
             IntermediateVM.SetupVM.DefaultPrecompiledLeaves;
 
         aggregate.Count.Should().Be(
-            6,
+            23,
             because:
-            "the Pine.Core aggregate contributes the Basics.compare and Dict.get kernel " +
-            "leaves, the two record runtime leaves (record access and record update), " +
+            "the Pine.Core aggregate contributes the Basics.compare, Basics.eq, Basics.idiv " +
+            "and Basics.gcd leaves, six Dict kernel leaves, the Json.Decode.parseValue leaf, " +
+            "six String kernel leaves, two Bytes kernel leaves, the two record runtime leaves " +
+            "(record access and record update), " +
             "plus the two Base64 conversion leaves (Base64.Encode.toBytes and " +
             "Base64.Decode.fromBytes)");
 
@@ -44,8 +46,48 @@ public class DefaultPrecompiledLeavesContentTests
             because: "the aggregate must expose the Basics.compare leaf");
 
         aggregate.Keys.Should().Contain(
+            [
+            CoreBasicsPrecompiledLeaves.EqLeafKey,
+            CoreBasicsPrecompiledLeaves.IdivLeafKey,
+            CoreBasicsPrecompiledLeaves.GcdLeafKey,
+            ],
+            because: "the aggregate must expose the Basics.eq, Basics.idiv and Basics.gcd leaves");
+
+        aggregate.Keys.Should().Contain(
             CoreDictPrecompiledLeaves.DictGetLeafKey,
             because: "the aggregate must expose the Dict.get leaf");
+
+        aggregate.Keys.Should().Contain(
+            [
+            CoreDictPrecompiledLeaves.DictToListLeafKey,
+            CoreDictPrecompiledLeaves.DictSizeLeafKey,
+            CoreDictPrecompiledLeaves.DictKeysLeafKey,
+            CoreDictPrecompiledLeaves.DictValuesLeafKey,
+            CoreDictPrecompiledLeaves.DictInsertLeafKey,
+            ],
+            because: "the aggregate must expose all optimized Dict leaves");
+
+        aggregate.Keys.Should().Contain(
+            KernelJsonDecodePrecompiledLeaves.ParseValueLeafKey,
+            because: "the aggregate must expose the Json.Decode.parseValue leaf");
+
+        aggregate.Keys.Should().Contain(
+            [
+            CoreStringPrecompiledLeaves.ToListRecursiveLeafKey,
+            CoreStringPrecompiledLeaves.SplitHelperOnBlobLeafKey,
+            CoreStringPrecompiledLeaves.LinesHelperLeafKey,
+            CoreStringPrecompiledLeaves.ToFloatLeafKey,
+            CoreStringPrecompiledLeaves.ToIntLeafKey,
+            CoreStringPrecompiledLeaves.FromIntLeafKey,
+            ],
+            because: "the aggregate must expose all optimized String leaves");
+
+        aggregate.Keys.Should().Contain(
+            [
+            KernelBytesPrecompiledLeaves.DecodeBlobAsCharsRecLeafKey,
+            KernelBytesPrecompiledLeaves.EncodeCharsAsBlobHelpLeafKey,
+            ],
+            because: "the aggregate must expose both recursive Bytes conversion leaves");
 
         aggregate.Keys.Should().Contain(
             CoreRecordPrecompiledLeaves.RecordAccessLeafKey,
@@ -68,8 +110,11 @@ public class DefaultPrecompiledLeavesContentTests
 
         var perAreaKeys =
             new HashSet<PineValue>(
-                IntermediateVM.SetupVM.BasicsComparePrecompiledLeaves.Keys
-                .Concat(IntermediateVM.SetupVM.DictGetPrecompiledLeaves.Keys)
+                IntermediateVM.SetupVM.BasicsPrecompiledLeaves.Keys
+                .Concat(IntermediateVM.SetupVM.DictPrecompiledLeaves.Keys)
+                .Concat(IntermediateVM.SetupVM.JsonDecodePrecompiledLeaves.Keys)
+                .Concat(IntermediateVM.SetupVM.StringPrecompiledLeaves.Keys)
+                .Concat(IntermediateVM.SetupVM.BytesPrecompiledLeaves.Keys)
                 .Concat(IntermediateVM.SetupVM.RecordAccessAndUpdatePrecompiledLeaves.Keys)
                 .Concat(IntermediateVM.SetupVM.Base64ConversionPrecompiledLeaves.Keys));
 
@@ -77,17 +122,35 @@ public class DefaultPrecompiledLeavesContentTests
             perAreaKeys,
             because:
             "the aggregate must be exactly the union of the per-area precompiled-leaf " +
-            "dictionaries it advertises (BasicsCompare + DictGet + RecordAccessAndUpdate + Base64Conversion)");
+            "dictionaries it advertises");
     }
 
     [Fact]
     public void Per_area_dictionaries_each_expose_their_leaves()
     {
-        IntermediateVM.SetupVM.BasicsComparePrecompiledLeaves.Count
-            .Should().Be(1, because: "the Basics.compare area currently exposes a single leaf");
+        IntermediateVM.SetupVM.BasicsPrecompiledLeaves.Count
+            .Should().Be(
+            4,
+            because:
+            "the Basics area currently exposes four leaves: compare, eq, idiv and gcd");
 
-        IntermediateVM.SetupVM.DictGetPrecompiledLeaves.Count
-            .Should().Be(1, because: "the Dict.get area currently exposes a single leaf");
+        IntermediateVM.SetupVM.DictPrecompiledLeaves.Count
+            .Should().Be(6, because: "the Dict area exposes six optimized operations");
+
+        IntermediateVM.SetupVM.JsonDecodePrecompiledLeaves.Count
+            .Should().Be(1, because: "the Json.Decode area exposes the parseValue leaf");
+
+        IntermediateVM.SetupVM.StringPrecompiledLeaves.Count
+            .Should().Be(
+            6,
+            because:
+            "the String area exposes three optimized recursive helpers and three numeric conversions");
+
+        IntermediateVM.SetupVM.BytesPrecompiledLeaves.Count
+            .Should().Be(
+            2,
+            because:
+            "the Bytes area exposes recursive UTF-8 decoding and encoding leaves");
 
         IntermediateVM.SetupVM.RecordAccessAndUpdatePrecompiledLeaves.Count
             .Should().Be(

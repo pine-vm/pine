@@ -293,9 +293,7 @@ public class PGOTests
                 .Extract(fromErr: err => throw new Exception("Failed for scenario: " + err));
             })];
 
-        var nonOptimizingPineVM =
-            SetupVM.Create(
-                disablePrecompiled: true);
+        var nonOptimizingPineVM = SetupVM.Create();
 
         var nonOptimizedScenariosStats =
             RunScenariosWithGivenVM(nonOptimizingPineVM);
@@ -313,8 +311,7 @@ public class PGOTests
             SetupVM.Create(
                 evalCache: null,
                 reportFunctionApplication: invocationReports.Add,
-                disableReductionInCompilation: true,
-                disablePrecompiled: true);
+                disableReductionInCompilation: true);
 
         RunScenariosWithGivenVM(profilingVM);
 

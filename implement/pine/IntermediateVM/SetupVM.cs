@@ -1,10 +1,8 @@
 using Pine.Core;
 using Pine.Core.CodeAnalysis;
-using Pine.Core.Internal;
 using Pine.Core.Interpreter.IntermediateVM;
 using Pine.Core.IO;
 using Pine.Core.PineVM;
-using Pine.PineVM;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -85,7 +83,6 @@ public static class SetupVM
         Action<EvaluationReport>? reportFunctionApplication = null,
         IReadOnlyDictionary<Expression, IReadOnlyList<PineValueClass>>? compilationEnvClasses = null,
         bool disableReductionInCompilation = false,
-        bool disablePrecompiled = false,
         bool enableTailRecursionOptimization = true,
         PineVMParseCache? parseCache = null,
         IReadOnlyDictionary<PineValue, Func<PineValue, PineValue?>>? precompiledLeaves = null,
@@ -94,20 +91,6 @@ public static class SetupVM
         OptimizationParametersSerial? optimizationParametersSerial = null,
         IFileStore? cacheFileStore = null)
     {
-        Func<Expression, PineValueInProcess, PineVMParseCache, Func<PrecompiledResult>?>? selectPrecompiled =
-            disablePrecompiled
-            ?
-            null
-            :
-            Precompiled.SelectPrecompiled;
-
-        Func<Expression, bool> skipInlineForExpression =
-            disablePrecompiled
-            ?
-            _ => false
-            :
-            Precompiled.HasPrecompiledForExpression;
-
         precompiledLeaves ??= DefaultPrecompiledLeaves;
 
         cacheFileStore ??= s_cacheFileStoreDefault;
@@ -119,8 +102,8 @@ public static class SetupVM
                 reportFunctionApplication: reportFunctionApplication,
                 compilationEnvClasses: compilationEnvClasses,
                 disableReductionInCompilation: disableReductionInCompilation,
-                selectPrecompiled: selectPrecompiled,
-                skipInlineForExpression: skipInlineForExpression,
+                selectPrecompiled: null,
+                skipInlineForExpression: _ => false,
                 enableTailRecursionOptimization: enableTailRecursionOptimization,
                 parseCache: parseCache,
                 precompiledLeaves: precompiledLeaves,

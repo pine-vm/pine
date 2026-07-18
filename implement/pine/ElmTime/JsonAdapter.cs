@@ -2,12 +2,12 @@ using Pine.Core;
 using Pine.Core.CodeAnalysis;
 using Pine.Core.CommonEncodings;
 using Pine.Core.Elm;
+using Pine.Core.Elm.ElmCompilerInDotnet.PrecompiledLeaves;
 using Pine.Core.Elm.ElmSyntax;
 using Pine.Core.Files;
 using Pine.Core.Interpreter;
 using Pine.Core.PineVM;
 using Pine.Elm;
-using Pine.PineVM;
 using System.Collections.Generic;
 using System.Linq;
 
@@ -384,15 +384,16 @@ public class ElmTimeJsonAdapter
                     .Extract(err => throw new System.Exception("Failed to evaluate exposed functions declaration: " + err));
             }
 
-            var exposedFunctionsList = Precompiled.DictToListRecursive(exposedFunctionsDeclDictValue);
+            var exposedFunctionsList =
+                (PineValue.ListValue)CoreDictPrecompiledLeaves.DictToList(exposedFunctionsDeclDictValue);
 
-            var exposedFunctions = new KeyValuePair<string, ExposedFunction>[exposedFunctionsList.Length];
+            var exposedFunctions = new KeyValuePair<string, ExposedFunction>[exposedFunctionsList.Items.Length];
 
-            for (var i = 0; i < exposedFunctionsList.Length; ++i)
+            for (var i = 0; i < exposedFunctionsList.Items.Length; ++i)
             {
                 var parseExposedFunctionResult =
                     ParseExposedFunctionDictEntryValue(
-                        exposedFunctionsList.Span[i],
+                        exposedFunctionsList.Items.Span[i],
                         parseCache,
                         elmEncodingCache);
 

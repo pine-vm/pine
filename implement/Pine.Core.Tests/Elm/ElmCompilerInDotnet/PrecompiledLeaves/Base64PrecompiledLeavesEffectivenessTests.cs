@@ -152,11 +152,11 @@ public class Base64PrecompiledLeavesEffectivenessTests
             enableTailRecursionOptimization: false,
             parseCache: null,
             precompiledLeaves:
-                enableDefaultPrecompiledLeaves
-                ?
-                IntermediateVM.SetupVM.DefaultPrecompiledLeaves
-                :
-                ImmutableDictionary<PineValue, Func<PineValue, PineValue?>>.Empty,
+            enableDefaultPrecompiledLeaves
+            ?
+            IntermediateVM.SetupVM.DefaultPrecompiledLeaves
+            :
+            ImmutableDictionary<PineValue, Func<PineValue, PineValue?>>.Empty,
             reportEnterPrecompiledLeaf: null,
             reportExitPrecompiledLeaf: null,
             optimizationParametersSerial: null,
@@ -204,6 +204,7 @@ public class Base64PrecompiledLeavesEffectivenessTests
 
         var simpleBase64 =
             ElmValueEncoding.ElmValueAsPineValue(ElmValue.StringInstance(Convert.ToBase64String(simpleBytes)));
+
         var complexBase64 =
             ElmValueEncoding.ElmValueAsPineValue(ElmValue.StringInstance(Convert.ToBase64String(complexBytes)));
 
