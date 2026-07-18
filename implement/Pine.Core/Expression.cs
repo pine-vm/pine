@@ -32,7 +32,7 @@ public abstract record Expression
     public abstract bool ReferencesEnvironment { get; }
 
     /// <summary>
-    /// Number of subexpressions contained in this expression that are of type <see cref="ParseAndEval"/>, including the expression itself if it is an eval expression.
+    /// Number of subexpressions contained in this expression that are of type <see cref="Eval"/>, including the expression itself if it is an eval expression.
     /// </summary>
     public abstract long EvalCount { get; }
 
@@ -42,7 +42,7 @@ public abstract record Expression
     public abstract long ConditionCount { get; }
 
     /// <summary>
-    /// Number of built-in expressions (<see cref="KernelApplication"/>) contained in this expression, including the expression itself if it is a built-in.
+    /// Number of built-in expressions (<see cref="Builtin"/>) contained in this expression, including the expression itself if it is a built-in.
     /// </summary>
     public abstract long BuiltinCount { get; }
 
@@ -62,24 +62,23 @@ public abstract record Expression
     /// </summary>
     public static readonly List EmptyList = new([]);
 
-    private static readonly Literal s_literalEmptyList =
-        LiteralInstance(PineValue.EmptyList);
+    private static readonly Litral s_literalEmptyList =
+        LitralInst(PineValue.EmptyList);
 
-    private static readonly Literal s_literalEmptyBlob =
-        LiteralInstance(PineValue.EmptyBlob);
+    private static readonly Litral s_literalEmptyBlob =
+        LitralInst(PineValue.EmptyBlob);
 
-    private static readonly IReadOnlyList<Literal> s_literalsBlobSingleByte =
-        [.. Enumerable.Range(0, 0x100).Select(i => LiteralInstance(PineValue.BlobSingleByte((byte)i)))
-        ];
+    private static readonly IReadOnlyList<Litral> s_literalsBlobSingleByte =
+        [.. Enumerable.Range(0, 0x100).Select(i => LitralInst(PineValue.BlobSingleByte((byte)i)))];
 
-    private static readonly FrozenDictionary<PineValue, Literal> s_literalOtherInstances =
+    private static readonly FrozenDictionary<PineValue, Litral> s_literalOtherInstances =
         ReusedLiteralOtherInstancesSource()
         .ToFrozenDictionary(
             literalValue => literalValue,
-            LiteralInstance);
+            LitralInst);
 
-    private static readonly FrozenDictionary<(string function, Expression input), KernelApplication> s_kernelApplicationInstances =
-        ReusedKernelApplicationInstancesSource()
+    private static readonly FrozenDictionary<(string function, Expression input), Builtin> s_builtinInstances =
+        ReusedBuiltinInstancesSource()
         .ToFrozenDictionary(
             keySelector: instance => (instance.Function, instance.Input),
             elementSelector: instance => instance);
@@ -91,12 +90,12 @@ public abstract record Expression
     /// </summary>
     public static Expression EnsureReuseInstanceGeneral(Expression expression)
     {
-        if (expression is KernelApplication kernelApplicationExpression)
+        if (expression is Builtin builtinExpression)
         {
-            if (s_kernelApplicationInstances is { } reusedKernelApplications)
+            if (s_builtinInstances is { } reusedBuiltinInstances)
             {
-                if (reusedKernelApplications.TryGetValue(
-                    (kernelApplicationExpression.Function, kernelApplicationExpression.Input),
+                if (reusedBuiltinInstances.TryGetValue(
+                    (builtinExpression.Function, builtinExpression.Input),
                     out var reusedInstance))
                 {
                     return reusedInstance;
@@ -113,11 +112,11 @@ public abstract record Expression
     }
 
     /// <summary>
-    /// Returns an instance of the <see cref="Literal"/> expression type for the given <see cref="PineValue"/>.
+    /// Returns an instance of the <see cref="Litral"/> expression type for the given <see cref="PineValue"/>.
     /// 
     /// Checks the cache of reused instances to avoid allocating a new instance if an equivalent instance is already available.
     /// </summary>
-    public static Literal LiteralInstance(PineValue literalValue)
+    public static Litral LitralInst(PineValue literalValue)
     {
         if (literalValue is PineValue.BlobValue blobValue)
         {
@@ -151,7 +150,7 @@ public abstract record Expression
         if (ReusedInstances.Instance.LiteralExpressions?.TryGetValue(literalValue, out var literal) ?? false)
             return literal;
 
-        return new Literal(literalValue);
+        return new Litral(literalValue);
     }
 
     /// <summary>
@@ -159,7 +158,7 @@ public abstract record Expression
     /// 
     /// Checks the cache of reused instances to avoid allocating a new instance if an equivalent instance is already available.
     /// </summary>
-    public static List ListInstance(IReadOnlyList<Expression> items)
+    public static List ListInst(IReadOnlyList<Expression> items)
     {
         if (items.Count is 0)
             return EmptyList;
@@ -180,7 +179,7 @@ public abstract record Expression
     /// 
     /// Checks the cache of reused instances to avoid allocating a new instance if an equivalent instance is already available.
     /// </summary>
-    public static Conditional ConditionalInstance(
+    public static Conditional ConditionalInst(
         Expression condition,
         Expression falseBranch,
         Expression trueBranch)
@@ -198,19 +197,19 @@ public abstract record Expression
     }
 
     /// <summary>
-    /// Instance of the <see cref="KernelApplication"/> variant, applying a kernel function.
+    /// Instance of the <see cref="Builtin"/> variant, applying a built-in function.
     /// </summary>
-    public static KernelApplication KernelApplicationInstance(
+    public static Builtin BuiltinInst(
         string function,
         Expression input)
     {
-        if (s_kernelApplicationInstances is { } reusedKernelApplications)
+        if (s_builtinInstances is { } reusedBuiltinInstances)
         {
-            if (reusedKernelApplications.TryGetValue((function, input), out var reusedInstance))
+            if (reusedBuiltinInstances.TryGetValue((function, input), out var reusedInstance))
                 return reusedInstance;
         }
 
-        var newInstance = new KernelApplication(function, input);
+        var newInstance = new Builtin(function, input);
 
         return newInstance;
     }
@@ -218,10 +217,10 @@ public abstract record Expression
     /// <summary>
     /// A literal expression only contains a concrete value.
     /// </summary>
-    public record Literal
+    public record Litral
         : Expression
     {
-        internal Literal(PineValue value)
+        internal Litral(PineValue value)
         {
             Value = value;
         }
@@ -232,17 +231,17 @@ public abstract record Expression
         public PineValue Value { get; }
 
         /// <summary>
-        /// Always returns zero, as a <see cref="Literal"/> expression does not contain any subexpressions.
+        /// Always returns zero, as a <see cref="Litral"/> expression does not contain any subexpressions.
         /// </summary>
         public override long SubexpressionCount { get; } = 0;
 
         /// <summary>
-        /// Always returns false, as a <see cref="Literal"/> expression does not contain any subexpressions.
+        /// Always returns false, as a <see cref="Litral"/> expression does not contain any subexpressions.
         /// </summary>
         public override bool ReferencesEnvironment { get; } = false;
 
         /// <summary>
-        /// Always returns zero, as a <see cref="Literal"/> expression does not contain any subexpressions.
+        /// Always returns zero, as a <see cref="Litral"/> expression does not contain any subexpressions.
         /// </summary>
         public override long EvalCount { get; } = 0;
 
@@ -274,7 +273,7 @@ public abstract record Expression
             }
 
             return
-                nameof(Literal) +
+                nameof(Litral) +
                 " { Value = " + Value.ToString() +
                 (valueInterpretationString is not null ? " (" + valueInterpretationString + ")" : "") +
                 " }";
@@ -548,14 +547,14 @@ public abstract record Expression
     }
 
     /// <summary>
-    /// A Parse-and-Eval expression allows for the instantiation of a new environment and the evaluation of an encoded expression.
+    /// An Eval expression allows for the instantiation of a new environment and the evaluation of an encoded expression.
     /// 
     /// Similar to 'eval' features in other languages, this expression enables meta programming by treating data as a program.
     /// 
     /// Program execution crashes if the value obtained via the <see cref="Encoded"/> expression part
     /// is not a valid encoding of a Pine expression.
     /// </summary>
-    public record ParseAndEval
+    public record Eval
         : Expression
     {
         private readonly int _slimHashCode;
@@ -577,7 +576,7 @@ public abstract record Expression
         public override bool ReferencesEnvironment { get; }
 
         /// <summary>
-        /// Always returns true, as this expression is itself a <see cref="ParseAndEval"/>.
+        /// Always returns true, as this expression is itself a <see cref="Eval"/>.
         /// </summary>
         public override long EvalCount { get; }
 
@@ -593,7 +592,7 @@ public abstract record Expression
         /// <summary>
         /// Creates a new instance of a Parse-and-Eval expression.
         /// </summary>
-        public ParseAndEval(
+        public Eval(
             Expression encoded,
             Expression environment)
         {
@@ -626,7 +625,7 @@ public abstract record Expression
             _slimHashCode;
 
         /// <inheritdoc/>
-        public virtual bool Equals(ParseAndEval? other)
+        public virtual bool Equals(Eval? other)
         {
             if (other is not { } notNull)
                 return false;
@@ -642,25 +641,23 @@ public abstract record Expression
     }
 
     /// <summary>
-    /// Application of a kernel function to an input expression.
+    /// Application of a built-in function to an input expression.
     /// 
-    /// Kernel functions are the built-in functions of the Pine language.
-    /// 
-    /// Kernel functions never crash the program, but may return default values in case of nonsensical input.
+    /// Built-in functions never crash the program, but may return default values in case of nonsensical input.
     /// Therefore it remains the responsibility of the caller to add branches for error messages as needed.
     /// </summary>
-    public record KernelApplication
+    public record Builtin
         : Expression
     {
         private readonly int _slimHashCode;
 
         /// <summary>
-        /// The name of the kernel function to be applied.
+        /// The name of the built-in function to be applied.
         /// </summary>
         public string Function { get; }
 
         /// <summary>
-        /// Input for the kernel function.
+        /// Input for the built-in function.
         /// </summary>
         public Expression Input { get; }
 
@@ -683,9 +680,9 @@ public abstract record Expression
         public override int MaxDepth { get; } = 0;
 
         /// <summary>
-        /// Creates a new instance of a kernel application.
+        /// Creates a new instance of a built-in application.
         /// </summary>
-        internal KernelApplication(
+        internal Builtin(
             string function,
             Expression input)
         {
@@ -705,7 +702,7 @@ public abstract record Expression
         }
 
         /// <inheritdoc/>
-        public virtual bool Equals(KernelApplication? other)
+        public virtual bool Equals(Builtin? other)
         {
             if (other is not { } notNull)
                 return false;
@@ -911,10 +908,10 @@ public abstract record Expression
     }
 
     /// <summary>
-    /// A string tag expression attaches a string tag to an expression.
-    /// These tags are not meant to be observable by the program, but to help with inspection, tracing and profiling.
+    /// A label expression attaches a label to an expression.
+    /// These labels are not meant to be observable by the program, but to help with inspection, tracing and profiling.
     /// </summary>
-    public record StringTag
+    public record Label
         : Expression
     {
         /// <summary>
@@ -957,7 +954,7 @@ public abstract record Expression
         /// <summary>
         /// Creates a new instance of a string tag expression.
         /// </summary>
-        public StringTag(
+        public Label(
             string tag,
             Expression tagged)
             : this(StringEncoding.ValueFromString(tag), tagged)
@@ -967,14 +964,16 @@ public abstract record Expression
         /// <summary>
         /// Creates a new tag expression with an arbitrary Pine value as its label.
         /// </summary>
-        public StringTag(
+        public Label(
             PineValue labelValue,
             Expression tagged)
         {
             LabelValue = labelValue;
+
             Tag =
                 StringEncoding.StringFromValue(labelValue).IsOkOrNull() ??
                 labelValue.ToString();
+
             Tagged = tagged;
 
             SubexpressionCount = tagged.SubexpressionCount + 1;
@@ -992,7 +991,7 @@ public abstract record Expression
             _slimHashCode;
 
         /// <inheritdoc/>
-        public virtual bool Equals(StringTag? other)
+        public virtual bool Equals(Label? other)
         {
             if (ReferenceEquals(other, this))
                 return true;
@@ -1037,16 +1036,16 @@ public abstract record Expression
                     conditionalExpression.TrueBranch
                     ],
 
-                    KernelApplication kernelApplicationExpression =>
-                    [kernelApplicationExpression.Input],
+                    Builtin builtinExpression =>
+                    [builtinExpression.Input],
 
-                    ParseAndEval parseAndEval =>
-                    [parseAndEval.Environment, parseAndEval.Encoded],
+                    Eval evalExpression =>
+                    [evalExpression.Environment, evalExpression.Encoded],
 
-                    StringTag stringTagExpression =>
+                    Label stringTagExpression =>
                     [stringTagExpression.Tagged],
 
-                    Literal =>
+                    Litral =>
                     [],
 
                     Environment =>
@@ -1096,7 +1095,7 @@ public abstract record Expression
             switch (expression)
             {
                 case Environment:
-                case Literal:
+                case Litral:
                     break;
 
                 case List list:
@@ -1107,16 +1106,16 @@ public abstract record Expression
 
                     break;
 
-                case ParseAndEval parseAndEvaluate:
+                case Eval evalExpression:
 
-                    stack.Push(parseAndEvaluate.Encoded);
-                    stack.Push(parseAndEvaluate.Environment);
+                    stack.Push(evalExpression.Encoded);
+                    stack.Push(evalExpression.Environment);
 
                     break;
 
-                case KernelApplication kernelApplication:
+                case Builtin builtin:
 
-                    stack.Push(kernelApplication.Input);
+                    stack.Push(builtin.Input);
 
                     break;
 
@@ -1132,7 +1131,7 @@ public abstract record Expression
 
                     break;
 
-                case StringTag stringTag:
+                case Label stringTag:
 
                     stack.Push(stringTag.Tagged);
 
@@ -1158,7 +1157,7 @@ public abstract record Expression
         }
     }
 
-    private static IEnumerable<KernelApplication> ReusedKernelApplicationInstancesSource()
+    private static IEnumerable<Builtin> ReusedBuiltinInstancesSource()
     {
         for (var i = 0; i < 16; ++i)
         {
@@ -1167,19 +1166,19 @@ public abstract record Expression
                 ?
                 EnvironmentInstance
                 :
-                KernelApplicationInstance(
+                BuiltinInst(
                     nameof(BuiltinFunction.skip),
-                    ListInstance(
+                    ListInst(
                         [
-                        LiteralInstance(IntegerEncoding.EncodeSignedInteger(i)),
+                        LitralInst(IntegerEncoding.EncodeSignedInteger(i)),
                         EnvironmentInstance
                         ]));
 
-            if (level0Skip is KernelApplication skipZeroBuiltin)
+            if (level0Skip is Builtin skipZeroBuiltin)
                 yield return skipZeroBuiltin;
 
             var level0SkipHead =
-                KernelApplicationInstance(
+                BuiltinInst(
                     nameof(BuiltinFunction.head),
                     level0Skip);
 
@@ -1192,11 +1191,11 @@ public abstract record Expression
                     ?
                     level0SkipHead
                     :
-                    KernelApplicationInstance(
+                    BuiltinInst(
                         nameof(BuiltinFunction.skip),
-                        ListInstance(
+                        ListInst(
                             [
-                            LiteralInstance(IntegerEncoding.EncodeSignedInteger(j)),
+                            LitralInst(IntegerEncoding.EncodeSignedInteger(j)),
                             level0SkipHead
                             ]));
 
@@ -1204,7 +1203,7 @@ public abstract record Expression
                     yield return level1Skip;
 
                 var level1SkipHead =
-                    KernelApplicationInstance(
+                    BuiltinInst(
                         nameof(BuiltinFunction.head),
                         level1Skip);
 
@@ -1217,11 +1216,11 @@ public abstract record Expression
                         ?
                         level1SkipHead
                         :
-                        KernelApplicationInstance(
+                        BuiltinInst(
                             nameof(BuiltinFunction.skip),
-                            ListInstance(
+                            ListInst(
                                 [
-                                LiteralInstance(IntegerEncoding.EncodeSignedInteger(k)),
+                                LitralInst(IntegerEncoding.EncodeSignedInteger(k)),
                                 level1SkipHead
                                 ]));
 
@@ -1229,7 +1228,7 @@ public abstract record Expression
                         yield return level2Skip;
 
                     var level2SkipHead =
-                        KernelApplicationInstance(
+                        BuiltinInst(
                             nameof(BuiltinFunction.head),
                             level2Skip);
 
@@ -1242,11 +1241,11 @@ public abstract record Expression
         {
             {
                 var concatPrependPlusSign =
-                    KernelApplicationInstance(
+                    BuiltinInst(
                         nameof(BuiltinFunction.concat),
-                        ListInstance(
+                        ListInst(
                             [
-                            LiteralInstance(PineValue.BlobSingleByte(4)),
+                            LitralInst(PineValue.BlobSingleByte(4)),
                             ExpressionBuilder.BuildExpressionForPathInExpression([i], EnvironmentInstance)
                             ]));
 
@@ -1256,11 +1255,11 @@ public abstract record Expression
             for (var j = 0; j < 2; ++j)
             {
                 var concatPrependPlusSign =
-                    KernelApplicationInstance(
+                    BuiltinInst(
                         nameof(BuiltinFunction.concat),
-                        ListInstance(
+                        ListInst(
                             [
-                            LiteralInstance(PineValue.BlobSingleByte(4)),
+                            LitralInst(PineValue.BlobSingleByte(4)),
                             ExpressionBuilder.BuildExpressionForPathInExpression([i, j], EnvironmentInstance)
                             ]));
 

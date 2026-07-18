@@ -4,19 +4,19 @@
       {
         "Conditional": [
           {
-            "Literal": [
+            "Litral": [
               11
             ]
           },
           {
-            "Literal": [
+            "Litral": [
               17
             ]
           },
           {
-            "ParseAndEval": [
+            "Eval": [
               {
-                "Literal": [
+                "Litral": [
                   41
                 ]
               },
@@ -31,19 +31,19 @@
       {
         "Conditional": [
           {
-            "Literal": [
+            "Litral": [
               13
             ]
           },
           {
-            "Literal": [
+            "Litral": [
               19
             ]
           },
           {
-            "ParseAndEval": [
+            "Eval": [
               {
-                "Literal": [
+                "Litral": [
                   43
                 ]
               },

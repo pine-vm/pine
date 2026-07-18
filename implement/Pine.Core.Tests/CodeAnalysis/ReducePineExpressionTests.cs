@@ -18,17 +18,17 @@ public class ReducePineExpressionTests
     public void TryEvaluateExpressionIndependent_EvaluatesLiteral_ListAndLengthKernel()
     {
         // literal
-        var lit = Expression.LiteralInstance(PineValue.Blob([1, 2]));
+        var lit = Expression.LitralInst(PineValue.Blob([1, 2]));
 
         ReducePineExpression.TryEvaluateExpressionIndependent(lit, s_parseCache)
             .IsOkOrNull().Should().Be(PineValue.Blob([1, 2]));
 
         // list of literals
         var list =
-            Expression.ListInstance(
+            Expression.ListInst(
                 [
-                Expression.LiteralInstance(PineValue.Blob([3])),
-                Expression.LiteralInstance(PineValue.EmptyList)
+                Expression.LitralInst(PineValue.Blob([3])),
+                Expression.LitralInst(PineValue.EmptyList)
                 ]);
 
         var evalList = ReducePineExpression.TryEvaluateExpressionIndependent(list, s_parseCache).IsOkOrNull();
@@ -41,7 +41,7 @@ public class ReducePineExpressionTests
 
         // kernel length([x,y]) -> 2
         var lengthOfList =
-            Expression.KernelApplicationInstance(
+            Expression.BuiltinInst(
                 nameof(BuiltinFunction.length),
                 list);
 
@@ -83,13 +83,13 @@ public class ReducePineExpressionTests
     public void TryEvaluateExpressionIndependent_ParseAndEval_WithLiteralArgs_EvaluatesInnerExpression()
     {
         // Build encoded expression value representing a simple literal
-        var innerLiteral = Expression.LiteralInstance(PineValue.Blob([42]));
+        var innerLiteral = Expression.LitralInst(PineValue.Blob([42]));
         var encodedValue = ExpressionEncoding.EncodeExpressionAsValue(innerLiteral);
 
         var parseAndEval =
-            new Expression.ParseAndEval(
-                encoded: Expression.LiteralInstance(encodedValue),
-                environment: Expression.LiteralInstance(PineValue.EmptyList));
+            new Expression.Eval(
+                encoded: Expression.LitralInst(encodedValue),
+                environment: Expression.LitralInst(PineValue.EmptyList));
 
         var result = ReducePineExpression.TryEvaluateExpressionIndependent(parseAndEval, s_parseCache);
 
@@ -100,13 +100,13 @@ public class ReducePineExpressionTests
     public void Transform_ReplacingEnvironmentWithLiteral_RemovesEnvAndReportsNoReference()
     {
         var expr =
-            Expression.ListInstance(
+            Expression.ListInst(
                 [
                 Expression.EnvironmentInstance,
 
-                Expression.KernelApplicationInstance(
+                Expression.BuiltinInst(
                     nameof(BuiltinFunction.head),
-                    Expression.LiteralInstance(
+                    Expression.LitralInst(
                         PineValue.List(
                             [
                             PineValue.Blob([1])
@@ -115,7 +115,7 @@ public class ReducePineExpressionTests
 
         var (mapped, referencesOriginalEnv) =
             ReducePineExpression.TransformPineExpressionWithOptionalReplacement(
-                e => e is Expression.Environment ? Expression.LiteralInstance(PineValue.EmptyList) : null,
+                e => e is Expression.Environment ? Expression.LitralInst(PineValue.EmptyList) : null,
                 expr);
 
         referencesOriginalEnv.Should().BeFalse();
@@ -131,7 +131,7 @@ public class ReducePineExpressionTests
     public void TryInferListLengthLowerBounds_SkipConst_OnLiteralList_ReturnsLowerBound()
     {
         var list =
-            Expression.LiteralInstance(
+            Expression.LitralInst(
                 PineValue.List(
                     [
                     PineValue.Blob([1]),
@@ -142,11 +142,11 @@ public class ReducePineExpressionTests
                     ]));
 
         var skip =
-            Expression.KernelApplicationInstance(
+            Expression.BuiltinInst(
                 nameof(BuiltinFunction.skip),
-                Expression.ListInstance(
+                Expression.ListInst(
                     [
-                    Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(2)),
+                    Expression.LitralInst(IntegerEncoding.EncodeSignedInteger(2)),
                     list
                     ]));
 
@@ -162,30 +162,30 @@ public class ReducePineExpressionTests
     {
         // Literals: TrueValue / FalseValue
         ReducePineExpression
-            .IsKnownBooleanExpression(Expression.LiteralInstance(PineKernelValues.TrueValue))
+            .IsKnownBooleanExpression(Expression.LitralInst(PineKernelValues.TrueValue))
             .Should().BeTrue();
 
         ReducePineExpression
-            .IsKnownBooleanExpression(Expression.LiteralInstance(PineKernelValues.FalseValue))
+            .IsKnownBooleanExpression(Expression.LitralInst(PineKernelValues.FalseValue))
             .Should().BeTrue();
 
         // Predicate kernels
         ReducePineExpression
             .IsKnownBooleanExpression(
-            Expression.KernelApplicationInstance(
+            Expression.BuiltinInst(
                 nameof(BuiltinFunction.equal),
-                Expression.ListInstance(
+                Expression.ListInst(
                     [
                     Expression.EnvironmentInstance,
-                    Expression.LiteralInstance(PineValue.Blob([7])),
+                    Expression.LitralInst(PineValue.Blob([7])),
                     ])))
             .Should().BeTrue();
 
         ReducePineExpression
             .IsKnownBooleanExpression(
-            Expression.KernelApplicationInstance(
+            Expression.BuiltinInst(
                 nameof(BuiltinFunction.int_is_sorted_asc),
-                Expression.LiteralInstance(PineValue.EmptyList)))
+                Expression.LitralInst(PineValue.EmptyList)))
             .Should().BeTrue();
     }
 
@@ -206,21 +206,21 @@ public class ReducePineExpressionTests
         // calling reduction is the one that produced the ambiguity.)
         ReducePineExpression
             .IsKnownBooleanExpression(
-            Expression.KernelApplicationInstance(
+            Expression.BuiltinInst(
                 nameof(BuiltinFunction.skip),
-                Expression.ListInstance(
+                Expression.ListInst(
                     [
-                    Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(1)),
-                    Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(2)),
+                    Expression.LitralInst(IntegerEncoding.EncodeSignedInteger(1)),
+                    Expression.LitralInst(IntegerEncoding.EncodeSignedInteger(2)),
                     ])))
             .Should().BeFalse();
 
         // Arithmetic: not Boolean.
         ReducePineExpression
             .IsKnownBooleanExpression(
-            Expression.KernelApplicationInstance(
+            Expression.BuiltinInst(
                 nameof(BuiltinFunction.int_add),
-                Expression.LiteralInstance(PineValue.EmptyList)))
+                Expression.LitralInst(PineValue.EmptyList)))
             .Should().BeFalse();
     }
 
@@ -238,24 +238,24 @@ public class ReducePineExpressionTests
         // known-Boolean expression, so the conditional is preserved.
 
         var nibble =
-            Expression.KernelApplicationInstance(
+            Expression.BuiltinInst(
                 nameof(BuiltinFunction.skip),
-                Expression.ListInstance(
+                Expression.ListInst(
                     [
-                    Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(1)),
+                    Expression.LitralInst(IntegerEncoding.EncodeSignedInteger(1)),
                     Expression.EnvironmentInstance,
                     ]));
 
-        var byteLiteralTwo = Expression.LiteralInstance(PineValue.Blob([0x02]));
+        var byteLiteralTwo = Expression.LitralInst(PineValue.Blob([0x02]));
 
         var conditional =
-            Expression.ConditionalInstance(
+            Expression.ConditionalInst(
                 condition:
-                Expression.KernelApplicationInstance(
+                Expression.BuiltinInst(
                     nameof(BuiltinFunction.equal),
-                    Expression.ListInstance([nibble, byteLiteralTwo])),
-                falseBranch: Expression.LiteralInstance(PineValue.Blob([0x07])),
-                trueBranch: Expression.LiteralInstance(PineValue.Blob([0x09])));
+                    Expression.ListInst([nibble, byteLiteralTwo])),
+                falseBranch: Expression.LitralInst(PineValue.Blob([0x07])),
+                trueBranch: Expression.LitralInst(PineValue.Blob([0x09])));
 
         var reduced =
             ReducePineExpression.ReduceExpressionBottomUp(conditional, s_parseCache);
@@ -264,13 +264,13 @@ public class ReducePineExpressionTests
         // equal-application; the branches must be unchanged.
         var reducedConditional = reduced.Should().BeOfType<Expression.Conditional>().Subject;
 
-        reducedConditional.Condition.Should().BeOfType<Expression.KernelApplication>()
+        reducedConditional.Condition.Should().BeOfType<Expression.Builtin>()
             .Which.Function.Should().Be(nameof(BuiltinFunction.equal));
 
-        reducedConditional.TrueBranch.Should().BeOfType<Expression.Literal>()
+        reducedConditional.TrueBranch.Should().BeOfType<Expression.Litral>()
             .Which.Value.Should().Be(PineValue.Blob([0x09]));
 
-        reducedConditional.FalseBranch.Should().BeOfType<Expression.Literal>()
+        reducedConditional.FalseBranch.Should().BeOfType<Expression.Litral>()
             .Which.Value.Should().Be(PineValue.Blob([0x07]));
     }
 

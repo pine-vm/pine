@@ -37,7 +37,7 @@ public class ExpressionEncodingDelegateConsultationTests
     [Fact]
     public void Delegate_is_not_consulted_for_Literal_root_because_it_has_no_subexpressions()
     {
-        var root = Expression.LiteralInstance(StringEncoding.ValueFromString("literal"));
+        var root = Expression.LitralInst(StringEncoding.ValueFromString("literal"));
 
         var recorder = new RecordingDelegate();
 
@@ -71,11 +71,11 @@ public class ExpressionEncodingDelegateConsultationTests
     [Fact]
     public void Delegate_is_consulted_once_per_List_item()
     {
-        Expression itemA = Expression.LiteralInstance(StringEncoding.ValueFromString("alfa"));
-        Expression itemB = Expression.LiteralInstance(StringEncoding.ValueFromString("beta"));
-        Expression itemC = Expression.LiteralInstance(StringEncoding.ValueFromString("gamma"));
+        Expression itemA = Expression.LitralInst(StringEncoding.ValueFromString("alfa"));
+        Expression itemB = Expression.LitralInst(StringEncoding.ValueFromString("beta"));
+        Expression itemC = Expression.LitralInst(StringEncoding.ValueFromString("gamma"));
 
-        var root = Expression.ListInstance([itemA, itemB, itemC]);
+        var root = Expression.ListInst([itemA, itemB, itemC]);
 
         var recorder = new RecordingDelegate();
 
@@ -92,12 +92,12 @@ public class ExpressionEncodingDelegateConsultationTests
     [Fact]
     public void Delegate_is_consulted_once_per_Conditional_branch_in_declaration_order()
     {
-        Expression condition = Expression.LiteralInstance(StringEncoding.ValueFromString("condition"));
-        Expression falseBranch = Expression.LiteralInstance(StringEncoding.ValueFromString("falseBranch"));
-        Expression trueBranch = Expression.LiteralInstance(StringEncoding.ValueFromString("trueBranch"));
+        Expression condition = Expression.LitralInst(StringEncoding.ValueFromString("condition"));
+        Expression falseBranch = Expression.LitralInst(StringEncoding.ValueFromString("falseBranch"));
+        Expression trueBranch = Expression.LitralInst(StringEncoding.ValueFromString("trueBranch"));
 
         var root =
-            Expression.ConditionalInstance(
+            Expression.ConditionalInst(
                 condition: condition,
                 falseBranch: falseBranch,
                 trueBranch: trueBranch);
@@ -117,10 +117,10 @@ public class ExpressionEncodingDelegateConsultationTests
     [Fact]
     public void Delegate_is_consulted_for_both_ParseAndEval_subexpressions()
     {
-        Expression encodedExpr = Expression.LiteralInstance(StringEncoding.ValueFromString("encoded"));
-        Expression environment = Expression.LiteralInstance(StringEncoding.ValueFromString("environment"));
+        Expression encodedExpr = Expression.LitralInst(StringEncoding.ValueFromString("encoded"));
+        Expression environment = Expression.LitralInst(StringEncoding.ValueFromString("environment"));
 
-        var root = new Expression.ParseAndEval(encoded: encodedExpr, environment: environment);
+        var root = new Expression.Eval(encoded: encodedExpr, environment: environment);
 
         var recorder = new RecordingDelegate();
 
@@ -137,10 +137,10 @@ public class ExpressionEncodingDelegateConsultationTests
     [Fact]
     public void Delegate_is_consulted_for_KernelApplication_input_only()
     {
-        Expression input = Expression.LiteralInstance(StringEncoding.ValueFromString("input"));
+        Expression input = Expression.LitralInst(StringEncoding.ValueFromString("input"));
 
         var root =
-            Expression.KernelApplicationInstance(
+            Expression.BuiltinInst(
                 function: nameof(BuiltinFunction.length),
                 input: input);
 
@@ -159,9 +159,9 @@ public class ExpressionEncodingDelegateConsultationTests
     [Fact]
     public void Delegate_is_consulted_for_StringTag_tagged_subexpression()
     {
-        Expression tagged = Expression.LiteralInstance(StringEncoding.ValueFromString("tagged"));
+        Expression tagged = Expression.LitralInst(StringEncoding.ValueFromString("tagged"));
 
-        var root = new Expression.StringTag(tag: "the-tag", tagged: tagged);
+        var root = new Expression.Label(tag: "the-tag", tagged: tagged);
 
         var recorder = new RecordingDelegate();
 
@@ -183,32 +183,32 @@ public class ExpressionEncodingDelegateConsultationTests
         //   [1] = ParseAndEval(encoded=L"enc", environment=Environment)
         //   [2] = StringTag("tag", tagged=L"tagged")
 
-        Expression cond = Expression.LiteralInstance(StringEncoding.ValueFromString("cond"));
-        Expression kaInput = Expression.LiteralInstance(StringEncoding.ValueFromString("ka-input"));
+        Expression cond = Expression.LitralInst(StringEncoding.ValueFromString("cond"));
+        Expression kaInput = Expression.LitralInst(StringEncoding.ValueFromString("ka-input"));
 
         Expression falseBranch =
-            Expression.KernelApplicationInstance(
+            Expression.BuiltinInst(
                 function: nameof(BuiltinFunction.length),
                 input: kaInput);
 
-        Expression trueBranch = Expression.LiteralInstance(StringEncoding.ValueFromString("true"));
+        Expression trueBranch = Expression.LitralInst(StringEncoding.ValueFromString("true"));
 
         Expression conditional =
-            Expression.ConditionalInstance(
+            Expression.ConditionalInst(
                 condition: cond,
                 falseBranch: falseBranch,
                 trueBranch: trueBranch);
 
-        Expression peEncoded = Expression.LiteralInstance(StringEncoding.ValueFromString("enc"));
+        Expression peEncoded = Expression.LitralInst(StringEncoding.ValueFromString("enc"));
         Expression peEnvironment = new Expression.Environment();
 
         Expression parseAndEval =
-            new Expression.ParseAndEval(encoded: peEncoded, environment: peEnvironment);
+            new Expression.Eval(encoded: peEncoded, environment: peEnvironment);
 
-        Expression stTagged = Expression.LiteralInstance(StringEncoding.ValueFromString("tagged"));
-        Expression stringTag = new Expression.StringTag(tag: "the-tag", tagged: stTagged);
+        Expression stTagged = Expression.LitralInst(StringEncoding.ValueFromString("tagged"));
+        Expression stringTag = new Expression.Label(tag: "the-tag", tagged: stTagged);
 
-        var root = Expression.ListInstance([conditional, parseAndEval, stringTag]);
+        var root = Expression.ListInst([conditional, parseAndEval, stringTag]);
 
         var recorder = new RecordingDelegate();
 
@@ -245,9 +245,9 @@ public class ExpressionEncodingDelegateConsultationTests
         // re-encoding of repeated subtrees. The cache uses the
         // EncodeExpressionAsValueWithoutTopLevelCacheLookup factory body, which delegates to
         // cache.EncodeExpressionAsValue for sub-encodings.
-        Expression shared = Expression.LiteralInstance(StringEncoding.ValueFromString("shared"));
+        Expression shared = Expression.LitralInst(StringEncoding.ValueFromString("shared"));
 
-        var root = Expression.ListInstance([shared, shared, shared]);
+        var root = Expression.ListInst([shared, shared, shared]);
 
         var cache = new PineExpressionEncodingCache();
 

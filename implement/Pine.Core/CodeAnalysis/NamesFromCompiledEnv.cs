@@ -144,7 +144,7 @@ public record NamesFromCompiledEnv
 
         var outerEnvClass = PineValueClass.Create(envClassEntries);
 
-        if (functionRecord.InnerFunction is Expression.ParseAndEval innerParseAndEval)
+        if (functionRecord.InnerFunction is Expression.Eval innerParseAndEval)
         {
             // Which env function is the entry pointing to?
 

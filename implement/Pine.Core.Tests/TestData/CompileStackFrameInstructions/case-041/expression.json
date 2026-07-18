@@ -1,10 +1,10 @@
 {
-  "KernelApplication": [
+  "Builtin": [
     "skip",
     {
       "List": [
         [
-          { "Literal": [ 73 ] },
+          { "Litral": [ 73 ] },
           { "Environment": [] }
         ]
       ]

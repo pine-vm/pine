@@ -10,12 +10,12 @@ namespace Pine.Core.Tests.Elm.ElmCompilerInDotnet.ApplicationTests;
 
 /// <summary>
 /// Tests demonstrating that the PineVM's intermediate-VM expression reduction consolidates
-/// the chain of nested <see cref="Expression.ParseAndEval"/> expressions emitted by the
+/// the chain of nested <see cref="Expression.Eval"/> expressions emitted by the
 /// Elm compiler in ElmCompilerInDotnet for the generic form of partial application.
 /// <para>
 /// The Elm compiler emits only two forms of applications: a saturated form when the
 /// argument count is at least the parameter count, and a generic form that uses one
-/// <see cref="Expression.ParseAndEval"/> nesting per applied argument
+/// <see cref="Expression.Eval"/> nesting per applied argument
 /// (constructed via
 /// <see cref="PineCodeAnalysis.BuildGenericFunctionApplication(Expression, System.Collections.Generic.IReadOnlyList{Expression})"/>).
 /// The new optimization in <see cref="ReducePineExpression"/> recognizes this generic form
@@ -31,7 +31,7 @@ namespace Pine.Core.Tests.Elm.ElmCompilerInDotnet.ApplicationTests;
 /// context (the "apply-one-arg helper"). The "across contexts" boundary is modeled directly
 /// as it appears in compiled code: the partial helper's body has the literal-headed chain
 /// emitted by <c>BuildGenericFunctionApplication</c>; the apply-one-arg helper's body is a
-/// <see cref="Expression.ParseAndEval"/> whose head is an environment-access expression
+/// <see cref="Expression.Eval"/> whose head is an environment-access expression
 /// (a function parameter, not a literal) — so the consolidation cannot fire across the
 /// boundary.
 /// </para>
@@ -112,7 +112,7 @@ public class PartialApplicationConsolidationTests
     private static readonly PineVMParseCache s_parseCache = new();
 
     /// <summary>
-    /// Counts the number of <see cref="Expression.ParseAndEval"/> nodes in an expression tree.
+    /// Counts the number of <see cref="Expression.Eval"/> nodes in an expression tree.
     /// </summary>
     private static int CountParseAndEval(Expression expression)
     {
@@ -120,7 +120,7 @@ public class PartialApplicationConsolidationTests
 
         foreach (var sub in Expression.EnumerateSelfAndDescendants(expression))
         {
-            if (sub is Expression.ParseAndEval)
+            if (sub is Expression.Eval)
             {
                 ++count;
             }
@@ -150,7 +150,7 @@ public class PartialApplicationConsolidationTests
 
         return
             PineCodeAnalysis.BuildGenericFunctionApplication(
-                Expression.LiteralInstance(functionValue),
+                Expression.LitralInst(functionValue),
                 argExpressions);
     }
 
@@ -161,7 +161,7 @@ public class PartialApplicationConsolidationTests
     /// parameter rather than a known function.
     /// </summary>
     private static Expression BuildApplyOneArgHelperBody() =>
-        new Expression.ParseAndEval(
+        new Expression.Eval(
             encoded: ListEnvAccess(0),
             environment: ListEnvAccess(1));
 
@@ -176,16 +176,16 @@ public class PartialApplicationConsolidationTests
         for (var i = 0; i < index; ++i)
         {
             current =
-                Expression.KernelApplicationInstance(
+                Expression.BuiltinInst(
                     nameof(BuiltinFunction.skip),
-                    Expression.ListInstance(
+                    Expression.ListInst(
                         [
-                        Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(1)),
+                        Expression.LitralInst(IntegerEncoding.EncodeSignedInteger(1)),
                         current
                         ]));
         }
 
-        return Expression.KernelApplicationInstance(nameof(BuiltinFunction.head), current);
+        return Expression.BuiltinInst(nameof(BuiltinFunction.head), current);
     }
 
     /// <summary>
@@ -211,11 +211,11 @@ public class PartialApplicationConsolidationTests
         // the "use the outer function gamma ten/twenty times in one invocation" requirement
         // from the task statement, applied to the helper's body).
         var partialHelperBatch =
-            Expression.ListInstance(
+            Expression.ListInst(
                 [.. Enumerable.Repeat(partialHelperBody, callCount)]);
 
         var applyOneArgHelperBatch =
-            Expression.ListInstance(
+            Expression.ListInst(
                 [.. Enumerable.Repeat(applyOneArgHelperBody, callCount)]);
 
         // Before reduction:
@@ -272,11 +272,11 @@ public class PartialApplicationConsolidationTests
         var applyOneArgHelperBody = BuildApplyOneArgHelperBody();
 
         var partialHelperBatch =
-            Expression.ListInstance(
+            Expression.ListInst(
                 [.. Enumerable.Repeat(partialHelperBody, callCount)]);
 
         var applyOneArgHelperBatch =
-            Expression.ListInstance(
+            Expression.ListInst(
                 [.. Enumerable.Repeat(applyOneArgHelperBody, callCount)]);
 
         // Before reduction: 3 + 1 = 4 ParseAndEval per gamma call.

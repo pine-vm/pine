@@ -298,16 +298,16 @@ public sealed class PersistentProcessLive : IAsyncDisposable
                 ?
                 currentNode
                 :
-                Expression.KernelApplicationInstance(
+                Expression.BuiltinInst(
                     function: nameof(BuiltinFunction.skip),
-                    Expression.ListInstance(
+                    Expression.ListInst(
                         [
-                        Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(nextSkipCount)),
+                        Expression.LitralInst(IntegerEncoding.EncodeSignedInteger(nextSkipCount)),
                         currentNode
                         ]));
 
             currentNode =
-                Expression.KernelApplicationInstance(
+                Expression.BuiltinInst(
                     function: nameof(BuiltinFunction.head),
                     skippedExpr);
         }

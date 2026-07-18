@@ -151,7 +151,7 @@ public record StaticFunctionInterface
                     yield return ReadOnlyMemory<int>.Empty;
                     break;
 
-                case Expression.Literal:
+                case Expression.Litral:
                     break;
 
                 case Expression.List list:
@@ -162,14 +162,14 @@ public record StaticFunctionInterface
 
                     break;
 
-                case Expression.ParseAndEval parseAndEvaluate:
+                case Expression.Eval parseAndEvaluate:
 
                     stack.Push(parseAndEvaluate.Encoded);
                     stack.Push(parseAndEvaluate.Environment);
 
                     break;
 
-                case Expression.KernelApplication kernelApplication:
+                case Expression.Builtin kernelApplication:
 
                     stack.Push(kernelApplication.Input);
 
@@ -183,7 +183,7 @@ public record StaticFunctionInterface
 
                     break;
 
-                case Expression.StringTag stringTag:
+                case Expression.Label stringTag:
 
                     stack.Push(stringTag.Tagged);
 

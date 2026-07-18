@@ -48,7 +48,7 @@ public class CodeAnalysis
         PineValueClass Environment);
 
     public record ParseSubExpression(
-        Expression.ParseAndEval ParseAndEvalExpr,
+        Expression.Eval ParseAndEvalExpr,
         IReadOnlyList<int>? ExpressionPath,
         PineValue? ExpressionValue,
         Expression? ParsedExpr);
@@ -67,7 +67,7 @@ public class CodeAnalysis
 
         var parseSubexpressions =
             Expression.EnumerateSelfAndDescendants(expression)
-            .OfType<Expression.ParseAndEval>()
+            .OfType<Expression.Eval>()
             .Select(parseAndEvalExpr =>
             {
                 PineValue? expressionValue = null;

@@ -15,7 +15,7 @@ namespace Pine.Core.Tests.CodeAnalysis;
 /// Focused tests verifying that <see cref="StaticProgramParser"/> recognizes the
 /// consolidated form produced by the generic-application chain consolidation
 /// optimization in
-/// <see cref="ReducePineExpression.TryConsolidateGenericFunctionApplicationChain(Expression.ParseAndEval, PineVMParseCache)"/>.
+/// <see cref="ReducePineExpression.TryConsolidateGenericFunctionApplicationChain(Expression.Eval, PineVMParseCache)"/>.
 /// </summary>
 public class StaticProgramParserConsolidatedFormTests
 {
@@ -39,15 +39,15 @@ public class StaticProgramParserConsolidatedFormTests
         return
             FunctionValueBuilder.EmitFunctionValueWithEnvFunctions(
                 innerExpression:
-                Expression.KernelApplicationInstance(
+                Expression.BuiltinInst(
                     function: nameof(BuiltinFunction.int_add),
                     input:
-                    Expression.ListInstance(
+                    Expression.ListInst(
                         [
                         BuildParamReference(0),
                         BuildParamReference(1),
                         BuildParamReference(2),
-                        Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(71))
+                        Expression.LitralInst(IntegerEncoding.EncodeSignedInteger(71))
                         ])),
                 parameterCount: 3,
                 envFunctions: []);
@@ -61,16 +61,16 @@ public class StaticProgramParserConsolidatedFormTests
         return
             FunctionValueBuilder.EmitFunctionValueWithEnvFunctions(
                 innerExpression:
-                Expression.KernelApplicationInstance(
+                Expression.BuiltinInst(
                     function: nameof(BuiltinFunction.int_add),
                     input:
-                    Expression.ListInstance(
+                    Expression.ListInst(
                         [
                         BuildParamReference(0),
                         BuildParamReference(1),
                         BuildParamReference(2),
                         BuildParamReference(3),
-                        Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(71))
+                        Expression.LitralInst(IntegerEncoding.EncodeSignedInteger(71))
                         ])),
                 parameterCount: 4,
                 envFunctions: []);
@@ -89,8 +89,8 @@ public class StaticProgramParserConsolidatedFormTests
         var arg1 = BuildParamReference(1);
 
         var chain =
-            (Expression.ParseAndEval)PineCodeAnalysis.BuildGenericFunctionApplication(
-                Expression.LiteralInstance(calleeValue),
+            (Expression.Eval)PineCodeAnalysis.BuildGenericFunctionApplication(
+                Expression.LitralInst(calleeValue),
                 [arg0, arg1]);
 
         var consolidated =
@@ -101,7 +101,7 @@ public class StaticProgramParserConsolidatedFormTests
         // Wrap the consolidated form as the body of a 2-param outer function.
         var outerFunctionValue =
             FunctionValueBuilder.EmitFunctionValueWithEnvFunctions(
-                innerExpression: Expression.ListInstance([consolidated!]),
+                innerExpression: Expression.ListInst([consolidated!]),
                 parameterCount: 2,
                 envFunctions: []);
 
@@ -148,8 +148,8 @@ public class StaticProgramParserConsolidatedFormTests
         var arg2 = BuildParamReference(2);
 
         var chain =
-            (Expression.ParseAndEval)PineCodeAnalysis.BuildGenericFunctionApplication(
-                Expression.LiteralInstance(calleeValue),
+            (Expression.Eval)PineCodeAnalysis.BuildGenericFunctionApplication(
+                Expression.LitralInst(calleeValue),
                 [arg0, arg1, arg2]);
 
         var consolidated =
@@ -159,7 +159,7 @@ public class StaticProgramParserConsolidatedFormTests
 
         var outerFunctionValue =
             FunctionValueBuilder.EmitFunctionValueWithEnvFunctions(
-                innerExpression: Expression.ListInstance([consolidated!]),
+                innerExpression: Expression.ListInst([consolidated!]),
                 parameterCount: 3,
                 envFunctions: []);
 
@@ -204,12 +204,12 @@ public class StaticProgramParserConsolidatedFormTests
 
         var calleeValue = BuildThreeParamCallee();
 
-        var arg0 = Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(11));
-        var arg1 = Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(13));
+        var arg0 = Expression.LitralInst(IntegerEncoding.EncodeSignedInteger(11));
+        var arg1 = Expression.LitralInst(IntegerEncoding.EncodeSignedInteger(13));
 
         var chain =
-            (Expression.ParseAndEval)PineCodeAnalysis.BuildGenericFunctionApplication(
-                Expression.LiteralInstance(calleeValue),
+            (Expression.Eval)PineCodeAnalysis.BuildGenericFunctionApplication(
+                Expression.LitralInst(calleeValue),
                 [arg0, arg1]);
 
         var consolidated =
@@ -219,7 +219,7 @@ public class StaticProgramParserConsolidatedFormTests
 
         var outerFunctionValue =
             FunctionValueBuilder.EmitFunctionValueWithEnvFunctions(
-                innerExpression: Expression.ListInstance([consolidated!]),
+                innerExpression: Expression.ListInst([consolidated!]),
                 parameterCount: 0,
                 envFunctions: []);
 

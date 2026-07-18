@@ -1,17 +1,17 @@
 {
-  "KernelApplication": [
+  "Builtin": [
     "equal",
     {
       "List": [
         [
           {
-            "KernelApplication": [
+            "Builtin": [
               "take",
               {
                 "List": [
                   [
                     {
-                      "Literal": [
+                      "Litral": [
                         1
                       ]
                     },
@@ -25,7 +25,7 @@
             ]
           },
           {
-            "Literal": [
+            "Litral": [
               {
                 "AsBase64": "ew=="
               }

@@ -2,7 +2,7 @@
   "List": [
     [
       {
-        "ParseAndEval": [
+        "Eval": [
           {
             "Environment": [
             ]
@@ -14,7 +14,7 @@
         ]
       },
       {
-        "Literal": [
+        "Litral": [
           {
             "AsBase64": ""
           }

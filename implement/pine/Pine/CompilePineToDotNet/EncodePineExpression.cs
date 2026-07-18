@@ -22,10 +22,10 @@ public partial class CompileToCSharp
 
         return expression switch
         {
-            Expression.Literal literal =>
+            Expression.Litral literal =>
             Result<string, ExpressionSyntax>.ok(
                 NewConstructorOfExpressionVariant(
-                    nameof(Expression.Literal),
+                    nameof(Expression.Litral),
                     CoreSyntaxFactory.CompileToCSharpLiteralExpression(
                         literal.Value,
                         overrideDefaultExpressionForValue,
@@ -73,24 +73,24 @@ public partial class CompileToCSharp
                                             .WithNameColon(
                                                 SyntaxFactory.NameColon(nameof(Expression.Conditional.TrueBranch))))))),
 
-            Expression.KernelApplication kernelApplicationExpr =>
+            Expression.Builtin kernelApplicationExpr =>
             continueEncode(kernelApplicationExpr.Input)
             .MapError(err => "Failed to encode input of kernel application: " + err)
             .Map(encodedInput =>
             NewConstructorOfExpressionVariant(
-                nameof(Expression.KernelApplication),
+                nameof(Expression.Builtin),
 
                 SyntaxFactory.Argument(SyntaxFactory.LiteralExpression(
                     SyntaxKind.StringLiteralExpression, SyntaxFactory.Literal(kernelApplicationExpr.Function)))
                 .WithNameColon(
-                    SyntaxFactory.NameColon(nameof(Expression.KernelApplication.Function))),
+                    SyntaxFactory.NameColon(nameof(Expression.Builtin.Function))),
 
                 SyntaxFactory.Argument(encodedInput)
                 .WithNameColon(
-                    SyntaxFactory.NameColon(nameof(Expression.KernelApplication.Input)))
+                    SyntaxFactory.NameColon(nameof(Expression.Builtin.Input)))
             )),
 
-            Expression.ParseAndEval decodeAndEvaluate =>
+            Expression.Eval decodeAndEvaluate =>
             continueEncode(decodeAndEvaluate.Encoded)
             .MapError(err => "Failed to encode expression of decode and evaluate: " + err)
             .AndThen(encodedExpression =>
@@ -98,7 +98,7 @@ public partial class CompileToCSharp
             .MapError(err => "Failed to encode environment of decode and evaluate: " + err)
             .Map(encodedEnvironment =>
             NewConstructorOfExpressionVariant(
-                nameof(Expression.ParseAndEval),
+                nameof(Expression.Eval),
                 encodedExpression,
                 encodedEnvironment))),
 

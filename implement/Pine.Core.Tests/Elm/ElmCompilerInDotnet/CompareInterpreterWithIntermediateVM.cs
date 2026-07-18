@@ -301,9 +301,9 @@ public sealed class CompareInterpreterWithIntermediateVM
             // zero-arg entry points work too.
             var report =
                 _vm.EvaluateExpressionOnCustomStack(
-                    new Expression.ParseAndEval(
-                        encoded: Expression.LiteralInstance(functionValue),
-                        environment: Expression.LiteralInstance(PineValue.EmptyList)),
+                    new Expression.Eval(
+                        encoded: Expression.LitralInst(functionValue),
+                        environment: Expression.LitralInst(PineValue.EmptyList)),
                     PineValue.EmptyBlob,
                     config: ElmCompilerTestHelper.DefaultTestEvaluationConfig)
                 .Extract(err => throw new Exception("CompareInterpreterWithIntermediateVM: VM eval failed: " + err));

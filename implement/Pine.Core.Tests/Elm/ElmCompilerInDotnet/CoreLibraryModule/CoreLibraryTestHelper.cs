@@ -34,7 +34,7 @@ public static class CoreLibraryTestHelper
         PineValue right)
     {
         var expression =
-            function(Expression.LiteralInstance(left), Expression.LiteralInstance(right));
+            function(Expression.LitralInst(left), Expression.LitralInst(right));
 
         return ElmCompilerTestHelper.EvaluateWithProfiling(expression, PineValue.EmptyBlob).evalReport;
     }
@@ -225,9 +225,9 @@ public static class CoreLibraryTestHelper
         for (var i = 0; i < arguments.Count; i++)
         {
             var asIndependent =
-                new Expression.ParseAndEval(
-                    encoded: Expression.LiteralInstance(currentValue),
-                    environment: Expression.LiteralInstance(arguments[i]));
+                new Expression.Eval(
+                    encoded: Expression.LitralInst(currentValue),
+                    environment: Expression.LitralInst(arguments[i]));
 
             var report =
                 vm.EvaluateExpressionOnCustomStack(

@@ -15,7 +15,7 @@ public class PineVMTests
                 new
                 {
                     expression = (Expression)
-                    Expression.LiteralInstance(PineValue.Blob([1, 4, 7])),
+                    Expression.LitralInst(PineValue.Blob([1, 4, 7])),
                     environment = PineValue.EmptyList,
 
                     expected =
@@ -24,7 +24,7 @@ public class PineVMTests
                 },
                 new
                 {
-                    expression = (Expression)Expression.ListInstance([]),
+                    expression = (Expression)Expression.ListInst([]),
                     environment = PineValue.EmptyList,
 
                     expected = Result<string, PineValue>.ok(PineValue.EmptyList)
@@ -33,9 +33,9 @@ public class PineVMTests
                 {
                     expression =
                     (Expression)
-                    Expression.KernelApplicationInstance
+                    Expression.BuiltinInst
                     (
-                        input: Expression.ListInstance([]),
+                        input: Expression.ListInst([]),
                         function: "concat"),
                     environment = PineValue.EmptyList,
 
@@ -45,37 +45,37 @@ public class PineVMTests
                 {
                     expression =
                     (Expression)
-                    Expression.KernelApplicationInstance
+                    Expression.BuiltinInst
                     (
                         input:
-                        Expression.ListInstance(
+                        Expression.ListInst(
                             [
-                            Expression.ListInstance(
+                            Expression.ListInst(
                                 [
-                                Expression.LiteralInstance(
+                                Expression.LitralInst(
                                     IntegerEncoding.EncodeSignedInteger(1)),
                                 ]),
 
-                            Expression.KernelApplicationInstance
+                            Expression.BuiltinInst
                             (
                                 function: nameof(BuiltinFunction.head),
                                 input: Expression.EnvironmentInstance),
 
-                            new Expression.ParseAndEval(
+                            new Expression.Eval(
                                 encoded:
-                                Expression.LiteralInstance(
+                                Expression.LitralInst(
                                     ExpressionEncoding.EncodeExpressionAsValue(
-                                        Expression.KernelApplicationInstance
+                                        Expression.BuiltinInst
                                         (
                                             function: nameof(BuiltinFunction.head),
                                             input: Expression.EnvironmentInstance))),
                                 environment:
-                                Expression.KernelApplicationInstance
+                                Expression.BuiltinInst
                                 (
                                     function: "skip",
-                                    input: Expression.ListInstance(
+                                    input: Expression.ListInst(
                                         [
-                                        Expression.LiteralInstance(
+                                        Expression.LitralInst(
                                             IntegerEncoding.EncodeSignedInteger(1)),
 
                                         Expression.EnvironmentInstance,
@@ -103,13 +103,13 @@ public class PineVMTests
                 {
                     expression =
                     (Expression)
-                    Expression.ConditionalInstance(
+                    Expression.ConditionalInst(
                         condition:
-                        Expression.LiteralInstance(PineValue.Blob([4])),
+                        Expression.LitralInst(PineValue.Blob([4])),
                         falseBranch:
-                        Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(17)),
+                        Expression.LitralInst(IntegerEncoding.EncodeSignedInteger(17)),
                         trueBranch:
-                        Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(13))),
+                        Expression.LitralInst(IntegerEncoding.EncodeSignedInteger(13))),
                     environment = PineValue.EmptyList,
 
                     expected =
@@ -121,29 +121,29 @@ public class PineVMTests
                 {
                     expression=
                     (Expression)
-                    Expression.ConditionalInstance(
+                    Expression.ConditionalInst(
                         condition:
-                        Expression.LiteralInstance(PineValue.Blob([2])),
+                        Expression.LitralInst(PineValue.Blob([2])),
                         falseBranch:
-                        new Expression.ParseAndEval(
+                        new Expression.Eval(
                             encoded:
-                            Expression.KernelApplicationInstance
+                            Expression.BuiltinInst
                             (
                                 function: nameof(BuiltinFunction.head),
                                 input:
-                                Expression.KernelApplicationInstance
+                                Expression.BuiltinInst
                                 (
                                     function: "skip",
-                                    input: Expression.ListInstance(
+                                    input: Expression.ListInst(
                                         [
-                                        Expression.LiteralInstance(
+                                        Expression.LitralInst(
                                             IntegerEncoding.EncodeSignedInteger(1)),
 
                                         Expression.EnvironmentInstance,
                                         ]))),
                             Expression.EnvironmentInstance),
                         trueBranch:
-                        Expression.LiteralInstance(
+                        Expression.LitralInst(
                             IntegerEncoding.EncodeSignedInteger(17))),
 
                     environment =
@@ -151,7 +151,7 @@ public class PineVMTests
                         [
                         IntegerEncoding.EncodeSignedInteger(43),
                         ExpressionEncoding.EncodeExpressionAsValue(
-                            Expression.KernelApplicationInstance
+                            Expression.BuiltinInst
                             (
                                 function: nameof(BuiltinFunction.head),
                                 input: Expression.EnvironmentInstance))
@@ -166,19 +166,19 @@ public class PineVMTests
                 {
                     expression=
                     (Expression)
-                    Expression.ConditionalInstance(
+                    Expression.ConditionalInst(
                         condition:
-                        Expression.LiteralInstance(PineValue.Blob([4])),
+                        Expression.LitralInst(PineValue.Blob([4])),
                         falseBranch:
-                        new Expression.ParseAndEval(
+                        new Expression.Eval(
                             encoded:
-                            Expression.KernelApplicationInstance
+                            Expression.BuiltinInst
                             (
                                 function: nameof(BuiltinFunction.head),
                                 input: Expression.EnvironmentInstance),
                             Expression.EnvironmentInstance),
                         trueBranch:
-                        Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(17))),
+                        Expression.LitralInst(IntegerEncoding.EncodeSignedInteger(17))),
 
                     environment = PineValue.EmptyList,
 
@@ -191,24 +191,24 @@ public class PineVMTests
                 {
                     expression=
                     (Expression)
-                    Expression.ConditionalInstance(
+                    Expression.ConditionalInst(
                         condition:
-                        Expression.LiteralInstance(PineValue.Blob([4])),
+                        Expression.LitralInst(PineValue.Blob([4])),
                         falseBranch:
-                        Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(17)),
+                        Expression.LitralInst(IntegerEncoding.EncodeSignedInteger(17)),
                         trueBranch:
-                        new Expression.ParseAndEval(
+                        new Expression.Eval(
                             encoded:
-                            Expression.KernelApplicationInstance
+                            Expression.BuiltinInst
                             (
                                 function: nameof(BuiltinFunction.head),
                                 input:
-                                Expression.KernelApplicationInstance
+                                Expression.BuiltinInst
                                 (
                                     function: "skip",
-                                    input: Expression.ListInstance(
+                                    input: Expression.ListInst(
                                         [
-                                        Expression.LiteralInstance(
+                                        Expression.LitralInst(
                                             IntegerEncoding.EncodeSignedInteger(1)),
 
                                         Expression.EnvironmentInstance,
@@ -221,7 +221,7 @@ public class PineVMTests
                         IntegerEncoding.EncodeSignedInteger(41),
 
                         ExpressionEncoding.EncodeExpressionAsValue(
-                            Expression.KernelApplicationInstance
+                            Expression.BuiltinInst
                             (
                                 function: nameof(BuiltinFunction.head),
                                 input: Expression.EnvironmentInstance))
@@ -236,14 +236,14 @@ public class PineVMTests
                 {
                     expression =
                     (Expression)
-                    Expression.KernelApplicationInstance
+                    Expression.BuiltinInst
                     (
                         input:
-                        Expression.ListInstance(
+                        Expression.ListInst(
                             [
-                            Expression.ListInstance(
+                            Expression.ListInst(
                                 [
-                                Expression.LiteralInstance(
+                                Expression.LitralInst(
                                     IntegerEncoding.EncodeSignedInteger(99)),
                                 ]),
 
@@ -274,20 +274,20 @@ public class PineVMTests
                 {
                     expression =
                     (Expression)
-                    Expression.KernelApplicationInstance
+                    Expression.BuiltinInst
                     (
                         input:
-                        Expression.ListInstance(
+                        Expression.ListInst(
                             [
-                            Expression.ListInstance(
+                            Expression.ListInst(
                                 [
-                                Expression.LiteralInstance(
+                                Expression.LitralInst(
                                     IntegerEncoding.EncodeSignedInteger(10)),
 
-                                Expression.LiteralInstance(
+                                Expression.LitralInst(
                                     IntegerEncoding.EncodeSignedInteger(20)),
 
-                                Expression.LiteralInstance(
+                                Expression.LitralInst(
                                     IntegerEncoding.EncodeSignedInteger(30)),
                                 ]),
 
@@ -318,16 +318,16 @@ public class PineVMTests
                 {
                     expression =
                     (Expression)
-                    Expression.KernelApplicationInstance
+                    Expression.BuiltinInst
                     (
                         input:
-                        Expression.ListInstance(
+                        Expression.ListInst(
                             [
                             Expression.EnvironmentInstance,
 
-                            Expression.ListInstance(
+                            Expression.ListInst(
                                 [
-                                Expression.LiteralInstance(
+                                Expression.LitralInst(
                                     IntegerEncoding.EncodeSignedInteger(99)),
                                 ]),
                             ]),
@@ -356,22 +356,22 @@ public class PineVMTests
                 {
                     expression =
                     (Expression)
-                    Expression.KernelApplicationInstance
+                    Expression.BuiltinInst
                     (
                         input:
-                        Expression.ListInstance(
+                        Expression.ListInst(
                             [
                             Expression.EnvironmentInstance,
 
-                            Expression.ListInstance(
+                            Expression.ListInst(
                                 [
-                                Expression.LiteralInstance(
+                                Expression.LitralInst(
                                     IntegerEncoding.EncodeSignedInteger(10)),
 
-                                Expression.LiteralInstance(
+                                Expression.LitralInst(
                                     IntegerEncoding.EncodeSignedInteger(20)),
 
-                                Expression.LiteralInstance(
+                                Expression.LitralInst(
                                     IntegerEncoding.EncodeSignedInteger(30)),
                                 ]),
                             ]),

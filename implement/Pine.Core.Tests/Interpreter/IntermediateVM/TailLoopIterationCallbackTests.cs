@@ -40,9 +40,9 @@ public class TailLoopIterationCallbackTests
                 TrackEnvConstraint: null);
 
         var rootExpression =
-            new Expression.ParseAndEval(
+            new Expression.Eval(
                 encoded:
-                Expression.LiteralInstance(
+                Expression.LitralInst(
                     ExpressionEncoding.EncodeExpressionAsValue(targetExpression)),
                 environment: Expression.EnvironmentInstance);
 
@@ -127,12 +127,12 @@ public class TailLoopIterationCallbackTests
         var nestedEnvironment = IntegerEncoding.EncodeSignedInteger(7);
 
         var rootExpression =
-            new Expression.ParseAndEval(
+            new Expression.Eval(
                 encoded:
-                Expression.LiteralInstance(
+                Expression.LitralInst(
                     ExpressionEncoding.EncodeExpressionAsValue(Expression.EnvironmentInstance)),
                 environment:
-                Expression.LiteralInstance(nestedEnvironment));
+                Expression.LitralInst(nestedEnvironment));
 
         var iterations = new List<TailLoopIteration>();
 
@@ -199,19 +199,19 @@ public class TailLoopIterationCallbackTests
         var targetInner = Expression.EnvironmentInstance;
 
         var targetMid =
-            new Expression.ParseAndEval(
+            new Expression.Eval(
                 encoded:
-                Expression.LiteralInstance(
+                Expression.LitralInst(
                     ExpressionEncoding.EncodeExpressionAsValue(targetInner)),
                 environment: Expression.EnvironmentInstance);
 
         var rootExpression =
-            new Expression.ParseAndEval(
+            new Expression.Eval(
                 encoded:
-                Expression.LiteralInstance(
+                Expression.LitralInst(
                     ExpressionEncoding.EncodeExpressionAsValue(targetMid)),
                 environment:
-                Expression.LiteralInstance(nestedEnvironment));
+                Expression.LitralInst(nestedEnvironment));
 
         var iterations = new List<TailLoopIteration>();
 
@@ -289,12 +289,12 @@ public class TailLoopIterationCallbackTests
                 iterations.Add(tailLoopIteration));
 
         var expression =
-            Expression.KernelApplicationInstance(
+            Expression.BuiltinInst(
                 nameof(BuiltinFunction.int_add),
-                Expression.ListInstance(
+                Expression.ListInst(
                     [
-                    Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(3)),
-                    Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(4))
+                    Expression.LitralInst(IntegerEncoding.EncodeSignedInteger(3)),
+                    Expression.LitralInst(IntegerEncoding.EncodeSignedInteger(4))
                     ]));
 
         var result = vm.EvaluateExpression(expression, PineValue.EmptyBlob);

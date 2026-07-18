@@ -2435,7 +2435,7 @@ public class CodeAnalysisTests
 
                 expression =
                 (Expression)
-                Expression.LiteralInstance(PineValue.EmptyBlob),
+                Expression.LitralInst(PineValue.EmptyBlob),
 
                 environment =
                 PineValue.EmptyList,
@@ -2450,9 +2450,9 @@ public class CodeAnalysisTests
 
                 expression =
                 (Expression)
-                new Expression.ParseAndEval(
+                new Expression.Eval(
                     encoded: Expression.EnvironmentInstance,
-                    environment: Expression.ListInstance([])),
+                    environment: Expression.ListInst([])),
 
                 environment =
                 PineValue.List(

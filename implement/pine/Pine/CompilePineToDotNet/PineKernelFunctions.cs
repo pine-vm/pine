@@ -36,12 +36,12 @@ public partial class CompileToCSharp
                 Expression.List listExpressionArgument =>
                     ContinueWithList(listExpressionArgument.Items),
 
-                Expression.Literal literalExpressionArgument =>
+                Expression.Litral literalExpressionArgument =>
                     literalExpressionArgument.Value switch
                     {
                         PineValue.ListValue literalList =>
                             ContinueWithList(
-                                literalList.Items.ToArray().Select(Expression.LiteralInstance)),
+                                literalList.Items.ToArray().Select(Expression.LitralInst)),
 
                         _ => null
                     },
@@ -58,7 +58,7 @@ public partial class CompileToCSharp
 
         long? asLiteralInt64 = null;
 
-        if (argumentExpression is Expression.Literal literal)
+        if (argumentExpression is Expression.Litral literal)
         {
             if (IntegerEncoding.ParseSignedIntegerStrict(literal.Value) is Result<string, BigInteger>.Ok okInteger &&
                 IntegerEncoding.EncodeSignedInteger(okInteger.Value) == literal.Value)

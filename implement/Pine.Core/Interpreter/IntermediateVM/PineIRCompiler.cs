@@ -64,7 +64,7 @@ public class PineIRCompiler
     /// </summary>
     public record CompilationContext(
         ImmutableHashSet<Expression> CopyToLocal,
-        IReadOnlyDictionary<Expression.ParseAndEval, JumpToLoop> TailCallElimination,
+        IReadOnlyDictionary<Expression.Eval, JumpToLoop> TailCallElimination,
         StaticFunctionInterface StackFrameParameters,
         int InstructionOffset,
         bool IsTailPosition)
@@ -76,7 +76,7 @@ public class PineIRCompiler
             StaticFunctionInterface stackFrameParameters) =>
             new(
                 CopyToLocal: [],
-                TailCallElimination: ImmutableDictionary<Expression.ParseAndEval, JumpToLoop>.Empty,
+                TailCallElimination: ImmutableDictionary<Expression.Eval, JumpToLoop>.Empty,
                 StackFrameParameters: stackFrameParameters,
                 InstructionOffset: 0,
                 IsTailPosition: true);
@@ -187,9 +187,9 @@ public class PineIRCompiler
     /// <summary>
     /// Enumerates <c>ParseAndEval</c> nodes that can participate in tail-call handling.
     /// </summary>
-    public static IEnumerable<Expression.ParseAndEval> EnumerateTailCalls(Expression expression)
+    public static IEnumerable<Expression.Eval> EnumerateTailCalls(Expression expression)
     {
-        if (expression is Expression.ParseAndEval parseAndEval)
+        if (expression is Expression.Eval parseAndEval)
         {
             yield return parseAndEval;
         }
@@ -207,7 +207,7 @@ public class PineIRCompiler
     }
 
     private static bool IsDirectTailCallToRoot(
-        Expression.ParseAndEval tailCall,
+        Expression.Eval tailCall,
         IReadOnlySet<Expression> rootExpressionForms,
         PineValueClass? envClass,
         PineVMParseCache parseCache)
@@ -490,7 +490,7 @@ public class PineIRCompiler
 
         switch (expr)
         {
-            case Expression.Literal literalExpr:
+            case Expression.Litral literalExpr:
                 return
                     prior
                     .AppendInstruction(
@@ -518,7 +518,7 @@ public class PineIRCompiler
                         prior,
                         parseCache);
 
-            case Expression.ParseAndEval pae:
+            case Expression.Eval pae:
                 return
                     CompileParseAndEval(
                         pae,
@@ -526,7 +526,7 @@ public class PineIRCompiler
                         prior,
                         parseCache);
 
-            case Expression.KernelApplication kernelApp:
+            case Expression.Builtin kernelApp:
                 return
                     CompileKernelApplication(
                         kernelApp,
@@ -634,7 +634,7 @@ public class PineIRCompiler
         var conditionExpression = conditional.Condition;
         var jumpLiteralValue = PineKernelValues.TrueValue;
 
-        while (conditionExpression is Expression.KernelApplication condKernelApp)
+        while (conditionExpression is Expression.Builtin condKernelApp)
         {
             if (condKernelApp.Function is nameof(BuiltinFunction.equal) &&
                 condKernelApp.Input is Expression.List equalList && equalList.Items.Count is 2)
@@ -755,7 +755,7 @@ public class PineIRCompiler
     /// Compiles a <c>ParseAndEval</c> expression, including direct parsing shortcuts and loop-based tail calls.
     /// </summary>
     public static NodeCompilationResult CompileParseAndEval(
-        Expression.ParseAndEval parseAndEvalExpr,
+        Expression.Eval parseAndEvalExpr,
         CompilationContext context,
         NodeCompilationResult prior,
         PineVMParseCache parseCache)
@@ -815,7 +815,7 @@ public class PineIRCompiler
     }
 
     private static NodeCompilationResult CompileGuardedJumpToLoop(
-        Expression.ParseAndEval parseAndEvalExpr,
+        Expression.Eval parseAndEvalExpr,
         JumpToLoop jumpToLoop,
         IReadOnlyList<PineValue> guardExpressionValues,
         CompilationContext context,
@@ -943,10 +943,10 @@ public class PineIRCompiler
     }
 
     /// <summary>
-    /// Compile a <see cref="Expression.KernelApplication"/> to instructions, including dispatching to specialized compilation methods for individual kernel functions and patterns of arguments.
+    /// Compile a <see cref="Expression.Builtin"/> to instructions, including dispatching to specialized compilation methods for individual kernel functions and patterns of arguments.
     /// </summary>
     public static NodeCompilationResult CompileKernelApplication(
-        Expression.KernelApplication kernelApplication,
+        Expression.Builtin kernelApplication,
         CompilationContext context,
         NodeCompilationResult prior,
         PineVMParseCache parseCache)
@@ -1093,7 +1093,7 @@ public class PineIRCompiler
     {
         if (KernelApplication_Equal_TryParse_Starting_With(input, parseCache) is { } startingWith)
         {
-            if (startingWith.expr is Expression.KernelApplication startingWithKernelApp &&
+            if (startingWith.expr is Expression.Builtin startingWithKernelApp &&
                 startingWithKernelApp.Function is nameof(BuiltinFunction.skip) &&
                 startingWithKernelApp.Input is Expression.List skipList &&
                 skipList.Items.Count is 2)
@@ -1154,7 +1154,7 @@ public class PineIRCompiler
             Expression partVar)
         {
             if (IntegerEncoding.ParseSignedIntegerRelaxed(partConst).IsOkOrNullable() is { } constInteger &&
-                partVar is Expression.KernelApplication varKernelApp &&
+                partVar is Expression.Builtin varKernelApp &&
                 varKernelApp.Function is nameof(BuiltinFunction.length))
             {
                 var afterVar =
@@ -1355,14 +1355,14 @@ public class PineIRCompiler
             if (TryParse_IndependentSignedIntegerRelaxed(skipCountExpr, parseCache) is { } skipCount)
             {
                 if (skipCount.IsOne &&
-                    skipSourceExpr is Expression.KernelApplication skipSourceKernelApp &&
+                    skipSourceExpr is Expression.Builtin skipSourceKernelApp &&
                     skipSourceKernelApp.Function is nameof(BuiltinFunction.int_add) &&
                     skipSourceKernelApp.Input is Expression.List skipSourceAddInputList &&
                     skipSourceAddInputList.Items.Count is 2)
                 {
                     NodeCompilationResult? ContinueForAddZeroOperand(Expression addZeroOperand)
                     {
-                        if (addZeroOperand is Expression.KernelApplication addOperandKernelApp &&
+                        if (addZeroOperand is Expression.Builtin addOperandKernelApp &&
                             addOperandKernelApp.Function is nameof(BuiltinFunction.concat) &&
                             addOperandKernelApp.Input is Expression.List concatList &&
                             concatList.Items.Count is 2 &&
@@ -1643,7 +1643,7 @@ public class PineIRCompiler
         PineVMParseCache parseCache)
     {
         if (TryParse_KernelTake_Const(input, parseCache) is { } takeConst &&
-            takeConst.sourceExpr is Expression.KernelApplication takeSourceKernelApp &&
+            takeConst.sourceExpr is Expression.Builtin takeSourceKernelApp &&
             takeSourceKernelApp.Function is nameof(BuiltinFunction.reverse))
         {
             var afterSource =
@@ -1676,12 +1676,12 @@ public class PineIRCompiler
         NodeCompilationResult prior,
         PineVMParseCache parseCache)
     {
-        if (input is Expression.KernelApplication innerKernelApp)
+        if (input is Expression.Builtin innerKernelApp)
         {
             if (innerKernelApp.Function is nameof(BuiltinFunction.equal) &&
                 innerKernelApp.Input is Expression.List equalList && equalList.Items.Count is 2)
             {
-                if (equalList.Items[0] is Expression.Literal leftLiteralExpr)
+                if (equalList.Items[0] is Expression.Litral leftLiteralExpr)
                 {
                     var afterRight =
                         CompileExpressionTransitive(
@@ -1696,7 +1696,7 @@ public class PineIRCompiler
                             StackInstruction.Not_Equal_Binary_Const(leftLiteralExpr.Value));
                 }
 
-                if (equalList.Items[1] is Expression.Literal rightLiteralExpr)
+                if (equalList.Items[1] is Expression.Litral rightLiteralExpr)
                 {
                     var afterLeft =
                         CompileExpressionTransitive(
@@ -1796,7 +1796,7 @@ public class PineIRCompiler
             {
                 var itemExpr = listExpr.Items[i];
 
-                if (itemExpr is Expression.Literal literalExpr)
+                if (itemExpr is Expression.Litral literalExpr)
                 {
                     if (BuiltinFunction.SignedIntegerFromValueRelaxed(literalExpr.Value) is not { } intValue)
                     {
@@ -1946,7 +1946,7 @@ public class PineIRCompiler
         Expression expr,
         PineVMParseCache parseCache)
     {
-        if (expr is Expression.KernelApplication kernelApp &&
+        if (expr is Expression.Builtin kernelApp &&
             kernelApp.Function is nameof(BuiltinFunction.concat) &&
             kernelApp.Input is Expression.List inputList &&
             inputList.Items.Count is 2)
@@ -1978,7 +1978,7 @@ public class PineIRCompiler
         Expression expr,
         PineVMParseCache parseCache)
     {
-        if (expr is Expression.KernelApplication kernelApp &&
+        if (expr is Expression.Builtin kernelApp &&
             kernelApp.Function is nameof(BuiltinFunction.concat) &&
             kernelApp.Input is Expression.List inputList &&
             inputList.Items.Count is 2)
@@ -2010,7 +2010,7 @@ public class PineIRCompiler
         Expression expr,
         PineVMParseCache parseCache)
     {
-        if (expr is Expression.KernelApplication kernelApp)
+        if (expr is Expression.Builtin kernelApp)
         {
             if (kernelApp.Function is nameof(BuiltinFunction.negate))
             {
@@ -2069,7 +2069,7 @@ public class PineIRCompiler
             {
                 var itemExpr = listExpr.Items[i];
 
-                if (itemExpr is Expression.Literal literalExpr)
+                if (itemExpr is Expression.Litral literalExpr)
                 {
                     if (BuiltinFunction.SignedIntegerFromValueRelaxed(literalExpr.Value) is not { } intValue)
                     {
@@ -2385,7 +2385,7 @@ public class PineIRCompiler
             {
                 var itemExpr = listExpr.Items[i];
 
-                if (itemExpr is Expression.Literal literalExpr)
+                if (itemExpr is Expression.Litral literalExpr)
                 {
                     constItems.Add(literalExpr.Value);
                 }
@@ -2467,7 +2467,7 @@ public class PineIRCompiler
             {
                 var itemExpr = listExpr.Items[i];
 
-                if (itemExpr is Expression.Literal literalExpr)
+                if (itemExpr is Expression.Litral literalExpr)
                 {
                     constItems.Add(literalExpr.Value);
                 }
@@ -2718,7 +2718,7 @@ public class PineIRCompiler
         Expression expression,
         PineVMParseCache parseCache)
     {
-        if (expression is not Expression.KernelApplication kernelApp)
+        if (expression is not Expression.Builtin kernelApp)
         {
             return null;
         }
@@ -2766,7 +2766,7 @@ public class PineIRCompiler
 
     private static (Expression skipCountExpr, Expression sourceExpr)? TryParse_KernelSkip(Expression expression)
     {
-        if (expression is not Expression.KernelApplication kernelApp ||
+        if (expression is not Expression.Builtin kernelApp ||
             kernelApp.Function is not nameof(BuiltinFunction.skip) ||
             kernelApp.Input is not Expression.List skipList ||
             skipList.Items.Count is not 2)
@@ -2800,7 +2800,7 @@ public class PineIRCompiler
     private static (Expression takeCountExpr, Expression sourceExpr)? TryParse_KernelTake(
         Expression expression)
     {
-        if (expression is not Expression.KernelApplication kernelApp ||
+        if (expression is not Expression.Builtin kernelApp ||
             kernelApp.Function is not nameof(BuiltinFunction.take) ||
             kernelApp.Input is not Expression.List takeList ||
             takeList.Items.Count is not 2)
@@ -2846,13 +2846,13 @@ public class PineIRCompiler
     /// </summary>
     public static bool ExpressionLargeEnoughForCSE(Expression expression)
     {
-        if (expression is Expression.Literal or Expression.Environment)
+        if (expression is Expression.Litral or Expression.Environment)
             return false;
 
-        if (expression is Expression.KernelApplication)
+        if (expression is Expression.Builtin)
             return true;
 
-        if (expression is Expression.ParseAndEval)
+        if (expression is Expression.Eval)
             return true;
 
         if (expression is Expression.List list)
@@ -2864,7 +2864,7 @@ public class PineIRCompiler
             }
         }
 
-        if (expression is Expression.StringTag stringTag)
+        if (expression is Expression.Label stringTag)
         {
             return ExpressionLargeEnoughForCSE(stringTag.Tagged);
         }

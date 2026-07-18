@@ -44,7 +44,7 @@ public abstract record StaticExpression<IdentifierT>
 
     /// <summary>
     /// Create a literal expression that wraps a concrete <see cref="PineValue"/>.
-    /// Analog to <see cref="Expression.Literal"/>.
+    /// Analog to <see cref="Expression.Litral"/>.
     /// </summary>
     /// <param name="value">The value to wrap in a literal expression.</param>
     public static StaticExpression<IdentifierT> LiteralInstance(PineValue value) =>
@@ -188,7 +188,7 @@ public abstract record StaticExpression<IdentifierT>
     }
 
     /// <summary>
-    /// Analog to <see cref="Expression.Literal"/>.
+    /// Analog to <see cref="Expression.Litral"/>.
     /// A literal expression only contains a concrete value.
     /// </summary>
     public record Literal(
@@ -323,7 +323,7 @@ public abstract record StaticExpression<IdentifierT>
     }
 
     /// <summary>
-    /// Analog to <see cref="Expression.KernelApplication"/>.
+    /// Analog to <see cref="Expression.Builtin"/>.
     /// Application of a kernel function to an input expression.
     /// 
     /// Kernel functions are the built-in functions of the Pine language.

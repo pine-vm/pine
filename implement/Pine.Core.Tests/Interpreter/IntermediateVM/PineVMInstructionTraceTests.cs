@@ -35,12 +35,12 @@ public class PineVMInstructionTraceTests
                 trace.Add(executedStackInstruction));
 
         var expression =
-            Expression.KernelApplicationInstance(
+            Expression.BuiltinInst(
                 nameof(BuiltinFunction.int_add),
-                Expression.ListInstance(
+                Expression.ListInst(
                     [
-                    Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(3)),
-                    Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(4))
+                    Expression.LitralInst(IntegerEncoding.EncodeSignedInteger(3)),
+                    Expression.LitralInst(IntegerEncoding.EncodeSignedInteger(4))
                     ]));
 
         var result = vm.EvaluateExpression(expression, PineValue.EmptyBlob);
@@ -86,12 +86,12 @@ public class PineVMInstructionTraceTests
         var nestedEnvironment = IntegerEncoding.EncodeSignedInteger(7);
 
         var expression =
-            new Expression.ParseAndEval(
+            new Expression.Eval(
                 encoded:
-                Expression.LiteralInstance(
+                Expression.LitralInst(
                     ExpressionEncoding.EncodeExpressionAsValue(Expression.EnvironmentInstance)),
                 environment:
-                Expression.LiteralInstance(nestedEnvironment));
+                Expression.LitralInst(nestedEnvironment));
 
         var result = vm.EvaluateExpression(expression, PineValue.EmptyBlob);
 
@@ -131,12 +131,12 @@ public class PineVMInstructionTraceTests
         var nestedEnvironment = IntegerEncoding.EncodeSignedInteger(7);
 
         var expression =
-            new Expression.ParseAndEval(
+            new Expression.Eval(
                 encoded:
-                Expression.LiteralInstance(
+                Expression.LitralInst(
                     ExpressionEncoding.EncodeExpressionAsValue(Expression.EnvironmentInstance)),
                 environment:
-                Expression.LiteralInstance(nestedEnvironment));
+                Expression.LitralInst(nestedEnvironment));
 
         var evalResult =
             vm.EvaluateExpressionOnCustomStack(

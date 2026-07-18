@@ -94,50 +94,50 @@ public class InlineSmallNonRecursiveCalleeRegressionTests
         var charArg = Expression.EnvironmentInstance;
 
         var codeExpr =
-            Expression.KernelApplicationInstance(
+            Expression.BuiltinInst(
                 function: nameof(BuiltinFunction.concat),
                 input:
-                Expression.ListInstance(
+                Expression.ListInst(
                     [
-                    Expression.KernelApplicationInstance(
+                    Expression.BuiltinInst(
                         function: nameof(BuiltinFunction.take),
                         input:
-                        Expression.ListInstance(
+                        Expression.ListInst(
                             [
-                            Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(1)),
-                            Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(0)),
+                            Expression.LitralInst(IntegerEncoding.EncodeSignedInteger(1)),
+                            Expression.LitralInst(IntegerEncoding.EncodeSignedInteger(0)),
                             ])),
                     charArg,
                     ]));
 
         var upperRange =
-            Expression.KernelApplicationInstance(
+            Expression.BuiltinInst(
                 function: nameof(BuiltinFunction.int_is_sorted_asc),
                 input:
-                Expression.ListInstance(
+                Expression.ListInst(
                     [
-                    Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(0x41)),
+                    Expression.LitralInst(IntegerEncoding.EncodeSignedInteger(0x41)),
                     codeExpr,
-                    Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(0x5A)),
+                    Expression.LitralInst(IntegerEncoding.EncodeSignedInteger(0x5A)),
                     ]));
 
         var lowerRange =
-            Expression.KernelApplicationInstance(
+            Expression.BuiltinInst(
                 function: nameof(BuiltinFunction.int_is_sorted_asc),
                 input:
-                Expression.ListInstance(
+                Expression.ListInst(
                     [
-                    Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(0x61)),
+                    Expression.LitralInst(IntegerEncoding.EncodeSignedInteger(0x61)),
                     codeExpr,
-                    Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(0x7A)),
+                    Expression.LitralInst(IntegerEncoding.EncodeSignedInteger(0x7A)),
                     ]));
 
         // True/False in Elm-on-Pine are blob singletons 0x04 / 0x02.
         var trueLiteral =
-            Expression.LiteralInstance(PineValue.Blob([0x04]));
+            Expression.LitralInst(PineValue.Blob([0x04]));
 
         var predicateBody =
-            Expression.ConditionalInstance(
+            Expression.ConditionalInst(
                 condition: upperRange,
                 falseBranch: lowerRange,
                 trueBranch: trueLiteral);
@@ -174,16 +174,16 @@ public class InlineSmallNonRecursiveCalleeRegressionTests
         var offsetRef = EnvironmentPathExpression([2]);
 
         var nextChar =
-            Expression.KernelApplicationInstance(
+            Expression.BuiltinInst(
                 function: nameof(BuiltinFunction.take),
                 input:
-                Expression.ListInstance(
+                Expression.ListInst(
                     [
-                    Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(1)),
-                    Expression.KernelApplicationInstance(
+                    Expression.LitralInst(IntegerEncoding.EncodeSignedInteger(1)),
+                    Expression.BuiltinInst(
                         function: nameof(BuiltinFunction.skip),
                         input:
-                        Expression.ListInstance(
+                        Expression.ListInst(
                             [
                             offsetRef,
                             srcBytesRef,
@@ -191,37 +191,37 @@ public class InlineSmallNonRecursiveCalleeRegressionTests
                     ]));
 
         var endOfInputCheck =
-            Expression.KernelApplicationInstance(
+            Expression.BuiltinInst(
                 function: nameof(BuiltinFunction.equal),
                 input:
-                Expression.ListInstance(
+                Expression.ListInst(
                     [
-                    Expression.KernelApplicationInstance(
+                    Expression.BuiltinInst(
                         function: nameof(BuiltinFunction.length),
                         input: nextChar),
-                    Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(0)),
+                    Expression.LitralInst(IntegerEncoding.EncodeSignedInteger(0)),
                     ]));
 
         var predicateCall =
-            new Expression.ParseAndEval(
-                encoded: Expression.LiteralInstance(predicateBodyEncoded),
+            new Expression.Eval(
+                encoded: Expression.LitralInst(predicateBodyEncoded),
                 environment: nextChar);
 
         var offsetPlusOne =
-            Expression.KernelApplicationInstance(
+            Expression.BuiltinInst(
                 function: nameof(BuiltinFunction.int_add),
                 input:
-                Expression.ListInstance(
+                Expression.ListInst(
                     [
                     offsetRef,
-                    Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(1)),
+                    Expression.LitralInst(IntegerEncoding.EncodeSignedInteger(1)),
                     ]));
 
         var recursiveCall =
-            new Expression.ParseAndEval(
+            new Expression.Eval(
                 encoded: selfRef,
                 environment:
-                Expression.ListInstance(
+                Expression.ListInst(
                     [
                     selfRef,
                     srcBytesRef,
@@ -229,10 +229,10 @@ public class InlineSmallNonRecursiveCalleeRegressionTests
                     ]));
 
         var helperBody =
-            Expression.ConditionalInstance(
+            Expression.ConditionalInst(
                 condition: endOfInputCheck,
                 falseBranch:
-                Expression.ConditionalInstance(
+                Expression.ConditionalInst(
                     condition: predicateCall,
                     falseBranch: offsetRef,
                     trueBranch: recursiveCall),
@@ -254,14 +254,14 @@ public class InlineSmallNonRecursiveCalleeRegressionTests
         var srcBytesValue = PineValue.Blob([0x61, 0x62, 0x63]); // "abc"
 
         var rootExpression =
-            new Expression.ParseAndEval(
-                encoded: Expression.LiteralInstance(helperBodyEncoded),
+            new Expression.Eval(
+                encoded: Expression.LitralInst(helperBodyEncoded),
                 environment:
-                Expression.ListInstance(
+                Expression.ListInst(
                     [
-                    Expression.LiteralInstance(helperBodyEncoded),
-                    Expression.LiteralInstance(srcBytesValue),
-                    Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(0)),
+                    Expression.LitralInst(helperBodyEncoded),
+                    Expression.LitralInst(srcBytesValue),
+                    Expression.LitralInst(IntegerEncoding.EncodeSignedInteger(0)),
                     ]));
 
         // -------- Run on a VM that captures every IR compilation --------

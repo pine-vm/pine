@@ -682,7 +682,7 @@ public partial class CompileToCSharp
              * can end up too in too outer scope, when they should be contained in a branch that is not taken
              * when the recursion reaches the base case.
              * */
-            !Expression.EnumerateSelfAndDescendants(subexpr).Any(sec => sec is Expression.ParseAndEval))
+            subexpr.EvalCount is 0)
             .ToImmutableArray();
 
         var newLetBindings =
@@ -755,10 +755,10 @@ public partial class CompileToCSharp
     public static bool IncludeForCommonSubexpressionElimination(Expression expression) =>
         expression switch
         {
-            Expression.ParseAndEval => true,
-            Expression.KernelApplication => true,
+            Expression.Eval => true,
+            Expression.Builtin => true,
             Expression.Conditional => true,
-            Expression.StringTag => true,
+            Expression.Label => true,
             _ => false
         };
 
@@ -766,7 +766,7 @@ public partial class CompileToCSharp
         Expression expression,
         ExpressionCompilationEnvironment environment)
     {
-        if (expression is Expression.Literal literalExpr)
+        if (expression is Expression.Litral literalExpr)
         {
             return
                 CompileToCSharpExpression(
@@ -785,7 +785,7 @@ public partial class CompileToCSharp
                 {
                     ExprResolvedInFunction.ExprResolvedToLiteral resolvedAsLiteral =>
                     CompileToCSharpExpression(
-                        Expression.LiteralInstance(resolvedAsLiteral.Value),
+                        Expression.LitralInst(resolvedAsLiteral.Value),
                         environment.FunctionEnvironment.DeclarationSyntaxContext),
 
                     ExprResolvedInFunction.ExprResolvedToFunctionParam resolvedToParam =>
@@ -814,13 +814,13 @@ public partial class CompileToCSharp
                 Expression.Conditional conditional =>
                 CompileToCSharpExpression(conditional, environment),
 
-                Expression.KernelApplication kernelApp =>
+                Expression.Builtin kernelApp =>
                 CompileToCSharpExpression(kernelApp, environment),
 
-                Expression.ParseAndEval parseAndEval =>
+                Expression.Eval parseAndEval =>
                 CompileToCSharpExpression(parseAndEval, environment),
 
-                Expression.StringTag stringTagExpr =>
+                Expression.Label stringTagExpr =>
                 CompileToCSharpExpression(stringTagExpr, environment),
 
                 _ =>
@@ -874,7 +874,7 @@ public partial class CompileToCSharp
     }
 
     public static Result<string, CompiledExpression> CompileToCSharpExpression(
-        Expression.KernelApplication kernelApplicationExpression,
+        Expression.Builtin kernelApplicationExpression,
         ExpressionCompilationEnvironment environment)
     {
         if (!PineKernelFunctions.KernelFunctionsInfo.Value.TryGetValue(kernelApplicationExpression.Function,
@@ -1037,7 +1037,7 @@ public partial class CompileToCSharp
     }
 
     public static Result<string, CompiledExpression> CompileToCSharpExpression(
-        Expression.ParseAndEval parseAndEvalExpr,
+        Expression.Eval parseAndEvalExpr,
         ExpressionCompilationEnvironment environment)
     {
         var parseAndEvalExprValue =
@@ -1142,9 +1142,9 @@ public partial class CompileToCSharp
                         PineCSharpSyntaxFactory.GenericInvocationThrowingRuntimeExceptionOnError(
                             environment.FunctionEnvironment,
                             NewConstructorOfExpressionVariant(
-                                nameof(Expression.ParseAndEval),
+                                nameof(Expression.Eval),
                                 NewConstructorOfExpressionVariant(
-                                    nameof(Expression.Literal),
+                                    nameof(Expression.Litral),
                                     exprCompiledExpr.Syntax),
                                 NewConstructorOfExpressionVariantWithoutArguments(
                                     nameof(Expression.Environment))),
@@ -1438,7 +1438,7 @@ public partial class CompileToCSharp
             {
                 return expression switch
                 {
-                    Expression.Literal literal =>
+                    Expression.Litral literal =>
                     Result<string, Expression>.ok(literal),
 
                     Expression.Environment =>
@@ -1447,7 +1447,7 @@ public partial class CompileToCSharp
                     Expression.List list =>
                     list.Items.Select(e => TransformPineExpressionWithOptionalReplacement(findReplacement, e))
                     .ListCombine()
-                    .Map(elements => (Expression)Expression.ListInstance([.. elements])),
+                    .Map(elements => (Expression)Expression.ListInst([.. elements])),
 
                     Expression.Conditional conditional =>
                     TransformPineExpressionWithOptionalReplacement(
@@ -1462,21 +1462,21 @@ public partial class CompileToCSharp
                         findReplacement,
                         conditional.FalseBranch)
                     .Map(transformedIfFalse =>
-                    (Expression)Expression.ConditionalInstance(
+                    (Expression)Expression.ConditionalInst(
                         transformedCondition,
                         falseBranch: transformedIfFalse,
                         trueBranch: transformedIfTrue)))),
 
-                    Expression.KernelApplication kernelAppl =>
+                    Expression.Builtin kernelAppl =>
                     TransformPineExpressionWithOptionalReplacement(findReplacement, kernelAppl.Input)
                     .MapError(err => "Failed to transform kernel application argument: " + err)
-                    .Map(transformedArgument => (Expression)Expression.KernelApplicationInstance(
+                    .Map(transformedArgument => (Expression)Expression.BuiltinInst(
                         function: kernelAppl.Function,
                         input: transformedArgument)),
 
-                    Expression.StringTag stringTag =>
+                    Expression.Label stringTag =>
                     TransformPineExpressionWithOptionalReplacement(findReplacement, stringTag.Tagged)
-                    .Map(transformedTagged => (Expression)new Expression.StringTag(tag: stringTag.Tag, tagged: transformedTagged)),
+                    .Map(transformedTagged => (Expression)new Expression.Label(tag: stringTag.Tag, tagged: transformedTagged)),
 
                     _ =>
                     Result<string, Expression>.err("Unsupported expression type: " + expression.GetType().FullName)
@@ -1485,7 +1485,7 @@ public partial class CompileToCSharp
     }
 
     public static Result<string, CompiledExpression> CompileToCSharpExpression(
-        Expression.Literal literalExpression,
+        Expression.Litral literalExpression,
         DeclarationSyntaxContext declarationSyntaxContext)
     {
         if (literalExpression.Value == PineValue.EmptyList)
@@ -1504,7 +1504,7 @@ public partial class CompileToCSharp
         "value_" + Convert.ToHexStringLower(s_compilerCache.ComputeHash(pineValue).Span)[..10];
 
     public static Result<string, CompiledExpression> CompileToCSharpExpression(
-        Expression.StringTag stringTagExpression,
+        Expression.Label stringTagExpression,
         ExpressionCompilationEnvironment environment)
     {
         Console.WriteLine("Compiling string tag: " + stringTagExpression.Tag);
@@ -1523,7 +1523,7 @@ public partial class CompileToCSharp
     private static IEnumerable<PineValue> EnumerateAllLiterals(Expression expression) =>
         expression switch
         {
-            Expression.Literal literal =>
+            Expression.Litral literal =>
             [literal.Value],
 
             Expression.Environment =>
@@ -1532,7 +1532,7 @@ public partial class CompileToCSharp
             Expression.List list =>
             list.Items.SelectMany(EnumerateAllLiterals),
 
-            Expression.KernelApplication kernelApplicationExpression =>
+            Expression.Builtin kernelApplicationExpression =>
             EnumerateAllLiterals(kernelApplicationExpression.Input),
 
             Expression.Conditional conditionalExpression =>
@@ -1542,12 +1542,12 @@ public partial class CompileToCSharp
             ,
                 .. EnumerateAllLiterals(conditionalExpression.FalseBranch)],
 
-            Expression.ParseAndEval parseAndEvalExpr =>
+            Expression.Eval parseAndEvalExpr =>
             [.. EnumerateAllLiterals(parseAndEvalExpr.Encoded)
             ,
                 .. EnumerateAllLiterals(parseAndEvalExpr.Environment)],
 
-            Expression.StringTag stringTagExpression =>
+            Expression.Label stringTagExpression =>
             EnumerateAllLiterals(stringTagExpression.Tagged),
 
             _ => throw new NotImplementedException("Expression type not implemented: " + expression.GetType().FullName)
@@ -1593,18 +1593,18 @@ public partial class CompileToCSharp
 
             switch (expr)
             {
-                case Expression.Literal:
+                case Expression.Litral:
                     // Leaf node, no further traversal needed
                     break;
                 case Expression.List listExpr:
                     foreach (var subExpr in listExpr.Items)
                         Traverse(subExpr, isConditional);
                     break;
-                case Expression.ParseAndEval parseAndEvalExpr:
+                case Expression.Eval parseAndEvalExpr:
                     Traverse(parseAndEvalExpr.Encoded, isConditional);
                     Traverse(parseAndEvalExpr.Environment, isConditional);
                     break;
-                case Expression.KernelApplication kernelAppExpr:
+                case Expression.Builtin kernelAppExpr:
                     Traverse(kernelAppExpr.Input, isConditional);
                     break;
                 case Expression.Conditional conditionalExpr:
@@ -1617,7 +1617,7 @@ public partial class CompileToCSharp
                 case Expression.Environment:
                     // Leaf node, no further traversal needed
                     break;
-                case Expression.StringTag stringTagExpr:
+                case Expression.Label stringTagExpr:
                     Traverse(stringTagExpr.Tagged, isConditional);
                     break;
                 default:

@@ -1,16 +1,16 @@
 {
   "Conditional": [
     {
-      "KernelApplication": [
+      "Builtin": [
         "head",
         {
-          "KernelApplication": [
+          "Builtin": [
             "skip",
             {
               "List": [
                 [
                   {
-                    "Literal": [
+                    "Litral": [
                       11
                     ]
                   },
@@ -27,16 +27,16 @@
     {
       "Conditional": [
         {
-          "KernelApplication": [
+          "Builtin": [
             "head",
             {
-              "KernelApplication": [
+              "Builtin": [
                 "skip",
                 {
                   "List": [
                     [
                       {
-                        "Literal": [
+                        "Litral": [
                           13
                         ]
                       },
@@ -51,14 +51,14 @@
           ]
         },
         {
-          "Literal": [
+          "Litral": [
             {
               "AsBase64": "ZQ=="
             }
           ]
         },
         {
-          "Literal": [
+          "Litral": [
             {
               "AsBase64": "yQ=="
             }
@@ -67,7 +67,7 @@
       ]
     },
     {
-      "Literal": [
+      "Litral": [
         {
           "AsBase64": "Cw=="
         }

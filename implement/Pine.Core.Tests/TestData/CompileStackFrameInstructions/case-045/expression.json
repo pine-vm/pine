@@ -1,33 +1,33 @@
 {
-  "KernelApplication": [
+  "Builtin": [
     "int_is_sorted_asc",
     {
       "List": [
         [
           {
-            "Literal": [
+            "Litral": [
               83
             ]
           },
           {
-            "KernelApplication": [
+            "Builtin": [
               "concat",
               {
                 "List": [
                   [
                     {
-                      "KernelApplication": [
+                      "Builtin": [
                         "take",
                         {
                           "List": [
                             [
                               {
-                                "Literal": [
+                                "Litral": [
                                   1
                                 ]
                               },
                               {
-                                "Literal": [
+                                "Litral": [
                                   0
                                 ]
                               }
@@ -37,7 +37,7 @@
                       ]
                     },
                     {
-                      "KernelApplication": [
+                      "Builtin": [
                         "head",
                         {
                           "Environment": [
@@ -51,7 +51,7 @@
             ]
           },
           {
-            "Literal": [
+            "Litral": [
               107
             ]
           }

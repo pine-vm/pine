@@ -1,49 +1,49 @@
 {
-  "KernelApplication": [
+  "Builtin": [
     "head",
     {
-      "KernelApplication": [
+      "Builtin": [
         "reverse",
         {
-          "KernelApplication": [
+          "Builtin": [
             "take",
             {
               "List": [
                 [
                   {
-                    "Literal": [
+                    "Litral": [
                       2
                     ]
                   },
                   {
-                    "KernelApplication": [
+                    "Builtin": [
                       "reverse",
                       {
                         "List": [
                           [
                             {
-                              "Literal": [
+                              "Litral": [
                                 {
                                   "AsBase64": "AQ=="
                                 }
                               ]
                             },
                             {
-                              "Literal": [
+                              "Litral": [
                                 {
                                   "AsBase64": "Ag=="
                                 }
                               ]
                             },
                             {
-                              "Literal": [
+                              "Litral": [
                                 {
                                   "AsBase64": "Aw=="
                                 }
                               ]
                             },
                             {
-                              "Literal": [
+                              "Litral": [
                                 {
                                   "AsBase64": "BA=="
                                 }

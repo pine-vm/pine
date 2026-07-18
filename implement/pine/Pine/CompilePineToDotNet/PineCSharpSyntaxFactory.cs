@@ -354,17 +354,17 @@ public static class PineCSharpSyntaxFactory
             ?
             compositionExpr
             :
-            Expression.KernelApplicationInstance(
+            Expression.BuiltinInst(
                 function: "skip",
                 input:
-                Expression.ListInstance(
+                Expression.ListInst(
                     [
-                    Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(currentOffset)),
+                    Expression.LitralInst(IntegerEncoding.EncodeSignedInteger(currentOffset)),
                         compositionExpr
                     ]));
 
         var currentExpr =
-            Expression.KernelApplicationInstance(
+            Expression.BuiltinInst(
                 function: "head",
                 input: skippedExpr);
 

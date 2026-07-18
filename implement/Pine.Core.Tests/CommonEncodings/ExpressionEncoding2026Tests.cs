@@ -9,18 +9,18 @@ namespace Pine.Core.Tests.CommonEncodings;
 public class ExpressionEncoding2026Tests
 {
     private static readonly Expression s_literal =
-        Expression.LiteralInstance(StringEncoding.ValueFromString("literal"));
+        Expression.LitralInst(StringEncoding.ValueFromString("literal"));
 
     [Fact]
     public void EncodeExpressionAsValue_uses_the_2026_shapes_and_labels()
     {
-        Expression input = Expression.LiteralInstance(StringEncoding.ValueFromString("input"));
-        Expression condition = Expression.LiteralInstance(StringEncoding.ValueFromString("condition"));
-        Expression falseBranch = Expression.LiteralInstance(StringEncoding.ValueFromString("false"));
-        Expression trueBranch = Expression.LiteralInstance(StringEncoding.ValueFromString("true"));
-        Expression encoded = Expression.LiteralInstance(StringEncoding.ValueFromString("encoded"));
+        Expression input = Expression.LitralInst(StringEncoding.ValueFromString("input"));
+        Expression condition = Expression.LitralInst(StringEncoding.ValueFromString("condition"));
+        Expression falseBranch = Expression.LitralInst(StringEncoding.ValueFromString("false"));
+        Expression trueBranch = Expression.LitralInst(StringEncoding.ValueFromString("true"));
+        Expression encoded = Expression.LitralInst(StringEncoding.ValueFromString("encoded"));
         Expression environment = Expression.EnvironmentInstance;
-        Expression labeled = Expression.LiteralInstance(StringEncoding.ValueFromString("labeled"));
+        Expression labeled = Expression.LitralInst(StringEncoding.ValueFromString("labeled"));
 
         var testCases =
             new (Expression expression, PineValue.ListValue expected)[]
@@ -33,7 +33,7 @@ public class ExpressionEncoding2026Tests
                         StringEncoding.ValueFromString("literal")
                         ])),
                 (
-                    Expression.ListInstance([s_literal, input]),
+                    Expression.ListInst([s_literal, input]),
                     PineValue.List(
                         [
                         StringEncoding.ValueFromString("List"),
@@ -41,7 +41,7 @@ public class ExpressionEncoding2026Tests
                         ExpressionEncoding2026.EncodeExpressionAsValue(input)
                         ])),
                 (
-                    Expression.KernelApplicationInstance("length", input),
+                    Expression.BuiltinInst("length", input),
                     PineValue.List(
                         [
                         StringEncoding.ValueFromString("Builtin"),
@@ -49,7 +49,7 @@ public class ExpressionEncoding2026Tests
                         ExpressionEncoding2026.EncodeExpressionAsValue(input)
                         ])),
                 (
-                    Expression.ConditionalInstance(condition, falseBranch, trueBranch),
+                    Expression.ConditionalInst(condition, falseBranch, trueBranch),
                     PineValue.List(
                         [
                         StringEncoding.ValueFromString("Condition"),
@@ -61,7 +61,7 @@ public class ExpressionEncoding2026Tests
                     Expression.EnvironmentInstance,
                     PineValue.List([StringEncoding.ValueFromString("Environment")])),
                 (
-                    new Expression.ParseAndEval(encoded, environment),
+                    new Expression.Eval(encoded, environment),
                     PineValue.List(
                         [
                         StringEncoding.ValueFromString("Eval"),
@@ -69,7 +69,7 @@ public class ExpressionEncoding2026Tests
                         ExpressionEncoding2026.EncodeExpressionAsValue(environment)
                         ])),
                 (
-                    new Expression.StringTag("label", labeled),
+                    new Expression.Label("label", labeled),
                     PineValue.List(
                         [
                         StringEncoding.ValueFromString("Label"),
@@ -97,15 +97,15 @@ public class ExpressionEncoding2026Tests
             {
                 s_literal,
                 Expression.EmptyList,
-                Expression.ListInstance([s_literal, Expression.EnvironmentInstance]),
-                Expression.KernelApplicationInstance("length", s_literal),
-                Expression.ConditionalInstance(
+                Expression.ListInst([s_literal, Expression.EnvironmentInstance]),
+                Expression.BuiltinInst("length", s_literal),
+                Expression.ConditionalInst(
                     s_literal,
                     Expression.EmptyList,
                     Expression.EnvironmentInstance),
                 Expression.EnvironmentInstance,
-                new Expression.ParseAndEval(s_literal, Expression.EnvironmentInstance),
-                new Expression.StringTag("label", s_literal)
+                new Expression.Eval(s_literal, Expression.EnvironmentInstance),
+                new Expression.Label("label", s_literal)
             };
 
         foreach (var expression in expressions)
@@ -129,7 +129,7 @@ public class ExpressionEncoding2026Tests
                 PineValue.EmptyList
                 ]);
 
-        var expression = new Expression.StringTag(labelValue, s_literal);
+        var expression = new Expression.Label(labelValue, s_literal);
 
         var encoded = ExpressionEncoding2026.EncodeExpressionAsValue(expression);
         encoded.Items.Span[1].Should().Be(labelValue);
@@ -137,7 +137,7 @@ public class ExpressionEncoding2026Tests
         var decoded =
             ExpressionEncoding2026.ParseExpressionFromValue(encoded)
             .Extract(error => throw new Exception(error))
-            .Should().BeOfType<Expression.StringTag>().Subject;
+            .Should().BeOfType<Expression.Label>().Subject;
 
         decoded.LabelValue.Should().Be(labelValue);
         decoded.Should().Be(expression);
@@ -204,12 +204,12 @@ public class ExpressionEncoding2026Tests
     [Fact]
     public void Encoder_delegate_is_consulted_once_for_each_direct_subexpression()
     {
-        Expression condition = Expression.LiteralInstance(StringEncoding.ValueFromString("condition"));
-        Expression falseBranch = Expression.LiteralInstance(StringEncoding.ValueFromString("false"));
-        Expression trueBranch = Expression.LiteralInstance(StringEncoding.ValueFromString("true"));
+        Expression condition = Expression.LitralInst(StringEncoding.ValueFromString("condition"));
+        Expression falseBranch = Expression.LitralInst(StringEncoding.ValueFromString("false"));
+        Expression trueBranch = Expression.LitralInst(StringEncoding.ValueFromString("true"));
 
         var expression =
-            Expression.ConditionalInstance(condition, falseBranch, trueBranch);
+            Expression.ConditionalInst(condition, falseBranch, trueBranch);
 
         var calls = new List<Expression>();
 
@@ -232,7 +232,7 @@ public class ExpressionEncoding2026Tests
         Expression nested = s_literal;
 
         for (var i = 0; i < depth; ++i)
-            nested = Expression.KernelApplicationInstance(nameof(BuiltinFunction.length), nested);
+            nested = Expression.BuiltinInst(nameof(BuiltinFunction.length), nested);
 
         var encoded = ExpressionEncoding2026.EncodeExpressionAsValue(nested);
         var decoded =
@@ -243,7 +243,7 @@ public class ExpressionEncoding2026Tests
 
         for (var i = 0; i < depth; ++i)
         {
-            var builtin = current.Should().BeOfType<Expression.KernelApplication>().Subject;
+            var builtin = current.Should().BeOfType<Expression.Builtin>().Subject;
 
             builtin.Function.Should().Be(nameof(BuiltinFunction.length));
             current = builtin.Input;

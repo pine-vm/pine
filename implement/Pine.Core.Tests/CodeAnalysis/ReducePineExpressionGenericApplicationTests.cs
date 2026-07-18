@@ -13,7 +13,7 @@ namespace Pine.Core.Tests.CodeAnalysis;
 /// <summary>
 /// Focused tests for the optimization that consolidates the generic form of partial
 /// application emitted by frontend compilers
-/// (see <see cref="ReducePineExpression.TryConsolidateGenericFunctionApplicationChain(Expression.ParseAndEval, PineVMParseCache)"/>).
+/// (see <see cref="ReducePineExpression.TryConsolidateGenericFunctionApplicationChain(Expression.Eval, PineVMParseCache)"/>).
 /// The chain is constructed using the same helper used by the Elm compiler:
 /// <see cref="PineCodeAnalysis.BuildGenericFunctionApplication(Expression, IReadOnlyList{Expression})"/>.
 /// </summary>
@@ -40,7 +40,7 @@ public class ReducePineExpressionGenericApplicationTests
     }
 
     /// <summary>
-    /// Counts the number of <see cref="Expression.ParseAndEval"/> nodes in an expression tree.
+    /// Counts the number of <see cref="Expression.Eval"/> nodes in an expression tree.
     /// </summary>
     private static int CountParseAndEval(Expression expression)
     {
@@ -48,7 +48,7 @@ public class ReducePineExpressionGenericApplicationTests
 
         foreach (var sub in Expression.EnumerateSelfAndDescendants(expression))
         {
-            if (sub is Expression.ParseAndEval)
+            if (sub is Expression.Eval)
             {
                 ++count;
             }
@@ -72,13 +72,13 @@ public class ReducePineExpressionGenericApplicationTests
 
         var chain =
             PineCodeAnalysis.BuildGenericFunctionApplication(
-                Expression.LiteralInstance(functionValue),
-                [Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(13))]);
+                Expression.LitralInst(functionValue),
+                [Expression.LitralInst(IntegerEncoding.EncodeSignedInteger(13))]);
 
-        chain.Should().BeOfType<Expression.ParseAndEval>();
+        chain.Should().BeOfType<Expression.Eval>();
 
         ReducePineExpression
-            .TryConsolidateGenericFunctionApplicationChain((Expression.ParseAndEval)chain, s_parseCache)
+            .TryConsolidateGenericFunctionApplicationChain((Expression.Eval)chain, s_parseCache)
             .Should().BeNull();
     }
 
@@ -93,13 +93,13 @@ public class ReducePineExpressionGenericApplicationTests
             PineCodeAnalysis.BuildGenericFunctionApplication(
                 nonLiteralFunc,
                 [
-                Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(13)),
-                Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(17)),
-                Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(19))
+                Expression.LitralInst(IntegerEncoding.EncodeSignedInteger(13)),
+                Expression.LitralInst(IntegerEncoding.EncodeSignedInteger(17)),
+                Expression.LitralInst(IntegerEncoding.EncodeSignedInteger(19))
                 ]);
 
         ReducePineExpression
-            .TryConsolidateGenericFunctionApplicationChain((Expression.ParseAndEval)chain, s_parseCache)
+            .TryConsolidateGenericFunctionApplicationChain((Expression.Eval)chain, s_parseCache)
             .Should().BeNull();
     }
 
@@ -109,12 +109,12 @@ public class ReducePineExpressionGenericApplicationTests
         // Three-parameter function; partially apply two arguments via the generic form.
         var functionValue = BuildIdentityEnvironmentFunctionValue(parameterCount: 3);
 
-        var arg0 = Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(11));
-        var arg1 = Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(13));
+        var arg0 = Expression.LitralInst(IntegerEncoding.EncodeSignedInteger(11));
+        var arg1 = Expression.LitralInst(IntegerEncoding.EncodeSignedInteger(13));
 
         var chain =
-            (Expression.ParseAndEval)PineCodeAnalysis.BuildGenericFunctionApplication(
-                Expression.LiteralInstance(functionValue),
+            (Expression.Eval)PineCodeAnalysis.BuildGenericFunctionApplication(
+                Expression.LitralInst(functionValue),
                 [arg0, arg1]);
 
         // The chain has two nested ParseAndEval expressions.
@@ -130,10 +130,10 @@ public class ReducePineExpressionGenericApplicationTests
 
         // Both forms must produce the same result when applying the third argument and
         // evaluating end-to-end.
-        var arg2 = Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(17));
+        var arg2 = Expression.LitralInst(IntegerEncoding.EncodeSignedInteger(17));
 
-        var beforeFull = (Expression)new Expression.ParseAndEval(chain, arg2);
-        var afterFull = (Expression)new Expression.ParseAndEval(consolidated!, arg2);
+        var beforeFull = (Expression)new Expression.Eval(chain, arg2);
+        var afterFull = (Expression)new Expression.Eval(consolidated!, arg2);
 
         Evaluate(afterFull).Should().Be(Evaluate(beforeFull));
     }
@@ -144,13 +144,13 @@ public class ReducePineExpressionGenericApplicationTests
         // Four-parameter function; partially apply three arguments via the generic form.
         var functionValue = BuildIdentityEnvironmentFunctionValue(parameterCount: 4);
 
-        var arg0 = Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(11));
-        var arg1 = Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(13));
-        var arg2 = Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(17));
+        var arg0 = Expression.LitralInst(IntegerEncoding.EncodeSignedInteger(11));
+        var arg1 = Expression.LitralInst(IntegerEncoding.EncodeSignedInteger(13));
+        var arg2 = Expression.LitralInst(IntegerEncoding.EncodeSignedInteger(17));
 
         var chain =
-            (Expression.ParseAndEval)PineCodeAnalysis.BuildGenericFunctionApplication(
-                Expression.LiteralInstance(functionValue),
+            (Expression.Eval)PineCodeAnalysis.BuildGenericFunctionApplication(
+                Expression.LitralInst(functionValue),
                 [arg0, arg1, arg2]);
 
         CountParseAndEval(chain).Should().Be(3);
@@ -163,10 +163,10 @@ public class ReducePineExpressionGenericApplicationTests
         CountParseAndEval(consolidated!).Should().BeLessThanOrEqualTo(1);
 
         // End-to-end equivalence: apply the final fourth argument and evaluate both forms.
-        var arg3 = Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(19));
+        var arg3 = Expression.LitralInst(IntegerEncoding.EncodeSignedInteger(19));
 
-        var beforeFull = (Expression)new Expression.ParseAndEval(chain, arg3);
-        var afterFull = (Expression)new Expression.ParseAndEval(consolidated!, arg3);
+        var beforeFull = (Expression)new Expression.Eval(chain, arg3);
+        var afterFull = (Expression)new Expression.Eval(consolidated!, arg3);
 
         Evaluate(afterFull).Should().Be(Evaluate(beforeFull));
     }
@@ -177,12 +177,12 @@ public class ReducePineExpressionGenericApplicationTests
         // The optimization must also be triggered from the standard bottom-up reducer.
         var functionValue = BuildIdentityEnvironmentFunctionValue(parameterCount: 3);
 
-        var arg0 = Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(11));
-        var arg1 = Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(13));
+        var arg0 = Expression.LitralInst(IntegerEncoding.EncodeSignedInteger(11));
+        var arg1 = Expression.LitralInst(IntegerEncoding.EncodeSignedInteger(13));
 
         var chain =
             PineCodeAnalysis.BuildGenericFunctionApplication(
-                Expression.LiteralInstance(functionValue),
+                Expression.LitralInst(functionValue),
                 [arg0, arg1]);
 
         var reduced =
@@ -202,13 +202,13 @@ public class ReducePineExpressionGenericApplicationTests
         // confirm the resulting expression contains only one ParseAndEval.
         var functionValue = BuildIdentityEnvironmentFunctionValue(parameterCount: 3);
 
-        var arg0 = Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(11));
-        var arg1 = Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(13));
-        var arg2 = Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(17));
+        var arg0 = Expression.LitralInst(IntegerEncoding.EncodeSignedInteger(11));
+        var arg1 = Expression.LitralInst(IntegerEncoding.EncodeSignedInteger(13));
+        var arg2 = Expression.LitralInst(IntegerEncoding.EncodeSignedInteger(17));
 
         var chain =
-            (Expression.ParseAndEval)PineCodeAnalysis.BuildGenericFunctionApplication(
-                Expression.LiteralInstance(functionValue),
+            (Expression.Eval)PineCodeAnalysis.BuildGenericFunctionApplication(
+                Expression.LitralInst(functionValue),
                 [arg0, arg1, arg2]);
 
         CountParseAndEval(chain).Should().Be(3);

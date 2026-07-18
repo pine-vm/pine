@@ -521,12 +521,12 @@ public record PineValueClass
     /// <param name="expression">
     /// Expression to analyze. Recognized cases:
     /// - <see cref="Expression.Environment"/>: returns <paramref name="envClass"/>.
-    /// - <see cref="Expression.Literal"/>: returns an equality constraint to the literal value.
+    /// - <see cref="Expression.Litral"/>: returns an equality constraint to the literal value.
     /// - Path in parent env (via <see cref="CodeAnalysis.TryParseExprAsPathInEnv(Expression)"/>):
     ///   if the path resolves in <paramref name="envClass"/>, returns an equality constraint to that value;
     ///   otherwise returns the projection of <paramref name="envClass"/> under that path via <see cref="PartUnderPath"/>.
     /// - <see cref="Expression.List"/>: maps each item recursively and combines constraints under their list indices.
-    /// Other expression kinds (for example a value computed via <see cref="Expression.KernelApplication"/>,
+    /// Other expression kinds (for example a value computed via <see cref="Expression.Builtin"/>,
     /// as emitted for environments that transform values at runtime) carry no static equality constraints
     /// and yield an empty (unconstrained) class, mirroring how unrecognized items inside a
     /// <see cref="Expression.List"/> contribute no constraints.
@@ -544,7 +544,7 @@ public record PineValueClass
             return envClass;
         }
 
-        if (expression is Expression.Literal literal)
+        if (expression is Expression.Litral literal)
         {
             return CreateEquals(literal.Value);
         }

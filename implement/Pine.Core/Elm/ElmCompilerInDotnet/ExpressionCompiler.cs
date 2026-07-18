@@ -28,7 +28,7 @@ public class ExpressionCompiler
         expression switch
         {
             SyntaxTypes.Expression.UnitExpr =>
-            Expression.LiteralInstance(PineValue.EmptyList),
+            Expression.LitralInst(PineValue.EmptyList),
 
             SyntaxTypes.Expression.Integer expr =>
             CompileInteger(expr),
@@ -90,7 +90,7 @@ public class ExpressionCompiler
 
     private static Result<CompilationError, Expression> CompileInteger(
         SyntaxTypes.Expression.Integer expr) =>
-        Expression.LiteralInstance(EmitIntegerLiteral(expr.Value));
+        Expression.LitralInst(EmitIntegerLiteral(expr.Value));
 
     private static Result<CompilationError, Expression> CompileFloatLiteral(
         SyntaxTypes.Expression.FloatLiteral expr)
@@ -102,16 +102,16 @@ public class ExpressionCompiler
         var pineValue =
             ElmValueEncoding.ElmValueAsPineValue(floatValue);
 
-        return Expression.LiteralInstance(pineValue);
+        return Expression.LitralInst(pineValue);
     }
 
     private static Result<CompilationError, Expression> CompileLiteral(
         SyntaxTypes.Expression.StringLiteral expr) =>
-        Expression.LiteralInstance(EmitStringLiteral(expr.Value));
+        Expression.LitralInst(EmitStringLiteral(expr.Value));
 
     private static Result<CompilationError, Expression> CompileCharLiteral(
         SyntaxTypes.Expression.CharLiteral expr) =>
-        Expression.LiteralInstance(EmitCharLiteral(expr.Value));
+        Expression.LitralInst(EmitCharLiteral(expr.Value));
 
     internal static Result<CompilationError, Expression> CompileFunctionOrValue(
         SyntaxTypes.Expression.FunctionOrValue expr,
@@ -136,12 +136,12 @@ public class ExpressionCompiler
         {
             if (expr.QualifiedName.DeclName is "True")
             {
-                return Expression.LiteralInstance(EmitBooleanLiteral(true));
+                return Expression.LitralInst(EmitBooleanLiteral(true));
             }
 
             if (expr.QualifiedName.DeclName is "False")
             {
-                return Expression.LiteralInstance(EmitBooleanLiteral(false));
+                return Expression.LitralInst(EmitBooleanLiteral(false));
             }
         }
 
@@ -173,7 +173,7 @@ public class ExpressionCompiler
             if (expectedArgCount is null || expectedArgCount.Value is 0)
             {
                 // Zero-argument tag: emit as a literal value
-                return Expression.LiteralInstance(ElmValueEncoding.TagAsPineValue(expr.QualifiedName.DeclName, []));
+                return Expression.LitralInst(ElmValueEncoding.TagAsPineValue(expr.QualifiedName.DeclName, []));
             }
 
             // Tag with arguments used as a function value (no application yet)
@@ -223,15 +223,15 @@ public class ExpressionCompiler
                     // layout. The body always expects [envFunctionsList], which
                     // may be empty for non-recursive single-member SCCs.
                     var crossSccEnvFuncsLiteral =
-                        Expression.LiteralInstance(
+                        Expression.LitralInst(
                             PineValue.List([.. crossSccCalleeInfo.EnvFunctions]));
 
                     var crossSccCallEnvironment =
-                        Expression.ListInstance([crossSccEnvFuncsLiteral]);
+                        Expression.ListInst([crossSccEnvFuncsLiteral]);
 
                     return
-                        (Result<CompilationError, Expression>)new Expression.ParseAndEval(
-                            encoded: Expression.LiteralInstance(crossSccCalleeInfo.EncodedBody),
+                        (Result<CompilationError, Expression>)new Expression.Eval(
+                            encoded: Expression.LitralInst(crossSccCalleeInfo.EncodedBody),
                             environment: crossSccCallEnvironment);
                 }
 
@@ -247,10 +247,10 @@ public class ExpressionCompiler
                     crossSccCalleeInfo.ParameterCount,
                     crossSccCalleeInfo.EnvFunctions) is { } crossSccTemplateValue)
                 {
-                    return Expression.LiteralInstance(crossSccTemplateValue);
+                    return Expression.LitralInst(crossSccTemplateValue);
                 }
 
-                return Expression.LiteralInstance(crossSccCalleeInfo.CompiledValue);
+                return Expression.LitralInst(crossSccCalleeInfo.CompiledValue);
             }
         }
 
@@ -260,7 +260,7 @@ public class ExpressionCompiler
         {
             if (CoreLibraryModule.CoreBasics.GetFunctionValue(expr.QualifiedName.DeclName) is { } basicsFunctionValue)
             {
-                return Expression.LiteralInstance(basicsFunctionValue);
+                return Expression.LitralInst(basicsFunctionValue);
             }
         }
 
@@ -268,7 +268,7 @@ public class ExpressionCompiler
             expr.QualifiedName.Namespaces[0] is "Debug" &&
             expr.QualifiedName.DeclName is "toString")
         {
-            return Expression.LiteralInstance(CoreLibraryModule.CoreDebug.ToString_FunctionValue());
+            return Expression.LitralInst(CoreLibraryModule.CoreDebug.ToString_FunctionValue());
         }
 
         // Handle List.cons used as a value reference (the :: operator after canonicalization)
@@ -276,7 +276,7 @@ public class ExpressionCompiler
         if (expr.QualifiedName.Namespaces.Count is 1 && expr.QualifiedName.Namespaces[0] is "List" &&
             expr.QualifiedName.DeclName is "cons")
         {
-            return Expression.LiteralInstance(s_consFunction.Value);
+            return Expression.LitralInst(s_consFunction.Value);
         }
 
         return new CompilationError.UnresolvedReference(expr.QualifiedName.DeclName, context.CurrentModuleName);
@@ -307,7 +307,7 @@ public class ExpressionCompiler
             }
 
             return
-                Expression.KernelApplicationInstance(
+                Expression.BuiltinInst(
                     kernelFunc.QualifiedName.DeclName,
                     compiledInputResult.IsOkOrNull()!);
         }
@@ -409,16 +409,16 @@ public class ExpressionCompiler
                 foreach (var pair in sortedPairs)
                 {
                     recordFieldItems.Add(
-                        Expression.LiteralInstance(StringEncoding.ValueFromString(pair.fieldName)));
+                        Expression.LitralInst(StringEncoding.ValueFromString(pair.fieldName)));
 
                     recordFieldItems.Add(pair.expr);
                 }
 
                 // Build the record: [ElmRecordTag, name0, value0, name1, value1, ...]
                 return
-                    Expression.ListInstance(
+                    Expression.ListInst(
                         [
-                        Expression.LiteralInstance(ElmValue.ElmRecordTypeTagNameAsValue),
+                        Expression.LitralInst(ElmValue.ElmRecordTypeTagNameAsValue),
                         ..recordFieldItems
                         ]);
             }
@@ -426,7 +426,7 @@ public class ExpressionCompiler
             // Check if this is a choice type tag application
             if (ElmValueEncoding.StringIsValidTagName(funcRef.QualifiedName.DeclName))
             {
-                var tagNameValue = Expression.LiteralInstance(StringEncoding.ValueFromString(funcRef.QualifiedName.DeclName));
+                var tagNameValue = Expression.LitralInst(StringEncoding.ValueFromString(funcRef.QualifiedName.DeclName));
 
                 var qualifiedTagName =
                     funcRef.QualifiedName.Namespaces.Count > 0
@@ -443,10 +443,10 @@ public class ExpressionCompiler
                 {
                     // Full application: build the choice type value directly
                     return
-                        Expression.ListInstance(
+                        Expression.ListInst(
                             [
                             tagNameValue,
-                            Expression.ListInstance(compiledArguments)
+                            Expression.ListInst(compiledArguments)
                             ]);
                 }
 
@@ -547,7 +547,7 @@ public class ExpressionCompiler
                 {
                     return
                         CompileGenericFunctionApplication(
-                            Expression.LiteralInstance(basicsFuncValue),
+                            Expression.LitralInst(basicsFuncValue),
                             compiledArguments);
                 }
 
@@ -558,7 +558,7 @@ public class ExpressionCompiler
                     if (compiledArguments.Length >= 2)
                     {
                         // Full application: cons head tail  ==>  concat([[head], tail])
-                        var singletonList = Expression.ListInstance([compiledArguments[0]]);
+                        var singletonList = Expression.ListInst([compiledArguments[0]]);
 
                         var consResult =
                             BuiltinHelpers.ApplyBuiltinConcat(
@@ -579,7 +579,7 @@ public class ExpressionCompiler
                     // Partial or no application: return the cons function value
                     return
                         CompileGenericFunctionApplication(
-                            Expression.LiteralInstance(s_consFunction.Value),
+                            Expression.LitralInst(s_consFunction.Value),
                             compiledArguments);
                 }
 
@@ -642,10 +642,10 @@ public class ExpressionCompiler
                     // empty for non-recursive single-member SCCs).
                     var cachedInfo = cachedCalleeInfo!;
 
-                    functionRef = Expression.LiteralInstance(cachedInfo.EncodedBody);
+                    functionRef = Expression.LitralInst(cachedInfo.EncodedBody);
 
                     callEnvFunctions =
-                        Expression.LiteralInstance(
+                        Expression.LitralInst(
                             PineValue.List([.. cachedInfo.EnvFunctions]));
                 }
 
@@ -653,11 +653,11 @@ public class ExpressionCompiler
                 var fullApplicationArgs = compiledArguments.Take(paramCount).ToList();
 
                 var callEnvironment =
-                    Expression.ListInstance(
+                    Expression.ListInst(
                         [callEnvFunctions, .. fullApplicationArgs]);
 
                 Expression fullApplicationResult =
-                    new Expression.ParseAndEval(
+                    new Expression.Eval(
                         encoded: functionRef,
                         environment: callEnvironment);
 
@@ -772,7 +772,7 @@ public class ExpressionCompiler
             compiledItems[i] = itemOk;
         }
 
-        return Expression.ListInstance(compiledItems);
+        return Expression.ListInst(compiledItems);
     }
 
     private static Result<CompilationError, Expression> CompileTupledExpression(
@@ -805,7 +805,7 @@ public class ExpressionCompiler
             compiledItems[i] = itemOk;
         }
 
-        return Expression.ListInstance(compiledItems);
+        return Expression.ListInst(compiledItems);
     }
 
     private static Result<CompilationError, Expression> CompileRecordExpr(
@@ -834,16 +834,16 @@ public class ExpressionCompiler
 
             // New flat layout: emit name and value as adjacent items in the outer list.
             compiledFieldItems.Add(
-                Expression.LiteralInstance(StringEncoding.ValueFromString(fieldName)));
+                Expression.LitralInst(StringEncoding.ValueFromString(fieldName)));
 
             compiledFieldItems.Add(compiledValue.IsOkOrNull()!);
         }
 
         // A record is encoded as [recordTypeTag, name0, value0, name1, value1, ...]
         return
-            Expression.ListInstance(
+            Expression.ListInst(
                 [
-                Expression.LiteralInstance(ElmValue.ElmRecordTypeTagNameAsValue),
+                Expression.LitralInst(ElmValue.ElmRecordTypeTagNameAsValue),
                 ..compiledFieldItems
                 ]);
     }
@@ -941,24 +941,24 @@ public class ExpressionCompiler
         {
             // Each update is encoded as [fieldName, newValue]
             var updatePair =
-                Expression.ListInstance(
+                Expression.ListInst(
                     [
-                    Expression.LiteralInstance(StringEncoding.ValueFromString(fieldName)),
+                    Expression.LitralInst(StringEncoding.ValueFromString(fieldName)),
                     valueExpr
                     ]);
 
             compiledUpdates.Add(updatePair);
         }
 
-        var updatesListExpr = Expression.ListInstance(compiledUpdates);
+        var updatesListExpr = Expression.ListInst(compiledUpdates);
 
         // Build the call to the record update function
         // The environment for the function is: [record, updates]
-        var callEnv = Expression.ListInstance([recordExpr, updatesListExpr]);
+        var callEnv = Expression.ListInst([recordExpr, updatesListExpr]);
 
         return
-            new Expression.ParseAndEval(
-                encoded: Expression.LiteralInstance(RecordRuntime.PineFunctionForRecordUpdateAsValue),
+            new Expression.Eval(
+                encoded: Expression.LitralInst(RecordRuntime.PineFunctionForRecordUpdateAsValue),
                 environment: callEnv);
     }
 
@@ -1014,7 +1014,7 @@ public class ExpressionCompiler
             }
         }
 
-        return Expression.ListInstance(resultItems);
+        return Expression.ListInst(resultItems);
     }
 
     private static Result<CompilationError, Expression> CompileRecordAccess(
@@ -1058,15 +1058,15 @@ public class ExpressionCompiler
         // Build the call to the record access function
         // The environment for the function is: [record, fieldName]
         var callEnv =
-            Expression.ListInstance(
+            Expression.ListInst(
                 [
                 recordExpr,
-                Expression.LiteralInstance(StringEncoding.ValueFromString(fieldName))
+                Expression.LitralInst(StringEncoding.ValueFromString(fieldName))
                 ]);
 
         return
-            new Expression.ParseAndEval(
-                encoded: Expression.LiteralInstance(RecordRuntime.PineFunctionForRecordAccessAsValue),
+            new Expression.Eval(
+                encoded: Expression.LitralInst(RecordRuntime.PineFunctionForRecordAccessAsValue),
                 environment: callEnv);
     }
 
@@ -1095,15 +1095,15 @@ public class ExpressionCompiler
 
         // Build the record field lookup body using the runtime function
         var callEnv =
-            Expression.ListInstance(
+            Expression.ListInst(
                 [
                 recordParam,
-                Expression.LiteralInstance(StringEncoding.ValueFromString(fieldName))
+                Expression.LitralInst(StringEncoding.ValueFromString(fieldName))
                 ]);
 
         var body =
-            new Expression.ParseAndEval(
-                encoded: Expression.LiteralInstance(RecordRuntime.PineFunctionForRecordAccessAsValue),
+            new Expression.Eval(
+                encoded: Expression.LitralInst(RecordRuntime.PineFunctionForRecordAccessAsValue),
                 environment: callEnv);
 
         var functionValue =
@@ -1115,7 +1115,7 @@ public class ExpressionCompiler
             throw new NotImplementedException(
                 "Failed to build function value template for record access function.");
 
-        return Expression.LiteralInstance(functionValue);
+        return Expression.LitralInst(functionValue);
     }
 
     /// <summary>
@@ -1178,7 +1178,7 @@ public class ExpressionCompiler
         // Handle :: (cons) operator specially - it's from List, not Basics
         if (expr.Operator is "::")
         {
-            return Expression.LiteralInstance(s_consFunction.Value);
+            return Expression.LitralInst(s_consFunction.Value);
         }
 
         // Delegate to BasicArithmetic for centralized operator handling
@@ -1204,7 +1204,7 @@ public class ExpressionCompiler
         var tailExpr = BuiltinHelpers.BuildPathToParameter(1);
 
         // head :: tail  ==>  concat([[head], tail])
-        var singletonList = Expression.ListInstance([headExpr]);
+        var singletonList = Expression.ListInst([headExpr]);
 
         var body =
             BuiltinHelpers.ApplyBuiltinConcat(
@@ -1226,7 +1226,7 @@ public class ExpressionCompiler
     {
         if (expr.Expression is SyntaxTypes.Expression.Integer intLiteral)
         {
-            return Expression.LiteralInstance(EmitIntegerLiteral(-intLiteral.Value));
+            return Expression.LitralInst(EmitIntegerLiteral(-intLiteral.Value));
         }
 
         var innerResult = Compile(expr.Expression, context);
@@ -1236,7 +1236,7 @@ public class ExpressionCompiler
             return err;
         }
 
-        var negativeOne = Expression.LiteralInstance(EmitIntegerLiteral(-1));
+        var negativeOne = Expression.LitralInst(EmitIntegerLiteral(-1));
         return BuiltinHelpers.ApplyBuiltinIntMul([negativeOne, innerResult.IsOkOrNull()!]);
     }
 
@@ -1266,7 +1266,7 @@ public class ExpressionCompiler
         }
 
         return
-            Expression.ConditionalInstance(
+            Expression.ConditionalInst(
                 condition: conditionResult.IsOkOrNull()!,
                 falseBranch: falseBranchResult.IsOkOrNull()!,
                 trueBranch: trueBranchResult.IsOkOrNull()!);
@@ -1787,7 +1787,7 @@ public class ExpressionCompiler
             }
         }
 
-        var envFuncsListExpr = Expression.ListInstance(envFunctionsExprs);
+        var envFuncsListExpr = Expression.ListInst(envFunctionsExprs);
 
         if (paramCount <= 0)
         {
@@ -1795,10 +1795,10 @@ public class ExpressionCompiler
             // to produce the actual value rather than returning an unevaluated function wrapper.
 
             var callEnvironment =
-                Expression.ListInstance([envFuncsListExpr]);
+                Expression.ListInst([envFuncsListExpr]);
 
             return
-                new Expression.ParseAndEval(
+                new Expression.Eval(
                     encoded: encodedBodyExpr,
                     environment: callEnvironment);
         }
@@ -1830,17 +1830,17 @@ public class ExpressionCompiler
         if (remainingArgCount <= 0)
         {
             // All arguments are already captured - just build the value directly
-            var tagNameValue = Expression.LiteralInstance(StringEncoding.ValueFromString(tagName));
+            var tagNameValue = Expression.LitralInst(StringEncoding.ValueFromString(tagName));
 
             return
-                Expression.ListInstance(
+                Expression.ListInst(
                     [
                     tagNameValue,
-                    Expression.ListInstance(capturedArgExpressions)
+                    Expression.ListInst(capturedArgExpressions)
                     ]);
         }
 
-        var tagNameLiteral = Expression.LiteralInstance(StringEncoding.ValueFromString(tagName));
+        var tagNameLiteral = Expression.LitralInst(StringEncoding.ValueFromString(tagName));
 
         // Build the inner expression for the FULL tag arity. At invocation time the inner expression is
         // evaluated with environment [envFunctions, arg_0, ..., arg_{totalArgCount-1}], i.e. arg_i is at
@@ -1859,10 +1859,10 @@ public class ExpressionCompiler
 
         // Build the choice type value expression for when all arguments are collected.
         var choiceTypeValueExpr =
-            Expression.ListInstance(
+            Expression.ListInst(
                 [
                 tagNameLiteral,
-                Expression.ListInstance(allArgExpressions)
+                Expression.ListInst(allArgExpressions)
                 ]);
 
         // Emit a compact template-based function value that only nests the remaining parameters and embeds
@@ -1895,14 +1895,14 @@ public class ExpressionCompiler
             argExpressions[i] = BuiltinHelpers.BuildPathToParameter(i);
         }
 
-        var tagNameExpr = Expression.LiteralInstance(StringEncoding.ValueFromString(tagName));
+        var tagNameExpr = Expression.LitralInst(StringEncoding.ValueFromString(tagName));
 
         // Build the choice type value expression for when all arguments are collected
         var choiceTypeValueExpr =
-            Expression.ListInstance(
+            Expression.ListInst(
                 [
                 tagNameExpr,
-                Expression.ListInstance(argExpressions)
+                Expression.ListInst(argExpressions)
                 ]);
 
         // Build the function value that wraps this expression
@@ -1914,7 +1914,7 @@ public class ExpressionCompiler
             throw new NotImplementedException(
                 "Failed to build function value template for choice tag function.");
 
-        return Expression.LiteralInstance(functionValue);
+        return Expression.LitralInst(functionValue);
     }
 
     /// <summary>
@@ -1938,15 +1938,15 @@ public class ExpressionCompiler
         foreach (var pair in sortedPairs)
         {
             recordFieldItems.Add(
-                Expression.LiteralInstance(StringEncoding.ValueFromString(pair.fieldName)));
+                Expression.LitralInst(StringEncoding.ValueFromString(pair.fieldName)));
 
             recordFieldItems.Add(pair.expr);
         }
 
         return
-            Expression.ListInstance(
+            Expression.ListInst(
                 [
-                Expression.LiteralInstance(ElmValue.ElmRecordTypeTagNameAsValue),
+                Expression.LitralInst(ElmValue.ElmRecordTypeTagNameAsValue),
                 ..recordFieldItems
                 ]);
     }
@@ -1985,7 +1985,7 @@ public class ExpressionCompiler
             throw new NotImplementedException(
                 "Failed to build function value template for record constructor function.");
 
-        return Expression.LiteralInstance(functionValue);
+        return Expression.LitralInst(functionValue);
     }
 
     /// <summary>
@@ -2056,7 +2056,7 @@ public class ExpressionCompiler
             // - encoded = the function value (which is an encoded expression)
             // - environment = the argument value
             result =
-                new Expression.ParseAndEval(
+                new Expression.Eval(
                     encoded: result,
                     environment: argument);
         }

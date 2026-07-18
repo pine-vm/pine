@@ -86,42 +86,42 @@ public class DirectTailLoopCompilationTests
         var useTailCall = EnvironmentPath([2]);
 
         var recursiveCall =
-            new Expression.ParseAndEval(
+            new Expression.Eval(
                 encoded: self,
                 environment:
-                Expression.ListInstance(
+                Expression.ListInst(
                     [
                     self,
-                    Expression.KernelApplicationInstance(
+                    Expression.BuiltinInst(
                         nameof(BuiltinFunction.int_add),
-                        Expression.ListInstance(
+                        Expression.ListInst(
                             [
                             count,
-                            Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(-1)),
+                            Expression.LitralInst(IntegerEncoding.EncodeSignedInteger(-1)),
                             ])),
                     useTailCall,
                     ]));
 
         var expression =
-            Expression.ConditionalInstance(
+            Expression.ConditionalInst(
                 condition:
-                Expression.KernelApplicationInstance(
+                Expression.BuiltinInst(
                     nameof(BuiltinFunction.equal),
-                    Expression.ListInstance(
+                    Expression.ListInst(
                         [
                         count,
-                        Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(0)),
+                        Expression.LitralInst(IntegerEncoding.EncodeSignedInteger(0)),
                         ])),
                 falseBranch:
-                Expression.ConditionalInstance(
+                Expression.ConditionalInst(
                     condition: useTailCall,
                     falseBranch:
-                    Expression.KernelApplicationInstance(
+                    Expression.BuiltinInst(
                         nameof(BuiltinFunction.int_add),
-                        Expression.ListInstance(
+                        Expression.ListInst(
                             [
                             recursiveCall,
-                            Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(1)),
+                            Expression.LitralInst(IntegerEncoding.EncodeSignedInteger(1)),
                             ])),
                     trueBranch: recursiveCall),
                 trueBranch: count);
@@ -166,35 +166,35 @@ public class DirectTailLoopCompilationTests
         var count = EnvironmentPath([3]);
 
         var expression =
-            Expression.ConditionalInstance(
+            Expression.ConditionalInst(
                 condition:
-                Expression.KernelApplicationInstance(
+                Expression.BuiltinInst(
                     nameof(BuiltinFunction.equal),
-                    Expression.ListInstance(
+                    Expression.ListInst(
                         [
                         count,
-                        Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(0)),
+                        Expression.LitralInst(IntegerEncoding.EncodeSignedInteger(0)),
                         ])),
                 falseBranch:
-                new Expression.ParseAndEval(
+                new Expression.Eval(
                     encoded: self,
                     environment:
-                    Expression.ListInstance(
+                    Expression.ListInst(
                         [
                         self,
                         right,
-                        Expression.KernelApplicationInstance(
+                        Expression.BuiltinInst(
                             nameof(BuiltinFunction.int_add),
-                            Expression.ListInstance([left, right])),
-                        Expression.KernelApplicationInstance(
+                            Expression.ListInst([left, right])),
+                        Expression.BuiltinInst(
                             nameof(BuiltinFunction.int_add),
-                            Expression.ListInstance(
+                            Expression.ListInst(
                                 [
                                 count,
-                                Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(-1)),
+                                Expression.LitralInst(IntegerEncoding.EncodeSignedInteger(-1)),
                                 ])),
                         ])),
-                trueBranch: Expression.ListInstance([left, right]));
+                trueBranch: Expression.ListInst([left, right]));
 
         var compilation =
             ExpressionCompilation.CompileExpression(
@@ -241,33 +241,33 @@ public class DirectTailLoopCompilationTests
         var count = EnvironmentPath([3]);
 
         var expression =
-            Expression.ConditionalInstance(
+            Expression.ConditionalInst(
                 condition:
-                Expression.KernelApplicationInstance(
+                Expression.BuiltinInst(
                     nameof(BuiltinFunction.equal),
-                    Expression.ListInstance(
+                    Expression.ListInst(
                         [
                         count,
-                        Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(0)),
+                        Expression.LitralInst(IntegerEncoding.EncodeSignedInteger(0)),
                         ])),
                 falseBranch:
-                new Expression.ParseAndEval(
+                new Expression.Eval(
                     encoded: self,
                     environment:
-                    Expression.ListInstance(
+                    Expression.ListInst(
                         [
                         self,
                         right,
                         left,
-                        Expression.KernelApplicationInstance(
+                        Expression.BuiltinInst(
                             nameof(BuiltinFunction.int_add),
-                            Expression.ListInstance(
+                            Expression.ListInst(
                                 [
                                 count,
-                                Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(-1)),
+                                Expression.LitralInst(IntegerEncoding.EncodeSignedInteger(-1)),
                                 ])),
                         ])),
-                trueBranch: Expression.ListInstance([left, right]));
+                trueBranch: Expression.ListInst([left, right]));
 
         var environment =
             PineValue.List(
@@ -293,28 +293,28 @@ public class DirectTailLoopCompilationTests
         var count = EnvironmentPath([1]);
 
         return
-            Expression.ConditionalInstance(
+            Expression.ConditionalInst(
                 condition:
-                Expression.KernelApplicationInstance(
+                Expression.BuiltinInst(
                     nameof(BuiltinFunction.equal),
-                    Expression.ListInstance(
+                    Expression.ListInst(
                         [
                         count,
-                        Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(0)),
+                        Expression.LitralInst(IntegerEncoding.EncodeSignedInteger(0)),
                         ])),
                 falseBranch:
-                new Expression.ParseAndEval(
+                new Expression.Eval(
                     encoded: self,
                     environment:
-                    Expression.ListInstance(
+                    Expression.ListInst(
                         [
                         self,
-                        Expression.KernelApplicationInstance(
+                        Expression.BuiltinInst(
                             nameof(BuiltinFunction.int_add),
-                            Expression.ListInstance(
+                            Expression.ListInst(
                                 [
                                 count,
-                                Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(-1)),
+                                Expression.LitralInst(IntegerEncoding.EncodeSignedInteger(-1)),
                                 ])),
                         ])),
                 trueBranch: count);

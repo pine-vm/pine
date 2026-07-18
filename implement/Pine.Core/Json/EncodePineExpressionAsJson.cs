@@ -30,8 +30,8 @@ public class EncodePineExpressionAsJson
     /// Expects a JSON string encoding a single <see cref="Expression"/>.
     /// <para>
     /// Decoding constructs the expression tree using the <c>Instance</c> factory methods on
-    /// <see cref="Expression"/> (for example <see cref="Expression.LiteralInstance"/> and
-    /// <see cref="Expression.ListInstance"/>), so that reuse of common heap instances also happens
+    /// <see cref="Expression"/> (for example <see cref="Expression.LitralInst"/> and
+    /// <see cref="Expression.ListInst"/>), so that reuse of common heap instances also happens
     /// on the JSON decoding path.
     /// </para>
     /// </summary>
@@ -46,8 +46,8 @@ public class EncodePineExpressionAsJson
     /// Expects a JSON string encoding a list (JSON array) of <see cref="Expression"/>.
     /// <para>
     /// Decoding constructs the expression tree using the <c>Instance</c> factory methods on
-    /// <see cref="Expression"/> (for example <see cref="Expression.LiteralInstance"/> and
-    /// <see cref="Expression.ListInstance"/>), so that reuse of common heap instances also happens
+    /// <see cref="Expression"/> (for example <see cref="Expression.LitralInst"/> and
+    /// <see cref="Expression.ListInst"/>), so that reuse of common heap instances also happens
     /// on the JSON decoding path.
     /// </para>
     /// </summary>
@@ -87,43 +87,51 @@ public class EncodePineExpressionAsJson
         return variantName switch
         {
             "Environment" =>
-                Expression.EnvironmentInstance,
+            Expression.EnvironmentInstance,
 
-            "Literal" =>
-                Expression.LiteralInstance(
-                    ParsePineValueFromJsonElement(arguments[0])),
+            "Litral" or "Literal" =>
+            Expression.LitralInst(
+                ParsePineValueFromJsonElement(arguments[0])),
 
             "List" =>
-                Expression.ListInstance(
-                    ParseExpressionListFromJsonElement(arguments[0])),
+            Expression.ListInst(
+                ParseExpressionListFromJsonElement(arguments[0])),
 
-            "ParseAndEval" =>
-                new Expression.ParseAndEval(
-                    encoded: ParseExpressionFromJsonElement(arguments[0]),
-                    environment: ParseExpressionFromJsonElement(arguments[1])),
+            "Eval" or "ParseAndEval" =>
+            new Expression.Eval(
+                encoded: ParseExpressionFromJsonElement(arguments[0]),
+                environment: ParseExpressionFromJsonElement(arguments[1])),
 
-            "KernelApplication" =>
-                Expression.KernelApplicationInstance(
-                    function:
-                    arguments[0].GetString()
-                    ?? throw new JsonException("Expected function name string"),
-                    input: ParseExpressionFromJsonElement(arguments[1])),
+            "Builtin" or "KernelApplication" =>
+            Expression.BuiltinInst(
+                function:
+                arguments[0].GetString()
+                ?? throw new JsonException("Expected function name string"),
+                input: ParseExpressionFromJsonElement(arguments[1])),
 
             "Conditional" =>
-                Expression.ConditionalInstance(
-                    condition: ParseExpressionFromJsonElement(arguments[0]),
-                    falseBranch: ParseExpressionFromJsonElement(arguments[1]),
-                    trueBranch: ParseExpressionFromJsonElement(arguments[2])),
+            Expression.ConditionalInst(
+                condition: ParseExpressionFromJsonElement(arguments[0]),
+                falseBranch: ParseExpressionFromJsonElement(arguments[1]),
+                trueBranch: ParseExpressionFromJsonElement(arguments[2])),
+
+            "Label" =>
+            new Expression.Label(
+                labelValue:
+                ParsePineValueFromJsonElement(arguments[0])
+                ?? throw new JsonException("Expected label value"),
+                tagged: ParseExpressionFromJsonElement(arguments[1])),
 
             "StringTag" =>
-                new Expression.StringTag(
-                    tag:
-                    arguments[0].GetString()
-                    ?? throw new JsonException("Expected tag string"),
-                    tagged: ParseExpressionFromJsonElement(arguments[1])),
+            new Expression.Label(
+                tag:
+                arguments[0].GetString()
+                ?? throw new JsonException("Expected tag string"),
+                tagged: ParseExpressionFromJsonElement(arguments[1])),
 
             _ =>
-                throw new JsonException("Unexpected expression variant: " + variantName),
+            throw new JsonException(
+                "Unexpected expression variant: " + variantName),
         };
     }
 

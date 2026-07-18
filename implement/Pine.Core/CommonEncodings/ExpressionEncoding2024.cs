@@ -12,7 +12,7 @@ public static class ExpressionEncoding2024
 {
     /// <summary>
     /// The standard encoding of Pine expression as Pine value.
-    /// This is the encoding used to map from data to code when evaluating a <see cref="Expression.ParseAndEval"/> expression.
+    /// This is the encoding used to map from data to code when evaluating a <see cref="Expression.Eval"/> expression.
     /// </summary>
     public static PineValue.ListValue EncodeExpressionAsValue(Expression expression) =>
         EncodeExpressionAsValueViaPostOrder(
@@ -84,7 +84,7 @@ public static class ExpressionEncoding2024
         switch (expression)
         {
             case Expression.Environment:
-            case Expression.Literal:
+            case Expression.Litral:
                 break;
 
             case Expression.List list:
@@ -96,7 +96,7 @@ public static class ExpressionEncoding2024
 
                 break;
 
-            case Expression.ParseAndEval parseAndEval:
+            case Expression.Eval parseAndEval:
                 if (!store.ContainsKey(parseAndEval.Encoded))
                     stack.Push(parseAndEval.Encoded);
 
@@ -105,7 +105,7 @@ public static class ExpressionEncoding2024
 
                 break;
 
-            case Expression.KernelApplication kernelApplication:
+            case Expression.Builtin kernelApplication:
                 if (!store.ContainsKey(kernelApplication.Input))
                     stack.Push(kernelApplication.Input);
 
@@ -123,7 +123,7 @@ public static class ExpressionEncoding2024
 
                 break;
 
-            case Expression.StringTag stringTag:
+            case Expression.Label stringTag:
                 if (!store.ContainsKey(stringTag.Tagged))
                     stack.Push(stringTag.Tagged);
 
@@ -165,7 +165,7 @@ public static class ExpressionEncoding2024
 
         return expression switch
         {
-            Expression.Literal literal =>
+            Expression.Litral literal =>
             EncodeChoiceTypeVariantAsPineValue(
                 "Literal",
                 PineValue.List([literal.Value])),
@@ -179,13 +179,13 @@ public static class ExpressionEncoding2024
             Expression.Conditional conditional =>
             EncodeConditional(conditional, encodeSubexpression),
 
-            Expression.ParseAndEval parseAndEval =>
+            Expression.Eval parseAndEval =>
             EncodeParseAndEval(parseAndEval, encodeSubexpression),
 
-            Expression.KernelApplication kernelAppl =>
+            Expression.Builtin kernelAppl =>
             EncodeKernelApplication(kernelAppl, encodeSubexpression),
 
-            Expression.StringTag stringTag =>
+            Expression.Label stringTag =>
             EncodeChoiceTypeVariantAsPineValue(
                 "StringTag",
                 PineValue.List(
@@ -441,7 +441,7 @@ public static class ExpressionEncoding2024
                 ?
                 "Expected one argument for literal but got zero"
                 :
-                Expression.LiteralInstance(tagArguments.Items.Span[0]),
+                Expression.LitralInst(tagArguments.Items.Span[0]),
 
                 "List" =>
                 tagArguments.Items.Length is not 1
@@ -499,11 +499,11 @@ public static class ExpressionEncoding2024
             expressions[i] = itemExpr;
         }
 
-        return Expression.ListInstance(expressions);
+        return Expression.ListInst(expressions);
     }
 
     private static PineValue.ListValue EncodeParseAndEval(
-        Expression.ParseAndEval parseAndEval,
+        Expression.Eval parseAndEval,
         Func<Expression, PineValue.ListValue> encodeSubexpression) =>
         EncodeChoiceTypeVariantAsPineValue(
             "ParseAndEval",
@@ -548,14 +548,14 @@ public static class ExpressionEncoding2024
                 "Unexpected result type: " + parseEnvironmentResult.GetType().FullName);
         }
 
-        return new Expression.ParseAndEval(encoded: encoded, environment: environment);
+        return new Expression.Eval(encoded: encoded, environment: environment);
     }
 
     /// <summary>
     /// Encodes a kernel application expression as a Pine value.
     /// </summary>
     private static PineValue.ListValue EncodeKernelApplication(
-        Expression.KernelApplication kernelApplicationExpression,
+        Expression.Builtin kernelApplicationExpression,
         Func<Expression, PineValue.ListValue> encodeSubexpression) =>
         EncodeChoiceTypeVariantAsPineValue(
             "KernelApplication",
@@ -601,7 +601,7 @@ public static class ExpressionEncoding2024
                 "Unexpected result type: " + parseInputResult.GetType().FullName);
         }
 
-        return Expression.KernelApplicationInstance(function: function, input: input);
+        return Expression.BuiltinInst(function: function, input: input);
     }
 
     private static PineValue.ListValue EncodeConditional(
@@ -665,7 +665,7 @@ public static class ExpressionEncoding2024
         }
 
         return
-            Expression.ConditionalInstance(
+            Expression.ConditionalInst(
                 condition: condition,
                 falseBranch: falseBranch,
                 trueBranch: trueBranch);
@@ -690,7 +690,7 @@ public static class ExpressionEncoding2024
                 err.Value,
 
                 Result<string, Expression>.Ok tagged =>
-                new Expression.StringTag(tag: tag.Value, tagged: tagged.Value),
+                new Expression.Label(tag: tag.Value, tagged: tagged.Value),
 
                 var other =>
                 throw new NotImplementedException("Unexpected result type: " + other.GetType().FullName)

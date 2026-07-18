@@ -170,7 +170,7 @@ public class StackInstructionTraceRendererTests
 
         var invokeInstruction =
             StackInstruction.Invoke_StackFrame_Const(
-                expression: Expression.LiteralInstance(StringEncoding.ValueFromString("increment")),
+                expression: Expression.LitralInst(StringEncoding.ValueFromString("increment")),
                 takeCount: 1);
 
         invokeInstruction.SetLinkedStackFrameInstructions(linkedInstructions);

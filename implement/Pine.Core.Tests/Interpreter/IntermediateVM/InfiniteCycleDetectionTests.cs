@@ -101,8 +101,8 @@ public class InfiniteCycleDetectionTests
         // invocation re-enters the same expression with the same environment
         // value, producing a cycle of length 1.
         var selfExpressionPlaceholder =
-            new Expression.ParseAndEval(
-                encoded: Expression.LiteralInstance(PineValue.EmptyList),
+            new Expression.Eval(
+                encoded: Expression.LitralInst(PineValue.EmptyList),
                 environment: Expression.EnvironmentInstance);
 
         // Replace the literal with the encoded form of the placeholder itself
@@ -111,12 +111,12 @@ public class InfiniteCycleDetectionTests
         //   environment = [encoded_self_expression, ...]
         //   target      = ParseAndEval(encoded = head env, environment = env)
         var headOfEnv =
-            Expression.KernelApplicationInstance(
+            Expression.BuiltinInst(
                 function: nameof(BuiltinFunction.head),
                 input: Expression.EnvironmentInstance);
 
         var selfRecursiveExpression =
-            new Expression.ParseAndEval(
+            new Expression.Eval(
                 encoded: headOfEnv,
                 environment: Expression.EnvironmentInstance);
 
@@ -165,41 +165,41 @@ public class InfiniteCycleDetectionTests
         // sequence of arguments observed is 0, 1, 0, 1, ... which is a
         // cycle of length 2 invocations of the same expression.
         var selfReference =
-            Expression.KernelApplicationInstance(
+            Expression.BuiltinInst(
                 function: nameof(BuiltinFunction.head),
                 input: Expression.EnvironmentInstance);
 
         var argReference =
-            Expression.KernelApplicationInstance(
+            Expression.BuiltinInst(
                 function: nameof(BuiltinFunction.head),
                 input:
-                Expression.KernelApplicationInstance(
+                Expression.BuiltinInst(
                     function: nameof(BuiltinFunction.skip),
                     input:
-                    Expression.ListInstance(
+                    Expression.ListInst(
                         [
-                        Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(1)),
+                        Expression.LitralInst(IntegerEncoding.EncodeSignedInteger(1)),
                         Expression.EnvironmentInstance,
                         ])));
 
         // toggledArg = 1 + (-1) * argReference  =  1 - argReference
         var toggledArg =
-            Expression.KernelApplicationInstance(
+            Expression.BuiltinInst(
                 function: nameof(BuiltinFunction.int_add),
                 input:
-                Expression.ListInstance(
+                Expression.ListInst(
                     [
-                    Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(1)),
-                    Expression.KernelApplicationInstance(
+                    Expression.LitralInst(IntegerEncoding.EncodeSignedInteger(1)),
+                    Expression.BuiltinInst(
                         function: nameof(BuiltinFunction.negate),
                         input: argReference),
                     ]));
 
         var selfRecursiveExpression =
-            new Expression.ParseAndEval(
+            new Expression.Eval(
                 encoded: selfReference,
                 environment:
-                Expression.ListInstance(
+                Expression.ListInst(
                     [
                     selfReference,
                     toggledArg,
@@ -257,30 +257,30 @@ public class InfiniteCycleDetectionTests
         // So the sequence of frame expressions is f, g, f, g, ... a cycle of
         // length 2.
         var headOfEnv =
-            Expression.KernelApplicationInstance(
+            Expression.BuiltinInst(
                 function: nameof(BuiltinFunction.head),
                 input: Expression.EnvironmentInstance);
 
         var headOfSkipOneEnv =
-            Expression.KernelApplicationInstance(
+            Expression.BuiltinInst(
                 function: nameof(BuiltinFunction.head),
                 input:
-                Expression.KernelApplicationInstance(
+                Expression.BuiltinInst(
                     function: nameof(BuiltinFunction.skip),
                     input:
-                    Expression.ListInstance(
+                    Expression.ListInst(
                         [
-                        Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(1)),
+                        Expression.LitralInst(IntegerEncoding.EncodeSignedInteger(1)),
                         Expression.EnvironmentInstance,
                         ])));
 
         var fExpression =
-            new Expression.ParseAndEval(
+            new Expression.Eval(
                 encoded: headOfEnv,
                 environment: Expression.EnvironmentInstance);
 
         var gExpression =
-            new Expression.ParseAndEval(
+            new Expression.Eval(
                 encoded: headOfSkipOneEnv,
                 environment: Expression.EnvironmentInstance);
 
@@ -325,9 +325,9 @@ public class InfiniteCycleDetectionTests
         Core.Interpreter.IntermediateVM.PineVM.EvaluationConfig config)
     {
         var rootExpression =
-            new Expression.ParseAndEval(
+            new Expression.Eval(
                 encoded:
-                Expression.LiteralInstance(
+                Expression.LitralInst(
                     ExpressionEncoding.EncodeExpressionAsValue(targetExpression)),
                 environment: Expression.EnvironmentInstance);
 

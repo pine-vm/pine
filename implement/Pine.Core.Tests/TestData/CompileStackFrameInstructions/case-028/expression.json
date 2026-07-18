@@ -1,11 +1,11 @@
 {
-  "KernelApplication": [
+  "Builtin": [
     "equal",
     {
       "List": [
         [
           {
-            "KernelApplication": [
+            "Builtin": [
               "length",
               {
                 "Environment": [
@@ -14,7 +14,7 @@
             ]
           },
           {
-            "Literal": [
+            "Litral": [
               11
             ]
           }

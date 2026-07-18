@@ -21,82 +21,82 @@ public class ExpressionJsonEncodingTests
 
                 // Empty list expression.
                 ("""{"List":[[]]}"""
-                , Expression.ListInstance([])),
+                , Expression.ListInst([])),
 
                 // Literal expression with an integer value.
                 ("""{"Literal":[42]}"""
-                , Expression.LiteralInstance(
+                , Expression.LitralInst(
                     IntegerEncoding.EncodeSignedInteger(42))),
 
                 // Literal expression with a string value.
                 ("""{"Literal":[{"BlobAsString":"Hello"}]}"""
-                , Expression.LiteralInstance(
+                , Expression.LitralInst(
                     StringEncoding.ValueFromString("Hello"))),
 
                 // Literal expression with an empty list value.
                 ("""{"Literal":[[]]}"""
-                , Expression.LiteralInstance(PineValue.EmptyList)),
+                , Expression.LitralInst(PineValue.EmptyList)),
 
                 // List expression with multiple items.
                 ("""{"List":[[{"Environment":[]},{"Literal":[1]}]]}"""
-                , Expression.ListInstance(
+                , Expression.ListInst(
                     [Expression.EnvironmentInstance,
-                     Expression.LiteralInstance(
+                     Expression.LitralInst(
                         IntegerEncoding.EncodeSignedInteger(1))])),
 
                 // Parse-and-eval expression.
                 ("""{"ParseAndEval":[{"Literal":[7]},{"Environment":[]}]}"""
-                , new Expression.ParseAndEval(
-                    encoded: Expression.LiteralInstance(
+                , new Expression.Eval(
+                    encoded: Expression.LitralInst(
                         IntegerEncoding.EncodeSignedInteger(7)),
                     environment: Expression.EnvironmentInstance)),
 
                 // Kernel application expression.
                 ("""{"KernelApplication":["head",{"Environment":[]}]}"""
-                , Expression.KernelApplicationInstance(
+                , Expression.BuiltinInst(
                     function: "head",
                     input: Expression.EnvironmentInstance)),
 
                 // Conditional expression.
                 ("""{"Conditional":[{"Environment":[]},{"Literal":[0]},{"Literal":[1]}]}"""
-                , Expression.ConditionalInstance(
+                , Expression.ConditionalInst(
                     condition: Expression.EnvironmentInstance,
-                    falseBranch: Expression.LiteralInstance(
+                    falseBranch: Expression.LitralInst(
                         IntegerEncoding.EncodeSignedInteger(0)),
-                    trueBranch: Expression.LiteralInstance(
+                    trueBranch: Expression.LitralInst(
                         IntegerEncoding.EncodeSignedInteger(1)))),
 
                 // String tag expression.
                 ("""{"StringTag":["my-tag",{"Environment":[]}]}"""
-                , new Expression.StringTag(
+                , new Expression.Label(
                     tag: "my-tag",
                     tagged: Expression.EnvironmentInstance)),
 
                 // Nested: kernel application with a list of subexpressions.
                 ("""{"KernelApplication":["equal",{"List":[[{"KernelApplication":["head",{"Environment":[]}]},{"Literal":[4]}]]}]}"""
-                , Expression.KernelApplicationInstance(
+                , Expression.BuiltinInst(
                     function: "equal",
-                    input: Expression.ListInstance(
-                        [Expression.KernelApplicationInstance(
+                    input: Expression.ListInst(
+                        [Expression.BuiltinInst(
                             function: "head",
                             input: Expression.EnvironmentInstance),
-                         Expression.LiteralInstance(
+                         Expression.LitralInst(
                             IntegerEncoding.EncodeSignedInteger(4))]))),
 
                 // Deeply nested: conditional combining kernel application, parse-and-eval and string tag.
                 ("""{"Conditional":[{"KernelApplication":["equal",{"Environment":[]}]},{"ParseAndEval":[{"Literal":[{"BlobAsString":"F"}]},{"List":[[{"Environment":[]}]]}]},{"StringTag":["branch",{"Literal":[9]}]}]}"""
-                , Expression.ConditionalInstance(
-                    condition: Expression.KernelApplicationInstance(
+                , Expression.ConditionalInst(
+                    condition: Expression.BuiltinInst(
                         function: "equal",
                         input: Expression.EnvironmentInstance),
-                    falseBranch: new Expression.ParseAndEval(
-                        encoded: Expression.LiteralInstance(
+                    falseBranch: new Expression.Eval(
+                        encoded: Expression.LitralInst(
                             StringEncoding.ValueFromString("F")),
-                        environment: Expression.ListInstance(
+                        environment: Expression.ListInst(
                             [Expression.EnvironmentInstance])),
-                    trueBranch: new Expression.StringTag(
+                    trueBranch: new Expression.Label(
                         tag: "branch",
-                        tagged: Expression.LiteralInstance(
+                        tagged: Expression.LitralInst(
                             IntegerEncoding.EncodeSignedInteger(9))))),
             };
 

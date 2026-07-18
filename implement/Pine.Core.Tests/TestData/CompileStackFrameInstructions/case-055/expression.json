@@ -1,5 +1,5 @@
 {
-  "KernelApplication": [
+  "Builtin": [
     "concat",
     {
       "List": [
@@ -12,7 +12,7 @@
             "List": [
               [
                 {
-                  "Literal": [
+                  "Litral": [
                     42
                   ]
                 }

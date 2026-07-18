@@ -1,11 +1,11 @@
 {
-  "KernelApplication": [
+  "Builtin": [
     "bit_and",
     {
       "List": [
         [
           {
-            "Literal": [
+            "Litral": [
               23
             ]
           },

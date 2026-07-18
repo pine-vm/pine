@@ -1,21 +1,21 @@
 {
   "Conditional": [
     {
-      "Literal": [
+      "Litral": [
         {
           "AsBase64": "BA=="
         }
       ]
     },
     {
-      "Literal": [
+      "Litral": [
         {
           "AsBase64": "Bw=="
         }
       ]
     },
     {
-      "Literal": [
+      "Litral": [
         {
           "AsBase64": "CQ=="
         }

@@ -1,11 +1,11 @@
 {
-  "KernelApplication": [
+  "Builtin": [
     "int_is_sorted_asc",
     {
       "List": [
         [
           {
-            "Literal": [
+            "Litral": [
               23
             ]
           },
@@ -14,7 +14,7 @@
             ]
           },
           {
-            "Literal": [
+            "Litral": [
               27
             ]
           }

@@ -11,7 +11,7 @@ namespace Pine.Core.Interpreter;
 /// A minimal, direct interpreter for Pine <see cref="Expression"/> trees.
 /// Evaluates expressions by recursive traversal without an intermediate representation or compilation step.
 /// <para>
-/// Optionally caches results of <see cref="Expression.ParseAndEval"/> evaluations keyed by
+/// Optionally caches results of <see cref="Expression.Eval"/> evaluations keyed by
 /// (<see cref="EvalCacheEntryKey.ExprValue"/>, <see cref="EvalCacheEntryKey.EnvValue"/>) pairs.
 /// </para>
 /// </summary>
@@ -36,7 +36,7 @@ public class DirectInterpreter(
         Expression expression,
         PineValue environment)
     {
-        if (expression is Expression.Literal literalExpression)
+        if (expression is Expression.Litral literalExpression)
             return literalExpression.Value;
 
         if (expression is Expression.List listExpression)
@@ -44,7 +44,7 @@ public class DirectInterpreter(
             return EvaluateListExpression(listExpression, environment);
         }
 
-        if (expression is Expression.ParseAndEval applicationExpression)
+        if (expression is Expression.Eval applicationExpression)
         {
             return
                 EvaluateParseAndEvalExpression(
@@ -52,7 +52,7 @@ public class DirectInterpreter(
                     environment);
         }
 
-        if (expression is Expression.KernelApplication kernelApplicationExpression)
+        if (expression is Expression.Builtin kernelApplicationExpression)
         {
             return
                 EvaluateKernelApplicationExpression(
@@ -73,7 +73,7 @@ public class DirectInterpreter(
             return environment;
         }
 
-        if (expression is Expression.StringTag stringTagExpression)
+        if (expression is Expression.Label stringTagExpression)
         {
             return
                 EvaluateExpressionDefault(
@@ -111,14 +111,14 @@ public class DirectInterpreter(
     }
 
     /// <summary>
-    /// Evaluates a <see cref="Expression.ParseAndEval"/> expression:
+    /// Evaluates a <see cref="Expression.Eval"/> expression:
     /// first evaluates the encoded expression and environment sub-expressions, then parses the
     /// encoded value into an <see cref="Expression"/> and evaluates it in the computed environment.
     /// Results may be cached when <c>evalCache</c> is provided.
     /// </summary>
     /// <exception cref="ParseExpressionException">Thrown when the encoded value cannot be parsed as a valid expression.</exception>
     public PineValue EvaluateParseAndEvalExpression(
-        Expression.ParseAndEval parseAndEval,
+        Expression.Eval parseAndEval,
         PineValue environment)
     {
         var environmentValue =
@@ -175,16 +175,16 @@ public class DirectInterpreter(
             fromOk: asString => "string \'" + asString + "\'");
 
     /// <summary>
-    /// Evaluates a <see cref="Expression.KernelApplication"/> expression.
+    /// Evaluates a <see cref="Expression.Builtin"/> expression.
     /// Includes an optimized fast path for the common <c>head(skip(...))</c> pattern used for
     /// environment path access, falling back to the generic kernel function application.
     /// </summary>
     public PineValue EvaluateKernelApplicationExpression(
         PineValue environment,
-        Expression.KernelApplication application)
+        Expression.Builtin application)
     {
         if (application.Function is nameof(BuiltinFunction.head) &&
-            application.Input is Expression.KernelApplication innerKernelApplication)
+            application.Input is Expression.Builtin innerKernelApplication)
         {
             if (innerKernelApplication.Function is nameof(BuiltinFunction.skip) &&
                 innerKernelApplication.Input is Expression.List skipListExpr &&
@@ -220,12 +220,12 @@ public class DirectInterpreter(
     }
 
     /// <summary>
-    /// Evaluates a <see cref="Expression.KernelApplication"/> using the generic kernel function dispatch.
+    /// Evaluates a <see cref="Expression.Builtin"/> using the generic kernel function dispatch.
     /// Evaluates the input expression first, then applies the named kernel function.
     /// </summary>
     public PineValue EvaluateKernelApplicationExpressionGeneric(
         PineValue environment,
-        Expression.KernelApplication application)
+        Expression.Builtin application)
     {
         var inputValue =
             EvaluateExpressionDefault(application.Input, environment);

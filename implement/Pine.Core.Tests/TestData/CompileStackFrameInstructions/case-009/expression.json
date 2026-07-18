@@ -1,25 +1,25 @@
 {
   "Conditional": [
     {
-      "Literal": [
+      "Litral": [
         11
       ]
     },
     {
-      "Literal": [
+      "Litral": [
         17
       ]
     },
     {
-      "ParseAndEval": [
+      "Eval": [
         {
-          "KernelApplication": [
+          "Builtin": [
             "skip",
             {
               "List": [
                 [
                   {
-                    "Literal": [
+                    "Litral": [
                       13
                     ]
                   },

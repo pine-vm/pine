@@ -649,7 +649,7 @@ public class CoreBasics
         if (GetFunctionValue(functionName) is not { } functionValue)
             return null;
 
-        return Expression.LiteralInstance(functionValue);
+        return Expression.LitralInst(functionValue);
     }
 
     /// <summary>
@@ -1170,7 +1170,7 @@ public class CoreBasics
                 False
         */
         return
-            Expression.ConditionalInstance(
+            Expression.ConditionalInst(
                 condition: BuiltinHelpers.ApplyBuiltinEqualBinary(left, s_trueValue),
                 trueBranch: right,
                 falseBranch: s_falseValue);
@@ -1195,7 +1195,7 @@ public class CoreBasics
                 b
         */
         return
-            Expression.ConditionalInstance(
+            Expression.ConditionalInst(
                 condition: BuiltinHelpers.ApplyBuiltinEqualBinary(left, s_trueValue),
                 trueBranch: s_trueValue,
                 falseBranch: right);
@@ -1221,7 +1221,7 @@ public class CoreBasics
         var bothEqual = BuiltinHelpers.ApplyBuiltinEqualBinary(left, right);
 
         return
-            Expression.ConditionalInstance(
+            Expression.ConditionalInst(
                 condition: bothEqual,
                 trueBranch: s_falseValue,
                 falseBranch: s_trueValue);
@@ -1388,7 +1388,7 @@ public class CoreBasics
         Expression f,
         Expression x)
     {
-        return new Expression.ParseAndEval(encoded: f, environment: x);
+        return new Expression.Eval(encoded: f, environment: x);
     }
 
     /// <summary>
@@ -1412,7 +1412,7 @@ public class CoreBasics
         Expression x,
         Expression f)
     {
-        return new Expression.ParseAndEval(encoded: f, environment: x);
+        return new Expression.Eval(encoded: f, environment: x);
     }
 
     /// <summary>
@@ -1485,10 +1485,10 @@ public class CoreBasics
                 Expression.EnvironmentInstance);
 
         // f(x)
-        var fx = new Expression.ParseAndEval(encoded: fCaptured, environment: xArg);
+        var fx = new Expression.Eval(encoded: fCaptured, environment: xArg);
 
         // g(f(x))
-        var gfx = new Expression.ParseAndEval(encoded: gCaptured, environment: fx);
+        var gfx = new Expression.Eval(encoded: gCaptured, environment: fx);
 
         return
             FunctionValueBuilder.EmitCurriedFunctionTemplateWithLeadingArgs(
@@ -1528,10 +1528,10 @@ public class CoreBasics
                 Expression.EnvironmentInstance);
 
         // f(x)
-        var fx = new Expression.ParseAndEval(encoded: fCaptured, environment: xArg);
+        var fx = new Expression.Eval(encoded: fCaptured, environment: xArg);
 
         // g(f(x))
-        var gfx = new Expression.ParseAndEval(encoded: gCaptured, environment: fx);
+        var gfx = new Expression.Eval(encoded: gCaptured, environment: fx);
 
         return
             FunctionValueBuilder.EmitCurriedFunctionTemplateWithLeadingArgs(
@@ -1574,13 +1574,13 @@ public class CoreBasics
 
         // Absolute values
         var absDividend =
-            Expression.ConditionalInstance(
+            Expression.ConditionalInst(
                 condition: dividendNonNegative,
                 trueBranch: dividend,
                 falseBranch: BuiltinMul(dividend, negativeOne));
 
         var absDivisor =
-            Expression.ConditionalInstance(
+            Expression.ConditionalInst(
                 condition: divisorNonNegative,
                 trueBranch: divisor,
                 falseBranch: BuiltinMul(divisor, negativeOne));
@@ -1593,14 +1593,14 @@ public class CoreBasics
 
         // Apply sign to result
         var signedQuotient =
-            Expression.ConditionalInstance(
+            Expression.ConditionalInst(
                 condition: signsMatch,
                 trueBranch: absQuotient,
                 falseBranch: BuiltinMul(absQuotient, negativeOne));
 
         // Final result: 0 if divisor is 0, otherwise the computed quotient
         return
-            Expression.ConditionalInstance(
+            Expression.ConditionalInst(
                 condition: divisorIsZero,
                 trueBranch: zero,
                 falseBranch: signedQuotient);
@@ -1625,14 +1625,14 @@ public class CoreBasics
         // envFunctions[0] = the function itself
 
         // Create a self-referential structure by putting the encoded body in envFunctions
-        var envFunctions = Expression.ListInstance([Expression.LiteralInstance(encodedBody)]);
+        var envFunctions = Expression.ListInst([Expression.LitralInst(encodedBody)]);
 
-        var initialArgs = Expression.ListInstance([absDividend, absDivisor, LiteralInt(0)]);
-        var initialEnv = Expression.ListInstance([envFunctions, initialArgs]);
+        var initialArgs = Expression.ListInst([absDividend, absDivisor, LiteralInt(0)]);
+        var initialEnv = Expression.ListInst([envFunctions, initialArgs]);
 
         return
-            new Expression.ParseAndEval(
-                encoded: Expression.LiteralInstance(encodedBody),
+            new Expression.Eval(
+                encoded: Expression.LitralInst(encodedBody),
                 environment: initialEnv);
     }
 
@@ -1718,14 +1718,14 @@ public class CoreBasics
         {
             // Build environment: [envFunctions, [dividend, divisor, quotient]]
             var newEnv =
-                Expression.ListInstance(
+                Expression.ListInst(
                     [
                     envFuncs,
-                    Expression.ListInstance([dividend, divisor, quotient])
+                    Expression.ListInst([dividend, divisor, quotient])
                     ]);
 
             return
-                new Expression.ParseAndEval(
+                new Expression.Eval(
                     encoded: selfFunc,
                     environment: newEnv);
         }
@@ -1774,10 +1774,10 @@ public class CoreBasics
         var divisorLeDividend = BuiltinIntIsSortedAsc(divisorExpr, dividendExpr);
 
         var innerBody =
-            Expression.ConditionalInstance(
+            Expression.ConditionalInst(
                 condition: scaledDivisorLeDividend,
                 trueBranch: scalingResult,
-                falseBranch: Expression.ConditionalInstance(
+                falseBranch: Expression.ConditionalInst(
                     condition: divisorLeDividend,
                     trueBranch: subtractResult,
                     falseBranch: baseCase));
@@ -1811,9 +1811,9 @@ public class CoreBasics
                     Pine_kernel.int_add [ remainder, divisor ]
          * */
 
-        var zero = Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(0));
+        var zero = Expression.LitralInst(IntegerEncoding.EncodeSignedInteger(0));
 
-        var one = Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(1));
+        var one = Expression.LitralInst(IntegerEncoding.EncodeSignedInteger(1));
 
         // Check if divisor is 1
         var divisorIsOne = BuiltinHelpers.ApplyBuiltinEqualBinary(divisor, one);
@@ -1826,14 +1826,14 @@ public class CoreBasics
 
         // If remainder is non-negative, return it; otherwise add divisor
         var adjustedRemainder =
-            Expression.ConditionalInstance(
+            Expression.ConditionalInst(
                 condition: remainderNonNegative,
                 trueBranch: remainder,
                 falseBranch: BuiltinAdd(remainder, divisor));
 
         // If divisor is 1, return 0; otherwise return adjusted remainder
         return
-            Expression.ConditionalInstance(
+            Expression.ConditionalInst(
                 condition: divisorIsOne,
                 trueBranch: zero,
                 falseBranch: adjustedRemainder);
@@ -1861,10 +1861,10 @@ public class CoreBasics
                     ]
          * */
 
-        var zero = Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(0));
+        var zero = Expression.LitralInst(IntegerEncoding.EncodeSignedInteger(0));
 
-        var one = Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(1));
-        var negativeOne = Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(-1));
+        var one = Expression.LitralInst(IntegerEncoding.EncodeSignedInteger(1));
+        var negativeOne = Expression.LitralInst(IntegerEncoding.EncodeSignedInteger(-1));
 
         // Check if divisor is 1
         var divisorIsOne = BuiltinHelpers.ApplyBuiltinEqualBinary(divisor, one);
@@ -1883,7 +1883,7 @@ public class CoreBasics
 
         // If divisor is 1, return 0; otherwise return remainder
         return
-            Expression.ConditionalInstance(
+            Expression.ConditionalInst(
                 condition: divisorIsOne,
                 trueBranch: zero,
                 falseBranch: remainder);
@@ -1905,18 +1905,18 @@ public class CoreBasics
 
         // Create envFunctions = [gcdEncodedBody] and call gcd(a, b)
         var initialEnvFunctions =
-            Expression.ListInstance([Expression.LiteralInstance(gcdEncodedBody)]);
+            Expression.ListInst([Expression.LitralInst(gcdEncodedBody)]);
 
         var initialEnv =
-            Expression.ListInstance(
+            Expression.ListInst(
                 [
                 initialEnvFunctions,
-                Expression.ListInstance([a, b])
+                Expression.ListInst([a, b])
                 ]);
 
         return
-            new Expression.ParseAndEval(
-                encoded: Expression.LiteralInstance(gcdEncodedBody),
+            new Expression.Eval(
+                encoded: Expression.LitralInst(gcdEncodedBody),
                 environment: initialEnv);
     }
 
@@ -1962,16 +1962,16 @@ public class CoreBasics
 
         // Recursive call: self(b, modBy b a) with same envFunctions
         var recursiveCall =
-            new Expression.ParseAndEval(
+            new Expression.Eval(
                 encoded: selfExpr,
-                environment: Expression.ListInstance(
+                environment: Expression.ListInst(
                     [
                     envFunctionsExpr,
-                    Expression.ListInstance([bExpr, modByResult])
+                    Expression.ListInst([bExpr, modByResult])
                     ]));
 
         var body =
-            Expression.ConditionalInstance(
+            Expression.ConditionalInst(
                 condition: bIsZero,
                 trueBranch: aExpr,
                 falseBranch: recursiveCall);
@@ -2038,10 +2038,10 @@ public class CoreBasics
 
         // Construct the negated float: [Elm_Float, [negatedNumerator, denominator]]
         var negatedFloat =
-            Expression.ListInstance(
+            Expression.ListInst(
                 [
                 s_elmFloatTypeTagNameLiteral,
-                Expression.ListInstance([negatedNumerator, denominator])
+                Expression.ListInst([negatedNumerator, denominator])
                 ]);
 
         // For non-float: just multiply by -1
@@ -2051,7 +2051,7 @@ public class CoreBasics
                 n);
 
         var asExpr =
-            Expression.ConditionalInstance(
+            Expression.ConditionalInst(
                 condition: isFloatCondition,
                 trueBranch: negatedFloat,
                 falseBranch: negatedInt);
@@ -2111,16 +2111,16 @@ public class CoreBasics
             BuiltinIntIsSortedAsc(LiteralInt(0), numerator);
 
         var absNumerator =
-            Expression.ConditionalInstance(
+            Expression.ConditionalInst(
                 condition: isNumeratorNonNegative,
                 trueBranch: numerator,
                 falseBranch: BuiltinMul(LiteralInt(-1), numerator));
 
         var absFloat =
-            Expression.ListInstance(
+            Expression.ListInst(
                 [
                 s_elmFloatTypeTagNameLiteral,
-                Expression.ListInstance([absNumerator, denominator])
+                Expression.ListInst([absNumerator, denominator])
                 ]);
 
         // For non-float: check if n >= 0
@@ -2128,13 +2128,13 @@ public class CoreBasics
             BuiltinIntIsSortedAsc(LiteralInt(0), n);
 
         var absInt =
-            Expression.ConditionalInstance(
+            Expression.ConditionalInst(
                 condition: isNonNegative,
                 trueBranch: n,
                 falseBranch: BuiltinMul(LiteralInt(-1), n));
 
         var asExpr =
-            Expression.ConditionalInstance(
+            Expression.ConditionalInst(
                 condition: isFloatCondition,
                 trueBranch: absFloat,
                 falseBranch: absInt);
@@ -2202,7 +2202,7 @@ public class CoreBasics
 
         // For non-float: the value is already an integer
         var asExpr =
-            Expression.ConditionalInstance(
+            Expression.ConditionalInst(
                 condition: isFloatCondition,
                 trueBranch: floorFloat,
                 falseBranch: n);
@@ -2231,11 +2231,11 @@ public class CoreBasics
         var isGT = Generic_Eq(compareNHigh, s_orderGT);
 
         return
-            Expression.ConditionalInstance(
+            Expression.ConditionalInst(
                 condition: isLT,
                 trueBranch: low,
                 falseBranch:
-                Expression.ConditionalInstance(
+                Expression.ConditionalInst(
                     condition: isGT,
                     trueBranch: high,
                     falseBranch: n));
@@ -2332,20 +2332,20 @@ public class CoreBasics
 
         // When augend is float
         var augendFloatBranch =
-            Expression.ConditionalInstance(
+            Expression.ConditionalInst(
                 condition: addendIsFloat,
                 trueBranch: floatFloatResult,
                 falseBranch: floatIntResult);
 
         // When augend is not float
         var augendNotFloatBranch =
-            Expression.ConditionalInstance(
+            Expression.ConditionalInst(
                 condition: addendIsFloat,
                 trueBranch: intFloatResult,
                 falseBranch: intAddition);
 
         return
-            Expression.ConditionalInstance(
+            Expression.ConditionalInst(
                 condition: augendIsFloat,
                 trueBranch: augendFloatBranch,
                 falseBranch: augendNotFloatBranch);
@@ -2415,20 +2415,20 @@ public class CoreBasics
 
         // When multiplicand is float
         var multiplicandFloatBranch =
-            Expression.ConditionalInstance(
+            Expression.ConditionalInst(
                 condition: multiplierIsFloat,
                 trueBranch: floatFloatResult,
                 falseBranch: floatIntResult);
 
         // When multiplicand is not float
         var multiplicandNotFloatBranch =
-            Expression.ConditionalInstance(
+            Expression.ConditionalInst(
                 condition: multiplierIsFloat,
                 trueBranch: intFloatResult,
                 falseBranch: intMultiplication);
 
         return
-            Expression.ConditionalInstance(
+            Expression.ConditionalInst(
                 condition: multiplicandIsFloat,
                 trueBranch: multiplicandFloatBranch,
                 falseBranch: multiplicandNotFloatBranch);
@@ -2516,20 +2516,20 @@ public class CoreBasics
 
         // When minuend is float
         var minuendFloatBranch =
-            Expression.ConditionalInstance(
+            Expression.ConditionalInst(
                 condition: subtrahendIsFloat,
                 trueBranch: floatFloatResult,
                 falseBranch: floatIntResult);
 
         // When minuend is not float
         var minuendNotFloatBranch =
-            Expression.ConditionalInstance(
+            Expression.ConditionalInst(
                 condition: subtrahendIsFloat,
                 trueBranch: intFloatResult,
                 falseBranch: intSubtraction);
 
         return
-            Expression.ConditionalInstance(
+            Expression.ConditionalInst(
                 condition: minuendIsFloat,
                 trueBranch: minuendFloatBranch,
                 falseBranch: minuendNotFloatBranch);
@@ -2583,8 +2583,8 @@ public class CoreBasics
         Expression arg)
     {
         return
-            new Expression.ParseAndEval(
-                encoded: Expression.LiteralInstance(functionValue),
+            new Expression.Eval(
+                encoded: Expression.LitralInst(functionValue),
                 environment: arg);
     }
 
@@ -2600,16 +2600,16 @@ public class CoreBasics
             BuiltinHelpers.ApplyBuiltinIntMul([left, right]);
     }
 
-    private static Expression.Literal LiteralInt(long value) =>
-        Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(value));
+    private static Expression.Litral LiteralInt(long value) =>
+        Expression.LitralInst(IntegerEncoding.EncodeSignedInteger(value));
 
-    private static Expression.KernelApplication BuiltinIntIsSortedAsc(Expression left, Expression right)
+    private static Expression.Builtin BuiltinIntIsSortedAsc(Expression left, Expression right)
     {
         return
-            Expression.KernelApplicationInstance(
+            Expression.BuiltinInst(
                 function: nameof(BuiltinFunction.int_is_sorted_asc),
                 input:
-                Expression.ListInstance(
+                Expression.ListInst(
                     [
                     left,
                     right
@@ -2636,47 +2636,47 @@ public class CoreBasics
 
         // Float result: [Elm_Float, [numerator, denominator]]
         var floatResult =
-            Expression.ListInstance(
+            Expression.ListInst(
                 [
                 s_elmFloatTypeTagNameLiteral,
-                Expression.ListInstance([numerator, denominator])
+                Expression.ListInst([numerator, denominator])
                 ]);
 
         // If denominator is 1, just return numerator as integer
         // If it divides evenly, return the quotient as integer
         // Otherwise, return the float structure
         return
-            Expression.ConditionalInstance(
+            Expression.ConditionalInst(
                 condition: denominatorIsOne,
                 trueBranch: numerator,
-                falseBranch: Expression.ConditionalInstance(
+                falseBranch: Expression.ConditionalInst(
                     condition: dividesEvenly,
                     trueBranch: quotient,
                     falseBranch: floatResult));
     }
 
-    private static Expression.ParseAndEval ApplyUnary(
+    private static Expression.Eval ApplyUnary(
         PineValue encodedFunctionValue,
         Expression argument)
     {
         return
-            new Expression.ParseAndEval(
-                encoded: Expression.LiteralInstance(encodedFunctionValue),
+            new Expression.Eval(
+                encoded: Expression.LitralInst(encodedFunctionValue),
                 environment: argument);
     }
 
     private static (PineValue functionValue, Expression left, Expression right)?
         TryParseAsBinaryApplication(Expression expr)
     {
-        if (expr is Expression.ParseAndEval parseAndEvalRight)
+        if (expr is Expression.Eval parseAndEvalRight)
         {
             var right = parseAndEvalRight.Environment;
 
-            if (parseAndEvalRight.Encoded is Expression.ParseAndEval parseAndEvalLeft)
+            if (parseAndEvalRight.Encoded is Expression.Eval parseAndEvalLeft)
             {
                 var left = parseAndEvalLeft.Environment;
 
-                if (parseAndEvalLeft.Encoded is Expression.Literal functionLiteral)
+                if (parseAndEvalLeft.Encoded is Expression.Litral functionLiteral)
                 {
                     var functionValue = functionLiteral.Value;
 
@@ -2694,12 +2694,12 @@ public class CoreBasics
         Expression right)
     {
         var leftApplied =
-            new Expression.ParseAndEval(
-                encoded: Expression.LiteralInstance(functionValue),
+            new Expression.Eval(
+                encoded: Expression.LitralInst(functionValue),
                 environment: left);
 
         var fullExpr =
-            new Expression.ParseAndEval(
+            new Expression.Eval(
                 encoded: leftApplied,
                 environment: right);
 
@@ -2717,40 +2717,40 @@ public class CoreBasics
             Expression.EnvironmentInstance);
 
     private static readonly Expression s_elmFloatTypeTagNameLiteral =
-        Expression.LiteralInstance(ElmValue.ElmFloatTypeTagNameAsValue);
+        Expression.LitralInst(ElmValue.ElmFloatTypeTagNameAsValue);
 
     private static readonly Expression s_elmStringTypeTagNameLiteral =
-        Expression.LiteralInstance(ElmValue.ElmStringTypeTagNameAsValue);
+        Expression.LitralInst(ElmValue.ElmStringTypeTagNameAsValue);
 
     private static readonly Expression s_elmDictNotEmptyTagNameLiteral =
-        Expression.LiteralInstance(ElmValue.ElmDictNotEmptyTagNameAsValue);
+        Expression.LitralInst(ElmValue.ElmDictNotEmptyTagNameAsValue);
 
     private static readonly Expression s_elmSetTypeTagNameLiteral =
-        Expression.LiteralInstance(ElmValue.ElmSetTypeTagNameAsValue);
+        Expression.LitralInst(ElmValue.ElmSetTypeTagNameAsValue);
 
     // ========== Internal Comparison Implementations ==========
 
     private static readonly Expression s_trueValue =
-        Expression.LiteralInstance(ElmValueEncoding.ElmValueAsPineValue(ElmValue.TrueValue));
+        Expression.LitralInst(ElmValueEncoding.ElmValueAsPineValue(ElmValue.TrueValue));
 
     private static readonly Expression s_falseValue =
-        Expression.LiteralInstance(ElmValueEncoding.ElmValueAsPineValue(ElmValue.FalseValue));
+        Expression.LitralInst(ElmValueEncoding.ElmValueAsPineValue(ElmValue.FalseValue));
 
     // Pine kernel true/false values (for comparing with kernel function results)
     private static readonly Expression s_pineKernelTrue =
-        Expression.LiteralInstance(PineVM.PineKernelValues.TrueValue);
+        Expression.LitralInst(PineVM.PineKernelValues.TrueValue);
 
     private static readonly Expression s_pineKernelFalse =
-        Expression.LiteralInstance(PineVM.PineKernelValues.FalseValue);
+        Expression.LitralInst(PineVM.PineKernelValues.FalseValue);
 
     private static readonly Expression s_orderLT =
-        Expression.LiteralInstance(ElmValueEncoding.ElmValueAsPineValue(ElmValue.TagInstance("LT", [])));
+        Expression.LitralInst(ElmValueEncoding.ElmValueAsPineValue(ElmValue.TagInstance("LT", [])));
 
     private static readonly Expression s_orderEQ =
-        Expression.LiteralInstance(ElmValueEncoding.ElmValueAsPineValue(ElmValue.TagInstance("EQ", [])));
+        Expression.LitralInst(ElmValueEncoding.ElmValueAsPineValue(ElmValue.TagInstance("EQ", [])));
 
     private static readonly Expression s_orderGT =
-        Expression.LiteralInstance(ElmValueEncoding.ElmValueAsPineValue(ElmValue.TagInstance("GT", [])));
+        Expression.LitralInst(ElmValueEncoding.ElmValueAsPineValue(ElmValue.TagInstance("GT", [])));
 
     private static Expression Internal_Eq(
         Expression left,
@@ -2771,18 +2771,18 @@ public class CoreBasics
 
         // Create envFunctions = [eqEncodedBody] and call eqDeep(left, right)
         var initialEnvFunctions =
-            Expression.ListInstance([Expression.LiteralInstance(eqEncodedBody)]);
+            Expression.ListInst([Expression.LitralInst(eqEncodedBody)]);
 
         var initialEnv =
-            Expression.ListInstance(
+            Expression.ListInst(
                 [
                 initialEnvFunctions,
-                Expression.ListInstance([left, right])
+                Expression.ListInst([left, right])
                 ]);
 
         return
-            new Expression.ParseAndEval(
-                encoded: Expression.LiteralInstance(eqEncodedBody),
+            new Expression.Eval(
+                encoded: Expression.LitralInst(eqEncodedBody),
                 environment: initialEnv);
     }
 
@@ -2848,7 +2848,7 @@ public class CoreBasics
         var leqListB =
             ExpressionBuilder.BuildExpressionForPathInExpression([1, 1], Expression.EnvironmentInstance);
 
-        var leqEmptyList = Expression.ListInstance([]);
+        var leqEmptyList = Expression.ListInst([]);
         var leqListAIsEmpty = BuiltinHelpers.ApplyBuiltinEqualBinary(leqListA, leqEmptyList);
 
         var leqHeadA = BuiltinHelpers.ApplyBuiltinHead(leqListA);
@@ -2860,31 +2860,31 @@ public class CoreBasics
         // ParseAndEval(leqEqFunc, [[leqEqFunc], [headA, headB]])
         // eqDeep expects env = [envFunctions, [a, b]] where envFunctions[0] = eqDeep self
         var eqHeadCall =
-            new Expression.ParseAndEval(
+            new Expression.Eval(
                 encoded: leqEqFunc,
-                environment: Expression.ListInstance(
+                environment: Expression.ListInst(
                     [
-                    Expression.ListInstance([leqEqFunc]),
-                    Expression.ListInstance([leqHeadA, leqHeadB])
+                    Expression.ListInst([leqEqFunc]),
+                    Expression.ListInst([leqHeadA, leqHeadB])
                     ]));
 
         var leqHeadsEqualIsTrue = BuiltinHelpers.ApplyBuiltinEqualBinary(eqHeadCall, s_trueValue);
 
         // Recursive call: self(tailA, tailB) with same envFunctions
         var leqRecursiveTailCall =
-            new Expression.ParseAndEval(
+            new Expression.Eval(
                 encoded: leqSelf,
-                environment: Expression.ListInstance(
+                environment: Expression.ListInst(
                     [
                     leqEnvFunctions,
-                    Expression.ListInstance([leqTailA, leqTailB])
+                    Expression.ListInst([leqTailA, leqTailB])
                     ]));
 
         var leqBody =
-            Expression.ConditionalInstance(
+            Expression.ConditionalInst(
                 condition: leqListAIsEmpty,
                 trueBranch: s_trueValue,
-                falseBranch: Expression.ConditionalInstance(
+                falseBranch: Expression.ConditionalInst(
                     condition: leqHeadsEqualIsTrue,
                     trueBranch: leqRecursiveTailCall,
                     falseBranch: s_falseValue));
@@ -2925,18 +2925,18 @@ public class CoreBasics
         var eqRightDenominator = BuiltinHelpers.ApplyBuiltinHead(BuiltinHelpers.ApplyBuiltinSkip(1, eqRightTagArgs));
 
         var eqFloatIntEqual =
-            Expression.ConditionalInstance(
+            Expression.ConditionalInst(
                 condition: BuiltinHelpers.ApplyBuiltinEqualBinary(eqLeftNumerator, eqB),
-                trueBranch: Expression.ConditionalInstance(
+                trueBranch: Expression.ConditionalInst(
                     condition: BuiltinHelpers.ApplyBuiltinEqualBinary(eqLeftDenominator, LiteralInt(1)),
                     trueBranch: s_trueValue,
                     falseBranch: s_falseValue),
                 falseBranch: s_falseValue);
 
         var eqIntFloatEqual =
-            Expression.ConditionalInstance(
+            Expression.ConditionalInst(
                 condition: BuiltinHelpers.ApplyBuiltinEqualBinary(eqA, eqRightNumerator),
-                trueBranch: Expression.ConditionalInstance(
+                trueBranch: Expression.ConditionalInst(
                     condition: BuiltinHelpers.ApplyBuiltinEqualBinary(eqRightDenominator, LiteralInt(1)),
                     trueBranch: s_trueValue,
                     falseBranch: s_falseValue),
@@ -2946,13 +2946,13 @@ public class CoreBasics
         var eqFloatFloatRightProduct = BuiltinMul(eqRightNumerator, eqLeftDenominator);
 
         var eqFloatFloatEqual =
-            Expression.ConditionalInstance(
+            Expression.ConditionalInst(
                 condition: BuiltinHelpers.ApplyBuiltinEqualBinary(eqFloatFloatLeftProduct, eqFloatFloatRightProduct),
                 trueBranch: s_trueValue,
                 falseBranch: s_falseValue);
 
         var eqLeftFloatBranch =
-            Expression.ConditionalInstance(
+            Expression.ConditionalInst(
                 condition: eqRightIsFloat,
                 trueBranch: eqFloatFloatEqual,
                 falseBranch: eqFloatIntEqual);
@@ -2977,7 +2977,7 @@ public class CoreBasics
         var eqDictEqual = BuiltinHelpers.ApplyBuiltinEqualBinary(eqDictToListLeft, eqDictToListRight);
 
         var eqDictEqualResult =
-            Expression.ConditionalInstance(
+            Expression.ConditionalInst(
                 condition: eqDictEqual,
                 trueBranch: s_trueValue,
                 falseBranch: s_falseValue);
@@ -2995,7 +2995,7 @@ public class CoreBasics
         var eqSetKeysEqual = BuiltinHelpers.ApplyBuiltinEqualBinary(eqDictKeysA, eqDictKeysB);
 
         var eqSetEqualResult =
-            Expression.ConditionalInstance(
+            Expression.ConditionalInst(
                 condition: eqSetKeysEqual,
                 trueBranch: s_trueValue,
                 falseBranch: s_falseValue);
@@ -3003,63 +3003,63 @@ public class CoreBasics
         // List equality: call listsEqualRecursive(a, b) with eqSelf as the eq function
         // ParseAndEval(leqEncodedBody, [[leqEncodedBody, eqSelf], [a, b]])
         var eqListsEqualCall =
-            new Expression.ParseAndEval(
-                encoded: Expression.LiteralInstance(leqEncodedBody),
-                environment: Expression.ListInstance(
+            new Expression.Eval(
+                encoded: Expression.LitralInst(leqEncodedBody),
+                environment: Expression.ListInst(
                     [
-                    Expression.ListInstance(
+                    Expression.ListInst(
                         [
-                        Expression.LiteralInstance(leqEncodedBody),
+                        Expression.LitralInst(leqEncodedBody),
                         eqSelf
                         ]),
-                    Expression.ListInstance([eqA, eqB])
+                    Expression.ListInst([eqA, eqB])
                     ]));
 
         // Build the type-specific branches
         var eqSetOrDefaultBranch =
-            Expression.ConditionalInstance(
+            Expression.ConditionalInst(
                 condition: eqLeftIsSet,
                 trueBranch: eqSetEqualResult,
                 falseBranch: eqListsEqualCall);
 
         var eqDictOrSetOrDefaultBranch =
-            Expression.ConditionalInstance(
+            Expression.ConditionalInst(
                 condition: eqLeftIsDict,
                 trueBranch: eqDictEqualResult,
                 falseBranch: eqSetOrDefaultBranch);
 
         var eqStringOrDictOrSetOrDefaultBranch =
-            Expression.ConditionalInstance(
+            Expression.ConditionalInst(
                 condition: eqLeftIsString,
                 trueBranch: s_falseValue,
                 falseBranch: eqDictOrSetOrDefaultBranch);
 
         var eqSameLengthBranch =
-            Expression.ConditionalInstance(
+            Expression.ConditionalInst(
                 condition: eqSameLengths,
                 trueBranch: eqStringOrDictOrSetOrDefaultBranch,
                 falseBranch: s_falseValue);
 
         var eqNonFloatFallback =
-            Expression.ConditionalInstance(
+            Expression.ConditionalInst(
                 condition: eqLeftIsBlob,
                 trueBranch: s_falseValue,
                 falseBranch: eqSameLengthBranch);
 
         var eqLeftNotFloatBranch =
-            Expression.ConditionalInstance(
+            Expression.ConditionalInst(
                 condition: eqRightIsFloat,
                 trueBranch: eqIntFloatEqual,
                 falseBranch: eqNonFloatFallback);
 
         var eqFloatHandling =
-            Expression.ConditionalInstance(
+            Expression.ConditionalInst(
                 condition: eqLeftIsFloat,
                 trueBranch: eqLeftFloatBranch,
                 falseBranch: eqLeftNotFloatBranch);
 
         var eqBody =
-            Expression.ConditionalInstance(
+            Expression.ConditionalInst(
                 condition: eqDirectEqual,
                 trueBranch: s_trueValue,
                 falseBranch: eqFloatHandling);
@@ -3080,7 +3080,7 @@ public class CoreBasics
         var eqResult = Internal_Eq(left, right);
 
         return
-            Expression.ConditionalInstance(
+            Expression.ConditionalInst(
                 condition: BuiltinHelpers.ApplyBuiltinEqualBinary(eqResult, s_trueValue),
                 trueBranch: s_falseValue,
                 falseBranch: s_trueValue);
@@ -3113,7 +3113,7 @@ public class CoreBasics
             ExpressionBuilder.BuildExpressionForPathInExpression([1], Expression.EnvironmentInstance);
 
         var zero = LiteralInt(0);
-        var emptyList = Expression.ListInstance([]);
+        var emptyList = Expression.ListInst([]);
 
         // Check if dict is empty: length(dict) == 0
         // RBEmpty_elm_builtin is represented as ["RBEmpty_elm_builtin"]  (length 1)
@@ -3139,7 +3139,7 @@ public class CoreBasics
         var rightChild = BuiltinHelpers.ApplyBuiltinHead(BuiltinHelpers.ApplyBuiltinSkip(4, args));
 
         // tuple = [key, value]
-        var tuple = Expression.ListInstance([key, value]);
+        var tuple = Expression.ListInst([key, value]);
 
         // Recursive calls
         static Expression RecursiveCall(
@@ -3148,14 +3148,14 @@ public class CoreBasics
             Expression arg)
         {
             var env =
-                Expression.ListInstance(
+                Expression.ListInst(
                     [
                     envFuncs,
                     arg
                     ]);
 
             return
-                new Expression.ParseAndEval(
+                new Expression.Eval(
                     encoded: selfFunc,
                     environment: env);
         }
@@ -3168,13 +3168,13 @@ public class CoreBasics
             BuiltinHelpers.ApplyBuiltinConcat(
                 [
                 leftList,
-                Expression.ListInstance([tuple]),
+                Expression.ListInst([tuple]),
                 rightList
                 ]);
 
         // if isRBNode then concat else []
         var innerBody =
-            Expression.ConditionalInstance(
+            Expression.ConditionalInst(
                 condition: isRBNode,
                 trueBranch: concatResult,
                 falseBranch: emptyList);
@@ -3182,12 +3182,12 @@ public class CoreBasics
         var encodedBody = ExpressionEncoding.EncodeExpressionAsValue(innerBody);
 
         // Initial invocation
-        var envFunctions = Expression.ListInstance([Expression.LiteralInstance(encodedBody)]);
-        var initialEnv = Expression.ListInstance([envFunctions, dict]);
+        var envFunctions = Expression.ListInst([Expression.LitralInst(encodedBody)]);
+        var initialEnv = Expression.ListInst([envFunctions, dict]);
 
         return
-            new Expression.ParseAndEval(
-                encoded: Expression.LiteralInstance(encodedBody),
+            new Expression.Eval(
+                encoded: Expression.LitralInst(encodedBody),
                 environment: initialEnv);
     }
 
@@ -3212,7 +3212,7 @@ public class CoreBasics
         var dictExpr =
             ExpressionBuilder.BuildExpressionForPathInExpression([1], Expression.EnvironmentInstance);
 
-        var emptyList = Expression.ListInstance([]);
+        var emptyList = Expression.ListInst([]);
 
         var isRBNode =
             BuiltinHelpers.ApplyBuiltinEqualBinary(
@@ -3232,14 +3232,14 @@ public class CoreBasics
             Expression arg)
         {
             var env =
-                Expression.ListInstance(
+                Expression.ListInst(
                     [
                     envFuncs,
                     arg
                     ]);
 
             return
-                new Expression.ParseAndEval(
+                new Expression.Eval(
                     encoded: selfFunc,
                     environment: env);
         }
@@ -3251,24 +3251,24 @@ public class CoreBasics
             BuiltinHelpers.ApplyBuiltinConcat(
                 [
                 leftKeys,
-                Expression.ListInstance([key]),
+                Expression.ListInst([key]),
                 rightKeys
                 ]);
 
         var innerBody =
-            Expression.ConditionalInstance(
+            Expression.ConditionalInst(
                 condition: isRBNode,
                 trueBranch: concatResult,
                 falseBranch: emptyList);
 
         var encodedBody = ExpressionEncoding.EncodeExpressionAsValue(innerBody);
 
-        var envFunctions = Expression.ListInstance([Expression.LiteralInstance(encodedBody)]);
-        var initialEnv = Expression.ListInstance([envFunctions, dict]);
+        var envFunctions = Expression.ListInst([Expression.LitralInst(encodedBody)]);
+        var initialEnv = Expression.ListInst([envFunctions, dict]);
 
         return
-            new Expression.ParseAndEval(
-                encoded: Expression.LiteralInstance(encodedBody),
+            new Expression.Eval(
+                encoded: Expression.LitralInst(encodedBody),
                 environment: initialEnv);
     }
 
@@ -3366,7 +3366,7 @@ public class CoreBasics
 
         // Check if left is a Pine list using isPineList: take(0, a) == []
         // isPineList a = Pine_kernel.equal [ Pine_kernel.take [ 0, a ], [] ]
-        var emptyList = Expression.ListInstance([]);
+        var emptyList = Expression.ListInst([]);
 
         var leftTakeZero = BuiltinHelpers.ApplyBuiltinTake(0, left);
         var leftIsList = BuiltinHelpers.ApplyBuiltinEqualBinary(leftTakeZero, emptyList);
@@ -3385,24 +3385,24 @@ public class CoreBasics
 
         // When left is Float (and not a string)
         var leftFloatBranch =
-            Expression.ConditionalInstance(
+            Expression.ConditionalInst(
                 condition: rightIsFloat,
                 trueBranch: floatFloatCompare,
                 falseBranch: floatIntCompare);
 
         // When left is not Float and not String, check if it's a list
         var leftNotFloatNotStringBranch =
-            Expression.ConditionalInstance(
+            Expression.ConditionalInst(
                 condition: rightIsFloat,
                 trueBranch: intFloatCompare,
-                falseBranch: Expression.ConditionalInstance(
+                falseBranch: Expression.ConditionalInst(
                     condition: leftIsList,
                     trueBranch: listCompare,
                     falseBranch: intCompare));
 
         // When left is not String
         var leftNotStringBranch =
-            Expression.ConditionalInstance(
+            Expression.ConditionalInst(
                 condition: leftIsFloat,
                 trueBranch: leftFloatBranch,
                 falseBranch: leftNotFloatNotStringBranch);
@@ -3411,19 +3411,19 @@ public class CoreBasics
         // Note: leftIsString and rightIsString return Pine kernel booleans ([4] for true, [2] for false)
         // Use a nested conditional to check both conditions
         var bothStringsCondition =
-            Expression.ConditionalInstance(
+            Expression.ConditionalInst(
                 condition: leftIsString,
                 trueBranch: rightIsString,
                 falseBranch: s_pineKernelFalse);
 
         var comparisonResult =
-            Expression.ConditionalInstance(
+            Expression.ConditionalInst(
                 condition: bothStringsCondition,
                 trueBranch: stringCompare,
                 falseBranch: leftNotStringBranch);
 
         return
-            Expression.ConditionalInstance(
+            Expression.ConditionalInst(
                 condition: directEqual,
                 trueBranch: s_orderEQ,
                 falseBranch: comparisonResult);
@@ -3500,14 +3500,14 @@ public class CoreBasics
             Expression strB)
         {
             var newEnv =
-                Expression.ListInstance(
+                Expression.ListInst(
                     [
                     envFuncs,
-                    Expression.ListInstance([offset, strA, strB])
+                    Expression.ListInst([offset, strA, strB])
                     ]);
 
             return
-                new Expression.ParseAndEval(
+                new Expression.Eval(
                     encoded: selfFunc,
                     environment: newEnv);
         }
@@ -3523,28 +3523,28 @@ public class CoreBasics
         // else: GT
 
         var charAEmptyResult =
-            Expression.ConditionalInstance(
+            Expression.ConditionalInst(
                 condition: charBEmpty,
                 trueBranch: s_orderEQ,
                 falseBranch: s_orderLT);
 
         var charsNotEmpty =
-            Expression.ConditionalInstance(
+            Expression.ConditionalInst(
                 condition: charsEqual,
                 trueBranch: recursiveCompare,
-                falseBranch: Expression.ConditionalInstance(
+                falseBranch: Expression.ConditionalInst(
                     condition: charALessThanB,
                     trueBranch: s_orderLT,
                     falseBranch: s_orderGT));
 
         var charBNotEmpty =
-            Expression.ConditionalInstance(
+            Expression.ConditionalInst(
                 condition: charBEmpty,
                 trueBranch: s_orderGT,
                 falseBranch: charsNotEmpty);
 
         var innerBody =
-            Expression.ConditionalInstance(
+            Expression.ConditionalInst(
                 condition: charAEmpty,
                 trueBranch: charAEmptyResult,
                 falseBranch: charBNotEmpty);
@@ -3553,14 +3553,14 @@ public class CoreBasics
         var encodedBody = ExpressionEncoding.EncodeExpressionAsValue(innerBody);
 
         // Create the initial invocation with offset = 0
-        var envFunctions = Expression.ListInstance([Expression.LiteralInstance(encodedBody)]);
+        var envFunctions = Expression.ListInst([Expression.LitralInst(encodedBody)]);
 
-        var initialArgs = Expression.ListInstance([zero, leftString, rightString]);
-        var initialEnv = Expression.ListInstance([envFunctions, initialArgs]);
+        var initialArgs = Expression.ListInst([zero, leftString, rightString]);
+        var initialEnv = Expression.ListInst([envFunctions, initialArgs]);
 
         return
-            new Expression.ParseAndEval(
-                encoded: Expression.LiteralInstance(encodedBody),
+            new Expression.Eval(
+                encoded: Expression.LitralInst(encodedBody),
                 environment: initialEnv);
     }
 
@@ -3624,10 +3624,10 @@ public class CoreBasics
 
         // headOrder: if headsEqual then EQ, else if headA < headB then LT else GT
         var headOrder =
-            Expression.ConditionalInstance(
+            Expression.ConditionalInst(
                 condition: headsEqual,
                 trueBranch: s_orderEQ,
-                falseBranch: Expression.ConditionalInstance(
+                falseBranch: Expression.ConditionalInst(
                     condition: headALessThanB,
                     trueBranch: s_orderLT,
                     falseBranch: s_orderGT));
@@ -3642,14 +3642,14 @@ public class CoreBasics
             Expression listB)
         {
             var newEnv =
-                Expression.ListInstance(
+                Expression.ListInst(
                     [
                     envFuncs,
-                    Expression.ListInstance([listA, listB])
+                    Expression.ListInst([listA, listB])
                     ]);
 
             return
-                new Expression.ParseAndEval(
+                new Expression.Eval(
                     encoded: selfFunc,
                     environment: newEnv);
         }
@@ -3658,25 +3658,25 @@ public class CoreBasics
 
         // Build the conditional logic
         var listAEmptyResult =
-            Expression.ConditionalInstance(
+            Expression.ConditionalInst(
                 condition: listBEmpty,
                 trueBranch: s_orderEQ,
                 falseBranch: s_orderLT);
 
         var compareHeadsResult =
-            Expression.ConditionalInstance(
+            Expression.ConditionalInst(
                 condition: headOrderIsEQ,
                 trueBranch: recursiveCompare,
                 falseBranch: headOrder);
 
         var listBNotEmpty =
-            Expression.ConditionalInstance(
+            Expression.ConditionalInst(
                 condition: listBEmpty,
                 trueBranch: s_orderGT,
                 falseBranch: compareHeadsResult);
 
         var innerBody =
-            Expression.ConditionalInstance(
+            Expression.ConditionalInst(
                 condition: listAEmpty,
                 trueBranch: listAEmptyResult,
                 falseBranch: listBNotEmpty);
@@ -3686,17 +3686,17 @@ public class CoreBasics
 
         // Create the initial invocation
         var envFunctions =
-            Expression.ListInstance(
+            Expression.ListInst(
                 [
-                Expression.LiteralInstance(encodedBody)
+                Expression.LitralInst(encodedBody)
                 ]);
 
-        var initialArgs = Expression.ListInstance([leftList, rightList]);
-        var initialEnv = Expression.ListInstance([envFunctions, initialArgs]);
+        var initialArgs = Expression.ListInst([leftList, rightList]);
+        var initialEnv = Expression.ListInst([envFunctions, initialArgs]);
 
         return
-            new Expression.ParseAndEval(
-                encoded: Expression.LiteralInstance(encodedBody),
+            new Expression.Eval(
+                encoded: Expression.LitralInst(encodedBody),
                 environment: initialEnv);
     }
 
@@ -3709,23 +3709,23 @@ public class CoreBasics
         var leftLessThan = BuiltinIntIsSortedAsc(left, right);
 
         return
-            Expression.ConditionalInstance(
+            Expression.ConditionalInst(
                 condition: leftLessThan,
                 trueBranch: s_orderLT,
                 falseBranch: s_orderGT);
     }
 
     private static readonly Expression s_compareInnerBodyEncodedLiteral =
-        Expression.LiteralInstance(Compare_InnerBodyEncodedValue);
+        Expression.LitralInst(Compare_InnerBodyEncodedValue);
 
     private static readonly Expression s_envFunctionsEmptyListLiteral =
-        Expression.LiteralInstance(PineValue.EmptyList);
+        Expression.LitralInst(PineValue.EmptyList);
 
     /// <summary>
     /// Builds an expression that invokes <c>Basics.compare</c> via a single
-    /// <see cref="Expression.ParseAndEval"/> targeting <see cref="Compare_InnerBodyEncodedValue"/>.
+    /// <see cref="Expression.Eval"/> targeting <see cref="Compare_InnerBodyEncodedValue"/>.
     /// <para>
-    /// Using <see cref="Expression.ParseAndEval"/> (rather than inlining
+    /// Using <see cref="Expression.Eval"/> (rather than inlining
     /// <see cref="Internal_Compare"/>) lets the intermediate VM intercept the call via a
     /// precompiled leaf registered under <see cref="Compare_InnerBodyEncodedValue"/>
     /// (see <c>CoreBasicsPrecompiledLeaves</c>). The wrapper environment shape
@@ -3736,10 +3736,10 @@ public class CoreBasics
     private static Expression InvokeCompareViaWrapper(Expression left, Expression right)
     {
         var invocationEnv =
-            Expression.ListInstance([s_envFunctionsEmptyListLiteral, left, right]);
+            Expression.ListInst([s_envFunctionsEmptyListLiteral, left, right]);
 
         return
-            new Expression.ParseAndEval(
+            new Expression.Eval(
                 encoded: s_compareInnerBodyEncodedLiteral,
                 environment: invocationEnv);
     }
@@ -3757,7 +3757,7 @@ public class CoreBasics
         var compareResult = InvokeCompareViaWrapper(left, right);
 
         return
-            Expression.ConditionalInstance(
+            Expression.ConditionalInst(
                 condition: BuiltinHelpers.ApplyBuiltinEqualBinary(compareResult, s_orderLT),
                 trueBranch: s_trueValue,
                 falseBranch: s_falseValue);
@@ -3776,7 +3776,7 @@ public class CoreBasics
         var compareResult = Internal_Compare(left, right);
 
         return
-            Expression.ConditionalInstance(
+            Expression.ConditionalInst(
                 condition: BuiltinHelpers.ApplyBuiltinEqualBinary(compareResult, s_orderGT),
                 trueBranch: s_trueValue,
                 falseBranch: s_falseValue);
@@ -3800,10 +3800,10 @@ public class CoreBasics
         var compareResult = Internal_Compare(left, right);
 
         return
-            Expression.ConditionalInstance(
+            Expression.ConditionalInst(
                 condition: directEqual,
                 trueBranch: s_trueValue,
-                falseBranch: Expression.ConditionalInstance(
+                falseBranch: Expression.ConditionalInst(
                     condition: BuiltinHelpers.ApplyBuiltinEqualBinary(compareResult, s_orderLT),
                     trueBranch: s_trueValue,
                     falseBranch: s_falseValue));
@@ -3827,10 +3827,10 @@ public class CoreBasics
         var compareResult = Internal_Compare(left, right);
 
         return
-            Expression.ConditionalInstance(
+            Expression.ConditionalInst(
                 condition: directEqual,
                 trueBranch: s_trueValue,
-                falseBranch: Expression.ConditionalInstance(
+                falseBranch: Expression.ConditionalInst(
                     condition: BuiltinHelpers.ApplyBuiltinEqualBinary(compareResult, s_orderGT),
                     trueBranch: s_trueValue,
                     falseBranch: s_falseValue));
@@ -3848,7 +3848,7 @@ public class CoreBasics
         */
 
         return
-            Expression.ConditionalInstance(
+            Expression.ConditionalInst(
                 condition: BuiltinHelpers.ApplyBuiltinEqualBinary(arg, s_falseValue),
                 trueBranch: s_trueValue,
                 falseBranch: s_falseValue);
@@ -3870,7 +3870,7 @@ public class CoreBasics
         var ltResult = Internal_Lt(left, right);
 
         return
-            Expression.ConditionalInstance(
+            Expression.ConditionalInst(
                 condition: BuiltinHelpers.ApplyBuiltinEqualBinary(ltResult, s_trueValue),
                 trueBranch: left,
                 falseBranch: right);
@@ -3892,7 +3892,7 @@ public class CoreBasics
         var gtResult = Internal_Gt(left, right);
 
         return
-            Expression.ConditionalInstance(
+            Expression.ConditionalInst(
                 condition: BuiltinHelpers.ApplyBuiltinEqualBinary(gtResult, s_trueValue),
                 trueBranch: left,
                 falseBranch: right);
@@ -3959,10 +3959,10 @@ public class CoreBasics
                 [leftStringContent, rightStringContent]);
 
         var stringResult =
-            Expression.ListInstance(
+            Expression.ListInst(
                 [
                 s_elmStringTypeTagNameLiteral,
-                Expression.ListInstance([concattedStringContent])
+                Expression.ListInst([concattedStringContent])
                 ]);
 
         // List case: just concat the two lists
@@ -3971,7 +3971,7 @@ public class CoreBasics
                 [left, right]);
 
         return
-            Expression.ConditionalInstance(
+            Expression.ConditionalInst(
                 condition: leftIsString,
                 trueBranch: stringResult,
                 falseBranch: listResult);

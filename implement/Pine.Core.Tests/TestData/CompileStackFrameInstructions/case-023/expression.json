@@ -1,23 +1,23 @@
 {
-  "KernelApplication": [
+  "Builtin": [
     "negate",
     {
-      "KernelApplication": [
+      "Builtin": [
         "int_is_sorted_asc",
         {
           "List": [
             [
               {
-                "KernelApplication": [
+                "Builtin": [
                   "head",
                   {
-                    "KernelApplication": [
+                    "Builtin": [
                       "skip",
                       {
                         "List": [
                           [
                             {
-                              "Literal": [
+                              "Litral": [
                                 11
                               ]
                             },
@@ -33,16 +33,16 @@
                 ]
               },
               {
-                "KernelApplication": [
+                "Builtin": [
                   "head",
                   {
-                    "KernelApplication": [
+                    "Builtin": [
                       "skip",
                       {
                         "List": [
                           [
                             {
-                              "Literal": [
+                              "Litral": [
                                 13
                               ]
                             },

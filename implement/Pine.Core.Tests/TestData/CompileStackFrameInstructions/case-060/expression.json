@@ -1,13 +1,13 @@
 {
   "Conditional": [
     {
-      "KernelApplication": [
+      "Builtin": [
         "equal",
         {
           "List": [
             [
               {
-                "KernelApplication": [
+                "Builtin": [
                   "equal",
                   {
                     "List": [
@@ -17,7 +17,7 @@
                           ]
                         },
                         {
-                          "Literal": [
+                          "Litral": [
                             37
                           ]
                         }
@@ -27,7 +27,7 @@
                 ]
               },
               {
-                "Literal": [
+                "Litral": [
                   {
                     "AsBase64": "BA=="
                   }
@@ -39,12 +39,12 @@
       ]
     },
     {
-      "Literal": [
+      "Litral": [
         41
       ]
     },
     {
-      "Literal": [
+      "Litral": [
         43
       ]
     }

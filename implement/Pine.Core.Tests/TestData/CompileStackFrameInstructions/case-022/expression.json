@@ -1,20 +1,20 @@
 {
-  "KernelApplication": [
+  "Builtin": [
     "int_is_sorted_asc",
     {
       "List": [
         [
           {
-            "KernelApplication": [
+            "Builtin": [
               "head",
               {
-                "KernelApplication": [
+                "Builtin": [
                   "skip",
                   {
                     "List": [
                       [
                         {
-                          "Literal": [
+                          "Litral": [
                             17
                           ]
                         },
@@ -30,16 +30,16 @@
             ]
           },
           {
-            "KernelApplication": [
+            "Builtin": [
               "head",
               {
-                "KernelApplication": [
+                "Builtin": [
                   "skip",
                   {
                     "List": [
                       [
                         {
-                          "Literal": [
+                          "Litral": [
                             19
                           ]
                         },

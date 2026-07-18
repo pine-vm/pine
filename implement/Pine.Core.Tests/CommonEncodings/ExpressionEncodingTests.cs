@@ -10,9 +10,9 @@ public class ExpressionEncodingTests
     public void ExpressionEncoding_emits_2026_and_parses_2024()
     {
         var expression =
-            Expression.KernelApplicationInstance(
+            Expression.BuiltinInst(
                 nameof(BuiltinFunction.length),
-                Expression.LiteralInstance(StringEncoding.ValueFromString("input")));
+                Expression.LitralInst(StringEncoding.ValueFromString("input")));
 
         ExpressionEncoding.EncodeExpressionAsValue(expression)
             .Should().Be(ExpressionEncoding2026.EncodeExpressionAsValue(expression));
@@ -39,33 +39,33 @@ public class ExpressionEncodingTests
         var testCases =
             new Expression[]
             {
-                Expression.LiteralInstance(StringEncoding.ValueFromString("literal content")),
+                Expression.LitralInst(StringEncoding.ValueFromString("literal content")),
 
                 new Expression.Environment(),
 
-                Expression.ListInstance(
+                Expression.ListInst(
                     [
-                    Expression.LiteralInstance(StringEncoding.ValueFromString("list element alfa")),
-                    Expression.LiteralInstance(StringEncoding.ValueFromString("list element beta")),
-                    Expression.LiteralInstance(StringEncoding.ValueFromString("list element gamma")),
+                    Expression.LitralInst(StringEncoding.ValueFromString("list element alfa")),
+                    Expression.LitralInst(StringEncoding.ValueFromString("list element beta")),
+                    Expression.LitralInst(StringEncoding.ValueFromString("list element gamma")),
                     ]),
 
-                Expression.ConditionalInstance(
-                    condition: Expression.LiteralInstance(StringEncoding.ValueFromString("condition")),
-                    falseBranch: Expression.LiteralInstance(StringEncoding.ValueFromString("if false")),
-                    trueBranch: Expression.LiteralInstance(StringEncoding.ValueFromString("if true"))),
+                Expression.ConditionalInst(
+                    condition: Expression.LitralInst(StringEncoding.ValueFromString("condition")),
+                    falseBranch: Expression.LitralInst(StringEncoding.ValueFromString("if false")),
+                    trueBranch: Expression.LitralInst(StringEncoding.ValueFromString("if true"))),
 
-                new Expression.ParseAndEval(
-                    encoded: Expression.LiteralInstance(StringEncoding.ValueFromString("encoded")),
-                    environment: Expression.LiteralInstance(StringEncoding.ValueFromString("environment"))),
+                new Expression.Eval(
+                    encoded: Expression.LitralInst(StringEncoding.ValueFromString("encoded")),
+                    environment: Expression.LitralInst(StringEncoding.ValueFromString("environment"))),
 
-                Expression.KernelApplicationInstance(
+                Expression.BuiltinInst(
                     function: nameof(BuiltinFunction.length),
-                    input: Expression.LiteralInstance(StringEncoding.ValueFromString("kernel app arg"))),
+                    input: Expression.LitralInst(StringEncoding.ValueFromString("kernel app arg"))),
 
-                new Expression.StringTag(
+                new Expression.Label(
                     tag: "tag text",
-                    tagged: Expression.LiteralInstance(StringEncoding.ValueFromString("tagged expr")))
+                    tagged: Expression.LitralInst(StringEncoding.ValueFromString("tagged expr")))
             };
 
         foreach (var testCase in testCases)
@@ -90,12 +90,12 @@ public class ExpressionEncodingTests
         const int depth = 100_000;
 
         Expression nested =
-            Expression.LiteralInstance(StringEncoding.ValueFromString("innermost"));
+            Expression.LitralInst(StringEncoding.ValueFromString("innermost"));
 
         for (var i = 0; i < depth; ++i)
         {
             nested =
-                Expression.KernelApplicationInstance(
+                Expression.BuiltinInst(
                     function: nameof(BuiltinFunction.length),
                     input: nested);
         }
@@ -113,14 +113,14 @@ public class ExpressionEncodingTests
 
         for (var i = 0; i < depth; ++i)
         {
-            var kernelApplication = current.Should().BeOfType<Expression.KernelApplication>().Subject;
+            var kernelApplication = current.Should().BeOfType<Expression.Builtin>().Subject;
 
             kernelApplication.Function.Should().Be(nameof(BuiltinFunction.length));
 
             current = kernelApplication.Input;
         }
 
-        current.Should().BeOfType<Expression.Literal>()
+        current.Should().BeOfType<Expression.Litral>()
             .Subject.Value.Should().Be(StringEncoding.ValueFromString("innermost"));
     }
 
@@ -133,12 +133,12 @@ public class ExpressionEncodingTests
         const int depth = 100_000;
 
         Expression nested =
-            Expression.LiteralInstance(StringEncoding.ValueFromString("innermost"));
+            Expression.LitralInst(StringEncoding.ValueFromString("innermost"));
 
         for (var i = 0; i < depth; ++i)
         {
             nested =
-                Expression.KernelApplicationInstance(
+                Expression.BuiltinInst(
                     function: nameof(BuiltinFunction.length),
                     input: nested);
         }
@@ -158,14 +158,14 @@ public class ExpressionEncodingTests
 
         for (var i = 0; i < depth; ++i)
         {
-            var kernelApplication = current.Should().BeOfType<Expression.KernelApplication>().Subject;
+            var kernelApplication = current.Should().BeOfType<Expression.Builtin>().Subject;
 
             kernelApplication.Function.Should().Be(nameof(BuiltinFunction.length));
 
             current = kernelApplication.Input;
         }
 
-        current.Should().BeOfType<Expression.Literal>()
+        current.Should().BeOfType<Expression.Litral>()
             .Subject.Value.Should().Be(StringEncoding.ValueFromString("innermost"));
     }
 }

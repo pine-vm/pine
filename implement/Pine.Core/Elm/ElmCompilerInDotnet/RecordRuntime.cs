@@ -64,27 +64,27 @@ public static class RecordRuntime
         // `processed` (initially empty) and `remaining` (initially the field stream) are
         // both flat lists [name, value, name, value, ...].
         var recursiveCallEnv =
-            Expression.ListInstance(
+            Expression.ListInst(
                 [
-                Expression.LiteralInstance(recursiveFunctionValue),
+                Expression.LitralInst(recursiveFunctionValue),
                 updatesExpr,
                 Expression.EmptyList, // processed flat fields (initially empty)
                 recordFieldsExpr // remaining flat fields
                 ]);
 
         var updatedFieldsExpr =
-            new Expression.ParseAndEval(
-                encoded: Expression.LiteralInstance(recursiveFunctionValue),
+            new Expression.Eval(
+                encoded: Expression.LitralInst(recursiveFunctionValue),
                 environment: recursiveCallEnv);
 
         // Reconstruct the record by prepending the tag to the flat updated-field stream:
         // concat([tag], updatedFields)
         return
-            Expression.KernelApplicationInstance(
+            Expression.BuiltinInst(
                 nameof(BuiltinFunction.concat),
-                Expression.ListInstance(
+                Expression.ListInst(
                     [
-                    Expression.ListInstance([recordTagExpr]),
+                    Expression.ListInst([recordTagExpr]),
                     updatedFieldsExpr
                     ]));
     }
@@ -158,20 +158,20 @@ public static class RecordRuntime
         // newUpdates = skip 1 updates (consume the update)
         // recurse with [self, newUpdates, newProcessed, restRemaining]
         var processedWithUpdate =
-            Expression.KernelApplicationInstance(
+            Expression.BuiltinInst(
                 nameof(BuiltinFunction.concat),
-                Expression.ListInstance(
+                Expression.ListInst(
                     [
                     processedExpr,
-                    Expression.ListInstance([firstFieldNameExpr, firstUpdateValueExpr])
+                    Expression.ListInst([firstFieldNameExpr, firstUpdateValueExpr])
                     ]));
 
         var restUpdates = BuiltinHelpers.ApplyBuiltinSkip(1, updatesExpr);
 
         var recurseAfterMatch =
-            new Expression.ParseAndEval(
+            new Expression.Eval(
                 encoded: selfExpr,
-                environment: Expression.ListInstance(
+                environment: Expression.ListInst(
                     [
                     selfExpr,
                     restUpdates,
@@ -183,18 +183,18 @@ public static class RecordRuntime
         // newProcessed = concat(processed, [originalName, originalValue])
         // recurse with [self, updates, newProcessed, restRemaining]
         var processedWithOriginal =
-            Expression.KernelApplicationInstance(
+            Expression.BuiltinInst(
                 nameof(BuiltinFunction.concat),
-                Expression.ListInstance(
+                Expression.ListInst(
                     [
                     processedExpr,
-                    Expression.ListInstance([firstFieldNameExpr, firstFieldValueExpr])
+                    Expression.ListInst([firstFieldNameExpr, firstFieldValueExpr])
                     ]));
 
         var recurseWithOriginal =
-            new Expression.ParseAndEval(
+            new Expression.Eval(
                 encoded: selfExpr,
-                environment: Expression.ListInstance(
+                environment: Expression.ListInst(
                     [
                     selfExpr,
                     updatesExpr,
@@ -207,17 +207,17 @@ public static class RecordRuntime
         // else if names match: use update and continue
         // else: keep original and continue (field name < update name)
         var fieldUpdateLogic =
-            Expression.ConditionalInstance(
+            Expression.ConditionalInst(
                 condition: updatesIsEmpty,
                 trueBranch: recurseWithOriginal, // no more updates, keep original
-                falseBranch: Expression.ConditionalInstance(
+                falseBranch: Expression.ConditionalInst(
                     condition: namesMatch,
                     trueBranch: recurseAfterMatch, // use update
                     falseBranch: recurseWithOriginal)); // keep original (field comes before update alphabetically)
 
         // Full function: if remaining is empty, return processed; else process next field
         return
-            Expression.ConditionalInstance(
+            Expression.ConditionalInst(
                 condition: remainingIsEmpty,
                 trueBranch: baseCase,
                 falseBranch: fieldUpdateLogic);
@@ -253,16 +253,16 @@ public static class RecordRuntime
 
         // Call the recursive function with: [self, fieldName, fields]
         var recursiveCallEnv =
-            Expression.ListInstance(
+            Expression.ListInst(
                 [
-                Expression.LiteralInstance(recursiveFunctionValue),
+                Expression.LitralInst(recursiveFunctionValue),
                 fieldNameExpr,
                 recordFieldsExpr
                 ]);
 
         return
-            new Expression.ParseAndEval(
-                encoded: Expression.LiteralInstance(recursiveFunctionValue),
+            new Expression.Eval(
+                encoded: Expression.LitralInst(recursiveFunctionValue),
                 environment: recursiveCallEnv);
     }
 
@@ -305,9 +305,9 @@ public static class RecordRuntime
         var restRemainingExpr = BuiltinHelpers.ApplyBuiltinSkip(2, remainingExpr);
 
         var recurseExpr =
-            new Expression.ParseAndEval(
+            new Expression.Eval(
                 encoded: selfExpr,
-                environment: Expression.ListInstance(
+                environment: Expression.ListInst(
                     [
                     selfExpr,
                     targetFieldNameExpr,
@@ -317,7 +317,7 @@ public static class RecordRuntime
         // If names match: return the field value
         // If names don't match: continue searching
         var searchLogic =
-            Expression.ConditionalInstance(
+            Expression.ConditionalInst(
                 condition: namesMatch,
                 trueBranch: firstFieldValueExpr,
                 falseBranch: recurseExpr);
@@ -325,7 +325,7 @@ public static class RecordRuntime
         // If remaining is empty, we didn't find the field (shouldn't happen in valid Elm)
         // Return empty list as error indicator
         return
-            Expression.ConditionalInstance(
+            Expression.ConditionalInst(
                 condition: remainingIsEmpty,
                 trueBranch: Expression.EmptyList, // Field not found (error case)
                 falseBranch: searchLogic);

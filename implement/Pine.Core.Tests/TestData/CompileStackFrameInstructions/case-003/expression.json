@@ -2,22 +2,22 @@
   "List": [
     [
       {
-        "Literal": [
+        "Litral": [
           [
           ]
         ]
       },
       {
-        "KernelApplication": [
+        "Builtin": [
           "concat",
           {
-            "KernelApplication": [
+            "Builtin": [
               "skip",
               {
                 "List": [
                   [
                     {
-                      "Literal": [
+                      "Litral": [
                         13
                       ]
                     },
@@ -33,23 +33,23 @@
         ]
       },
       {
-        "Literal": [
+        "Litral": [
           {
             "AsBase64": ""
           }
         ]
       },
       {
-        "KernelApplication": [
+        "Builtin": [
           "concat",
           {
-            "KernelApplication": [
+            "Builtin": [
               "skip",
               {
                 "List": [
                   [
                     {
-                      "Literal": [
+                      "Litral": [
                         13
                       ]
                     },

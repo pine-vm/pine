@@ -245,7 +245,7 @@ public class PatternCompiler
             else
             {
                 result =
-                    Expression.ConditionalInstance(
+                    Expression.ConditionalInst(
                         condition: conditionExpr,
                         trueBranch: caseBody,
                         falseBranch: result ?? caseBody);
@@ -424,7 +424,7 @@ public class PatternCompiler
             else
             {
                 invokedBodyExpr =
-                    Expression.ConditionalInstance(
+                    Expression.ConditionalInst(
                         condition: conditionExpr,
                         trueBranch: caseBody,
                         falseBranch: invokedBodyExpr ?? caseBody);
@@ -446,9 +446,9 @@ public class PatternCompiler
             ExpressionEncoding.EncodeExpressionAsValue(invokedBodyExpr);
 
         return
-            new Expression.ParseAndEval(
-                encoded: Expression.LiteralInstance(invokedBodyExprEncoded),
-                environment: Expression.ListInstance(argumentList));
+            new Expression.Eval(
+                encoded: Expression.LitralInst(invokedBodyExprEncoded),
+                environment: Expression.ListInst(argumentList));
     }
 
     /// <summary>
@@ -525,17 +525,17 @@ public class PatternCompiler
             SyntaxTypes.Pattern.IntPattern intPattern =>
             PatternAnalysis.WithCondition(
                 new PatternCondition.ValueEquals(
-                    Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(intPattern.Value)))),
+                    Expression.LitralInst(IntegerEncoding.EncodeSignedInteger(intPattern.Value)))),
 
             SyntaxTypes.Pattern.CharPattern charPattern =>
             PatternAnalysis.WithCondition(
                 new PatternCondition.ValueEquals(
-                    Expression.LiteralInstance(ElmValueEncoding.ElmCharAsPineValue(charPattern.Value)))),
+                    Expression.LitralInst(ElmValueEncoding.ElmCharAsPineValue(charPattern.Value)))),
 
             SyntaxTypes.Pattern.StringPattern stringPattern =>
             PatternAnalysis.WithCondition(
                 new PatternCondition.ValueEquals(
-                    Expression.LiteralInstance(ElmValueEncoding.StringAsPineValue(stringPattern.Value)))),
+                    Expression.LitralInst(ElmValueEncoding.StringAsPineValue(stringPattern.Value)))),
 
             SyntaxTypes.Pattern.AsPattern asPattern =>
             AnalyzeAsPattern(
@@ -594,7 +594,7 @@ public class PatternCompiler
         {
             return
                 PatternAnalysis.WithCondition(
-                    new PatternCondition.ValueEquals(Expression.LiteralInstance(constantValue)));
+                    new PatternCondition.ValueEquals(Expression.LitralInst(constantValue)));
         }
 
         var conditions =
@@ -731,7 +731,7 @@ public class PatternCompiler
         {
             return
                 PatternAnalysis.WithCondition(
-                    new PatternCondition.ValueEquals(Expression.LiteralInstance(constantValue)));
+                    new PatternCondition.ValueEquals(Expression.LitralInst(constantValue)));
         }
 
         var conditions =
@@ -804,10 +804,10 @@ public class PatternCompiler
         {
             return
                 PatternAnalysis.WithCondition(
-                    new PatternCondition.ValueEquals(Expression.LiteralInstance(constantValue)));
+                    new PatternCondition.ValueEquals(Expression.LitralInst(constantValue)));
         }
 
-        var expectedTagName = Expression.LiteralInstance(StringEncoding.ValueFromString(tagName));
+        var expectedTagName = Expression.LitralInst(StringEncoding.ValueFromString(tagName));
 
         var conditions =
             new List<PatternCondition>
@@ -963,15 +963,15 @@ public class PatternCompiler
             var fieldName = fieldNode.FieldName;
 
             var lookupEnv =
-                Expression.ListInstance(
+                Expression.ListInst(
                     [
                     scrutinee,
-                    Expression.LiteralInstance(StringEncoding.ValueFromString(fieldName))
+                    Expression.LitralInst(StringEncoding.ValueFromString(fieldName))
                     ]);
 
             var fieldValueExpr =
-                new Expression.ParseAndEval(
-                    encoded: Expression.LiteralInstance(RecordRuntime.PineFunctionForRecordAccessAsValue),
+                new Expression.Eval(
+                    encoded: Expression.LitralInst(RecordRuntime.PineFunctionForRecordAccessAsValue),
                     environment: lookupEnv);
 
             bindings = bindings.Add(fieldName, fieldValueExpr);
@@ -1021,14 +1021,14 @@ public class PatternCompiler
             PatternCondition.LengthEquals lengthEquals =>
             BuiltinHelpers.ApplyBuiltinEqualBinary(
                 BuiltinHelpers.ApplyBuiltinLength(scrutinee),
-                Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(lengthEquals.ExpectedLength))),
+                Expression.LitralInst(IntegerEncoding.EncodeSignedInteger(lengthEquals.ExpectedLength))),
 
             PatternCondition.NotEmpty =>
             BuiltinHelpers.ApplyBuiltinEqualBinary(
                 BuiltinHelpers.ApplyBuiltinEqualBinary(
                     BuiltinHelpers.ApplyBuiltinLength(scrutinee),
-                    Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(0))),
-                Expression.LiteralInstance(BuiltinFunction.ValueFromBool(false))),
+                    Expression.LitralInst(IntegerEncoding.EncodeSignedInteger(0))),
+                Expression.LitralInst(BuiltinFunction.ValueFromBool(false))),
 
             PatternCondition.ItemCondition itemCondition =>
             CompileConditionToExpression(itemCondition.SubCondition, itemCondition.Accessor(scrutinee)),
@@ -1062,10 +1062,10 @@ public class PatternCompiler
             else
             {
                 result =
-                    Expression.ConditionalInstance(
+                    Expression.ConditionalInst(
                         condition: conditionExpr,
                         trueBranch: result,
-                        falseBranch: Expression.LiteralInstance(BuiltinFunction.ValueFromBool(false)));
+                        falseBranch: Expression.LitralInst(BuiltinFunction.ValueFromBool(false)));
             }
         }
 

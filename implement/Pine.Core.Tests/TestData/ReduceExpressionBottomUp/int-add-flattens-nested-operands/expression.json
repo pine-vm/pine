@@ -1,11 +1,11 @@
 {
-  "KernelApplication": [
+  "Builtin": [
     "int_add",
     {
       "List": [
         [
           {
-            "KernelApplication": [
+            "Builtin": [
               "int_add",
               {
                 "List": [
@@ -14,7 +14,7 @@
                       "Environment": []
                     },
                     {
-                      "Literal": [
+                      "Litral": [
                         3
                       ]
                     }
@@ -24,7 +24,7 @@
             ]
           },
           {
-            "Literal": [
+            "Litral": [
               5
             ]
           }

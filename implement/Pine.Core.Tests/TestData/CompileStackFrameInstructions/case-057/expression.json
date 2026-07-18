@@ -2,7 +2,7 @@
   "List": [
     [
       {
-        "KernelApplication": [
+        "Builtin": [
           "head",
           {
             "Environment": []
@@ -10,7 +10,7 @@
         ]
       },
       {
-        "KernelApplication": [
+        "Builtin": [
           "head",
           {
             "Environment": []

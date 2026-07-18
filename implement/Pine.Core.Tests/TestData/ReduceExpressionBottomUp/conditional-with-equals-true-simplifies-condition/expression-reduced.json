@@ -1,7 +1,7 @@
 {
   "Conditional": [
     {
-      "KernelApplication": [
+      "Builtin": [
         "equal",
         {
           "List": [
@@ -10,7 +10,7 @@
                 "Environment": []
               },
               {
-                "Literal": [
+                "Litral": [
                   {
                     "AsBase64": "Bw=="
                   }
@@ -22,14 +22,14 @@
       ]
     },
     {
-      "Literal": [
+      "Litral": [
         {
           "AsBase64": "Bw=="
         }
       ]
     },
     {
-      "Literal": [
+      "Litral": [
         {
           "AsBase64": "CQ=="
         }

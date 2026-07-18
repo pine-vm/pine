@@ -1,28 +1,28 @@
 {
-  "KernelApplication": [
+  "Builtin": [
     "skip",
     {
       "List": [
         [
           {
-            "Literal": [
+            "Litral": [
               1
             ]
           },
           {
-            "KernelApplication": [
+            "Builtin": [
               "int_add",
               {
                 "List": [
                   [
                     {
-                      "KernelApplication": [
+                      "Builtin": [
                         "concat",
                         {
                           "List": [
                             [
                               {
-                                "Literal": [
+                                "Litral": [
                                   {
                                     "AsBase64": "BA=="
                                   }
@@ -38,7 +38,7 @@
                       ]
                     },
                     {
-                      "Literal": [
+                      "Litral": [
                         0
                       ]
                     }

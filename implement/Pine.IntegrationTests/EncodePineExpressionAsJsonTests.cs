@@ -15,15 +15,15 @@ public class EncodePineExpressionAsJsonTests
         IReadOnlyList<Expression> testCases =
             [
             Expression.EnvironmentInstance,
-            Expression.ListInstance([]),
+            Expression.ListInst([]),
 
-            Expression.LiteralInstance(
+            Expression.LitralInst(
                 IntegerEncoding.EncodeSignedInteger(1)),
 
-            Expression.LiteralInstance(
+            Expression.LitralInst(
                 StringEncoding.ValueFromString("Hello world!")),
 
-            Expression.LiteralInstance(
+            Expression.LitralInst(
                 PineValue.List(
                     [
                     StringEncoding.ValueFromString("String"),
@@ -32,23 +32,23 @@ public class EncodePineExpressionAsJsonTests
                     )),
 
             // Function 'isPineList' from the core libraries.
-            Expression.KernelApplicationInstance(
-            input: Expression.ListInstance(
-                [Expression.KernelApplicationInstance(
-                    input: Expression.ListInstance(
-                        [Expression.LiteralInstance(
+            Expression.BuiltinInst(
+            input: Expression.ListInst(
+                [Expression.BuiltinInst(
+                    input: Expression.ListInst(
+                        [Expression.LitralInst(
                             IntegerEncoding.EncodeSignedInteger(0)),
-                        Expression.KernelApplicationInstance(
-                            input: Expression.KernelApplicationInstance(
-                                input: Expression.KernelApplicationInstance(
-                                    input: Expression.ListInstance(
-                                        [Expression.LiteralInstance(
+                        Expression.BuiltinInst(
+                            input: Expression.BuiltinInst(
+                                input: Expression.BuiltinInst(
+                                    input: Expression.ListInst(
+                                        [Expression.LitralInst(
                                             IntegerEncoding.EncodeSignedInteger(
                                                 1)), Expression.EnvironmentInstance]),
                                     function: "skip"),
                                 function: "head"),
                             function: "head")]),
-                    function: "take"), Expression.LiteralInstance(
+                    function: "take"), Expression.LitralInst(
                     PineValue.EmptyList)]),
             function: "equal")
 
@@ -72,12 +72,12 @@ public class EncodePineExpressionAsJsonTests
         IReadOnlyList<IReadOnlyList<Expression>> testCases =
             [
             [Expression.EnvironmentInstance],
-            [Expression.ListInstance([])],
+            [Expression.ListInst([])],
 
-            [Expression.LiteralInstance(
+            [Expression.LitralInst(
                 IntegerEncoding.EncodeSignedInteger(1))],
 
-            [Expression.LiteralInstance(
+            [Expression.LitralInst(
                 StringEncoding.ValueFromString("Hello world!"))],
 
             ];

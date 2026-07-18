@@ -1,28 +1,28 @@
 {
-  "KernelApplication": [
+  "Builtin": [
     "head",
     {
-      "KernelApplication": [
+      "Builtin": [
         "reverse",
         {
           "List": [
             [
               {
-                "Literal": [
+                "Litral": [
                   {
                     "AsBase64": "AQ=="
                   }
                 ]
               },
               {
-                "Literal": [
+                "Litral": [
                   {
                     "AsBase64": "Ag=="
                   }
                 ]
               },
               {
-                "Literal": [
+                "Litral": [
                   {
                     "AsBase64": "Aw=="
                   }

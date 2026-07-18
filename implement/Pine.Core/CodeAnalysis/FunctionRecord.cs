@@ -125,7 +125,7 @@ public record FunctionRecord(
 
         var parseExpressionResult = parseCache.ParseExpression(pineValue);
 
-        if (parseExpressionResult.IsOkOrNull() is Expression.ParseAndEval)
+        if (parseExpressionResult.IsOkOrNull() is Expression.Eval)
         {
             var nestedWrapperResult = ParseNestedWrapperForm(pineValue, parseCache);
 
@@ -154,7 +154,7 @@ public record FunctionRecord(
 
         return
             new FunctionRecord(
-                InnerFunction: Expression.LiteralInstance(pineValue),
+                InnerFunction: Expression.LitralInst(pineValue),
                 ParameterCount: 0,
                 EnvFunctions: ReadOnlyMemory<PineValue>.Empty,
                 ArgumentsAlreadyCollected: ReadOnlyMemory<PineValue>.Empty);
@@ -185,7 +185,7 @@ public record FunctionRecord(
         }
 
         // Check for ParseAndEval expression (0/1 parameter functions)
-        if (expr is Expression.ParseAndEval parseAndEval)
+        if (expr is Expression.Eval parseAndEval)
         {
             return ParseFunctionValueFromParseAndEval(parseAndEval, parseCache);
         }
@@ -204,11 +204,11 @@ public record FunctionRecord(
     /// This handles 0 and 1 parameter functions in the WithEnvFunctions wrapper shape.
     /// </summary>
     private static Result<string, ParsedFunctionValue> ParseFunctionValueFromParseAndEval(
-        Expression.ParseAndEval parseAndEval,
+        Expression.Eval parseAndEval,
         PineVMParseCache parseCache)
     {
         // The inner expression is encoded as a literal in the 'encoded' field
-        if (parseAndEval.Encoded is not Expression.Literal encodedLiteral)
+        if (parseAndEval.Encoded is not Expression.Litral encodedLiteral)
         {
             return "Expected Literal in ParseAndEval.Encoded";
         }
@@ -333,13 +333,13 @@ public record FunctionRecord(
                 return "Failed to parse next level at level " + levels + ": " + nextParseErr;
             }
 
-            if (nextParseResult.IsOkOrNull() is Expression.ParseAndEval parseAndEval)
+            if (nextParseResult.IsOkOrNull() is Expression.Eval parseAndEval)
             {
                 // This is the innermost level - determine the format
                 levels++;
 
                 // Extract inner expression from Encoded
-                if (parseAndEval.Encoded is not Expression.Literal innerLit)
+                if (parseAndEval.Encoded is not Expression.Litral innerLit)
                 {
                     return "Expected Literal in innermost ParseAndEval.Encoded";
                 }
@@ -360,7 +360,7 @@ public record FunctionRecord(
                 // WithEnvFunctions: environment is concat([envFuncs], argsExpr)
                 //   where the first item of the concat input is a list containing env functions
 
-                if (parseAndEval.Environment is Expression.KernelApplication kernelApp &&
+                if (parseAndEval.Environment is Expression.Builtin kernelApp &&
                     kernelApp.Function is nameof(BuiltinFunction.concat))
                 {
                     // WithEnvFunctions: concat([[envFuncs], fullArgs]) where fullArgs = concat(captured, [lastArg])
@@ -422,13 +422,13 @@ public record FunctionRecord(
             return "Failed to parse nested wrapper expression: " + parseErr;
         }
 
-        if (parseExprResult.IsOkOrNull() is not Expression.ParseAndEval outerParseAndEval)
+        if (parseExprResult.IsOkOrNull() is not Expression.Eval outerParseAndEval)
         {
             return "Nested wrapper must be a ParseAndEval expression";
         }
 
         // The inner expression is encoded as a literal in the 'encoded' field
-        if (outerParseAndEval.Encoded is not Expression.Literal encodedLiteral)
+        if (outerParseAndEval.Encoded is not Expression.Litral encodedLiteral)
         {
             return "Expected Literal in ParseAndEval.Encoded";
         }
@@ -472,7 +472,7 @@ public record FunctionRecord(
         if (innerExpression is Expression.List innerList &&
             IsWrapperBuilderExpression(innerList) &&
             envList.Items.Count is 2 &&
-            envList.Items[0] is Expression.Literal { Value: PineValue.ListValue collectedArguments } &&
+            envList.Items[0] is Expression.Litral { Value: PineValue.ListValue collectedArguments } &&
             envList.Items[1] is Expression.Environment)
         {
             var remainingFunctionResult =
@@ -549,7 +549,7 @@ public record FunctionRecord(
             if (parseResult.IsErrOrNull() is { } parseErr)
                 return "Failed to parse curried template level: " + parseErr;
 
-            if (parseResult.IsOkOrNull() is Expression.ParseAndEval terminal)
+            if (parseResult.IsOkOrNull() is Expression.Eval terminal)
                 return ParseCurriedTemplateTerminal(terminal, probeArguments, parseCache);
 
             if (parseResult.IsOkOrNull() is not Expression.List templateLevel)
@@ -579,11 +579,11 @@ public record FunctionRecord(
     }
 
     private static Result<string, FunctionRecord> ParseCurriedTemplateTerminal(
-        Expression.ParseAndEval terminal,
+        Expression.Eval terminal,
         IReadOnlyList<PineValue> probeArguments,
         PineVMParseCache parseCache)
     {
-        if (terminal.Encoded is not Expression.Literal encodedBody)
+        if (terminal.Encoded is not Expression.Litral encodedBody)
             return "Expected Literal in curried template ParseAndEval.Encoded";
 
         if (parseCache.ParseExpression(encodedBody.Value).IsOkOrNull() is not { } innerFunction)
@@ -609,7 +609,7 @@ public record FunctionRecord(
 
         for (var argumentIndex = 0; argumentIndex < capturedArgumentCount; ++argumentIndex)
         {
-            if (environment.Items[argumentIndex + 1] is not Expression.Literal capturedArgument)
+            if (environment.Items[argumentIndex + 1] is not Expression.Litral capturedArgument)
                 return "Expected captured curried template argument to be a Literal";
 
             capturedArguments[argumentIndex] = capturedArgument.Value;
@@ -619,7 +619,7 @@ public record FunctionRecord(
         {
             var environmentIndex = capturedArgumentCount + probeIndex + 1;
 
-            if (environment.Items[environmentIndex] is not Expression.Literal probeLiteral ||
+            if (environment.Items[environmentIndex] is not Expression.Litral probeLiteral ||
                 probeLiteral.Value != probeArguments[probeIndex])
             {
                 return "Curried template did not preserve probe argument";
@@ -637,7 +637,7 @@ public record FunctionRecord(
     private static bool IsWrapperBuilderExpression(Expression.List expression)
     {
         if (expression.Items.Count is not (2 or 3) ||
-            expression.Items[0] is not Expression.Literal tagLiteral)
+            expression.Items[0] is not Expression.Litral tagLiteral)
         {
             return false;
         }
@@ -655,7 +655,7 @@ public record FunctionRecord(
     private static Result<string, PineValue[]> ParseEnvFunctionsFromExpression(Expression expr)
     {
         // Form 1: Single literal containing a list value
-        if (expr is Expression.Literal envFuncsLiteral)
+        if (expr is Expression.Litral envFuncsLiteral)
         {
             if (envFuncsLiteral.Value is PineValue.ListValue envFuncsList)
             {
@@ -674,7 +674,7 @@ public record FunctionRecord(
             {
                 var item = envFuncListExpr.Items[i];
 
-                if (item is not Expression.Literal lit)
+                if (item is not Expression.Litral lit)
                 {
                     return "Expected all items in env functions list to be Literals";
                 }
@@ -783,13 +783,13 @@ public record FunctionRecord(
                 return "Failed to parse next level at level " + levels + ": " + nextParseErr;
             }
 
-            if (nextParseResult.IsOkOrNull() is Expression.ParseAndEval parseAndEval)
+            if (nextParseResult.IsOkOrNull() is Expression.Eval parseAndEval)
             {
                 // This is the innermost level - extract inner expression and env functions
                 levels++;
 
                 // Extract inner expression from Encoded
-                if (parseAndEval.Encoded is not Expression.Literal innerLit)
+                if (parseAndEval.Encoded is not Expression.Litral innerLit)
                 {
                     return "Expected Literal in innermost ParseAndEval.Encoded";
                 }
@@ -808,7 +808,7 @@ public record FunctionRecord(
 
                 // Extract env functions from environment structure
                 // With flat layout: environment is concat([envFuncs], fullArgs) - a KernelApplication
-                if (parseAndEval.Environment is Expression.KernelApplication concatApp &&
+                if (parseAndEval.Environment is Expression.Builtin concatApp &&
                     concatApp.Function is nameof(BuiltinFunction.concat) &&
                     concatApp.Input is Expression.List concatInputList &&
                     concatInputList.Items.Count is 2 &&
@@ -888,12 +888,12 @@ public record FunctionRecord(
     {
         switch (expr)
         {
-            case Expression.Literal lit:
+            case Expression.Litral lit:
                 {
                     // Check if this literal contains a valid expression (List or ParseAndEval)
                     var parseResult = parseCache.ParseExpression(lit.Value);
 
-                    if (parseResult.IsOkOrNull() is Expression.List or Expression.ParseAndEval)
+                    if (parseResult.IsOkOrNull() is Expression.List or Expression.Eval)
                     {
                         return lit.Value;
                     }
@@ -975,7 +975,7 @@ public record FunctionRecord(
 
             return
                 new FunctionRecord(
-                    InnerFunction: Expression.LiteralInstance(overallValue),
+                    InnerFunction: Expression.LitralInst(overallValue),
                     ParameterCount: 0,
                     EnvFunctions: ReadOnlyMemory<PineValue>.Empty,
                     ArgumentsAlreadyCollected: ReadOnlyMemory<PineValue>.Empty);

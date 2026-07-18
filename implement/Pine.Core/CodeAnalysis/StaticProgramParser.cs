@@ -21,7 +21,7 @@ public class StaticProgramParser
     public abstract record CrashOrigin
     {
         /// <summary>
-        /// Originating from a <see cref="Expression.ParseAndEval"/> proven to never evaluate to a valid encoded expression.
+        /// Originating from a <see cref="Expression.Eval"/> proven to never evaluate to a valid encoded expression.
         /// </summary>
         public sealed record CrashFromParseAndEval
             : CrashOrigin;
@@ -247,7 +247,7 @@ public class StaticProgramParser
         PineVMParseCache parseCache)
         where IdentifierT : notnull
     {
-        if (expression is Expression.Literal literal)
+        if (expression is Expression.Litral literal)
         {
             if (parseConfig.IdentifyInstanceOptional(path, literal.Value) is { } identifyResult)
             {
@@ -336,7 +336,7 @@ public class StaticProgramParser
             return (listNode, allDependencies);
         }
 
-        if (expression is Expression.KernelApplication kernelApp)
+        if (expression is Expression.Builtin kernelApp)
         {
             var parseInputResult =
                 ParseExpression(
@@ -438,7 +438,7 @@ public class StaticProgramParser
             return (conditionalNode, allDependencies);
         }
 
-        if (expression is Expression.ParseAndEval parseAndEvalExpr)
+        if (expression is Expression.Eval parseAndEvalExpr)
         {
             return
                 ParseCurriedFunctionApplication(
@@ -470,7 +470,7 @@ public class StaticProgramParser
     /// <para>
     /// Also recognizes <b>Form A</b> per §2.2 of
     /// <c>explore/internal-analysis/2026-04-22-analysis-inline-non-recursive-callees.md</c>:
-    /// a single <see cref="Expression.ParseAndEval"/> whose <c>Encoded</c> is
+    /// a single <see cref="Expression.Eval"/> whose <c>Encoded</c> is
     /// <c>Literal(v)</c> with <c>v</c> recognized as a known callee's
     /// <c>EncodedExpression</c> (via
     /// <see cref="StaticProgramParserConfig{IdentifierT}.IdentifyEncodedBodyOptional"/>),
@@ -483,7 +483,7 @@ public class StaticProgramParser
     private static Result<string, (StaticExpression<IdentifierT> current, ImmutableDictionary<IdentifierT, PineValue> dependencies)>
         ParseCurriedFunctionApplication<IdentifierT>(
         ImmutableStack<IdentifierT> path,
-        Expression.ParseAndEval parseAndEvalExpr,
+        Expression.Eval parseAndEvalExpr,
         PineValueClass envClass,
         StaticProgramParserConfig<IdentifierT> parseConfig,
         PineVMParseCache parseCache)
@@ -496,7 +496,7 @@ public class StaticProgramParser
         // non-Literal Encoded slot that the rest of this method does not recognize.
         // We invert the construction symbolically using
         // TryDecodeApplicationOfConstructedEncoding, then re-parse the equivalent expression.
-        if (parseAndEvalExpr.Encoded is not Expression.Literal &&
+        if (parseAndEvalExpr.Encoded is not Expression.Litral &&
             ReducePineExpression.TryDecodeApplicationOfConstructedEncoding(
                 parseAndEvalExpr.Encoded,
                 parseAndEvalExpr.Environment,
@@ -530,7 +530,7 @@ public class StaticProgramParser
         // Literal recognized as a known callee's EncodedExpression. Per §2.2 the
         // environment is uniformly List[Literal(envFuncs), arg0, ..., arg{n-1}].
         if (parseConfig.IdentifyEncodedBodyOptional is { } identifyEncodedBody &&
-            parseAndEvalExpr.Encoded is Expression.Literal outerEncodedLit &&
+            parseAndEvalExpr.Encoded is Expression.Litral outerEncodedLit &&
             identifyEncodedBody(path, outerEncodedLit.Value) is { } formAIdentify &&
             parseAndEvalExpr.Environment is Expression.List formAEnvList &&
             formAEnvList.Items.Count >= 1)
@@ -587,7 +587,7 @@ public class StaticProgramParser
         // environment when each placeholder is bound to the corresponding actual argument.
         if (parseConfig.ConsolidatedFormTemplates is { } consolidatedTemplates &&
             consolidatedTemplates.Count > 0 &&
-            parseAndEvalExpr.Encoded is Expression.Literal consolidatedEncodedLit)
+            parseAndEvalExpr.Encoded is Expression.Litral consolidatedEncodedLit)
         {
             for (var templateIdx = 0; templateIdx < consolidatedTemplates.Count; ++templateIdx)
             {
@@ -668,7 +668,7 @@ public class StaticProgramParser
         var collectedArgs = new List<Expression>();
         var currentExpr = parseAndEvalExpr;
 
-        while (currentExpr.Encoded is Expression.ParseAndEval nestedParseAndEval)
+        while (currentExpr.Encoded is Expression.Eval nestedParseAndEval)
         {
             collectedArgs.Add(currentExpr.Environment);
             currentExpr = nestedParseAndEval;
@@ -724,10 +724,10 @@ public class StaticProgramParser
 
                 for (var i = 0; i < innerFunctionRecord.EnvFunctions.Length; i++)
                 {
-                    inlinedEnvFuncsItems[i] = Expression.LiteralInstance(innerFunctionRecord.EnvFunctions.Span[i]);
+                    inlinedEnvFuncsItems[i] = Expression.LitralInst(innerFunctionRecord.EnvFunctions.Span[i]);
                 }
 
-                var inlinedEnvFuncsList = Expression.ListInstance(inlinedEnvFuncsItems);
+                var inlinedEnvFuncsList = Expression.ListInst(inlinedEnvFuncsItems);
 
                 var inlineCollectedArgs =
                     new Expression[
@@ -736,7 +736,7 @@ public class StaticProgramParser
                 for (var i = 0; i < innerFunctionRecord.ArgumentsAlreadyCollected.Length; i++)
                 {
                     inlineCollectedArgs[i] =
-                        Expression.LiteralInstance(innerFunctionRecord.ArgumentsAlreadyCollected.Span[i]);
+                        Expression.LitralInst(innerFunctionRecord.ArgumentsAlreadyCollected.Span[i]);
                 }
 
                 for (var i = 0; i < collectedArgs.Count; i++)
@@ -751,10 +751,10 @@ public class StaticProgramParser
                 if (innerFunctionRecord.UsesNestedArgFormat)
                 {
                     inlinedEnvironment =
-                        Expression.ListInstance(
+                        Expression.ListInst(
                             [
                             inlinedEnvFuncsList,
-                            Expression.ListInstance(inlineCollectedArgs),
+                            Expression.ListInst(inlineCollectedArgs),
                             ]);
                 }
                 else
@@ -767,12 +767,12 @@ public class StaticProgramParser
                         flatEnvItems[1 + i] = inlineCollectedArgs[i];
                     }
 
-                    inlinedEnvironment = Expression.ListInstance(flatEnvItems);
+                    inlinedEnvironment = Expression.ListInst(flatEnvItems);
                 }
 
                 var inlinedExpression =
-                    new Expression.ParseAndEval(
-                        encoded: Expression.LiteralInstance(
+                    new Expression.Eval(
+                        encoded: Expression.LitralInst(
                             ExpressionEncoding.EncodeExpressionAsValue(innerFunctionRecord.InnerFunction)),
                         environment: inlinedEnvironment);
 
@@ -887,7 +887,7 @@ public class StaticProgramParser
         PineVMParseCache parseCache)
     {
         // Case 1: Encoded is a literal - direct function reference
-        if (encoded is Expression.Literal encodedLiteral)
+        if (encoded is Expression.Litral encodedLiteral)
         {
             return (encodedLiteral.Value, isFullApplication: false);
         }

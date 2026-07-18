@@ -255,7 +255,7 @@ public class CompilePineToDotNetTests
     public void Test_compile_specialized_for_kernel_head()
     {
         var pineExpression =
-            Expression.KernelApplicationInstance(
+            Expression.BuiltinInst(
                 function: nameof(BuiltinFunction.head),
                 input: new Expression.Environment());
 
@@ -353,7 +353,7 @@ public class CompilePineToDotNetTests
             {
                 expr =
                 (Expression)
-                Expression.KernelApplicationInstance(
+                Expression.BuiltinInst(
                     function: nameof(BuiltinFunction.head),
                     input: new Expression.Environment()),
 
@@ -369,14 +369,14 @@ public class CompilePineToDotNetTests
             {
                 expr =
                 (Expression)
-                Expression.KernelApplicationInstance(
+                Expression.BuiltinInst(
                     function: nameof(BuiltinFunction.head),
                     input:
-                    Expression.KernelApplicationInstance(
+                    Expression.BuiltinInst(
                         function:"skip",
-                        input: Expression.ListInstance(
+                        input: Expression.ListInst(
                             [
-                            Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(13)),
+                            Expression.LitralInst(IntegerEncoding.EncodeSignedInteger(13)),
                             new Expression.Environment()
                             ]))),
 

@@ -430,9 +430,9 @@ public class ElmCompilerTestHelper
         for (var i = 0; i < arguments.Count; i++)
         {
             var asIndependent =
-                new Expression.ParseAndEval(
-                    encoded: Expression.LiteralInstance(currentValue),
-                    environment: Expression.LiteralInstance(arguments[i]));
+                new Expression.Eval(
+                    encoded: Expression.LitralInst(currentValue),
+                    environment: Expression.LitralInst(arguments[i]));
 
             var currentResult =
                 vm.EvaluateExpressionOnCustomStack(

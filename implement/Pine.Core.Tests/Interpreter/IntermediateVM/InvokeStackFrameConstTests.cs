@@ -154,7 +154,7 @@ public class InvokeStackFrameConstTests
         EvaluateViaDirectInterpreter(
             targetExpression: listMapExpression,
             forwardedEncodedExpression:
-            Expression.ListInstance(
+            Expression.ListInst(
                 [
                 IncrementExpression(EnvironmentPathExpression([1, 0])),
                 IncrementExpression(EnvironmentPathExpression([1, 1])),
@@ -188,37 +188,37 @@ public class InvokeStackFrameConstTests
         var factorialExpression = EnvironmentPathExpression([0]);
 
         var recursiveFactorialExpression =
-            Expression.ConditionalInstance(
+            Expression.ConditionalInst(
                 condition:
-                Expression.KernelApplicationInstance(
+                Expression.BuiltinInst(
                     function: nameof(BuiltinFunction.int_is_sorted_asc),
                     input:
-                    Expression.ListInstance(
+                    Expression.ListInst(
                         [
                         EnvironmentPathExpression([1]),
-                        Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(1)),
+                        Expression.LitralInst(IntegerEncoding.EncodeSignedInteger(1)),
                         ])),
                 trueBranch:
-                Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(1)),
+                Expression.LitralInst(IntegerEncoding.EncodeSignedInteger(1)),
                 falseBranch:
-                Expression.KernelApplicationInstance(
+                Expression.BuiltinInst(
                     function: nameof(BuiltinFunction.int_mul),
                     input:
-                    Expression.ListInstance(
+                    Expression.ListInst(
                         [
-                        new Expression.ParseAndEval(
+                        new Expression.Eval(
                             encoded: EnvironmentPathExpression([0]),
                             environment:
-                            Expression.ListInstance(
+                            Expression.ListInst(
                                 [
                                 EnvironmentPathExpression([0]),
-                                Expression.KernelApplicationInstance(
+                                Expression.BuiltinInst(
                                     function: nameof(BuiltinFunction.int_add),
                                     input:
-                                    Expression.ListInstance(
+                                    Expression.ListInst(
                                         [
                                         EnvironmentPathExpression([1]),
-                                        Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(-1)),
+                                        Expression.LitralInst(IntegerEncoding.EncodeSignedInteger(-1)),
                                         ])),
                                 ])),
                         EnvironmentPathExpression([1]),
@@ -305,52 +305,52 @@ public class InvokeStackFrameConstTests
         var fibonacciExpression = EnvironmentPathExpression([0]);
 
         var recursiveFibonacciExpression =
-            Expression.ConditionalInstance(
+            Expression.ConditionalInst(
                 condition:
-                Expression.KernelApplicationInstance(
+                Expression.BuiltinInst(
                     function: nameof(BuiltinFunction.int_is_sorted_asc),
                     input:
-                    Expression.ListInstance(
+                    Expression.ListInst(
                         [
                         EnvironmentPathExpression([1]),
-                        Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(1)),
+                        Expression.LitralInst(IntegerEncoding.EncodeSignedInteger(1)),
                         ])),
                 trueBranch:
                 EnvironmentPathExpression([1]),
                 falseBranch:
-                Expression.KernelApplicationInstance(
+                Expression.BuiltinInst(
                     function: nameof(BuiltinFunction.int_add),
                     input:
-                    Expression.ListInstance(
+                    Expression.ListInst(
                         [
-                        new Expression.ParseAndEval(
+                        new Expression.Eval(
                             encoded: EnvironmentPathExpression([0]),
                             environment:
-                            Expression.ListInstance(
+                            Expression.ListInst(
                                 [
                                 EnvironmentPathExpression([0]),
-                                Expression.KernelApplicationInstance(
+                                Expression.BuiltinInst(
                                     function: nameof(BuiltinFunction.int_add),
                                     input:
-                                    Expression.ListInstance(
+                                    Expression.ListInst(
                                         [
                                         EnvironmentPathExpression([1]),
-                                        Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(-2)),
+                                        Expression.LitralInst(IntegerEncoding.EncodeSignedInteger(-2)),
                                         ])),
                                 ])),
-                        new Expression.ParseAndEval(
+                        new Expression.Eval(
                             encoded: EnvironmentPathExpression([0]),
                             environment:
-                            Expression.ListInstance(
+                            Expression.ListInst(
                                 [
                                 EnvironmentPathExpression([0]),
-                                Expression.KernelApplicationInstance(
+                                Expression.BuiltinInst(
                                     function: nameof(BuiltinFunction.int_add),
                                     input:
-                                    Expression.ListInstance(
+                                    Expression.ListInst(
                                         [
                                         EnvironmentPathExpression([1]),
-                                        Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(-1)),
+                                        Expression.LitralInst(IntegerEncoding.EncodeSignedInteger(-1)),
                                         ])),
                                 ])),
                         ])));
@@ -647,7 +647,7 @@ public class InvokeStackFrameConstTests
         EvaluateViaDirectInterpreter(
             targetExpression: listMapDispatchExpression,
             forwardedEncodedExpression:
-            Expression.ListInstance(
+            Expression.ListInst(
                 [
                 IncrementExpression(EnvironmentPathExpression([1, 0])),
                 IncrementExpression(EnvironmentPathExpression([1, 1])),
@@ -742,9 +742,9 @@ public class InvokeStackFrameConstTests
         IReadOnlyList<(IReadOnlyList<EnvConstraintItem> constraint, StackFrameInstructions instructions)>? specializedInstructions = null)
     {
         var rootExpression =
-            new Expression.ParseAndEval(
+            new Expression.Eval(
                 encoded:
-                Expression.LiteralInstance(
+                Expression.LitralInst(
                     ExpressionEncoding.EncodeExpressionAsValue(targetExpression)),
                 environment: Expression.EnvironmentInstance);
 
@@ -768,7 +768,7 @@ public class InvokeStackFrameConstTests
         PineValue rootEnvironment)
     {
         var wrappedRootExpression =
-            new Expression.ParseAndEval(
+            new Expression.Eval(
                 encoded: targetExpression,
                 environment: EnvironmentPathExpression([1]));
 
@@ -820,18 +820,18 @@ public class InvokeStackFrameConstTests
 
     private static Expression LengthExpression(
         Expression expression) =>
-        Expression.KernelApplicationInstance(
+        Expression.BuiltinInst(
             function: nameof(BuiltinFunction.length),
             input: expression);
 
     private static Expression IncrementExpression(
         Expression expression) =>
-        Expression.KernelApplicationInstance(
+        Expression.BuiltinInst(
             function: nameof(BuiltinFunction.int_add),
             input:
-            Expression.ListInstance(
+            Expression.ListInst(
                 [
                 expression,
-                Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(1)),
+                Expression.LitralInst(IntegerEncoding.EncodeSignedInteger(1)),
                 ]));
 }

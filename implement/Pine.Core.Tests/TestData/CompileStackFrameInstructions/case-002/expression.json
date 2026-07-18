@@ -2,19 +2,19 @@
   "List": [
     [
       {
-        "Literal": [
+        "Litral": [
           [
           ]
         ]
       },
       {
-        "KernelApplication": [
+        "Builtin": [
           "skip",
           {
             "List": [
               [
                 {
-                  "Literal": [
+                  "Litral": [
                     1
                   ]
                 },
@@ -28,20 +28,20 @@
         ]
       },
       {
-        "Literal": [
+        "Litral": [
           {
             "AsBase64": ""
           }
         ]
       },
       {
-        "KernelApplication": [
+        "Builtin": [
           "skip",
           {
             "List": [
               [
                 {
-                  "Literal": [
+                  "Litral": [
                     1
                   ]
                 },

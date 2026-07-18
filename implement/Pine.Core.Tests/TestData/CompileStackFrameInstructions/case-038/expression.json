@@ -1,11 +1,11 @@
 {
-  "KernelApplication": [
+  "Builtin": [
     "bit_shift_left",
     {
       "List": [
         [
           {
-            "Literal": [
+            "Litral": [
               13
             ]
           },

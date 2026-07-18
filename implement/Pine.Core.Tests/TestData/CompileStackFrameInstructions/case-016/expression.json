@@ -4,7 +4,7 @@
       "List": [
         [
           {
-            "KernelApplication": [
+            "Builtin": [
               "int_mul",
               {
                 "List": [
@@ -27,7 +27,7 @@
             ]
           },
           {
-            "KernelApplication": [
+            "Builtin": [
               "int_mul",
               {
                 "List": [
@@ -55,7 +55,7 @@
     {
       "Conditional": [
         {
-          "KernelApplication": [
+          "Builtin": [
             "int_mul",
             {
               "List": [
@@ -78,19 +78,19 @@
           ]
         },
         {
-          "Literal": [
+          "Litral": [
             27
           ]
         },
         {
-          "Literal": [
+          "Litral": [
             23
           ]
         }
       ]
     },
     {
-      "Literal": [
+      "Litral": [
         13
       ]
     }

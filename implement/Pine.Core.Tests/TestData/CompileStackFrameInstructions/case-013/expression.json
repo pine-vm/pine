@@ -1,31 +1,31 @@
 {
   "Conditional": [
     {
-      "Literal": [
+      "Litral": [
         11
       ]
     },
     {
       "Conditional": [
         {
-          "Literal": [
+          "Litral": [
             21
           ]
         },
         {
-          "Literal": [
+          "Litral": [
             27
           ]
         },
         {
-          "Literal": [
+          "Litral": [
             23
           ]
         }
       ]
     },
     {
-      "Literal": [
+      "Litral": [
         13
       ]
     }

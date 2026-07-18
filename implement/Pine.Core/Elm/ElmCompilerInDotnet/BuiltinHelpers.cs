@@ -26,11 +26,11 @@ public static class BuiltinHelpers
     /// Equivalent to: Pine_kernel.skip [ count, expr ]
     /// </summary>
     public static Expression ApplyBuiltinSkip(int count, Expression expr) =>
-        Expression.KernelApplicationInstance(
+        Expression.BuiltinInst(
             nameof(BuiltinFunction.skip),
-            Expression.ListInstance(
+            Expression.ListInst(
                 [
-                Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(count)),
+                Expression.LitralInst(IntegerEncoding.EncodeSignedInteger(count)),
                 expr
                 ]));
 
@@ -39,7 +39,7 @@ public static class BuiltinHelpers
     /// Equivalent to: Pine_kernel.head expr
     /// </summary>
     public static Expression ApplyBuiltinHead(Expression expr) =>
-        Expression.KernelApplicationInstance(
+        Expression.BuiltinInst(
             nameof(BuiltinFunction.head),
             expr);
 
@@ -48,16 +48,16 @@ public static class BuiltinHelpers
     /// Equivalent to: Pine_kernel.equal [ left, right ]
     /// </summary>
     public static Expression ApplyBuiltinEqualBinary(Expression left, Expression right) =>
-        Expression.KernelApplicationInstance(
+        Expression.BuiltinInst(
             nameof(BuiltinFunction.equal),
-            Expression.ListInstance([left, right]));
+            Expression.ListInst([left, right]));
 
     /// <summary>
     /// Apply the builtin 'length' function.
     /// Equivalent to: Pine_kernel.length expr
     /// </summary>
     public static Expression ApplyBuiltinLength(Expression expr) =>
-        Expression.KernelApplicationInstance(
+        Expression.BuiltinInst(
             nameof(BuiltinFunction.length),
             expr);
 
@@ -66,38 +66,38 @@ public static class BuiltinHelpers
     /// Equivalent to: Pine_kernel.int_add operands
     /// </summary>
     public static Expression ApplyBuiltinIntAdd(IReadOnlyList<Expression> operands) =>
-        Expression.KernelApplicationInstance(
+        Expression.BuiltinInst(
             nameof(BuiltinFunction.int_add),
-            Expression.ListInstance(operands));
+            Expression.ListInst(operands));
 
     /// <summary>
     /// Apply the builtin 'int_mul' function.
     /// Equivalent to: Pine_kernel.int_mul operands
     /// </summary>
     public static Expression ApplyBuiltinIntMul(IReadOnlyList<Expression> operands) =>
-        Expression.KernelApplicationInstance(
+        Expression.BuiltinInst(
             nameof(BuiltinFunction.int_mul),
-            Expression.ListInstance(operands));
+            Expression.ListInst(operands));
 
     /// <summary>
     /// Apply the builtin 'skip' function with a dynamic count expression.
     /// Equivalent to: Pine_kernel.skip [ countExpr, expr ]
     /// </summary>
     public static Expression ApplyBuiltinSkip(Expression countExpr, Expression expr) =>
-        Expression.KernelApplicationInstance(
+        Expression.BuiltinInst(
             nameof(BuiltinFunction.skip),
-            Expression.ListInstance([countExpr, expr]));
+            Expression.ListInst([countExpr, expr]));
 
     /// <summary>
     /// Apply the builtin 'take' function with a constant count.
     /// Equivalent to: Pine_kernel.take [ count, expr ]
     /// </summary>
     public static Expression ApplyBuiltinTake(int count, Expression expr) =>
-        Expression.KernelApplicationInstance(
+        Expression.BuiltinInst(
             nameof(BuiltinFunction.take),
-            Expression.ListInstance(
+            Expression.ListInst(
                 [
-                Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(count)),
+                Expression.LitralInst(IntegerEncoding.EncodeSignedInteger(count)),
                 expr
                 ]));
 
@@ -106,7 +106,7 @@ public static class BuiltinHelpers
     /// Equivalent to: Pine_kernel.concat items
     /// </summary>
     public static Expression ApplyBuiltinConcat(IReadOnlyList<Expression> items) =>
-        Expression.KernelApplicationInstance(
+        Expression.BuiltinInst(
             nameof(BuiltinFunction.concat),
-            Expression.ListInstance(items));
+            Expression.ListInst(items));
 }

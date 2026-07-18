@@ -1,19 +1,19 @@
 {
-  "KernelApplication": [
+  "Builtin": [
     "reverse",
     {
-      "KernelApplication": [
+      "Builtin": [
         "take",
         {
           "List": [
             [
               {
-                "Literal": [
+                "Litral": [
                   3
                 ]
               },
               {
-                "KernelApplication": [
+                "Builtin": [
                   "reverse",
                   {
                     "Environment": [

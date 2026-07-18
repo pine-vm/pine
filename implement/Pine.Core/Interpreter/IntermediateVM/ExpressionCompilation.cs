@@ -358,7 +358,7 @@ public record ExpressionCompilation(
         }
 
         Expression? TryInlineParseAndEval(
-            Expression.ParseAndEval parseAndEvalExpr)
+            Expression.Eval parseAndEvalExpr)
         {
             if (parseAndEvalExpr.Encoded.ReferencesEnvironment)
             {
@@ -429,7 +429,7 @@ public record ExpressionCompilation(
              * inlining-driven code growth rather than fixed runtime cost. Static IR size
              * is gated separately by the entry-level maxSubexpressionCount cap above.
              */
-            bool IsExpansionCandidateForFirstInliner(Expression.ParseAndEval pe)
+            bool IsExpansionCandidateForFirstInliner(Expression.Eval pe)
             {
                 if (pe.Encoded.ReferencesEnvironment)
                 {
@@ -596,13 +596,13 @@ public record ExpressionCompilation(
                                     underConditional: true);
 
                             return
-                                Expression.ConditionalInstance(
+                                Expression.ConditionalInst(
                                     condition: conditionInlined,
                                     falseBranch: falseBranchInlined,
                                     trueBranch: trueBranchInlined);
                         }
 
-                        if (expr is Expression.ParseAndEval parseAndEval)
+                        if (expr is Expression.Eval parseAndEval)
                         {
                             if (TryInlineParseAndEval(parseAndEval) is { } inlined)
                             {
@@ -636,12 +636,12 @@ public record ExpressionCompilation(
 
     /// <summary>
     /// Computes, for an expression, the per-path maximum number of
-    /// <see cref="Expression.ParseAndEval"/> nodes that <em>would be expanded by future
+    /// <see cref="Expression.Eval"/> nodes that <em>would be expanded by future
     /// inlining</em> along any single dynamic evaluation path. A
     /// <see cref="Expression.Conditional"/> contributes
     /// <c>condition_path + max(true_path, false_path)</c> rather than the
     /// sum of all branches, reflecting that exactly one of <c>TrueBranch</c>/<c>FalseBranch</c>
-    /// executes per evaluation. A <see cref="Expression.ParseAndEval"/> contributes 1
+    /// executes per evaluation. A <see cref="Expression.Eval"/> contributes 1
     /// only when the supplied <paramref name="isExpansionCandidate"/> predicate returns
     /// true for it; otherwise it contributes 0.
     /// <para>
@@ -656,7 +656,7 @@ public record ExpressionCompilation(
     /// </summary>
     internal static int ComputeParseAndEvalPathMax(
         Expression expression,
-        Func<Expression.ParseAndEval, bool> isExpansionCandidate)
+        Func<Expression.Eval, bool> isExpansionCandidate)
     {
         switch (expression)
         {
@@ -669,7 +669,7 @@ public record ExpressionCompilation(
                     return condP + Math.Max(trueP, falseP);
                 }
 
-            case Expression.ParseAndEval parseAndEval:
+            case Expression.Eval parseAndEval:
                 {
                     var encP = ComputeParseAndEvalPathMax(parseAndEval.Encoded, isExpansionCandidate);
                     var envP = ComputeParseAndEvalPathMax(parseAndEval.Environment, isExpansionCandidate);
@@ -692,10 +692,10 @@ public record ExpressionCompilation(
                     return sumP;
                 }
 
-            case Expression.KernelApplication kernelApp:
+            case Expression.Builtin kernelApp:
                 return ComputeParseAndEvalPathMax(kernelApp.Input, isExpansionCandidate);
 
-            case Expression.StringTag stringTag:
+            case Expression.Label stringTag:
                 return ComputeParseAndEvalPathMax(stringTag.Tagged, isExpansionCandidate);
 
             default:
@@ -797,7 +797,7 @@ public record ExpressionCompilation(
         }
 
         Expression? TryInlineParseAndEval(
-            Expression.ParseAndEval parseAndEvalExpr,
+            Expression.Eval parseAndEvalExpr,
             bool noRecursion)
         {
             Expression? ContinueReduceForKnownExprValue(PineValue exprValue)
@@ -861,7 +861,7 @@ public record ExpressionCompilation(
                         parseCache,
                         reducedExpressionCache: reducedExpressionCache);
 
-                bool IsExpansionCandidateForSecondInliner(Expression.ParseAndEval pe)
+                bool IsExpansionCandidateForSecondInliner(Expression.Eval pe)
                 {
                     if (pe.Encoded.ReferencesEnvironment)
                     {
@@ -996,13 +996,13 @@ public record ExpressionCompilation(
                                     underConditional: true);
 
                             return
-                                Expression.ConditionalInstance(
+                                Expression.ConditionalInst(
                                     condition: conditionInlined,
                                     falseBranch: falseBranchInlined,
                                     trueBranch: trueBranchInlined);
                         }
 
-                        if (expr is Expression.ParseAndEval parseAndEval)
+                        if (expr is Expression.Eval parseAndEval)
                         {
                             if (TryInlineParseAndEval(parseAndEval, noRecursion: underConditional) is { } inlined)
                             {
@@ -1045,14 +1045,14 @@ public record ExpressionCompilation(
                 {
                     if (CodeAnalysis.CodeAnalysis.TryParseAsLiteral(descendant) is { } literal)
                     {
-                        return Expression.LiteralInstance(literal);
+                        return Expression.LitralInst(literal);
                     }
 
                     if (CodeAnalysis.CodeAnalysis.TryParseExprAsPathInEnv(descendant) is { } pathInEnv)
                     {
                         if (envConstraintId.TryGetValue(pathInEnv) is { } value)
                         {
-                            return Expression.LiteralInstance(value);
+                            return Expression.LitralInst(value);
                         }
                     }
 
@@ -1105,13 +1105,13 @@ public record ExpressionCompilation(
                 }
             }
 
-            if (expression is Expression.ParseAndEval parseAndEval)
+            if (expression is Expression.Eval parseAndEval)
             {
                 stack.Push(parseAndEval.Encoded);
                 stack.Push(parseAndEval.Environment);
             }
 
-            if (expression is Expression.KernelApplication kernelApp)
+            if (expression is Expression.Builtin kernelApp)
             {
                 stack.Push(kernelApp.Input);
             }
@@ -1130,7 +1130,7 @@ public record ExpressionCompilation(
                 */
             }
 
-            if (expression is Expression.StringTag stringTag)
+            if (expression is Expression.Label stringTag)
             {
                 stack.Push(stringTag.Tagged);
             }

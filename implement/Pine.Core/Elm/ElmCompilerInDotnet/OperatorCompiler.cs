@@ -159,7 +159,7 @@ public class OperatorCompiler
         {
             // Cons operator: prepend element to list
             // head :: tail  ==>  concat([[head], tail])
-            var singletonList = Expression.ListInstance([leftCompiled]);
+            var singletonList = Expression.ListInst([leftCompiled]);
 
             return
                 BuiltinHelpers.ApplyBuiltinConcat(

@@ -1,39 +1,39 @@
 {
-  "KernelApplication": [
+  "Builtin": [
     "int_is_sorted_asc",
     {
       "List": [
         [
           {
-            "Literal": [
+            "Litral": [
               23
             ]
           },
           {
-            "KernelApplication": [
+            "Builtin": [
               "head",
               {
-                "KernelApplication": [
+                "Builtin": [
                   "skip",
                   {
                     "List": [
                       [
                         {
-                          "Literal": [
+                          "Litral": [
                             41
                           ]
                         },
                         {
-                          "KernelApplication": [
+                          "Builtin": [
                             "head",
                             {
-                              "KernelApplication": [
+                              "Builtin": [
                                 "skip",
                                 {
                                   "List": [
                                     [
                                       {
-                                        "Literal": [
+                                        "Litral": [
                                           43
                                         ]
                                       },
@@ -56,7 +56,7 @@
             ]
           },
           {
-            "Literal": [
+            "Litral": [
               27
             ]
           }

@@ -1,10 +1,10 @@
 {
-  "KernelApplication": [
+  "Builtin": [
     "take",
     {
       "List": [
         [
-          { "Literal": [ 71 ] },
+          { "Litral": [ 71 ] },
           { "Environment": [] }
         ]
       ]

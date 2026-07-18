@@ -1061,7 +1061,7 @@ public record StackInstruction(
         if (expression is Expression.Environment)
             return nameof(Expression.Environment);
 
-        if (expression is Expression.Literal literalExpression &&
+        if (expression is Expression.Litral literalExpression &&
             StringEncoding.StringFromValue(literalExpression.Value).IsOkOrNull() is { } literalString)
         {
             return literalString;

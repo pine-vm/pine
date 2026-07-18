@@ -1,11 +1,11 @@
 {
-  "KernelApplication": [
+  "Builtin": [
     "int_add",
     {
       "List": [
         [
           {
-            "Literal": [
+            "Litral": [
               8
             ]
           },

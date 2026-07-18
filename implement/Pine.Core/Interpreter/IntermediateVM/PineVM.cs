@@ -2992,7 +2992,7 @@ public class PineVM : IPineVM
         Expression expression,
         PineValueInProcess envValue)
     {
-        if (expression is not Expression.ParseAndEval evalExpr)
+        if (expression is not Expression.Eval evalExpr)
             return null;
 
         if (evalExpr.Encoded.EvalCount > 0 || evalExpr.Environment.EvalCount > 0)
@@ -3063,7 +3063,7 @@ public class PineVM : IPineVM
     {
         performanceCounters.InstructionCount++;
 
-        if (expression is Expression.Literal literal)
+        if (expression is Expression.Litral literal)
         {
             return PineValueInProcess.Create(literal.Value);
         }
@@ -3117,7 +3117,7 @@ public class PineVM : IPineVM
             return envValue;
         }
 
-        if (expression is Expression.KernelApplication builtinExpr)
+        if (expression is Expression.Builtin builtinExpr)
         {
             if (builtinExpr.Function is nameof(BuiltinFunction.length))
             {
@@ -3197,7 +3197,7 @@ public class PineVM : IPineVM
 
             if (builtinExpr.Function is nameof(BuiltinFunction.head))
             {
-                if (builtinExpr.Input is Expression.KernelApplication innerBuiltinExpr &&
+                if (builtinExpr.Input is Expression.Builtin innerBuiltinExpr &&
                     innerBuiltinExpr.Function is nameof(BuiltinFunction.skip))
                 {
                     var skipInputValue = EvalDirect(innerBuiltinExpr.Input, envValue, ref performanceCounters);
@@ -3207,7 +3207,7 @@ public class PineVM : IPineVM
 
                     int? skipCount = null;
 
-                    if (innerBuiltinExpr.Input is Expression.Literal skipCountLiteral)
+                    if (innerBuiltinExpr.Input is Expression.Litral skipCountLiteral)
                     {
                         if (BuiltinFunction.SignedIntegerFromValueRelaxed(skipCountLiteral.Value) is { } skipCountValue)
                         {
@@ -3253,7 +3253,7 @@ public class PineVM : IPineVM
 
                     int? skipCount = null;
 
-                    if (skipListExpr.Items[0] is Expression.Literal skipCountLiteral)
+                    if (skipListExpr.Items[0] is Expression.Litral skipCountLiteral)
                     {
                         if (BuiltinFunction.SignedIntegerFromValueRelaxed(skipCountLiteral.Value) is { } skipCountValue)
                         {
@@ -3295,7 +3295,7 @@ public class PineVM : IPineVM
 
                     int? takeCount = null;
 
-                    if (skipListExpr.Items[0] is Expression.Literal takeCountLiteral)
+                    if (skipListExpr.Items[0] is Expression.Litral takeCountLiteral)
                     {
                         if (BuiltinFunction.SignedIntegerFromValueRelaxed(takeCountLiteral.Value) is { } takeCountValue)
                         {
@@ -3387,7 +3387,7 @@ public class PineVM : IPineVM
             }
         }
 
-        if (expression is Expression.StringTag stringTagExpr)
+        if (expression is Expression.Label stringTagExpr)
         {
             return EvalDirect(stringTagExpr.Tagged, envValue, ref performanceCounters);
         }

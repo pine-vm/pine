@@ -27,7 +27,7 @@ public record ReusedInstances(
 
     public FrozenSet<Expression>? Expressions { private set; get; }
 
-    public FrozenDictionary<PineValue, Expression.Literal>? LiteralExpressions { private set; get; }
+    public FrozenDictionary<PineValue, Expression.Litral>? LiteralExpressions { private set; get; }
 
     internal FrozenDictionary<Expression.List.ListStruct, Expression.List>? ListExpressions { private set; get; }
 
@@ -404,10 +404,10 @@ public record ReusedInstances(
                     descendant switch
                     {
                         Expression.List listExpression =>
-                        Expression.ListInstance([.. listExpression.Items.Select(ReuseInstance)]),
+                        Expression.ListInst([.. listExpression.Items.Select(ReuseInstance)]),
 
                         Expression.Conditional conditionalExpression =>
-                        Expression.ConditionalInstance(
+                        Expression.ConditionalInst(
                             condition: ReuseInstance(conditionalExpression.Condition),
                             falseBranch: ReuseInstance(conditionalExpression.FalseBranch),
                             trueBranch: ReuseInstance(conditionalExpression.TrueBranch)),
@@ -426,7 +426,7 @@ public record ReusedInstances(
 
             LiteralExpressions =
                 Expressions
-                .OfType<Expression.Literal>()
+                .OfType<Expression.Litral>()
                 .ToFrozenDictionary(
                     keySelector: literal => literal.Value,
                     elementSelector: literal => literal);

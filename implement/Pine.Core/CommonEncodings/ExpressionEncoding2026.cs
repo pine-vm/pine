@@ -82,7 +82,7 @@ public static class ExpressionEncoding2026
     {
         switch (expression)
         {
-            case Expression.Literal:
+            case Expression.Litral:
             case Expression.Environment:
                 break;
 
@@ -92,7 +92,7 @@ public static class ExpressionEncoding2026
 
                 break;
 
-            case Expression.KernelApplication kernelApplication:
+            case Expression.Builtin kernelApplication:
                 PushChildIfUnencoded(kernelApplication.Input, store, stack);
                 break;
 
@@ -102,12 +102,12 @@ public static class ExpressionEncoding2026
                 PushChildIfUnencoded(conditional.TrueBranch, store, stack);
                 break;
 
-            case Expression.ParseAndEval parseAndEval:
+            case Expression.Eval parseAndEval:
                 PushChildIfUnencoded(parseAndEval.Encoded, store, stack);
                 PushChildIfUnencoded(parseAndEval.Environment, store, stack);
                 break;
 
-            case Expression.StringTag stringTag:
+            case Expression.Label stringTag:
                 PushChildIfUnencoded(stringTag.Tagged, store, stack);
                 break;
 
@@ -136,13 +136,13 @@ public static class ExpressionEncoding2026
         Func<Expression, PineValue.ListValue> encodeSubexpression) =>
         expression switch
         {
-            Expression.Literal literal =>
+            Expression.Litral literal =>
             PineValue.List([s_literalTag, literal.Value]),
 
             Expression.List list =>
             EncodeList(list, encodeSubexpression),
 
-            Expression.KernelApplication kernelApplication =>
+            Expression.Builtin kernelApplication =>
             PineValue.List(
                 [
                 s_builtinTag,
@@ -162,7 +162,7 @@ public static class ExpressionEncoding2026
             Expression.Environment =>
             s_environmentExpressionValue,
 
-            Expression.ParseAndEval parseAndEval =>
+            Expression.Eval parseAndEval =>
             PineValue.List(
                 [
                 s_evalTag,
@@ -170,7 +170,7 @@ public static class ExpressionEncoding2026
                 encodeSubexpression(parseAndEval.Environment)
                 ]),
 
-            Expression.StringTag stringTag =>
+            Expression.Label stringTag =>
             PineValue.List(
                 [
                 s_labelTag,
@@ -342,7 +342,7 @@ public static class ExpressionEncoding2026
             "Litral" =>
             rootList.Items.Length is 2
             ?
-            Expression.LiteralInstance(rootList.Items.Span[1])
+            Expression.LitralInst(rootList.Items.Span[1])
             :
             UnexpectedItemCount("literal", 2, rootList.Items.Length),
 
@@ -395,7 +395,7 @@ public static class ExpressionEncoding2026
             expressions[i - 1] = expression;
         }
 
-        return Expression.ListInstance(expressions);
+        return Expression.ListInst(expressions);
     }
 
     private static Result<string, Expression> ParseBuiltin(
@@ -429,7 +429,7 @@ public static class ExpressionEncoding2026
                 inputResult.GetType().Name);
         }
 
-        return Expression.KernelApplicationInstance(function, input);
+        return Expression.BuiltinInst(function, input);
     }
 
     private static Result<string, Expression> ParseCondition(
@@ -462,7 +462,7 @@ public static class ExpressionEncoding2026
                 "ParseCondition received an unexpected result variant");
         }
 
-        return Expression.ConditionalInstance(condition, falseBranch, trueBranch);
+        return Expression.ConditionalInst(condition, falseBranch, trueBranch);
     }
 
     private static Result<string, Expression> ParseEval(
@@ -489,7 +489,7 @@ public static class ExpressionEncoding2026
                 "ParseEval received an unexpected result variant");
         }
 
-        return new Expression.ParseAndEval(encoded, environment);
+        return new Expression.Eval(encoded, environment);
     }
 
     private static Result<string, Expression> ParseLabel(
@@ -511,7 +511,7 @@ public static class ExpressionEncoding2026
                 labeledResult.GetType().Name);
         }
 
-        return new Expression.StringTag(items.Span[1], labeled);
+        return new Expression.Label(items.Span[1], labeled);
     }
 
     private static string UnexpectedItemCount(string variant, int expected, int actual) =>

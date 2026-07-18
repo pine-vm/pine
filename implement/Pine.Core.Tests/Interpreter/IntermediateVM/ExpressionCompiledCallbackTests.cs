@@ -44,12 +44,12 @@ public class ExpressionCompiledCallbackTests
                 compiled.Add(expressionCompiled));
 
         var expression =
-            Expression.KernelApplicationInstance(
+            Expression.BuiltinInst(
                 nameof(BuiltinFunction.int_add),
-                Expression.ListInstance(
+                Expression.ListInst(
                     [
-                    Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(3)),
-                    Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(4))
+                    Expression.LitralInst(IntegerEncoding.EncodeSignedInteger(3)),
+                    Expression.LitralInst(IntegerEncoding.EncodeSignedInteger(4))
                     ]));
 
         var result = vm.EvaluateExpression(expression, PineValue.EmptyBlob);
@@ -99,21 +99,21 @@ public class ExpressionCompiledCallbackTests
                 compiled.Add(expressionCompiled));
 
         var exprA =
-            Expression.KernelApplicationInstance(
+            Expression.BuiltinInst(
                 nameof(BuiltinFunction.int_add),
-                Expression.ListInstance(
+                Expression.ListInst(
                     [
-                    Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(1)),
-                    Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(2))
+                    Expression.LitralInst(IntegerEncoding.EncodeSignedInteger(1)),
+                    Expression.LitralInst(IntegerEncoding.EncodeSignedInteger(2))
                     ]));
 
         var exprB =
-            Expression.KernelApplicationInstance(
+            Expression.BuiltinInst(
                 nameof(BuiltinFunction.int_mul),
-                Expression.ListInstance(
+                Expression.ListInst(
                     [
-                    Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(3)),
-                    Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(4))
+                    Expression.LitralInst(IntegerEncoding.EncodeSignedInteger(3)),
+                    Expression.LitralInst(IntegerEncoding.EncodeSignedInteger(4))
                     ]));
 
         vm.EvaluateExpression(exprA, PineValue.EmptyBlob)
@@ -166,12 +166,12 @@ public class ExpressionCompiledCallbackTests
         var nestedEnvironment = IntegerEncoding.EncodeSignedInteger(7);
 
         var rootExpression =
-            new Expression.ParseAndEval(
+            new Expression.Eval(
                 encoded:
-                Expression.LiteralInstance(
+                Expression.LitralInst(
                     ExpressionEncoding.EncodeExpressionAsValue(Expression.EnvironmentInstance)),
                 environment:
-                Expression.LiteralInstance(nestedEnvironment));
+                Expression.LitralInst(nestedEnvironment));
 
         var result = vm.EvaluateExpression(rootExpression, PineValue.EmptyBlob);
 
@@ -214,7 +214,7 @@ public class ExpressionCompiledCallbackTests
                 cacheFileStore: null);
 
         var expression =
-            Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(11));
+            Expression.LitralInst(IntegerEncoding.EncodeSignedInteger(11));
 
         vm.EvaluateExpression(expression, PineValue.EmptyBlob)
             .IsOkOrNull().Should().Be(IntegerEncoding.EncodeSignedInteger(11));

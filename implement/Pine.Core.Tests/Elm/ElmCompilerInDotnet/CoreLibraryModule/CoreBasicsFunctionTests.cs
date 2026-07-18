@@ -1799,10 +1799,10 @@ public class CoreBasicsFunctionTests
     public void TryInterpret_Add_returns_number_add()
     {
         var leftExpr =
-            Expression.LiteralInstance(ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(13)));
+            Expression.LitralInst(ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(13)));
 
         var rightExpr =
-            Expression.LiteralInstance(ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(17)));
+            Expression.LitralInst(ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(17)));
 
         var composed =
             CoreBasics.Generic_Add(leftExpr, rightExpr);
@@ -1820,10 +1820,10 @@ public class CoreBasicsFunctionTests
     public void TryInterpret_Sub_returns_number_sub()
     {
         var leftExpr =
-            Expression.LiteralInstance(ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(13)));
+            Expression.LitralInst(ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(13)));
 
         var rightExpr =
-            Expression.LiteralInstance(ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(17)));
+            Expression.LitralInst(ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(17)));
 
         var composed =
             CoreBasics.Generic_Sub(leftExpr, rightExpr);
@@ -1841,10 +1841,10 @@ public class CoreBasicsFunctionTests
     public void TryInterpret_Mul_returns_number_mul()
     {
         var leftExpr =
-            Expression.LiteralInstance(ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(13)));
+            Expression.LitralInst(ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(13)));
 
         var rightExpr =
-            Expression.LiteralInstance(ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(17)));
+            Expression.LitralInst(ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(17)));
 
         var composed =
             CoreBasics.Generic_Mul(leftExpr, rightExpr);
@@ -1860,10 +1860,10 @@ public class CoreBasicsFunctionTests
     public void TryInterpret_Int_div_returns_int_div()
     {
         var leftExpr =
-            Expression.LiteralInstance(ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(21)));
+            Expression.LitralInst(ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(21)));
 
         var rightExpr =
-            Expression.LiteralInstance(ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(7)));
+            Expression.LitralInst(ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(7)));
 
         var composed =
             CoreBasics.Int_div(leftExpr, rightExpr);
@@ -1879,10 +1879,10 @@ public class CoreBasicsFunctionTests
     public void TryInterpret_Eq_returns_eq()
     {
         var leftExpr =
-            Expression.LiteralInstance(ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(13)));
+            Expression.LitralInst(ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(13)));
 
         var rightExpr =
-            Expression.LiteralInstance(ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(17)));
+            Expression.LitralInst(ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(17)));
 
         var composed =
             CoreBasics.Generic_Eq(leftExpr, rightExpr);
@@ -1898,10 +1898,10 @@ public class CoreBasicsFunctionTests
     public void TryInterpret_Neq_returns_neq()
     {
         var leftExpr =
-            Expression.LiteralInstance(ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(13)));
+            Expression.LitralInst(ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(13)));
 
         var rightExpr =
-            Expression.LiteralInstance(ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(17)));
+            Expression.LitralInst(ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(17)));
 
         var composed =
             CoreBasics.Generic_Neq(leftExpr, rightExpr);
@@ -1917,10 +1917,10 @@ public class CoreBasicsFunctionTests
     public void TryInterpret_Compare_returns_compare()
     {
         var leftExpr =
-            Expression.LiteralInstance(ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(13)));
+            Expression.LitralInst(ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(13)));
 
         var rightExpr =
-            Expression.LiteralInstance(ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(17)));
+            Expression.LitralInst(ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(17)));
 
         var composed =
             CoreBasics.Generic_Compare(leftExpr, rightExpr);
@@ -1936,10 +1936,10 @@ public class CoreBasicsFunctionTests
     public void TryInterpret_Lt_returns_lt()
     {
         var leftExpr =
-            Expression.LiteralInstance(ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(13)));
+            Expression.LitralInst(ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(13)));
 
         var rightExpr =
-            Expression.LiteralInstance(ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(17)));
+            Expression.LitralInst(ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(17)));
 
         var composed =
             CoreBasics.Generic_Lt(leftExpr, rightExpr);
@@ -1955,10 +1955,10 @@ public class CoreBasicsFunctionTests
     public void TryInterpret_Gt_returns_gt()
     {
         var leftExpr =
-            Expression.LiteralInstance(ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(13)));
+            Expression.LitralInst(ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(13)));
 
         var rightExpr =
-            Expression.LiteralInstance(ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(17)));
+            Expression.LitralInst(ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(17)));
 
         var composed =
             CoreBasics.Generic_Gt(leftExpr, rightExpr);
@@ -1974,10 +1974,10 @@ public class CoreBasicsFunctionTests
     public void TryInterpret_Le_returns_le()
     {
         var leftExpr =
-            Expression.LiteralInstance(ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(13)));
+            Expression.LitralInst(ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(13)));
 
         var rightExpr =
-            Expression.LiteralInstance(ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(17)));
+            Expression.LitralInst(ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(17)));
 
         var composed =
             CoreBasics.Generic_Le(leftExpr, rightExpr);
@@ -1993,10 +1993,10 @@ public class CoreBasicsFunctionTests
     public void TryInterpret_Ge_returns_ge()
     {
         var leftExpr =
-            Expression.LiteralInstance(ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(13)));
+            Expression.LitralInst(ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(13)));
 
         var rightExpr =
-            Expression.LiteralInstance(ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(17)));
+            Expression.LitralInst(ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(17)));
 
         var composed =
             CoreBasics.Generic_Ge(leftExpr, rightExpr);
@@ -2012,10 +2012,10 @@ public class CoreBasicsFunctionTests
     public void TryInterpret_Min_returns_min()
     {
         var leftExpr =
-            Expression.LiteralInstance(ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(13)));
+            Expression.LitralInst(ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(13)));
 
         var rightExpr =
-            Expression.LiteralInstance(ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(17)));
+            Expression.LitralInst(ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(17)));
 
         var composed =
             CoreBasics.Generic_Min(leftExpr, rightExpr);
@@ -2031,10 +2031,10 @@ public class CoreBasicsFunctionTests
     public void TryInterpret_Max_returns_max()
     {
         var leftExpr =
-            Expression.LiteralInstance(ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(13)));
+            Expression.LitralInst(ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(13)));
 
         var rightExpr =
-            Expression.LiteralInstance(ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(17)));
+            Expression.LitralInst(ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(17)));
 
         var composed =
             CoreBasics.Generic_Max(leftExpr, rightExpr);
@@ -2050,10 +2050,10 @@ public class CoreBasicsFunctionTests
     public void TryInterpret_Always_returns_always()
     {
         var leftExpr =
-            Expression.LiteralInstance(ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(13)));
+            Expression.LitralInst(ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(13)));
 
         var rightExpr =
-            Expression.LiteralInstance(ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(17)));
+            Expression.LitralInst(ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(17)));
 
         var composed =
             CoreBasics.Generic_Always(leftExpr, rightExpr);
@@ -2069,12 +2069,12 @@ public class CoreBasicsFunctionTests
     public void TryInterpret_non_arithmetic_returns_null()
     {
         // A ParseAndEval that doesn't match any arithmetic pattern
-        var someExpr = Expression.LiteralInstance(PineValue.EmptyList);
+        var someExpr = Expression.LitralInst(PineValue.EmptyList);
 
         var parseAndEval =
-            new Expression.ParseAndEval(
-                encoded: Expression.LiteralInstance(PineValue.EmptyList),
-                environment: Expression.ListInstance([someExpr, someExpr]));
+            new Expression.Eval(
+                encoded: Expression.LitralInst(PineValue.EmptyList),
+                environment: Expression.ListInst([someExpr, someExpr]));
 
         var result = CoreBasics.Identify(parseAndEval);
 
@@ -2086,7 +2086,7 @@ public class CoreBasicsFunctionTests
     {
         // A non-ParseAndEval expression
         var literalExpr =
-            Expression.LiteralInstance(ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(42)));
+            Expression.LitralInst(ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(42)));
 
         var result = CoreBasics.Identify(literalExpr);
 
@@ -2098,12 +2098,12 @@ public class CoreBasicsFunctionTests
     {
         // ParseAndEval with environment that's not a 2-element list
         var singleArgExpr =
-            Expression.LiteralInstance(ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(1)));
+            Expression.LitralInst(ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(1)));
 
         var parseAndEval =
-            new Expression.ParseAndEval(
-                encoded: Expression.LiteralInstance(CoreBasics.Add_FunctionValue()),
-                environment: Expression.ListInstance([singleArgExpr])); // Only 1 argument
+            new Expression.Eval(
+                encoded: Expression.LitralInst(CoreBasics.Add_FunctionValue()),
+                environment: Expression.ListInst([singleArgExpr])); // Only 1 argument
 
         var result = CoreBasics.Identify(parseAndEval);
 

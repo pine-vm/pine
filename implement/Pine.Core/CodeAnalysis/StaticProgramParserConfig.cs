@@ -30,7 +30,7 @@ namespace Pine.Core.CodeAnalysis;
 /// <param name="ConsolidatedFormTemplates">
 /// Optional list of templates recognizing the consolidated form produced by the
 /// generic-application chain consolidation optimization in
-/// <see cref="ReducePineExpression.TryConsolidateGenericFunctionApplicationChain(Expression.ParseAndEval, PineVMParseCache)"/>.
+/// <see cref="ReducePineExpression.TryConsolidateGenericFunctionApplicationChain(Expression.Eval, PineVMParseCache)"/>.
 /// Each template carries the literal value that appears as the <c>Encoded</c> head of the
 /// consolidated <c>ParseAndEval</c>, the symbolic environment expression with placeholders
 /// for the K applied arguments, and the identifier (and optional original function value

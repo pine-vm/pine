@@ -1,10 +1,10 @@
 {
   "Conditional": [
     {
-      "KernelApplication": [
+      "Builtin": [
         "negate",
         {
-          "KernelApplication": [
+          "Builtin": [
             "head",
             {
               "Environment": [
@@ -14,7 +14,7 @@
         }
       ]
     },
-    { "Literal": [ 17 ] },
-    { "Literal": [ 21 ] }
+    { "Litral": [ 17 ] },
+    { "Litral": [ 21 ] }
   ]
 }

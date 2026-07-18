@@ -1,19 +1,19 @@
 {
-  "KernelApplication": [
+  "Builtin": [
     "reverse",
     {
-      "KernelApplication": [
+      "Builtin": [
         "skip",
         {
           "List": [
             [
               {
-                "Literal": [
+                "Litral": [
                   1
                 ]
               },
               {
-                "KernelApplication": [
+                "Builtin": [
                   "reverse",
                   {
                     "Conditional": [
@@ -21,7 +21,7 @@
                         "Environment": []
                       },
                       {
-                        "Literal": [
+                        "Litral": [
                           [
                             {
                               "AsBase64": "Cg=="
@@ -36,7 +36,7 @@
                         ]
                       },
                       {
-                        "Literal": [
+                        "Litral": [
                           [
                             {
                               "AsBase64": "FA=="

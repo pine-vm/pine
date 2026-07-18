@@ -120,7 +120,7 @@ public class StaticProgramParserTests
         var functionValue =
             FunctionValueBuilder.EmitFunctionValueWithEnvFunctions(
                 innerExpression:
-                Expression.ListInstance(
+                Expression.ListInst(
                     [
                     BuildParamReference(0)
                     ]),
@@ -156,7 +156,7 @@ public class StaticProgramParserTests
         var functionValue =
             FunctionValueBuilder.EmitFunctionValueWithEnvFunctions(
                 innerExpression:
-                Expression.ListInstance(
+                Expression.ListInst(
                     [
                     BuildParamReference(0),
                     BuildParamReference(1)
@@ -194,15 +194,15 @@ public class StaticProgramParserTests
         var functionValue =
             FunctionValueBuilder.EmitFunctionValueWithEnvFunctions(
                 innerExpression:
-                Expression.ListInstance(
+                Expression.ListInst(
                     [
-                    Expression.KernelApplicationInstance(
+                    Expression.BuiltinInst(
                         function: nameof(BuiltinFunction.int_add),
                         input:
-                        Expression.ListInstance(
+                        Expression.ListInst(
                             [
                             BuildParamReference(0),
-                            Expression.LiteralInstance(
+                            Expression.LitralInst(
                                 IntegerEncoding.EncodeSignedInteger(71))
                             ])),
                     ]),
@@ -241,15 +241,15 @@ public class StaticProgramParserTests
         var functionBetaValue =
             FunctionValueBuilder.EmitFunctionValueWithEnvFunctions(
                 innerExpression:
-                Expression.ListInstance(
+                Expression.ListInst(
                     [
-                    Expression.KernelApplicationInstance(
+                    Expression.BuiltinInst(
                         function: nameof(BuiltinFunction.int_add),
                         input:
-                        Expression.ListInstance(
+                        Expression.ListInst(
                             [
                             BuildParamReference(0),
-                            Expression.LiteralInstance(
+                            Expression.LitralInst(
                                 IntegerEncoding.EncodeSignedInteger(71))
                             ])),
                     ]),
@@ -259,15 +259,15 @@ public class StaticProgramParserTests
         var functionAlfaValue =
             FunctionValueBuilder.EmitFunctionValueWithEnvFunctions(
                 innerExpression:
-                Expression.ListInstance(
+                Expression.ListInst(
                     [
-                    new Expression.ParseAndEval(
-                        encoded: Expression.LiteralInstance(functionBetaValue),
+                    new Expression.Eval(
+                        encoded: Expression.LitralInst(functionBetaValue),
                         environment:
-                        Expression.ListInstance(
+                        Expression.ListInst(
                             [
                             BuildParamReference(0),
-                            Expression.LiteralInstance(
+                            Expression.LitralInst(
                                 IntegerEncoding.EncodeSignedInteger(31))
                             ])),
                     ]),
@@ -317,12 +317,12 @@ public class StaticProgramParserTests
         var functionBetaValue =
             FunctionValueBuilder.EmitFunctionValueWithEnvFunctions(
                 innerExpression:
-                Expression.ListInstance(
+                Expression.ListInst(
                     [
-                    Expression.KernelApplicationInstance(
+                    Expression.BuiltinInst(
                         function: nameof(BuiltinFunction.int_add),
                         input:
-                        Expression.ListInstance(
+                        Expression.ListInst(
                             [
                             BuildParamReference(0),
                             BuildParamReference(1),
@@ -334,13 +334,13 @@ public class StaticProgramParserTests
         var functionAlfaValue =
             FunctionValueBuilder.EmitFunctionValueWithEnvFunctions(
                 innerExpression:
-                Expression.ListInstance(
+                Expression.ListInst(
                     [
-                    new Expression.ParseAndEval(
+                    new Expression.Eval(
                         encoded:
-                        new Expression.ParseAndEval(
-                            encoded: Expression.LiteralInstance(functionBetaValue),
-                            environment: Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(91))),
+                        new Expression.Eval(
+                            encoded: Expression.LitralInst(functionBetaValue),
+                            environment: Expression.LitralInst(IntegerEncoding.EncodeSignedInteger(91))),
                         environment: BuildParamReference(0)),
                     ]),
                 parameterCount: 1,
@@ -418,15 +418,15 @@ public class StaticProgramParserTests
         var functionBetaValue =
             FunctionValueBuilder.EmitFunctionValueWithEnvFunctions(
                 innerExpression:
-                Expression.ListInstance(
+                Expression.ListInst(
                     [
-                    Expression.KernelApplicationInstance(
+                    Expression.BuiltinInst(
                         function: nameof(BuiltinFunction.int_add),
                         input:
-                        Expression.ListInstance(
+                        Expression.ListInst(
                             [
                             BuildParamReference(0),
-                            Expression.LiteralInstance(
+                            Expression.LitralInst(
                                 IntegerEncoding.EncodeSignedInteger(71))
                             ])),
                     ]),
@@ -436,23 +436,23 @@ public class StaticProgramParserTests
         var betaEncodedExpression = EncodedExpressionOf(functionBetaValue, parseCache);
 
         var formAArg =
-            Expression.ListInstance(
+            Expression.ListInst(
                 [
                 BuildParamReference(0),
-                Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(31))
+                Expression.LitralInst(IntegerEncoding.EncodeSignedInteger(31))
                 ]);
 
         var functionAlfaValue =
             FunctionValueBuilder.EmitFunctionValueWithEnvFunctions(
                 innerExpression:
-                Expression.ListInstance(
+                Expression.ListInst(
                     [
-                    new Expression.ParseAndEval(
-                        encoded: Expression.LiteralInstance(betaEncodedExpression),
+                    new Expression.Eval(
+                        encoded: Expression.LitralInst(betaEncodedExpression),
                         environment:
-                        Expression.ListInstance(
+                        Expression.ListInst(
                             [
-                            Expression.LiteralInstance(PineValue.EmptyList),
+                            Expression.LitralInst(PineValue.EmptyList),
                             formAArg
                             ])),
                     ]),
@@ -506,12 +506,12 @@ public class StaticProgramParserTests
         var functionBetaValue =
             FunctionValueBuilder.EmitFunctionValueWithEnvFunctions(
                 innerExpression:
-                Expression.ListInstance(
+                Expression.ListInst(
                     [
-                    Expression.KernelApplicationInstance(
+                    Expression.BuiltinInst(
                         function: nameof(BuiltinFunction.int_add),
                         input:
-                        Expression.ListInstance(
+                        Expression.ListInst(
                             [
                             BuildParamReference(0),
                             BuildParamReference(1),
@@ -525,15 +525,15 @@ public class StaticProgramParserTests
         var functionAlfaValue =
             FunctionValueBuilder.EmitFunctionValueWithEnvFunctions(
                 innerExpression:
-                Expression.ListInstance(
+                Expression.ListInst(
                     [
-                    new Expression.ParseAndEval(
-                        encoded: Expression.LiteralInstance(betaEncodedExpression),
+                    new Expression.Eval(
+                        encoded: Expression.LitralInst(betaEncodedExpression),
                         environment:
-                        Expression.ListInstance(
+                        Expression.ListInst(
                             [
-                            Expression.LiteralInstance(PineValue.EmptyList),
-                            Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(91)),
+                            Expression.LitralInst(PineValue.EmptyList),
+                            Expression.LitralInst(IntegerEncoding.EncodeSignedInteger(91)),
                             BuildParamReference(0),
                             ])),
                     ]),
@@ -585,12 +585,12 @@ public class StaticProgramParserTests
         var functionBetaValue =
             FunctionValueBuilder.EmitFunctionValueWithEnvFunctions(
                 innerExpression:
-                Expression.ListInstance(
+                Expression.ListInst(
                     [
-                    Expression.KernelApplicationInstance(
+                    Expression.BuiltinInst(
                         function: nameof(BuiltinFunction.int_add),
                         input:
-                        Expression.ListInstance(
+                        Expression.ListInst(
                             [
                             BuildParamReference(0),
                             BuildParamReference(1),
@@ -605,13 +605,13 @@ public class StaticProgramParserTests
         var callerFormAValue =
             FunctionValueBuilder.EmitFunctionValueWithEnvFunctions(
                 innerExpression:
-                new Expression.ParseAndEval(
-                    encoded: Expression.LiteralInstance(betaEncodedExpression),
+                new Expression.Eval(
+                    encoded: Expression.LitralInst(betaEncodedExpression),
                     environment:
-                    Expression.ListInstance(
+                    Expression.ListInst(
                         [
-                        Expression.LiteralInstance(PineValue.EmptyList),
-                        Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(91)),
+                        Expression.LitralInst(PineValue.EmptyList),
+                        Expression.LitralInst(IntegerEncoding.EncodeSignedInteger(91)),
                         BuildParamReference(0),
                         ])),
                 parameterCount: 1,
@@ -621,11 +621,11 @@ public class StaticProgramParserTests
         var callerFormBValue =
             FunctionValueBuilder.EmitFunctionValueWithEnvFunctions(
                 innerExpression:
-                new Expression.ParseAndEval(
+                new Expression.Eval(
                     encoded:
-                    new Expression.ParseAndEval(
-                        encoded: Expression.LiteralInstance(functionBetaValue),
-                        environment: Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(91))),
+                    new Expression.Eval(
+                        encoded: Expression.LitralInst(functionBetaValue),
+                        environment: Expression.LitralInst(IntegerEncoding.EncodeSignedInteger(91))),
                     environment: BuildParamReference(0)),
                 parameterCount: 1,
                 envFunctions: []);

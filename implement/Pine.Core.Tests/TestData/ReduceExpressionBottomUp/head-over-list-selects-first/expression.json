@@ -1,5 +1,5 @@
 {
-  "KernelApplication": [
+  "Builtin": [
     "head",
     {
       "List": [
@@ -8,7 +8,7 @@
             "Environment": []
           },
           {
-            "Literal": [
+            "Litral": [
               42
             ]
           }

@@ -1,14 +1,14 @@
 {
-  "KernelApplication": [
+  "Builtin": [
     "head",
     {
-      "KernelApplication": [
+      "Builtin": [
         "skip",
         {
           "List": [
             [
               {
-                "Literal": [
+                "Litral": [
                   2
                 ]
               },
@@ -16,28 +16,28 @@
                 "List": [
                   [
                     {
-                      "Literal": [
+                      "Litral": [
                         {
                           "AsBase64": "AQ=="
                         }
                       ]
                     },
                     {
-                      "Literal": [
+                      "Litral": [
                         {
                           "AsBase64": "Ag=="
                         }
                       ]
                     },
                     {
-                      "Literal": [
+                      "Litral": [
                         {
                           "AsBase64": "Aw=="
                         }
                       ]
                     },
                     {
-                      "Literal": [
+                      "Litral": [
                         {
                           "AsBase64": "BA=="
                         }

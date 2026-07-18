@@ -24,28 +24,28 @@ namespace Pine.Core.CodeGen;
 public static class FunctionValueBuilder
 {
     private static readonly Expression s_evalTag =
-        Expression.LiteralInstance(StringEncoding.ValueFromString("Eval"));
+        Expression.LitralInst(StringEncoding.ValueFromString("Eval"));
 
     private static readonly Expression s_litralTag =
-        Expression.LiteralInstance(StringEncoding.ValueFromString("Litral"));
+        Expression.LitralInst(StringEncoding.ValueFromString("Litral"));
 
     private static readonly Expression s_listTag =
-        Expression.LiteralInstance(StringEncoding.ValueFromString("List"));
+        Expression.LitralInst(StringEncoding.ValueFromString("List"));
 
     private static readonly Expression s_environmentTag =
-        Expression.LiteralInstance(StringEncoding.ValueFromString("Environment"));
+        Expression.LitralInst(StringEncoding.ValueFromString("Environment"));
 
     private static readonly Expression s_builtinTag =
-        Expression.LiteralInstance(StringEncoding.ValueFromString("Builtin"));
+        Expression.LitralInst(StringEncoding.ValueFromString("Builtin"));
 
     private static readonly Expression s_conditionTag =
-        Expression.LiteralInstance(StringEncoding.ValueFromString("Condition"));
+        Expression.LitralInst(StringEncoding.ValueFromString("Condition"));
 
     private static readonly Expression s_labelTag =
-        Expression.LiteralInstance(StringEncoding.ValueFromString("Label"));
+        Expression.LitralInst(StringEncoding.ValueFromString("Label"));
 
     private static readonly Expression s_concatTag =
-        Expression.LiteralInstance(StringEncoding.ValueFromString("concat"));
+        Expression.LitralInst(StringEncoding.ValueFromString("concat"));
 
 
     /// <summary>
@@ -83,7 +83,7 @@ public static class FunctionValueBuilder
 
     /// <summary>
     /// Composes a function expression that, when evaluated, produces a function value
-    /// supporting incremental argument application via <see cref="Expression.ParseAndEval"/> expressions.
+    /// supporting incremental argument application via <see cref="Expression.Eval"/> expressions.
     /// Unlike <see cref="EmitFunctionValueWithEnvFunctions"/>, this method takes expressions for env functions
     /// that will be evaluated to get the actual values at expression evaluation time.
     /// </summary>
@@ -103,7 +103,7 @@ public static class FunctionValueBuilder
 
         return
             EmitFunctionExpressionFromEncodedBody(
-                Expression.LiteralInstance(innerExprEncoded),
+                Expression.LitralInst(innerExprEncoded),
                 parameterCount,
                 envFunctionsExprs);
     }
@@ -246,10 +246,10 @@ public static class FunctionValueBuilder
 
         return
             EmitCurriedFunctionTemplateWithLeadingArgsFromEncodedBodyExpression(
-                Expression.LiteralInstance(innerExprEncoded),
+                Expression.LitralInst(innerExprEncoded),
                 parameterCount,
                 leadingArgExpressions,
-                Expression.LiteralInstance(envFunctionsValue));
+                Expression.LitralInst(envFunctionsValue));
     }
 
     /// <summary>
@@ -332,21 +332,21 @@ public static class FunctionValueBuilder
         var invocationEnvironmentItems = new Expression[parameterCount + 1];
 
         invocationEnvironmentItems[0] =
-            Expression.LiteralInstance(envFunctionsValue);
+            Expression.LitralInst(envFunctionsValue);
 
         for (var argumentIndex = 0; argumentIndex < parameterCount - 1; ++argumentIndex)
         {
             invocationEnvironmentItems[argumentIndex + 1] =
-                Expression.LiteralInstance(BuildTemplateArgumentPlaceholder(argumentIndex));
+                Expression.LitralInst(BuildTemplateArgumentPlaceholder(argumentIndex));
         }
 
         invocationEnvironmentItems[parameterCount] =
             Expression.EnvironmentInstance;
 
         Expression current =
-            new Expression.ParseAndEval(
-                encoded: Expression.LiteralInstance(innerExprEncoded),
-                environment: Expression.ListInstance(invocationEnvironmentItems));
+            new Expression.Eval(
+                encoded: Expression.LitralInst(innerExprEncoded),
+                environment: Expression.ListInst(invocationEnvironmentItems));
 
         for (var argumentIndex = parameterCount - 2;
             argumentIndex >= capturedArgumentCount;
@@ -381,13 +381,13 @@ public static class FunctionValueBuilder
     /// <para>
     /// Subexpressions are encoded in post-order (children before parents) into a local store that also
     /// deduplicates shared subtrees, so each distinct subexpression is encoded at most once. Each
-    /// <see cref="Expression.Literal"/> is offered to <paramref name="replaceLiteral"/>; a non-null result
+    /// <see cref="Expression.Litral"/> is offered to <paramref name="replaceLiteral"/>; a non-null result
     /// is substituted in place of quoting the literal as a constant.
     /// </para>
     /// </summary>
     private static Expression EncodeExpressionAsTemplateProducerViaPostOrder(
         Expression rootExpression,
-        System.Func<Expression.Literal, Expression?> replaceLiteral,
+        System.Func<Expression.Litral, Expression?> replaceLiteral,
         bool evalIndependentToLiteral)
     {
         var store = new Dictionary<Expression, Expression>();
@@ -449,7 +449,7 @@ public static class FunctionValueBuilder
     {
         switch (expression)
         {
-            case Expression.Literal:
+            case Expression.Litral:
             case Expression.Environment:
                 break;
 
@@ -462,7 +462,7 @@ public static class FunctionValueBuilder
 
                 break;
 
-            case Expression.ParseAndEval parseAndEval:
+            case Expression.Eval parseAndEval:
                 if (!store.ContainsKey(parseAndEval.Encoded))
                     stack.Push(parseAndEval.Encoded);
 
@@ -483,25 +483,25 @@ public static class FunctionValueBuilder
     /// </summary>
     private static Expression EncodeTemplateNode(
         Expression expression,
-        System.Func<Expression.Literal, Expression?> replaceLiteral,
+        System.Func<Expression.Litral, Expression?> replaceLiteral,
         System.Func<Expression, Expression> encodedChild,
         bool evalIndependentToLiteral)
     {
         if (evalIndependentToLiteral &&
             !expression.ReferencesEnvironment &&
-            expression is not Expression.Literal)
+            expression is not Expression.Litral)
         {
             if (TryEvaluateIndependentExpression(
                 expression,
-                abortForNode: node => node is Expression.Literal literal && replaceLiteral(literal) is not null) is { } evaluated)
+                abortForNode: node => node is Expression.Litral literal && replaceLiteral(literal) is not null) is { } evaluated)
             {
-                return Expression.LiteralInstance(evaluated);
+                return Expression.LitralInst(evaluated);
             }
         }
 
         switch (expression)
         {
-            case Expression.Literal literal:
+            case Expression.Litral literal:
 
                 if (replaceLiteral(literal) is { } replacement)
                 {
@@ -510,7 +510,7 @@ public static class FunctionValueBuilder
 
                 // ["Litral", value]
                 return
-                    EncodeLitral(Expression.LiteralInstance(literal.Value));
+                    EncodeLitral(Expression.LitralInst(literal.Value));
 
             case Expression.Environment:
 
@@ -530,7 +530,7 @@ public static class FunctionValueBuilder
                     return EncodeList(encodedItems);
                 }
 
-            case Expression.ParseAndEval parseAndEval:
+            case Expression.Eval parseAndEval:
 
                 // ["Eval", encoded_encoded, environment_encoded]
                 return
@@ -559,7 +559,7 @@ public static class FunctionValueBuilder
         if (abortForNode(expression))
             return null;
 
-        if (expression is Expression.Literal literal)
+        if (expression is Expression.Litral literal)
         {
             return literal.Value;
         }
@@ -606,7 +606,7 @@ public static class FunctionValueBuilder
 
     /// <summary>
     /// Composes a function value in a form that supports incremental argument application via
-    /// <see cref="Expression.ParseAndEval"/> expressions.
+    /// <see cref="Expression.Eval"/> expressions.
     /// The inner expression will receive environment as [envFunctions, arg0, arg1, ...].
     /// </summary>
     /// <param name="innerExpression">The inner function expression body.</param>
@@ -641,7 +641,7 @@ public static class FunctionValueBuilder
 
     /// <summary>
     /// Composes a function expression that, when evaluated, produces a function value
-    /// supporting incremental argument application via <see cref="Expression.ParseAndEval"/> expressions.
+    /// supporting incremental argument application via <see cref="Expression.Eval"/> expressions.
     /// This overload takes an expression that evaluates to the already-encoded function body,
     /// which is useful when the encoded body is stored in the environment (e.g., for same-SCC functions).
     /// </summary>
@@ -710,7 +710,7 @@ public static class FunctionValueBuilder
     {
         return EncodeList(
             [
-            EncodeLitral(Expression.ListInstance([Expression.EnvironmentInstance])),
+            EncodeLitral(Expression.ListInst([Expression.EnvironmentInstance])),
             EncodeEnvironment()
             ]);
     }
@@ -725,7 +725,7 @@ public static class FunctionValueBuilder
             ExpressionBuilder.BuildExpressionForPathInExpression([0], Expression.EnvironmentInstance);
 
         var currentArgExpr = ExpressionBuilder.BuildExpressionForPathInExpression([1], Expression.EnvironmentInstance);
-        var newCapturedExpr = BuiltinAppConcatBinary(capturedSoFarExpr, Expression.ListInstance([currentArgExpr]));
+        var newCapturedExpr = BuiltinAppConcatBinary(capturedSoFarExpr, Expression.ListInst([currentArgExpr]));
 
         return EncodeList(
             [
@@ -743,8 +743,8 @@ public static class FunctionValueBuilder
     {
         return expression switch
         {
-            Expression.Literal literal =>
-            EncodeLitral(Expression.LiteralInstance(literal.Value)),
+            Expression.Litral literal =>
+            EncodeLitral(Expression.LitralInst(literal.Value)),
 
             Expression.Environment =>
             EncodeEnvironment(),
@@ -752,14 +752,14 @@ public static class FunctionValueBuilder
             Expression.List list =>
             EncodeListExpressionAsListExpression(list),
 
-            Expression.ParseAndEval parseAndEval =>
+            Expression.Eval parseAndEval =>
             EncodeEval(
                 EncodeExpressionAsListExpression(parseAndEval.Encoded),
                 EncodeExpressionAsListExpression(parseAndEval.Environment)),
 
-            Expression.KernelApplication kernelApp =>
+            Expression.Builtin kernelApp =>
             EncodeBuiltin(
-                Expression.LiteralInstance(StringEncoding.ValueFromString(kernelApp.Function)),
+                Expression.LitralInst(StringEncoding.ValueFromString(kernelApp.Function)),
                 EncodeExpressionAsListExpression(kernelApp.Input)),
 
             Expression.Conditional conditional =>
@@ -768,9 +768,9 @@ public static class FunctionValueBuilder
                 EncodeExpressionAsListExpression(conditional.FalseBranch),
                 EncodeExpressionAsListExpression(conditional.TrueBranch)),
 
-            Expression.StringTag stringTag =>
+            Expression.Label stringTag =>
             EncodeLabel(
-                Expression.LiteralInstance(stringTag.LabelValue),
+                Expression.LitralInst(stringTag.LabelValue),
                 EncodeExpressionAsListExpression(stringTag.Tagged)),
 
             _ =>
@@ -796,7 +796,7 @@ public static class FunctionValueBuilder
     }
 
     private static Expression EncodeLitral(Expression value) =>
-        Expression.ListInstance([s_litralTag, value]);
+        Expression.ListInst([s_litralTag, value]);
 
     private static Expression EncodeList(IReadOnlyList<Expression> encodedItems)
     {
@@ -807,29 +807,29 @@ public static class FunctionValueBuilder
         for (var i = 0; i < encodedItems.Count; ++i)
             items[i + 1] = encodedItems[i];
 
-        return Expression.ListInstance(items);
+        return Expression.ListInst(items);
     }
 
     private static Expression EncodeBuiltin(Expression functionName, Expression encodedInput) =>
-        Expression.ListInstance([s_builtinTag, functionName, encodedInput]);
+        Expression.ListInst([s_builtinTag, functionName, encodedInput]);
 
     private static Expression EncodeCondition(
         Expression encodedCondition,
         Expression encodedFalseBranch,
         Expression encodedTrueBranch) =>
-        Expression.ListInstance(
+        Expression.ListInst(
             [s_conditionTag, encodedCondition, encodedFalseBranch, encodedTrueBranch]);
 
     private static Expression EncodeEnvironment() =>
-        Expression.ListInstance([s_environmentTag]);
+        Expression.ListInst([s_environmentTag]);
 
     private static Expression EncodeEval(
         Expression encodedExpression,
         Expression encodedEnvironment) =>
-        Expression.ListInstance([s_evalTag, encodedExpression, encodedEnvironment]);
+        Expression.ListInst([s_evalTag, encodedExpression, encodedEnvironment]);
 
     private static Expression EncodeLabel(Expression label, Expression encodedLabeled) =>
-        Expression.ListInstance([s_labelTag, label, encodedLabeled]);
+        Expression.ListInst([s_labelTag, label, encodedLabeled]);
 
     /// <summary>
     /// Creates a wrapper for a zero-parameter function - immediate invocation.
@@ -841,12 +841,12 @@ public static class FunctionValueBuilder
     {
         // ParseAndEval(innerExpr, [envFunctions])
         var envFunctionsExpr = CreateLiteralListExpression(envFunctions);
-        var invocationEnv = Expression.ListInstance([envFunctionsExpr]);
+        var invocationEnv = Expression.ListInst([envFunctionsExpr]);
 
         var invocationExpr =
-            new Expression.ParseAndEval(
+            new Expression.Eval(
                 encoded:
-                Expression.LiteralInstance(EncodeExpressionAsValue2026(innerExpression, encodeExprCache)),
+                Expression.LitralInst(EncodeExpressionAsValue2026(innerExpression, encodeExprCache)),
                 environment: invocationEnv);
 
         return EncodeExpressionAsValue2026(invocationExpr, encodeExprCache);
@@ -864,12 +864,12 @@ public static class FunctionValueBuilder
         // Expression: ParseAndEval(innerExpr, [envFunctions, env])
         // Where env is the single argument
         var envFunctionsExpr = CreateLiteralListExpression(envFunctions);
-        var invocationEnv = Expression.ListInstance([envFunctionsExpr, Expression.EnvironmentInstance]);
+        var invocationEnv = Expression.ListInst([envFunctionsExpr, Expression.EnvironmentInstance]);
 
         var invocationExpr =
-            new Expression.ParseAndEval(
+            new Expression.Eval(
                 encoded:
-                Expression.LiteralInstance(EncodeExpressionAsValue2026(innerExpression, encodeExprCache)),
+                Expression.LitralInst(EncodeExpressionAsValue2026(innerExpression, encodeExprCache)),
                 environment: invocationEnv);
 
         return EncodeExpressionAsValue2026(invocationExpr, encodeExprCache);
@@ -933,21 +933,21 @@ public static class FunctionValueBuilder
         var fullArgsExpr =
             BuiltinAppConcatBinary(
                 capturedArgsExpr,
-                Expression.ListInstance([lastArgExpr]));
+                Expression.ListInst([lastArgExpr]));
 
         // Build invocation environment: concat([envFuncs], fullArgs)
         var envFuncsExpr = CreateLiteralListExpression(envFunctions);
 
         var invocationEnv =
             BuiltinAppConcatBinary(
-                Expression.ListInstance([envFuncsExpr]),
+                Expression.ListInst([envFuncsExpr]),
                 fullArgsExpr);
 
         // ParseAndEval(innerExpr, invocationEnv)
         return
-            new Expression.ParseAndEval(
+            new Expression.Eval(
                 encoded:
-                Expression.LiteralInstance(EncodeExpressionAsValue2026(innerExpression, encodeExprCache)),
+                Expression.LitralInst(EncodeExpressionAsValue2026(innerExpression, encodeExprCache)),
                 environment: invocationEnv);
     }
 
@@ -997,10 +997,10 @@ public static class FunctionValueBuilder
     private static Expression BuildLevel0Expression(PineValue nextLevelEncoded)
     {
         var nextLevelLiteralEncoded =
-            EncodeLitral(Expression.LiteralInstance(nextLevelEncoded));
+            EncodeLitral(Expression.LitralInst(nextLevelEncoded));
 
         var capturedArgsEncoded =
-            EncodeLitral(Expression.ListInstance([Expression.EnvironmentInstance]));
+            EncodeLitral(Expression.ListInst([Expression.EnvironmentInstance]));
 
         var envStructureEncoded =
             EncodeList([capturedArgsEncoded, EncodeEnvironment()]);
@@ -1025,10 +1025,10 @@ public static class FunctionValueBuilder
         var newCapturedExpr =
             BuiltinAppConcatBinary(
                 capturedSoFar,
-                Expression.ListInstance([currentArg]));
+                Expression.ListInst([currentArg]));
 
         var nextLevelLiteralEncoded =
-            EncodeLitral(Expression.LiteralInstance(nextLevelEncoded));
+            EncodeLitral(Expression.LitralInst(nextLevelEncoded));
 
         var capturedLiteralEncoded =
             EncodeLitral(newCapturedExpr);
@@ -1056,10 +1056,10 @@ public static class FunctionValueBuilder
         return ExpressionBuilder.CreateLiteralList(values);
     }
 
-    private static Expression.KernelApplication BuiltinAppConcatBinary(Expression left, Expression right) =>
-        Expression.KernelApplicationInstance(
+    private static Expression.Builtin BuiltinAppConcatBinary(Expression left, Expression right) =>
+        Expression.BuiltinInst(
             function: nameof(BuiltinFunction.concat),
-            input: Expression.ListInstance([left, right]));
+            input: Expression.ListInst([left, right]));
 
     #region FromEncodedBody variants
 
@@ -1153,7 +1153,7 @@ public static class FunctionValueBuilder
         var fullArgsExpr =
             BuiltinAppConcatBinary(
                 capturedArgsExpr,
-                Expression.ListInstance([lastArgExpr]));
+                Expression.ListInst([lastArgExpr]));
 
         var fullArgsEncoding = EncodeExpressionAsListExpression(fullArgsExpr);
 

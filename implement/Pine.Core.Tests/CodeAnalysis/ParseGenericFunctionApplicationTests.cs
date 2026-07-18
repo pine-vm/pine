@@ -16,7 +16,7 @@ public class ParseGenericFunctionApplicationTests
     {
         // A bare literal: not a generic application chain.
         PineCodeAnalysis.ParseGenericFunctionApplication(
-            Expression.LiteralInstance(PineValue.EmptyList))
+            Expression.LitralInst(PineValue.EmptyList))
             .Should().BeNull();
 
         // Environment node alone: not a generic application chain.
@@ -26,9 +26,9 @@ public class ParseGenericFunctionApplicationTests
 
         // Plain list expression: not a ParseAndEval at the root.
         PineCodeAnalysis.ParseGenericFunctionApplication(
-            Expression.ListInstance(
+            Expression.ListInst(
                 [
-                Expression.LiteralInstance(PineValue.EmptyList),
+                Expression.LitralInst(PineValue.EmptyList),
                 Expression.EnvironmentInstance
                 ]))
             .Should().BeNull();
@@ -37,14 +37,14 @@ public class ParseGenericFunctionApplicationTests
     [Fact]
     public void Parses_single_argument_chain()
     {
-        var func = Expression.LiteralInstance(PineValue.Blob([1, 2, 3]));
+        var func = Expression.LitralInst(PineValue.Blob([1, 2, 3]));
         var arg0 = Expression.EnvironmentInstance;
 
         var built =
             PineCodeAnalysis.BuildGenericFunctionApplication(func, [arg0]);
 
         // The built chain must be a single ParseAndEval.
-        built.Should().BeOfType<Expression.ParseAndEval>();
+        built.Should().BeOfType<Expression.Eval>();
 
         var parsed = PineCodeAnalysis.ParseGenericFunctionApplication(built);
 
@@ -56,12 +56,12 @@ public class ParseGenericFunctionApplicationTests
     [Fact]
     public void Parses_multi_argument_chain_in_application_order()
     {
-        var func = Expression.LiteralInstance(PineValue.Blob([0xAA]));
+        var func = Expression.LitralInst(PineValue.Blob([0xAA]));
 
-        var arg0 = Expression.LiteralInstance(PineValue.Blob([0x10]));
-        var arg1 = Expression.LiteralInstance(PineValue.Blob([0x20]));
-        var arg2 = Expression.LiteralInstance(PineValue.Blob([0x30]));
-        var arg3 = Expression.LiteralInstance(PineValue.Blob([0x40]));
+        var arg0 = Expression.LitralInst(PineValue.Blob([0x10]));
+        var arg1 = Expression.LitralInst(PineValue.Blob([0x20]));
+        var arg2 = Expression.LitralInst(PineValue.Blob([0x30]));
+        var arg3 = Expression.LitralInst(PineValue.Blob([0x40]));
 
         var built =
             PineCodeAnalysis.BuildGenericFunctionApplication(
@@ -69,9 +69,9 @@ public class ParseGenericFunctionApplicationTests
                 [arg0, arg1, arg2, arg3]);
 
         // Outer expression is ParseAndEval whose environment is the LAST argument.
-        built.Should().BeOfType<Expression.ParseAndEval>();
+        built.Should().BeOfType<Expression.Eval>();
 
-        var outer = (Expression.ParseAndEval)built;
+        var outer = (Expression.Eval)built;
         outer.Environment.Should().BeSameAs(arg3);
 
         var parsed = PineCodeAnalysis.ParseGenericFunctionApplication(built);
@@ -84,7 +84,7 @@ public class ParseGenericFunctionApplicationTests
     [Fact]
     public void Build_with_no_arguments_returns_function_expression_unchanged()
     {
-        var func = Expression.LiteralInstance(PineValue.Blob([7]));
+        var func = Expression.LitralInst(PineValue.Blob([7]));
 
         var built =
             PineCodeAnalysis.BuildGenericFunctionApplication(func, []);
@@ -101,12 +101,12 @@ public class ParseGenericFunctionApplicationTests
         // The inner function value may not be a literal: it can be a path into the environment
         // (for example when the function comes from a parameter).
         var funcExpr =
-            Expression.KernelApplicationInstance(
+            Expression.BuiltinInst(
                 nameof(BuiltinFunction.head),
                 Expression.EnvironmentInstance);
 
-        var arg0 = Expression.LiteralInstance(PineValue.Blob([1]));
-        var arg1 = Expression.LiteralInstance(PineValue.Blob([2]));
+        var arg0 = Expression.LitralInst(PineValue.Blob([1]));
+        var arg1 = Expression.LitralInst(PineValue.Blob([2]));
 
         var built =
             PineCodeAnalysis.BuildGenericFunctionApplication(funcExpr, [arg0, arg1]);
@@ -121,17 +121,17 @@ public class ParseGenericFunctionApplicationTests
     [Fact]
     public void Parses_chain_with_arguments_referencing_the_environment()
     {
-        var func = Expression.LiteralInstance(PineValue.Blob([0x55]));
+        var func = Expression.LitralInst(PineValue.Blob([0x55]));
 
         // Arguments may also be expressions referencing the environment.
         var arg0 = Expression.EnvironmentInstance;
 
         var arg1 =
-            Expression.KernelApplicationInstance(
+            Expression.BuiltinInst(
                 nameof(BuiltinFunction.head),
                 Expression.EnvironmentInstance);
 
-        var arg2 = Expression.LiteralInstance(PineValue.Blob([0xCC]));
+        var arg2 = Expression.LitralInst(PineValue.Blob([0xCC]));
 
         var built =
             PineCodeAnalysis.BuildGenericFunctionApplication(
@@ -151,7 +151,7 @@ public class ParseGenericFunctionApplicationTests
     [Fact]
     public void Parse_round_trips_through_build_for_chains_of_varying_length()
     {
-        var func = Expression.LiteralInstance(PineValue.Blob([0x01]));
+        var func = Expression.LitralInst(PineValue.Blob([0x01]));
 
         for (var argCount = 1; argCount <= 6; ++argCount)
         {
@@ -159,7 +159,7 @@ public class ParseGenericFunctionApplicationTests
 
             for (var i = 0; i < argCount; ++i)
             {
-                arguments[i] = Expression.LiteralInstance(PineValue.Blob([(byte)(0x80 + i)]));
+                arguments[i] = Expression.LitralInst(PineValue.Blob([(byte)(0x80 + i)]));
             }
 
             var built = PineCodeAnalysis.BuildGenericFunctionApplication(func, arguments);

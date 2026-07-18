@@ -8,11 +8,11 @@ namespace Pine.Core.CodeAnalysis;
 /// <para>
 /// One of the parser's responsibilities is to prove that the different
 /// surface forms of expressions serving as the same function — bare
-/// references (depth K=0), nested-<see cref="Expression.ParseAndEval"/>
+/// references (depth K=0), nested-<see cref="Expression.Eval"/>
 /// chains (Form B), the saturated single-<c>ParseAndEval</c> form whose
 /// <c>Encoded</c> is the encoded inner-function body (Form A), and the
 /// consolidated form produced by
-/// <see cref="ReducePineExpression.TryConsolidateGenericFunctionApplicationChain(Expression.ParseAndEval, PineVMParseCache, ReductionConfig)"/>
+/// <see cref="ReducePineExpression.TryConsolidateGenericFunctionApplicationChain(Expression.Eval, PineVMParseCache, ReductionConfig)"/>
 /// (Form C) — are semantically equivalent and canonicalize them to the
 /// same identifier. The variance covered includes partial application
 /// (every K ∈ [0, ParameterCount]).

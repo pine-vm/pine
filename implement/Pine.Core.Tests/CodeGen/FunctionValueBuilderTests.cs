@@ -33,7 +33,7 @@ public class FunctionValueBuilderTests
     {
         // A zero-parameter function just returns a constant
         var literalResult = PineValue.Blob([42]);
-        var innerExpression = Expression.LiteralInstance(literalResult);
+        var innerExpression = Expression.LitralInst(literalResult);
 
         var functionValue =
             FunctionValueBuilder.EmitFunctionValueWithEnvFunctions(
@@ -51,7 +51,7 @@ public class FunctionValueBuilderTests
     {
         // Inner expression returns a constant
         var expectedResult = PineValue.Blob([1, 2, 3]);
-        var innerExpression = Expression.LiteralInstance(expectedResult);
+        var innerExpression = Expression.LitralInst(expectedResult);
 
         var functionValue =
             FunctionValueBuilder.EmitFunctionValueWithEnvFunctions(
@@ -120,7 +120,7 @@ public class FunctionValueBuilderTests
         var envFuncAccess = BuildExpressionForPathInEnvironment([0, 0]);
         var argAccess = BuildExpressionForPathInEnvironment([1]);
 
-        var innerExpression = Expression.ListInstance([envFuncAccess, argAccess]);
+        var innerExpression = Expression.ListInst([envFuncAccess, argAccess]);
 
         var functionValue =
             FunctionValueBuilder.EmitFunctionValueWithEnvFunctions(
@@ -150,7 +150,7 @@ public class FunctionValueBuilderTests
         var arg0Access = BuildExpressionForPathInEnvironment([0, 0]);
         var arg1Access = BuildExpressionForPathInEnvironment([0, 1]);
 
-        var innerExpression = Expression.ListInstance([arg0Access, arg1Access]);
+        var innerExpression = Expression.ListInst([arg0Access, arg1Access]);
 
         var functionValue =
             FunctionValueBuilder.EmitFunctionValueWithEnvFunctions(
@@ -171,7 +171,7 @@ public class FunctionValueBuilderTests
         var arg0Access = BuildExpressionForPathInEnvironment([1]);
         var arg1Access = BuildExpressionForPathInEnvironment([2]);
 
-        var innerExpression = Expression.ListInstance([arg0Access, arg1Access]);
+        var innerExpression = Expression.ListInst([arg0Access, arg1Access]);
 
         var functionValue =
             FunctionValueBuilder.EmitFunctionValueWithEnvFunctions(
@@ -212,7 +212,7 @@ public class FunctionValueBuilderTests
         var arg1Access = BuildExpressionForPathInEnvironment([2]);
         var arg2Access = BuildExpressionForPathInEnvironment([3]);
 
-        var innerExpression = Expression.ListInstance([arg0Access, arg1Access, arg2Access]);
+        var innerExpression = Expression.ListInst([arg0Access, arg1Access, arg2Access]);
 
         var functionValue =
             FunctionValueBuilder.EmitFunctionValueWithEnvFunctions(
@@ -266,19 +266,19 @@ public class FunctionValueBuilderTests
 
         // Create product expression: arg0 * arg1
         var productExpr =
-            Expression.KernelApplicationInstance(
+            Expression.BuiltinInst(
                 function: nameof(BuiltinFunction.int_mul),
-                input: Expression.ListInstance([arg0Access, arg1Access]));
+                input: Expression.ListInst([arg0Access, arg1Access]));
 
         // Create sum expression: (arg0 * arg1) + arg2
 
         var sumExpr =
-            Expression.KernelApplicationInstance(
+            Expression.BuiltinInst(
                 function: nameof(BuiltinFunction.int_add),
-                input: Expression.ListInstance([productExpr, arg2Access]));
+                input: Expression.ListInst([productExpr, arg2Access]));
 
         // Return [envFunc0, envFunc1, product]
-        var innerExpression = Expression.ListInstance([envFunc0Access, sumExpr, envFunc1Access]);
+        var innerExpression = Expression.ListInst([envFunc0Access, sumExpr, envFunc1Access]);
 
         var functionValue =
             FunctionValueBuilder.EmitFunctionValueWithEnvFunctions(
@@ -319,7 +319,7 @@ public class FunctionValueBuilderTests
     {
         // A zero-parameter function returns a constant
         var expectedResult = PineValue.Blob([42, 43]);
-        var innerExpression = Expression.LiteralInstance(expectedResult);
+        var innerExpression = Expression.LitralInst(expectedResult);
 
         // Encode as nested wrapper
         var functionValue =
@@ -357,7 +357,7 @@ public class FunctionValueBuilderTests
         // A function that uses an env function and returns [envFunc[0], arg0]
         var envFuncAccess = BuildExpressionForPathInEnvironment([0, 0]);
         var argAccess = BuildExpressionForPathInEnvironment([1]);
-        var innerExpression = Expression.ListInstance([envFuncAccess, argAccess]);
+        var innerExpression = Expression.ListInst([envFuncAccess, argAccess]);
 
         var envFunction = PineValue.Blob([99]);
 
@@ -390,11 +390,11 @@ public class FunctionValueBuilderTests
 
         // sum = arg0 + arg1
         var sumExpr =
-            Expression.KernelApplicationInstance(
+            Expression.BuiltinInst(
                 function: nameof(BuiltinFunction.int_add),
-                input: Expression.ListInstance([arg0Access, arg1Access]));
+                input: Expression.ListInst([arg0Access, arg1Access]));
 
-        var innerExpression = Expression.ListInstance([envFunc0Access, envFunc1Access, sumExpr]);
+        var innerExpression = Expression.ListInst([envFunc0Access, envFunc1Access, sumExpr]);
 
         var envFunc0 = PineValue.Blob([100]);
         var envFunc1 = PineValue.Blob([200]);
@@ -480,9 +480,9 @@ public class FunctionValueBuilderTests
         var arg1 = BuildExpressionForPathInEnvironment([2]);
 
         var innerExpression =
-            Expression.KernelApplicationInstance(
+            Expression.BuiltinInst(
                 function: nameof(BuiltinFunction.int_add),
-                input: Expression.ListInstance([arg0, arg1]));
+                input: Expression.ListInst([arg0, arg1]));
 
         var functionValue =
             FunctionValueBuilder.EmitFunctionValueWithEnvFunctions(
@@ -511,7 +511,7 @@ public class FunctionValueBuilderTests
     public void ParseFunctionRecord_ZeroParameters_ParsesCorrectly()
     {
         var expectedResult = PineValue.Blob([42, 43]);
-        var innerExpression = Expression.LiteralInstance(expectedResult);
+        var innerExpression = Expression.LitralInst(expectedResult);
 
         var functionValue =
             FunctionValueBuilder.EmitFunctionValueWithEnvFunctions(
@@ -559,7 +559,7 @@ public class FunctionValueBuilderTests
         var envFunc1 = PineValue.Blob([200]);
 
         var innerExpression =
-            Expression.ListInstance(
+            Expression.ListInst(
                 [
                 BuildExpressionForPathInEnvironment([0, 0]),
                 BuildExpressionForPathInEnvironment([0, 1]),
@@ -593,7 +593,7 @@ public class FunctionValueBuilderTests
     public void ParseFunctionRecord_TwoParameters_ParsesParameterCount()
     {
         var innerExpression =
-            Expression.ListInstance(
+            Expression.ListInst(
                 [
                 BuildExpressionForPathInEnvironment([1]),
                 BuildExpressionForPathInEnvironment([2])
@@ -620,7 +620,7 @@ public class FunctionValueBuilderTests
     public void ParseFunctionRecord_ThreeParameters_ParsesParameterCount()
     {
         var innerExpression =
-            Expression.ListInstance(
+            Expression.ListInst(
                 [
                 BuildExpressionForPathInEnvironment([1]),
                 BuildExpressionForPathInEnvironment([2]),
@@ -648,7 +648,7 @@ public class FunctionValueBuilderTests
     public void ParseFunctionRecord_ThreeParameters_AfterFirstApplication_ParsesCollectedArgument()
     {
         var innerExpression =
-            Expression.ListInstance(
+            Expression.ListInst(
                 [
                 BuildExpressionForPathInEnvironment([1]),
                 BuildExpressionForPathInEnvironment([2]),
@@ -679,7 +679,7 @@ public class FunctionValueBuilderTests
     public void ParseFunctionRecord_FourParameters_ParsesParameterCount()
     {
         var innerExpression =
-            Expression.ListInstance(
+            Expression.ListInst(
                 [
                 BuildExpressionForPathInEnvironment([1]),
                 BuildExpressionForPathInEnvironment([2]),
@@ -715,7 +715,7 @@ public class FunctionValueBuilderTests
         int capturedArgumentCount)
     {
         var innerExpression =
-            Expression.ListInstance(
+            Expression.ListInst(
                 Enumerable.Range(1, parameterCount)
                 .Select(index => BuildExpressionForPathInEnvironment([index]))
                 .ToArray());
@@ -760,7 +760,7 @@ public class FunctionValueBuilderTests
         var envFunc2 = PineValue.Blob([250]);
 
         var innerExpression =
-            Expression.ListInstance(
+            Expression.ListInst(
                 [
                 BuildExpressionForPathInEnvironment([0, 0]),
                 BuildExpressionForPathInEnvironment([0, 1]),
@@ -798,7 +798,7 @@ public class FunctionValueBuilderTests
         var envFunc1 = StringEncoding.ValueFromString("Env1");
 
         var innerExpression =
-            Expression.ListInstance(
+            Expression.ListInst(
                 [
                 BuildExpressionForPathInEnvironment([0, 0]),
                 BuildExpressionForPathInEnvironment([0, 1]),
@@ -836,7 +836,7 @@ public class FunctionValueBuilderTests
         var envFunc2 = PineValue.Blob([30]);
 
         var innerExpression =
-            Expression.ListInstance(
+            Expression.ListInst(
                 [
                 BuildExpressionForPathInEnvironment([0, 0]),
                 BuildExpressionForPathInEnvironment([0, 1]),
@@ -878,7 +878,7 @@ public class FunctionValueBuilderTests
     {
         // Inner expression returns a constant
         var expectedResult = PineValue.Blob([1, 2, 3]);
-        var innerExpression = Expression.LiteralInstance(expectedResult);
+        var innerExpression = Expression.LitralInst(expectedResult);
 
         // Build an expression that produces the function value
         var functionExpression =
@@ -948,10 +948,10 @@ public class FunctionValueBuilderTests
         var envFuncAccess = BuildExpressionForPathInEnvironment([0, 0]);
         var argAccess = BuildExpressionForPathInEnvironment([1]);
 
-        var innerExpression = Expression.ListInstance([envFuncAccess, argAccess]);
+        var innerExpression = Expression.ListInst([envFuncAccess, argAccess]);
 
         // Use Literal expression for env function - simplest way to test
-        var envFunctionExpr = Expression.LiteralInstance(envFunction);
+        var envFunctionExpr = Expression.LitralInst(envFunction);
 
         var functionExpression =
             FunctionValueBuilder.EmitFunctionExpression(
@@ -990,7 +990,7 @@ public class FunctionValueBuilderTests
         var arg0Access = BuildExpressionForPathInEnvironment([1]);
         var arg1Access = BuildExpressionForPathInEnvironment([2]);
 
-        var innerExpression = Expression.ListInstance([arg0Access, arg1Access]);
+        var innerExpression = Expression.ListInst([arg0Access, arg1Access]);
 
         var functionExpression =
             FunctionValueBuilder.EmitFunctionExpression(
@@ -1040,7 +1040,7 @@ public class FunctionValueBuilderTests
         var arg1Access = BuildExpressionForPathInEnvironment([2]);
         var arg2Access = BuildExpressionForPathInEnvironment([3]);
 
-        var innerExpression = Expression.ListInstance([arg0Access, arg1Access, arg2Access]);
+        var innerExpression = Expression.ListInst([arg0Access, arg1Access, arg2Access]);
 
         var functionExpression =
             FunctionValueBuilder.EmitFunctionExpression(
@@ -1107,19 +1107,19 @@ public class FunctionValueBuilderTests
 
         // Create product expression: arg0 * arg1
         var productExpr =
-            Expression.KernelApplicationInstance(
+            Expression.BuiltinInst(
                 function: nameof(BuiltinFunction.int_mul),
-                input: Expression.ListInstance([arg0Access, arg1Access]));
+                input: Expression.ListInst([arg0Access, arg1Access]));
 
         // Create sum expression: (arg0 * arg1) + arg2
 
         var sumExpr =
-            Expression.KernelApplicationInstance(
+            Expression.BuiltinInst(
                 function: nameof(BuiltinFunction.int_add),
-                input: Expression.ListInstance([productExpr, arg2Access]));
+                input: Expression.ListInst([productExpr, arg2Access]));
 
         // Return [envFunc0, sum, envFunc1]
-        var innerExpression = Expression.ListInstance([envFunc0Access, sumExpr, envFunc1Access]);
+        var innerExpression = Expression.ListInst([envFunc0Access, sumExpr, envFunc1Access]);
 
         // Use environment-dependent expressions for env functions.
         // These expressions reference the outer environment where the function expression will be evaluated.
@@ -1186,11 +1186,11 @@ public class FunctionValueBuilderTests
 
         // sum = arg0 + arg1
         var sumExpr =
-            Expression.KernelApplicationInstance(
+            Expression.BuiltinInst(
                 function: nameof(BuiltinFunction.int_add),
-                input: Expression.ListInstance([arg0Access, arg1Access]));
+                input: Expression.ListInst([arg0Access, arg1Access]));
 
-        var innerExpression = Expression.ListInstance([envFunc0Access, envFunc1Access, sumExpr]);
+        var innerExpression = Expression.ListInst([envFunc0Access, envFunc1Access, sumExpr]);
 
         var envFunc0 = PineValue.Blob([100]);
         var envFunc1 = PineValue.Blob([200]);
@@ -1250,19 +1250,19 @@ public class FunctionValueBuilderTests
     public void BuildCurriedFunctionValueAsTemplate_OneParameter()
     {
         var innerExpr =
-            Expression.KernelApplicationInstance(
+            Expression.BuiltinInst(
                 function: nameof(KernelFunction.int_add),
-                input: Expression.ListInstance(
+                input: Expression.ListInst(
                     [
-                    Expression.KernelApplicationInstance(
+                    Expression.BuiltinInst(
                         function: nameof(KernelFunction.int_mul),
-                        input: Expression.ListInstance(
+                        input: Expression.ListInst(
                             [
                             BuildExpressionForPathInEnvironment([1]),
-                            Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(17))
+                            Expression.LitralInst(IntegerEncoding.EncodeSignedInteger(17))
                             ])),
 
-                    Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(19))
+                    Expression.LitralInst(IntegerEncoding.EncodeSignedInteger(19))
                     ]));
 
         var templateValue =
@@ -1289,9 +1289,9 @@ public class FunctionValueBuilderTests
         parseFirstLevelOk.BuiltinCount.Should().Be(0);
 
         var plainApplicationExpr =
-            new Expression.ParseAndEval(
-                encoded: Expression.LiteralInstance(templateValue),
-                environment: Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(41)));
+            new Expression.Eval(
+                encoded: Expression.LitralInst(templateValue),
+                environment: Expression.LitralInst(IntegerEncoding.EncodeSignedInteger(41)));
 
         var evaluated =
             EvaluateExpression(plainApplicationExpr, PineValue.List([]));
@@ -1314,19 +1314,19 @@ public class FunctionValueBuilderTests
     public void BuildCurriedFunctionValueAsTemplate_TwoParameters()
     {
         var innerExpr =
-            Expression.KernelApplicationInstance(
+            Expression.BuiltinInst(
                 function: nameof(KernelFunction.int_add),
-                input: Expression.ListInstance(
+                input: Expression.ListInst(
                     [
-                    Expression.KernelApplicationInstance(
+                    Expression.BuiltinInst(
                         function: nameof(KernelFunction.int_mul),
-                        input: Expression.ListInstance(
+                        input: Expression.ListInst(
                             [
                             BuildExpressionForPathInEnvironment([1]),
-                            Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(17))
+                            Expression.LitralInst(IntegerEncoding.EncodeSignedInteger(17))
                             ])),
 
-                    Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(19)),
+                    Expression.LitralInst(IntegerEncoding.EncodeSignedInteger(19)),
 
                     BuildExpressionForPathInEnvironment([2]),
                     ]));
@@ -1385,14 +1385,14 @@ public class FunctionValueBuilderTests
         }
 
         var firstArgPlainApplicationExpr =
-            new Expression.ParseAndEval(
-                encoded: Expression.LiteralInstance(templateValue),
-                environment: Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(41)));
+            new Expression.Eval(
+                encoded: Expression.LitralInst(templateValue),
+                environment: Expression.LitralInst(IntegerEncoding.EncodeSignedInteger(41)));
 
         var secondArgPlainApplicationExpr =
-            new Expression.ParseAndEval(
+            new Expression.Eval(
                 encoded: firstArgPlainApplicationExpr,
-                environment: Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(43)));
+                environment: Expression.LitralInst(IntegerEncoding.EncodeSignedInteger(43)));
 
         var evaluated =
             EvaluateExpression(secondArgPlainApplicationExpr, PineValue.List([]));
@@ -1419,19 +1419,19 @@ public class FunctionValueBuilderTests
         var envFunc0 = IntegerEncoding.EncodeSignedInteger(100);
 
         var innerExpr =
-            Expression.KernelApplicationInstance(
+            Expression.BuiltinInst(
                 function: nameof(KernelFunction.int_add),
-                input: Expression.ListInstance(
+                input: Expression.ListInst(
                     [
-                    Expression.KernelApplicationInstance(
+                    Expression.BuiltinInst(
                         function: nameof(KernelFunction.int_mul),
-                        input: Expression.ListInstance(
+                        input: Expression.ListInst(
                             [
                             BuildExpressionForPathInEnvironment([1]),
-                            Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(17))
+                            Expression.LitralInst(IntegerEncoding.EncodeSignedInteger(17))
                             ])),
 
-                    Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(19)),
+                    Expression.LitralInst(IntegerEncoding.EncodeSignedInteger(19)),
 
                     BuildExpressionForPathInEnvironment([0, 0]),
                     ]));
@@ -1461,9 +1461,9 @@ public class FunctionValueBuilderTests
         parseFirstLevelOk.BuiltinCount.Should().Be(0);
 
         var plainApplicationExpr =
-            new Expression.ParseAndEval(
-                encoded: Expression.LiteralInstance(templateValue),
-                environment: Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(41)));
+            new Expression.Eval(
+                encoded: Expression.LitralInst(templateValue),
+                environment: Expression.LitralInst(IntegerEncoding.EncodeSignedInteger(41)));
 
         var evaluated =
             EvaluateExpression(plainApplicationExpr, PineValue.List([]));
@@ -1492,19 +1492,19 @@ public class FunctionValueBuilderTests
         var envFunc1 = IntegerEncoding.EncodeSignedInteger(200);
 
         var innerExpr =
-            Expression.KernelApplicationInstance(
+            Expression.BuiltinInst(
                 function: nameof(KernelFunction.int_add),
-                input: Expression.ListInstance(
+                input: Expression.ListInst(
                     [
-                    Expression.KernelApplicationInstance(
+                    Expression.BuiltinInst(
                         function: nameof(KernelFunction.int_mul),
-                        input: Expression.ListInstance(
+                        input: Expression.ListInst(
                             [
                             BuildExpressionForPathInEnvironment([1]),
-                            Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(17))
+                            Expression.LitralInst(IntegerEncoding.EncodeSignedInteger(17))
                             ])),
 
-                    Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(19)),
+                    Expression.LitralInst(IntegerEncoding.EncodeSignedInteger(19)),
 
                     BuildExpressionForPathInEnvironment([2]),
 
@@ -1568,14 +1568,14 @@ public class FunctionValueBuilderTests
         }
 
         var firstArgPlainApplicationExpr =
-            new Expression.ParseAndEval(
-                encoded: Expression.LiteralInstance(templateValue),
-                environment: Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(41)));
+            new Expression.Eval(
+                encoded: Expression.LitralInst(templateValue),
+                environment: Expression.LitralInst(IntegerEncoding.EncodeSignedInteger(41)));
 
         var secondArgPlainApplicationExpr =
-            new Expression.ParseAndEval(
+            new Expression.Eval(
                 encoded: firstArgPlainApplicationExpr,
-                environment: Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(43)));
+                environment: Expression.LitralInst(IntegerEncoding.EncodeSignedInteger(43)));
 
         var evaluated =
             EvaluateExpression(secondArgPlainApplicationExpr, PineValue.List([]));
@@ -1602,7 +1602,7 @@ public class FunctionValueBuilderTests
     public void ParseFunctionValue_WithEnvFunctions_ZeroParameters_SymmetryTest()
     {
         var expectedResult = PineValue.Blob([42, 43]);
-        var innerExpression = Expression.LiteralInstance(expectedResult);
+        var innerExpression = Expression.LitralInst(expectedResult);
 
         var functionValue =
             FunctionValueBuilder.EmitFunctionValueWithEnvFunctions(
@@ -1632,7 +1632,7 @@ public class FunctionValueBuilderTests
         var envFunc = PineValue.Blob([99, 88]);
 
         var innerExpression =
-            Expression.ListInstance(
+            Expression.ListInst(
                 [
                 BuildExpressionForPathInEnvironment([0, 0]), // envFuncs[0]
                 BuildExpressionForPathInEnvironment([1]) // arg
@@ -1668,7 +1668,7 @@ public class FunctionValueBuilderTests
         // Inner expression: returns [arg0, arg1]
         // env = [envFuncs, arg0, arg1]
         var innerExpression =
-            Expression.ListInstance(
+            Expression.ListInst(
                 [
                 BuildExpressionForPathInEnvironment([1]), // arg0
                 BuildExpressionForPathInEnvironment([2]) // arg1
@@ -1709,7 +1709,7 @@ public class FunctionValueBuilderTests
         var envFunc = PineValue.Blob([77]);
 
         var innerExpression =
-            Expression.ListInstance(
+            Expression.ListInst(
                 [
                 BuildExpressionForPathInEnvironment([0, 0]), // envFuncs[0]
                 BuildExpressionForPathInEnvironment([1]), // arg0
@@ -1754,9 +1754,9 @@ public class FunctionValueBuilderTests
         var arg1Access = BuildExpressionForPathInEnvironment([2]);
 
         var innerExpression =
-            Expression.KernelApplicationInstance(
+            Expression.BuiltinInst(
                 function: nameof(BuiltinFunction.int_add),
-                input: Expression.ListInstance([arg0Access, arg1Access]));
+                input: Expression.ListInst([arg0Access, arg1Access]));
 
         var envFunc = PineValue.Blob([100]);
 
@@ -1950,7 +1950,7 @@ public class FunctionValueBuilderTests
 
         for (var i = 0; i < leadingCount; i++)
         {
-            leadingArgExpressions[i] = Expression.LiteralInstance(argValues[i]);
+            leadingArgExpressions[i] = Expression.LitralInst(argValues[i]);
         }
 
         var emittedExpr =
@@ -2010,12 +2010,12 @@ public class FunctionValueBuilderTests
         for (var i = 0; i < parameterCount; i++)
         {
             terms.Add(
-                Expression.KernelApplicationInstance(
+                Expression.BuiltinInst(
                     function: nameof(KernelFunction.int_mul),
-                    input: Expression.ListInstance(
+                    input: Expression.ListInst(
                         [
                         BuildExpressionForPathInEnvironment([1 + i]),
-                        Expression.LiteralInstance(
+                        Expression.LitralInst(
                             IntegerEncoding.EncodeSignedInteger(s_partialAppCoefficients[i]))
                         ])));
         }
@@ -2023,22 +2023,22 @@ public class FunctionValueBuilderTests
         if (withEnvFunctions)
         {
             terms.Add(
-                Expression.KernelApplicationInstance(
+                Expression.BuiltinInst(
                     function: nameof(KernelFunction.int_mul),
-                    input: Expression.ListInstance(
+                    input: Expression.ListInst(
                         [
                         BuildExpressionForPathInEnvironment([0, 0]),
-                        Expression.LiteralInstance(
+                        Expression.LitralInst(
                             IntegerEncoding.EncodeSignedInteger(s_partialAppEnvFuncCoefficient))
                         ])));
         }
 
-        terms.Add(Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(s_partialAppConstant)));
+        terms.Add(Expression.LitralInst(IntegerEncoding.EncodeSignedInteger(s_partialAppConstant)));
 
         return
-            Expression.KernelApplicationInstance(
+            Expression.BuiltinInst(
                 function: nameof(KernelFunction.int_add),
-                input: Expression.ListInstance(terms));
+                input: Expression.ListInst(terms));
     }
 
     private static long ComputeExpectedResult(
@@ -2142,7 +2142,7 @@ public class FunctionValueBuilderTests
 
         for (var i = 0; i < leadingCount; i++)
         {
-            leadingArgExpressions[i] = Expression.LiteralInstance(argValues[i]);
+            leadingArgExpressions[i] = Expression.LitralInst(argValues[i]);
         }
 
         // The partial-application-site environment is [encodedBody, envFunctionsList]; the body and
@@ -2211,7 +2211,7 @@ public class FunctionValueBuilderTests
 
         for (var i = 0; i < leadingCount; i++)
         {
-            leadingArgExpressions[i] = Expression.LiteralInstance(argValues[i]);
+            leadingArgExpressions[i] = Expression.LitralInst(argValues[i]);
         }
 
         // Reference: the static (value-based) variant applied to the same leading arguments.

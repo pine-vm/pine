@@ -1,8 +1,8 @@
 {
   "List": [
     [
-      { "Literal": [ [] ] },
-      { "Literal": [ { "AsBase64": "" } ] }
+      { "Litral": [ [] ] },
+      { "Litral": [ { "AsBase64": "" } ] }
     ]
   ]
 }

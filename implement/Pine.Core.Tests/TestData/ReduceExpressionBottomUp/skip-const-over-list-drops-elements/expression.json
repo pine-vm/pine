@@ -1,11 +1,11 @@
 {
-  "KernelApplication": [
+  "Builtin": [
     "skip",
     {
       "List": [
         [
           {
-            "Literal": [
+            "Litral": [
               2
             ]
           },
@@ -19,7 +19,7 @@
                         "Environment": []
                       },
                       {
-                        "Literal": [
+                        "Litral": [
                           13
                         ]
                       }
@@ -27,7 +27,7 @@
                   ]
                 },
                 {
-                  "Literal": [
+                  "Litral": [
                     17
                   ]
                 },
@@ -38,7 +38,7 @@
                         "Environment": []
                       },
                       {
-                        "Literal": [
+                        "Litral": [
                           19
                         ]
                       }
@@ -46,7 +46,7 @@
                   ]
                 },
                 {
-                  "Literal": [
+                  "Litral": [
                     21
                   ]
                 }

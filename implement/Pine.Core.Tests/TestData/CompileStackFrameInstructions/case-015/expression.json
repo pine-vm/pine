@@ -1,14 +1,14 @@
 {
-  "KernelApplication": [
+  "Builtin": [
     "head",
     {
-      "KernelApplication": [
+      "Builtin": [
         "skip",
         {
           "List": [
             [
               {
-                "Literal": [
+                "Litral": [
                   17
                 ]
               },
@@ -16,26 +16,26 @@
                 "List": [
                   [
                     {
-                      "Literal": [
+                      "Litral": [
                         21
                       ]
                     },
                     {
-                      "KernelApplication": [
+                      "Builtin": [
                         "head",
                         {
-                          "KernelApplication": [
+                          "Builtin": [
                             "skip",
                             {
                               "List": [
                                 [
                                   {
-                                    "Literal": [
+                                    "Litral": [
                                       23
                                     ]
                                   },
                                   {
-                                    "KernelApplication": [
+                                    "Builtin": [
                                       "negate",
                                       {
                                         "Environment": [

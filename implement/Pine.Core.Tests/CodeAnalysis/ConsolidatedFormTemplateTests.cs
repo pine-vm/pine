@@ -51,20 +51,20 @@ public class ConsolidatedFormTemplateTests
         // Build a real consolidated form by running the optimization on a fresh chain with
         // distinct concrete arguments. The encoded literal must equal the template's, and the
         // matcher must recover the concrete arguments at the placeholder positions.
-        var arg0 = Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(11));
-        var arg1 = Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(13));
+        var arg0 = Expression.LitralInst(IntegerEncoding.EncodeSignedInteger(11));
+        var arg1 = Expression.LitralInst(IntegerEncoding.EncodeSignedInteger(13));
 
         var chain =
-            (Expression.ParseAndEval)PineCodeAnalysis.BuildGenericFunctionApplication(
-                Expression.LiteralInstance(functionValue),
+            (Expression.Eval)PineCodeAnalysis.BuildGenericFunctionApplication(
+                Expression.LitralInst(functionValue),
                 [arg0, arg1]);
 
         var consolidated =
             ReducePineExpression.TryConsolidateGenericFunctionApplicationChain(chain, s_parseCache);
 
         consolidated.Should().NotBeNull();
-        var consolidatedPaE = (Expression.ParseAndEval)consolidated!;
-        var encodedLit = (Expression.Literal)consolidatedPaE.Encoded;
+        var consolidatedPaE = (Expression.Eval)consolidated!;
+        var encodedLit = (Expression.Litral)consolidatedPaE.Encoded;
         encodedLit.Value.Should().Be(template.EncodedLiteral);
 
         var bindings =
@@ -90,21 +90,21 @@ public class ConsolidatedFormTemplateTests
         template.Should().NotBeNull();
         template!.Placeholders.Count.Should().Be(3);
 
-        var arg0 = Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(11));
-        var arg1 = Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(13));
-        var arg2 = Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(17));
+        var arg0 = Expression.LitralInst(IntegerEncoding.EncodeSignedInteger(11));
+        var arg1 = Expression.LitralInst(IntegerEncoding.EncodeSignedInteger(13));
+        var arg2 = Expression.LitralInst(IntegerEncoding.EncodeSignedInteger(17));
 
         var chain =
-            (Expression.ParseAndEval)PineCodeAnalysis.BuildGenericFunctionApplication(
-                Expression.LiteralInstance(functionValue),
+            (Expression.Eval)PineCodeAnalysis.BuildGenericFunctionApplication(
+                Expression.LitralInst(functionValue),
                 [arg0, arg1, arg2]);
 
         var consolidated =
             ReducePineExpression.TryConsolidateGenericFunctionApplicationChain(chain, s_parseCache);
 
         consolidated.Should().NotBeNull();
-        var consolidatedPaE = (Expression.ParseAndEval)consolidated!;
-        var encodedLit = (Expression.Literal)consolidatedPaE.Encoded;
+        var consolidatedPaE = (Expression.Eval)consolidated!;
+        var encodedLit = (Expression.Litral)consolidatedPaE.Encoded;
         encodedLit.Value.Should().Be(template.EncodedLiteral);
 
         var bindings =
@@ -139,32 +139,32 @@ public class ConsolidatedFormTemplateTests
             for (var i = 0; i < idx; ++i)
             {
                 cur =
-                    Expression.KernelApplicationInstance(
+                    Expression.BuiltinInst(
                         "skip",
-                        Expression.ListInstance(
+                        Expression.ListInst(
                             [
-                            Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(1)),
+                            Expression.LitralInst(IntegerEncoding.EncodeSignedInteger(1)),
                             cur
                             ]));
             }
 
-            return Expression.KernelApplicationInstance("head", cur);
+            return Expression.BuiltinInst("head", cur);
         }
 
         var arg0 = EnvAccess(0);
         var arg1 = EnvAccess(1);
 
         var chain =
-            (Expression.ParseAndEval)PineCodeAnalysis.BuildGenericFunctionApplication(
-                Expression.LiteralInstance(functionValue),
+            (Expression.Eval)PineCodeAnalysis.BuildGenericFunctionApplication(
+                Expression.LitralInst(functionValue),
                 [arg0, arg1]);
 
         var consolidated =
             ReducePineExpression.TryConsolidateGenericFunctionApplicationChain(chain, s_parseCache);
 
         consolidated.Should().NotBeNull();
-        var consolidatedPaE = (Expression.ParseAndEval)consolidated!;
-        var encodedLit = (Expression.Literal)consolidatedPaE.Encoded;
+        var consolidatedPaE = (Expression.Eval)consolidated!;
+        var encodedLit = (Expression.Litral)consolidatedPaE.Encoded;
         encodedLit.Value.Should().Be(template!.EncodedLiteral);
 
         var bindings =
@@ -192,13 +192,13 @@ public class ConsolidatedFormTemplateTests
         template.Should().NotBeNull();
         template!.Placeholders.Count.Should().Be(3);
 
-        var arg0 = Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(11));
-        var arg1 = Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(13));
-        var arg2 = Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(17));
+        var arg0 = Expression.LitralInst(IntegerEncoding.EncodeSignedInteger(11));
+        var arg1 = Expression.LitralInst(IntegerEncoding.EncodeSignedInteger(13));
+        var arg2 = Expression.LitralInst(IntegerEncoding.EncodeSignedInteger(17));
 
         var chain =
-            (Expression.ParseAndEval)PineCodeAnalysis.BuildGenericFunctionApplication(
-                Expression.LiteralInstance(functionValue),
+            (Expression.Eval)PineCodeAnalysis.BuildGenericFunctionApplication(
+                Expression.LitralInst(functionValue),
                 [arg0, arg1, arg2]);
 
         var consolidated =
@@ -210,9 +210,9 @@ public class ConsolidatedFormTemplateTests
         // single ParseAndEval (with the encoded body as Encoded) or a fully inlined body
         // (no remaining ParseAndEval). The template helper requires a ParseAndEval shape;
         // when the consolidation collapses below that shape the template is null.
-        if (consolidated is Expression.ParseAndEval consolidatedPaE)
+        if (consolidated is Expression.Eval consolidatedPaE)
         {
-            var encodedLit = (Expression.Literal)consolidatedPaE.Encoded;
+            var encodedLit = (Expression.Litral)consolidatedPaE.Encoded;
             encodedLit.Value.Should().Be(template.EncodedLiteral);
 
             var bindings =
@@ -240,7 +240,7 @@ public class ConsolidatedFormTemplateTests
 
         // Use an actual env that obviously cannot have come from this function's optimized
         // application — e.g. a single literal where a List structure is expected.
-        var bogusActual = Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(0));
+        var bogusActual = Expression.LitralInst(IntegerEncoding.EncodeSignedInteger(0));
 
         var bindings =
             PineCodeAnalysis.TryMatchExpressionTemplate(

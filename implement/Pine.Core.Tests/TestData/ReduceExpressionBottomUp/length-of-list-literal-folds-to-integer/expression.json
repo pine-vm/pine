@@ -1,18 +1,18 @@
 {
-  "KernelApplication": [
+  "Builtin": [
     "length",
     {
       "List": [
         [
           {
-            "Literal": [
+            "Litral": [
               {
                 "AsBase64": "AQ=="
               }
             ]
           },
           {
-            "Literal": [
+            "Litral": [
               {
                 "AsBase64": "Ag=="
               }

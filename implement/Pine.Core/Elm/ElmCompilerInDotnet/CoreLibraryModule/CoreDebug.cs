@@ -37,7 +37,7 @@ public static class CoreDebug
                 zero);
 
         var completedDigits =
-            Expression.ConditionalInstance(
+            Expression.ConditionalInst(
                 condition: noDigits,
                 falseBranch: lowerDigits,
                 trueBranch: LiteralText("0"));
@@ -56,17 +56,17 @@ public static class CoreDebug
         for (var digitValue = 8; digitValue >= 0; digitValue--)
         {
             digitText =
-                Expression.ConditionalInstance(
+                Expression.ConditionalInst(
                     condition: BuiltinHelpers.ApplyBuiltinEqualBinary(digit, LiteralInt(digitValue)),
                     falseBranch: digitText,
                     trueBranch: LiteralText(digitValue.ToString(System.Globalization.CultureInfo.InvariantCulture)));
         }
 
         var recurse =
-            new Expression.ParseAndEval(
+            new Expression.Eval(
                 encoded: self,
                 environment:
-                Expression.ListInstance(
+                Expression.ListInst(
                     [
                     self,
                     upperDigits,
@@ -74,7 +74,7 @@ public static class CoreDebug
                     ]));
 
         var digitsBody =
-            Expression.ConditionalInstance(
+            Expression.ConditionalInst(
                 condition: isComplete,
                 falseBranch: recurse,
                 trueBranch: completedDigits);
@@ -88,24 +88,24 @@ public static class CoreDebug
                 LiteralByte(4));
 
         var absoluteValue =
-            Expression.ConditionalInstance(
+            Expression.ConditionalInst(
                 condition: isNonNegative,
                 falseBranch: BuiltinHelpers.ApplyBuiltinIntMul([LiteralInt(-1), input]),
                 trueBranch: input);
 
         var digits =
-            new Expression.ParseAndEval(
-                encoded: Expression.LiteralInstance(encodedDigitsBody),
+            new Expression.Eval(
+                encoded: Expression.LitralInst(encodedDigitsBody),
                 environment:
-                Expression.ListInstance(
+                Expression.ListInst(
                     [
-                    Expression.LiteralInstance(encodedDigitsBody),
+                    Expression.LitralInst(encodedDigitsBody),
                     absoluteValue,
                     LiteralText("")
                     ]));
 
         var content =
-            Expression.ConditionalInstance(
+            Expression.ConditionalInst(
                 condition: isNonNegative,
                 falseBranch: BuiltinHelpers.ApplyBuiltinConcat([LiteralText("-"), digits]),
                 trueBranch: digits);
@@ -143,10 +143,10 @@ public static class CoreDebug
         var tail = BuiltinHelpers.ApplyBuiltinSkip(1, remaining);
 
         var renderedHead =
-            new Expression.ParseAndEval(
+            new Expression.Eval(
                 encoded: renderer,
                 environment:
-                Expression.ListInstance(
+                Expression.ListInst(
                     [
                     renderer,
                     BuiltinHelpers.ApplyBuiltinHead(remaining)
@@ -158,9 +158,9 @@ public static class CoreDebug
                     BuiltinHelpers.ApplyBuiltinSkip(1, renderedHead)));
 
         var renderedTail =
-            new Expression.ParseAndEval(
+            new Expression.Eval(
                 encoded: self,
-                environment: Expression.ListInstance([self, renderer, tail]));
+                environment: Expression.ListInst([self, renderer, tail]));
 
         var tailIsEmpty =
             BuiltinHelpers.ApplyBuiltinEqualBinary(
@@ -168,7 +168,7 @@ public static class CoreDebug
                 zero);
 
         var nonEmptyContent =
-            Expression.ConditionalInstance(
+            Expression.ConditionalInst(
                 condition: tailIsEmpty,
                 falseBranch:
                 BuiltinHelpers.ApplyBuiltinConcat(
@@ -176,7 +176,7 @@ public static class CoreDebug
                 trueBranch: renderedHeadContent);
 
         var listBody =
-            Expression.ConditionalInstance(
+            Expression.ConditionalInst(
                 condition: isEmpty,
                 falseBranch: nonEmptyContent,
                 trueBranch: LiteralText(""));
@@ -189,12 +189,12 @@ public static class CoreDebug
         var rendererValue = Path(1);
 
         var listContent =
-            new Expression.ParseAndEval(
-                encoded: Expression.LiteralInstance(encodedListHelperBody),
+            new Expression.Eval(
+                encoded: Expression.LitralInst(encodedListHelperBody),
                 environment:
-                Expression.ListInstance(
+                Expression.ListInst(
                     [
-                    Expression.LiteralInstance(encodedListHelperBody),
+                    Expression.LitralInst(encodedListHelperBody),
                     rendererSelf,
                     rendererValue
                     ]));
@@ -208,31 +208,31 @@ public static class CoreDebug
             Internal_StringToString(rendererValue);
 
         var hasListItems =
-            Expression.KernelApplicationInstance(
+            Expression.BuiltinInst(
                 nameof(BuiltinFunction.int_is_sorted_asc),
-                Expression.ListInstance(
+                Expression.ListInst(
                     [
                     LiteralInt(1),
                     BuiltinHelpers.ApplyBuiltinLength(rendererValue)
                     ]));
 
         var isString =
-            Expression.ConditionalInstance(
+            Expression.ConditionalInst(
                 condition: hasListItems,
-                falseBranch: Expression.LiteralInstance(PineVM.PineKernelValues.FalseValue),
+                falseBranch: Expression.LitralInst(PineVM.PineKernelValues.FalseValue),
                 trueBranch:
                 BuiltinHelpers.ApplyBuiltinEqualBinary(
                     BuiltinHelpers.ApplyBuiltinHead(rendererValue),
-                    Expression.LiteralInstance(ElmValue.ElmStringTypeTagNameAsValue)));
+                    Expression.LitralInst(ElmValue.ElmStringTypeTagNameAsValue)));
 
         var nonBlobResult =
-            Expression.ConditionalInstance(
+            Expression.ConditionalInst(
                 condition: isString,
                 falseBranch: listResult,
                 trueBranch: stringResult);
 
         var emptyBlob =
-            Expression.LiteralInstance(PineValue.EmptyBlob);
+            Expression.LitralInst(PineValue.EmptyBlob);
 
         var isBlob =
             BuiltinHelpers.ApplyBuiltinEqualBinary(
@@ -243,34 +243,34 @@ public static class CoreDebug
             BuiltinHelpers.ApplyBuiltinLength(rendererValue);
 
         var blobHasIntegerLength =
-            Expression.KernelApplicationInstance(
+            Expression.BuiltinInst(
                 nameof(BuiltinFunction.int_is_sorted_asc),
-                Expression.ListInstance([LiteralInt(2), blobLength]));
+                Expression.ListInst([LiteralInt(2), blobLength]));
 
         var blobSign =
             BuiltinHelpers.ApplyBuiltinHead(rendererValue);
 
         var blobHasIntegerSign =
-            Expression.ConditionalInstance(
+            Expression.ConditionalInst(
                 condition: BuiltinHelpers.ApplyBuiltinEqualBinary(blobSign, LiteralByte(2)),
                 falseBranch: BuiltinHelpers.ApplyBuiltinEqualBinary(blobSign, LiteralByte(4)),
-                trueBranch: Expression.LiteralInstance(PineVM.PineKernelValues.TrueValue));
+                trueBranch: Expression.LitralInst(PineVM.PineKernelValues.TrueValue));
 
         var blobDecodesAsInteger =
-            Expression.ConditionalInstance(
+            Expression.ConditionalInst(
                 condition: blobHasIntegerLength,
-                falseBranch: Expression.LiteralInstance(PineVM.PineKernelValues.FalseValue),
+                falseBranch: Expression.LitralInst(PineVM.PineKernelValues.FalseValue),
                 trueBranch: blobHasIntegerSign);
 
         var blobResult =
             WrapString(LiteralText("<blob>"));
 
         var rendererBody =
-            Expression.ConditionalInstance(
+            Expression.ConditionalInst(
                 condition: isBlob,
                 falseBranch: nonBlobResult,
                 trueBranch:
-                Expression.ConditionalInstance(
+                Expression.ConditionalInst(
                     condition: blobDecodesAsInteger,
                     falseBranch: blobResult,
                     trueBranch: ApplyUnary(IntToStringFunctionValue(), rendererValue)));
@@ -279,21 +279,21 @@ public static class CoreDebug
             ExpressionEncoding.EncodeExpressionAsValue(rendererBody);
 
         return
-            new Expression.ParseAndEval(
-                encoded: Expression.LiteralInstance(encodedRendererBody),
+            new Expression.Eval(
+                encoded: Expression.LitralInst(encodedRendererBody),
                 environment:
-                Expression.ListInstance(
+                Expression.ListInst(
                     [
-                    Expression.LiteralInstance(encodedRendererBody),
+                    Expression.LitralInst(encodedRendererBody),
                     value
                     ]));
     }
 
     private static Expression WrapString(Expression content) =>
-        Expression.ListInstance(
+        Expression.ListInst(
             [
-            Expression.LiteralInstance(ElmValue.ElmStringTypeTagNameAsValue),
-            Expression.ListInstance([content])
+            Expression.LitralInst(ElmValue.ElmStringTypeTagNameAsValue),
+            Expression.ListInst([content])
             ]);
 
     private static Expression Path(int index) =>
@@ -301,17 +301,17 @@ public static class CoreDebug
             [index],
             Expression.EnvironmentInstance);
 
-    private static Expression.Literal LiteralInt(long value) =>
-        Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(value));
+    private static Expression.Litral LiteralInt(long value) =>
+        Expression.LitralInst(IntegerEncoding.EncodeSignedInteger(value));
 
-    private static Expression.Literal LiteralText(string value) =>
-        Expression.LiteralInstance(StringEncoding.ValueFromString(value));
+    private static Expression.Litral LiteralText(string value) =>
+        Expression.LitralInst(StringEncoding.ValueFromString(value));
 
-    private static Expression.Literal LiteralByte(byte value) =>
-        Expression.LiteralInstance(PineValue.BlobSingleByte(value));
+    private static Expression.Litral LiteralByte(byte value) =>
+        Expression.LitralInst(PineValue.BlobSingleByte(value));
 
     private static Expression ApplyUnary(PineValue functionValue, Expression argument) =>
-        new Expression.ParseAndEval(
-            encoded: Expression.LiteralInstance(functionValue),
+        new Expression.Eval(
+            encoded: Expression.LitralInst(functionValue),
             environment: argument);
 }

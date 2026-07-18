@@ -448,7 +448,7 @@ public class CodeAnalysis
 
             var allParseAndEvalExpressions =
                 Expression.EnumerateSelfAndDescendants(currentExprInlined)
-                .OfType<Expression.ParseAndEval>()
+                .OfType<Expression.Eval>()
                 .ToImmutableArray();
 
             var distinctParseAndEvalExpressions =
@@ -727,7 +727,7 @@ public class CodeAnalysis
                 findReplacement:
                 expr =>
                 {
-                    if (expr is not Expression.ParseAndEval parseAndEval)
+                    if (expr is not Expression.Eval parseAndEval)
                     {
                         return null;
                     }
@@ -823,7 +823,7 @@ public class CodeAnalysis
 
     /// <summary>
     /// Normalizes applications emitted in the "generic function application" form, in which the
-    /// <see cref="Expression.ParseAndEval.Encoded"/> part is an <see cref="Expression.List"/> that
+    /// <see cref="Expression.Eval.Encoded"/> part is an <see cref="Expression.List"/> that
     /// constructs an encoded Pine expression at runtime (for example
     /// <c>List["ParseAndEval", [Literal(body), &lt;environment construction&gt;]]</c>).
     /// Each such application is replaced by the equivalent expression computed via
@@ -833,7 +833,7 @@ public class CodeAnalysis
     /// <para>
     /// Only the <see cref="Expression.List"/> construction shape is decoded here; the ordinary
     /// literal-encoded and path-encoded applications (including nested
-    /// <see cref="Expression.ParseAndEval"/> chains) are left untouched for the existing
+    /// <see cref="Expression.Eval"/> chains) are left untouched for the existing
     /// inlining and consolidation logic to handle.
     /// </para>
     /// </summary>
@@ -852,7 +852,7 @@ public class CodeAnalysis
                     findReplacement:
                     expr =>
                     {
-                        if (expr is not Expression.ParseAndEval parseAndEval)
+                        if (expr is not Expression.Eval parseAndEval)
                             return null;
 
                         if (parseAndEval.Encoded is not Expression.List)
@@ -891,7 +891,7 @@ public class CodeAnalysis
             }
         }
 
-        if (expression is Expression.Literal literal)
+        if (expression is Expression.Litral literal)
         {
             return StaticExpressionGen.LiteralInstance(literal.Value);
         }
@@ -901,7 +901,7 @@ public class CodeAnalysis
             return StaticExpressionGen.EnvironmentInstance;
         }
 
-        if (expression is Expression.ParseAndEval parseAndEval)
+        if (expression is Expression.Eval parseAndEval)
         {
             var parseEncodedResult =
                 ParseAsStaticExpression(
@@ -1037,7 +1037,7 @@ public class CodeAnalysis
             return StaticExpressionGen.ListInstance(parsedItems);
         }
 
-        if (expression is Expression.KernelApplication kernelApp)
+        if (expression is Expression.Builtin kernelApp)
         {
             var parseInputResult =
                 ParseAsStaticExpression(
@@ -1138,7 +1138,7 @@ public class CodeAnalysis
     }
 
     static Result<string, PineValue> TryGetChildEncodedExprValue(
-        Expression.ParseAndEval parseAndEval,
+        Expression.Eval parseAndEval,
         PineValueClass envValueClass,
         PineVMParseCache parseCache)
     {
@@ -1175,7 +1175,7 @@ public class CodeAnalysis
     }
 
     private static bool ParseAndEvalCrashingAlways(
-        Expression.ParseAndEval parseAndEval,
+        Expression.Eval parseAndEval,
         PineVMParseCache parseCache)
     {
         if (parseAndEval.Encoded.ReferencesEnvironment)
@@ -1196,7 +1196,7 @@ public class CodeAnalysis
 
     private static Result<object, (PineValue, Expression)>
         ParseIndependentParseAndEvalExpression(
-        Expression.ParseAndEval parseAndEval,
+        Expression.Eval parseAndEval,
         PineVMParseCache parseCache)
     {
         if (parseAndEval.Encoded.ReferencesEnvironment)
@@ -1753,13 +1753,13 @@ public class CodeAnalysis
                 return pathSegments;
             }
 
-            if (currentExpression is not Expression.KernelApplication kernelApplication)
+            if (currentExpression is not Expression.Builtin kernelApplication)
                 return null;
 
             if (kernelApplication.Function is not nameof(BuiltinFunction.head))
                 return null;
 
-            if (kernelApplication.Input is Expression.KernelApplication inputKernelApplication &&
+            if (kernelApplication.Input is Expression.Builtin inputKernelApplication &&
                 inputKernelApplication.Function is nameof(BuiltinFunction.skip))
             {
                 if (inputKernelApplication.Input is not Expression.List skipInputList)
@@ -1768,7 +1768,7 @@ public class CodeAnalysis
                 if (skipInputList.Items.Count is not 2)
                     return null;
 
-                if (skipInputList.Items[0] is not Expression.Literal skipCountLiteral)
+                if (skipInputList.Items[0] is not Expression.Litral skipCountLiteral)
                     return null;
 
                 if (BuiltinFunction.SignedIntegerFromValueRelaxed(skipCountLiteral.Value) is not { } skipValue)
@@ -1789,18 +1789,18 @@ public class CodeAnalysis
 
     /// <summary>
     /// Returns the literal <see cref="PineValue"/> carried by <paramref name="expression"/>,
-    /// unfolding <see cref="Expression.StringTag"/> layers when present.
+    /// unfolding <see cref="Expression.Label"/> layers when present.
     /// </summary>
     /// <param name="expression">Expression to inspect for an embedded literal value.</param>
     /// <returns>The literal value when the expression represents one; otherwise <c>null</c>.</returns>
     public static PineValue? TryParseAsLiteral(Expression expression)
     {
-        if (expression is Expression.Literal literal)
+        if (expression is Expression.Litral literal)
         {
             return literal.Value;
         }
 
-        if (expression is Expression.StringTag stringTagExpr)
+        if (expression is Expression.Label stringTagExpr)
         {
             return TryParseAsLiteral(stringTagExpr.Tagged);
         }
@@ -1813,7 +1813,7 @@ public class CodeAnalysis
     /// frontend compilers (for example the Elm compiler in
     /// <c>Pine.Core.Elm.ElmCompilerInDotnet.ExpressionCompiler</c>).
     /// <para>
-    /// The result is a chain of nested <see cref="Expression.ParseAndEval"/> expressions,
+    /// The result is a chain of nested <see cref="Expression.Eval"/> expressions,
     /// one per supplied argument, applying arguments to <paramref name="functionExpr"/>
     /// from left to right. With zero arguments the input <paramref name="functionExpr"/>
     /// is returned unchanged.
@@ -1826,7 +1826,7 @@ public class CodeAnalysis
     /// <param name="functionExpr">The expression representing the function value.</param>
     /// <param name="arguments">The arguments to apply, in application order.</param>
     /// <returns>
-    /// The chain of nested <see cref="Expression.ParseAndEval"/> wrappers, or
+    /// The chain of nested <see cref="Expression.Eval"/> wrappers, or
     /// <paramref name="functionExpr"/> itself when <paramref name="arguments"/> is empty.
     /// </returns>
     public static Expression BuildGenericFunctionApplication(
@@ -1838,7 +1838,7 @@ public class CodeAnalysis
         for (var i = 0; i < arguments.Count; ++i)
         {
             result =
-                new Expression.ParseAndEval(
+                new Expression.Eval(
                     encoded: result,
                     environment: arguments[i]);
         }
@@ -1849,7 +1849,7 @@ public class CodeAnalysis
     /// <summary>
     /// Inverse of <see cref="BuildGenericFunctionApplication(Expression, IReadOnlyList{Expression})"/>.
     /// <para>
-    /// Recognizes a chain of nested <see cref="Expression.ParseAndEval"/> expressions
+    /// Recognizes a chain of nested <see cref="Expression.Eval"/> expressions
     /// of the form
     /// <c>ParseAndEval(... ParseAndEval(ParseAndEval(F, a0), a1) ..., a_{n-1})</c>
     /// and returns the function expression <c>F</c> together with the list of
@@ -1857,20 +1857,20 @@ public class CodeAnalysis
     /// </para>
     /// <para>
     /// Returns <c>null</c> when <paramref name="expression"/> is not a
-    /// <see cref="Expression.ParseAndEval"/> (i.e. when no arguments would be
-    /// recovered). For any <see cref="Expression.ParseAndEval"/> the result has
+    /// <see cref="Expression.Eval"/> (i.e. when no arguments would be
+    /// recovered). For any <see cref="Expression.Eval"/> the result has
     /// at least one argument.
     /// </para>
     /// </summary>
     /// <param name="expression">The expression to interpret as a generic application chain.</param>
     /// <returns>
     /// A pair of the recovered function expression and the recovered argument list,
-    /// or <c>null</c> when the input is not a <see cref="Expression.ParseAndEval"/>.
+    /// or <c>null</c> when the input is not a <see cref="Expression.Eval"/>.
     /// </returns>
     public static (Expression functionExpr, IReadOnlyList<Expression> arguments)?
         ParseGenericFunctionApplication(Expression expression)
     {
-        if (expression is not Expression.ParseAndEval)
+        if (expression is not Expression.Eval)
         {
             return null;
         }
@@ -1879,7 +1879,7 @@ public class CodeAnalysis
 
         var current = expression;
 
-        while (current is Expression.ParseAndEval parseAndEval)
+        while (current is Expression.Eval parseAndEval)
         {
             argumentsReversed.Add(parseAndEval.Environment);
 
@@ -1894,14 +1894,14 @@ public class CodeAnalysis
     /// <summary>
     /// A precomputed template for recognizing the consolidated form produced by the
     /// generic-application chain consolidation optimization in
-    /// <see cref="ReducePineExpression.TryConsolidateGenericFunctionApplicationChain(Expression.ParseAndEval, PineVMParseCache)"/>.
+    /// <see cref="ReducePineExpression.TryConsolidateGenericFunctionApplicationChain(Expression.Eval, PineVMParseCache)"/>.
     /// <para>
     /// When the optimization is applied to
     /// <c>BuildGenericFunctionApplication(Literal(<paramref name="FunctionValue"/>), [arg0, ..., arg{<paramref name="DepthK"/>-1}])</c>
-    /// the result is a single <see cref="Expression.ParseAndEval"/> whose
-    /// <see cref="Expression.ParseAndEval.Encoded"/> is <see cref="Expression.Literal"/>
+    /// the result is a single <see cref="Expression.Eval"/> whose
+    /// <see cref="Expression.Eval.Encoded"/> is <see cref="Expression.Litral"/>
     /// of <paramref name="EncodedLiteral"/> and whose
-    /// <see cref="Expression.ParseAndEval.Environment"/> is structurally
+    /// <see cref="Expression.Eval.Environment"/> is structurally
     /// equivalent to <paramref name="EnvTemplate"/> with each placeholder
     /// (entries in <paramref name="Placeholders"/>) replaced by the corresponding actual
     /// argument expression.
@@ -1911,7 +1911,7 @@ public class CodeAnalysis
     /// <param name="DepthK">The number of arguments the chain applied to the function.</param>
     /// <param name="EncodedLiteral">
     /// The constant <see cref="PineValue"/> appearing as the literal head of the consolidated
-    /// <see cref="Expression.ParseAndEval"/>.
+    /// <see cref="Expression.Eval"/>.
     /// </param>
     /// <param name="EnvTemplate">
     /// The environment expression produced by the optimization, with the K placeholder
@@ -1940,7 +1940,7 @@ public class CodeAnalysis
     /// </para>
     /// <para>
     /// Returns <c>null</c> when the optimization does not produce a single
-    /// <see cref="Expression.ParseAndEval"/> with literal <see cref="Expression.ParseAndEval.Encoded"/>
+    /// <see cref="Expression.Eval"/> with literal <see cref="Expression.Eval.Encoded"/>
     /// (for example when <paramref name="depthK"/> is below the optimization's threshold of 2,
     /// or when <paramref name="functionValue"/> is not parsable as an expression).
     /// </para>
@@ -1964,17 +1964,17 @@ public class CodeAnalysis
             // and is opaque to the optimization's constant-folding (the kernel function name is
             // unrecognized so no folding fires on it).
             placeholders[i] =
-                Expression.KernelApplicationInstance(
+                Expression.BuiltinInst(
                     function: "__consolidated_form_template_placeholder_" + i + "__",
                     input: Expression.EnvironmentInstance);
         }
 
         var chain =
             BuildGenericFunctionApplication(
-                Expression.LiteralInstance(functionValue),
+                Expression.LitralInst(functionValue),
                 placeholders);
 
-        if (chain is not Expression.ParseAndEval chainPaE)
+        if (chain is not Expression.Eval chainPaE)
         {
             return null;
         }
@@ -1984,12 +1984,12 @@ public class CodeAnalysis
                 chainPaE,
                 parseCache);
 
-        if (consolidated is not Expression.ParseAndEval consolidatedPaE)
+        if (consolidated is not Expression.Eval consolidatedPaE)
         {
             return null;
         }
 
-        if (consolidatedPaE.Encoded is not Expression.Literal encodedLit)
+        if (consolidatedPaE.Encoded is not Expression.Litral encodedLit)
         {
             return null;
         }
@@ -2064,8 +2064,8 @@ public class CodeAnalysis
         // Otherwise match by structural shape.
         switch (template)
         {
-            case Expression.Literal litT
-            when actual is Expression.Literal litA:
+            case Expression.Litral litT
+            when actual is Expression.Litral litA:
                 return litT.Value.Equals(litA.Value);
 
             case Expression.Environment
@@ -2102,13 +2102,13 @@ public class CodeAnalysis
             // structurally equivalent to a List of literals when matching against a List
             // template, so such call sites still recognize the consolidated form.
             case Expression.List listT2
-            when actual is Expression.Literal litA2 &&
+            when actual is Expression.Litral litA2 &&
                     litA2.Value is PineValue.ListValue listValueA &&
                     listT2.Items.Count == listValueA.Items.Length:
 
                 for (var i = 0; i < listT2.Items.Count; ++i)
                 {
-                    var actualItem = Expression.LiteralInstance(listValueA.Items.Span[i]);
+                    var actualItem = Expression.LitralInst(listValueA.Items.Span[i]);
 
                     if (!TryMatchExpressionTemplateInternal(
                             listT2.Items[i],
@@ -2122,8 +2122,8 @@ public class CodeAnalysis
 
                 return true;
 
-            case Expression.KernelApplication kT
-            when actual is Expression.KernelApplication kA:
+            case Expression.Builtin kT
+            when actual is Expression.Builtin kA:
                 if (kT.Function != kA.Function)
                 {
                     return false;
@@ -2131,8 +2131,8 @@ public class CodeAnalysis
 
                 return TryMatchExpressionTemplateInternal(kT.Input, kA.Input, placeholders, bindings);
 
-            case Expression.ParseAndEval peT
-            when actual is Expression.ParseAndEval peA:
+            case Expression.Eval peT
+            when actual is Expression.Eval peA:
                 return
                     TryMatchExpressionTemplateInternal(peT.Encoded, peA.Encoded, placeholders, bindings) &&
                     TryMatchExpressionTemplateInternal(peT.Environment, peA.Environment, placeholders, bindings);
@@ -2144,8 +2144,8 @@ public class CodeAnalysis
                     TryMatchExpressionTemplateInternal(cT.TrueBranch, cA.TrueBranch, placeholders, bindings) &&
                     TryMatchExpressionTemplateInternal(cT.FalseBranch, cA.FalseBranch, placeholders, bindings);
 
-            case Expression.StringTag tT
-            when actual is Expression.StringTag tA:
+            case Expression.Label tT
+            when actual is Expression.Label tA:
                 return
                     tT.Tag == tA.Tag &&
                     TryMatchExpressionTemplateInternal(tT.Tagged, tA.Tagged, placeholders, bindings);
@@ -2167,7 +2167,7 @@ public class CodeAnalysis
     {
         var allParseAndEvalExpressions =
             Expression.EnumerateSelfAndDescendants(expression)
-            .OfType<Expression.ParseAndEval>()
+            .OfType<Expression.Eval>()
             .ToImmutableArray();
 
         var parsedItems = new Dictionary<IReadOnlyList<int>, PineValue>();

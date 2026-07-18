@@ -1,19 +1,19 @@
 {
   "Conditional": [
     {
-      "Literal": [
+      "Litral": [
         11
       ]
     },
     {
       "Conditional": [
         {
-          "Literal": [
+          "Litral": [
             13
           ]
         },
         {
-          "ParseAndEval": [
+          "Eval": [
             {
               "Environment": [
               ]
@@ -25,14 +25,14 @@
           ]
         },
         {
-          "Literal": [
+          "Litral": [
             21
           ]
         }
       ]
     },
     {
-      "Literal": [
+      "Litral": [
         23
       ]
     }

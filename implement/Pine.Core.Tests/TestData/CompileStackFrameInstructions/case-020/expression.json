@@ -1,16 +1,16 @@
 {
-  "KernelApplication": [
+  "Builtin": [
     "equal",
     {
       "List": [
         [
           {
-            "Literal": [
+            "Litral": [
               17
             ]
           },
           {
-            "KernelApplication": [
+            "Builtin": [
               "head",
               {
                 "Environment": [

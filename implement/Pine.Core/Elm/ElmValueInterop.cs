@@ -336,7 +336,7 @@ public class ElmValueInterop
 
                 if (literalValueResult.IsOkOrNull() is { } literalValueOk)
                 {
-                    return Expression.LiteralInstance(literalValueOk);
+                    return Expression.LitralInst(literalValueOk);
                 }
 
                 if (literalValueResult.IsErrOrNull() is { } literalValueErr)
@@ -389,7 +389,7 @@ public class ElmValueInterop
                         "Unexpected result type for list item: " + itemResult.GetType().FullName);
                 }
 
-                return Expression.ListInstance(items);
+                return Expression.ListInst(items);
             }
 
             if (tag.TagName is "ParseAndEvalExpression")
@@ -440,7 +440,7 @@ public class ElmValueInterop
                         "Unexpected result type for environment: " + environmentResult.GetType().FullName);
                 }
 
-                return new Expression.ParseAndEval(encodedOk, environmentOk);
+                return new Expression.Eval(encodedOk, environmentOk);
             }
 
             if (tag.TagName is "KernelApplicationExpression")
@@ -477,7 +477,7 @@ public class ElmValueInterop
                         "Unexpected result type for environment: " + environmentResult.GetType().FullName);
                 }
 
-                return Expression.KernelApplicationInstance(functionString.Value, environmentOk);
+                return Expression.BuiltinInst(functionString.Value, environmentOk);
             }
 
             if (tag.TagName is "ConditionalExpression")
@@ -549,7 +549,7 @@ public class ElmValueInterop
                 }
 
                 return
-                    Expression.ConditionalInstance(
+                    Expression.ConditionalInst(
                         condition: conditionOk,
                         falseBranch: falseBranchOk,
                         trueBranch: trueBranchOk);
@@ -594,7 +594,7 @@ public class ElmValueInterop
                         "Unexpected result type for stringTagged: " + stringTaggedResult.GetType().FullName);
                 }
 
-                return new Expression.StringTag(stringtagString.Value, stringTaggedOk);
+                return new Expression.Label(stringtagString.Value, stringTaggedOk);
             }
 
             return "Unexpected tag name: " + tag.TagName;

@@ -42,7 +42,7 @@ public class PineKernelFunctionsInline
     {
         if (IsKernelAppTakingZeroFrom(firstArgument) is Expression firstArgumentTakenZero)
         {
-            if (secondArgument == Expression.LiteralInstance(PineValue.EmptyBlob))
+            if (secondArgument == Expression.LitralInst(PineValue.EmptyBlob))
             {
                 return
                     CompileToCSharp.CompileToCSharpExpression(
@@ -59,7 +59,7 @@ public class PineKernelFunctionsInline
                             compilationEnv.FunctionEnvironment.DeclarationSyntaxContext)));
             }
 
-            if (secondArgument == Expression.LiteralInstance(PineValue.EmptyList))
+            if (secondArgument == Expression.LitralInst(PineValue.EmptyList))
             {
                 return
                     CompileToCSharp.CompileToCSharpExpression(
@@ -107,7 +107,7 @@ public class PineKernelFunctionsInline
 
     public static Expression? IsKernelAppTakingZeroFrom(Expression expression)
     {
-        if (expression is not Expression.KernelApplication kernelApp)
+        if (expression is not Expression.Builtin kernelApp)
             return null;
 
         if (kernelApp.Function is not nameof(BuiltinFunction.take))
@@ -119,7 +119,7 @@ public class PineKernelFunctionsInline
         if (takeArgumentList.Items.Count is not 2)
             return null;
 
-        if (takeArgumentList.Items[0] != Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(0)))
+        if (takeArgumentList.Items[0] != Expression.LitralInst(IntegerEncoding.EncodeSignedInteger(0)))
             return null;
 
         return takeArgumentList.Items[1];

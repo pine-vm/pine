@@ -115,9 +115,9 @@ public class LoopIterationCountLimitTests
         int? loopIterationCountLimit)
     {
         var rootExpression =
-            new Expression.ParseAndEval(
+            new Expression.Eval(
                 encoded:
-                Expression.LiteralInstance(
+                Expression.LitralInst(
                     ExpressionEncoding.EncodeExpressionAsValue(targetExpression)),
                 environment: Expression.EnvironmentInstance);
 

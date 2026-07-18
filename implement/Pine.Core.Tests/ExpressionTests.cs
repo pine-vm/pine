@@ -15,132 +15,132 @@ public class ExpressionTests
             [
             Expression.EnvironmentInstance,
 
-            Expression.LiteralInstance(PineValue.EmptyList),
+            Expression.LitralInst(PineValue.EmptyList),
 
-            Expression.ListInstance([]),
+            Expression.ListInst([]),
 
-            Expression.ListInstance([Expression.EnvironmentInstance]),
+            Expression.ListInst([Expression.EnvironmentInstance]),
 
-            Expression.ListInstance(
+            Expression.ListInst(
                 [
                 Expression.EnvironmentInstance,
-                Expression.LiteralInstance(PineValue.EmptyList)
+                Expression.LitralInst(PineValue.EmptyList)
                 ]),
 
-            Expression.ListInstance(
+            Expression.ListInst(
                 [
                 Expression.EnvironmentInstance,
-                Expression.ListInstance(
+                Expression.ListInst(
                     [
                     Expression.EnvironmentInstance,
-                    Expression.LiteralInstance(PineValue.EmptyList),
+                    Expression.LitralInst(PineValue.EmptyList),
                     ]),
-                Expression.ListInstance([]),
+                Expression.ListInst([]),
                 ]),
 
-            Expression.ConditionalInstance(
-                Expression.ListInstance([]),
-                Expression.ListInstance(
+            Expression.ConditionalInst(
+                Expression.ListInst([]),
+                Expression.ListInst(
                     [
                     Expression.EnvironmentInstance,
-                    Expression.LiteralInstance(PineValue.EmptyList),
+                    Expression.LitralInst(PineValue.EmptyList),
                     ]),
-                Expression.ListInstance([])),
+                Expression.ListInst([])),
 
-            Expression.ConditionalInstance(
-                Expression.ListInstance([]),
-                Expression.ListInstance(
+            Expression.ConditionalInst(
+                Expression.ListInst([]),
+                Expression.ListInst(
                     [
-                    Expression.LiteralInstance(PineValue.EmptyBlob),
-                    Expression.LiteralInstance(PineValue.EmptyList),
+                    Expression.LitralInst(PineValue.EmptyBlob),
+                    Expression.LitralInst(PineValue.EmptyList),
                     ]),
-                Expression.ListInstance([])),
+                Expression.ListInst([])),
 
-            new Expression.ParseAndEval(
+            new Expression.Eval(
                 Expression.EnvironmentInstance,
                 Expression.EnvironmentInstance),
 
-            Expression.KernelApplicationInstance(
+            Expression.BuiltinInst(
                 "function",
                 Expression.EnvironmentInstance),
 
-            new Expression.StringTag(
+            new Expression.Label(
                 "test",
-                Expression.ListInstance([])),
+                Expression.ListInst([])),
 
-            new Expression.StringTag(
+            new Expression.Label(
                 "test",
                 Expression.EnvironmentInstance),
 
-            new Expression.StringTag(
+            new Expression.Label(
                 "test",
-                Expression.ListInstance([Expression.EnvironmentInstance])),
+                Expression.ListInst([Expression.EnvironmentInstance])),
 
-            // ParseAndEval nested inside a List subexpression.
-            Expression.ListInstance(
+            // Eval nested inside a List subexpression.
+            Expression.ListInst(
                 [
-                Expression.LiteralInstance(PineValue.EmptyList),
-                new Expression.ParseAndEval(
+                Expression.LitralInst(PineValue.EmptyList),
+                new Expression.Eval(
                     Expression.EnvironmentInstance,
                     Expression.EnvironmentInstance),
                 ]),
 
-            // ParseAndEval nested in the input of a KernelApplication.
-            Expression.KernelApplicationInstance(
+            // Eval nested in the input of a KernelApplication.
+            Expression.BuiltinInst(
                 "function",
-                new Expression.ParseAndEval(
-                    Expression.LiteralInstance(PineValue.EmptyList),
+                new Expression.Eval(
+                    Expression.LitralInst(PineValue.EmptyList),
                     Expression.EnvironmentInstance)),
 
-            // ParseAndEval nested in a branch of a Conditional.
-            Expression.ConditionalInstance(
-                Expression.ListInstance([]),
-                Expression.ListInstance([]),
-                new Expression.ParseAndEval(
+            // Eval nested in a branch of a Conditional.
+            Expression.ConditionalInst(
+                Expression.ListInst([]),
+                Expression.ListInst([]),
+                new Expression.Eval(
                     Expression.EnvironmentInstance,
-                    Expression.LiteralInstance(PineValue.EmptyList))),
+                    Expression.LitralInst(PineValue.EmptyList))),
 
-            // ParseAndEval nested inside a StringTag.
-            new Expression.StringTag(
+            // Eval nested inside a StringTag.
+            new Expression.Label(
                 "test",
-                new Expression.ParseAndEval(
+                new Expression.Eval(
                     Expression.EnvironmentInstance,
                     Expression.EnvironmentInstance)),
 
-            // ParseAndEval with another ParseAndEval nested in its parts.
-            new Expression.ParseAndEval(
-                new Expression.ParseAndEval(
+            // Eval with another Eval nested in its parts.
+            new Expression.Eval(
+                new Expression.Eval(
                     Expression.EnvironmentInstance,
-                    Expression.LiteralInstance(PineValue.EmptyList)),
+                    Expression.LitralInst(PineValue.EmptyList)),
                 Expression.EnvironmentInstance),
 
-            Expression.KernelApplicationInstance(
+            Expression.BuiltinInst(
                 nameof(BuiltinFunction.int_add),
-                Expression.KernelApplicationInstance(
+                Expression.BuiltinInst(
                     nameof(BuiltinFunction.int_mul),
-                    Expression.LiteralInstance(PineValue.EmptyList))),
+                    Expression.LitralInst(PineValue.EmptyList))),
 
-            Expression.ListInstance(
+            Expression.ListInst(
                 [
-                Expression.KernelApplicationInstance(
+                Expression.BuiltinInst(
                     nameof(BuiltinFunction.int_add),
-                    Expression.LiteralInstance(PineValue.EmptyList)),
+                    Expression.LitralInst(PineValue.EmptyList)),
 
-                Expression.KernelApplicationInstance(
+                Expression.BuiltinInst(
                     nameof(BuiltinFunction.int_add),
-                    Expression.LiteralInstance(PineValue.EmptyList)),
+                    Expression.LitralInst(PineValue.EmptyList)),
                 ]),
 
-            Expression.ConditionalInstance(
-                Expression.KernelApplicationInstance(
+            Expression.ConditionalInst(
+                Expression.BuiltinInst(
                     nameof(BuiltinFunction.int_add),
-                    Expression.LiteralInstance(PineValue.EmptyList)),
-                Expression.KernelApplicationInstance(
+                    Expression.LitralInst(PineValue.EmptyList)),
+                Expression.BuiltinInst(
                     nameof(BuiltinFunction.int_add),
-                    Expression.LiteralInstance(PineValue.EmptyList)),
-                Expression.KernelApplicationInstance(
+                    Expression.LitralInst(PineValue.EmptyList)),
+                Expression.BuiltinInst(
                     nameof(BuiltinFunction.int_add),
-                    Expression.LiteralInstance(PineValue.EmptyList))),
+                    Expression.LitralInst(PineValue.EmptyList))),
 
             ];
 
@@ -159,13 +159,13 @@ public class ExpressionTests
                 rootAndSubexpressions.OfType<Expression.Environment>().Any();
 
             var evalCount =
-                rootAndSubexpressions.OfType<Expression.ParseAndEval>().Count();
+                rootAndSubexpressions.OfType<Expression.Eval>().Count();
 
             var conditionCount =
                 rootAndSubexpressions.OfType<Expression.Conditional>().Count();
 
             var builtinCount =
-                rootAndSubexpressions.OfType<Expression.KernelApplication>().Count();
+                rootAndSubexpressions.OfType<Expression.Builtin>().Count();
 
             testCase.SubexpressionCount.Should().Be(subexpressions.Count);
             testCase.ReferencesEnvironment.Should().Be(anyNodeIsEnvironment);
@@ -184,11 +184,11 @@ public class ExpressionTests
         static Expression BuildDeeplyNestedList(int depth)
         {
             Expression current =
-                Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(31));
+                Expression.LitralInst(IntegerEncoding.EncodeSignedInteger(31));
 
             for (var i = 0; i < depth; ++i)
             {
-                current = Expression.ListInstance([current]);
+                current = Expression.ListInst([current]);
             }
 
             return current;
@@ -207,11 +207,11 @@ public class ExpressionTests
         static Expression BuildDeeplyNestedListWithInnerValue(int depth, long innerValue)
         {
             Expression current =
-                Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(innerValue));
+                Expression.LitralInst(IntegerEncoding.EncodeSignedInteger(innerValue));
 
             for (var i = 0; i < depth; ++i)
             {
-                current = Expression.ListInstance([current]);
+                current = Expression.ListInst([current]);
             }
 
             return current;
@@ -230,33 +230,33 @@ public class ExpressionTests
         {
             (Expression.EnvironmentInstance, 0),
 
-            (Expression.LiteralInstance(PineValue.EmptyList), 0),
+            (Expression.LitralInst(PineValue.EmptyList), 0),
 
-            (Expression.ListInstance([]), 0),
+            (Expression.ListInst([]), 0),
 
-            (Expression.ListInstance([Expression.EnvironmentInstance]), 1),
+            (Expression.ListInst([Expression.EnvironmentInstance]), 1),
 
-            (Expression.ListInstance(
+            (Expression.ListInst(
                 [
                 Expression.EnvironmentInstance,
-                Expression.LiteralInstance(PineValue.EmptyList)
+                Expression.LitralInst(PineValue.EmptyList)
                 ]),
                 1),
 
-            (Expression.ConditionalInstance(
-                Expression.ListInstance([]),
-                Expression.ListInstance(
+            (Expression.ConditionalInst(
+                Expression.ListInst([]),
+                Expression.ListInst(
                     [
                     Expression.EnvironmentInstance,
-                    Expression.LiteralInstance(PineValue.EmptyList),
+                    Expression.LitralInst(PineValue.EmptyList),
                     ]),
-                Expression.ListInstance([])), 2),
+                Expression.ListInst([])), 2),
 
-            (new Expression.ParseAndEval(
+            (new Expression.Eval(
                 Expression.EnvironmentInstance,
                 Expression.EnvironmentInstance), 1),
 
-            (Expression.KernelApplicationInstance(
+            (Expression.BuiltinInst(
                 "function",
                 Expression.EnvironmentInstance), 1),
         };
@@ -273,33 +273,33 @@ public class ExpressionTests
     public void Expression_nested_list_equality()
     {
         var exprA =
-            Expression.ListInstance(
+            Expression.ListInst(
                 [
-                Expression.ListInstance(
+                Expression.ListInst(
                     [
-                    Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(31)),
+                    Expression.LitralInst(IntegerEncoding.EncodeSignedInteger(31)),
                     ]),
-                Expression.ListInstance(
+                Expression.ListInst(
                     [
-                    Expression.ListInstance(
+                    Expression.ListInst(
                         [
-                        Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(41)),
+                        Expression.LitralInst(IntegerEncoding.EncodeSignedInteger(41)),
                         ]),
                     ]),
                 ]);
 
         var exprB =
-            Expression.ListInstance(
+            Expression.ListInst(
                 [
-                Expression.ListInstance(
+                Expression.ListInst(
                     [
-                    Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(31)),
+                    Expression.LitralInst(IntegerEncoding.EncodeSignedInteger(31)),
                     ]),
-                Expression.ListInstance(
+                Expression.ListInst(
                     [
-                    Expression.ListInstance(
+                    Expression.ListInst(
                         [
-                        Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(41)),
+                        Expression.LitralInst(IntegerEncoding.EncodeSignedInteger(41)),
                         ]),
                     ]),
                 ]);

@@ -96,14 +96,14 @@ public static class ExpressionBuilder
                 ?
                 current
                 :
-                Expression.KernelApplicationInstance(
+                Expression.BuiltinInst(
                     function: "skip",
                     input:
-                    Expression.ListInstance(
-                        items: [Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(nextOffset)), current]));
+                    Expression.ListInst(
+                        items: [Expression.LitralInst(IntegerEncoding.EncodeSignedInteger(nextOffset)), current]));
 
             var headExpr =
-                Expression.KernelApplicationInstance(
+                Expression.BuiltinInst(
                     function: "head",
                     input: skipExpr);
 
@@ -127,9 +127,9 @@ public static class ExpressionBuilder
 
         for (var i = 0; i < values.Count; i++)
         {
-            items[i] = Expression.LiteralInstance(values[i]);
+            items[i] = Expression.LitralInst(values[i]);
         }
 
-        return Expression.ListInstance(items);
+        return Expression.ListInst(items);
     }
 }
