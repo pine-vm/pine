@@ -31,7 +31,7 @@ public abstract record ElmValue
     /// <summary>
     /// The number of ElmValue nodes contained within this ElmValue.
     /// </summary>
-    abstract public int ContainedNodesCount { get; }
+    abstract public long ContainedNodesCount { get; }
 
     /// <summary>
     /// Corresponding to the Elm expression 'True'.
@@ -339,7 +339,7 @@ public abstract record ElmValue
         : ElmValue
     {
         /// <inheritdoc/>
-        override public int ContainedNodesCount { get; } = 0;
+        override public long ContainedNodesCount { get; } = 0;
 
         /// <inheritdoc/>
         public override string ToString()
@@ -367,7 +367,7 @@ public abstract record ElmValue
         readonly int _slimHashCode;
 
         /// <inheritdoc/>
-        override public int ContainedNodesCount { get; }
+        override public long ContainedNodesCount { get; }
 
         internal ElmTag(
             string tagName,
@@ -532,7 +532,7 @@ public abstract record ElmValue
         internal readonly int SlimHashCode;
 
         /// <inheritdoc/>
-        public override int ContainedNodesCount { get; }
+        public override long ContainedNodesCount { get; }
 
         /// <summary>
         /// Initializes a new instance of the <see cref="ElmList"/> class.
@@ -605,7 +605,7 @@ public abstract record ElmValue
         public string Value { get; }
 
         /// <inheritdoc/>
-        public override int ContainedNodesCount { get; } = 0;
+        public override long ContainedNodesCount { get; } = 0;
 
         internal ElmString(string value)
         {
@@ -623,7 +623,7 @@ public abstract record ElmValue
         : ElmValue
     {
         /// <inheritdoc/>
-        public override int ContainedNodesCount { get; } = 0;
+        public override long ContainedNodesCount { get; } = 0;
     }
 
     /// <summary>
@@ -634,7 +634,7 @@ public abstract record ElmValue
         : ElmValue
     {
         /// <inheritdoc/>
-        public override int ContainedNodesCount { get; } =
+        public override long ContainedNodesCount { get; } =
             Fields.Sum(field => field.Value.ContainedNodesCount) + Fields.Count;
 
         /// <inheritdoc/>
@@ -693,7 +693,7 @@ public abstract record ElmValue
         /// <summary>
         /// The number of contained nodes is always zero for 'Bytes' values.
         /// </summary>
-        public override int ContainedNodesCount { get; } = 0;
+        public override long ContainedNodesCount { get; } = 0;
 
 
         /// <inheritdoc/>
@@ -734,7 +734,7 @@ public abstract record ElmValue
         /// <summary>
         /// The number of contained nodes is always zero for raw Pine blob values.
         /// </summary>
-        public override int ContainedNodesCount { get; } = 0;
+        public override long ContainedNodesCount { get; } = 0;
 
 
         /// <inheritdoc/>
@@ -841,7 +841,7 @@ public abstract record ElmValue
         }
 
         /// <inheritdoc/>
-        override public int ContainedNodesCount { get; } = 0;
+        override public long ContainedNodesCount { get; } = 0;
     }
 
     /// <summary>
@@ -853,7 +853,7 @@ public abstract record ElmValue
         : ElmValue
     {
         /// <inheritdoc/>
-        public override int ContainedNodesCount { get; } = 0;
+        public override long ContainedNodesCount { get; } = 0;
     }
 
     /// <summary>
