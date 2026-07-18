@@ -572,6 +572,116 @@ public class PineValueInProcessTests
     }
 
     [Fact]
+    public void Equal_with_equal_blob_slice_builders_does_not_materialize()
+    {
+        var left =
+            PineValueInProcess.Skip(
+                1,
+                PineValueInProcess.Create(PineValue.Blob([0, 1, 2, 3])));
+
+        var right =
+            PineValueInProcess.Take(
+                3,
+                PineValueInProcess.Create(PineValue.Blob([1, 2, 3, 4])));
+
+        PineValueInProcess.AreEqual(left, right).Should().BeTrue();
+
+        left.EvaluatedOrNull.Should().BeNull();
+        right.EvaluatedOrNull.Should().BeNull();
+    }
+
+    [Fact]
+    public void Equal_with_equal_list_slice_builders_does_not_materialize()
+    {
+        var left =
+            PineValueInProcess.Skip(
+                1,
+                PineValueInProcess.Create(
+                    PineValue.List(
+                        [PineValue.Blob([0]), PineValue.Blob([1]), PineValue.Blob([2])])));
+
+        var right =
+            PineValueInProcess.Take(
+                2,
+                PineValueInProcess.Create(
+                    PineValue.List(
+                        [PineValue.Blob([1]), PineValue.Blob([2]), PineValue.Blob([3])])));
+
+        PineValueInProcess.AreEqual(left, right).Should().BeTrue();
+
+        left.EvaluatedOrNull.Should().BeNull();
+        right.EvaluatedOrNull.Should().BeNull();
+    }
+
+    [Fact]
+    public void Equal_with_blob_slice_builder_and_evaluated_value_does_not_materialize_slice()
+    {
+        var slice =
+            PineValueInProcess.Skip(
+                1,
+                PineValueInProcess.Create(PineValue.Blob([0, 1, 2, 3])));
+
+        var evaluated = PineValueInProcess.Create(PineValue.Blob([1, 2, 3]));
+
+        PineValueInProcess.AreEqual(slice, evaluated).Should().BeTrue();
+        PineValueInProcess.AreEqual(evaluated, slice).Should().BeTrue();
+
+        slice.EvaluatedOrNull.Should().BeNull();
+    }
+
+    [Fact]
+    public void Equal_with_list_slice_builder_and_evaluated_value_does_not_materialize_slice()
+    {
+        var slice =
+            PineValueInProcess.Skip(
+                1,
+                PineValueInProcess.Create(
+                    PineValue.List(
+                        [PineValue.Blob([0]), PineValue.Blob([1]), PineValue.Blob([2])])));
+
+        var evaluated =
+            PineValueInProcess.Create(
+                PineValue.List([PineValue.Blob([1]), PineValue.Blob([2])]));
+
+        PineValueInProcess.AreEqual(slice, evaluated).Should().BeTrue();
+        PineValueInProcess.AreEqual(evaluated, slice).Should().BeTrue();
+
+        slice.EvaluatedOrNull.Should().BeNull();
+    }
+
+    [Fact]
+    public void Equal_with_blob_slice_skipped_beyond_end_does_not_materialize_slice()
+    {
+        var slice =
+            PineValueInProcess.Skip(
+                4,
+                PineValueInProcess.Create(PineValue.Blob([1, 2, 3])));
+
+        PineValueInProcess.AreEqual(slice, PineValueInProcess.EmptyBlob).Should().BeTrue();
+
+        slice.EvaluatedOrNull.Should().BeNull();
+    }
+
+    [Fact]
+    public void Equal_with_list_slices_skipped_beyond_end_does_not_materialize_slices()
+    {
+        var left =
+            PineValueInProcess.Skip(
+                4,
+                PineValueInProcess.Create(PineValue.List([PineValue.Blob([1])])));
+
+        var right =
+            PineValueInProcess.Skip(
+                5,
+                PineValueInProcess.Create(PineValue.List([PineValue.Blob([2])])));
+
+        PineValueInProcess.AreEqual(left, right).Should().BeTrue();
+
+        left.EvaluatedOrNull.Should().BeNull();
+        right.EvaluatedOrNull.Should().BeNull();
+    }
+
+    [Fact]
     public void Complex_combination_of_operations_produces_correct_result()
     {
         // Create a complex scenario: skip, take, concat

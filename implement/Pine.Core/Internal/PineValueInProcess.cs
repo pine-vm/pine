@@ -985,10 +985,17 @@ public class PineValueInProcess
                 return finalA.Equals(finalB);
             }
 
-            if (sliceA.GetLength() != sliceB.GetLength())
-            {
-                return false;
-            }
+            return AreSlicesEqual(sliceA, sliceB);
+        }
+
+        if (a._sliceBuilder is { } onlySliceA && b._evaluated is { } onlyEvaluatedB)
+        {
+            return AreSliceAndValueEqual(onlySliceA, onlyEvaluatedB);
+        }
+
+        if (b._sliceBuilder is { } onlySliceB && a._evaluated is { } onlyEvaluatedA)
+        {
+            return AreSliceAndValueEqual(onlySliceB, onlyEvaluatedA);
         }
 
         if (a._concatBuilder is { } concatA && b._concatBuilder is { } concatB)
@@ -1040,6 +1047,94 @@ public class PineValueInProcess
         var bEval = b.Evaluate();
 
         return aEval.Equals(bEval);
+    }
+
+    private static bool AreSlicesEqual(
+        ImmutableSliceBuilder left,
+        ImmutableSliceBuilder right)
+    {
+        var leftLength = left.GetLength();
+
+        if (leftLength != right.GetLength())
+        {
+            return false;
+        }
+
+        if (leftLength is 0)
+        {
+            return true;
+        }
+
+        var leftValue = left.FinalValue ?? left.Original;
+        var rightValue = right.FinalValue ?? right.Original;
+        var leftOffset = left.FinalValue is null ? left.SkipCount : 0;
+        var rightOffset = right.FinalValue is null ? right.SkipCount : 0;
+
+        if (leftValue is PineValue.BlobValue leftBlob &&
+            rightValue is PineValue.BlobValue rightBlob)
+        {
+            return
+                leftBlob.Bytes.Span.Slice(leftOffset, leftLength)
+                .SequenceEqual(rightBlob.Bytes.Span.Slice(rightOffset, leftLength));
+        }
+
+        if (leftValue is PineValue.ListValue leftList &&
+            rightValue is PineValue.ListValue rightList)
+        {
+            return
+                AreListItemsEqual(
+                    leftList.Items.Slice(leftOffset, leftLength),
+                    rightList.Items.Slice(rightOffset, leftLength));
+        }
+
+        return false;
+    }
+
+    private static bool AreSliceAndValueEqual(
+        ImmutableSliceBuilder slice,
+        PineValue value)
+    {
+        var sliceLength = slice.GetLength();
+        var sliceValue = slice.FinalValue ?? slice.Original;
+        var sliceOffset = slice.FinalValue is null ? slice.SkipCount : 0;
+
+        if (sliceValue is PineValue.BlobValue sliceBlob &&
+            value is PineValue.BlobValue valueBlob)
+        {
+            if (sliceLength != valueBlob.Bytes.Length)
+            {
+                return false;
+            }
+
+            if (sliceLength is 0)
+            {
+                return true;
+            }
+
+            return
+                sliceBlob.Bytes.Span.Slice(sliceOffset, sliceLength).SequenceEqual(valueBlob.Bytes.Span);
+        }
+
+        if (sliceValue is PineValue.ListValue sliceList &&
+            value is PineValue.ListValue valueList)
+        {
+            if (sliceLength != valueList.Items.Length)
+            {
+                return false;
+            }
+
+            if (sliceLength is 0)
+            {
+                return true;
+            }
+
+            return
+                AreListItemsEqual(
+                    sliceList.Items.Slice(sliceOffset, sliceLength),
+                    valueList.Items);
+        }
+
+        return false;
     }
 
     /// <summary>
