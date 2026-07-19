@@ -49,6 +49,18 @@ public static class CoreStringPrecompiledLeaves
     public static PineValue FromIntLeafKey =>
         s_leafInfos.Value["fromInt"].leafKey;
 
+    /// <summary>
+    /// Pine value key for the precompiled <c>String.trimLeftCountBytesTrimmed</c> leaf.
+    /// </summary>
+    public static PineValue TrimLeftCountBytesTrimmedLeafKey =>
+        s_leafInfos.Value["trimLeftCountBytesTrimmed"].leafKey;
+
+    /// <summary>
+    /// Pine value key for the precompiled <c>String.trimRightCountBytesRemaining</c> leaf.
+    /// </summary>
+    public static PineValue TrimRightCountBytesRemainingLeafKey =>
+        s_leafInfos.Value["trimRightCountBytesRemaining"].leafKey;
+
     private static readonly Lazy<IReadOnlyDictionary<string, (PineValue leafKey, PineValue envFunctionsValue)>>
         s_leafInfos =
         new(BuildLeafInfos);
@@ -95,6 +107,8 @@ public static class CoreStringPrecompiledLeaves
             "toFloat",
             "toInt",
             "fromInt",
+            "trimLeftCountBytesTrimmed",
+            "trimRightCountBytesRemaining",
         })
         {
             var record =
@@ -312,6 +326,64 @@ public static class CoreStringPrecompiledLeaves
                 StringEncoding.BlobValueFromString(
                     integer.ToString(System.Globalization.CultureInfo.InvariantCulture))
                 .Bytes);
+    }
+
+    /// <summary>
+    /// Executes <c>String.trimLeftCountBytesTrimmed</c> directly, or returns <c>null</c>
+    /// for an unexpected environment.
+    /// </summary>
+    public static PineValue? TrimLeftCountBytesTrimmedLeafDelegate(PineValue environment)
+    {
+        if (!EnvironmentMatches(environment, "trimLeftCountBytesTrimmed") ||
+            !TryParseIndex(environment.ValueFromPathOrEmptyList([1]), out var offset) ||
+            environment.ValueFromPathOrEmptyList([2]) is not PineValue.BlobValue chars ||
+            chars.Bytes.Length % 4 is not 0 ||
+            offset > chars.Bytes.Length ||
+            offset % 4 is not 0)
+        {
+            return null;
+        }
+
+        while (offset < chars.Bytes.Length &&
+            IsCharRemovedOnTrim(chars.Bytes.Span[offset..]))
+        {
+            offset += 4;
+        }
+
+        return IntegerEncoding.EncodeSignedInteger(offset);
+    }
+
+    /// <summary>
+    /// Executes <c>String.trimRightCountBytesRemaining</c> directly, or returns <c>null</c>
+    /// for an unexpected environment.
+    /// </summary>
+    public static PineValue? TrimRightCountBytesRemainingLeafDelegate(PineValue environment)
+    {
+        if (!EnvironmentMatches(environment, "trimRightCountBytesRemaining") ||
+            !TryParseIndex(environment.ValueFromPathOrEmptyList([1]), out var remainingLength) ||
+            environment.ValueFromPathOrEmptyList([2]) is not PineValue.BlobValue chars ||
+            chars.Bytes.Length % 4 is not 0 ||
+            remainingLength > chars.Bytes.Length ||
+            remainingLength % 4 is not 0)
+        {
+            return null;
+        }
+
+        while (remainingLength > 0 &&
+            IsCharRemovedOnTrim(chars.Bytes.Span[(remainingLength - 4)..]))
+        {
+            remainingLength -= 4;
+        }
+
+        return IntegerEncoding.EncodeSignedInteger(remainingLength);
+    }
+
+    private static bool IsCharRemovedOnTrim(ReadOnlySpan<byte> charBytes)
+    {
+        var codePoint =
+            System.Buffers.Binary.BinaryPrimitives.ReadUInt32BigEndian(charBytes);
+
+        return codePoint is ' ' or '\t' or '\n' or '\r' or 0x00A0;
     }
 
     private static (System.Numerics.BigInteger Numerator, System.Numerics.BigInteger? Denominator)
@@ -567,5 +639,7 @@ public static class CoreStringPrecompiledLeaves
             .Add(LinesHelperLeafKey, LinesHelperLeafDelegate)
             .Add(ToFloatLeafKey, ToFloatLeafDelegate)
             .Add(ToIntLeafKey, ToIntLeafDelegate)
-            .Add(FromIntLeafKey, FromIntLeafDelegate));
+            .Add(FromIntLeafKey, FromIntLeafDelegate)
+            .Add(TrimLeftCountBytesTrimmedLeafKey, TrimLeftCountBytesTrimmedLeafDelegate)
+            .Add(TrimRightCountBytesRemainingLeafKey, TrimRightCountBytesRemainingLeafDelegate));
 }

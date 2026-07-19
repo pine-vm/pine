@@ -30,6 +30,12 @@ public static class SetupVM
     private const string StringToFloatName = PrecompiledLeafValueNamePrefix + "String/toFloat";
     private const string StringToIntName = PrecompiledLeafValueNamePrefix + "String/toInt";
     private const string StringFromIntName = PrecompiledLeafValueNamePrefix + "String/fromInt";
+    private const string StringTrimLeftCountBytesTrimmedName =
+        PrecompiledLeafValueNamePrefix + "String/trimLeftCountBytesTrimmed";
+    private const string StringTrimRightCountBytesRemainingName =
+        PrecompiledLeafValueNamePrefix + "String/trimRightCountBytesRemaining";
+    private const string LanguageServiceRemoveWrappingFromMultilineCommentName =
+        PrecompiledLeafValueNamePrefix + "LanguageService/removeWrappingFromMultilineComment";
     private const string BytesDecodeBlobAsCharsRecName =
         PrecompiledLeafValueNamePrefix + "Bytes.Decode/decodeBlobAsCharsRec";
     private const string BytesEncodeCharsAsBlobHelpName =
@@ -62,6 +68,13 @@ public static class SetupVM
             [StringToFloatName] = CoreStringPrecompiledLeaves.ToFloatLeafDelegate,
             [StringToIntName] = CoreStringPrecompiledLeaves.ToIntLeafDelegate,
             [StringFromIntName] = CoreStringPrecompiledLeaves.FromIntLeafDelegate,
+            [StringTrimLeftCountBytesTrimmedName] =
+                CoreStringPrecompiledLeaves.TrimLeftCountBytesTrimmedLeafDelegate,
+            [StringTrimRightCountBytesRemainingName] =
+                CoreStringPrecompiledLeaves.TrimRightCountBytesRemainingLeafDelegate,
+            [LanguageServiceRemoveWrappingFromMultilineCommentName] =
+                Elm.ElmCompilerInDotnet.PrecompiledLeaves.LanguageServicePrecompiledLeaves
+                .RemoveWrappingFromMultilineCommentLeafDelegate,
             [BytesDecodeBlobAsCharsRecName] = KernelBytesPrecompiledLeaves.DecodeBlobAsCharsRecLeafDelegate,
             [BytesEncodeCharsAsBlobHelpName] = KernelBytesPrecompiledLeaves.EncodeCharsAsBlobHelpLeafDelegate,
             [RecordAccessName] = CoreRecordPrecompiledLeaves.RecordAccessLeafDelegate,
@@ -94,6 +107,13 @@ public static class SetupVM
             [StringToFloatName] = CoreStringPrecompiledLeaves.ToFloatLeafKey,
             [StringToIntName] = CoreStringPrecompiledLeaves.ToIntLeafKey,
             [StringFromIntName] = CoreStringPrecompiledLeaves.FromIntLeafKey,
+            [StringTrimLeftCountBytesTrimmedName] =
+                CoreStringPrecompiledLeaves.TrimLeftCountBytesTrimmedLeafKey,
+            [StringTrimRightCountBytesRemainingName] =
+                CoreStringPrecompiledLeaves.TrimRightCountBytesRemainingLeafKey,
+            [LanguageServiceRemoveWrappingFromMultilineCommentName] =
+                Elm.ElmCompilerInDotnet.PrecompiledLeaves.LanguageServicePrecompiledLeaves
+                .RemoveWrappingFromMultilineCommentLeafKey,
             [BytesDecodeBlobAsCharsRecName] = KernelBytesPrecompiledLeaves.DecodeBlobAsCharsRecLeafKey,
             [BytesEncodeCharsAsBlobHelpName] = KernelBytesPrecompiledLeaves.EncodeCharsAsBlobHelpLeafKey,
             [RecordAccessName] = CoreRecordPrecompiledLeaves.RecordAccessLeafKey,
@@ -164,6 +184,9 @@ public static class SetupVM
     public static IReadOnlyDictionary<PineValue, Func<PineValue, PineValue?>> StringPrecompiledLeaves =>
         s_stringPrecompiledLeaves.Value;
 
+    public static IReadOnlyDictionary<PineValue, Func<PineValue, PineValue?>> LanguageServicePrecompiledLeaves =>
+        s_languageServicePrecompiledLeaves.Value;
+
     public static IReadOnlyDictionary<PineValue, Func<PineValue, PineValue?>> BytesPrecompiledLeaves =>
         s_bytesPrecompiledLeaves.Value;
 
@@ -223,7 +246,16 @@ public static class SetupVM
                 StringLinesHelperName,
                 StringToFloatName,
                 StringToIntName,
-                StringFromIntName));
+                StringFromIntName,
+                StringTrimLeftCountBytesTrimmedName,
+                StringTrimRightCountBytesRemainingName));
+
+    private static readonly Lazy<IReadOnlyDictionary<PineValue, Func<PineValue, PineValue?>>>
+        s_languageServicePrecompiledLeaves =
+        new(
+            () =>
+            BuildPrecompiledLeavesForNames(
+                LanguageServiceRemoveWrappingFromMultilineCommentName));
 
     private static readonly Lazy<IReadOnlyDictionary<PineValue, Func<PineValue, PineValue?>>> s_bytesPrecompiledLeaves =
         new(

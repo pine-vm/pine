@@ -32,11 +32,12 @@ public class DefaultPrecompiledLeavesContentTests
             IntermediateVM.SetupVM.DefaultPrecompiledLeaves;
 
         aggregate.Count.Should().Be(
-            23,
+            26,
             because:
             "the Pine.Core aggregate contributes the Basics.compare, Basics.eq, Basics.idiv " +
             "and Basics.gcd leaves, six Dict kernel leaves, the Json.Decode.parseValue leaf, " +
-            "six String kernel leaves, two Bytes kernel leaves, the two record runtime leaves " +
+            "eight String kernel leaves, the LanguageService comment-unwrapping leaf, " +
+            "two Bytes kernel leaves, the two record runtime leaves " +
             "(record access and record update), " +
             "plus the two Base64 conversion leaves (Base64.Encode.toBytes and " +
             "Base64.Decode.fromBytes)");
@@ -79,8 +80,14 @@ public class DefaultPrecompiledLeavesContentTests
             CoreStringPrecompiledLeaves.ToFloatLeafKey,
             CoreStringPrecompiledLeaves.ToIntLeafKey,
             CoreStringPrecompiledLeaves.FromIntLeafKey,
+            CoreStringPrecompiledLeaves.TrimLeftCountBytesTrimmedLeafKey,
+            CoreStringPrecompiledLeaves.TrimRightCountBytesRemainingLeafKey,
             ],
             because: "the aggregate must expose all optimized String leaves");
+
+        aggregate.Keys.Should().Contain(
+            LanguageServicePrecompiledLeaves.RemoveWrappingFromMultilineCommentLeafKey,
+            because: "the aggregate must expose the LanguageService comment-unwrapping leaf");
 
         aggregate.Keys.Should().Contain(
             [
@@ -114,6 +121,7 @@ public class DefaultPrecompiledLeavesContentTests
                 .Concat(IntermediateVM.SetupVM.DictPrecompiledLeaves.Keys)
                 .Concat(IntermediateVM.SetupVM.JsonDecodePrecompiledLeaves.Keys)
                 .Concat(IntermediateVM.SetupVM.StringPrecompiledLeaves.Keys)
+                .Concat(IntermediateVM.SetupVM.LanguageServicePrecompiledLeaves.Keys)
                 .Concat(IntermediateVM.SetupVM.BytesPrecompiledLeaves.Keys)
                 .Concat(IntermediateVM.SetupVM.RecordAccessAndUpdatePrecompiledLeaves.Keys)
                 .Concat(IntermediateVM.SetupVM.Base64ConversionPrecompiledLeaves.Keys));
@@ -142,9 +150,14 @@ public class DefaultPrecompiledLeavesContentTests
 
         IntermediateVM.SetupVM.StringPrecompiledLeaves.Count
             .Should().Be(
-            6,
+            8,
             because:
-            "the String area exposes three optimized recursive helpers and three numeric conversions");
+            "the String area exposes five optimized recursive helpers and three numeric conversions");
+
+        IntermediateVM.SetupVM.LanguageServicePrecompiledLeaves.Count
+            .Should().Be(
+            1,
+            because: "the LanguageService area exposes the comment-unwrapping leaf");
 
         IntermediateVM.SetupVM.BytesPrecompiledLeaves.Count
             .Should().Be(
