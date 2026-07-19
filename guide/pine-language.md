@@ -77,7 +77,7 @@ The encoding of each expression variant is:
 | `LitralExpression value` | `[ String("Litral"), value ]` |
 | `ListExpression [ item₀, ..., itemₙ ]` | `[ String("List"), Encode(item₀), ..., Encode(itemₙ) ]` |
 | `BuiltinExpression function input` | `[ String("Builtin"), String(function), Encode(input) ]` |
-| `ConditionalExpression condition falseBranch trueBranch` | `[ String("Condition"), Encode(condition), Encode(falseBranch), Encode(trueBranch) ]` |
+| `ConditionalExpression condition falseBranch trueBranch` | `[ String("Conditional"), Encode(condition), Encode(falseBranch), Encode(trueBranch) ]` |
 | `EnvironmentExpression` | `[ String("Environment") ]` |
 | `EvalExpression encoded environment` | `[ String("Eval"), Encode(encoded), Encode(environment) ]` |
 | `LabelExpression label expression` | `[ String("Label"), label, Encode(expression) ]` |
@@ -96,7 +96,7 @@ An encoded expression is valid exactly when:
 4. Every item shown as `Encode(...)` is itself a valid encoded expression.
 5. For `Builtin`, the function item is a valid encoded string.
 
-The order of items is significant. In particular, `Condition` stores the
+The order of items is significant. In particular, `Conditional` stores the
 false branch before the true branch, and `Eval` stores the encoded-expression
 operand before the environment operand.
 

@@ -110,19 +110,19 @@ public class OptimizeAndEmitValueFromStringTests
                         local_005 == PineKernelValues.TrueValue ? local_003 : BuiltinFunctionSpecialized.int_mul(-1, local_003);
 
                     PineValue local_013 =
-                        Global_Anonymous.zzz_anon_38e6937c_a50db278(
+                        Global_Anonymous.zzz_anon_60bf67c9_187f7517(
                             local_006,
                             CommonReusedValues.Blob_Int_256,
                             CommonReusedValues.Blob_Int_0);
 
                     PineValue local_014 =
-                        Global_Anonymous.zzz_anon_38e6937c_a50db278(
+                        Global_Anonymous.zzz_anon_60bf67c9_187f7517(
                             local_006,
                             CommonReusedValues.Blob_Int_65536,
                             CommonReusedValues.Blob_Int_0);
 
                     PineValue local_015 =
-                        Global_Anonymous.zzz_anon_38e6937c_a50db278(
+                        Global_Anonymous.zzz_anon_60bf67c9_187f7517(
                             local_006,
                             CommonReusedValues.Blob_Int_16777216,
                             CommonReusedValues.Blob_Int_0);
@@ -137,9 +137,9 @@ public class OptimizeAndEmitValueFromStringTests
                         local_005 == PineKernelValues.TrueValue ? local_015 : BuiltinFunctionSpecialized.int_mul(-1, local_015);
 
                     PineValue local_023 = BuiltinFunctionSpecialized.int_mul(-256, local_016);
-                    PineValue local_024 = Global_Anonymous.zzz_anon_66da43a6_dda26649(local_016, CommonReusedValues.Blob_Int_256);
-                    PineValue local_025 = Global_Anonymous.zzz_anon_66da43a6_dda26649(local_017, CommonReusedValues.Blob_Int_256);
-                    PineValue local_026 = Global_Anonymous.zzz_anon_66da43a6_dda26649(local_018, CommonReusedValues.Blob_Int_256);
+                    PineValue local_024 = Global_Anonymous.zzz_anon_e8c66032_dda26649(local_016, CommonReusedValues.Blob_Int_256);
+                    PineValue local_025 = Global_Anonymous.zzz_anon_e8c66032_dda26649(local_017, CommonReusedValues.Blob_Int_256);
+                    PineValue local_026 = Global_Anonymous.zzz_anon_e8c66032_dda26649(local_018, CommonReusedValues.Blob_Int_256);
                     PineValue local_030 = BuiltinFunctionSpecialized.int_mul(-256, local_024);
                     PineValue local_031 = BuiltinFunctionSpecialized.int_mul(-256, local_025);
                     PineValue local_032 = BuiltinFunctionSpecialized.int_mul(-256, local_026);
@@ -236,7 +236,7 @@ public class OptimizeAndEmitValueFromStringTests
             """"
             public static class Global_Anonymous
             {
-                public static PineValue zzz_anon_38e6937c_a50db278(PineValue param_1_0, PineValue param_1_1, PineValue param_1_2)
+                public static PineValue zzz_anon_60bf67c9_187f7517(PineValue param_1_0, PineValue param_1_1, PineValue param_1_2)
                 {
                     PineValue local_param_1_0 = param_1_0;
                     PineValue local_param_1_1 = param_1_1;
@@ -249,7 +249,7 @@ public class OptimizeAndEmitValueFromStringTests
                         if (BuiltinFunctionSpecialized.int_is_sorted_asc_as_boolean(local_000, local_param_1_0))
                         {
                             PineValue local_001 =
-                                Global_Anonymous.zzz_anon_38e6937c_a50db278(
+                                Global_Anonymous.zzz_anon_60bf67c9_187f7517(
                                     local_param_1_0,
                                     local_000,
                                     CommonReusedValues.Blob_Int_0);
@@ -257,7 +257,7 @@ public class OptimizeAndEmitValueFromStringTests
                             return
                                 BuiltinFunctionSpecialized.int_add(
                                     BuiltinFunctionSpecialized.int_mul(16, local_001),
-                                    Global_Anonymous.zzz_anon_38e6937c_a50db278(
+                                    Global_Anonymous.zzz_anon_60bf67c9_187f7517(
                                         BuiltinFunctionSpecialized.int_add(
                                             local_param_1_0,
                                             BuiltinFunctionSpecialized.int_mul(
@@ -287,7 +287,7 @@ public class OptimizeAndEmitValueFromStringTests
                     }
                 }
 
-                public static PineValue zzz_anon_66da43a6_dda26649(PineValue param_1, PineValue param_2)
+                public static PineValue zzz_anon_e8c66032_dda26649(PineValue param_1, PineValue param_2)
                 {
                     if (param_2 == CommonReusedValues.Blob_Int_0)
                     {
@@ -307,7 +307,7 @@ public class OptimizeAndEmitValueFromStringTests
                         local_004 == PineKernelValues.TrueValue ? param_2 : BuiltinFunctionSpecialized.int_mul(-1, param_2);
 
                     PineValue local_009 =
-                        Global_Anonymous.zzz_anon_38e6937c_a50db278(local_005, local_006, CommonReusedValues.Blob_Int_0);
+                        Global_Anonymous.zzz_anon_60bf67c9_187f7517(local_005, local_006, CommonReusedValues.Blob_Int_0);
 
                     if (local_003 == local_004)
                     {

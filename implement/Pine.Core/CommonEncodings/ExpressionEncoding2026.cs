@@ -15,7 +15,7 @@ public static class ExpressionEncoding2026
 
     private static readonly PineValue s_builtinTag = StringEncoding.ValueFromString("Builtin");
 
-    private static readonly PineValue s_conditionTag = StringEncoding.ValueFromString("Condition");
+    private static readonly PineValue s_conditionalTag = StringEncoding.ValueFromString("Conditional");
 
     private static readonly PineValue s_environmentTag = StringEncoding.ValueFromString("Environment");
 
@@ -153,7 +153,7 @@ public static class ExpressionEncoding2026
             Expression.Conditional conditional =>
             PineValue.List(
                 [
-                s_conditionTag,
+                s_conditionalTag,
                 encodeSubexpression(conditional.Condition),
                 encodeSubexpression(conditional.FalseBranch),
                 encodeSubexpression(conditional.TrueBranch)
@@ -272,7 +272,7 @@ public static class ExpressionEncoding2026
 
                 break;
 
-            case "Condition":
+            case "Conditional" or "Condition":
                 if (rootList.Items.Length is 4)
                 {
                     PushChildIfUnparsed(rootList.Items.Span[1], store, stack);
@@ -352,7 +352,7 @@ public static class ExpressionEncoding2026
             "Builtin" =>
             ParseBuiltin(rootList.Items, generalParser),
 
-            "Condition" =>
+            "Conditional" or "Condition" =>
             ParseCondition(rootList.Items, generalParser),
 
             "Environment" =>
@@ -437,7 +437,7 @@ public static class ExpressionEncoding2026
         Func<PineValue, Result<string, Expression>> generalParser)
     {
         if (items.Length is not 4)
-            return UnexpectedItemCount("condition", 4, items.Length);
+            return UnexpectedItemCount("conditional", 4, items.Length);
 
         var conditionResult = generalParser(items.Span[1]);
 

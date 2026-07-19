@@ -69,7 +69,8 @@ public abstract record Expression
         LitralInst(PineValue.EmptyBlob);
 
     private static readonly IReadOnlyList<Litral> s_literalsBlobSingleByte =
-        [.. Enumerable.Range(0, 0x100).Select(i => LitralInst(PineValue.BlobSingleByte((byte)i)))];
+        [.. Enumerable.Range(0, 0x100).Select(i => LitralInst(PineValue.BlobSingleByte((byte)i)))
+        ];
 
     private static readonly FrozenDictionary<PineValue, Litral> s_literalOtherInstances =
         ReusedLiteralOtherInstancesSource()
@@ -969,11 +970,9 @@ public abstract record Expression
             Expression tagged)
         {
             LabelValue = labelValue;
-
             Tag =
                 StringEncoding.StringFromValue(labelValue).IsOkOrNull() ??
                 labelValue.ToString();
-
             Tagged = tagged;
 
             SubexpressionCount = tagged.SubexpressionCount + 1;

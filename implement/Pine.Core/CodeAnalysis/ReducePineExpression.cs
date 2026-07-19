@@ -2036,7 +2036,7 @@ public class ReducePineExpression
                     return Expression.BuiltinInst(functionName, decodedInput);
                 }
 
-            case "Condition":
+            case "Conditional" or "Condition":
                 {
                     if (construction.Items.Count is not 4 ||
                         TryDecodeApplicationOfConstructedEncoding(

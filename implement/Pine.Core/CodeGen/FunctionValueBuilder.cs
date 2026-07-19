@@ -38,8 +38,8 @@ public static class FunctionValueBuilder
     private static readonly Expression s_builtinTag =
         Expression.LitralInst(StringEncoding.ValueFromString("Builtin"));
 
-    private static readonly Expression s_conditionTag =
-        Expression.LitralInst(StringEncoding.ValueFromString("Condition"));
+    private static readonly Expression s_conditionalTag =
+        Expression.LitralInst(StringEncoding.ValueFromString("Conditional"));
 
     private static readonly Expression s_labelTag =
         Expression.LitralInst(StringEncoding.ValueFromString("Label"));
@@ -818,7 +818,7 @@ public static class FunctionValueBuilder
         Expression encodedFalseBranch,
         Expression encodedTrueBranch) =>
         Expression.ListInst(
-            [s_conditionTag, encodedCondition, encodedFalseBranch, encodedTrueBranch]);
+            [s_conditionalTag, encodedCondition, encodedFalseBranch, encodedTrueBranch]);
 
     private static Expression EncodeEnvironment() =>
         Expression.ListInst([s_environmentTag]);

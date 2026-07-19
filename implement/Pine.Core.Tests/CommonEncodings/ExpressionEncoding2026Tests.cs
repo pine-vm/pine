@@ -52,7 +52,7 @@ public class ExpressionEncoding2026Tests
                     Expression.ConditionalInst(condition, falseBranch, trueBranch),
                     PineValue.List(
                         [
-                        StringEncoding.ValueFromString("Condition"),
+                        StringEncoding.ValueFromString("Conditional"),
                         ExpressionEncoding2026.EncodeExpressionAsValue(condition),
                         ExpressionEncoding2026.EncodeExpressionAsValue(falseBranch),
                         ExpressionEncoding2026.EncodeExpressionAsValue(trueBranch)
@@ -177,7 +177,7 @@ public class ExpressionEncoding2026Tests
                     ]),
                 PineValue.List(
                     [
-                    StringEncoding.ValueFromString("Condition"),
+                    StringEncoding.ValueFromString("Conditional"),
                     ExpressionEncoding2026.EncodeExpressionAsValue(s_literal)
                     ]),
                 PineValue.List(
