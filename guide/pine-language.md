@@ -100,6 +100,75 @@ The order of items is significant. In particular, `Conditional` stores the
 false branch before the true branch, and `Eval` stores the encoded-expression
 operand before the environment operand.
 
+#### Deferring Branch Decoding with Eval
+
+Decoding an expression is strict. A decoder validates the complete recursive
+encoding before evaluating the decoded expression. Consequently, an invalid
+encoding in either branch of an encoded `Conditional` makes the whole encoded
+expression invalid, even if evaluation would not select that branch.
+
+A frontend language can nevertheless avoid decoding the contents of branches
+that are not selected. It can embed the encoding of each branch as literal data
+and use `Eval` to decode and evaluate the selected branch:
+
+```Elm
+defer : Expression -> Expression
+defer expression =
+    EvalExpression
+        (LitralExpression (Encode(expression)))
+        EnvironmentExpression
+
+compiledConditional : Expression
+compiledConditional =
+    ConditionalExpression
+        compiledCondition
+        (defer compiledFalseBranch)
+        (defer compiledTrueBranch)
+```
+
+The outer expression has a valid encoding. Each `Encode(expression)` appears as
+the value of a `LitralExpression`, so it is embedded as data and is not part of
+the recursive encoding of the outer expression. Because a `Conditional`
+evaluates only its selected branch, only the selected branch needs to be
+decoded. `EnvironmentExpression` passes the current environment to that branch.
+
+A lazy crash follows as a consequence of this pattern. A frontend can use a
+value that is not a valid expression encoding instead of `Encode(expression)`:
+
+```Elm
+crashExpression : Expression
+crashExpression =
+    EvalExpression
+        (LitralExpression (BlobValue []))
+        EnvironmentExpression
+```
+
+Every expression encoding is a `ListValue`, so `BlobValue []` is invalid. The
+containing expression remains valid because the blob is literal data. The
+program crashes only if evaluation reaches `crashExpression` and `Eval` tries
+to decode the blob.
+
+An implementation that eagerly decodes expressions and reuses their parsed
+representations can avoid the runtime cost of the `Eval` wrapper. While parsing,
+it may recognize an expression of this form:
+
+```Elm
+EvalExpression
+    (LitralExpression encodedExpression)
+    EnvironmentExpression
+```
+
+If `encodedExpression` is a valid expression encoding, the implementation may
+replace the `Eval` internally with the decoded expression. This inlining
+preserves behavior because the decoded expression receives the same environment
+as the `Eval`. If `encodedExpression` is invalid, parsing the containing
+expression must still succeed; the implementation must retain the `Eval` or an
+equivalent internal `Crash` representation so that the program crashes only if
+evaluation reaches it. An internal `Crash` representation is an implementation
+detail, not an additional Pine expression variant, and has no expression
+encoding.
+
+
 ### Builtin Expression
 
 A `Builtin` expression maps the given input value with one of the 17 built-in functions of the Pine language:
