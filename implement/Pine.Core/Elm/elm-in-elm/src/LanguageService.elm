@@ -1364,7 +1364,7 @@ referenceRangesInModuleResolvingTo ( targetDefinitionFilePath, targetDefinitionR
         localModuleItemsBeforeFiltering =
             localDeclarationsAndImportExposings
                 |> List.map
-                    (\( ( declFileLocation, declRange ), scope, (CompletionItem completionItemLabel _ _ _) ) ->
+                    (\( ( declFileLocation, declRange ), scope, CompletionItem completionItemLabel _ _ _ ) ->
                         let
                             ( maybeFilterRange, completionItemRange ) =
                                 case scope of
@@ -3653,26 +3653,33 @@ removeWrappingFromMultilineComment withWrapping =
         trimmed =
             String.trim withWrapping
 
-        lessPrefix : String
-        lessPrefix =
-            String.trimLeft
-                (if String.startsWith "{-|" trimmed then
-                    String.dropLeft 3 trimmed
+        dropLeftCount : Int
+        dropLeftCount =
+            if String.startsWith "{-|" trimmed then
+                3
 
-                 else if String.startsWith "{-" trimmed then
-                    String.dropLeft 2 trimmed
+            else if String.startsWith "{-" trimmed then
+                2
 
-                 else
-                    trimmed
-                )
+            else
+                0
+
+        dropRightCount : Int
+        dropRightCount =
+            if String.endsWith "-}" trimmed then
+                2
+
+            else
+                0
+
+        lessCommentTokens : String
+        lessCommentTokens =
+            String.slice
+                dropLeftCount
+                (String.length trimmed - dropRightCount)
+                trimmed
     in
-    String.trimRight
-        (if String.endsWith "-}" lessPrefix then
-            String.dropRight 2 lessPrefix
-
-         else
-            lessPrefix
-        )
+    String.trim lessCommentTokens
 
 
 locationIsInComment : Elm.Syntax.Range.Location -> Elm.Syntax.File.File -> Bool
