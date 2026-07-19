@@ -36,31 +36,35 @@ public static class ExpressionEncoding
 
     public static Result<string, Expression> ParseExpressionFromValue(PineValue value)
     {
-        var parsed2026 = ExpressionEncoding2026.ParseExpressionFromValue(value);
+        var parsed2026 =
+            ExpressionEncoding2026.ParseExpressionFromValueWithoutResultAllocation(value);
 
-        if (parsed2026.IsOkOrNull() is not null)
-            return parsed2026;
+        if (parsed2026.IsOk)
+            return parsed2026.ToPublicResult();
 
         return ExpressionEncoding2024.ParseExpressionFromValue(value);
     }
 
-    internal static Result<string, Expression> ParseExpressionFromValueViaPostOrder(
+    internal static ExpressionEncoding2026.ParseExpressionResult ParseExpressionFromValueViaPostOrder(
         PineValue rootValue,
-        IDictionary<PineValue, Result<string, Expression>> store)
+        IDictionary<PineValue, ExpressionEncoding2026.ParseExpressionResult> store)
     {
         var parsed2026 =
             ExpressionEncoding2026.ParseExpressionFromValueViaPostOrder(
                 rootValue,
                 store);
 
-        if (parsed2026.IsOkOrNull() is not null)
+        if (parsed2026.IsOk)
             return parsed2026;
 
         var parsed2024 = ExpressionEncoding2024.ParseExpressionFromValue(rootValue);
 
-        store[rootValue] = parsed2024;
+        var parsed2024Struct =
+            ExpressionEncoding2026.ParseExpressionResult.FromPublicResult(parsed2024);
 
-        return parsed2024;
+        store[rootValue] = parsed2024Struct;
+
+        return parsed2024Struct;
     }
 
     public static Result<string, Expression> ParseExpressionFromValue(

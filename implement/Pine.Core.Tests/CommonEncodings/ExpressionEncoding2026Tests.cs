@@ -120,6 +120,59 @@ public class ExpressionEncoding2026Tests
     }
 
     [Fact]
+    public void Internal_parse_results_are_value_types()
+    {
+        typeof(ExpressionEncoding2026.ParseExpressionResult).IsValueType.Should().BeTrue();
+        typeof(StringEncoding.StringParseResult).IsValueType.Should().BeTrue();
+    }
+
+    [Fact]
+    public void Internal_string_parser_does_not_allocate_for_reused_values()
+    {
+        var encodedTag = StringEncoding.ValueFromString("Conditional");
+
+        for (var i = 0; i < 10; ++i)
+            _ = StringEncoding.StringFromValueWithoutResultAllocation(encodedTag);
+
+        var allocatedBefore = GC.GetAllocatedBytesForCurrentThread();
+
+        StringEncoding.StringParseResult parsed = default;
+
+        for (var i = 0; i < 100; ++i)
+            parsed = StringEncoding.StringFromValueWithoutResultAllocation(encodedTag);
+
+        var allocatedBytes =
+            GC.GetAllocatedBytesForCurrentThread() - allocatedBefore;
+
+        GC.KeepAlive(parsed.Value);
+
+        parsed.Value.Should().Be("Conditional");
+        allocatedBytes.Should().Be(0);
+    }
+
+    [Fact]
+    public void Public_node_parser_uses_supplied_child_parser()
+    {
+        var input = Expression.LitralInst(StringEncoding.ValueFromString("input"));
+        var expression = Expression.BuiltinInst("length", input);
+        var encoded = ExpressionEncoding2026.EncodeExpressionAsValue(expression);
+        var parsedChildren = new List<PineValue>();
+
+        Result<string, Expression> ParseChild(PineValue child)
+        {
+            parsedChildren.Add(child);
+            return ExpressionEncoding2026.ParseExpressionFromValue(child);
+        }
+
+        var parsed =
+            ExpressionEncoding2026.ParseExpressionFromValue(encoded, ParseChild)
+            .Extract(error => throw new Exception(error));
+
+        parsed.Should().Be(expression);
+        parsedChildren.Should().Equal(encoded.Items.Span[2]);
+    }
+
+    [Fact]
     public void Label_accepts_any_PineValue()
     {
         var labelValue =

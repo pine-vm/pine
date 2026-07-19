@@ -8,7 +8,10 @@ namespace Pine.Core.CodeAnalysis;
 /// </summary>
 public class PineVMParseCache
 {
-    private readonly ConcurrentDictionary<PineValue, Result<string, Expression>> _parseExprCache = [];
+    private readonly ConcurrentDictionary<
+        PineValue,
+        ExpressionEncoding2026.ParseExpressionResult>
+        _parseExprCache = [];
 
     /// <summary>
     /// Parses the given <paramref name="expressionValue"/> into an <see cref="Expression"/> using
@@ -31,7 +34,8 @@ public class PineVMParseCache
         return
             ExpressionEncoding.ParseExpressionFromValueViaPostOrder(
                 expressionValue,
-                _parseExprCache);
+                _parseExprCache)
+            .ToPublicResult();
     }
 }
 

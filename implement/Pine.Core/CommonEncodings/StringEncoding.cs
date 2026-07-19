@@ -154,23 +154,27 @@ public static class StringEncoding
     /// <summary>
     /// Try parse the given PineValue as a string.
     /// </summary>
-    public static Result<string, string> StringFromValue(PineValue pineValue)
+    public static Result<string, string> StringFromValue(PineValue pineValue) =>
+        StringFromValueWithoutResultAllocation(pineValue).ToPublicResult();
+
+    internal static StringParseResult StringFromValueWithoutResultAllocation(PineValue pineValue)
     {
         if (s_reusedStringFromValue is { } dict &&
             dict.TryGetValue(pineValue, out var reusedInst) &&
             reusedInst is not null)
         {
-            return Result<string, string>.ok(reusedInst);
+            return StringParseResult.Ok(reusedInst);
         }
 
         if (pineValue is PineValue.ListValue list)
-            return StringFromListValue(list);
+            return StringFromListValueWithoutResultAllocation(list);
 
         if (pineValue is PineValue.BlobValue blob)
-            return StringFromBlobValue(blob.Bytes);
+            return StringFromBlobValueWithoutResultAllocation(blob.Bytes);
 
         return
-            Result<string, string>.err("PineValue is not a blob: " + pineValue.GetType().FullName);
+            StringParseResult.Err(
+                "PineValue is not a blob: " + pineValue.GetType().FullName);
     }
 
     private static readonly Result<string, string> s_emptyStringOk = Result<string, string>.ok("");
@@ -189,9 +193,20 @@ public static class StringEncoding
         if (blobBytes.Length is 0)
             return s_emptyStringOk;
 
+        return StringFromBlobValueWithoutResultAllocation(blobBytes).ToPublicResult();
+    }
+
+    private static StringParseResult StringFromBlobValueWithoutResultAllocation(
+        ReadOnlyMemory<byte> blobBytes)
+    {
+        if (blobBytes.Length is 0)
+            return StringParseResult.Ok("");
+
         if (blobBytes.Length % 4 is not 0)
         {
-            return Result<string, string>.err("Blob length is not a multiple of 4: " + blobBytes.Length);
+            return
+                StringParseResult.Err(
+                    "Blob length is not a multiple of 4: " + blobBytes.Length);
         }
 
         var codePointsCount = blobBytes.Length / 4;
@@ -205,7 +220,9 @@ public static class StringEncoding
 
             if (!UnicodeUtility.IsValidUnicodeScalar(codePoint))
             {
-                return Result<string, string>.err("Blob value at [" + index + "] out of range: " + codePoint);
+                return
+                    StringParseResult.Err(
+                        "Blob value at [" + index + "] out of range: " + codePoint);
             }
 
             stringBuilder.Append(char.ConvertFromUtf32(codePoint));
@@ -214,7 +231,7 @@ public static class StringEncoding
         var asString =
             PopularValues.InternIfKnown(stringBuilder.ToString());
 
-        return Result<string, string>.ok(asString);
+        return StringParseResult.Ok(asString);
     }
 
     public static Result<string, string> StringFromListValue(PineValue.ListValue list)
@@ -222,8 +239,17 @@ public static class StringEncoding
         if (list.Items.Length is 0)
             return s_emptyStringOk;
 
+        return StringFromListValueWithoutResultAllocation(list).ToPublicResult();
+    }
+
+    private static StringParseResult StringFromListValueWithoutResultAllocation(
+        PineValue.ListValue list)
+    {
+        if (list.Items.Length is 0)
+            return StringParseResult.Ok("");
+
         if (CommonStringsDecodedAsList.TryGetValue(list, out var commonString))
-            return Result<string, string>.ok(commonString);
+            return StringParseResult.Ok(commonString);
 
         var stringBuilder = new System.Text.StringBuilder(capacity: list.Items.Length * 2);
 
@@ -232,7 +258,7 @@ public static class StringEncoding
             if (list.Items.Span[index] is not PineValue.BlobValue blobValue)
             {
                 return
-                    Result<string, string>.err(
+                    StringParseResult.Err(
                         "failed decoding char as integer at [" + index + "]: Not a blob");
             }
 
@@ -246,10 +272,42 @@ public static class StringEncoding
             }
 
             // https://github.com/dotnet/runtime/blob/e05944dd74118db06d6987fe2724813950725737/src/libraries/System.Private.CoreLib/src/System/Char.cs#L1036
-            return Result<string, string>.err("Char code at [" + index + "] out of range: " + charInteger);
+            return
+                StringParseResult.Err(
+                    "Char code at [" + index + "] out of range: " + charInteger);
         }
 
-        return Result<string, string>.ok(stringBuilder.ToString());
+        return StringParseResult.Ok(stringBuilder.ToString());
+    }
+
+    internal readonly struct StringParseResult
+    {
+        private StringParseResult(string? value, string? error)
+        {
+            Value = value;
+            Error = error;
+        }
+
+        public string? Value { get; }
+
+        public string? Error { get; }
+
+        public bool IsOk => Value is not null;
+
+        public static StringParseResult Ok(string value) =>
+            new(value, error: null);
+
+        public static StringParseResult Err(string error) =>
+            new(value: null, error);
+
+        public Result<string, string> ToPublicResult() =>
+            Value is { } value
+            ?
+            Result<string, string>.ok(value)
+            :
+            Result<string, string>.err(
+                Error ??
+                throw new InvalidOperationException("String parse result contains neither a value nor an error"));
     }
 
     /// <summary>
