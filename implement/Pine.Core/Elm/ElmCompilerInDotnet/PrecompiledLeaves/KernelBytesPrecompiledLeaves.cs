@@ -107,7 +107,7 @@ public static class KernelBytesPrecompiledLeaves
         }
     }
 
-    private static PineValue? EncodeCharsAsBlobHelpLeafDelegate(PineValue environment)
+    public static PineValue? EncodeCharsAsBlobHelpLeafDelegate(PineValue environment)
     {
         if (!EnvironmentMatches(environment, "encodeCharsAsBlobHelp"))
         {
@@ -189,7 +189,7 @@ public static class KernelBytesPrecompiledLeaves
         return PineValue.Blob(output.ToArray());
     }
 
-    private static PineValue? DecodeBlobAsCharsRecLeafDelegate(PineValue environment)
+    public static PineValue? DecodeBlobAsCharsRecLeafDelegate(PineValue environment)
     {
         if (!EnvironmentMatches(environment, "decodeBlobAsCharsRec") ||
             IntegerEncoding.ParseSignedIntegerRelaxed(

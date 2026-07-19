@@ -28,6 +28,12 @@ namespace Pine.Core.Elm.ElmCompilerInDotnet.PrecompiledLeaves;
 /// </summary>
 public static class Base64PrecompiledLeaves
 {
+    public static PineValue EncodeToBytesLeafKey =>
+        s_leafInfos.Value["encode"].leafKey;
+
+    public static PineValue DecodeFromBytesLeafKey =>
+        s_leafInfos.Value["decode"].leafKey;
+
     /// <summary>
     /// Default precompiled-leaves dictionary contributed by the <c>Base64</c> modules
     /// (<c>Base64.Encode.toBytes</c> and <c>Base64.Decode.fromBytes</c>). Suitable for
@@ -41,24 +47,26 @@ public static class Base64PrecompiledLeaves
 
     private static IReadOnlyDictionary<PineValue, Func<PineValue, PineValue?>> BuildDefaultLeaves()
     {
-        var parsedEnv = s_parsedBase64Env.Value;
-
-        var (encodeLeafKey, encodeEnvFunctionsValue) =
-            DeriveLeafInfo(parsedEnv, "Base64.Encode", "toBytes");
-
-        var (decodeLeafKey, decodeEnvFunctionsValue) =
-            DeriveLeafInfo(parsedEnv, "Base64.Decode", "fromBytes");
-
         return
             ImmutableDictionary<PineValue, Func<PineValue, PineValue?>>.Empty
-            .Add(encodeLeafKey, EncodeToBytesLeafDelegate(encodeEnvFunctionsValue))
-            .Add(decodeLeafKey, DecodeFromBytesLeafDelegate(decodeEnvFunctionsValue));
+            .Add(EncodeToBytesLeafKey, EncodeToBytesLeafDelegate)
+            .Add(DecodeFromBytesLeafKey, DecodeFromBytesLeafDelegate);
     }
 
     // ---------- compilation + environment ----------
 
     private static readonly Lazy<ElmInteractiveEnvironment.ParsedInteractiveEnvironment> s_parsedBase64Env =
         new(ParseBase64Environment);
+
+    private static readonly Lazy<IReadOnlyDictionary<string, (PineValue leafKey, PineValue envFunctionsValue)>>
+        s_leafInfos =
+        new(
+            () =>
+            new Dictionary<string, (PineValue leafKey, PineValue envFunctionsValue)>
+            {
+                ["encode"] = DeriveLeafInfo(s_parsedBase64Env.Value, "Base64.Encode", "toBytes"),
+                ["decode"] = DeriveLeafInfo(s_parsedBase64Env.Value, "Base64.Decode", "fromBytes"),
+            });
 
     private static ElmInteractiveEnvironment.ParsedInteractiveEnvironment ParseBase64Environment()
     {
@@ -158,47 +166,48 @@ public static class Base64PrecompiledLeaves
     /// <c>Nothing</c> for an invalid base64 string), without interpreting the
     /// recursive chunking loop.
     /// </summary>
-    private static Func<PineValue, PineValue?> EncodeToBytesLeafDelegate(PineValue envFunctionsValue) =>
-        environment =>
+    public static PineValue? EncodeToBytesLeafDelegate(PineValue environment)
+    {
+        var envFunctionsValue = s_leafInfos.Value["encode"].envFunctionsValue;
+
+        if (environment.ValueFromPathOrEmptyList([0]) != envFunctionsValue)
         {
-            if (environment.ValueFromPathOrEmptyList([0]) != envFunctionsValue)
-            {
-                return null;
-            }
+            return null;
+        }
 
-            var stringArg = environment.ValueFromPathOrEmptyList([1]);
+        var stringArg = environment.ValueFromPathOrEmptyList([1]);
 
-            if (stringArg.ValueFromPathOrEmptyList([0]) != ElmValue.ElmStringTypeTagNameAsValue)
-            {
-                return null;
-            }
+        if (stringArg.ValueFromPathOrEmptyList([0]) != ElmValue.ElmStringTypeTagNameAsValue)
+        {
+            return null;
+        }
 
-            if (stringArg.ValueFromPathOrEmptyList([1, 0]) is not PineValue.BlobValue stringCharsBlob)
-            {
-                return null;
-            }
+        if (stringArg.ValueFromPathOrEmptyList([1, 0]) is not PineValue.BlobValue stringCharsBlob)
+        {
+            return null;
+        }
 
-            if (StringEncoding.StringFromValue(stringCharsBlob).IsOkOrNull() is not { } dotnetString)
-            {
-                return null;
-            }
+        if (StringEncoding.StringFromValue(stringCharsBlob).IsOkOrNull() is not { } dotnetString)
+        {
+            return null;
+        }
 
-            var dotnetBytesBuffer = new byte[dotnetString.Length];
+        var dotnetBytesBuffer = new byte[dotnetString.Length];
 
-            if (!Convert.TryFromBase64String(dotnetString, dotnetBytesBuffer, out var bytesWritten))
-            {
-                return s_tagNothingValue;
-            }
+        if (!Convert.TryFromBase64String(dotnetString, dotnetBytesBuffer, out var bytesWritten))
+        {
+            return s_tagNothingValue;
+        }
 
-            var bytesValue =
-                PineValue.List(
-                    [
-                    ElmValue.ElmBytesTypeTagNameAsValue,
-                    PineValue.List([PineValue.Blob(dotnetBytesBuffer.AsMemory(start: 0, length: bytesWritten))])
-                    ]);
+        var bytesValue =
+            PineValue.List(
+                [
+                ElmValue.ElmBytesTypeTagNameAsValue,
+                PineValue.List([PineValue.Blob(dotnetBytesBuffer.AsMemory(start: 0, length: bytesWritten))])
+                ]);
 
-            return JustValue(bytesValue);
-        };
+        return JustValue(bytesValue);
+    }
 
     /// <summary>
     /// Short-circuit .NET implementation of <c>Base64.Decode.fromBytes</c>
@@ -206,28 +215,29 @@ public static class Base64PrecompiledLeaves
     /// base64 string, returning the corresponding <c>Maybe String</c> value,
     /// without interpreting the recursive decoding loop.
     /// </summary>
-    private static Func<PineValue, PineValue?> DecodeFromBytesLeafDelegate(PineValue envFunctionsValue) =>
-        environment =>
+    public static PineValue? DecodeFromBytesLeafDelegate(PineValue environment)
+    {
+        var envFunctionsValue = s_leafInfos.Value["decode"].envFunctionsValue;
+
+        if (environment.ValueFromPathOrEmptyList([0]) != envFunctionsValue)
         {
-            if (environment.ValueFromPathOrEmptyList([0]) != envFunctionsValue)
-            {
-                return null;
-            }
+            return null;
+        }
 
-            var bytesArg = environment.ValueFromPathOrEmptyList([1]);
+        var bytesArg = environment.ValueFromPathOrEmptyList([1]);
 
-            if (bytesArg.ValueFromPathOrEmptyList([0]) != ElmValue.ElmBytesTypeTagNameAsValue)
-            {
-                return null;
-            }
+        if (bytesArg.ValueFromPathOrEmptyList([0]) != ElmValue.ElmBytesTypeTagNameAsValue)
+        {
+            return null;
+        }
 
-            if (bytesArg.ValueFromPathOrEmptyList([1, 0]) is not PineValue.BlobValue bytesBlob)
-            {
-                return null;
-            }
+        if (bytesArg.ValueFromPathOrEmptyList([1, 0]) is not PineValue.BlobValue bytesBlob)
+        {
+            return null;
+        }
 
-            var dotnetString = Convert.ToBase64String(bytesBlob.Bytes.Span);
+        var dotnetString = Convert.ToBase64String(bytesBlob.Bytes.Span);
 
-            return JustValue(ElmValueEncoding.StringAsPineValue(dotnetString));
-        };
+        return JustValue(ElmValueEncoding.StringAsPineValue(dotnetString));
+    }
 }

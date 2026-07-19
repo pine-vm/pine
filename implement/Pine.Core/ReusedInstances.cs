@@ -121,7 +121,8 @@ public record ReusedInstances(
                 return
                     BuildPineListValueReusedInstances(
                         loadExpressionRootsSource(),
-                        additionalRoots: []);
+                        additionalRoots:
+                        IntermediateVM.SetupVM.BuildDefaultPrecompiledLeafValues().Values);
             });
 
     private static Result<string, PineListValueReusedInstances> LoadEmbeddedPrebuilt(
@@ -221,7 +222,6 @@ public record ReusedInstances(
             listsFromElmSyntaxLocations
             .Concat(expressionRootsSource.Select(ExpressionEncoding.EncodeExpressionAsValue))
             .Concat(PopularExpression.BuildPopularValueDictionary().Values)
-            .Concat(PopularValuesFromElmPrecompiled())
             .OrderBy(pineValue => pineValue is PineValue.ListValue listValue ? listValue.NodesCount : 0)
             .ToList();
 
@@ -923,8 +923,4 @@ public record ReusedInstances(
         return encodedForCompilerDict.Values;
     }
 
-    private static IEnumerable<PineValue> PopularValuesFromElmPrecompiled()
-    {
-        return IntermediateVM.SetupVM.DefaultPrecompiledLeaves.Keys;
-    }
 }

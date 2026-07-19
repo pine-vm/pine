@@ -97,16 +97,26 @@ public class Program
     public static void BuildAndSaveValueDictionary(
         IEnumerable<KeyValuePair<Pine.Core.Files.FileTree, PineValue>> elmCompilers)
     {
+        var precompiledLeafValues =
+            Pine.Core.IntermediateVM.SetupVM.BuildDefaultPrecompiledLeafValues();
+
         var fromFreshBuild =
             ReusedInstances.BuildPineListValueReusedInstances(
                 ReusedInstances.ExpressionsSource(),
-                additionalRoots: elmCompilers.Select(kvp => kvp.Value));
+                additionalRoots:
+                elmCompilers.Select(kvp => kvp.Value)
+                .Concat(precompiledLeafValues.Values));
+
+        var namedReusedValues =
+            ReusedInstances.PrebuildListEntries(fromFreshBuild)
+            .Concat(precompiledLeafValues)
+            .ToDictionary();
 
         BundledDeclarations.CompressAndWriteBundleFile(
             compiledEnvironments:
             elmCompilers.ToDictionary(),
             otherReusedValues:
-            ReusedInstances.PrebuildListEntries(fromFreshBuild),
+            namedReusedValues,
             destinationDirectory: DestinationDirectory);
     }
 
