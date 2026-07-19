@@ -316,6 +316,9 @@ public record ImmutableSliceBuilder(
     /// </summary>
     public int GetLength()
     {
+        if (TakeCount < 1)
+            return 0;
+
         if (FinalValue is { } finalValue)
         {
             return Internal.BuiltinFunctionSpecialized.length_as_int(finalValue);

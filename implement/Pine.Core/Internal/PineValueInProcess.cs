@@ -1164,6 +1164,11 @@ public class PineValueInProcess
             }
         }
 
+        if (inProcess._sliceBuilder is { } sliceBuilder)
+        {
+            return AreSliceAndValueEqual(sliceBuilder, pineValue);
+        }
+
         var eval = inProcess.Evaluate();
 
         return eval.Equals(pineValue);
