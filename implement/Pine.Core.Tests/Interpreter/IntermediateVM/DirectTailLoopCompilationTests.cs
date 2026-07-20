@@ -53,6 +53,26 @@ public class DirectTailLoopCompilationTests
         report!.ReturnValue.Evaluate().Should().Be(IntegerEncoding.EncodeSignedInteger(0));
         report.Counters.InvocationCount.Should().Be(0);
         report.Counters.LoopIterationCount.Should().Be(5);
+
+        var reportWithoutTailLoop =
+            CreateVM(enableTailRecursionOptimization: false)
+            .EvaluateExpressionOnCustomStack(
+                expression,
+                PineValue.List(
+                    [
+                    expressionValue,
+                    IntegerEncoding.EncodeSignedInteger(5),
+                    ]),
+                new Core.Interpreter.IntermediateVM.PineVM.EvaluationConfig(
+                    InvocationCountLimit: null,
+                    LoopIterationCountLimit: null,
+                    StackDepthLimit: null))
+            .IsOkOrNull();
+
+        reportWithoutTailLoop.Should().NotBeNull();
+        reportWithoutTailLoop!.ReturnValue.Evaluate().Should().Be(report.ReturnValue.Evaluate());
+        reportWithoutTailLoop.Counters.InvocationCount.Should().BeGreaterThan(report.Counters.InvocationCount);
+        reportWithoutTailLoop.Counters.LoopIterationCount.Should().Be(0);
     }
 
     [Fact]
@@ -207,12 +227,12 @@ public class DirectTailLoopCompilationTests
 
         compilation.Generic.Parameters.ParamsPaths
             .Should().BeEquivalentTo(
-                ImmutableArray.Create<IReadOnlyList<int>>(
-                    [0],
-                    [1],
-                    [2],
-                    [3]),
-                options => options.WithStrictOrdering());
+            ImmutableArray.Create<IReadOnlyList<int>>(
+                [0],
+                [1],
+                [2],
+                [3]),
+            options => options.WithStrictOrdering());
 
         var environment =
             PineValue.List(
@@ -225,11 +245,11 @@ public class DirectTailLoopCompilationTests
 
         Evaluate(CreateVM(true), expression, environment)
             .Should().Be(
-                PineValue.List(
-                    [
-                    IntegerEncoding.EncodeSignedInteger(3),
-                    IntegerEncoding.EncodeSignedInteger(5),
-                    ]));
+            PineValue.List(
+                [
+                IntegerEncoding.EncodeSignedInteger(3),
+                IntegerEncoding.EncodeSignedInteger(5),
+                ]));
     }
 
     [Fact]
@@ -280,11 +300,66 @@ public class DirectTailLoopCompilationTests
 
         Evaluate(CreateVM(true), expression, environment)
             .Should().Be(
-                PineValue.List(
+            PineValue.List(
+                [
+                IntegerEncoding.EncodeSignedInteger(2),
+                IntegerEncoding.EncodeSignedInteger(1),
+                ]));
+    }
+
+    [Fact]
+    public void Tail_loop_reuses_same_iteration_environment_dependent_cse()
+    {
+        var self = EnvironmentPath([0]);
+        var count = EnvironmentPath([1]);
+
+        var decrementedCount =
+            Expression.BuiltinInst(
+                nameof(BuiltinFunction.int_add),
+                Expression.ListInst(
                     [
-                    IntegerEncoding.EncodeSignedInteger(2),
-                    IntegerEncoding.EncodeSignedInteger(1),
+                    count,
+                    Expression.LitralInst(IntegerEncoding.EncodeSignedInteger(-1)),
                     ]));
+
+        var expression =
+            Expression.ConditionalInst(
+                condition:
+                Expression.BuiltinInst(
+                    nameof(BuiltinFunction.equal),
+                    Expression.ListInst(
+                        [
+                        decrementedCount,
+                        Expression.LitralInst(IntegerEncoding.EncodeSignedInteger(0)),
+                        ])),
+                falseBranch:
+                new Expression.Eval(
+                    encoded: self,
+                    environment: Expression.ListInst([self, decrementedCount])),
+                trueBranch: decrementedCount);
+
+        var compilation =
+            ExpressionCompilation.CompileExpression(
+                expression,
+                specializations: [],
+                parseCache: new(),
+                disableReduction: true,
+                enableTailRecursionOptimization: true,
+                skipInlining: (_, _) => false);
+
+        compilation.Generic.Instructions.Count(
+            instruction => instruction.Kind == StackInstructionKind.Int_Add_Const)
+            .Should().Be(1);
+
+        Evaluate(
+            CreateVM(true),
+            expression,
+            PineValue.List(
+                [
+                ExpressionEncoding.EncodeExpressionAsValue(expression),
+                IntegerEncoding.EncodeSignedInteger(3),
+                ]))
+            .Should().Be(IntegerEncoding.EncodeSignedInteger(0));
     }
 
     private static Expression BuildCountdownExpression()

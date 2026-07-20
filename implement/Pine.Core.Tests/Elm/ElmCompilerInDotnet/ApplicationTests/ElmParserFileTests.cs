@@ -228,10 +228,10 @@ public class ElmParserFileTests
 
         result.counts.Should().Be(
             """
-            InvocationCount: 239
-            BuildListCount: 411
-            LoopIterationCount: 22
-            InstructionCount: 6_425
+            InvocationCount: 213
+            BuildListCount: 395
+            LoopIterationCount: 25
+            InstructionCount: 6_403
             """);
     }
 
@@ -246,10 +246,10 @@ public class ElmParserFileTests
 
         result.counts.Should().Be(
             """
-            InvocationCount: 347
-            BuildListCount: 598
-            LoopIterationCount: 41
-            InstructionCount: 10_200
+            InvocationCount: 313
+            BuildListCount: 571
+            LoopIterationCount: 44
+            InstructionCount: 10_131
             """);
     }
 
@@ -295,8 +295,7 @@ public class ElmParserFileTests
     /// <see cref="ElmLanguageServiceTests"/>.
     /// <para>
     /// Like <see cref="File_matches_language_service_scenario_ModuleA"/>,
-    /// this test currently reproduces the open compile-to-PineVM gap
-    /// and is skipped. See
+    /// this test covers the compile-to-PineVM regression. See
     /// <c>ElmParserExpressionTests.Expression_int_plus_int</c> for the
     /// minimal reproduction of the same defect.
     /// </para>

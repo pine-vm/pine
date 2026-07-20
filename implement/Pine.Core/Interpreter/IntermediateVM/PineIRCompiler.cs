@@ -64,7 +64,7 @@ public class PineIRCompiler
     /// </summary>
     public record CompilationContext(
         ImmutableHashSet<Expression> CopyToLocal,
-        IReadOnlyDictionary<Expression.Eval, JumpToLoop> TailCallElimination,
+        TailLoopTarget? TailLoop,
         StaticFunctionInterface StackFrameParameters,
         int InstructionOffset,
         bool IsTailPosition)
@@ -76,7 +76,7 @@ public class PineIRCompiler
             StaticFunctionInterface stackFrameParameters) =>
             new(
                 CopyToLocal: [],
-                TailCallElimination: ImmutableDictionary<Expression.Eval, JumpToLoop>.Empty,
+                TailLoop: null,
                 StackFrameParameters: stackFrameParameters,
                 InstructionOffset: 0,
                 IsTailPosition: true);
@@ -116,11 +116,12 @@ public class PineIRCompiler
     }
 
     /// <summary>
-    /// Describes the target instruction and environment slot used for a loop-form tail call.
+    /// Identifies the root function independently of any particular call occurrence.
     /// </summary>
-    public record JumpToLoop(
-        int DestinationInstructionIndex,
-        IReadOnlyList<PineValue>? GuardExpressionValues);
+    public record TailLoopTarget(
+        IReadOnlySet<Expression> RootExpressionForms,
+        PineValueClass? EnvironmentClass,
+        IReadOnlyList<PineValue> GuardExpressionValues);
 
 
     /// <summary>
@@ -148,62 +149,24 @@ public class PineIRCompiler
             .Distinct()
             .ToArray();
 
-        var tailCallElimination =
-            (enableTailRecursionOptimization
-            ?
-            EnumerateTailCalls(rootExpression)
-            :
-            [])
-            .Select(
-                tailCall =>
-                (
-                tailCall,
-                direct:
-                IsDirectTailCallToRoot(
-                    tailCall,
-                    rootExpressionForms,
-                    envClass,
-                    parseCache)))
-            .Where(item => item.direct || envClass is null)
-            .ToImmutableDictionary(
-                item => item.tailCall,
-                item =>
-                new JumpToLoop(
-                    DestinationInstructionIndex: 0,
-                    GuardExpressionValues: item.direct ? null : rootExpressionValues));
-
         return
             CompileExpressionTransitive(
                 rootExpression,
                 context:
                 CompilationContext.Init(parametersAsLocals) with
                 {
-                    TailCallElimination = tailCallElimination
+                    TailLoop =
+                    enableTailRecursionOptimization
+                    ?
+                    new TailLoopTarget(
+                        RootExpressionForms: rootExpressionForms,
+                        EnvironmentClass: envClass,
+                        GuardExpressionValues: rootExpressionValues)
+                    :
+                    null
                 },
                 prior: prior,
                 parseCache);
-    }
-
-    /// <summary>
-    /// Enumerates <c>ParseAndEval</c> nodes that can participate in tail-call handling.
-    /// </summary>
-    public static IEnumerable<Expression.Eval> EnumerateTailCalls(Expression expression)
-    {
-        if (expression is Expression.Eval parseAndEval)
-        {
-            yield return parseAndEval;
-        }
-
-        if (expression is Expression.Conditional conditional)
-        {
-            foreach (var branch in new[] { conditional.TrueBranch, conditional.FalseBranch })
-            {
-                foreach (var tailCall in EnumerateTailCalls(branch))
-                {
-                    yield return tailCall;
-                }
-            }
-        }
     }
 
     private static bool IsDirectTailCallToRoot(
@@ -761,15 +724,26 @@ public class PineIRCompiler
         PineVMParseCache parseCache)
     {
         if (context.IsTailPosition &&
-            context.TailCallElimination.TryGetValue(parseAndEvalExpr, out var jumpToLoop))
+            context.TailLoop is { } tailLoop)
         {
-            if (jumpToLoop.GuardExpressionValues is { } guardExpressionValues)
+            var isDirect =
+                IsDirectTailCallToRoot(
+                    parseAndEvalExpr,
+                    tailLoop.RootExpressionForms,
+                    tailLoop.EnvironmentClass,
+                    parseCache);
+
+            if (!isDirect && tailLoop.EnvironmentClass is not null)
+            {
+                return CompileNormalParseAndEval(parseAndEvalExpr, context, prior, parseCache);
+            }
+
+            if (!isDirect)
             {
                 return
                     CompileGuardedJumpToLoop(
                         parseAndEvalExpr,
-                        jumpToLoop,
-                        guardExpressionValues,
+                        tailLoop.GuardExpressionValues,
                         context,
                         prior,
                         parseCache);
@@ -783,8 +757,7 @@ public class PineIRCompiler
                     parseCache);
 
             var jumpOffset =
-                jumpToLoop.DestinationInstructionIndex - afterEnvironment.Instructions.Count -
-                context.InstructionOffset;
+                -afterEnvironment.Instructions.Count - context.InstructionOffset;
 
             return
                 afterEnvironment
@@ -794,29 +767,35 @@ public class PineIRCompiler
                     ]);
         }
 
-        {
-            var afterEnvironment =
-                prior.ContinueWithExpression(
-                    parseAndEvalExpr.Environment,
-                    context,
-                    parseCache);
+        return CompileNormalParseAndEval(parseAndEvalExpr, context, prior, parseCache);
+    }
 
-            var afterExpr =
-                afterEnvironment.ContinueWithExpression(
-                    parseAndEvalExpr.Encoded,
-                    context,
-                    parseCache);
+    private static NodeCompilationResult CompileNormalParseAndEval(
+        Expression.Eval parseAndEvalExpr,
+        CompilationContext context,
+        NodeCompilationResult prior,
+        PineVMParseCache parseCache)
+    {
+        var afterEnvironment =
+            prior.ContinueWithExpression(
+                parseAndEvalExpr.Environment,
+                context,
+                parseCache);
 
-            return
-                afterExpr
-                .AppendInstruction(
-                    StackInstruction.Parse_And_Eval_Binary);
-        }
+        var afterExpr =
+            afterEnvironment.ContinueWithExpression(
+                parseAndEvalExpr.Encoded,
+                context,
+                parseCache);
+
+        return
+            afterExpr
+            .AppendInstruction(
+                StackInstruction.Parse_And_Eval_Binary);
     }
 
     private static NodeCompilationResult CompileGuardedJumpToLoop(
         Expression.Eval parseAndEvalExpr,
-        JumpToLoop jumpToLoop,
         IReadOnlyList<PineValue> guardExpressionValues,
         CompilationContext context,
         NodeCompilationResult prior,
@@ -858,8 +837,7 @@ public class PineIRCompiler
                 parseCache);
 
         var backwardJumpOffset =
-            jumpToLoop.DestinationInstructionIndex -
-            context.InstructionOffset -
+            -context.InstructionOffset -
             loopBranchInstructionOffset -
             loopBranch.Instructions.Count;
 

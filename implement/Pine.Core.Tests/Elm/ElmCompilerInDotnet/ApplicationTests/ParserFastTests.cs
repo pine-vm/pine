@@ -788,16 +788,16 @@ public class ParserFastTests
             """
             InvocationCount: 2
             BuildListCount: 3
-            LoopIterationCount: 21
-            InstructionCount: 971
+            LoopIterationCount: 18
+            InstructionCount: 839
             """);
 
         PerformanceCountersFormatting.FormatCounts(report2).Should().Be(
             """
             InvocationCount: 2
             BuildListCount: 3
-            LoopIterationCount: 47
-            InstructionCount: 2_115
+            LoopIterationCount: 44
+            InstructionCount: 1_983
             """);
     }
 

@@ -182,7 +182,7 @@ public record ExpressionCompilation(
         bool disableGenericApplicationChainConsolidation = false)
     {
         var inlinedStaticInvocations =
-            disableReduction || enableTailRecursionOptimization
+            disableReduction
             ?
             rootExpression
             :
@@ -200,7 +200,7 @@ public record ExpressionCompilation(
                 disableGenericApplicationChainConsolidation: disableGenericApplicationChainConsolidation);
 
         var expressionWithEnvConstraint =
-            envConstraintId is null || enableTailRecursionOptimization
+            envConstraintId is null
             ?
             inlinedStaticInvocations
             :
@@ -283,7 +283,10 @@ public record ExpressionCompilation(
             StackInstruction.Return
             ];
 
-        return allInstructions;
+        return
+            PineControlFlowGraph
+            .FromInstructions(allInstructions)
+            .LowerToStackInstructions();
     }
 
 
