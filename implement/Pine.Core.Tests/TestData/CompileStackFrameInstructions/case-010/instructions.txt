@@ -6,6 +6,6 @@ Jump_Const (5)
 Local_Get (0)
 Local_Get (0)
 Skip_Const (13)
-Parse_And_Eval_Binary
+Eval_Binary
 Build_List (2)
 Return

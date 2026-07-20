@@ -556,7 +556,7 @@ public class InvokeStackFrameConstTests
         report.LoopIterationCount.Should().Be(0);
 
         StackInstructionTraceRenderer.RenderInstructionTrace(trace)
-            .Should().Contain("Parse_And_Eval_Binary");
+            .Should().Contain("Eval_Binary");
     }
 
     [Fact]

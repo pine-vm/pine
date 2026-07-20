@@ -52,7 +52,7 @@ namespace Pine.Core.Tests.Interpreter.IntermediateVM;
 /// The <em>helper-body snapshot</em> is the primary signal of the inlining
 /// work: index 0–N should contain the inlined predicate's reduced kernel ops
 /// (<c>concat</c> + two <c>int_is_sorted_asc</c>-derived range checks)
-/// directly, with NO <c>Parse_And_Eval_Binary</c> for the predicate dispatch.
+/// directly, with NO <c>Eval_Binary</c> for the predicate dispatch.
 /// Any future inlining-threshold regression that re-rejects this body will
 /// fail the snapshot here with a clear diff.
 /// </para>
@@ -338,7 +338,7 @@ public class InlineSmallNonRecursiveCalleeRegressionTests
                 """
                 0: Push_Literal (List [3] (348))
                 1: Push_Literal (List [2] (345))
-                2: Parse_And_Eval_Binary
+                2: Eval_Binary
                 3: Return
                 """);
 
@@ -376,7 +376,7 @@ public class InlineSmallNonRecursiveCalleeRegressionTests
                 25: Int_Add_Const (1)
                 26: Build_List (3)
                 27: Local_Get (0)
-                28: Parse_And_Eval_Binary
+                28: Eval_Binary
                 29: Return
                 30: Local_Get (2)
                 31: Return
@@ -389,7 +389,7 @@ public class InlineSmallNonRecursiveCalleeRegressionTests
             // reducer evaluates the now-inlined body symbolically, the root
             // IR may collapse to either:
             //   - a single Push_Literal of the final result, or
-            //   - the inlined kernel ops + a recursive Parse_And_Eval_Binary.
+            //   - the inlined kernel ops + a recursive Eval_Binary.
             distinctCompiled.Should().HaveCount(1);
 
             // Either form is acceptable as a regression guard for this test:

@@ -527,7 +527,7 @@ public class FunctionApplicationOverheadTests
             """
             0: Push_Literal (List [20] (20))
             1: Push_Literal (List [3] (562))
-            2: Parse_And_Eval_Binary
+            2: Eval_Binary
             3: Return
             """);
 
@@ -574,7 +574,7 @@ public class FunctionApplicationOverheadTests
             32: Build_List (2)
             33: Local_Get (0)
             34: Head_Generic
-            35: Parse_And_Eval_Binary
+            35: Eval_Binary
             36: Prepend_List_Items (1)
             37: Return
             """);
@@ -622,7 +622,7 @@ public class FunctionApplicationOverheadTests
             32: Build_List (2)
             33: Local_Get (0)
             34: Head_Generic
-            35: Parse_And_Eval_Binary
+            35: Eval_Binary
             36: Prepend_List_Items (1)
             37: Return
             """);
@@ -670,7 +670,7 @@ public class FunctionApplicationOverheadTests
             32: Build_List (2)
             33: Local_Get (0)
             34: Head_Generic
-            35: Parse_And_Eval_Binary
+            35: Eval_Binary
             36: Prepend_List_Items (1)
             37: Return
             """);
@@ -718,7 +718,7 @@ public class FunctionApplicationOverheadTests
             32: Build_List (2)
             33: Local_Get (0)
             34: Head_Generic
-            35: Parse_And_Eval_Binary
+            35: Eval_Binary
             36: Prepend_List_Items (1)
             37: Return
             """);

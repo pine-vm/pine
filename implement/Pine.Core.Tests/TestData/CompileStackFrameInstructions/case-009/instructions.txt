@@ -5,5 +5,5 @@ Return
 Local_Get (0)
 Local_Get (0)
 Skip_Const (13)
-Parse_And_Eval_Binary
+Eval_Binary
 Return

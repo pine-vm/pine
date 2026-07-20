@@ -14,7 +14,7 @@ public class PineControlFlowGraphTests
         [
             StackInstruction.Local_Get(0),
             StackInstruction.Local_Get(1),
-            StackInstruction.Parse_And_Eval_Binary,
+            StackInstruction.Eval_Binary,
             StackInstruction.Return,
         ];
 

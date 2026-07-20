@@ -162,7 +162,7 @@ public class DirectTailLoopCompilationTests
             .Should().Be(1);
 
         compilation.Generic.Instructions.Count(
-            instruction => instruction.Kind == StackInstructionKind.Parse_And_Eval_Binary)
+            instruction => instruction.Kind == StackInstructionKind.Eval_Binary)
             .Should().Be(2, "the non-tail occurrence and guarded fallback remain normal invocations");
 
         var environment =

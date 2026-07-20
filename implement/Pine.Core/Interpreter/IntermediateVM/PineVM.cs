@@ -411,12 +411,12 @@ public class PineVM : IPineVM
         long instructionCount = 0;
         long invocationCount = 0;
         long loopIterationCount = 0;
-        long parseAndEvalCount = 0;
+        long evalCount = 0;
         long buildListCount = 0;
         long stackFrameCount = 0;
         long stackFrameReplaceCount = 0;
         long lastCacheEntryInstructionCount = 0;
-        long lastCacheEntryParseAndEvalCount = 0;
+        long lastCacheEntryEvalCount = 0;
         long tailLoopIterationCount = 0;
 
         PerformanceCounters CurrentCounters() =>
@@ -1061,9 +1061,9 @@ public class PineVM : IPineVM
 
                         return null;
 
-                    case PrecompiledResult.ContinueParseAndEval continueParseAndEval:
+                    case PrecompiledResult.ContinueEval continueEval:
                         {
-                            var contParseResult = ParseExpression(continueParseAndEval.ExpressionValue);
+                            var contParseResult = ParseExpression(continueEval.ExpressionValue);
 
                             if (contParseResult.IsErrOrNull() is { } contParseErr)
                             {
@@ -1088,9 +1088,9 @@ public class PineVM : IPineVM
 
                             return
                                 InvokePrecompiledOrBuildStackFrame(
-                                    expressionValue: continueParseAndEval.ExpressionValue,
+                                    expressionValue: continueEval.ExpressionValue,
                                     expression: contParseOk,
-                                    environmentValue: PineValueInProcess.Create(continueParseAndEval.EnvironmentValue),
+                                    environmentValue: PineValueInProcess.Create(continueEval.EnvironmentValue),
                                     replaceCurrentFrame: replaceCurrentFrame);
                         }
 
@@ -1108,7 +1108,7 @@ public class PineVM : IPineVM
                                     new StackFrameProfilingBaseline(
                                         BeginInstructionCount: instructionCount,
                                         BeginInvocationCount: invocationCount,
-                                        BeginParseAndEvalCount: parseAndEvalCount,
+                                        BeginEvalCount: evalCount,
                                         BeginStackFrameCount: stackFrameCount,
                                         BeginBuildListCount: buildListCount),
                                     Specialization: specialization.Stepwise,
@@ -1308,7 +1308,7 @@ public class PineVM : IPineVM
                 new StackFrameProfilingBaseline(
                     BeginInstructionCount: instructionCount,
                     BeginInvocationCount: invocationCount,
-                    BeginParseAndEvalCount: parseAndEvalCount,
+                    BeginEvalCount: evalCount,
                     BeginStackFrameCount: stackFrameCount,
                     BeginBuildListCount: buildListCount);
 
@@ -1423,7 +1423,7 @@ public class PineVM : IPineVM
                 var frameInvocationCount =
                     invocationCount - currentFrame.ProfilingBaseline.BeginInvocationCount;
 
-                var frameParseAndEvalCount = parseAndEvalCount - currentFrame.ProfilingBaseline.BeginParseAndEvalCount;
+                var frameEvalCount = evalCount - currentFrame.ProfilingBaseline.BeginEvalCount;
                 var frameStackFrameCount = stackFrameCount - currentFrame.ProfilingBaseline.BeginStackFrameCount;
                 var frameBuildListCount = buildListCount - currentFrame.ProfilingBaseline.BeginBuildListCount;
 
@@ -1440,20 +1440,20 @@ public class PineVM : IPineVM
 
                 if (frameTotalInstructionCount + frameStackFrameCount * 100 > 700 && EvalCache is { } evalCache)
                 {
-                    var parseAndEvalCountSinceLastCacheEntry =
-                        parseAndEvalCount - lastCacheEntryParseAndEvalCount;
+                    var evalCountSinceLastCacheEntry =
+                        evalCount - lastCacheEntryEvalCount;
 
                     var instructionCountSinceLastCacheEntry =
                         instructionCount - lastCacheEntryInstructionCount;
 
-                    if (instructionCountSinceLastCacheEntry + parseAndEvalCountSinceLastCacheEntry * 100 > 700)
+                    if (instructionCountSinceLastCacheEntry + evalCountSinceLastCacheEntry * 100 > 700)
                     {
                         if (evalCache.TryAdd(
                             new EvalCacheEntryKey(currentFrameExprValue, currentFrame.InputValues),
                             frameReturnValue.Evaluate()))
                         {
                             lastCacheEntryInstructionCount = instructionCount;
-                            lastCacheEntryParseAndEvalCount = parseAndEvalCount;
+                            lastCacheEntryEvalCount = evalCount;
                         }
                     }
                 }
@@ -2455,9 +2455,9 @@ public class PineVM : IPineVM
                             continue;
                         }
 
-                    case StackInstructionKind.Parse_And_Eval_Binary:
+                    case StackInstructionKind.Eval_Binary:
                         {
-                            ++parseAndEvalCount;
+                            ++evalCount;
 
                             if (IncrementInvocationCountAndEnforceLimits() is { } limitError)
                             {

@@ -287,7 +287,7 @@ public enum StackInstructionKind
     /// Tries to parse the top value from the stack as a Pine expression and evaluates it using
     /// the second value on the stack as the environment.
     /// </summary>
-    Parse_And_Eval_Binary,
+    Eval_Binary,
 
     /// <summary>
     /// Invokes a specific stack-frame representation using values forwarded directly from the stack.
@@ -843,10 +843,10 @@ public record StackInstruction(
         new(StackInstructionKind.Int_Less_Than_Or_Equal_Binary);
 
     /// <summary>
-    /// A pre-built <see cref="StackInstructionKind.Parse_And_Eval_Binary"/> instruction.
+    /// A pre-built <see cref="StackInstructionKind.Eval_Binary"/> instruction.
     /// </summary>
-    public static readonly StackInstruction Parse_And_Eval_Binary =
-        new(StackInstructionKind.Parse_And_Eval_Binary);
+    public static readonly StackInstruction Eval_Binary =
+        new(StackInstructionKind.Eval_Binary);
 
     /// <summary>
     /// Creates a <see cref="StackInstructionKind.Invoke_StackFrame_Const"/> instruction that invokes
@@ -1509,7 +1509,7 @@ public record StackInstruction(
                 PushCount: 0,
                 []),
 
-            StackInstructionKind.Parse_And_Eval_Binary =>
+            StackInstructionKind.Eval_Binary =>
             new InstructionDetails(
                 PopCount: 2,
                 PushCount: 1,

@@ -4,7 +4,7 @@ Push_Literal (Blob [2] (int 13))
 Jump_If_Equal_Const (Blob [1] (0x04) , 5)
 Local_Get (0)
 Local_Get (0)
-Parse_And_Eval_Binary
+Eval_Binary
 Return
 Push_Literal (Blob [2] (int 21))
 Return

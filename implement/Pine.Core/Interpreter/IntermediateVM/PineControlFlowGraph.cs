@@ -130,7 +130,7 @@ public sealed record PineControlFlowGraph(
 
                     break;
 
-                case StackInstructionKind.Parse_And_Eval_Binary:
+                case StackInstructionKind.Eval_Binary:
                 case StackInstructionKind.Return:
                     if (instructionIndex + 1 < instructions.Count)
                     {
@@ -411,7 +411,7 @@ public sealed record PineControlFlowGraph(
                     BranchArguments: [],
                     Instruction: last),
 
-                StackInstructionKind.Parse_And_Eval_Binary =>
+                StackInstructionKind.Eval_Binary =>
                 new PineControlFlowTerminator.Invoke(
                     Continuation: ResolveBlock(
                         endInstructionIndexExclusive,

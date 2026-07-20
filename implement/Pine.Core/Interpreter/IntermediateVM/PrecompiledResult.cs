@@ -20,7 +20,7 @@ public abstract record PrecompiledResult
     /// Indicates that the precompiled function wants to continue by parsing and evaluating
     /// another expression in a new environment.
     /// </summary>
-    public sealed record ContinueParseAndEval(
+    public sealed record ContinueEval(
         PineValue EnvironmentValue,
         PineValue ExpressionValue)
         : PrecompiledResult;
