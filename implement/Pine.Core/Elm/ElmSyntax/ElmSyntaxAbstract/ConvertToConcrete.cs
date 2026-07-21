@@ -408,7 +408,9 @@ public static class ConvertToConcrete
                     [.. listExpr.Elements.Select(element => Node(ToExpression(element)))])),
 
             Expression.FunctionOrValue functionOrValue =>
-            new SyntaxModel.Expression.FunctionOrValue(functionOrValue.QualifiedName.Namespaces, functionOrValue.QualifiedName.DeclName),
+            new SyntaxModel.Expression.FunctionOrValue(
+                functionOrValue.QualifiedName.Namespaces,
+                functionOrValue.QualifiedName.DeclName),
 
             Expression.IfBlock ifBlock =>
             new SyntaxModel.Expression.IfBlock(
@@ -424,8 +426,8 @@ public static class ConvertToConcrete
 
             Expression.Application application =>
             new SyntaxModel.Expression.Application(
-                Node(ToExpression(application.Function)),
-                [.. application.Arguments.Select(argument => Node(ToExpression(argument)))]),
+                Node(ToExpressionInApplicationPosition(application.Function)),
+                [.. application.Arguments.Select(argument => Node(ToExpressionInApplicationPosition(argument)))]),
 
             Expression.OperatorApplication operatorApplication =>
             new SyntaxModel.Expression.OperatorApplication(
@@ -489,6 +491,62 @@ public static class ConvertToConcrete
             _ =>
             throw new System.NotImplementedException(
                 "Unexpected expression type: " + expression.GetType().FullName)
+        };
+
+    private static SyntaxModel.Expression ToExpressionInApplicationPosition(Expression expression)
+    {
+        var converted = ToExpression(expression);
+
+        if (!NeedsParenthesesInApplicationPosition(expression))
+            return converted;
+
+        return new SyntaxModel.Expression.ParenthesizedExpression(Node(converted));
+    }
+
+    private static bool NeedsParenthesesInApplicationPosition(Expression expression) =>
+        expression switch
+        {
+            Expression.Negation =>
+            true,
+
+            Expression.IfBlock =>
+            true,
+
+            Expression.Application =>
+            true,
+
+            Expression.OperatorApplication =>
+            true,
+
+            Expression.LambdaExpression =>
+            true,
+
+            Expression.CaseExpression =>
+            true,
+
+            Expression.LetExpression =>
+            true,
+
+            Expression.UnitExpr or
+            Expression.StringLiteral or
+            Expression.CharLiteral or
+            Expression.Integer or
+            Expression.FloatLiteral or
+            Expression.ListExpr or
+            Expression.FunctionOrValue or
+            Expression.PrefixOperator or
+            Expression.TupledExpression or
+            Expression.RecordExpr or
+            Expression.RecordAccess or
+            Expression.RecordAccessFunction or
+            Expression.RecordUpdateExpression or
+            Expression.GLSLExpression =>
+            false,
+
+            _ =>
+            throw new System.NotImplementedException(
+                "NeedsParenthesesInApplicationPosition does not handle expression variant: "
+                + expression.GetType().Name)
         };
 
     private static SyntaxModel.RecordExprField ToRecordExprField(RecordSetter setter) =>

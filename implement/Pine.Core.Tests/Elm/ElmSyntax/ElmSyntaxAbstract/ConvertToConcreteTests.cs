@@ -99,6 +99,56 @@ public class ConvertToConcreteTests
         AssertExpressionRoundTrips(abstractExpression);
     }
 
+    [Theory]
+    [InlineData("outer (inner argument)")]
+    [InlineData("outer (left + right)")]
+    [InlineData("outer (-value)")]
+    [InlineData("outer (if condition then yes else no)")]
+    [InlineData("outer (\\value -> value)")]
+    [InlineData("outer (let value = 1 in value)")]
+    public void Compound_application_argument_is_parenthesized(string expressionText)
+    {
+        var abstractExpression = ParseExpression(expressionText);
+
+        var concrete = Abstract.ConvertToConcrete.ToExpression(abstractExpression);
+
+        var application = concrete.Should().BeOfType<Concrete.Expression.Application>().Subject;
+        application.Arguments[0].Value.Should().BeOfType<Concrete.Expression.ParenthesizedExpression>();
+    }
+
+    [Fact]
+    public void Nested_application_in_function_position_is_parenthesized()
+    {
+        var abstractExpression = ParseExpression("(f argument) secondArgument");
+
+        var concrete = Abstract.ConvertToConcrete.ToExpression(abstractExpression);
+
+        var application = concrete.Should().BeOfType<Concrete.Expression.Application>().Subject;
+        application.Function.Value.Should().BeOfType<Concrete.Expression.ParenthesizedExpression>();
+    }
+
+    [Fact]
+    public void Converted_nested_application_renders_to_equivalent_elm()
+    {
+        var moduleText =
+            "module Test exposing (..)\n\n\nvalue =\n    outer (inner argument)\n";
+
+        var file =
+            ElmSyntaxParser.ParseModuleText(moduleText)
+            .Extract(err => throw new Exception("Parse failed: " + err));
+
+        var abstractFile = Abstract.ConvertFromConcrete.FromFile(file);
+        var concreteFile = Abstract.ConvertToConcrete.FromFile(abstractFile);
+
+        var rendered = Pine.Core.Elm.ElmSyntax.Avh4Format.FormatToString(concreteFile);
+
+        var reparsed =
+            ElmSyntaxParser.ParseModuleText(rendered)
+            .Extract(err => throw new Exception("Reparse failed: " + err + "\n\n" + rendered));
+
+        Abstract.ConvertFromConcrete.FromFile(reparsed).Should().Be(abstractFile);
+    }
+
     [Fact]
     public void Case_expression_round_trips_through_concrete_model()
     {
