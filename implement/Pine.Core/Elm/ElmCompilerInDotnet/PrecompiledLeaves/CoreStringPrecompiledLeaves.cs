@@ -492,6 +492,7 @@ public static class CoreStringPrecompiledLeaves
         }
 
         var fractionalDigits = afterSeparator.Length / 4;
+
         var denominator =
             fractionalDigits is >= 1 and <= 10
             ?

@@ -1495,7 +1495,10 @@ public static class TypeInference
             functionTypes is not null)
         {
             var qualifiedFuncName =
-                ResolveQualifiedNameRef(funcOrValueRef.QualifiedName.Namespaces, funcOrValueRef.QualifiedName.DeclName, currentModuleName);
+                ResolveQualifiedNameRef(
+                    funcOrValueRef.QualifiedName.Namespaces,
+                    funcOrValueRef.QualifiedName.DeclName,
+                    currentModuleName);
 
             if (functionTypes.TryGetValue(qualifiedFuncName, out var functionTypeInfo))
             {
@@ -1586,7 +1589,10 @@ public static class TypeInference
                 }
 
                 var qualifiedName =
-                    ResolveQualifiedNameRef(funcRef.QualifiedName.Namespaces, funcRef.QualifiedName.DeclName, currentModuleName);
+                    ResolveQualifiedNameRef(
+                        funcRef.QualifiedName.Namespaces,
+                        funcRef.QualifiedName.DeclName,
+                        currentModuleName);
 
                 // Look up the function type
                 // After canonicalization, all references should be fully qualified
@@ -2173,7 +2179,9 @@ public static class TypeInference
                 {
                     // This is a tag constructor application
                     if (constructorArgumentTypes.TryGetValue(
-                        QualifiedNameHelper.ToQualifiedNameRef(tagFuncRef.QualifiedName.Namespaces, tagFuncRef.QualifiedName.DeclName),
+                        QualifiedNameHelper.ToQualifiedNameRef(
+                            tagFuncRef.QualifiedName.Namespaces,
+                            tagFuncRef.QualifiedName.DeclName),
                         out var argTypes))
                     {
                         // Match arguments to constructor argument types
@@ -2341,7 +2349,10 @@ public static class TypeInference
                     !ElmValueEncoding.StringIsValidTagName(funcRef.QualifiedName.DeclName))
                 {
                     var qualifiedFuncName =
-                        ResolveQualifiedNameRef(funcRef.QualifiedName.Namespaces, funcRef.QualifiedName.DeclName, currentModuleName);
+                        ResolveQualifiedNameRef(
+                            funcRef.QualifiedName.Namespaces,
+                            funcRef.QualifiedName.DeclName,
+                            currentModuleName);
 
                     // First, check if this is a Basics module function with known types
                     IReadOnlyList<InferredType>? paramTypes = null;
@@ -3273,7 +3284,8 @@ public static class TypeInference
                             }
                             else
                             {
-                                parameterTypes = parameterTypes.Add(scrutineeRef.QualifiedName.DeclName, patternOpenRecord);
+                                parameterTypes =
+                                    parameterTypes.Add(scrutineeRef.QualifiedName.DeclName, patternOpenRecord);
                             }
 
                             // Register each destructured field name as a local binding
@@ -3562,7 +3574,9 @@ public static class TypeInference
                     if (parameterTypes.TryGetValue(accessedVar.QualifiedName.DeclName, out var existingType))
                     {
                         parameterTypes =
-                            parameterTypes.SetItem(accessedVar.QualifiedName.DeclName, UnifyTypes(existingType, openRecord));
+                            parameterTypes.SetItem(
+                                accessedVar.QualifiedName.DeclName,
+                                UnifyTypes(existingType, openRecord));
                     }
                     else
                     {

@@ -399,7 +399,7 @@ public class PatternCompiler
                     patternBindingTypes;
 
                 caseContext =
-                                    caseContext.WithReplacedLocalBindingsAndTypes(caseContext.LocalBindings, mergedBindingTypes);
+                    caseContext.WithReplacedLocalBindingsAndTypes(caseContext.LocalBindings, mergedBindingTypes);
             }
 
             var caseBodyResult = ExpressionCompiler.Compile(caseItem.Expression, caseContext);

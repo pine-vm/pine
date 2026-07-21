@@ -457,7 +457,10 @@ public class ElmCompiler
             {
                 var firstIncompleteDeclaration = parseModuleOk.IncompleteDeclarations[0];
 
-                parseFailures.Add(moduleNameFlattened, ElmSyntax.ElmSyntaxParseError.RenderDisplayString(firstIncompleteDeclaration.Value.ParseError));
+                parseFailures.Add(
+                    moduleNameFlattened,
+                    ElmSyntax.ElmSyntaxParseError.RenderDisplayString(firstIncompleteDeclaration.Value.ParseError));
+
                 continue;
             }
 
@@ -1669,8 +1672,7 @@ public class ElmCompiler
             compiledBody =
                 ReducePineExpression.ReduceExpressionBottomUp(
                     compiledBody,
-                    ReductionConfig.Default
-                    with
+                    ReductionConfig.Default with
                     {
                         DisableGenericApplicationChainConsolidation = disableGenericApplicationChainConsolidation
                     },

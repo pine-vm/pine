@@ -126,11 +126,12 @@ public static class LanguageServicePrecompiledLeaves
 
         var unwrappedChars = chars.Bytes.Slice(start, end - start);
 
-        return PineValue.List(
-            [
-            ElmValue.ElmStringTypeTagNameAsValue,
-            PineValue.List([PineValue.Blob(unwrappedChars)]),
-            ]);
+        return
+            PineValue.List(
+                [
+                ElmValue.ElmStringTypeTagNameAsValue,
+                PineValue.List([PineValue.Blob(unwrappedChars)]),
+                ]);
     }
 
     private static (int Start, int End) TrimOffsets(

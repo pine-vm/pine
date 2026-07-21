@@ -426,14 +426,19 @@ public class ExpressionCompiler
             // Check if this is a choice type tag application
             if (ElmValueEncoding.StringIsValidTagName(funcRef.QualifiedName.DeclName))
             {
-                var tagNameValue = Expression.LitralInst(StringEncoding.ValueFromString(funcRef.QualifiedName.DeclName));
+                var tagNameValue =
+                    Expression.LitralInst(StringEncoding.ValueFromString(funcRef.QualifiedName.DeclName));
 
                 var qualifiedTagName =
                     funcRef.QualifiedName.Namespaces.Count > 0
                     ?
                     funcRef.QualifiedName.FullName
                     :
-                    QualifiedNameHelper.ToQualifiedNameString([context.CurrentModuleName], funcRef.QualifiedName.DeclName);
+                    QualifiedNameHelper.ToQualifiedNameString(
+                        [
+                        context.CurrentModuleName
+                        ],
+                        funcRef.QualifiedName.DeclName);
 
                 var expectedArgCount =
                     context.ModuleCompilationContext.TryGetChoiceTypeConstructorArgumentCount(qualifiedTagName);
