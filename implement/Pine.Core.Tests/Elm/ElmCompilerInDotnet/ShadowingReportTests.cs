@@ -1,9 +1,10 @@
 using AwesomeAssertions;
 using Pine.Core.Elm.ElmCompilerInDotnet;
 using Pine.Core.Elm.ElmSyntax;
-using Pine.Core.Elm.ElmSyntax.Stil4mElmSyntax7;
 using System.Linq;
 using Xunit;
+
+using ConcreteSyntaxTypes = Pine.Core.Elm.ElmSyntax.SyntaxModel;
 
 namespace Pine.Core.Tests.Elm.ElmCompilerInDotnet;
 
@@ -14,13 +15,11 @@ namespace Pine.Core.Tests.Elm.ElmCompilerInDotnet;
 /// </summary>
 public class ShadowingReportTests
 {
-    private static File ParseModuleText(string moduleText)
+    private static ConcreteSyntaxTypes.File ParseModuleText(string moduleText)
     {
-        var concreteSyntax =
+        return
             ElmSyntaxParser.ParseModuleText(moduleText)
             .Extract(err => throw new System.Exception("Failed parsing: " + err));
-
-        return FromFullSyntaxModel.Convert(concreteSyntax);
     }
 
     private static ModuleCanonicalizationResult GetModuleResult(

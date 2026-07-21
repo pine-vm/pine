@@ -53,7 +53,7 @@ namespace Pine.Core.Elm.ElmCompilerInDotnet;
 /// through their own <typeparamref name="LoweredT"/> payload).
 /// </param>
 public record CompilationPipelineStageResults<LoweredT>(
-    IReadOnlyList<SyntaxTypes.File> Canonicalized,
+    IReadOnlyList<SyntaxModelTypes.File> Canonicalized,
     LoweredT Lowered,
     IReadOnlyList<SyntaxTypes.File> ModulesForCompilation,
     ImmutableList<OptimizationIterationStageResults>? OptimizationIterations = null);
@@ -102,6 +102,11 @@ public record OptimizationIterationStageResults(
 /// </summary>
 public class ElmCompiler
 {
+    private sealed record CanonicalizationBoundaryResult(
+        IReadOnlyList<SyntaxModelTypes.File> ConcreteModules,
+        IReadOnlyList<SyntaxTypes.File> LoweringModules,
+        HashSet<string> RootModuleNames);
+
     /// <summary>
     /// Default configuration for the Elm syntax transformations run as part of the standard compilation pipeline.
     /// </summary>
@@ -329,15 +334,17 @@ public class ElmCompiler
         if (canonicalizationResult.IsErrOrNull() is { } canonErr)
             return canonErr;
 
-        if (canonicalizationResult.IsOkOrNullable() is not { } canonicalizationOk)
+        if (canonicalizationResult.IsOkOrNull() is not { } canonicalizationOk)
         {
             throw new NotImplementedException(
                 "Unexpected result type: " + canonicalizationResult.GetType().Name);
         }
 
-        var (canonicalizedModules, rootModuleNames) = canonicalizationOk;
+        var canonicalizedModules = canonicalizationOk.ConcreteModules;
+        var modulesForLowering = canonicalizationOk.LoweringModules;
+        var rootModuleNames = canonicalizationOk.RootModuleNames;
 
-        var flatCanonicalized = FlattenModulesToDeclarationDictionary(canonicalizedModules);
+        var flatCanonicalized = FlattenModulesToDeclarationDictionary(modulesForLowering);
 
         IReadOnlySet<DeclQualifiedName> rootDeclarationNames =
             flatCanonicalized.Keys
@@ -364,7 +371,7 @@ public class ElmCompiler
         var modulesForCompilation =
             ReconstructModulesFromFlatDict(
                 filteredDeclarations,
-                canonicalizedModules);
+                modulesForLowering);
 
         return
             new CompilationPipelineStageResults<LoweredT>(
@@ -380,7 +387,7 @@ public class ElmCompiler
     /// Shared between the back-compat and generic overloads of
     /// <see cref="LowerToElmSyntaxForCompilation"/>.
     /// </summary>
-    private static Result<string, (List<SyntaxTypes.File> CanonicalizedModules, HashSet<string> RootModuleNames)>
+    private static Result<string, CanonicalizationBoundaryResult>
         ParseAndCanonicalizeForLowering(
         FileTree appCodeTree,
         IReadOnlyList<IReadOnlyList<string>> rootFilePaths)
@@ -398,7 +405,7 @@ public class ElmCompiler
             .ToImmutableArray();
 
         // Step 1: Parse all modules, building a map from file path to module name.
-        var successfullyParsedModules = new Dictionary<string, SyntaxTypes.File>();
+        var successfullyParsedModules = new Dictionary<string, SyntaxModelTypes.File>();
 
         var parseFailures = new Dictionary<string, string>();
 
@@ -464,10 +471,7 @@ public class ElmCompiler
                 continue;
             }
 
-            var parseModuleAst =
-                SyntaxTypes.FromFullSyntaxModel.Convert(parseModuleOk);
-
-            successfullyParsedModules[moduleNameFlattened] = parseModuleAst;
+            successfullyParsedModules[moduleNameFlattened] = parseModuleOk;
         }
 
         // Step 2: Compute the transitive dependency closure of the root modules.
@@ -581,7 +585,16 @@ public class ElmCompiler
         var canonicalizedModules =
             canonicalizedModulesDict.Values.Select(v => v.File).ToList();
 
-        return (canonicalizedModules, rootModuleNames);
+        var modulesForLowering =
+            canonicalizedModules
+            .Select(module => SyntaxTypes.FromFullSyntaxModel.Convert(module with { Imports = [] }))
+            .ToList();
+
+        return
+            new CanonicalizationBoundaryResult(
+                ConcreteModules: canonicalizedModules,
+                LoweringModules: modulesForLowering,
+                RootModuleNames: rootModuleNames);
     }
 
     /// <summary>
@@ -2409,7 +2422,10 @@ public class ElmCompiler
         string stageName)
     {
         var (errors, shadowings) =
-            NamingErrorDetection.DetectNamingErrorsInFlatDict(declarations);
+            NamingErrorDetection.DetectNamingErrorsInFlatDict(
+                declarations.ToImmutableDictionary(
+                    item => item.Key,
+                    item => SyntaxTypes.ToFullSyntaxModel.Convert(item.Value)));
 
         return FormatNamingErrorProblems(errors, shadowings, stageName);
     }

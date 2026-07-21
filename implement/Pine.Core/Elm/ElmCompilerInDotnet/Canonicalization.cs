@@ -6,7 +6,8 @@ using System.Linq;
 
 using ModuleName = System.Collections.Generic.IReadOnlyList<string>;
 
-using SyntaxTypes = Pine.Core.Elm.ElmSyntax.Stil4mElmSyntax7;
+using SyntaxTypes = Pine.Core.Elm.ElmSyntax.SyntaxModel;
+using CompatibilityTypes = Pine.Core.Elm.ElmSyntax.Stil4mElmSyntax7;
 
 // Alias to avoid ambiguity with System.Range
 using Range = Pine.Core.Elm.ElmSyntax.SyntaxModel.Range;
@@ -163,7 +164,8 @@ public class Canonicalization
                     $"Name '{ambiguous.Name}' is exposed by multiple imports: {string.Join(", ", ambiguous.ImportingModules)}",
 
                     _ =>
-                    $"Unknown error at {err.Range}"
+                    throw new NotImplementedException(
+                        "RenderErrors does not handle canonicalization-error variant: " + err.GetType().Name)
                 })
             .ToList();
 
@@ -194,15 +196,15 @@ public class Canonicalization
     /// On success, returns a dictionary mapping module names to their canonicalized files (which may contain errors).
     /// On failure (e.g., duplicate module names), returns an error message.
     /// </returns>
-    public static Result<string, IReadOnlyDictionary<ModuleName, Result<string, SyntaxTypes.File>>> Canonicalize(
-        IReadOnlyList<SyntaxTypes.File> modules)
+    public static Result<string, IReadOnlyDictionary<ModuleName, Result<string, File>>> Canonicalize(
+        IReadOnlyList<File> modules)
     {
         // Use CanonicalizeAllowingErrors and convert results to error format when there are errors
         var allowingErrorsResult = CanonicalizeAllowingErrors(modules);
 
         if (allowingErrorsResult.IsErrOrNull() is { } err)
         {
-            return Result<string, IReadOnlyDictionary<ModuleName, Result<string, SyntaxTypes.File>>>.err(err);
+            return Result<string, IReadOnlyDictionary<ModuleName, Result<string, File>>>.err(err);
         }
 
         var allowingErrorsModules =
@@ -211,7 +213,7 @@ public class Canonicalization
                 "Unexpected result type from CanonicalizeAllowingErrors");
 
         var resultDictionary =
-            new Dictionary<ModuleName, Result<string, SyntaxTypes.File>>(
+            new Dictionary<ModuleName, Result<string, File>>(
                 EnumerableExtensions.EqualityComparer<ModuleName>());
 
         foreach (var (moduleName, (file, errors, _)) in allowingErrorsModules)
@@ -222,11 +224,57 @@ public class Canonicalization
             }
             else
             {
-                resultDictionary[moduleName] = Result<string, SyntaxTypes.File>.ok(file);
+                resultDictionary[moduleName] = Result<string, File>.ok(file);
             }
         }
 
         return resultDictionary;
+    }
+
+    /// <summary>
+    /// Compatibility adapter for callers that explicitly use the stil4m/elm-syntax 7 model.
+    /// Canonicalization itself runs on the concrete syntax model.
+    /// </summary>
+    public static Result<string, IReadOnlyDictionary<ModuleName, Result<string, CompatibilityTypes.File>>> Canonicalize(
+        IReadOnlyList<CompatibilityTypes.File> modules)
+    {
+        var concreteResult =
+            Canonicalize(
+                modules
+                .Select(CompatibilityTypes.ToFullSyntaxModel.Convert)
+                .ToList());
+
+        if (concreteResult.IsErrOrNull() is { } error)
+            return error;
+
+        var concreteModules =
+            concreteResult.IsOkOrNull() ??
+            throw new NotImplementedException(
+                "Unexpected result type from concrete Canonicalize");
+
+        var compatibilityModules =
+            new Dictionary<ModuleName, Result<string, CompatibilityTypes.File>>(
+                EnumerableExtensions.EqualityComparer<ModuleName>());
+
+        foreach (var (moduleName, moduleResult) in concreteModules)
+        {
+            if (moduleResult.IsErrOrNull() is { } moduleError)
+            {
+                compatibilityModules[moduleName] = moduleError;
+                continue;
+            }
+
+            var concreteFile =
+                moduleResult.IsOkOrNull() ??
+                throw new NotImplementedException(
+                    "Unexpected module result type from concrete Canonicalize");
+
+            compatibilityModules[moduleName] =
+                CompatibilityTypes.FromFullSyntaxModel.Convert(
+                    concreteFile with { Imports = [] });
+        }
+
+        return compatibilityModules;
     }
 
     /// <summary>
@@ -239,7 +287,7 @@ public class Canonicalization
     /// On failure (e.g., duplicate module names), returns an error message.
     /// </returns>
     public static Result<string, CanonicalizationResultWithErrors> CanonicalizeWithErrors(
-        IReadOnlyList<SyntaxTypes.File> modules)
+        IReadOnlyList<File> modules)
     {
         var allowingErrorsResult = CanonicalizeAllowingErrors(modules);
 
@@ -253,16 +301,7 @@ public class Canonicalization
             throw new NotImplementedException(
                 "Unexpected result type from CanonicalizeAllowingErrors");
 
-        var resultDictionary =
-            new Dictionary<ModuleName, ModuleCanonicalizationResult>(
-                EnumerableExtensions.EqualityComparer<ModuleName>());
-
-        foreach (var (moduleName, (file, errors, shadowings)) in allowingErrorsModules)
-        {
-            resultDictionary[moduleName] = new ModuleCanonicalizationResult(file, errors, shadowings);
-        }
-
-        return new CanonicalizationResultWithErrors(resultDictionary);
+        return new CanonicalizationResultWithErrors(allowingErrorsModules);
     }
 
     /// <summary>
@@ -279,13 +318,50 @@ public class Canonicalization
     /// On success, returns a dictionary mapping module names to tuples of (canonicalized file, errors).
     /// On failure (e.g., duplicate module names), returns an error message.
     /// </returns>
-    public static Result<string, IReadOnlyDictionary<ModuleName, (SyntaxTypes.File File, IReadOnlyList<CanonicalizationError> Errors, ImmutableDictionary<string, ShadowingLocation> Shadowings)>> CanonicalizeAllowingErrors(
-        IReadOnlyList<SyntaxTypes.File> modules)
+    public static Result<string, IReadOnlyDictionary<ModuleName, ModuleCanonicalizationResult>> CanonicalizeAllowingErrors(
+        IReadOnlyList<File> modules)
     {
         return
             CanonicalizeAllowingErrors(
                 modules,
                 ImplicitImportConfig.Default);
+    }
+
+    /// <summary>
+    /// Compatibility adapter for callers that explicitly use the stil4m/elm-syntax 7 model.
+    /// Canonicalization itself runs on the concrete syntax model.
+    /// </summary>
+    public static Result<string, IReadOnlyDictionary<ModuleName, (CompatibilityTypes.File File, IReadOnlyList<CanonicalizationError> Errors, ImmutableDictionary<string, ShadowingLocation> Shadowings)>> CanonicalizeAllowingErrors(
+        IReadOnlyList<CompatibilityTypes.File> modules)
+    {
+        var concreteResult =
+            CanonicalizeAllowingErrors(
+                modules
+                .Select(CompatibilityTypes.ToFullSyntaxModel.Convert)
+                .ToList());
+
+        if (concreteResult.IsErrOrNull() is { } error)
+            return error;
+
+        var concreteModules =
+            concreteResult.IsOkOrNull() ??
+            throw new NotImplementedException(
+                "Unexpected result type from concrete CanonicalizeAllowingErrors");
+
+        var compatibilityModules =
+            new Dictionary<ModuleName, (CompatibilityTypes.File, IReadOnlyList<CanonicalizationError>, ImmutableDictionary<string, ShadowingLocation>)>(
+                EnumerableExtensions.EqualityComparer<ModuleName>());
+
+        foreach (var (moduleName, moduleResult) in concreteModules)
+        {
+            compatibilityModules[moduleName] =
+                (CompatibilityTypes.FromFullSyntaxModel.Convert(
+                    moduleResult.File with { Imports = [] }),
+                moduleResult.Errors,
+                moduleResult.Shadowings);
+        }
+
+        return compatibilityModules;
     }
 
     /// <summary>
@@ -305,8 +381,8 @@ public class Canonicalization
     /// On success, returns a dictionary mapping module names to tuples of (canonicalized file, errors, shadowings).
     /// On failure (e.g., duplicate module names), returns an error message.
     /// </returns>
-    public static Result<string, IReadOnlyDictionary<ModuleName, (SyntaxTypes.File File, IReadOnlyList<CanonicalizationError> Errors, ImmutableDictionary<string, ShadowingLocation> Shadowings)>> CanonicalizeAllowingErrors(
-        IReadOnlyList<SyntaxTypes.File> modules,
+    public static Result<string, IReadOnlyDictionary<ModuleName, ModuleCanonicalizationResult>> CanonicalizeAllowingErrors(
+        IReadOnlyList<File> modules,
         ImplicitImportConfig implicitImportConfig)
     {
         // Check for duplicate module names
@@ -330,7 +406,7 @@ public class Canonicalization
                 .ToList();
 
             return
-                Result<string, IReadOnlyDictionary<ModuleName, (SyntaxTypes.File, IReadOnlyList<CanonicalizationError>, ImmutableDictionary<string, ShadowingLocation>)>>.err(
+                Result<string, IReadOnlyDictionary<ModuleName, ModuleCanonicalizationResult>>.err(
                     $"Duplicate module names: {string.Join(", ", duplicateNames)}");
         }
 
@@ -341,7 +417,7 @@ public class Canonicalization
         var moduleInfixMap = BuildModuleInfixMap(modules);
 
         var resultDictionary =
-            new Dictionary<ModuleName, (SyntaxTypes.File File, IReadOnlyList<CanonicalizationError> Errors, ImmutableDictionary<string, ShadowingLocation> Shadowings)>(
+            new Dictionary<ModuleName, ModuleCanonicalizationResult>(
                 EnumerableExtensions.EqualityComparer<ModuleName>());
 
         foreach (var module in modules)
@@ -405,22 +481,26 @@ public class Canonicalization
                 .Select(result => result.Value)
                 .ToList();
 
-            // Create new file with empty imports
+            // Preserve the source-shaped file. Imports are still needed for diagnostics and
+            // source mapping even though all references in declarations are now canonical.
             var canonicalizedModule =
                 module with
                 {
-                    Declarations = canonicalizedDeclarations,
-                    Imports = []
+                    Declarations = canonicalizedDeclarations
                 };
 
             // Always return the file along with any errors and shadowings
-            resultDictionary[currentModuleName] = (canonicalizedModule, allErrors, allShadowings);
+            resultDictionary[currentModuleName] =
+                new ModuleCanonicalizationResult(
+                    canonicalizedModule,
+                    allErrors,
+                    allShadowings);
         }
 
         return resultDictionary;
     }
 
-    private static ImmutableHashSet<string> BuildLocalDeclarations(SyntaxTypes.File module)
+    private static ImmutableHashSet<string> BuildLocalDeclarations(File module)
     {
         var localDeclarationsBuilder = ImmutableHashSet.CreateBuilder<string>();
 
@@ -429,19 +509,19 @@ public class Canonicalization
             var declName =
                 decl.Value switch
                 {
-                    SyntaxTypes.Declaration.FunctionDeclaration funcDecl =>
+                    Declaration.FunctionDeclaration funcDecl =>
                     funcDecl.Function.Declaration.Value.Name.Value,
 
-                    SyntaxTypes.Declaration.CustomTypeDeclaration typeDecl =>
+                    Declaration.ChoiceTypeDeclaration typeDecl =>
                     typeDecl.TypeDeclaration.Name.Value,
 
-                    SyntaxTypes.Declaration.AliasDeclaration aliasDecl =>
+                    Declaration.AliasDeclaration aliasDecl =>
                     aliasDecl.TypeAlias.Name.Value,
 
-                    SyntaxTypes.Declaration.InfixDeclaration infixDecl =>
+                    Declaration.InfixDeclaration infixDecl =>
                     infixDecl.Infix.Operator.Value,
 
-                    SyntaxTypes.Declaration.PortDeclaration portDecl =>
+                    Declaration.PortDeclaration portDecl =>
                     portDecl.Signature.Name.Value,
 
                     _ =>
@@ -452,11 +532,11 @@ public class Canonicalization
             localDeclarationsBuilder.Add(declName);
 
             // Also add type constructors for choice types
-            if (decl.Value is SyntaxTypes.Declaration.CustomTypeDeclaration choiceTypeDecl)
+            if (decl.Value is Declaration.ChoiceTypeDeclaration choiceTypeDecl)
             {
                 foreach (var ctor in choiceTypeDecl.TypeDeclaration.Constructors)
                 {
-                    localDeclarationsBuilder.Add(ctor.Value.Name.Value);
+                    localDeclarationsBuilder.Add(ctor.Constructor.Value.Name.Value);
                 }
             }
         }
@@ -469,7 +549,7 @@ public class Canonicalization
     /// Module-level declarations are allowed to shadow imports in Elm, but we track them for analysis.
     /// </summary>
     private static ImmutableDictionary<string, ShadowingLocation> CollectModuleLevelShadowings(
-        SyntaxTypes.File module,
+        File module,
         ImmutableDictionary<string, ImmutableList<ModuleName>> valueImportMap,
         ImmutableDictionary<string, ImmutableList<ModuleName>> typeImportMap)
     {
@@ -480,7 +560,7 @@ public class Canonicalization
         {
             switch (decl.Value)
             {
-                case SyntaxTypes.Declaration.FunctionDeclaration funcDecl:
+                case Declaration.FunctionDeclaration funcDecl:
                     {
                         var nameNode = funcDecl.Function.Declaration.Value.Name;
 
@@ -496,7 +576,7 @@ public class Canonicalization
                         break;
                     }
 
-                case SyntaxTypes.Declaration.CustomTypeDeclaration typeDecl:
+                case Declaration.ChoiceTypeDeclaration typeDecl:
                     {
                         var nameNode = typeDecl.TypeDeclaration.Name;
 
@@ -512,20 +592,20 @@ public class Canonicalization
                         // Also check type constructors
                         foreach (var ctor in typeDecl.TypeDeclaration.Constructors)
                         {
-                            if (valueImportMap.ContainsKey(ctor.Value.Name.Value) &&
-                                !shadowings.ContainsKey(ctor.Value.Name.Value))
+                            if (valueImportMap.ContainsKey(ctor.Constructor.Value.Name.Value) &&
+                                !shadowings.ContainsKey(ctor.Constructor.Value.Name.Value))
                             {
                                 shadowings =
                                     shadowings.Add(
-                                        ctor.Value.Name.Value,
-                                        new ShadowingLocation(ctor.Value.Name.Range, emptyPath));
+                                        ctor.Constructor.Value.Name.Value,
+                                        new ShadowingLocation(ctor.Constructor.Value.Name.Range, emptyPath));
                             }
                         }
 
                         break;
                     }
 
-                case SyntaxTypes.Declaration.AliasDeclaration aliasDecl:
+                case Declaration.AliasDeclaration aliasDecl:
                     {
                         var nameNode = aliasDecl.TypeAlias.Name;
 
@@ -541,7 +621,7 @@ public class Canonicalization
                         break;
                     }
 
-                case SyntaxTypes.Declaration.PortDeclaration portDecl:
+                case Declaration.PortDeclaration portDecl:
                     {
                         var nameNode = portDecl.Signature.Name;
 
@@ -556,6 +636,14 @@ public class Canonicalization
 
                         break;
                     }
+
+                case SyntaxTypes.Declaration.InfixDeclaration:
+                    break;
+
+                default:
+                    throw new NotImplementedException(
+                        "CollectModuleLevelShadowings does not handle declaration variant: " +
+                        decl.Value.GetType().Name);
             }
         }
 
@@ -563,7 +651,7 @@ public class Canonicalization
     }
 
     private static ImmutableDictionary<string, ModuleExports> BuildModuleExportsMap(
-        IReadOnlyList<SyntaxTypes.File> modules)
+        IReadOnlyList<File> modules)
     {
         var exportsMapBuilder = ImmutableDictionary.CreateBuilder<string, ModuleExports>();
 
@@ -581,13 +669,13 @@ public class Canonicalization
             var exposingList =
                 module.ModuleDefinition.Value switch
                 {
-                    SyntaxTypes.Module.NormalModule normalModule =>
+                    Module.NormalModule normalModule =>
                     normalModule.ModuleData.ExposingList.Value,
 
-                    SyntaxTypes.Module.PortModule portModule =>
+                    Module.PortModule portModule =>
                     portModule.ModuleData.ExposingList.Value,
 
-                    SyntaxTypes.Module.EffectModule effectModule =>
+                    Module.EffectModule effectModule =>
                     effectModule.ModuleData.ExposingList.Value,
 
                     _ =>
@@ -596,29 +684,29 @@ public class Canonicalization
                 };
 
             // Check if the module exposes all (..)
-            var exposesAll = exposingList is SyntaxTypes.Exposing.All;
+            var exposesAll = exposingList is Exposing.All;
 
             // Build a map of all declarations for filtering
-            var allDeclarations = new Dictionary<string, SyntaxTypes.Declaration>();
+            var allDeclarations = new Dictionary<string, Declaration>();
 
             foreach (var decl in module.Declarations)
             {
                 var declName =
                     decl.Value switch
                     {
-                        SyntaxTypes.Declaration.FunctionDeclaration funcDecl =>
+                        Declaration.FunctionDeclaration funcDecl =>
                         funcDecl.Function.Declaration.Value.Name.Value,
 
-                        SyntaxTypes.Declaration.CustomTypeDeclaration typeDecl =>
+                        Declaration.ChoiceTypeDeclaration typeDecl =>
                         typeDecl.TypeDeclaration.Name.Value,
 
-                        SyntaxTypes.Declaration.AliasDeclaration aliasDecl =>
+                        Declaration.AliasDeclaration aliasDecl =>
                         aliasDecl.TypeAlias.Name.Value,
 
-                        SyntaxTypes.Declaration.InfixDeclaration infixDecl =>
+                        Declaration.InfixDeclaration infixDecl =>
                         infixDecl.Infix.Operator.Value,
 
-                        SyntaxTypes.Declaration.PortDeclaration portDecl =>
+                        Declaration.PortDeclaration portDecl =>
                         portDecl.Signature.Name.Value,
 
                         _ =>
@@ -636,11 +724,11 @@ public class Canonicalization
                 {
                     switch (decl.Value)
                     {
-                        case SyntaxTypes.Declaration.FunctionDeclaration funcDecl:
+                        case Declaration.FunctionDeclaration funcDecl:
                             valueExportsBuilder.Add(funcDecl.Function.Declaration.Value.Name.Value);
                             break;
 
-                        case SyntaxTypes.Declaration.CustomTypeDeclaration typeDecl:
+                        case Declaration.ChoiceTypeDeclaration typeDecl:
                             var typeName = typeDecl.TypeDeclaration.Name.Value;
                             typeExportsBuilder.Add(typeName);
 
@@ -648,7 +736,7 @@ public class Canonicalization
 
                             foreach (var ctor in typeDecl.TypeDeclaration.Constructors)
                             {
-                                var ctorName = ctor.Value.Name.Value;
+                                var ctorName = ctor.Constructor.Value.Name.Value;
                                 valueExportsBuilder.Add(ctorName);
                                 constructorsBuilder.Add(ctorName);
                             }
@@ -656,23 +744,23 @@ public class Canonicalization
                             typeConstructorsBuilder[typeName] = constructorsBuilder.ToImmutable();
                             break;
 
-                        case SyntaxTypes.Declaration.AliasDeclaration aliasDecl:
+                        case Declaration.AliasDeclaration aliasDecl:
                             typeExportsBuilder.Add(aliasDecl.TypeAlias.Name.Value);
 
                             // Record type aliases also create an implicit constructor function
                             if (aliasDecl.TypeAlias.TypeAnnotation.Value
-                                is SyntaxTypes.TypeAnnotation.Record)
+                                is TypeAnnotation.Record)
                             {
                                 valueExportsBuilder.Add(aliasDecl.TypeAlias.Name.Value);
                             }
 
                             break;
 
-                        case SyntaxTypes.Declaration.InfixDeclaration infixDecl:
+                        case Declaration.InfixDeclaration infixDecl:
                             valueExportsBuilder.Add(infixDecl.Infix.Operator.Value);
                             break;
 
-                        case SyntaxTypes.Declaration.PortDeclaration portDecl:
+                        case Declaration.PortDeclaration portDecl:
                             valueExportsBuilder.Add(portDecl.Signature.Name.Value);
                             break;
 
@@ -682,7 +770,7 @@ public class Canonicalization
                     }
                 }
             }
-            else if (exposingList is SyntaxTypes.Exposing.Explicit explicitExposing)
+            else if (exposingList is Exposing.Explicit explicitExposing)
             {
                 // Only export what's explicitly listed
                 foreach (var exposeNode in explicitExposing.Nodes)
@@ -691,42 +779,42 @@ public class Canonicalization
 
                     switch (expose)
                     {
-                        case SyntaxTypes.TopLevelExpose.InfixExpose infixExpose:
+                        case TopLevelExpose.InfixExpose infixExpose:
                             valueExportsBuilder.Add(infixExpose.Name);
                             break;
 
-                        case SyntaxTypes.TopLevelExpose.FunctionExpose funcExpose:
+                        case TopLevelExpose.FunctionExpose funcExpose:
                             valueExportsBuilder.Add(funcExpose.Name);
                             break;
 
-                        case SyntaxTypes.TopLevelExpose.TypeOrAliasExpose typeOrAlias:
+                        case TopLevelExpose.TypeOrAliasExpose typeOrAlias:
                             typeExportsBuilder.Add(typeOrAlias.Name);
 
                             // Record type aliases also create an implicit constructor function
                             if (allDeclarations.TryGetValue(typeOrAlias.Name, out var aliasLookup) &&
-                                aliasLookup is SyntaxTypes.Declaration.AliasDeclaration aliasDeclLookup &&
+                                aliasLookup is Declaration.AliasDeclaration aliasDeclLookup &&
                                 aliasDeclLookup.TypeAlias.TypeAnnotation.Value
-                                is SyntaxTypes.TypeAnnotation.Record)
+                                is TypeAnnotation.Record)
                             {
                                 valueExportsBuilder.Add(typeOrAlias.Name);
                             }
 
                             break;
 
-                        case SyntaxTypes.TopLevelExpose.TypeExpose typeExpose:
+                        case TopLevelExpose.TypeExpose typeExpose:
                             var exposedTypeName = typeExpose.ExposedType.Name;
                             typeExportsBuilder.Add(exposedTypeName);
 
                             // If exposing constructors (..), add them
                             if (typeExpose.ExposedType.Open is not null &&
                                 allDeclarations.TryGetValue(exposedTypeName, out var typeDecl) &&
-                                typeDecl is SyntaxTypes.Declaration.CustomTypeDeclaration choiceTypeDecl)
+                                typeDecl is Declaration.ChoiceTypeDeclaration choiceTypeDecl)
                             {
                                 var constructorsBuilder = ImmutableList.CreateBuilder<string>();
 
                                 foreach (var ctor in choiceTypeDecl.TypeDeclaration.Constructors)
                                 {
-                                    var ctorName = ctor.Value.Name.Value;
+                                    var ctorName = ctor.Constructor.Value.Name.Value;
                                     valueExportsBuilder.Add(ctorName);
                                     constructorsBuilder.Add(ctorName);
                                 }
@@ -754,7 +842,7 @@ public class Canonicalization
     }
 
     private static (ImmutableDictionary<string, ImmutableList<ModuleName>>, ImmutableDictionary<string, ImmutableList<ModuleName>>, ImmutableDictionary<string, ModuleName>) BuildImportMaps(
-        IReadOnlyList<Node<SyntaxTypes.Import>> imports,
+        IReadOnlyList<Node<Import>> imports,
         ImmutableDictionary<string, ModuleExports> moduleExportsMap)
     {
         var typeImportMap =
@@ -775,7 +863,7 @@ public class Canonicalization
             // Handle module alias
             if (import.ModuleAlias is { } importModuleAlias)
             {
-                var alias = string.Join(".", importModuleAlias.Value);
+                var alias = string.Join(".", importModuleAlias.Alias.Value);
                 aliasMap[alias] = moduleName;
             }
 
@@ -785,9 +873,9 @@ public class Canonicalization
                 continue;
             }
 
-            var exposing = import.ExposingList.Value;
+            var exposing = import.ExposingList.Value.ExposingList.Value;
 
-            if (exposing is SyntaxTypes.Exposing.All)
+            if (exposing is Exposing.All)
             {
                 // Handle 'exposing (..)' 
                 if (moduleExportsMap.TryGetValue(moduleNameStr, out var moduleExports))
@@ -820,7 +908,7 @@ public class Canonicalization
                 continue;
             }
 
-            if (exposing is SyntaxTypes.Exposing.Explicit explicitExposing)
+            if (exposing is Exposing.Explicit explicitExposing)
             {
                 foreach (var exposeNode in explicitExposing.Nodes)
                 {
@@ -869,23 +957,23 @@ public class Canonicalization
     /// Returns type names and value names separately for an exposed item.
     /// </summary>
     private static (ModuleName TypeNames, ModuleName ValueNames) GetExposedNamesByNamespace(
-        SyntaxTypes.TopLevelExpose expose,
+        TopLevelExpose expose,
         string moduleName,
         ImmutableDictionary<string, ModuleExports> moduleExportsMap)
     {
         return expose switch
         {
             // Infix operators are values
-            SyntaxTypes.TopLevelExpose.InfixExpose infixExpose =>
+            TopLevelExpose.InfixExpose infixExpose =>
             ([], [infixExpose.Name]),
 
             // Functions are values
-            SyntaxTypes.TopLevelExpose.FunctionExpose functionExpose =>
+            TopLevelExpose.FunctionExpose functionExpose =>
             ([], [functionExpose.Name]),
 
             // Type or alias without constructors - type name only
             // However, record type aliases also export a value (constructor function)
-            SyntaxTypes.TopLevelExpose.TypeOrAliasExpose typeOrAliasExpose =>
+            TopLevelExpose.TypeOrAliasExpose typeOrAliasExpose =>
             (moduleExportsMap.TryGetValue(moduleName, out var aliasModuleExports) &&
             aliasModuleExports.ValueExports.Contains(typeOrAliasExpose.Name))
             ?
@@ -894,7 +982,7 @@ public class Canonicalization
             ([typeOrAliasExpose.Name], []),
 
             // Type with constructors - type name as type, constructors as values
-            SyntaxTypes.TopLevelExpose.TypeExpose typeExpose =>
+            TopLevelExpose.TypeExpose typeExpose =>
             GetTypeExposeNamesByNamespace(typeExpose, moduleName, moduleExportsMap),
 
             _ =>
@@ -904,7 +992,7 @@ public class Canonicalization
     }
 
     private static (ModuleName TypeNames, ModuleName ValueNames) GetTypeExposeNamesByNamespace(
-        SyntaxTypes.TopLevelExpose.TypeExpose typeExpose,
+        TopLevelExpose.TypeExpose typeExpose,
         string moduleName,
         ImmutableDictionary<string, ModuleExports> moduleExportsMap)
     {
@@ -924,21 +1012,21 @@ public class Canonicalization
         return (typeNames, valueNames);
     }
 
-    private static CanonicalizationResult<Node<SyntaxTypes.Declaration>> CanonicalizeDeclaration(
-        Node<SyntaxTypes.Declaration> declNode,
+    private static CanonicalizationResult<Node<Declaration>> CanonicalizeDeclaration(
+        Node<Declaration> declNode,
         CanonicalizationContext context)
     {
         var decl = declNode.Value;
 
         // Canonicalize based on declaration type
-        SyntaxTypes.Declaration canonicalizedDecl;
+        Declaration canonicalizedDecl;
 
         IReadOnlyList<CanonicalizationError> errors;
         ImmutableDictionary<string, ShadowingLocation> shadowings;
 
         switch (decl)
         {
-            case SyntaxTypes.Declaration.FunctionDeclaration funcDecl:
+            case Declaration.FunctionDeclaration funcDecl:
                 {
                     var funcName = funcDecl.Function.Declaration.Value.Name.Value;
 
@@ -950,49 +1038,50 @@ public class Canonicalization
                             funcDecl.Function,
                             contextWithDeclPath);
 
-                    canonicalizedDecl = new SyntaxTypes.Declaration.FunctionDeclaration(funcResult.Value);
+                    canonicalizedDecl = new Declaration.FunctionDeclaration(funcResult.Value);
 
                     errors = funcResult.Errors;
                     shadowings = funcResult.Shadowings;
                     break;
                 }
 
-            case SyntaxTypes.Declaration.CustomTypeDeclaration typeDecl:
+            case Declaration.ChoiceTypeDeclaration typeDecl:
                 {
                     var typeResult =
                         CanonicalizeTypeStruct(
                             typeDecl.TypeDeclaration,
                             context);
 
-                    canonicalizedDecl = new SyntaxTypes.Declaration.CustomTypeDeclaration(typeResult.Value);
+                    canonicalizedDecl = new Declaration.ChoiceTypeDeclaration(typeResult.Value);
 
                     errors = typeResult.Errors;
                     shadowings = typeResult.Shadowings;
                     break;
                 }
 
-            case SyntaxTypes.Declaration.AliasDeclaration aliasDecl:
+            case Declaration.AliasDeclaration aliasDecl:
                 {
                     var aliasResult =
                         CanonicalizeTypeAlias(
                             aliasDecl.TypeAlias,
                             context);
 
-                    canonicalizedDecl = new SyntaxTypes.Declaration.AliasDeclaration(aliasResult.Value);
+                    canonicalizedDecl = new Declaration.AliasDeclaration(aliasResult.Value);
 
                     errors = aliasResult.Errors;
                     shadowings = aliasResult.Shadowings;
                     break;
                 }
 
-            case SyntaxTypes.Declaration.PortDeclaration portDecl:
+            case Declaration.PortDeclaration portDecl:
                 {
                     var signatureResult =
                         CanonicalizeSignature(
                             portDecl.Signature,
                             context);
 
-                    canonicalizedDecl = new SyntaxTypes.Declaration.PortDeclaration(signatureResult.Value);
+                    canonicalizedDecl =
+                        new Declaration.PortDeclaration(portDecl.PortTokenLocation, signatureResult.Value);
 
                     errors = signatureResult.Errors;
                     shadowings = signatureResult.Shadowings;
@@ -1011,29 +1100,29 @@ public class Canonicalization
         }
 
         var canonicalizedNode =
-            new Node<SyntaxTypes.Declaration>(
+            new Node<Declaration>(
                 declNode.Range,
                 canonicalizedDecl);
 
         return
-            new CanonicalizationResult<Node<SyntaxTypes.Declaration>>(
+            new CanonicalizationResult<Node<Declaration>>(
                 canonicalizedNode,
                 errors,
                 shadowings);
     }
 
-    private static CanonicalizationResult<SyntaxTypes.FunctionStruct> CanonicalizeFunctionStruct(
-        SyntaxTypes.FunctionStruct func,
+    private static CanonicalizationResult<FunctionStruct> CanonicalizeFunctionStruct(
+        FunctionStruct func,
         CanonicalizationContext context)
     {
         var signatureResult =
             func.Signature is null
             ?
-            NoErrors<Node<SyntaxTypes.Signature>?>(null)
+            NoErrors<Node<Signature>?>(null)
             :
             CanonicalizeSignature(func.Signature.Value, context)
             .MapValue(
-                sig => (Node<SyntaxTypes.Signature>?)new Node<SyntaxTypes.Signature>(
+                sig => (Node<Signature>?)new Node<Signature>(
                     func.Signature.Range,
                     sig));
 
@@ -1046,16 +1135,16 @@ public class Canonicalization
             CanonicalizationResultExtensions.Map2(
                 signatureResult,
                 implResult,
-                (canonicalizedSignature, canonicalizedImpl) => new SyntaxTypes.FunctionStruct(
+                (canonicalizedSignature, canonicalizedImpl) => new FunctionStruct(
                     Documentation: func.Documentation,
                     Signature: canonicalizedSignature,
-                    Declaration: new Node<SyntaxTypes.FunctionImplementation>(
+                    Declaration: new Node<FunctionImplementation>(
                         func.Declaration.Range,
                         canonicalizedImpl)));
     }
 
-    private static CanonicalizationResult<SyntaxTypes.FunctionImplementation> CanonicalizeFunctionImplementation(
-        SyntaxTypes.FunctionImplementation impl,
+    private static CanonicalizationResult<FunctionImplementation> CanonicalizeFunctionImplementation(
+        FunctionImplementation impl,
         CanonicalizationContext context)
     {
         // Collect parameter variables while checking for shadowing.
@@ -1109,9 +1198,10 @@ public class Canonicalization
                 contextWithParams);
 
         var functionImplementation =
-            new SyntaxTypes.FunctionImplementation(
+            new FunctionImplementation(
                 Name: impl.Name,
                 Arguments: canonicalizedArguments,
+                EqualsTokenLocation: impl.EqualsTokenLocation,
                 Expression: exprResult.Value);
 
         var allErrors =
@@ -1122,11 +1212,11 @@ public class Canonicalization
                 CanonicalizationResult<object>.MergeShadowings(paramShadowings, argumentShadowings),
                 exprResult.Shadowings);
 
-        return new CanonicalizationResult<SyntaxTypes.FunctionImplementation>(functionImplementation, allErrors, allShadowings);
+        return new CanonicalizationResult<FunctionImplementation>(functionImplementation, allErrors, allShadowings);
     }
 
     internal static ImmutableHashSet<string> CollectPatternVariables(
-        SyntaxTypes.Pattern pattern,
+        Pattern pattern,
         ImmutableHashSet<string> variables)
     {
         switch (pattern)
@@ -1136,7 +1226,7 @@ public class Canonicalization
                 // Matches anything, no variables to collect
                 return variables;
 
-            case SyntaxTypes.Pattern.VarPattern varPattern:
+            case Pattern.VarPattern varPattern:
                 return variables.Add(varPattern.Name);
 
             case SyntaxTypes.Pattern.UnitPattern:
@@ -1169,7 +1259,7 @@ public class Canonicalization
                 // Float literal, no variables to collect
                 return variables;
 
-            case SyntaxTypes.Pattern.TuplePattern tuple:
+            case Pattern.TuplePattern tuple:
                 {
                     var result = variables;
 
@@ -1181,16 +1271,16 @@ public class Canonicalization
                     return result;
                 }
 
-            case SyntaxTypes.Pattern.RecordPattern recordPattern:
+            case Pattern.RecordPattern recordPattern:
                 return variables.Union(recordPattern.Fields.Select(f => f.Value));
 
-            case SyntaxTypes.Pattern.UnConsPattern unCons:
+            case Pattern.UnConsPattern unCons:
                 {
                     var result = CollectPatternVariables(unCons.Head.Value, variables);
                     return CollectPatternVariables(unCons.Tail.Value, result);
                 }
 
-            case SyntaxTypes.Pattern.ListPattern list:
+            case Pattern.ListPattern list:
                 {
                     var result = variables;
 
@@ -1202,7 +1292,7 @@ public class Canonicalization
                     return result;
                 }
 
-            case SyntaxTypes.Pattern.NamedPattern named:
+            case Pattern.NamedPattern named:
                 {
                     var result = variables;
 
@@ -1214,7 +1304,7 @@ public class Canonicalization
                     return result;
                 }
 
-            case SyntaxTypes.Pattern.AsPattern asPattern:
+            case Pattern.AsPattern asPattern:
                 {
                     var result =
                         CollectPatternVariables(asPattern.Pattern.Value, variables);
@@ -1222,7 +1312,7 @@ public class Canonicalization
                     return result.Add(asPattern.Name.Value);
                 }
 
-            case SyntaxTypes.Pattern.ParenthesizedPattern parenPattern:
+            case Pattern.ParenthesizedPattern parenPattern:
                 return CollectPatternVariables(parenPattern.Pattern.Value, variables);
 
             default:
@@ -1244,7 +1334,7 @@ public class Canonicalization
     /// <returns>A tuple of (collected variables, shadowing errors, detected shadowings).</returns>
     internal static (ImmutableHashSet<string> Variables, IReadOnlyList<CanonicalizationError> Errors, ImmutableDictionary<string, ShadowingLocation> Shadowings)
         CollectPatternVariablesWithShadowCheck(
-        SyntaxTypes.Pattern pattern,
+        Pattern pattern,
         Range patternRange,
         ImmutableHashSet<string> existingVariables,
         ImmutableHashSet<string> collectedVariables,
@@ -1264,7 +1354,7 @@ public class Canonicalization
             case SyntaxTypes.Pattern.FloatPattern:
                 return (collectedVariables, errors, shadowings);
 
-            case SyntaxTypes.Pattern.VarPattern varPattern:
+            case Pattern.VarPattern varPattern:
                 {
                     if (existingVariables.Contains(varPattern.Name))
                     {
@@ -1285,7 +1375,7 @@ public class Canonicalization
                     return (collectedVariables.Add(varPattern.Name), errors, shadowings);
                 }
 
-            case SyntaxTypes.Pattern.TuplePattern tuple:
+            case Pattern.TuplePattern tuple:
                 {
                     var result = collectedVariables;
 
@@ -1307,7 +1397,7 @@ public class Canonicalization
                     return (result, errors, shadowings);
                 }
 
-            case SyntaxTypes.Pattern.RecordPattern recordPattern:
+            case Pattern.RecordPattern recordPattern:
                 {
                     foreach (var field in recordPattern.Fields)
                     {
@@ -1331,7 +1421,7 @@ public class Canonicalization
                     return (collectedVariables.Union(recordPattern.Fields.Select(f => f.Value)), errors, shadowings);
                 }
 
-            case SyntaxTypes.Pattern.UnConsPattern unCons:
+            case Pattern.UnConsPattern unCons:
                 {
                     var (headVars, headErrors, headShadowings) =
                         CollectPatternVariablesWithShadowCheck(
@@ -1355,7 +1445,7 @@ public class Canonicalization
                     return (tailVars, errors, shadowings);
                 }
 
-            case SyntaxTypes.Pattern.ListPattern list:
+            case Pattern.ListPattern list:
                 {
                     var result = collectedVariables;
 
@@ -1377,7 +1467,7 @@ public class Canonicalization
                     return (result, errors, shadowings);
                 }
 
-            case SyntaxTypes.Pattern.NamedPattern named:
+            case Pattern.NamedPattern named:
                 {
                     var result = collectedVariables;
 
@@ -1399,7 +1489,7 @@ public class Canonicalization
                     return (result, errors, shadowings);
                 }
 
-            case SyntaxTypes.Pattern.AsPattern asPattern:
+            case Pattern.AsPattern asPattern:
                 {
                     var (patternVars, patternErrors, patternShadowings) =
                         CollectPatternVariablesWithShadowCheck(
@@ -1431,7 +1521,7 @@ public class Canonicalization
                     return (patternVars.Add(asPattern.Name.Value), errors, shadowings);
                 }
 
-            case SyntaxTypes.Pattern.ParenthesizedPattern parenPattern:
+            case Pattern.ParenthesizedPattern parenPattern:
                 return
                     CollectPatternVariablesWithShadowCheck(
                         parenPattern.Pattern.Value,
@@ -1446,8 +1536,8 @@ public class Canonicalization
         }
     }
 
-    private static CanonicalizationResult<SyntaxTypes.Signature> CanonicalizeSignature(
-        SyntaxTypes.Signature signature,
+    private static CanonicalizationResult<Signature> CanonicalizeSignature(
+        Signature signature,
         CanonicalizationContext context)
     {
         var typeAnnotationResult =
@@ -1456,15 +1546,20 @@ public class Canonicalization
                 context);
 
         var canonicalizedSignature =
-            new SyntaxTypes.Signature(
+            new Signature(
                 Name: signature.Name,
+                ColonLocation: signature.ColonLocation,
                 TypeAnnotation: typeAnnotationResult.Value);
 
-        return new CanonicalizationResult<SyntaxTypes.Signature>(canonicalizedSignature, typeAnnotationResult.Errors);
+        return
+            new CanonicalizationResult<Signature>(
+                canonicalizedSignature,
+                typeAnnotationResult.Errors,
+                typeAnnotationResult.Shadowings);
     }
 
-    private static CanonicalizationResult<SyntaxTypes.TypeStruct> CanonicalizeTypeStruct(
-        SyntaxTypes.TypeStruct typeStruct,
+    private static CanonicalizationResult<TypeStruct> CanonicalizeTypeStruct(
+        TypeStruct typeStruct,
         CanonicalizationContext context)
     {
         return
@@ -1472,17 +1567,20 @@ public class Canonicalization
                 typeStruct.Constructors,
                 ctor => CanonicalizeValueConstructorNode(ctor, context))
             .MapValue(
-                canonicalizedConstructors => new SyntaxTypes.TypeStruct(
+                canonicalizedConstructors => new TypeStruct(
                     Documentation: typeStruct.Documentation,
+                    TypeTokenLocation: typeStruct.TypeTokenLocation,
                     Name: typeStruct.Name,
                     Generics: typeStruct.Generics,
+                    EqualsTokenLocation: typeStruct.EqualsTokenLocation,
                     Constructors: [.. canonicalizedConstructors]));
     }
 
-    private static CanonicalizationResult<Node<SyntaxTypes.ValueConstructor>> CanonicalizeValueConstructorNode(
-        Node<SyntaxTypes.ValueConstructor> ctorNode,
+    private static CanonicalizationResult<(Location? PipeTokenLocation, Node<ValueConstructor> Constructor)> CanonicalizeValueConstructorNode(
+        (Location? PipeTokenLocation, Node<ValueConstructor> Constructor) ctorEntry,
         CanonicalizationContext context)
     {
+        var ctorNode = ctorEntry.Constructor;
         var ctor = ctorNode.Value;
 
         return
@@ -1490,15 +1588,17 @@ public class Canonicalization
                 ctor.Arguments,
                 arg => CanonicalizeTypeAnnotationNode(arg, context))
             .MapValue(
-                canonicalizedArguments => new Node<SyntaxTypes.ValueConstructor>(
+                canonicalizedArguments =>
+                (ctorEntry.PipeTokenLocation,
+                new Node<ValueConstructor>(
                     ctorNode.Range,
-                    new SyntaxTypes.ValueConstructor(
+                    new ValueConstructor(
                         Name: ctor.Name,
-                        Arguments: [.. canonicalizedArguments])));
+                        Arguments: [.. canonicalizedArguments]))));
     }
 
-    private static CanonicalizationResult<SyntaxTypes.TypeAlias> CanonicalizeTypeAlias(
-        SyntaxTypes.TypeAlias typeAlias,
+    private static CanonicalizationResult<TypeAlias> CanonicalizeTypeAlias(
+        TypeAlias typeAlias,
         CanonicalizationContext context)
     {
         var typeAnnotationResult =
@@ -1507,73 +1607,81 @@ public class Canonicalization
                 context);
 
         var canonicalizedTypeAlias =
-            new SyntaxTypes.TypeAlias(
+            new TypeAlias(
                 Documentation: typeAlias.Documentation,
+                TypeTokenLocation: typeAlias.TypeTokenLocation,
+                AliasTokenLocation: typeAlias.AliasTokenLocation,
                 Name: typeAlias.Name,
                 Generics: typeAlias.Generics,
+                EqualsTokenLocation: typeAlias.EqualsTokenLocation,
                 TypeAnnotation: typeAnnotationResult.Value);
 
-        return new CanonicalizationResult<SyntaxTypes.TypeAlias>(canonicalizedTypeAlias, typeAnnotationResult.Errors);
+        return
+            new CanonicalizationResult<TypeAlias>(
+                canonicalizedTypeAlias,
+                typeAnnotationResult.Errors,
+                typeAnnotationResult.Shadowings);
     }
 
-    private static CanonicalizationResult<Node<SyntaxTypes.TypeAnnotation>> CanonicalizeTypeAnnotationNode(
-        Node<SyntaxTypes.TypeAnnotation> typeNode,
+    private static CanonicalizationResult<Node<TypeAnnotation>> CanonicalizeTypeAnnotationNode(
+        Node<TypeAnnotation> typeNode,
         CanonicalizationContext context) =>
         MapNodeWithErrors(typeNode, type => CanonicalizeTypeAnnotation(type, context));
 
-    private static CanonicalizationResult<SyntaxTypes.TypeAnnotation> CanonicalizeTypeAnnotation(
-        SyntaxTypes.TypeAnnotation type,
+    private static CanonicalizationResult<TypeAnnotation> CanonicalizeTypeAnnotation(
+        TypeAnnotation type,
         CanonicalizationContext context) =>
         type switch
         {
-            SyntaxTypes.TypeAnnotation.GenericType genericType =>
-            NoErrors<SyntaxTypes.TypeAnnotation>(genericType), // Generic types don't need canonicalization
+            TypeAnnotation.GenericType genericType =>
+            NoErrors<TypeAnnotation>(genericType), // Generic types don't need canonicalization
 
-            SyntaxTypes.TypeAnnotation.Typed typed =>
+            TypeAnnotation.Typed typed =>
             CanonicalizeTypedAnnotation(typed, context)
-            .MapValue(t => (SyntaxTypes.TypeAnnotation)t),
+            .MapValue(t => (TypeAnnotation)t),
 
-            SyntaxTypes.TypeAnnotation.Unit unit =>
-            NoErrors<SyntaxTypes.TypeAnnotation>(unit), // Unit type doesn't need canonicalization
+            TypeAnnotation.Unit unit =>
+            NoErrors<TypeAnnotation>(unit), // Unit type doesn't need canonicalization
 
-            SyntaxTypes.TypeAnnotation.Tupled tupled =>
+            TypeAnnotation.Tupled tupled =>
             CanonicalizationResultExtensions.ConcatMap(
                 tupled.TypeAnnotations,
                 t => CanonicalizeTypeAnnotationNode(t, context))
             .MapValue(
                 canonicalizedNodes =>
-                (SyntaxTypes.TypeAnnotation)new SyntaxTypes.TypeAnnotation.Tupled([.. canonicalizedNodes])),
+                (TypeAnnotation)new TypeAnnotation.Tupled(RebuildSeparated(tupled.TypeAnnotations, [.. canonicalizedNodes]))),
 
-            SyntaxTypes.TypeAnnotation.Record record =>
+            TypeAnnotation.Record record =>
             CanonicalizeRecordDefinition(
                 record.RecordDefinition,
                 context)
-            .MapValue(recordDef => (SyntaxTypes.TypeAnnotation)new SyntaxTypes.TypeAnnotation.Record(recordDef)),
+            .MapValue(recordDef => (TypeAnnotation)new TypeAnnotation.Record(recordDef)),
 
-            SyntaxTypes.TypeAnnotation.GenericRecord genericRecord =>
+            TypeAnnotation.GenericRecord genericRecord =>
             CanonicalizeRecordDefinition(
                 genericRecord.RecordDefinition.Value,
                 context)
             .MapValue(
-                recordDef => (SyntaxTypes.TypeAnnotation)new SyntaxTypes.TypeAnnotation.GenericRecord(
+                recordDef => (TypeAnnotation)new TypeAnnotation.GenericRecord(
                     genericRecord.GenericName,
-                    new Node<SyntaxTypes.RecordDefinition>(
+                    genericRecord.PipeLocation,
+                    new Node<RecordDefinition>(
                         genericRecord.RecordDefinition.Range,
                         recordDef))),
 
-            SyntaxTypes.TypeAnnotation.FunctionTypeAnnotation funcType =>
+            TypeAnnotation.FunctionTypeAnnotation funcType =>
             CanonicalizationResultExtensions.Map2(
                 CanonicalizeTypeAnnotationNode(funcType.ArgumentType, context),
                 CanonicalizeTypeAnnotationNode(funcType.ReturnType, context),
-                (argNode, retNode) => (SyntaxTypes.TypeAnnotation)new SyntaxTypes.TypeAnnotation.FunctionTypeAnnotation(argNode, retNode)),
+                (argNode, retNode) => (TypeAnnotation)new TypeAnnotation.FunctionTypeAnnotation(argNode, funcType.ArrowLocation, retNode)),
 
             _ =>
             throw new NotImplementedException(
                 $"Unhandled type annotation in CanonicalizeTypeAnnotation: {type.GetType().Name}")
         };
 
-    private static CanonicalizationResult<SyntaxTypes.TypeAnnotation.Typed> CanonicalizeTypedAnnotation(
-        SyntaxTypes.TypeAnnotation.Typed typed,
+    private static CanonicalizationResult<TypeAnnotation.Typed> CanonicalizeTypedAnnotation(
+        TypeAnnotation.Typed typed,
         CanonicalizationContext context)
     {
         var (moduleName, name) = typed.TypeName.Value;
@@ -1609,28 +1717,30 @@ public class Canonicalization
             typeArgumentResults.SelectMany(r => r.Errors).ToList();
 
         var canonicalizedTyped =
-            new SyntaxTypes.TypeAnnotation.Typed(
+            new TypeAnnotation.Typed(
                 TypeName: canonicalizedTypeName,
                 TypeArguments: canonicalizedTypeArguments);
 
         var allErrors = resolveErrors.Concat(typeArgumentErrors).ToList();
 
-        return new CanonicalizationResult<SyntaxTypes.TypeAnnotation.Typed>(canonicalizedTyped, allErrors);
+        return new CanonicalizationResult<TypeAnnotation.Typed>(canonicalizedTyped, allErrors);
     }
 
-    private static CanonicalizationResult<SyntaxTypes.RecordDefinition> CanonicalizeRecordDefinition(
-        SyntaxTypes.RecordDefinition recordDef,
+    private static CanonicalizationResult<RecordDefinition> CanonicalizeRecordDefinition(
+        RecordDefinition recordDef,
         CanonicalizationContext context)
     {
         return
             CanonicalizationResultExtensions.ConcatMap(
                 recordDef.Fields,
                 field => CanonicalizeRecordFieldNode(field, context))
-            .MapValue(canonicalizedFields => new SyntaxTypes.RecordDefinition([.. canonicalizedFields]));
+            .MapValue(
+                canonicalizedFields =>
+                new RecordDefinition(RebuildSeparated(recordDef.Fields, [.. canonicalizedFields])));
     }
 
-    private static CanonicalizationResult<Node<SyntaxTypes.RecordField>> CanonicalizeRecordFieldNode(
-        Node<SyntaxTypes.RecordField> fieldNode,
+    private static CanonicalizationResult<Node<RecordField>> CanonicalizeRecordFieldNode(
+        Node<RecordField> fieldNode,
         CanonicalizationContext context)
     {
         var field = fieldNode.Value;
@@ -1641,18 +1751,26 @@ public class Canonicalization
                 context);
 
         var canonicalizedField =
-            new Node<SyntaxTypes.RecordField>(
+            new Node<RecordField>(
                 fieldNode.Range,
-                new SyntaxTypes.RecordField(
+                new RecordField(
                     FieldName: field.FieldName,
+                    ColonLocation: field.ColonLocation,
                     FieldType: fieldTypeResult.Value));
 
         return
-            new CanonicalizationResult<Node<SyntaxTypes.RecordField>>(
+            new CanonicalizationResult<Node<RecordField>>(
                 canonicalizedField,
-                fieldTypeResult.Errors);
+                fieldTypeResult.Errors,
+                fieldTypeResult.Shadowings);
     }
 
+    /// <summary>
+    /// Canonicalizes an Elm expression using the configured implicit imports.
+    /// </summary>
+    /// <param name="expr">The expression to canonicalize.</param>
+    /// <param name="implicitImportConfig">The implicit imports available to the expression.</param>
+    /// <returns>The canonicalized expression together with any canonicalization errors.</returns>
     public static CanonicalizationResult<SyntaxTypes.Expression> CanonicalizeExpression(
         SyntaxTypes.Expression expr,
         ImplicitImportConfig implicitImportConfig)
@@ -1695,16 +1813,16 @@ public class Canonicalization
                 SyntaxTypes.Expression.Literal literal =>
                 NoErrors((SyntaxTypes.Expression)literal),
 
+                SyntaxTypes.Expression.MultilineStringLiteral multilineString =>
+                NoErrors((SyntaxTypes.Expression)multilineString),
+
                 SyntaxTypes.Expression.CharLiteral charLiteral =>
                 NoErrors((SyntaxTypes.Expression)charLiteral),
 
                 SyntaxTypes.Expression.Integer integer =>
                 NoErrors((SyntaxTypes.Expression)integer),
 
-                SyntaxTypes.Expression.Hex hex =>
-                NoErrors((SyntaxTypes.Expression)hex),
-
-                SyntaxTypes.Expression.Floatable floatable =>
+                SyntaxTypes.Expression.FloatLiteral floatable =>
                 NoErrors((SyntaxTypes.Expression)floatable),
 
                 SyntaxTypes.Expression.Negation negation =>
@@ -1713,7 +1831,9 @@ public class Canonicalization
 
                 SyntaxTypes.Expression.ListExpr list =>
                 CanonicalizationResultExtensions.ConcatMap(list.Elements, e => CanonicalizeExpressionNode(e, context))
-                .MapValue(elements => (SyntaxTypes.Expression)new SyntaxTypes.Expression.ListExpr([.. elements])),
+                .MapValue(
+                    elements =>
+                    (SyntaxTypes.Expression)new SyntaxTypes.Expression.ListExpr(RebuildSeparated(list.Elements, [.. elements]))),
 
                 SyntaxTypes.Expression.FunctionOrValue funcOrValue =>
                 CanonicalizeFunctionOrValue(funcOrValue, exprNode.Range, context)
@@ -1724,7 +1844,13 @@ public class Canonicalization
                     CanonicalizeExpressionNode(ifBlock.Condition, context),
                     CanonicalizeExpressionNode(ifBlock.ThenBlock, context),
                     CanonicalizeExpressionNode(ifBlock.ElseBlock, context),
-                    (cond, thenBlock, elseBlock) => (SyntaxTypes.Expression)new SyntaxTypes.Expression.IfBlock(cond, thenBlock, elseBlock)),
+                    (cond, thenBlock, elseBlock) => (SyntaxTypes.Expression)new SyntaxTypes.Expression.IfBlock(
+                        ifBlock.IfTokenLocation,
+                        cond,
+                        ifBlock.ThenTokenLocation,
+                        thenBlock,
+                        ifBlock.ElseTokenLocation,
+                        elseBlock)),
 
                 SyntaxTypes.Expression.PrefixOperator prefixOperator =>
                 NoErrors((SyntaxTypes.Expression)prefixOperator),
@@ -1734,10 +1860,12 @@ public class Canonicalization
                 .MapValue(inner => (SyntaxTypes.Expression)new SyntaxTypes.Expression.ParenthesizedExpression(inner)),
 
                 SyntaxTypes.Expression.Application application =>
-                CanonicalizationResultExtensions.ConcatMap(
-                    application.Arguments,
-                    arg => CanonicalizeExpressionNode(arg, context))
-                .MapValue(args => (SyntaxTypes.Expression)new SyntaxTypes.Expression.Application([.. args])),
+                CanonicalizationResultExtensions.Map2(
+                    CanonicalizeExpressionNode(application.Function, context),
+                    CanonicalizationResultExtensions.ConcatMap(
+                        application.Arguments,
+                        arg => CanonicalizeExpressionNode(arg, context)),
+                    (func, args) => (SyntaxTypes.Expression)new SyntaxTypes.Expression.Application(func, [.. args])),
 
                 SyntaxTypes.Expression.OperatorApplication opApp =>
                 CanonicalizeOperatorApplication(opApp, context, exprNode.Range),
@@ -1747,7 +1875,8 @@ public class Canonicalization
                     tupled.Elements,
                     e => CanonicalizeExpressionNode(e, context))
                 .MapValue(
-                    elements => (SyntaxTypes.Expression)new SyntaxTypes.Expression.TupledExpression([.. elements])),
+                    elements =>
+                    (SyntaxTypes.Expression)new SyntaxTypes.Expression.TupledExpression(RebuildSeparated(tupled.Elements, [.. elements]))),
 
                 SyntaxTypes.Expression.LambdaExpression lambda =>
                 CanonicalizeLambdaStruct(lambda.Lambda, context)
@@ -1766,7 +1895,9 @@ public class Canonicalization
                 CanonicalizationResultExtensions.ConcatMap(
                     record.Fields,
                     f => CanonicalizeRecordFieldExpr(f, context))
-                .MapValue(fields => (SyntaxTypes.Expression)new SyntaxTypes.Expression.RecordExpr([.. fields])),
+                .MapValue(
+                    fields =>
+                    (SyntaxTypes.Expression)new SyntaxTypes.Expression.RecordExpr(RebuildSeparated(record.Fields, [.. fields]))),
 
                 SyntaxTypes.Expression.RecordAccess recordAccess =>
                 CanonicalizeExpressionNode(recordAccess.Record, context)
@@ -1783,7 +1914,13 @@ public class Canonicalization
                     f => CanonicalizeRecordFieldExpr(f, context))
                 .MapValue(
                     fields =>
-                    (SyntaxTypes.Expression)new SyntaxTypes.Expression.RecordUpdateExpression(recordUpdate.RecordName, [.. fields])),
+                    (SyntaxTypes.Expression)new SyntaxTypes.Expression.RecordUpdateExpression(
+                        recordUpdate.RecordName,
+                        recordUpdate.PipeLocation,
+                        RebuildSeparated(recordUpdate.Fields, [.. fields]))),
+
+                SyntaxTypes.Expression.GLSLExpression glslExpression =>
+                NoErrors((SyntaxTypes.Expression)glslExpression),
 
                 _ =>
                 throw new NotImplementedException(
@@ -1807,7 +1944,7 @@ public class Canonicalization
         var rightResult = CanonicalizeExpressionNode(opApp.Right, context);
 
         // Look up the operator in the operator-to-function mapping
-        if (context.OperatorToFunction.TryGetValue(opApp.Operator, out var funcMapping))
+        if (context.OperatorToFunction.TryGetValue(opApp.Operator.Value, out var funcMapping))
         {
             // Convert operator application to function application: func left right
             var funcOrValue =
@@ -1821,11 +1958,11 @@ public class Canonicalization
                 CanonicalizationResultExtensions.Map2(
                     leftResult,
                     rightResult,
-                    (left, right) => (SyntaxTypes.Expression)new SyntaxTypes.Expression.Application([funcNode, left, right]));
+                    (left, right) => (SyntaxTypes.Expression)new SyntaxTypes.Expression.Application(funcNode, [left, right]));
         }
 
         // Also check if the current module declares this operator via its own infix declarations
-        if (context.ModuleLevelDeclarations.Contains(opApp.Operator))
+        if (context.ModuleLevelDeclarations.Contains(opApp.Operator.Value))
         {
             // The operator is declared in this module; resolve using the function name from local scope.
             // This handles the case where a module uses its own infix operators.
@@ -1940,31 +2077,31 @@ public class Canonicalization
         return ResolveModuleName(name, range, currentModuleName, importMap, localVariables, localDeclarations);
     }
 
-    private static CanonicalizationResult<Node<(Node<string>, Node<SyntaxTypes.Expression>)>>
+    private static CanonicalizationResult<RecordExprField>
         CanonicalizeRecordFieldExpr(
-        Node<(Node<string> fieldName, Node<SyntaxTypes.Expression> valueExpr)> fieldNode,
+        RecordExprField field,
         CanonicalizationContext context)
     {
-        var (fieldName, valueExpr) = fieldNode.Value;
-
         var exprResult =
             CanonicalizeExpressionNode(
-                valueExpr,
+                field.ValueExpr,
                 context);
 
         var canonicalizedField =
-            new Node<(Node<string>, Node<SyntaxTypes.Expression>)>(
-                fieldNode.Range,
-                (fieldName, exprResult.Value));
+            new RecordExprField(
+                field.FieldName,
+                field.EqualsLocation,
+                exprResult.Value);
 
         return
-            new CanonicalizationResult<Node<(Node<string>, Node<SyntaxTypes.Expression>)>>(
+            new CanonicalizationResult<RecordExprField>(
                 canonicalizedField,
-                exprResult.Errors);
+                exprResult.Errors,
+                exprResult.Shadowings);
     }
 
-    private static CanonicalizationResult<SyntaxTypes.LambdaStruct> CanonicalizeLambdaStruct(
-        SyntaxTypes.LambdaStruct lambda,
+    private static CanonicalizationResult<LambdaStruct> CanonicalizeLambdaStruct(
+        LambdaStruct lambda,
         CanonicalizationContext context)
     {
         // Extend local variables with lambda parameters
@@ -1991,13 +2128,15 @@ public class Canonicalization
             CanonicalizationResultExtensions.Map2(
                 argumentsResult,
                 exprResult,
-                (canonicalizedArguments, canonicalizedExpr) => new SyntaxTypes.LambdaStruct(
+                (canonicalizedArguments, canonicalizedExpr) => new LambdaStruct(
+                    BackslashLocation: lambda.BackslashLocation,
                     Arguments: [.. canonicalizedArguments],
+                    ArrowLocation: lambda.ArrowLocation,
                     Expression: canonicalizedExpr));
     }
 
-    private static CanonicalizationResult<SyntaxTypes.CaseBlock> CanonicalizeCaseBlock(
-        SyntaxTypes.CaseBlock caseBlock,
+    private static CanonicalizationResult<CaseBlock> CanonicalizeCaseBlock(
+        CaseBlock caseBlock,
         CanonicalizationContext context)
     {
         var exprResult =
@@ -2014,13 +2153,15 @@ public class Canonicalization
             CanonicalizationResultExtensions.Map2(
                 exprResult,
                 casesResult,
-                (canonicalizedExpr, canonicalizedCases) => new SyntaxTypes.CaseBlock(
+                (canonicalizedExpr, canonicalizedCases) => new CaseBlock(
+                    CaseTokenLocation: caseBlock.CaseTokenLocation,
                     Expression: canonicalizedExpr,
+                    OfTokenLocation: caseBlock.OfTokenLocation,
                     Cases: [.. canonicalizedCases]));
     }
 
-    private static CanonicalizationResult<SyntaxTypes.Case> CanonicalizeCase(
-        SyntaxTypes.Case caseItem,
+    private static CanonicalizationResult<Case> CanonicalizeCase(
+        Case caseItem,
         CanonicalizationContext context)
     {
         // Collect pattern variables while checking for shadowing against both
@@ -2049,8 +2190,9 @@ public class Canonicalization
                 contextWithPatternVars);
 
         var canonicalizedCase =
-            new SyntaxTypes.Case(
+            new Case(
                 Pattern: patternResult.Value,
+                ArrowLocation: caseItem.ArrowLocation,
                 Expression: exprResult.Value);
 
         var allErrors = shadowErrors.Concat(patternResult.Errors).Concat(exprResult.Errors).ToList();
@@ -2060,7 +2202,7 @@ public class Canonicalization
                 CanonicalizationResult<object>.MergeShadowings(patternShadowings, patternResult.Shadowings),
                 exprResult.Shadowings);
 
-        return new CanonicalizationResult<SyntaxTypes.Case>(canonicalizedCase, allErrors, allShadowings);
+        return new CanonicalizationResult<Case>(canonicalizedCase, allErrors, allShadowings);
     }
 
     private static CanonicalizationResult<SyntaxTypes.Expression.LetBlock> CanonicalizeLetBlock(
@@ -2136,7 +2278,9 @@ public class Canonicalization
                 declsResult,
                 exprResult,
                 (canonicalizedDecls, canonicalizedExpr) => new SyntaxTypes.Expression.LetBlock(
+                    LetTokenLocation: letBlock.LetTokenLocation,
                     Declarations: [.. canonicalizedDecls],
+                    InTokenLocation: letBlock.InTokenLocation,
                     Expression: canonicalizedExpr));
 
         // Combine shadow errors with any errors from canonicalization
@@ -2159,6 +2303,7 @@ public class Canonicalization
     {
         SyntaxTypes.Expression.LetDeclaration canonicalizedDecl;
         IReadOnlyList<CanonicalizationError> errors;
+        ImmutableDictionary<string, ShadowingLocation> shadowings;
 
         switch (decl)
         {
@@ -2171,6 +2316,7 @@ public class Canonicalization
                         new SyntaxTypes.Expression.LetDeclaration.LetFunction(funcResult.Value);
 
                     errors = funcResult.Errors;
+                    shadowings = funcResult.Shadowings;
                     break;
                 }
 
@@ -2183,9 +2329,18 @@ public class Canonicalization
                         CanonicalizeExpressionNode(letDestr.Expression, context);
 
                     canonicalizedDecl =
-                        new SyntaxTypes.Expression.LetDeclaration.LetDestructuring(patternResult.Value, exprResult.Value);
+                        new SyntaxTypes.Expression.LetDeclaration.LetDestructuring(
+                            patternResult.Value,
+                            letDestr.EqualsTokenLocation,
+                            exprResult.Value);
 
                     errors = [.. patternResult.Errors, .. exprResult.Errors];
+
+                    shadowings =
+                        CanonicalizationResult<object>.MergeShadowings(
+                            patternResult.Shadowings,
+                            exprResult.Shadowings);
+
                     break;
                 }
 
@@ -2194,89 +2349,103 @@ public class Canonicalization
                     $"Unhandled let declaration type in CanonicalizeLetDeclaration: {decl.GetType().Name}");
         }
 
-        return new CanonicalizationResult<SyntaxTypes.Expression.LetDeclaration>(canonicalizedDecl, errors);
+        return
+            new CanonicalizationResult<SyntaxTypes.Expression.LetDeclaration>(
+                canonicalizedDecl,
+                errors,
+                shadowings);
     }
 
-    private static CanonicalizationResult<Node<SyntaxTypes.Pattern>> CanonicalizePatternNode(
-        Node<SyntaxTypes.Pattern> patternNode,
+    private static CanonicalizationResult<Node<Pattern>> CanonicalizePatternNode(
+        Node<Pattern> patternNode,
         CanonicalizationContext context) =>
         MapNodeWithErrors(patternNode, pattern => CanonicalizePattern(pattern, patternNode.Range, context));
 
-    private static CanonicalizationResult<SyntaxTypes.Pattern> CanonicalizePattern(
-        SyntaxTypes.Pattern pattern,
+    private static CanonicalizationResult<Pattern> CanonicalizePattern(
+        Pattern pattern,
         Range range,
         CanonicalizationContext context) =>
         pattern switch
         {
-            SyntaxTypes.Pattern.AllPattern allPattern =>
-            NoErrors<SyntaxTypes.Pattern>(allPattern),
+            Pattern.AllPattern allPattern =>
+            NoErrors<Pattern>(allPattern),
 
-            SyntaxTypes.Pattern.VarPattern varPattern =>
-            NoErrors<SyntaxTypes.Pattern>(varPattern),
+            Pattern.VarPattern varPattern =>
+            NoErrors<Pattern>(varPattern),
 
-            SyntaxTypes.Pattern.UnitPattern unitPattern =>
-            NoErrors<SyntaxTypes.Pattern>(unitPattern),
+            Pattern.UnitPattern unitPattern =>
+            NoErrors<Pattern>(unitPattern),
 
-            SyntaxTypes.Pattern.CharPattern charPattern =>
-            NoErrors<SyntaxTypes.Pattern>(charPattern),
+            Pattern.CharPattern charPattern =>
+            NoErrors<Pattern>(charPattern),
 
-            SyntaxTypes.Pattern.StringPattern stringPattern =>
-            NoErrors<SyntaxTypes.Pattern>(stringPattern),
+            Pattern.StringPattern stringPattern =>
+            NoErrors<Pattern>(stringPattern),
 
-            SyntaxTypes.Pattern.IntPattern intPattern =>
-            NoErrors<SyntaxTypes.Pattern>(intPattern),
+            Pattern.IntPattern intPattern =>
+            NoErrors<Pattern>(intPattern),
 
-            SyntaxTypes.Pattern.HexPattern hexPattern =>
-            NoErrors<SyntaxTypes.Pattern>(hexPattern),
+            Pattern.HexPattern hexPattern =>
+            NoErrors<Pattern>(hexPattern),
 
-            SyntaxTypes.Pattern.FloatPattern floatPattern =>
-            NoErrors<SyntaxTypes.Pattern>(floatPattern),
+            Pattern.FloatPattern floatPattern =>
+            NoErrors<Pattern>(floatPattern),
 
-            SyntaxTypes.Pattern.TuplePattern tuple =>
+            Pattern.TuplePattern tuple =>
             CanonicalizationResultExtensions.ConcatMap(
                 tuple.Elements,
                 e => CanonicalizePatternNode(e, context))
             .MapValue(
                 canonicalizedElems =>
-                (SyntaxTypes.Pattern)new SyntaxTypes.Pattern.TuplePattern([.. canonicalizedElems])),
+                (Pattern)new Pattern.TuplePattern(
+                    RebuildSeparated(tuple.Elements, [.. canonicalizedElems]))),
 
-            SyntaxTypes.Pattern.RecordPattern recordPattern =>
-            NoErrors<SyntaxTypes.Pattern>(recordPattern),
+            Pattern.RecordPattern recordPattern =>
+            NoErrors<Pattern>(recordPattern),
 
-            SyntaxTypes.Pattern.UnConsPattern unCons =>
+            Pattern.UnConsPattern unCons =>
             CanonicalizationResultExtensions.Map2(
                 CanonicalizePatternNode(unCons.Head, context),
                 CanonicalizePatternNode(unCons.Tail, context),
                 (headNode, tailNode) =>
-                (SyntaxTypes.Pattern)new SyntaxTypes.Pattern.UnConsPattern(headNode, tailNode)),
+                (Pattern)new Pattern.UnConsPattern(
+                    headNode,
+                    unCons.ConsOperatorLocation,
+                    tailNode)),
 
-            SyntaxTypes.Pattern.ListPattern list =>
+            Pattern.ListPattern list =>
             CanonicalizationResultExtensions.ConcatMap(
                 list.Elements,
                 e => CanonicalizePatternNode(e, context))
             .MapValue(
                 canonicalizedElems =>
-                (SyntaxTypes.Pattern)new SyntaxTypes.Pattern.ListPattern([.. canonicalizedElems])),
+                (Pattern)new Pattern.ListPattern(
+                    RebuildSeparated(list.Elements, [.. canonicalizedElems]))),
 
-            SyntaxTypes.Pattern.NamedPattern named =>
+            Pattern.NamedPattern named =>
             CanonicalizeNamedPattern(named, range, context)
-            .MapValue(np => (SyntaxTypes.Pattern)np),
+            .MapValue(np => (Pattern)np),
 
-            SyntaxTypes.Pattern.AsPattern asPattern =>
+            Pattern.AsPattern asPattern =>
             CanonicalizePatternNode(asPattern.Pattern, context)
-            .MapValue(innerNode => (SyntaxTypes.Pattern)new SyntaxTypes.Pattern.AsPattern(innerNode, asPattern.Name)),
+            .MapValue(
+                innerNode =>
+                (Pattern)new Pattern.AsPattern(
+                    innerNode,
+                    asPattern.AsTokenLocation,
+                    asPattern.Name)),
 
-            SyntaxTypes.Pattern.ParenthesizedPattern parenPattern =>
+            Pattern.ParenthesizedPattern parenPattern =>
             CanonicalizePatternNode(parenPattern.Pattern, context)
-            .MapValue(innerNode => (SyntaxTypes.Pattern)new SyntaxTypes.Pattern.ParenthesizedPattern(innerNode)),
+            .MapValue(innerNode => (Pattern)new Pattern.ParenthesizedPattern(innerNode)),
 
             _ =>
             throw new NotImplementedException(
                 $"Unhandled pattern type in CanonicalizePattern: {pattern.GetType().Name}")
         };
 
-    private static CanonicalizationResult<SyntaxTypes.Pattern.NamedPattern> CanonicalizeNamedPattern(
-        SyntaxTypes.Pattern.NamedPattern namedPattern,
+    private static CanonicalizationResult<Pattern.NamedPattern> CanonicalizeNamedPattern(
+        Pattern.NamedPattern namedPattern,
         Range range,
         CanonicalizationContext context)
     {
@@ -2305,8 +2474,8 @@ public class Canonicalization
             argumentResults.SelectMany(r => r.Errors).ToList();
 
         var canonicalizedNamedPattern =
-            new SyntaxTypes.Pattern.NamedPattern(
-                Name: new SyntaxTypes.QualifiedNameRef(
+            new Pattern.NamedPattern(
+                Name: new QualifiedNameRef(
                     ModuleName: resolvedModuleName,
                     Name: qualifiedName.Name),
                 Arguments: canonicalizedArguments);
@@ -2314,7 +2483,7 @@ public class Canonicalization
         var allErrors = resolveErrors.Concat(argumentErrors).ToList();
 
         return
-            new CanonicalizationResult<SyntaxTypes.Pattern.NamedPattern>(
+            new CanonicalizationResult<Pattern.NamedPattern>(
                 canonicalizedNamedPattern,
                 allErrors);
     }
@@ -2328,14 +2497,45 @@ public class Canonicalization
         return
             new CanonicalizationResult<Node<T>>(
                 new Node<T>(node.Range, result.Value),
-                result.Errors);
+                result.Errors,
+                result.Shadowings);
+    }
+
+    private static SeparatedSyntaxList<T> RebuildSeparated<T>(
+        SeparatedSyntaxList<T> original,
+        IReadOnlyList<T> values)
+    {
+        if (values.Count != original.Count)
+        {
+            throw new ArgumentException(
+                $"Expected {original.Count} values when rebuilding a separated list, but received {values.Count}.",
+                nameof(values));
+        }
+
+        return
+            original switch
+            {
+                SeparatedSyntaxList<T>.Empty =>
+                new SeparatedSyntaxList<T>.Empty(),
+
+                SeparatedSyntaxList<T>.NonEmpty nonEmpty =>
+                new SeparatedSyntaxList<T>.NonEmpty(
+                    values[0],
+                    nonEmpty.Rest
+                    .Select((item, index) => (item.SeparatorLocation, values[index + 1]))
+                    .ToList()),
+
+                _ =>
+                throw new NotImplementedException(
+                    "RebuildSeparated does not handle separated-list variant: " + original.GetType().Name)
+            };
     }
 
     /// <summary>
     /// Builds a map of module names to their exposed infix declarations.
     /// </summary>
     private static ImmutableDictionary<string, ImmutableList<(string Operator, string FunctionName)>>
-        BuildModuleInfixMap(IReadOnlyList<SyntaxTypes.File> modules)
+        BuildModuleInfixMap(IReadOnlyList<File> modules)
     {
         var builder = ImmutableDictionary.CreateBuilder<string, ImmutableList<(string, string)>>();
 
@@ -2348,7 +2548,7 @@ public class Canonicalization
 
             foreach (var decl in module.Declarations)
             {
-                if (decl.Value is SyntaxTypes.Declaration.InfixDeclaration infixDecl)
+                if (decl.Value is Declaration.InfixDeclaration infixDecl)
                 {
                     infixDecls.Add((infixDecl.Infix.Operator.Value, infixDecl.Infix.FunctionName.Value));
                 }
@@ -2369,7 +2569,7 @@ public class Canonicalization
     /// </summary>
     private static ImmutableDictionary<string, (ModuleName ModuleName, string FunctionName)>
         CollectImportedInfixOperators(
-        IReadOnlyList<Node<SyntaxTypes.Import>> imports,
+        IReadOnlyList<Node<Import>> imports,
         ImmutableDictionary<string, ModuleExports> moduleExportsMap,
         ImmutableDictionary<string, ImmutableList<(string Operator, string FunctionName)>> moduleInfixMap)
     {
@@ -2388,9 +2588,9 @@ public class Canonicalization
             if (import.ExposingList is null)
                 continue;
 
-            var exposing = import.ExposingList.Value;
+            var exposing = import.ExposingList.Value.ExposingList.Value;
 
-            if (exposing is SyntaxTypes.Exposing.All)
+            if (exposing is Exposing.All)
             {
                 // exposing (..) - import all infix operators from this module
                 foreach (var (op, funcName) in infixDecls)
@@ -2398,12 +2598,12 @@ public class Canonicalization
                     operatorToFunction[op] = (moduleName, funcName);
                 }
             }
-            else if (exposing is SyntaxTypes.Exposing.Explicit explicitExposing)
+            else if (exposing is Exposing.Explicit explicitExposing)
             {
                 // Check if specific operators are explicitly imported
                 foreach (var exposeNode in explicitExposing.Nodes)
                 {
-                    if (exposeNode.Value is SyntaxTypes.TopLevelExpose.InfixExpose infixExpose)
+                    if (exposeNode.Value is TopLevelExpose.InfixExpose infixExpose)
                     {
                         var opName = infixExpose.Name;
 

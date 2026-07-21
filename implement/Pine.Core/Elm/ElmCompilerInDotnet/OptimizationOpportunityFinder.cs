@@ -1449,7 +1449,6 @@ public static class OptimizationOpportunityFinder
                 text =>
                 ElmSyntaxParser.ParseModuleText(text)
                 .Extract(err => throw new System.Exception("Failed parsing: " + err)))
-            .Select(SyntaxTypes.FromFullSyntaxModel.Convert)
             .ToList();
 
         var canonicalized =
@@ -1460,13 +1459,14 @@ public static class OptimizationOpportunityFinder
             parsedModules
             .Select(
                 module =>
-                canonicalized[SyntaxTypes.Module.GetModuleName(module.ModuleDefinition.Value).Value]
+                canonicalized[SyntaxModel.Module.GetModuleName(module.ModuleDefinition.Value).Value]
                 .Extract(
                     err =>
                     throw new System.Exception(
                         "Module " +
-                        string.Join(".", SyntaxTypes.Module.GetModuleName(module.ModuleDefinition.Value).Value) +
+                        string.Join(".", SyntaxModel.Module.GetModuleName(module.ModuleDefinition.Value).Value) +
                         " has errors: " + err)))
+            .Select(SyntaxTypes.FromFullSyntaxModel.Convert)
             .ToList();
 
         return ElmCompiler.FlattenModulesToDeclarationDictionary(orderedCanonicalizedModules);
@@ -2361,4 +2361,3 @@ public static class OptimizationOpportunityFinder
         return RenderTypeAnnotation(annotation);
     }
 }
-

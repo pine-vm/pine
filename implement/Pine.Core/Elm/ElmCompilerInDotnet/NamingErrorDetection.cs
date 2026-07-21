@@ -4,7 +4,7 @@ using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
 
-using SyntaxTypes = Pine.Core.Elm.ElmSyntax.Stil4mElmSyntax7;
+using SyntaxTypes = Pine.Core.Elm.ElmSyntax.SyntaxModel;
 
 namespace Pine.Core.Elm.ElmCompilerInDotnet;
 
@@ -28,7 +28,7 @@ public static class NamingErrorDetection
     /// </returns>
     public static (IReadOnlyList<CanonicalizationError> Errors, ImmutableDictionary<string, ShadowingLocation> Shadowings)
         DetectNamingErrorsInFlatDict(
-        ImmutableDictionary<DeclQualifiedName, SyntaxTypes.Declaration> declarations)
+        ImmutableDictionary<DeclQualifiedName, Declaration> declarations)
     {
         // Group declarations by module namespace
         var moduleGroups =
@@ -64,7 +64,7 @@ public static class NamingErrorDetection
     /// and type constructor names.
     /// </summary>
     private static ImmutableHashSet<string> BuildModuleLevelNamesFromDeclarations(
-        IEnumerable<(string DeclName, SyntaxTypes.Declaration Declaration)> declarations)
+        IEnumerable<(string DeclName, Declaration Declaration)> declarations)
     {
         var builder = ImmutableHashSet.CreateBuilder<string>();
 
@@ -73,11 +73,11 @@ public static class NamingErrorDetection
             builder.Add(declName);
 
             // Also add type constructors for choice types
-            if (declaration is SyntaxTypes.Declaration.CustomTypeDeclaration choiceTypeDecl)
+            if (declaration is Declaration.ChoiceTypeDeclaration choiceTypeDecl)
             {
                 foreach (var ctor in choiceTypeDecl.TypeDeclaration.Constructors)
                 {
-                    builder.Add(ctor.Value.Name.Value);
+                    builder.Add(ctor.Constructor.Value.Name.Value);
                 }
             }
         }
@@ -93,7 +93,7 @@ public static class NamingErrorDetection
     /// <returns>Aggregated errors and shadowings from all declarations.</returns>
     public static (IReadOnlyList<CanonicalizationError> Errors, ImmutableDictionary<string, ShadowingLocation> Shadowings)
         DetectNamingErrorsInModule(
-        IReadOnlyList<SyntaxTypes.Declaration> declarations,
+        IReadOnlyList<Declaration> declarations,
         ImmutableHashSet<string> moduleLevelNames)
     {
         var allErrors = new List<CanonicalizationError>();
@@ -121,12 +121,12 @@ public static class NamingErrorDetection
     /// </summary>
     public static (IReadOnlyList<CanonicalizationError> Errors, ImmutableDictionary<string, ShadowingLocation> Shadowings)
         DetectNamingErrorsInDeclaration(
-        SyntaxTypes.Declaration declaration,
+        Declaration declaration,
         ImmutableHashSet<string> moduleLevelNames)
     {
         switch (declaration)
         {
-            case SyntaxTypes.Declaration.FunctionDeclaration funcDecl:
+            case Declaration.FunctionDeclaration funcDecl:
                 {
                     var funcName = funcDecl.Function.Declaration.Value.Name.Value;
                     var declarationPath = ImmutableList.Create(funcName);
@@ -138,7 +138,7 @@ public static class NamingErrorDetection
                             declarationPath);
                 }
 
-            case SyntaxTypes.Declaration.CustomTypeDeclaration:
+            case SyntaxTypes.Declaration.ChoiceTypeDeclaration:
             case SyntaxTypes.Declaration.AliasDeclaration:
             case SyntaxTypes.Declaration.PortDeclaration:
             case SyntaxTypes.Declaration.InfixDeclaration:
@@ -159,7 +159,7 @@ public static class NamingErrorDetection
     /// </summary>
     private static (IReadOnlyList<CanonicalizationError> Errors, ImmutableDictionary<string, ShadowingLocation> Shadowings)
         DetectNamingErrorsInFunctionImpl(
-        SyntaxTypes.FunctionImplementation impl,
+        FunctionImplementation impl,
         ImmutableHashSet<string> moduleLevelNames,
         ImmutableList<string> declarationPath)
     {
@@ -219,13 +219,14 @@ public static class NamingErrorDetection
         {
             case SyntaxTypes.Expression.UnitExpr:
             case SyntaxTypes.Expression.Literal:
+            case SyntaxTypes.Expression.MultilineStringLiteral:
             case SyntaxTypes.Expression.CharLiteral:
             case SyntaxTypes.Expression.Integer:
-            case SyntaxTypes.Expression.Hex:
-            case SyntaxTypes.Expression.Floatable:
+            case SyntaxTypes.Expression.FloatLiteral:
             case SyntaxTypes.Expression.FunctionOrValue:
             case SyntaxTypes.Expression.PrefixOperator:
             case SyntaxTypes.Expression.RecordAccessFunction:
+            case SyntaxTypes.Expression.GLSLExpression:
                 return ([], []);
 
             case SyntaxTypes.Expression.Negation negation:
@@ -239,7 +240,7 @@ public static class NamingErrorDetection
             case SyntaxTypes.Expression.ListExpr list:
                 return
                     DetectNamingErrorsInExpressionNodes(
-                        list.Elements,
+                        list.Elements.Nodes,
                         moduleLevelNames,
                         localDeclarations,
                         declarationPath);
@@ -282,7 +283,7 @@ public static class NamingErrorDetection
             case SyntaxTypes.Expression.TupledExpression tupled:
                 return
                     DetectNamingErrorsInExpressionNodes(
-                        tupled.Elements,
+                        tupled.Elements.Nodes,
                         moduleLevelNames,
                         localDeclarations,
                         declarationPath);
@@ -314,7 +315,7 @@ public static class NamingErrorDetection
             case SyntaxTypes.Expression.RecordExpr record:
                 return
                     DetectNamingErrorsInRecordFields(
-                        record.Fields,
+                        record.Fields.Nodes,
                         moduleLevelNames,
                         localDeclarations,
                         declarationPath);
@@ -330,7 +331,7 @@ public static class NamingErrorDetection
             case SyntaxTypes.Expression.RecordUpdateExpression recordUpdate:
                 return
                     DetectNamingErrorsInRecordFields(
-                        recordUpdate.Fields,
+                        recordUpdate.Fields.Nodes,
                         moduleLevelNames,
                         localDeclarations,
                         declarationPath);
@@ -347,7 +348,7 @@ public static class NamingErrorDetection
     /// </summary>
     private static (IReadOnlyList<CanonicalizationError> Errors, ImmutableDictionary<string, ShadowingLocation> Shadowings)
         DetectNamingErrorsInLambda(
-        SyntaxTypes.LambdaStruct lambda,
+        LambdaStruct lambda,
         ImmutableHashSet<string> moduleLevelNames,
         ImmutableHashSet<string> localDeclarations,
         ImmutableList<string> declarationPath)
@@ -394,7 +395,7 @@ public static class NamingErrorDetection
     /// </summary>
     private static (IReadOnlyList<CanonicalizationError> Errors, ImmutableDictionary<string, ShadowingLocation> Shadowings)
         DetectNamingErrorsInCaseBlock(
-        SyntaxTypes.CaseBlock caseBlock,
+        CaseBlock caseBlock,
         ImmutableHashSet<string> moduleLevelNames,
         ImmutableHashSet<string> localDeclarations,
         ImmutableList<string> declarationPath)
@@ -435,7 +436,7 @@ public static class NamingErrorDetection
     /// </summary>
     private static (IReadOnlyList<CanonicalizationError> Errors, ImmutableDictionary<string, ShadowingLocation> Shadowings)
         DetectNamingErrorsInCase(
-        SyntaxTypes.Case caseItem,
+        Case caseItem,
         ImmutableHashSet<string> moduleLevelNames,
         ImmutableHashSet<string> localDeclarations,
         ImmutableList<string> declarationPath)
@@ -580,7 +581,7 @@ public static class NamingErrorDetection
     /// </summary>
     private static (IReadOnlyList<CanonicalizationError> Errors, ImmutableDictionary<string, ShadowingLocation> Shadowings)
         DetectNamingErrorsInExpressionNodes(
-        IReadOnlyList<Node<SyntaxTypes.Expression>> nodes,
+        IEnumerable<Node<SyntaxTypes.Expression>> nodes,
         ImmutableHashSet<string> moduleLevelNames,
         ImmutableHashSet<string> localDeclarations,
         ImmutableList<string> declarationPath)
@@ -609,7 +610,7 @@ public static class NamingErrorDetection
     /// </summary>
     private static (IReadOnlyList<CanonicalizationError> Errors, ImmutableDictionary<string, ShadowingLocation> Shadowings)
         DetectNamingErrorsInRecordFields(
-        IReadOnlyList<Node<(Node<string>, Node<SyntaxTypes.Expression>)>> fields,
+        IEnumerable<RecordExprField> fields,
         ImmutableHashSet<string> moduleLevelNames,
         ImmutableHashSet<string> localDeclarations,
         ImmutableList<string> declarationPath)
@@ -621,7 +622,7 @@ public static class NamingErrorDetection
         {
             var (errors, shadowings) =
                 DetectNamingErrorsInExpression(
-                    field.Value.Item2.Value,
+                    field.ValueExpr.Value,
                     moduleLevelNames,
                     localDeclarations,
                     declarationPath);

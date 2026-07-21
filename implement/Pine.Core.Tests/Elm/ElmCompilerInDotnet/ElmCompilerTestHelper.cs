@@ -682,7 +682,7 @@ public class ElmCompilerTestHelper
 
     // Helper to extract a canonicalized module by name from the result dictionary
     public static AbstractSyntaxTypes.File GetCanonicalizedModule(
-        Result<string, IReadOnlyDictionary<IReadOnlyList<string>, Result<string, AbstractSyntaxTypes.File>>> canonicalizeResult,
+        Result<string, IReadOnlyDictionary<IReadOnlyList<string>, Result<string, ConcreteSyntaxTypes.File>>> canonicalizeResult,
         string[] moduleName)
     {
         var modulesDict =
@@ -694,13 +694,15 @@ public class ElmCompilerTestHelper
             .FirstOrDefault(kvp => kvp.Key.SequenceEqual(moduleName))
             .Value;
 
-        return
+        var concreteFile =
             moduleResult is null
             ?
             throw new Exception($"Module {string.Join(".", moduleName)} not found in canonicalization result")
             :
             moduleResult
             .Extract(err => throw new Exception($"Module {string.Join(".", moduleName)} has errors: " + err));
+
+        return FromFullSyntaxModel.Convert(concreteFile with { Imports = [] });
     }
 
     public static AbstractSyntaxTypes.File CanonicalizeAndGetSingleModule(
@@ -713,7 +715,6 @@ public class ElmCompilerTestHelper
                 text =>
                 ElmSyntaxParser.ParseModuleText(text)
                 .Extract(err => throw new Exception("Failed parsing: " + err)))
-            .Select(FromFullSyntaxModel.Convert)
             .ToList();
 
         var canonicalizeResult =

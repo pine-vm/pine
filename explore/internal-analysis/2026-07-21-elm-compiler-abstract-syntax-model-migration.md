@@ -219,9 +219,15 @@ This model should be introduced only with a concrete consumer, such as complete 
 ### Phase 1: Establish behavior and model parity
 
 1. Inventory every `Stil4mElmSyntax7` type in `ElmCompilerInDotnet` and classify it as canonicalization, lowering, emission, source tooling, or compatibility API.
-2. Add parity tests that run representative modules through the current path and through direct `SyntaxModel -> ElmSyntaxAbstract` conversion, comparing canonical names, normalized literals, declaration order, and emitted Pine behavior.
+2. Add parity tests that compare canonicalized concrete syntax converted directly to `ElmSyntaxAbstract` with explicitly canonical source, covering canonical names, normalized literals, and declaration order. Keep the Stil4m compatibility adapter covered by the existing canonicalization suite; it delegates to the concrete implementation and is therefore not an independent semantic oracle.
 3. Add focused tests for concrete constructs that disappear or change shape in abstract syntax: parentheses, operator applications, tuple and record syntax, let destructuring, patterns, comments, hexadecimal literals, and escaped literals.
-4. Define the graph-path vocabulary used to correlate abstract nodes with canonical concrete nodes, including rules for skipped concrete-only nodes.
+4. Define the graph-path vocabulary used to correlate abstract nodes with canonical concrete nodes, including rules for skipped concrete-only nodes. This belongs to Phase 6 and is intentionally deferred until the abstract boundary exists; adding it during the canonicalization-only work would create an unused speculative API.
+
+#### Phase 1 implementation report
+
+The existing canonicalization suite was retained as compatibility coverage, and focused concrete-model tests now compare direct concrete-to-abstract conversion with explicitly canonical source. Additional tests cover formatting-insensitive abstract equality and preservation of ranges, comments, imports, separator locations, hexadecimal spelling, and escaped literal source text.
+
+The main surprise was that an independent “old path versus new path” oracle ceased to exist once the Stil4m entry point became a compatibility adapter over concrete canonicalization. The plan was corrected to use explicit canonical source as the semantic oracle instead. The proposed graph-path vocabulary was also moved back to Phase 6: no production consumer exists until later-stage diagnostics use the abstract tree.
 
 ### Phase 2: Move canonicalization to `SyntaxModel`
 
@@ -230,6 +236,14 @@ This model should be introduced only with a concrete consumer, such as complete 
 3. Remove the parser-to-`Stil4mElmSyntax7` conversion from `ParseAndCanonicalizeForLowering`.
 4. Update canonicalization tests first, then compiler integration tests, to use parser-native concrete files.
 5. Keep compatibility adapters only at non-compiler interfaces that explicitly require `Stil4mElmSyntax7`.
+
+The canonicalized concrete file preserves imports, comments, ranges, separators, and other source structure. During the phased migration, a typed compiler-boundary result carries both that concrete result and a temporary Stil4m lowering projection. Only the temporary projection drops imports to preserve the behavior expected by the unmigrated lowering pipeline.
+
+#### Phase 2 implementation report
+
+`Canonicalization`, its result records, naming analysis, parser integration, source annotation tooling, and interpreter entry points now canonicalize `SyntaxModel` directly. Per-module outputs use `ModuleCanonicalizationResult` rather than repeating a structural tuple type. The compiler exposes concrete files in `CompilationPipelineStageResults.Canonicalized` and isolates the remaining Stil4m conversion in a typed temporary boundary payload. Explicit Stil4m compatibility overloads remain for external and test consumers, but production parsing no longer converts before canonicalization.
+
+Porting revealed that `SeparatedSyntaxList` cannot be rebuilt as an ordinary list: delimiter locations must be copied from the original shape. A checked rebuilding helper now rejects cardinality changes and preserves separator locations. The first implementation also continued the old behavior of clearing imports from the canonicalized file; this was backtracked because it contradicted the source-aware boundary. Imports are now retained in concrete results and removed only from the temporary lowering projection. Another correction preserved shadowing metadata through node, record-field, and nested let-declaration mappings where the initial port propagated values and errors but accidentally discarded shadowings.
 
 ### Phase 3: Introduce the single abstract boundary
 

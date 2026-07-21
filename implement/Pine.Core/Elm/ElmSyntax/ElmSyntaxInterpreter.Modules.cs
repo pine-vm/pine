@@ -5,9 +5,6 @@ using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
 
-using Stil4mFile = Pine.Core.Elm.ElmSyntax.Stil4mElmSyntax7.File;
-using Stil4mFromFull = Pine.Core.Elm.ElmSyntax.Stil4mElmSyntax7.FromFullSyntaxModel;
-using Stil4mToFull = Pine.Core.Elm.ElmSyntax.Stil4mElmSyntax7.ToFullSyntaxModel;
 
 namespace Pine.Core.Elm.ElmSyntax;
 
@@ -201,15 +198,7 @@ public partial class ElmSyntaxInterpreter
                 "(the synthetic root module containing 'pine_root_expression').";
         }
 
-        // Convert to the Stil4mElmSyntax7 form expected by Canonicalization.
-        var stil4mFiles = new List<Stil4mFile>(modules.Count);
-
-        for (var i = 0; i < modules.Count; i++)
-        {
-            stil4mFiles.Add(Stil4mFromFull.Convert(modules[i]));
-        }
-
-        var canonicalizeResult = Canonicalization.CanonicalizeAllowingErrors(stil4mFiles);
+        var canonicalizeResult = Canonicalization.CanonicalizeAllowingErrors(modules);
 
         if (canonicalizeResult.IsErrOrNull() is { } canonErr)
         {
@@ -238,9 +227,7 @@ public partial class ElmSyntaxInterpreter
                 return "Failed canonicalization in module " + moduleNameStr + ":\n" + errMessages;
             }
 
-            var fullModuleFile = Stil4mToFull.Convert(canonicalizedFile);
-
-            var abstractFile = ElmSyntaxAbstract.ConvertFromConcrete.FromFile(fullModuleFile);
+            var abstractFile = ElmSyntaxAbstract.ConvertFromConcrete.FromFile(canonicalizedFile);
 
             var abstractFileOptimized = OptimizeSyntax(abstractFile);
 
@@ -304,11 +291,7 @@ public partial class ElmSyntaxInterpreter
     private static CanonicalizationResult<SyntaxModel.Expression> CanonicalizeExpression(
         SyntaxModel.Expression expr)
     {
-        var stil4mExpr = Stil4mFromFull.Convert(expr);
-
-        return
-            Canonicalization.CanonicalizeExpression(stil4mExpr, ImplicitImportConfig.Default)
-            .MapValue(stil4mCanonicalExpr => Stil4mToFull.Convert(stil4mCanonicalExpr));
+        return Canonicalization.CanonicalizeExpression(expr, ImplicitImportConfig.Default);
     }
 
     /// <summary>

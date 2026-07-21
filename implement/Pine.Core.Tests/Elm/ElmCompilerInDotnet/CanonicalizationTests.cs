@@ -7,18 +7,17 @@ using System.Linq;
 using Xunit;
 
 using SyntaxTypes = Pine.Core.Elm.ElmSyntax.Stil4mElmSyntax7;
+using ConcreteSyntaxTypes = Pine.Core.Elm.ElmSyntax.SyntaxModel;
 
 namespace Pine.Core.Tests.Elm.ElmCompilerInDotnet;
 
 public class CanonicalizationTests
 {
-    private static File ParseModuleText(string moduleTex)
+    private static ConcreteSyntaxTypes.File ParseModuleText(string moduleTex)
     {
-        var concreteSyntax =
+        return
             ElmSyntaxParser.ParseModuleText(moduleTex)
             .Extract(err => throw new System.Exception("Failed parsing: " + err));
-
-        return FromFullSyntaxModel.Convert(concreteSyntax);
     }
 
     [Fact]
@@ -485,7 +484,7 @@ public class CanonicalizationTests
     }
 
     [Fact]
-    public void Removes_import_syntax_nodes()
+    public void Preserves_import_syntax_nodes()
     {
         var module1Text =
             """"
@@ -518,16 +517,13 @@ public class CanonicalizationTests
             canonicalizeResult
             .Extract(err => throw new System.Exception("Failed canonicalization: " + err));
 
-        // Verify that all modules have empty imports lists
-        foreach (var (moduleName, moduleResult) in modulesDict)
-        {
-            var module =
-                moduleResult
-                .Extract(
-                    err => throw new System.Exception($"Module {string.Join(".", moduleName)} has errors: " + err));
+        modulesDict[["Module1"]]
+            .Extract(err => throw new System.Exception("Module Module1 has errors: " + err))
+            .Imports.Should().Equal(parsedModule1.Imports);
 
-            module.Imports.Should().BeEmpty();
-        }
+        modulesDict[["Module2"]]
+            .Extract(err => throw new System.Exception("Module Module2 has errors: " + err))
+            .Imports.Should().Equal(parsedModule2.Imports);
     }
 
     [Fact]

@@ -1150,9 +1150,20 @@ public class SnapshotTestFormat
     }
 
     /// <summary>
-    /// Converts a list of modules (in the Stil4m abstract syntax) to a flat dictionary
+    /// Converts concrete modules to the compatibility representation used by snapshot rendering.
     /// of declarations keyed by their fully qualified name.
     /// Each declaration in a module is prefixed with the module name to form the qualified key.
+    /// </summary>
+    public static IReadOnlyDictionary<DeclQualifiedName, AbstractSyntaxTypes.Declaration>
+        ModulesToFlatDeclarationDictionary(
+        IReadOnlyList<File> modules) =>
+        ModulesToFlatDeclarationDictionary(
+            modules
+            .Select(AbstractSyntaxTypes.FromFullSyntaxModel.Convert)
+            .ToList());
+
+    /// <summary>
+    /// Converts a list of modules (in the Stil4m abstract syntax) to a flat dictionary
     /// </summary>
     public static IReadOnlyDictionary<DeclQualifiedName, AbstractSyntaxTypes.Declaration>
         ModulesToFlatDeclarationDictionary(

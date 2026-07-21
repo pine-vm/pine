@@ -99,7 +99,7 @@ public class AddInferredTypeAnnotations
         // Dictionary to store parsed files by module name
         var parsedFilesByModuleName = new Dictionary<string, File>(StringComparer.Ordinal);
 
-        var abstractFilesList = new List<AbstractSyntaxTypes.File>();
+        var concreteFiles = new List<File>();
 
         foreach (var moduleFile in elmModuleFiles)
         {
@@ -123,17 +123,14 @@ public class AddInferredTypeAnnotations
 
             parsedFilesByModuleName[moduleNameStr] = parsedFile;
 
-            // Convert to abstract syntax for canonicalization
-            var abstractFile = AbstractSyntaxTypes.FromFullSyntaxModel.Convert(parsedFile);
-
-            abstractFilesList.Add(abstractFile);
+            concreteFiles.Add(parsedFile);
         }
 
         // Apply canonicalization to resolve all references to fully qualified forms
         // Use CanonicalizeAllowingErrors to continue even with undefined local variable references
         // This enables IDE functionality (like "add inferred type annotation") even when
         // the file contains some invalid references
-        var canonicalizeResult = Canonicalization.CanonicalizeAllowingErrors(abstractFilesList);
+        var canonicalizeResult = Canonicalization.CanonicalizeAllowingErrors(concreteFiles);
 
         if (canonicalizeResult.IsErrOrNull() is { } canonErr)
         {
@@ -156,11 +153,13 @@ public class AddInferredTypeAnnotations
             // don't prevent us from inferring types for cross-module references
             var moduleNameStr = string.Join(".", moduleName);
 
-            canonicalizedFilesByModuleName[moduleNameStr] = canonicalizedFile;
+            var loweringFile = AbstractSyntaxTypes.FromFullSyntaxModel.Convert(canonicalizedFile);
+
+            canonicalizedFilesByModuleName[moduleNameStr] = loweringFile;
 
             var moduleSignatures =
                 TypeInference.BuildFunctionSignaturesMap(
-                    ElmSyntaxAbstractConversion.FromFile(canonicalizedFile),
+                    ElmSyntaxAbstractConversion.FromFile(loweringFile),
                     moduleNameStr);
 
             allSignatures = allSignatures.SetItems(moduleSignatures);
