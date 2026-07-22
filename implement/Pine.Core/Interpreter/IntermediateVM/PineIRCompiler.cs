@@ -1934,9 +1934,9 @@ public class PineIRCompiler
 
             if (!prependedExpr.ReferencesEnvironment)
             {
-                if (ReducePineExpression.TryEvaluateExpressionIndependent(
-                    prependedExpr, parseCache).IsOkOrNull() is not
-                    { } prependedValue)
+                if (ReducePineExpression.TryEvalIndependent(
+                    prependedExpr,
+                    parseCache).Value is not { } prependedValue)
                 {
                     return null;
                 }
@@ -1966,9 +1966,9 @@ public class PineIRCompiler
 
             if (!prependedExpr.ReferencesEnvironment)
             {
-                if (ReducePineExpression.TryEvaluateExpressionIndependent(
-                    prependedExpr, parseCache).IsOkOrNull() is not
-                    { } prependedValue)
+                if (ReducePineExpression.TryEvalIndependent(
+                    prependedExpr,
+                    parseCache).Value is not { } prependedValue)
                 {
                     return null;
                 }
@@ -2816,8 +2816,9 @@ public class PineIRCompiler
         }
 
         return
-            ReducePineExpression.TryEvaluateExpressionIndependent(expression, parseCache)
-            .IsOkOrNull();
+            ReducePineExpression.TryEvalIndependent(
+                expression,
+                parseCache).Value;
     }
 
     /// <summary>

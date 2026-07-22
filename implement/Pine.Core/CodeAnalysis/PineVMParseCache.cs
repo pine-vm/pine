@@ -31,11 +31,13 @@ public class PineVMParseCache
     /// </remarks>
     public Result<string, Expression> ParseExpression(PineValue expressionValue)
     {
-        return
-            ExpressionEncoding.ParseExpressionFromValueViaPostOrder(
-                expressionValue,
-                _parseExprCache)
-            .ToPublicResult();
+        return ParseExpressionWithoutResultAllocation(expressionValue).ToPublicResult();
     }
+
+    internal ExpressionEncoding2026.ParseExpressionResult ParseExpressionWithoutResultAllocation(
+        PineValue expressionValue) =>
+        ExpressionEncoding.ParseExpressionFromValueViaPostOrder(
+            expressionValue,
+            _parseExprCache);
 }
 

@@ -54,6 +54,36 @@ public record struct ReductionConfig(
 /// </summary>
 public class ReducePineExpression
 {
+    internal readonly struct ValueEvalResult
+    {
+        private ValueEvalResult(PineValue? value, string? error)
+        {
+            Value = value;
+            Error = error;
+        }
+
+        public PineValue? Value { get; }
+
+        public string? Error { get; }
+
+        public bool IsOk => Value is not null;
+
+        public static ValueEvalResult Ok(PineValue value) =>
+            new(value, error: null);
+
+        public static ValueEvalResult Err(string error) =>
+            new(value: null, error);
+
+        public Result<string, PineValue> ToPublicResult() =>
+            Value is { } value
+            ?
+            value
+            :
+            Error ??
+            throw new InvalidOperationException(
+                "Independent evaluation result contains neither a value nor an error");
+    }
+
     /// <summary>
     /// Attempts to evaluate an <see cref="Expression"/> that does not depend on the environment.
     /// Returns a <c>Result</c> whose <c>Ok</c> value is the computed <see cref="PineValue"/>,
@@ -65,31 +95,38 @@ public class ReducePineExpression
     public static Result<string, PineValue> TryEvaluateExpressionIndependent(
         Expression expression,
         PineVMParseCache parseCache) =>
+        TryEvalIndependent(expression, parseCache).ToPublicResult();
+
+    internal static ValueEvalResult TryEvalIndependent(
+        Expression expression,
+        PineVMParseCache parseCache) =>
         expression switch
         {
             Expression.Environment =>
-            "Expression depends on environment",
+            ValueEvalResult.Err("Expression depends on environment"),
 
             Expression.Litral literal =>
-            Result<string, PineValue>.ok(literal.Value),
+            ValueEvalResult.Ok(literal.Value),
 
             Expression.List list =>
-            TryEvaluateExpressionIndependent(list, parseCache),
+            TryEvalIndependent(list, parseCache),
 
             Expression.Builtin builtinExpr =>
-            TryEvaluateExpressionIndependent(builtinExpr, parseCache),
+            TryEvalIndependent(builtinExpr, parseCache),
 
             Expression.Eval evalExpr =>
-            TryEvaluateExpressionIndependent(evalExpr, parseCache),
+            TryEvalIndependent(evalExpr, parseCache),
 
             Expression.Conditional conditional =>
-            TryEvaluateExpressionIndependent(conditional, parseCache),
+            TryEvalIndependent(conditional, parseCache),
 
             Expression.Label labelExpr =>
-            TryEvaluateExpressionIndependent(labelExpr.Tagged, parseCache),
+            TryEvalIndependent(labelExpr.Tagged, parseCache),
 
             _ =>
-            "Unsupported expression type: " + expression.GetType().FullName
+            throw new NotImplementedException(
+                "TryEvalIndependent does not handle expression variant: " +
+                expression.GetType().Name)
         };
 
     /// <summary>
@@ -101,15 +138,23 @@ public class ReducePineExpression
     /// <returns>The evaluated list value or an error message.</returns>
     public static Result<string, PineValue> TryEvaluateExpressionIndependent(
         Expression.List listExpr,
+        PineVMParseCache parseCache) =>
+        TryEvalIndependent(listExpr, parseCache).ToPublicResult();
+
+    private static ValueEvalResult TryEvalIndependent(
+        Expression.List listExpr,
         PineVMParseCache parseCache)
     {
         var itemsValues = new PineValue[listExpr.Items.Count];
 
         for (var i = 0; i < listExpr.Items.Count; i++)
         {
-            var itemResult = TryEvaluateExpressionIndependent(listExpr.Items[i], parseCache);
+            var itemResult =
+                TryEvalIndependent(
+                    listExpr.Items[i],
+                    parseCache);
 
-            if (itemResult.IsOkOrNull() is { } itemValue)
+            if (itemResult.Value is { } itemValue)
             {
                 itemsValues[i] = itemValue;
             }
@@ -119,7 +164,7 @@ public class ReducePineExpression
             }
         }
 
-        return PineValue.List(itemsValues);
+        return ValueEvalResult.Ok(PineValue.List(itemsValues));
     }
 
     /// <summary>
@@ -129,23 +174,29 @@ public class ReducePineExpression
     /// </summary>
     public static Result<string, PineValue> TryEvaluateExpressionIndependent(
         Expression.Eval evalExpr,
+        PineVMParseCache parseCache) =>
+        TryEvalIndependent(evalExpr, parseCache).ToPublicResult();
+
+    private static ValueEvalResult TryEvalIndependent(
+        Expression.Eval evalExpr,
         PineVMParseCache parseCache)
     {
         var evalEnvResult =
-            TryEvaluateExpressionIndependent(evalExpr.Environment, parseCache);
+            TryEvalIndependent(
+                evalExpr.Environment,
+                parseCache);
 
+        if (evalEnvResult.Error is { } err)
         {
-            if (evalEnvResult.IsErrOrNull() is { } err)
-            {
-                return
-                    "Failed evaluating env of eval expression: " + err;
-            }
+            return
+                ValueEvalResult.Err(
+                    "Failed evaluating env of eval expression: " + err);
         }
 
-        if (evalEnvResult.IsOkOrNull() is not { } envValue)
+        if (evalEnvResult.Value is not { } envValue)
         {
-            throw new NotImplementedException(
-                "Unexpected result type: " + evalEnvResult);
+            throw new InvalidOperationException(
+                "Independent evaluation result contains neither a value nor an error");
         }
 
         try
@@ -171,38 +222,43 @@ public class ReducePineExpression
         }
 
         var evalEncodedExprResult =
-            TryEvaluateExpressionIndependent(evalExpr.Encoded, parseCache);
+            TryEvalIndependent(
+                evalExpr.Encoded,
+                parseCache);
 
-        if (evalEncodedExprResult.IsErrOrNull() is { } encodedErr)
+        if (evalEncodedExprResult.Error is { } encodedErr)
         {
             return
-                "Failed to evaluate encoded expression: " + encodedErr;
+                ValueEvalResult.Err(
+                    "Failed to evaluate encoded expression: " + encodedErr);
         }
 
-        if (evalEncodedExprResult.IsOkOrNull() is not { } encodedOk)
+        if (evalEncodedExprResult.Value is not { } encodedOk)
         {
-            throw new NotImplementedException(
-                "Unexpected result type from evaluating encoded expression: " + evalEncodedExprResult);
+            throw new InvalidOperationException(
+                "Independent evaluation result contains neither a value nor an error");
         }
 
-        var parseResult = parseCache.ParseExpression(encodedOk);
+        var parseResult =
+            parseCache.ParseExpressionWithoutResultAllocation(encodedOk);
 
-        if (parseResult.IsErrOrNull() is { } parseErr)
+        if (parseResult.Error is { } parseErr)
         {
             return
-                "Failed to parse encoded expression: " + parseErr;
+                ValueEvalResult.Err(
+                    "Failed to parse encoded expression: " + parseErr);
         }
 
-        if (parseResult.IsOkOrNull() is not { } parseOk)
+        if (parseResult.Expression is not { } parseOk)
         {
-            throw new NotImplementedException(
-                "Unexpected result type from parsing encoded expression: " + parseResult);
+            throw new InvalidOperationException(
+                "Expression parse result contains neither an expression nor an error");
         }
 
         if (!parseOk.ReferencesEnvironment)
         {
             return
-                TryEvaluateExpressionIndependent(parseOk, parseCache);
+                TryEvalIndependent(parseOk, parseCache);
         }
 
         /*
@@ -242,7 +298,7 @@ public class ReducePineExpression
         return innerOk;
         */
 
-        return "Not following parse&eval";
+        return ValueEvalResult.Err("Not following parse&eval");
     }
 
     /// <summary>
@@ -254,29 +310,43 @@ public class ReducePineExpression
     /// <returns>The result of the selected branch, or an error message if evaluation fails.</returns>
     public static Result<string, PineValue> TryEvaluateExpressionIndependent(
         Expression.Conditional conditionalExpr,
+        PineVMParseCache parseCache) =>
+        TryEvalIndependent(conditionalExpr, parseCache).ToPublicResult();
+
+    private static ValueEvalResult TryEvalIndependent(
+        Expression.Conditional conditionalExpr,
         PineVMParseCache parseCache)
     {
         var evalConditionResult =
-            TryEvaluateExpressionIndependent(conditionalExpr.Condition, parseCache);
+            TryEvalIndependent(
+                conditionalExpr.Condition,
+                parseCache);
 
-        if (evalConditionResult.IsErrOrNull() is { } conditionErr)
+        if (evalConditionResult.Error is { } conditionErr)
         {
             return
-                "Failed to evaluate condition: " + conditionErr;
+                ValueEvalResult.Err(
+                    "Failed to evaluate condition: " + conditionErr);
         }
 
-        if (evalConditionResult.IsOkOrNull() is not { } conditionOk)
+        if (evalConditionResult.Value is not { } conditionOk)
         {
-            throw new NotImplementedException(
-                "Unexpected result type from evaluating condition: " + evalConditionResult);
+            throw new InvalidOperationException(
+                "Independent evaluation result contains neither a value nor an error");
         }
 
         if (conditionOk == PineKernelValues.TrueValue)
         {
-            return TryEvaluateExpressionIndependent(conditionalExpr.TrueBranch, parseCache);
+            return
+                TryEvalIndependent(
+                    conditionalExpr.TrueBranch,
+                    parseCache);
         }
 
-        return TryEvaluateExpressionIndependent(conditionalExpr.FalseBranch, parseCache);
+        return
+            TryEvalIndependent(
+                conditionalExpr.FalseBranch,
+                parseCache);
     }
 
     /// <summary>
@@ -288,24 +358,34 @@ public class ReducePineExpression
     /// <returns>The computed value, or an error message if evaluation fails.</returns>
     public static Result<string, PineValue> TryEvaluateExpressionIndependent(
         Expression.Builtin builtinExpr,
+        PineVMParseCache parseCache) =>
+        TryEvalIndependent(builtinExpr, parseCache).ToPublicResult();
+
+    private static ValueEvalResult TryEvalIndependent(
+        Expression.Builtin builtinExpr,
         PineVMParseCache parseCache)
     {
         var evalInputResult =
-            TryEvaluateExpressionIndependent(builtinExpr.Input, parseCache);
+            TryEvalIndependent(
+                builtinExpr.Input,
+                parseCache);
 
-        if (evalInputResult.IsErrOrNull() is { } inputErr)
+        if (evalInputResult.Error is { } inputErr)
         {
             return
-                "Failed to evaluate built-in application input: " + inputErr;
+                ValueEvalResult.Err(
+                    "Failed to evaluate built-in application input: " + inputErr);
         }
 
-        if (evalInputResult.IsOkOrNull() is not { } inputOk)
+        if (evalInputResult.Value is not { } inputOk)
         {
-            throw new NotImplementedException(
-                "Unexpected result type from evaluating built-in application input: " + evalInputResult);
+            throw new InvalidOperationException(
+                "Independent evaluation result contains neither a value nor an error");
         }
 
-        return BuiltinFunction.ApplyFunctionGeneric(builtinExpr.Function, inputOk);
+        return
+            ValueEvalResult.Ok(
+                BuiltinFunction.ApplyFunctionGeneric(builtinExpr.Function, inputOk));
     }
 
     /// <summary>
@@ -348,7 +428,7 @@ public class ReducePineExpression
 
             try
             {
-                if (TryEvaluateExpressionIndependent(expression, parseCache).IsOkOrNull() is { } okValue)
+                if (TryEvalIndependent(expression, parseCache).Value is { } okValue)
                 {
                     return Expression.LitralInst(okValue);
                 }
@@ -482,7 +562,8 @@ public class ReducePineExpression
                                 var countExpr = inputList.Items[0];
                                 var seqExpr = inputList.Items[1];
 
-                                if (TryEvaluateExpressionIndependent(countExpr, parseCache).IsOkOrNull() is { } okSkipCountValue &&
+                                if (TryEvalIndependent(countExpr, parseCache).Value is
+                                    { } okSkipCountValue &&
                                     BuiltinFunction.SignedIntegerFromValueRelaxed(okSkipCountValue) is { } okSkipCount)
                                 {
                                     if (ApplyBuiltinFunctionSkipToAllBranches((int)(okSkipCount < 0 ? 0 : okSkipCount), seqExpr) is { } reducedSkip)
@@ -504,7 +585,8 @@ public class ReducePineExpression
                                 var countExpr = takeInput.Items[0];
                                 var srcExpr = takeInput.Items[1];
 
-                                if (TryEvaluateExpressionIndependent(countExpr, parseCache).IsOkOrNull() is { } okTakeCountValue &&
+                                if (TryEvalIndependent(countExpr, parseCache).Value is
+                                    { } okTakeCountValue &&
                                     BuiltinFunction.SignedIntegerFromValueRelaxed(okTakeCountValue) is { } okTakeCount)
                                 {
                                     if (ApplyBuiltinFunctionTakeToAllBranches((int)okTakeCount, srcExpr) is { } reducedTake)
@@ -714,7 +796,9 @@ public class ReducePineExpression
                 {
                     if (!conditional.Condition.ReferencesEnvironment)
                     {
-                        if (TryEvaluateExpressionIndependent(conditional.Condition, parseCache).IsOkOrNull() is { } conditionValue)
+                        if (TryEvalIndependent(
+                            conditional.Condition,
+                            parseCache).Value is { } conditionValue)
                         {
                             return
                                 conditionValue == PineKernelValues.TrueValue
@@ -942,7 +1026,7 @@ public class ReducePineExpression
 
         if (!reducedExpr.ReferencesEnvironment)
         {
-            if (TryEvaluateExpressionIndependent(reducedExpr, parseCache).IsOkOrNull() is { } okValue)
+            if (TryEvalIndependent(reducedExpr, parseCache).Value is { } okValue)
             {
                 return Expression.LitralInst(okValue);
             }
@@ -1055,7 +1139,9 @@ public class ReducePineExpression
             if (kernelApp.Function is nameof(BuiltinFunction.skip) &&
                 kernelApp.Input is Expression.List skipInputList && skipInputList.Items.Count is 2)
             {
-                if (TryEvaluateExpressionIndependent(skipInputList.Items[0], parseCache).IsOkOrNull() is { } okSkipCountValue)
+                if (TryEvalIndependent(
+                    skipInputList.Items[0],
+                    parseCache).Value is { } okSkipCountValue)
                 {
                     if (IntegerEncoding.ParseSignedIntegerRelaxed(okSkipCountValue).IsOkOrNullable() is { } okSkipCount)
                     {
@@ -1653,10 +1739,12 @@ public class ReducePineExpression
         if (evalExpr.Encoded.ReferencesEnvironment)
             return null;
 
-        if (TryEvaluateExpressionIndependent(evalExpr.Encoded, parseCache).IsOkOrNull() is not { } encodedExprValue)
+        if (TryEvalIndependent(
+            evalExpr.Encoded,
+            parseCache).Value is not { } encodedExprValue)
             return null;
 
-        if (parseCache.ParseExpression(encodedExprValue).IsOkOrNull() is not { } innerExpr)
+        if (parseCache.ParseExpressionWithoutResultAllocation(encodedExprValue).Expression is not { } innerExpr)
             return null;
 
         var evalCountBefore = evalExpr.Environment.EvalCount;

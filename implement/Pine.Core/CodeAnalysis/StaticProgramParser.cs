@@ -924,11 +924,11 @@ public class StaticProgramParser
 
                     // Try to evaluate it independently
                     var evalResult =
-                        ReducePineExpression.TryEvaluateExpressionIndependent(
+                        ReducePineExpression.TryEvalIndependent(
                             functionExpr,
                             parseCache);
 
-                    if (evalResult.IsOkOrNull() is { } evalFunctionValue)
+                    if (evalResult.Value is { } evalFunctionValue)
                     {
                         return (evalFunctionValue, isFullApplication: true);
                     }

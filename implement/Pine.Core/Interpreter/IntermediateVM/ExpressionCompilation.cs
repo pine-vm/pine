@@ -368,13 +368,14 @@ public record ExpressionCompilation(
                 return null;
             }
 
-            if (ReducePineExpression.TryEvaluateExpressionIndependent(
-                parseAndEvalExpr.Encoded, parseCache).IsOkOrNull() is not { } exprValue)
+            if (ReducePineExpression.TryEvalIndependent(
+                parseAndEvalExpr.Encoded,
+                parseCache).Value is not { } exprValue)
             {
                 return null;
             }
 
-            if (parseCache.ParseExpression(exprValue).IsOkOrNull() is not { } parseOk)
+            if (parseCache.ParseExpressionWithoutResultAllocation(exprValue).Expression is not { } parseOk)
             {
                 return null;
             }
@@ -439,13 +440,14 @@ public record ExpressionCompilation(
                     return false;
                 }
 
-                if (ReducePineExpression.TryEvaluateExpressionIndependent(
-                    pe.Encoded, parseCache).IsOkOrNull() is not { } peValue)
+                if (ReducePineExpression.TryEvalIndependent(
+                    pe.Encoded,
+                    parseCache).Value is not { } peValue)
                 {
                     return false;
                 }
 
-                if (parseCache.ParseExpression(peValue).IsOkOrNull() is not { } peParsed)
+                if (parseCache.ParseExpressionWithoutResultAllocation(peValue).Expression is not { } peParsed)
                 {
                     return false;
                 }
@@ -871,13 +873,14 @@ public record ExpressionCompilation(
                         return false;
                     }
 
-                    if (ReducePineExpression.TryEvaluateExpressionIndependent(
-                        pe.Encoded, parseCache).IsOkOrNull() is not { } peValue)
+                    if (ReducePineExpression.TryEvalIndependent(
+                        pe.Encoded,
+                        parseCache).Value is not { } peValue)
                     {
                         return false;
                     }
 
-                    if (parseCache.ParseExpression(peValue).IsOkOrNull() is not { } peParsed)
+                    if (parseCache.ParseExpressionWithoutResultAllocation(peValue).Expression is not { } peParsed)
                     {
                         return false;
                     }
@@ -946,9 +949,9 @@ public record ExpressionCompilation(
 
             if (!parseAndEvalExpr.Encoded.ReferencesEnvironment)
             {
-                if (ReducePineExpression.TryEvaluateExpressionIndependent(
-                    parseAndEvalExpr.Encoded, parseCache).IsOkOrNull() is
-                    { } evalExprOk)
+                if (ReducePineExpression.TryEvalIndependent(
+                    parseAndEvalExpr.Encoded,
+                    parseCache).Value is { } evalExprOk)
                 {
                     return ContinueReduceForKnownExprValue(evalExprOk);
                 }

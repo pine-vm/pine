@@ -3,6 +3,7 @@ using Pine.Core.CodeAnalysis;
 using Pine.Core.CommonEncodings;
 using Pine.Core.Json;
 using Pine.Core.PineVM;
+using System;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
@@ -94,6 +95,81 @@ public class ReducePineExpressionTests
         var result = ReducePineExpression.TryEvaluateExpressionIndependent(parseAndEval, s_parseCache);
 
         result.IsOkOrNull().Should().Be(PineValue.Blob([42]));
+    }
+
+    [Fact]
+    public void Independent_evaluation_internal_result_is_a_value_type()
+    {
+        typeof(ReducePineExpression.ValueEvalResult).IsValueType.Should().BeTrue();
+    }
+
+    [Fact]
+    public void Independent_evaluation_internal_path_does_not_allocate_for_recursive_labels()
+    {
+        Expression expression = Expression.LitralInst(PineValue.BlobSingleByte(42));
+
+        for (var i = 0; i < 100; ++i)
+            expression = new Expression.Label("label", expression);
+
+        for (var i = 0; i < 10; ++i)
+            _ = ReducePineExpression.TryEvalIndependent(expression, s_parseCache);
+
+        var allocatedBefore = GC.GetAllocatedBytesForCurrentThread();
+
+        ReducePineExpression.ValueEvalResult result = default;
+
+        for (var i = 0; i < 100; ++i)
+        {
+            result =
+                ReducePineExpression.TryEvalIndependent(
+                    expression,
+                    s_parseCache);
+        }
+
+        var allocatedBytes =
+            GC.GetAllocatedBytesForCurrentThread() - allocatedBefore;
+
+        GC.KeepAlive(result.Value);
+
+        result.Value.Should().Be(PineValue.BlobSingleByte(42));
+        allocatedBytes.Should().Be(0);
+    }
+
+    [Fact]
+    public void Independent_evaluation_internal_path_does_not_allocate_for_cached_eval()
+    {
+        var expectedValue = PineValue.BlobSingleByte(43);
+
+        var evalExpression =
+            new Expression.Eval(
+                encoded:
+                Expression.LitralInst(
+                    ExpressionEncoding.EncodeExpressionAsValue(
+                        Expression.LitralInst(expectedValue))),
+                environment: Expression.LitralInst(PineValue.EmptyList));
+
+        for (var i = 0; i < 10; ++i)
+            _ = ReducePineExpression.TryEvalIndependent(evalExpression, s_parseCache);
+
+        var allocatedBefore = GC.GetAllocatedBytesForCurrentThread();
+
+        ReducePineExpression.ValueEvalResult result = default;
+
+        for (var i = 0; i < 100; ++i)
+        {
+            result =
+                ReducePineExpression.TryEvalIndependent(
+                    evalExpression,
+                    s_parseCache);
+        }
+
+        var allocatedBytes =
+            GC.GetAllocatedBytesForCurrentThread() - allocatedBefore;
+
+        GC.KeepAlive(result.Value);
+
+        result.Value.Should().Be(expectedValue);
+        allocatedBytes.Should().Be(0);
     }
 
     [Fact]

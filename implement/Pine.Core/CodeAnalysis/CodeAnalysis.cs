@@ -1163,9 +1163,9 @@ public class CodeAnalysis
         }
         else
         {
-            if (ReducePineExpression.TryEvaluateExpressionIndependent(
+            if (ReducePineExpression.TryEvalIndependent(
                 parseAndEval.Encoded,
-                parseCache).IsOkOrNull() is { } fromLiteral)
+                parseCache).Value is { } fromLiteral)
             {
                 return fromLiteral;
             }
@@ -1206,25 +1206,27 @@ public class CodeAnalysis
         }
 
         var evalIndependentResult =
-            ReducePineExpression.TryEvaluateExpressionIndependent(parseAndEval.Encoded, parseCache);
+            ReducePineExpression.TryEvalIndependent(
+                parseAndEval.Encoded,
+                parseCache);
 
         {
-            if (evalIndependentResult.IsErrOrNull() is { } err)
+            if (evalIndependentResult.Error is { } err)
             {
                 throw new Exception("Failed to evaluate parseAndEval.Encoded independently: " + err);
             }
         }
 
-        if (evalIndependentResult.IsOkOrNull() is not { } evalIndependentValue)
+        if (evalIndependentResult.Value is not { } evalIndependentValue)
         {
-            throw new Exception(
-                "Unexpected return type: " +
-                evalIndependentResult.GetType().Name);
+            throw new InvalidOperationException(
+                "Independent evaluation result contains neither a value nor an error");
         }
 
-        var parseExprResult = parseCache.ParseExpression(evalIndependentValue);
+        var parseExprResult =
+            parseCache.ParseExpressionWithoutResultAllocation(evalIndependentValue);
 
-        if (parseExprResult.IsOkOrNull() is not { } parsedExpr)
+        if (parseExprResult.Expression is not { } parsedExpr)
         {
             /*
              * If parsing of a literal fails, it means the program will crash at runtime if the containing branch is taken.
