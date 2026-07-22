@@ -22,6 +22,8 @@ namespace Pine.Core.Internal;
 /// </summary>
 public class PineValueInProcess
 {
+    private const int ShortBlobLengthThreshold = 8;
+
     private PineValue? _evaluated;
 
     private ImmutableSliceBuilder? _sliceBuilder;
@@ -44,8 +46,16 @@ public class PineValueInProcess
     /// </summary>
     private (PineValueInProcess tag, IReadOnlyList<PineValueInProcess> tagArgs)? _tagged;
 
+    private readonly static IReadOnlyList<PineValueInProcess> s_blobSingle =
+        [.. Enumerable.Range(0, 256).Select(i =>
+        {
+            var v = Create(PineValue.BlobSingleByte((byte)i ));
+            v.Evaluate();
+            return v;
+        })];
+
     private readonly static IReadOnlyList<PineValueInProcess> s_integersPositive =
-        [.. Enumerable.Range(0, 4_000).Select(i =>
+        [.. Enumerable.Range(0, 10_000).Select(i =>
         {
             var v = CreateInteger(i);
             v.Evaluate();
@@ -54,7 +64,7 @@ public class PineValueInProcess
         })];
 
     private readonly static IReadOnlyList<PineValueInProcess> s_integersNegative =
-        [.. Enumerable.Range(1, 1_000).Select(i =>
+        [.. Enumerable.Range(1, 5_000).Select(i =>
         {
             var v = CreateInteger(-i);
             v.Evaluate();
@@ -167,21 +177,20 @@ public class PineValueInProcess
     /// <returns>A new <see cref="PineValueInProcess"/> representing the integer.</returns>
     public static PineValueInProcess CreateInteger(BigInteger integer)
     {
-        if (0 <= integer && s_integersPositive is not null)
+        if (0 <= integer)
         {
-            if (integer < s_integersPositive.Count)
+            if (s_integersPositive is { } positiveCache && integer < positiveCache.Count)
             {
-                return s_integersPositive[(int)integer];
+                return positiveCache[(int)integer];
             }
         }
-
-        if (integer < 0 && s_integersNegative is not null)
+        else
         {
             var abs = -integer - 1;
 
-            if (abs < s_integersNegative.Count)
+            if (s_integersNegative is { } negativeCache && abs < negativeCache.Count)
             {
-                return s_integersNegative[(int)abs];
+                return negativeCache[(int)abs];
             }
         }
 
@@ -190,6 +199,103 @@ public class PineValueInProcess
             {
                 _integer = integer,
                 _integerIsStrict = true
+            };
+    }
+
+    private static PineValueInProcess CreateFromBlob(
+        PineValue.BlobValue source,
+        int startIndex,
+        int takeCount)
+    {
+        if (takeCount < 1)
+            return EmptyBlob;
+
+        var remainingAfterStart = source.Bytes.Length - startIndex;
+
+        if (remainingAfterStart < 1)
+            return EmptyBlob;
+
+        var resultLength =
+            takeCount < remainingAfterStart
+            ?
+            takeCount
+            :
+            remainingAfterStart;
+
+        if (resultLength is 1 && s_blobSingle is { } blobSingle)
+        {
+            return blobSingle[source.Bytes.Span[startIndex]];
+        }
+
+        if (resultLength <= ShortBlobLengthThreshold)
+        {
+            var firstByte = source.Bytes.Span[startIndex];
+            var secondByte = source.Bytes.Span[startIndex + 1];
+
+            if (firstByte is 4)
+            {
+                if (resultLength is 2)
+                {
+                    return CreateInteger(secondByte);
+                }
+
+                if (resultLength is 3 && secondByte is not 0)
+                {
+                    var thirdByte = source.Bytes.Span[startIndex + 2];
+
+                    return CreateInteger((secondByte << 8) | thirdByte);
+                }
+            }
+
+            // Canonical encoding of negative integer?
+            if (firstByte is 2 && secondByte is not 0)
+            {
+                if (resultLength is 2)
+                {
+                    return CreateInteger(-secondByte);
+                }
+
+                if (resultLength is 3)
+                {
+                    var thirdByte = source.Bytes.Span[startIndex + 2];
+
+                    return CreateInteger(-((secondByte << 8) | thirdByte));
+                }
+            }
+
+            var blobValue = PineValue.Blob(source.Bytes.Slice(startIndex, resultLength));
+
+            if (BuiltinFunction.SignedIntegerFromValueRelaxed(blobValue) is { } integer)
+            {
+                if (0 <= integer && integer < s_integersPositive.Count)
+                {
+                    var reused = s_integersPositive[(int)integer];
+
+                    if (reused.Evaluate() == blobValue)
+                        return reused;
+                }
+
+                if (integer < 0)
+                {
+                    var index = -integer - 1;
+
+                    if (index < s_integersNegative.Count)
+                    {
+                        var reused = s_integersNegative[(int)index];
+
+                        if (reused.Evaluate() == blobValue)
+                            return reused;
+                    }
+                }
+            }
+
+            return Create(blobValue);
+        }
+
+        return
+            new PineValueInProcess
+            {
+                _sliceBuilder = ImmutableSliceBuilder.Create(source).Skip(startIndex).Take(takeCount),
             };
     }
 
@@ -487,6 +593,14 @@ public class PineValueInProcess
 
         var evaluated = source.Evaluate();
 
+        if (evaluated is PineValue.BlobValue blobValue)
+        {
+            var startIndex = Math.Min(skipCount, blobValue.Bytes.Length);
+            var resultLength = blobValue.Bytes.Length - startIndex;
+
+            return CreateFromBlob(blobValue, startIndex, resultLength);
+        }
+
         return
             new PineValueInProcess
             {
@@ -558,6 +672,11 @@ public class PineValueInProcess
 
         var evaluated = source.Evaluate();
 
+        if (evaluated is PineValue.BlobValue blobValue)
+        {
+            return CreateFromBlob(blobValue, startIndex: 0, takeCount);
+        }
+
         return
             new PineValueInProcess
             {
@@ -583,6 +702,23 @@ public class PineValueInProcess
         }
 
         var evaluated = source.Evaluate();
+
+        if (evaluated is PineValue.BlobValue blobValue)
+        {
+            var resultLength =
+                takeCount <= 0
+                ?
+                0
+                :
+                Math.Min(takeCount, blobValue.Bytes.Length);
+
+            var startIndex = Math.Max(0, blobValue.Bytes.Length - resultLength);
+
+            return CreateFromBlob(
+                blobValue,
+                startIndex,
+                resultLength);
+        }
 
         return
             new PineValueInProcess

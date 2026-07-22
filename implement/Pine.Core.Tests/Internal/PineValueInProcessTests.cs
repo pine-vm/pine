@@ -284,6 +284,38 @@ public class PineValueInProcessTests
         VerifyConsistencyOfDerivedProperties(result);
     }
 
+    [Theory]
+    [InlineData(42, new byte[] { 99, 4, 42 })]
+    [InlineData(-42, new byte[] { 99, 2, 42 })]
+    public void Skip_on_short_blob_reuses_integer(int integer, byte[] sourceBytes)
+    {
+        var original = PineValueInProcess.Create(PineValue.Blob(sourceBytes));
+
+        var result = PineValueInProcess.Skip(1, original);
+
+        result.Should().BeSameAs(PineValueInProcess.CreateInteger(integer));
+    }
+
+    [Fact]
+    public void Skip_on_short_non_integer_blob_creates_evaluated_value()
+    {
+        var original = PineValueInProcess.Create(PineValue.Blob([10, 20, 30]));
+
+        var result = PineValueInProcess.Skip(1, original);
+
+        result.EvaluatedOrNull.Should().Be(PineValue.Blob([20, 30]));
+    }
+
+    [Fact]
+    public void Skip_preserves_noncanonical_positive_integer_blob()
+    {
+        var original = PineValueInProcess.Create(PineValue.Blob([99, 4, 0, 42]));
+
+        var result = PineValueInProcess.Skip(1, original);
+
+        result.Evaluate().Should().Be(PineValue.Blob([4, 0, 42]));
+    }
+
     [Fact]
     public void Skip_chaining_accumulates_correctly()
     {
@@ -351,6 +383,50 @@ public class PineValueInProcessTests
 
         evaluated.Should().Be(expected);
         VerifyConsistencyOfDerivedProperties(result);
+    }
+
+    [Theory]
+    [InlineData(42, new byte[] { 4, 42, 99 })]
+    [InlineData(-42, new byte[] { 2, 42, 99 })]
+    public void Take_on_short_blob_reuses_integer(int integer, byte[] sourceBytes)
+    {
+        var original = PineValueInProcess.Create(PineValue.Blob(sourceBytes));
+
+        var result = PineValueInProcess.Take(2, original);
+
+        result.Should().BeSameAs(PineValueInProcess.CreateInteger(integer));
+    }
+
+    [Fact]
+    public void Take_on_short_non_integer_blob_creates_evaluated_value()
+    {
+        var original = PineValueInProcess.Create(PineValue.Blob([10, 20, 30]));
+
+        var result = PineValueInProcess.Take(2, original);
+
+        result.EvaluatedOrNull.Should().Be(PineValue.Blob([10, 20]));
+    }
+
+    [Theory]
+    [InlineData(42, new byte[] { 99, 4, 42 })]
+    [InlineData(-42, new byte[] { 99, 2, 42 })]
+    public void TakeLast_on_short_blob_reuses_integer(int integer, byte[] sourceBytes)
+    {
+        var original = PineValueInProcess.Create(PineValue.Blob(sourceBytes));
+
+        var result = PineValueInProcess.TakeLast(2, original);
+
+        result.Should().BeSameAs(PineValueInProcess.CreateInteger(integer));
+    }
+
+    [Fact]
+    public void TakeLast_on_short_non_integer_blob_creates_evaluated_value()
+    {
+        var original = PineValueInProcess.Create(PineValue.Blob([10, 20, 30]));
+
+        var result = PineValueInProcess.TakeLast(2, original);
+
+        result.EvaluatedOrNull.Should().Be(PineValue.Blob([20, 30]));
     }
 
     [Fact]
@@ -577,12 +653,14 @@ public class PineValueInProcessTests
         var left =
             PineValueInProcess.Skip(
                 1,
-                PineValueInProcess.Create(PineValue.Blob([0, 1, 2, 3])));
+                PineValueInProcess.Create(
+                    PineValue.Blob([.. Enumerable.Range(0, 18).Select(i => (byte)i)])));
 
         var right =
             PineValueInProcess.Take(
-                3,
-                PineValueInProcess.Create(PineValue.Blob([1, 2, 3, 4])));
+                17,
+                PineValueInProcess.Create(
+                    PineValue.Blob([.. Enumerable.Range(1, 18).Select(i => (byte)i)])));
 
         PineValueInProcess.AreEqual(left, right).Should().BeTrue();
 
@@ -619,9 +697,12 @@ public class PineValueInProcessTests
         var slice =
             PineValueInProcess.Skip(
                 1,
-                PineValueInProcess.Create(PineValue.Blob([0, 1, 2, 3])));
+                PineValueInProcess.Create(
+                    PineValue.Blob([.. Enumerable.Range(0, 18).Select(i => (byte)i)])));
 
-        var evaluated = PineValueInProcess.Create(PineValue.Blob([1, 2, 3]));
+        var evaluated =
+            PineValueInProcess.Create(
+                PineValue.Blob([.. Enumerable.Range(1, 17).Select(i => (byte)i)]));
 
         PineValueInProcess.AreEqual(slice, evaluated).Should().BeTrue();
         PineValueInProcess.AreEqual(evaluated, slice).Should().BeTrue();
@@ -654,8 +735,11 @@ public class PineValueInProcessTests
     {
         var slice =
             PineValueInProcess.Skip(
-                4,
-                PineValueInProcess.Create(PineValue.Blob([1, 2, 3])));
+                100,
+                PineValueInProcess.Skip(
+                    1,
+                    PineValueInProcess.Create(
+                        PineValue.Blob([.. Enumerable.Range(0, 19).Select(i => (byte)i)]))));
 
         PineValueInProcess.AreEqual(slice, PineValueInProcess.EmptyBlob).Should().BeTrue();
 
