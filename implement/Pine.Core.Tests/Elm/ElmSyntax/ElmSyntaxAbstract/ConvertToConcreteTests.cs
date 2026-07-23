@@ -321,6 +321,30 @@ public class ConvertToConcreteTests
     }
 
     [Fact]
+    public void Compound_function_argument_pattern_is_parenthesized()
+    {
+        var moduleText =
+            "module Test exposing (..)\n\n\n" +
+            "type Wrapped a = Wrapped a\n\n\n" +
+            "unwrap fallback (Wrapped value) =\n" +
+            "    value\n";
+
+        var file =
+            ElmSyntaxParser.ParseModuleText(moduleText)
+            .Extract(err => throw new Exception("Parse failed: " + err));
+
+        var abstractFile = Abstract.ConvertFromConcrete.FromFile(file);
+        var concreteFile = Abstract.ConvertToConcrete.FromFile(abstractFile);
+
+        var unwrapDeclaration =
+            concreteFile.Declarations[1].Value
+            .Should().BeOfType<Concrete.Declaration.FunctionDeclaration>().Subject;
+
+        unwrapDeclaration.Function.Declaration.Value.Arguments[1].Value
+            .Should().BeOfType<Concrete.Pattern.ParenthesizedPattern>();
+    }
+
+    [Fact]
     public void Full_module_round_trips_through_concrete_model()
     {
         var moduleText =

@@ -295,7 +295,7 @@ public static class ConvertToConcrete
         FunctionImplementation functionImplementation) =>
         new(
             Node(functionImplementation.Name),
-            [.. functionImplementation.Arguments.Select(argument => Node(ToPattern(argument)))],
+            [.. functionImplementation.Arguments.Select(argument => Node(ToPatternInArgumentPosition(argument)))],
             s_zeroLocation,
             Node(ToExpression(functionImplementation.Expression)));
 
@@ -358,7 +358,7 @@ public static class ConvertToConcrete
             Pattern.NamedPattern namedPattern =>
             new SyntaxModel.Pattern.NamedPattern(
                 ToQualifiedNameRef(namedPattern.Name),
-                [.. namedPattern.Arguments.Select(argument => Node(ToPattern(argument)))]),
+                [.. namedPattern.Arguments.Select(argument => Node(ToPatternInArgumentPosition(argument)))]),
 
             Pattern.AsPattern asPattern =>
             new SyntaxModel.Pattern.AsPattern(
@@ -369,6 +369,44 @@ public static class ConvertToConcrete
             _ =>
             throw new System.NotImplementedException(
                 "Unexpected pattern type: " + pattern.GetType().FullName)
+        };
+
+    private static SyntaxModel.Pattern ToPatternInArgumentPosition(Pattern pattern)
+    {
+        var converted = ToPattern(pattern);
+
+        if (!NeedsParenthesesInArgumentPosition(pattern))
+            return converted;
+
+        return new SyntaxModel.Pattern.ParenthesizedPattern(Node(converted));
+    }
+
+    private static bool NeedsParenthesesInArgumentPosition(Pattern pattern) =>
+        pattern switch
+        {
+            Pattern.NamedPattern namedPattern =>
+            namedPattern.Arguments.Count is not 0,
+
+            Pattern.UnConsPattern or
+            Pattern.AsPattern =>
+            true,
+
+            Pattern.AllPattern or
+            Pattern.VarPattern or
+            Pattern.UnitPattern or
+            Pattern.CharPattern or
+            Pattern.StringPattern or
+            Pattern.IntPattern or
+            Pattern.FloatPattern or
+            Pattern.TuplePattern or
+            Pattern.RecordPattern or
+            Pattern.ListPattern =>
+            false,
+
+            _ =>
+            throw new System.NotImplementedException(
+                "NeedsParenthesesInArgumentPosition does not handle pattern variant: "
+                + pattern.GetType().Name)
         };
 
     private static SyntaxModel.QualifiedNameRef ToQualifiedNameRef(QualifiedNameRef qualifiedNameRef) =>
@@ -445,7 +483,7 @@ public static class ConvertToConcrete
             new SyntaxModel.Expression.LambdaExpression(
                 new SyntaxModel.LambdaStruct(
                     s_zeroLocation,
-                    [.. lambdaExpression.Arguments.Select(argument => Node(ToPattern(argument)))],
+                    [.. lambdaExpression.Arguments.Select(argument => Node(ToPatternInArgumentPosition(argument)))],
                     s_zeroLocation,
                     Node(ToExpression(lambdaExpression.Expression)))),
 
