@@ -46,6 +46,8 @@ public class Avh4Format
     /// <returns>A formatted File with updated token locations.</returns>
     public static File Format(File file)
     {
+        file = NormalizeModuleDocumentationComment(file);
+
         // Build the comment query helper
         var commentQueries = new CommentQueryHelper(file.Comments);
 
@@ -505,6 +507,142 @@ public class Avh4Format
         }
 
         return IsIntrinsicallyMultilineExpression(expression);
+    }
+
+    private static bool ExpressionForcesMultilineLayout(ExpressionSyntax expression)
+    {
+        while (expression is ExpressionSyntax.ParenthesizedExpression parenthesized)
+        {
+            expression = parenthesized.Expression.Value;
+        }
+
+        if (IsIntrinsicallyMultilineExpression(expression))
+            return true;
+
+        return
+            expression is ExpressionSyntax.Application application &&
+            application.Arguments.Any(argument => ExpressionForcesMultilineLayout(argument.Value));
+    }
+
+    private static bool IsZeroIntegerLiteral(ExpressionSyntax expression)
+    {
+        while (expression is ExpressionSyntax.ParenthesizedExpression parenthesized)
+        {
+            expression = parenthesized.Expression.Value;
+        }
+
+        if (expression is not ExpressionSyntax.Integer integer)
+            return false;
+
+        var digits =
+            integer.LiteralText.StartsWith("0x", System.StringComparison.Ordinal)
+            ?
+            integer.LiteralText[2..]
+            :
+            integer.LiteralText;
+
+        return digits.Length > 0 && digits.All(character => character is '0');
+    }
+
+    private static string NormalizeDocumentationComment(string commentText)
+    {
+        if (!commentText.TrimStart().StartsWith("{-|", System.StringComparison.Ordinal))
+            return commentText;
+
+        var lines = commentText.Split('\n');
+        var normalizedLines = new List<string>(lines.Length);
+        var removedEmptyDocs = false;
+
+        foreach (var line in lines)
+        {
+            var trimmed = line.Trim();
+
+            if (trimmed is "@docs")
+            {
+                while (normalizedLines.Count > 0 && string.IsNullOrWhiteSpace(normalizedLines[^1]))
+                {
+                    normalizedLines.RemoveAt(normalizedLines.Count - 1);
+                }
+
+                removedEmptyDocs = true;
+                continue;
+            }
+
+            if (removedEmptyDocs)
+            {
+                if (string.IsNullOrWhiteSpace(line))
+                    continue;
+
+                normalizedLines.Add(string.Empty);
+                removedEmptyDocs = false;
+            }
+
+            if (trimmed.StartsWith("@docs ", System.StringComparison.Ordinal))
+            {
+                var docsIndex = line.IndexOf("@docs ", System.StringComparison.Ordinal);
+
+                var names =
+                    line[(docsIndex + "@docs ".Length)..]
+                    .Split(',')
+                    .Select(name => name.Trim())
+                    .Select(
+                        name =>
+                        name.EndsWith("(..)", System.StringComparison.Ordinal)
+                        ?
+                        name[..^4]
+                        :
+                        name);
+
+                normalizedLines.Add(line[..(docsIndex + "@docs ".Length)] + string.Join(", ", names));
+                continue;
+            }
+
+            normalizedLines.Add(line);
+        }
+
+        return string.Join("\n", normalizedLines);
+    }
+
+    private static File NormalizeModuleDocumentationComment(File file)
+    {
+        var firstBodyRow =
+            file.Imports
+            .Select(importNode => importNode.Range.Start.Row)
+            .Concat(file.Declarations.Select(declaration => declaration.Range.Start.Row))
+            .DefaultIfEmpty(int.MaxValue)
+            .Min();
+
+        var moduleDocumentation =
+            file.Comments
+            .Where(
+                comment =>
+                comment.Range.Start.Row > file.ModuleDefinition.Range.End.Row &&
+                comment.Range.Start.Row < firstBodyRow &&
+                comment.Value.TrimStart().StartsWith("{-|", System.StringComparison.Ordinal))
+            .OrderBy(comment => comment.Range.Start.Row)
+            .ThenBy(comment => comment.Range.Start.Column)
+            .FirstOrDefault();
+
+        if (moduleDocumentation is null)
+            return file;
+
+        return
+            file with
+            {
+                Comments =
+                [
+                .. file.Comments.Select(
+                    comment =>
+                    ReferenceEquals(comment, moduleDocumentation)
+                    ?
+                    comment with
+                    {
+                        Value = NormalizeDocumentationComment(comment.Value)
+                    }
+                    :
+                    comment)
+                ]
+            };
     }
 
     /// <summary>
@@ -4232,10 +4370,16 @@ public class Avh4Format
 
         private FormattingResult<Node<ExpressionSyntax>> FormatExpression(
             Node<ExpressionSyntax> expr,
-            FormattingContext context)
+            FormattingContext context) =>
+            FormatExpression(expr, context, forceRightPipeMultiline: false);
+
+        private FormattingResult<Node<ExpressionSyntax>> FormatExpression(
+            Node<ExpressionSyntax> expr,
+            FormattingContext context,
+            bool forceRightPipeMultiline)
         {
             var startLoc = context.CurrentLocation();
-            var result = FormatExpressionValue(expr.Value, expr.Range, context);
+            var result = FormatExpressionValue(expr.Value, expr.Range, context, forceRightPipeMultiline);
 
             return
                 FormattingResult<Node<ExpressionSyntax>>.Create(
@@ -4246,7 +4390,8 @@ public class Avh4Format
         private FormattingResult<ExpressionSyntax> FormatExpressionValue(
             ExpressionSyntax expr,
             Range originalRange,
-            FormattingContext context)
+            FormattingContext context,
+            bool forceRightPipeMultiline)
         {
             switch (expr)
             {
@@ -4340,6 +4485,24 @@ public class Avh4Format
 
                 case ExpressionSyntax.Negation negation:
                     {
+                        if (IsZeroIntegerLiteral(negation.Expression.Value) &&
+                            !commentQueries.HasWithinRange(originalRange))
+                        {
+                            var zeroExpression = negation.Expression;
+
+                            while (zeroExpression.Value is ExpressionSyntax.ParenthesizedExpression parenthesized)
+                            {
+                                zeroExpression = parenthesized.Expression;
+                            }
+
+                            return
+                                FormatExpressionValue(
+                                    zeroExpression.Value,
+                                    zeroExpression.Range,
+                                    context,
+                                    forceRightPipeMultiline: false);
+                        }
+
                         var afterNegSign = context.Advance(1); // "-"
                         var negResult = FormatExpression(negation.Expression, afterNegSign);
 
@@ -4652,7 +4815,12 @@ public class Avh4Format
                         if (IsSimpleExpressionThatDoesNotNeedParens(innerExpr.Value))
                         {
                             // Skip the parentheses entirely and just format the inner expression
-                            return FormatExpressionValue(innerExpr.Value, innerExpr.Range, context);
+                            return
+                                FormatExpressionValue(
+                                    innerExpr.Value,
+                                    innerExpr.Range,
+                                    context,
+                                    forceRightPipeMultiline: false);
                         }
 
                         // Create reference context at opening paren for close paren alignment
@@ -4750,7 +4918,12 @@ public class Avh4Format
 
                 case ExpressionSyntax.OperatorApplication opApp:
                     {
-                        var leftResult = FormatExpression(opApp.Left, context);
+                        var forcePipeChainMultiline =
+                            forceRightPipeMultiline ||
+                            (opApp.Operator.Value is "|>" &&
+                            ExpressionForcesMultilineLayout(opApp.Right.Value));
+
+                        var leftResult = FormatExpression(opApp.Left, context, forcePipeChainMultiline);
 
                         // Check if the right operand is on a new line in the original
                         var rightOnNewLine = opApp.Right.Range.Start.Row > opApp.Left.Range.End.Row;
@@ -4762,7 +4935,8 @@ public class Avh4Format
                         // (even if it starts on the same line as <|)
                         var treatAsMultiline =
                             rightOnNewLine ||
-                            (opApp.Operator.Value is "<|" && rightIsMultiline);
+                            (opApp.Operator.Value is "<|" && rightIsMultiline) ||
+                            (opApp.Operator.Value is "|>" && forcePipeChainMultiline);
 
                         if (treatAsMultiline)
                         {
@@ -5062,6 +5236,13 @@ public class Avh4Format
             FormattingContext context,
             int? chainBaseColumn = null)
         {
+            if (ifBlock.ElseBlock.Value is ExpressionSyntax.ParenthesizedExpression parenthesizedElse &&
+                parenthesizedElse.Expression.Value is ExpressionSyntax.IfBlock &&
+                !commentQueries.HasWithinRange(ifBlock.ElseBlock.Range))
+            {
+                ifBlock = ifBlock with { ElseBlock = parenthesizedElse.Expression };
+            }
+
             // Check if this is a chained else-if (else block is another if)
             // But only if there are no comments between else and if tokens
             var isElseIf = false;

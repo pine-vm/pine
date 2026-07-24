@@ -165,6 +165,19 @@ public class CommentQueryHelper
         _allComments.Any(c => c.Range.Start.Row > afterRow && c.Range.Start.Row < beforeRow);
 
     /// <summary>
+    /// Check if any comment starts within the given range.
+    /// </summary>
+    public bool HasWithinRange(Range range) =>
+        _allComments.Any(
+            comment =>
+            (comment.Range.Start.Row > range.Start.Row ||
+            (comment.Range.Start.Row == range.Start.Row &&
+            comment.Range.Start.Column > range.Start.Column)) &&
+            (comment.Range.Start.Row < range.End.Row ||
+            (comment.Range.Start.Row == range.End.Row &&
+            comment.Range.Start.Column < range.End.Column)));
+
+    /// <summary>
     /// Get all comments on a specific row that start after a given column.
     /// Returns comments ordered by column.
     /// </summary>
