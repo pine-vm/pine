@@ -35,7 +35,13 @@ The runtime performance items are not related to the Pine language, but are impl
 
 ## Language Elm
 
-- [ ] Expand the Elm compiler to instantiate higher-order functions so that downstream code analysis only needs to parse first-order functions.
++ [ ] Expand the Elm compiler to instantiate higher-order functions so that downstream code analysis only needs to parse first-order functions.
+
++ Elm language server features to make available (some possibily via extensions that contribute diagnostics and codefixes which are then surfaced by the LS.)
+  + [ ] Feature: 'add inferred type annotation'
+  + [ ] Feature: diagnostic on unused declaration.
+  + [ ] Feature: diagnostic on unused import.
+  + [ ] Feature: Code fix on naming error: 'add missing import': offers to select one module of all modules containing this name, minus the modules already imported without alias, appears on naming error if that set of modules is not empty.
 
 ## App Developer Tools
 
