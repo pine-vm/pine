@@ -624,7 +624,29 @@ public class Rendering
                 context.Append("module");
                 context.AdvanceToLocation(effectModule.ModuleData.ModuleName.Range.Start);
                 context.Append(RenderModuleName(effectModule.ModuleData.ModuleName.Value));
-                context.AdvanceToLocation(effectModule.ModuleData.ExposingTokenLocation);
+                context.AdvanceByMinimum(1);
+                context.Append("where");
+                context.AdvanceByMinimum(1);
+                context.Append("{");
+
+                if (effectModule.ModuleData.Command is { } command)
+                {
+                    context.AdvanceByMinimum(1);
+                    context.Append("command = " + command.Value);
+                }
+
+                if (effectModule.ModuleData.Subscription is { } subscription)
+                {
+                    if (effectModule.ModuleData.Command is not null)
+                        context.Append(",");
+
+                    context.AdvanceByMinimum(1);
+                    context.Append("subscription = " + subscription.Value);
+                }
+
+                context.AdvanceByMinimum(1);
+                context.Append("}");
+                context.AdvanceByMinimum(1);
                 context.Append("exposing");
                 RenderExposing(effectModule.ModuleData.ExposingList, context);
                 break;
@@ -925,7 +947,17 @@ public class Rendering
 
                 foreach (var arg in typed.TypeArguments)
                 {
-                    context.AdvanceToLocation(arg.Range.Start);
+                    if (arg.Range.Start.Row < context.CurrentRow ||
+                        (arg.Range.Start.Row == context.CurrentRow &&
+                        arg.Range.Start.Column <= context.CurrentColumn))
+                    {
+                        context.AdvanceByMinimum(1);
+                    }
+                    else
+                    {
+                        context.AdvanceToLocation(arg.Range.Start);
+                    }
+
                     RenderTypeAnnotation(arg, context);
                 }
 

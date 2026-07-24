@@ -1,11 +1,10 @@
 using AwesomeAssertions;
 using Pine.Core.CodeAnalysis;
 using Pine.Core.Elm.ElmCompilerInDotnet;
-using Pine.Core.Elm.ElmSyntax.SyntaxModel;
 using System.Collections.Immutable;
 using Xunit;
 
-using SyntaxTypes = Pine.Core.Elm.ElmSyntax.Stil4mElmSyntax7;
+using SyntaxTypes = Pine.Core.Elm.ElmSyntax.ElmSyntaxAbstract;
 
 namespace Pine.Core.Tests.Elm.ElmCompilerInDotnet;
 
@@ -35,26 +34,20 @@ namespace Pine.Core.Tests.Elm.ElmCompilerInDotnet;
 /// </summary>
 public class OptimizedElmSyntaxDeclarationsTests
 {
-    private static readonly Range s_emptyRange =
-        new(new Location(1, 1), new Location(1, 1));
-
-    private static Node<T> Node<T>(T value) => new(s_emptyRange, value);
-
     private static SyntaxTypes.Declaration.FunctionDeclaration MakeFunctionDeclaration(
         string declName,
         SyntaxTypes.Expression? body = null)
     {
         var implementation =
             new SyntaxTypes.FunctionImplementation(
-                Name: Node(declName),
+                Name: declName,
                 Arguments: [],
-                Expression: Node(body ?? new SyntaxTypes.Expression.UnitExpr()));
+                Expression: body ?? new SyntaxTypes.Expression.UnitExpr());
 
         var functionStruct =
             new SyntaxTypes.FunctionStruct(
-                Documentation: null,
                 Signature: null,
-                Declaration: Node(implementation));
+                Declaration: implementation);
 
         return new SyntaxTypes.Declaration.FunctionDeclaration(functionStruct);
     }
@@ -63,8 +56,8 @@ public class OptimizedElmSyntaxDeclarationsTests
     {
         var signature =
             new SyntaxTypes.Signature(
-                Name: Node(portName),
-                TypeAnnotation: Node<SyntaxTypes.TypeAnnotation>(new SyntaxTypes.TypeAnnotation.Unit()));
+                Name: portName,
+                TypeAnnotation: new SyntaxTypes.TypeAnnotation.Unit());
 
         return new SyntaxTypes.Declaration.PortDeclaration(signature);
     }

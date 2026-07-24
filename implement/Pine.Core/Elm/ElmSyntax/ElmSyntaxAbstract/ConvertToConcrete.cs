@@ -346,9 +346,9 @@ public static class ConvertToConcrete
 
             Pattern.UnConsPattern unConsPattern =>
             new SyntaxModel.Pattern.UnConsPattern(
-                Node(ToPattern(unConsPattern.Head)),
+                Node(ToPatternInArgumentPosition(unConsPattern.Head)),
                 s_zeroLocation,
-                Node(ToPattern(unConsPattern.Tail))),
+                Node(ToPatternInArgumentPosition(unConsPattern.Tail))),
 
             Pattern.ListPattern listPattern =>
             new SyntaxModel.Pattern.ListPattern(
@@ -362,7 +362,7 @@ public static class ConvertToConcrete
 
             Pattern.AsPattern asPattern =>
             new SyntaxModel.Pattern.AsPattern(
-                Node(ToPattern(asPattern.Pattern)),
+                Node(ToPatternInArgumentPosition(asPattern.Pattern)),
                 s_zeroLocation,
                 Node(asPattern.Name)),
 
@@ -438,7 +438,7 @@ public static class ConvertToConcrete
             new SyntaxModel.Expression.FloatLiteral(FloatLiteralText(floatable.Numerator, floatable.Denominator)),
 
             Expression.Negation negation =>
-            new SyntaxModel.Expression.Negation(Node(ToExpression(negation.Expression))),
+            new SyntaxModel.Expression.Negation(Node(ToExpressionInApplicationPosition(negation.Expression))),
 
             Expression.ListExpr listExpr =>
             new SyntaxModel.Expression.ListExpr(
@@ -471,8 +471,8 @@ public static class ConvertToConcrete
             new SyntaxModel.Expression.OperatorApplication(
                 Node(operatorApplication.Operator),
                 operatorApplication.Direction,
-                Node(ToExpression(operatorApplication.Left)),
-                Node(ToExpression(operatorApplication.Right))),
+                Node(ToExpressionInOperatorOperandPosition(operatorApplication.Left)),
+                Node(ToExpressionInOperatorOperandPosition(operatorApplication.Right))),
 
             Expression.TupledExpression tupledExpression =>
             new SyntaxModel.Expression.TupledExpression(
@@ -510,7 +510,7 @@ public static class ConvertToConcrete
 
             Expression.RecordAccess recordAccess =>
             new SyntaxModel.Expression.RecordAccess(
-                Node(ToExpression(recordAccess.Record)),
+                Node(ToExpressionInApplicationPosition(recordAccess.Record)),
                 Node(recordAccess.FieldName)),
 
             Expression.RecordAccessFunction recordAccessFunction =>
@@ -540,6 +540,13 @@ public static class ConvertToConcrete
 
         return new SyntaxModel.Expression.ParenthesizedExpression(Node(converted));
     }
+
+    private static SyntaxModel.Expression ToExpressionInOperatorOperandPosition(Expression expression) =>
+        NeedsParenthesesInApplicationPosition(expression)
+        ?
+        new SyntaxModel.Expression.ParenthesizedExpression(Node(ToExpression(expression)))
+        :
+        ToExpression(expression);
 
     private static bool NeedsParenthesesInApplicationPosition(Expression expression) =>
         expression switch
@@ -607,7 +614,7 @@ public static class ConvertToConcrete
 
             LetDeclaration.LetDestructuring letDestructuring =>
             new SyntaxModel.Expression.LetDeclaration.LetDestructuring(
-                Node(ToPattern(letDestructuring.Pattern)),
+                Node(ToPatternInArgumentPosition(letDestructuring.Pattern)),
                 s_zeroLocation,
                 Node(ToExpression(letDestructuring.Expression))),
 

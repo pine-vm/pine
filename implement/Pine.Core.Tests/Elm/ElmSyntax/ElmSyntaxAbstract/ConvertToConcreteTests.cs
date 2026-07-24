@@ -345,6 +345,62 @@ public class ConvertToConcreteTests
     }
 
     [Fact]
+    public void Compound_alias_inner_pattern_is_parenthesized()
+    {
+        var pattern =
+            new Abstract.Pattern.AsPattern(
+                new Abstract.Pattern.NamedPattern(
+                    new Abstract.QualifiedNameRef([], "Wrapped"),
+                    [new Abstract.Pattern.VarPattern("value")]),
+                "wrapped");
+
+        var concrete = Abstract.ConvertToConcrete.ToPattern(pattern);
+
+        var aliasPattern = concrete.Should().BeOfType<Concrete.Pattern.AsPattern>().Subject;
+        aliasPattern.Pattern.Value.Should().BeOfType<Concrete.Pattern.ParenthesizedPattern>();
+    }
+
+    [Fact]
+    public void Compound_let_destructuring_pattern_is_parenthesized()
+    {
+        var moduleText =
+            """
+            module Test exposing (..)
+
+            type Wrapped a =
+                Wrapped a
+
+            extract wrapped =
+                let
+                    (Wrapped value) =
+                        wrapped
+                in
+                value
+            """;
+
+        var file =
+            ElmSyntaxParser.ParseModuleText(moduleText)
+            .Extract(err => throw new Exception("Parse failed: " + err));
+
+        var abstractFile = Abstract.ConvertFromConcrete.FromFile(file);
+        var concreteFile = Abstract.ConvertToConcrete.FromFile(abstractFile);
+
+        var extractDeclaration =
+            concreteFile.Declarations[1].Value
+            .Should().BeOfType<Concrete.Declaration.FunctionDeclaration>().Subject;
+
+        var letExpression =
+            extractDeclaration.Function.Declaration.Value.Expression.Value
+            .Should().BeOfType<Concrete.Expression.LetExpression>().Subject;
+
+        var destructuring =
+            letExpression.Value.Declarations[0].Value
+            .Should().BeOfType<Concrete.Expression.LetDeclaration.LetDestructuring>().Subject;
+
+        destructuring.Pattern.Value.Should().BeOfType<Concrete.Pattern.ParenthesizedPattern>();
+    }
+
+    [Fact]
     public void Full_module_round_trips_through_concrete_model()
     {
         var moduleText =
