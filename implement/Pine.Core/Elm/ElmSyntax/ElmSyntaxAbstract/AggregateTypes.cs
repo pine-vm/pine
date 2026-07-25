@@ -188,6 +188,26 @@ public abstract record Module
     public sealed record EffectModule(
         EffectModuleData ModuleData)
         : Module;
+
+    /// <summary>
+    /// Retrieve the module name for the specified module instance.
+    /// </summary>
+    public static ModuleName GetModuleName(Module module) =>
+        module switch
+        {
+            NormalModule normalModule =>
+            normalModule.ModuleData.ModuleName,
+
+            PortModule portModule =>
+            portModule.ModuleData.ModuleName,
+
+            EffectModule effectModule =>
+            effectModule.ModuleData.ModuleName,
+
+            _ =>
+            throw new System.NotImplementedException(
+                "Unexpected module type: " + module.GetType().Name),
+        };
 }
 
 /// <summary>
