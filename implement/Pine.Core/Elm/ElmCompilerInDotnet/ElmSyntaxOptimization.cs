@@ -8,6 +8,8 @@ using System.Linq;
 using ModuleName = System.Collections.Generic.IReadOnlyList<string>;
 
 using SyntaxTypes = Pine.Core.Elm.ElmSyntax.Stil4mElmSyntax7;
+using SyntaxModelTypes = Pine.Core.Elm.ElmSyntax.SyntaxModel;
+using ElmSyntaxAbstract = Pine.Core.Elm.ElmSyntax.ElmSyntaxAbstract;
 
 namespace Pine.Core.Elm.ElmCompilerInDotnet;
 
@@ -101,286 +103,6 @@ public partial class ElmSyntaxOptimization
     private sealed record InliningResult(
         SyntaxTypes.Expression Expression,
         ImmutableList<Node<SyntaxTypes.Declaration>> GeneratedDeclarations);
-
-
-    /// <summary>
-    /// Default number of optimization rounds for
-    /// <see cref="OptimizeRounds(OptimizedElmSyntaxDeclarations, Config)"/>.
-    /// </summary>
-    public const int DefaultOptimizationRounds = 4;
-
-    /// <summary>
-    /// Runs the combined specialization-and-inlining pipeline with the
-    /// <see cref="DefaultOptimizationRounds"/> limit, repeating transformations
-    /// until the declaration dictionary converges (structural equality) or the limit is reached.
-    /// </summary>
-    public static Result<string, OptimizedElmSyntaxDeclarations> OptimizeRounds(
-        OptimizedElmSyntaxDeclarations declarations,
-        Config config) =>
-        OptimizeRounds(declarations, config, rounds: DefaultOptimizationRounds);
-
-    /// <summary>
-    /// Runs the combined specialization-and-inlining pipeline up to <paramref name="rounds"/>
-    /// times, stopping early in case of convergence.
-    /// </summary>
-    public static Result<string, OptimizedElmSyntaxDeclarations> OptimizeRounds(
-        OptimizedElmSyntaxDeclarations declarations,
-        Config config,
-        int rounds)
-    {
-        var current = declarations;
-
-        for (var round = 0; round < rounds; round++)
-        {
-            var result = SpecializeAndInlineDeclarations(current, config, RewriteConfig.Combined);
-
-            if (result.IsErrOrNull() is { } err)
-                return err;
-
-            if (result.IsOkOrNull() is not { } next)
-                throw new NotImplementedException("Unexpected result type");
-
-            // Structural equality: if the output matches the input the pipeline has converged.
-            if (next.Equals(current))
-            {
-                return next;
-            }
-
-            current = next;
-        }
-
-        return current;
-    }
-
-    /// <summary>
-    /// Run only the specialization rewrite stage: collect higher-order specialization
-    /// opportunities and emit the corresponding <c>__specialized__N</c> sibling
-    /// declarations, without performing classic inlining at call sites. Because this
-    /// stage can emit new declarations, the method name includes "Specialize".
-    /// Convenience wrapper for
-    /// <see cref="SpecializeAndInlineDeclarations(OptimizedElmSyntaxDeclarations, Config, RewriteConfig)"/>
-    /// with <see cref="RewriteConfig.SpecializationOnly"/>.
-    /// </summary>
-    public static Result<string, OptimizedElmSyntaxDeclarations> SpecializeDeclarations(
-        OptimizedElmSyntaxDeclarations declarations,
-        Config config) =>
-        SpecializeAndInlineDeclarations(declarations, config, RewriteConfig.SpecializationOnly);
-
-    /// <summary>
-    /// Run a single combined specialization+inlining round. This is the entry point
-    /// used by the inlining phases of the compiler pipeline. Because this can both
-    /// add new specialized sibling declarations and substitute callee bodies at
-    /// call sites, the name includes "Specialize" and "Inline".
-    /// <para>
-    /// Phase 2 of the production pipeline runs as Combined (not InliningOnly).
-    /// See explore/internal-analysis/2026-05-16-skipWhileWithoutLinebreakHelp-alpha-regression.md
-    /// §5.4 for the rationale: running classic inlining without specialization
-    /// creates a temporal gap where a recursive higher-order call newly exposed
-    /// by Phase 2's wrapper inlining cannot be redirected to its pre-existing
-    /// <c>__specialized__N</c> sibling (TrySpecializeRecursiveCall is gated by
-    /// EnablesSpecialization, which is false in InliningOnly). Routing Phase 2
-    /// through Combined closes the gap by enabling both spec collection and
-    /// call-site rewriting within the same call.
-    /// </para>
-    /// </summary>
-    public static Result<string, OptimizedElmSyntaxDeclarations> SpecializeAndInlineDeclarationsCombined(
-        OptimizedElmSyntaxDeclarations declarations,
-        Config config) =>
-        SpecializeAndInlineDeclarations(declarations, config, RewriteConfig.Combined);
-
-    /// <summary>
-    /// Workhorse of the specialization+inlining pipeline: in one pass it (a)
-    /// collects specialization opportunities and emits the resulting
-    /// <c>__specialized__N</c> sibling declarations, (b) substitutes selected
-    /// callee bodies at call sites, (c) lifts any lambdas / local functions
-    /// introduced during the rewrite, (d) optionally strips wrapper-return
-    /// patterns (emitting <c>__stripped</c> sibling declarations) and applies
-    /// wrap/unwrap cancellation. Because this method can ADD new top-level
-    /// declarations, its name includes "Specialize" (per the project convention
-    /// that "Rewrite" is reserved for non-adding transforms).
-    /// <para>
-    /// Whether the trailing wrap/unwrap cancellation runs is gated on
-    /// <see cref="Config.WrapUnwrapCancellationEnabled"/>. The wrapper-return
-    /// stripping + cancellation block as a whole is also gated on
-    /// <c>config.SmallFunctions is null</c> — see
-    /// <c>explore/internal-analysis/2026-05-15-s1-cancel-parser-newtype-wrap-unwrap.md</c>
-    /// section 5 for why those passes must not run under size-based inlining.
-    /// </para>
-    /// </summary>
-    public static Result<string, OptimizedElmSyntaxDeclarations> SpecializeAndInlineDeclarations(
-        OptimizedElmSyntaxDeclarations declarations,
-        Config config,
-        RewriteConfig rewriteConfig) =>
-        SpecializeAndInlineDeclarations(declarations, config, rewriteConfig, StageToggles.Default);
-
-    /// <summary>
-    /// Extended overload of
-    /// <see cref="SpecializeAndInlineDeclarations(OptimizedElmSyntaxDeclarations, Config, RewriteConfig)"/>
-    /// that accepts a <see cref="StageToggles"/> record selecting which post-passes run
-    /// after the specialization+inlining rewrite. Intended for debugging investigations
-    /// (e.g. bisecting which sub-stage in a given round introduces an incorrect rewrite):
-    /// callers can ask for the raw inliner output, then drive
-    /// <see cref="LambdaLifting.LiftLambdas(OptimizedElmSyntaxDeclarations)"/>,
-    /// <see cref="ApplicationNormalization.NormalizeApplicationsInDeclarationDictionary"/>,
-    /// and the WRS / WUC passes manually in their own test code. The defaults on
-    /// <see cref="StageToggles.Default"/> reproduce the production behaviour of the
-    /// three-argument overload, so existing callers are unaffected.
-    /// </summary>
-    public static Result<string, OptimizedElmSyntaxDeclarations> SpecializeAndInlineDeclarations(
-        OptimizedElmSyntaxDeclarations declarations,
-        Config config,
-        RewriteConfig rewriteConfig,
-        StageToggles stageToggles)
-    {
-        // Build a dictionary of all function declarations
-        var functionsByQualifiedName = BuildFunctionDictionary(declarations);
-
-        // Mark recursive functions
-        var functionsWithRecursionInfo = MarkRecursiveFunctions(functionsByQualifiedName);
-
-        // Build type context: identify constructors of single-constructor choice types
-        var singleChoiceConstructors = BuildSingleChoiceConstructors(declarations);
-
-        // Build function signatures from type annotations for type-aware function detection
-        var functionSignatures = BuildFunctionSignatures(declarations);
-
-        // --- Pass 1: Collect all specialization requests ---
-        var resolution =
-            new ModuleResolutionContext(
-                functionsWithRecursionInfo,
-                singleChoiceConstructors,
-                functionSignatures);
-
-        var collectionContext =
-            new InliningContext(
-                resolution,
-                config,
-                [],
-                SpecializationCatalog: SpecializationCatalog.Empty,
-                RewriteConfig: rewriteConfig);
-
-        var collectedSpecializations =
-            CollectSpecializationsFromDeclarations(declarations, collectionContext);
-
-        // --- Naming: Deduplicate and assign deterministic names ---
-        // Deduplication includes filtering out specializations already present
-        // in `declarations.FunctionDeclarations[*].Specializations` so that we
-        // never re-emit a fresh `__specialized__N` name for a specialization
-        // the input already carries.
-        var catalog = BuildCatalogFromCollectedSpecializations(collectedSpecializations, declarations);
-
-        // --- Pass 2: Rewrite using the catalog ---
-        var rewriteContext =
-            new InliningContext(
-                resolution,
-                config,
-                [],
-                SpecializationCatalog: catalog,
-                RewriteConfig: rewriteConfig);
-
-        // Group declarations by module for per-module processing, iterating
-        // the structured form directly so we never materialise a global
-        // flat dictionary in this method.
-        var declsByModule =
-            new Dictionary<ModuleName, ImmutableDictionary<DeclQualifiedName, SyntaxTypes.Declaration>.Builder>(
-                EnumerableExtensions.EqualityComparer<ModuleName>());
-
-        foreach (var entry in declarations.EnumerateAllDeclarations())
-        {
-            if (!declsByModule.TryGetValue(entry.Key.Namespaces, out var moduleBuilder))
-            {
-                moduleBuilder =
-                    ImmutableDictionary.CreateBuilder<DeclQualifiedName, SyntaxTypes.Declaration>();
-
-                declsByModule[entry.Key.Namespaces] = moduleBuilder;
-            }
-
-            moduleBuilder[entry.Key] =
-                ElmSyntaxAbstractConversion.ToDeclaration(entry.Value);
-        }
-
-        var resultBuilder =
-            ImmutableDictionary.CreateBuilder<DeclQualifiedName, SyntaxTypes.Declaration>();
-
-        foreach (var (moduleName, moduleBuilder) in declsByModule)
-        {
-            var moduleContext =
-                rewriteContext with { Resolution = rewriteContext.Resolution with { CurrentModuleName = moduleName } };
-
-            var moduleDecls = moduleBuilder.ToImmutable();
-
-            var inlinedModuleDecls = InlineDeclarations(moduleDecls, moduleName, moduleContext);
-
-            foreach (var (key, decl) in inlinedModuleDecls)
-            {
-                resultBuilder[key] = decl;
-            }
-        }
-
-        // Lift inlining output into the structured model so subsequent
-        // rewrite passes can each take and return
-        // OptimizedElmSyntaxDeclarations.
-        var current =
-            OptimizedElmSyntaxDeclarations.FromFlatDictionary(
-                ElmSyntaxAbstractConversion.FromDeclarationDictionary(
-                    resultBuilder.ToImmutable()));
-
-        // Lambda lifting: lift any lambdas or local functions introduced during
-        // inlining/specialization so that the output is free of disallowed nodes.
-        if (stageToggles.LambdaLiftingEnabled)
-        {
-            current = LambdaLifting.LiftLambdas(current);
-        }
-
-        // Normalize all Application nodes so no Application has another
-        // Application as its head. Substitution-based rewrites elsewhere
-        // in the pipeline (notably the pipe-operator desugaring above)
-        // can produce nested-curried Application form, which forces
-        // ExpressionCompiler.CompileApplication to fall through to the
-        // closure-allocating EmitFunctionValueWithEnvFunctions path
-        // instead of taking the direct-call fast path. Flattening here
-        // reshapes those into single saturated Applications without
-        // changing observable behavior.
-        if (stageToggles.NormalizeApplicationsEnabled)
-        {
-            current = NormalizeApplicationsInDeclarationDictionary(current);
-        }
-
-        // D2 Step 2 (WrapperReturnStripping) + S1 (WrapUnwrapCancellation):
-        // both passes are gated on Phases 1 + 2 (config.SmallFunctions is null) only —
-        // running them under Phase 3 size-based inlining can cause its small-function
-        // inliner to re-inline a __stripped sibling back into a forwarding body, undoing
-        // the strip. See
-        // explore/internal-analysis/2026-05-15-s1-cancel-parser-newtype-wrap-unwrap.md
-        // section 5 for the placement rationale.
-        if (config.SmallFunctions is null && stageToggles.WrapperReturnStrippingEnabled)
-        {
-            var newtypeRegistry = NewtypeWrapperAnalysis.BuildNewtypeRegistry(current);
-
-            if (!newtypeRegistry.IsEmpty)
-            {
-                var stripPlans =
-                    WrapperReturnStripping.BuildStripPlans(current, newtypeRegistry);
-
-                current = WrapperReturnStripping.RewriteDeclarationDictionary(current);
-
-                var siblingsByOriginal =
-                    stripPlans.ToImmutableDictionary(
-                        kvp => kvp.Key,
-                        kvp => kvp.Value.ToGeneratedSiblingDecl());
-
-                if (config.WrapUnwrapCancellationEnabled)
-                {
-                    current =
-                        WrapUnwrapCancellation.RewriteDeclarationDictionary(
-                            current,
-                            siblingsByOriginal);
-                }
-            }
-        }
-
-        return current;
-    }
 
     /// <summary>
     /// Apply only the wrap/unwrap cancellation rewrite pass (Shapes A/B
@@ -658,6 +380,24 @@ public partial class ElmSyntaxOptimization
         return recursive;
     }
 
+    internal static IEnumerable<DeclQualifiedName> CollectFunctionReferences(
+        ElmSyntaxAbstract.Expression expression)
+    {
+        var concreteExpression =
+            ElmSyntaxAbstract.ConvertToConcrete.ToExpression(expression);
+
+        var expressionNode =
+            new SyntaxModelTypes.Node<SyntaxModelTypes.Expression>(
+                new SyntaxModelTypes.Range(
+                    new SyntaxModelTypes.Location(1, 1),
+                    new SyntaxModelTypes.Location(1, 2)),
+                concreteExpression);
+
+        return
+            CollectFunctionReferences(
+                SyntaxTypes.FromFullSyntaxModel.ConvertExpressionNode(expressionNode).Value);
+    }
+
     private static IEnumerable<DeclQualifiedName> CollectFunctionReferences(
         SyntaxTypes.Expression expr)
     {
@@ -771,108 +511,6 @@ public partial class ElmSyntaxOptimization
         }
 
         return builder.ToImmutable();
-    }
-
-    private static ImmutableDictionary<DeclQualifiedName, SyntaxTypes.Declaration> InlineDeclarations(
-        ImmutableDictionary<DeclQualifiedName, SyntaxTypes.Declaration> moduleDecls,
-        ModuleName moduleName,
-        InliningContext context)
-    {
-        var moduleLevelNames = CollectModuleLevelDeclarationNames(moduleDecls);
-
-        context =
-            context with
-            {
-                ModuleLevelNames = moduleLevelNames
-            };
-
-        var newDecls = ImmutableList.CreateBuilder<Node<SyntaxTypes.Declaration>>();
-        var inlinedDeclarations = new List<(DeclQualifiedName Key, Node<SyntaxTypes.Declaration> Decl)>();
-
-        foreach (var (key, decl) in moduleDecls.OrderBy(kvp => kvp.Key))
-        {
-            var declNode = new Node<SyntaxTypes.Declaration>(ElmSyntaxTransformations.s_zeroRange, decl);
-            var (inlinedDecl, generatedDecls) = InlineDeclaration(declNode, context);
-
-            inlinedDeclarations.Add((key, inlinedDecl));
-            newDecls.AddRange(generatedDecls);
-        }
-
-        // Inline the generated specialized functions to beta-reduce any
-        // lambda applications introduced by parameter substitution
-        // (e.g., (\x -> [x, x]) first  →  [first, first]).
-        foreach (var newDecl in newDecls)
-        {
-            var (inlinedNewDecl, furtherDecls) = InlineDeclaration(newDecl, context);
-
-            var newDeclName = ElmCompiler.GetDeclarationName(inlinedNewDecl.Value);
-            var newKey = DeclQualifiedName.Create(moduleName, newDeclName ?? "unknown");
-
-            inlinedDeclarations.Add((newKey, inlinedNewDecl));
-
-            foreach (var furtherDecl in furtherDecls)
-            {
-                var furtherDeclName = ElmCompiler.GetDeclarationName(furtherDecl.Value);
-                var furtherKey = DeclQualifiedName.Create(moduleName, furtherDeclName ?? "unknown");
-                inlinedDeclarations.Add((furtherKey, furtherDecl));
-            }
-        }
-
-        // Build a flat dict of the inlined declarations for simplification context.
-        // Use a builder to handle duplicate keys (same specialized function generated
-        // from different call sites) — last value wins, which is safe since duplicates
-        // have identical content.
-        var inlinedDeclsDictBuilder =
-            ImmutableDictionary.CreateBuilder<DeclQualifiedName, SyntaxTypes.Declaration>();
-
-        foreach (var (key, declNode) in inlinedDeclarations)
-        {
-            inlinedDeclsDictBuilder[key] = declNode.Value;
-        }
-
-        var inlinedDeclsDict = inlinedDeclsDictBuilder.ToImmutable();
-
-        var simplificationFunctions = context.Resolution.FunctionsByQualifiedName.ToBuilder();
-
-        foreach (var rewrittenFunction in MarkRecursiveFunctions(BuildFunctionDictionary(inlinedDeclsDict)))
-        {
-            simplificationFunctions[rewrittenFunction.Key] = rewrittenFunction.Value;
-        }
-
-        var simplificationContext =
-            context with
-            {
-                Resolution =
-                context.Resolution with
-                {
-                    FunctionsByQualifiedName = simplificationFunctions.ToImmutable()
-                }
-            };
-
-        // Recompute module-level names to include any newly generated declarations
-        // (e.g., specialized functions added during inlining). The original moduleLevelNames
-        // only covered the input declarations. Without this update, RenameDeclarationBindingsAvoidingCapture
-        // would not know to rename local bindings that clash with the new top-level names.
-        var allModuleLevelNames = CollectModuleLevelDeclarationNames(inlinedDeclsDict);
-
-        var resultBuilder =
-            ImmutableDictionary.CreateBuilder<DeclQualifiedName, SyntaxTypes.Declaration>();
-
-        foreach (var (key, declNode) in inlinedDeclarations)
-        {
-            var simplified = SimplifyGeneratedDeclaration(declNode, simplificationContext);
-
-            // Safety net: rename all local bindings in the declaration to ensure
-            // no naming clashes remain after simplification and inlining.
-            simplified = RenameDeclarationBindingsAvoidingCapture(simplified, allModuleLevelNames);
-
-            // Post-process: ensure all Application arguments are parenthesized where necessary
-            var parenthesized = ElmSyntaxTransformations.ParenthesizeDeclaration(simplified);
-
-            resultBuilder[key] = parenthesized.Value;
-        }
-
-        return resultBuilder.ToImmutable();
     }
 
     /// <summary>

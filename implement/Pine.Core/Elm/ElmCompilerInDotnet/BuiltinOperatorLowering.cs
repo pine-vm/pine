@@ -1,16 +1,25 @@
 using Pine.Core.CodeAnalysis;
+using Pine.Core.CommonEncodings;
 using Pine.Core.Elm.ElmSyntax.SyntaxModel;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
+using System.Numerics;
 
-using SyntaxTypes = Pine.Core.Elm.ElmSyntax.Stil4mElmSyntax7;
+using SyntaxTypes = Pine.Core.Elm.ElmSyntax.ElmSyntaxAbstract;
 
 namespace Pine.Core.Elm.ElmCompilerInDotnet;
 
 /// <summary>
 /// Rewrites canonicalized Elm syntax so builtin operators and selected core arithmetic helpers
 /// are expressed in a form that later compilation stages can map directly to Pine builtins.
+/// <para>
+/// This stage operates exclusively on the abstract Elm syntax model
+/// (<see cref="Pine.Core.Elm.ElmSyntax.ElmSyntaxAbstract"/>): there is no source-location
+/// tracking, no concrete-syntax <c>Node&lt;T&gt;</c> wrapper, and no bridging/conversion to or
+/// from the concrete <c>Stil4mElmSyntax7</c> model. Callers are expected to supply and receive
+/// declarations already expressed in the abstract model.
+/// </para>
 /// </summary>
 public static class BuiltinOperatorLowering
 {
@@ -33,16 +42,6 @@ public static class BuiltinOperatorLowering
         BoolOr,
     }
 
-    /// <summary>
-    /// Zero-based location used for generated syntax nodes introduced by lowering.
-    /// </summary>
-    private static readonly Location s_zeroLocation = new(Row: 0, Column: 0);
-
-    /// <summary>
-    /// Zero range used for generated syntax nodes introduced by lowering.
-    /// </summary>
-    private static readonly Range s_zeroRange = new(Start: s_zeroLocation, End: s_zeroLocation);
-
     private record RewriteContext(
         string CurrentModuleName,
         ImmutableDictionary<string, int> ParameterNames,
@@ -55,7 +54,7 @@ public static class BuiltinOperatorLowering
 
     /// <summary>
     /// Applies builtin-operator lowering to a flat dictionary of Elm declarations
-    /// that have already passed earlier syntax optimization stages.
+    /// (in the abstract syntax model) that have already passed earlier syntax optimization stages.
     /// </summary>
     /// <param name="declarations">The flat declaration dictionary to rewrite.</param>
     /// <returns>The rewritten declarations, or an error message.</returns>
@@ -66,10 +65,7 @@ public static class BuiltinOperatorLowering
         var aliasTypes = BuildAliasTypes(declarations);
 
         var choiceTypeDefinitions =
-            TypeInference.BuildChoiceTypeDefinitions(
-                declarations.ToImmutableDictionary(
-                    kvp => kvp.Key,
-                    kvp => ElmSyntaxAbstractConversion.FromDeclaration(kvp.Value)));
+            TypeInference.BuildChoiceTypeDefinitions(declarations);
 
         var functionSignatures = BuildFunctionSignatures(declarations);
 
@@ -80,40 +76,38 @@ public static class BuiltinOperatorLowering
         {
             var moduleNameString = string.Join(".", key.Namespaces);
 
-            var declNode = new Node<SyntaxTypes.Declaration>(ElmSyntaxTransformations.s_zeroRange, decl);
-
             var rewritten =
                 RewriteDeclaration(
-                    declNode,
+                    decl,
                     moduleNameString,
                     functionTypes,
                     aliasTypes,
                     choiceTypeDefinitions,
                     functionSignatures);
 
-            resultBuilder[key] = rewritten.Value;
+            resultBuilder[key] = rewritten;
         }
 
         return resultBuilder.ToImmutable();
     }
 
-    private static Node<SyntaxTypes.Declaration> RewriteDeclaration(
-        Node<SyntaxTypes.Declaration> declarationNode,
+    private static SyntaxTypes.Declaration RewriteDeclaration(
+        SyntaxTypes.Declaration declaration,
         string moduleName,
         IReadOnlyDictionary<QualifiedNameRef, FunctionTypeInfo> functionTypes,
         IReadOnlyDictionary<QualifiedNameRef, TypeInference.InferredType> aliasTypes,
         IReadOnlyDictionary<QualifiedNameRef, TypeInference.ChoiceTypeDefinition> choiceTypeDefinitions,
         ImmutableDictionary<string, TypeInference.InferredType> functionSignatures)
     {
-        if (declarationNode.Value is not SyntaxTypes.Declaration.FunctionDeclaration functionDeclaration)
-            return declarationNode;
+        if (declaration is not SyntaxTypes.Declaration.FunctionDeclaration functionDeclaration)
+            return declaration;
 
-        var implementation = functionDeclaration.Function.Declaration.Value;
+        var implementation = functionDeclaration.Function.Declaration;
 
         var inferred =
             TypeInference.InferFunctionDeclarationType(
-                ElmSyntaxAbstractConversion.FromExpression(implementation.Expression.Value),
-                [.. implementation.Arguments.Select(arg => ElmSyntaxAbstractConversion.FromPattern(arg.Value))],
+                implementation.Expression,
+                implementation.Arguments,
                 moduleName,
                 functionSignatures);
 
@@ -137,7 +131,7 @@ public static class BuiltinOperatorLowering
                 FunctionSignatures: functionSignatures);
 
         var expectedReturnType =
-            TypeInference.GetFunctionReturnType(ElmSyntaxAbstractConversion.FromFunctionStruct(functionDeclaration.Function)) is { } explicitReturnType &&
+            TypeInference.GetFunctionReturnType(functionDeclaration.Function) is { } explicitReturnType &&
             explicitReturnType is not TypeInference.InferredType.UnknownType
             ?
             explicitReturnType
@@ -151,36 +145,25 @@ public static class BuiltinOperatorLowering
             };
 
         return
-            declarationNode with
-            {
-                Value =
-                new SyntaxTypes.Declaration.FunctionDeclaration(
-                    functionDeclaration.Function with
-                    {
-                        Declaration =
-                        new Node<SyntaxTypes.FunctionImplementation>(
-                            functionDeclaration.Function.Declaration.Range,
-                            rewrittenImplementation)
-                    })
-            };
+            new SyntaxTypes.Declaration.FunctionDeclaration(
+                functionDeclaration.Function with
+                {
+                    Declaration = rewrittenImplementation
+                });
     }
 
-    private static Node<SyntaxTypes.Expression> RewriteExpression(
-        Node<SyntaxTypes.Expression> expressionNode,
+    private static SyntaxTypes.Expression RewriteExpression(
+        SyntaxTypes.Expression expression,
         RewriteContext context,
         TypeInference.InferredType? expectedType = null)
     {
         var expandedExpectedType = ExpandAliasType(expectedType, context.AliasTypes);
 
-        var rewrittenExpression =
-            expressionNode.Value switch
+        return
+            expression switch
             {
                 SyntaxTypes.Expression.Application application =>
                 RewriteApplication(application, context, expandedExpectedType),
-
-                SyntaxTypes.Expression.ParenthesizedExpression parenthesized =>
-                new SyntaxTypes.Expression.ParenthesizedExpression(
-                    RewriteExpression(parenthesized.Expression, context, expandedExpectedType)),
 
                 SyntaxTypes.Expression.IfBlock ifBlock =>
                 new SyntaxTypes.Expression.IfBlock(
@@ -190,22 +173,20 @@ public static class BuiltinOperatorLowering
 
                 SyntaxTypes.Expression.CaseExpression caseExpression =>
                 new SyntaxTypes.Expression.CaseExpression(
-                    new SyntaxTypes.CaseBlock(
-                        RewriteExpression(caseExpression.CaseBlock.Expression, context),
-                        [
-                        .. caseExpression.CaseBlock.Cases.Select(
-                            caseItem =>
-                            new SyntaxTypes.Case(
-                                caseItem.Pattern,
-                                RewriteExpression(caseItem.Expression, context, expandedExpectedType)))
-                        ])),
+                    RewriteExpression(caseExpression.Expression, context),
+                    [
+                    .. caseExpression.Cases.Select(
+                        caseItem =>
+                        new SyntaxTypes.Case(
+                            caseItem.Pattern,
+                            RewriteExpression(caseItem.Expression, context, expandedExpectedType)))
+                    ]),
 
                 SyntaxTypes.Expression.LetExpression letExpression =>
                 RewriteLetExpression(letExpression, context, expandedExpectedType),
 
                 SyntaxTypes.Expression.LambdaExpression lambdaExpression =>
-                new SyntaxTypes.Expression.LambdaExpression(
-                    RewriteLambda(lambdaExpression.Lambda, context, expandedExpectedType)),
+                RewriteLambda(lambdaExpression, context, expandedExpectedType),
 
                 SyntaxTypes.Expression.ListExpr listExpression =>
                 new SyntaxTypes.Expression.ListExpr(
@@ -231,19 +212,19 @@ public static class BuiltinOperatorLowering
                     [
                     .. recordExpression.Fields.Select(
                         field =>
-                        new Node<(Node<string>, Node<SyntaxTypes.Expression>)>(
-                            field.Range,
-                            (field.Value.fieldName,
+                        new SyntaxTypes.RecordSetter(
+                            field.FieldName,
+                            field.FieldNameValue,
                             RewriteExpression(
-                                field.Value.valueExpr,
+                                field.Value,
                                 context,
                                 expandedExpectedType is TypeInference.InferredType.RecordType expectedRecordType
                                 ?
                                 expectedRecordType.Fields
-                                .FirstOrDefault(expectedField => expectedField.FieldName == field.Value.fieldName.Value)
+                                .FirstOrDefault(expectedField => expectedField.FieldName == field.FieldName)
                                 .FieldType
                                 :
-                                null))))
+                                null)))
                     ]),
 
                 SyntaxTypes.Expression.RecordUpdateExpression recordUpdate =>
@@ -252,15 +233,17 @@ public static class BuiltinOperatorLowering
                     [
                     .. recordUpdate.Fields.Select(
                         field =>
-                        new Node<(Node<string>, Node<SyntaxTypes.Expression>)>(
-                            field.Range,
-                            (field.Value.fieldName, RewriteExpression(field.Value.valueExpr, context))))
+                        new SyntaxTypes.RecordSetter(
+                            field.FieldName,
+                            field.FieldNameValue,
+                            RewriteExpression(field.Value, context)))
                     ]),
 
                 SyntaxTypes.Expression.RecordAccess recordAccess =>
                 new SyntaxTypes.Expression.RecordAccess(
                     RewriteExpression(recordAccess.Record, context),
-                    recordAccess.FieldName),
+                    recordAccess.FieldName,
+                    recordAccess.FieldNameValue),
 
                 SyntaxTypes.Expression.Negation negation =>
                 new SyntaxTypes.Expression.Negation(
@@ -274,10 +257,8 @@ public static class BuiltinOperatorLowering
                     RewriteExpression(operatorApplication.Right, context)),
 
                 _ =>
-                expressionNode.Value
+                expression
             };
-
-        return new Node<SyntaxTypes.Expression>(expressionNode.Range, rewrittenExpression);
     }
 
     private static SyntaxTypes.Expression RewriteApplication(
@@ -285,9 +266,11 @@ public static class BuiltinOperatorLowering
         RewriteContext context,
         TypeInference.InferredType? expectedType)
     {
+        var rewrittenFunction = RewriteExpression(application.Function, context);
+
         var expectedArgumentTypes = GetExpectedArgumentTypes(application, context);
 
-        var rewrittenArguments = new List<Node<SyntaxTypes.Expression>>(application.Arguments.Count);
+        var rewrittenArguments = new List<SyntaxTypes.Expression>(application.Arguments.Count);
 
         for (var i = 0; i < application.Arguments.Count; i++)
         {
@@ -295,19 +278,18 @@ public static class BuiltinOperatorLowering
                 RewriteExpression(
                     application.Arguments[i],
                     context,
-                    i is 0
-                    ?
-                    null
-                    :
-                    expectedArgumentTypes.ElementAtOrDefault(i - 1)));
+                    expectedArgumentTypes.ElementAtOrDefault(i)));
         }
 
-        if (rewrittenArguments.Count is 3 &&
-            TryMapBuiltinOperator(rewrittenArguments[0].Value) is { } loweredOp)
+        if (rewrittenArguments.Count is 2 &&
+            TryMapBuiltinOperator(rewrittenFunction) is { } loweredOp)
         {
+            var left = rewrittenArguments[0];
+            var right = rewrittenArguments[1];
+
             var leftType =
                 TypeInference.InferExpressionType(
-                    ElmSyntaxAbstractConversion.FromExpression(rewrittenArguments[1].Value),
+                    left,
                     context.ParameterNames,
                     context.ParameterTypes,
                     context.LocalBindingTypes,
@@ -316,7 +298,7 @@ public static class BuiltinOperatorLowering
 
             var rightType =
                 TypeInference.InferExpressionType(
-                    ElmSyntaxAbstractConversion.FromExpression(rewrittenArguments[2].Value),
+                    right,
                     context.ParameterNames,
                     context.ParameterTypes,
                     context.LocalBindingTypes,
@@ -330,8 +312,8 @@ public static class BuiltinOperatorLowering
                     return
                         BuildBuiltinApplication(
                             "equal",
-                            rewrittenArguments[1],
-                            rewrittenArguments[2]);
+                            left,
+                            right);
                 }
             }
             else if (loweredOp is LoweredOperator.NotEqual)
@@ -348,17 +330,16 @@ public static class BuiltinOperatorLowering
                     // sidesteps the FalseValue / TrueValue / skip-byte representational
                     // collision documented in PineKernelValues.
                     var equalApplication =
-                        WrapNode(
-                            BuildBuiltinApplication(
-                                "equal",
-                                rewrittenArguments[1],
-                                rewrittenArguments[2]));
+                        BuildBuiltinApplication(
+                            "equal",
+                            left,
+                            right);
 
                     return
                         BuildIfBlock(
                             equalApplication,
-                            WrapNode(BuildBasicsBoolReference(value: false)),
-                            WrapNode(BuildBasicsBoolReference(value: true)));
+                            BuildBasicsBoolReference(value: false),
+                            BuildBasicsBoolReference(value: true));
                 }
             }
             else if (loweredOp is LoweredOperator.IntLt or LoweredOperator.IntGt or LoweredOperator.IntLe or LoweredOperator.IntGe)
@@ -368,15 +349,13 @@ public static class BuiltinOperatorLowering
                     return
                         BuildIntComparisonApplication(
                             loweredOp,
-                            rewrittenArguments[1],
-                            rewrittenArguments[2]);
+                            left,
+                            right);
                 }
             }
             else if (loweredOp is LoweredOperator.BoolAnd)
             {
-                if (TryMergeChainedIntIsSortedAsc(
-                    rewrittenArguments[1].Value,
-                    rewrittenArguments[2].Value) is { } merged)
+                if (TryMergeChainedIntIsSortedAsc(left, right) is { } merged)
                 {
                     return merged;
                 }
@@ -388,9 +367,9 @@ public static class BuiltinOperatorLowering
                 // `a` reduces to a literal Bool).
                 return
                     BuildIfBlock(
-                        rewrittenArguments[1],
-                        rewrittenArguments[2],
-                        WrapNode(BuildBasicsBoolReference(value: false)));
+                        left,
+                        right,
+                        BuildBasicsBoolReference(value: false));
             }
             else if (loweredOp is LoweredOperator.BoolOr)
             {
@@ -398,9 +377,9 @@ public static class BuiltinOperatorLowering
                 // makes the short-circuiting semantics of `||` explicit.
                 return
                     BuildIfBlock(
-                        rewrittenArguments[1],
-                        WrapNode(BuildBasicsBoolReference(value: true)),
-                        rewrittenArguments[2]);
+                        left,
+                        BuildBasicsBoolReference(value: true),
+                        right);
             }
             else if (expectedType is TypeInference.InferredType.IntType ||
                 ProvesIntegerBuiltin(leftType, rightType))
@@ -408,29 +387,21 @@ public static class BuiltinOperatorLowering
                 return loweredOp switch
                 {
                     LoweredOperator.IntSub =>
-                    BuildBuiltinSubtractionApplication(
-                        rewrittenArguments[1],
-                        rewrittenArguments[2]),
+                    BuildBuiltinSubtractionApplication(left, right),
 
                     LoweredOperator.IntAdd =>
-                    BuildBuiltinApplication(
-                        "int_add",
-                        rewrittenArguments[1],
-                        rewrittenArguments[2]),
+                    BuildBuiltinApplication("int_add", left, right),
 
                     LoweredOperator.IntMul =>
-                    BuildBuiltinApplication(
-                        "int_mul",
-                        rewrittenArguments[1],
-                        rewrittenArguments[2]),
+                    BuildBuiltinApplication("int_mul", left, right),
 
                     _ =>
-                    new SyntaxTypes.Expression.Application(rewrittenArguments)
+                    new SyntaxTypes.Expression.Application(rewrittenFunction, rewrittenArguments)
                 };
             }
         }
 
-        return new SyntaxTypes.Expression.Application(rewrittenArguments);
+        return new SyntaxTypes.Expression.Application(rewrittenFunction, rewrittenArguments);
     }
 
     private static bool ProvesIntegerBuiltin(
@@ -541,20 +512,19 @@ public static class BuiltinOperatorLowering
     {
         var localBindingTypes = context.LocalBindingTypes.ToBuilder();
 
-        foreach (var declaration in letExpression.Value.Declarations)
+        foreach (var declaration in letExpression.Declarations)
         {
-            switch (declaration.Value)
+            switch (declaration)
             {
-                case SyntaxTypes.Expression.LetDeclaration.LetFunction letFunction:
+                case SyntaxTypes.LetDeclaration.LetFunction letFunction:
                     {
-                        var implementation = letFunction.Function.Declaration.Value;
+                        var implementation = letFunction.Function.Declaration;
 
-                        localBindingTypes[implementation.Name.Value] =
-                            TypeInference.BuildFunctionTypeFromSignatureOrNull(
-                                ElmSyntaxAbstractConversion.FromFunctionStruct(letFunction.Function))
+                        localBindingTypes[implementation.Name] =
+                            TypeInference.BuildFunctionTypeFromSignatureOrNull(letFunction.Function)
                             ??
                             BuildInferredFunctionType(
-                                implementation.Expression.Value,
+                                implementation.Expression,
                                 implementation.Arguments,
                                 context.CurrentModuleName,
                                 context.FunctionSignatures);
@@ -562,12 +532,12 @@ public static class BuiltinOperatorLowering
                         break;
                     }
 
-                case SyntaxTypes.Expression.LetDeclaration.LetDestructuring letDestructuring
-                when letDestructuring.Pattern.Value is SyntaxTypes.Pattern.VarPattern varPattern:
+                case SyntaxTypes.LetDeclaration.LetDestructuring letDestructuring
+                when letDestructuring.Pattern is SyntaxTypes.Pattern.VarPattern varPattern:
 
                     localBindingTypes[varPattern.Name] =
                         TypeInference.InferExpressionType(
-                            ElmSyntaxAbstractConversion.FromExpression(letDestructuring.Expression.Value),
+                            letDestructuring.Expression,
                             context.ParameterNames,
                             context.ParameterTypes,
                             localBindingTypes.ToImmutable(),
@@ -581,49 +551,46 @@ public static class BuiltinOperatorLowering
         var letContext = context with { LocalBindingTypes = localBindingTypes.ToImmutable() };
 
         var rewrittenDeclarations =
-            letExpression.Value.Declarations
+            letExpression.Declarations
             .Select(declaration => RewriteLetDeclaration(declaration, letContext))
             .ToList();
 
         return
             new SyntaxTypes.Expression.LetExpression(
-                new SyntaxTypes.Expression.LetBlock(
-                    rewrittenDeclarations,
-                    RewriteExpression(letExpression.Value.Expression, letContext, expectedType)));
+                rewrittenDeclarations,
+                RewriteExpression(letExpression.Expression, letContext, expectedType));
     }
 
-    private static Node<SyntaxTypes.Expression.LetDeclaration> RewriteLetDeclaration(
-        Node<SyntaxTypes.Expression.LetDeclaration> declarationNode,
+    private static SyntaxTypes.LetDeclaration RewriteLetDeclaration(
+        SyntaxTypes.LetDeclaration declaration,
         RewriteContext context)
     {
-        var rewritten =
-            declarationNode.Value switch
+        return
+            declaration switch
             {
-                SyntaxTypes.Expression.LetDeclaration.LetFunction letFunction =>
+                SyntaxTypes.LetDeclaration.LetFunction letFunction =>
                 RewriteLetFunctionDeclaration(letFunction, context),
 
-                SyntaxTypes.Expression.LetDeclaration.LetDestructuring letDestructuring =>
-                new SyntaxTypes.Expression.LetDeclaration.LetDestructuring(
+                SyntaxTypes.LetDeclaration.LetDestructuring letDestructuring =>
+                new SyntaxTypes.LetDeclaration.LetDestructuring(
                     letDestructuring.Pattern,
                     RewriteExpression(letDestructuring.Expression, context)),
 
                 _ =>
-                declarationNode.Value
+                declaration
             };
-
-        return new Node<SyntaxTypes.Expression.LetDeclaration>(declarationNode.Range, rewritten);
     }
 
-    private static SyntaxTypes.Expression.LetDeclaration RewriteLetFunctionDeclaration(
-        SyntaxTypes.Expression.LetDeclaration.LetFunction letFunction,
+    private static SyntaxTypes.LetDeclaration RewriteLetFunctionDeclaration(
+        SyntaxTypes.LetDeclaration.LetFunction letFunction,
         RewriteContext context)
     {
-        var implementation = letFunction.Function.Declaration.Value;
+        var implementation = letFunction.Function.Declaration;
 
         var inferred =
             TypeInference.InferFunctionDeclarationType(
-                ElmSyntaxAbstractConversion.FromExpression(implementation.Expression.Value),
-                [.. implementation.Arguments.Select(arg => ElmSyntaxAbstractConversion.FromPattern(arg.Value))],
+                implementation.Expression,
+                implementation.Arguments,
                 context.CurrentModuleName,
                 context.FunctionSignatures);
 
@@ -642,7 +609,7 @@ public static class BuiltinOperatorLowering
             };
 
         var expectedReturnType =
-            TypeInference.GetFunctionReturnType(ElmSyntaxAbstractConversion.FromFunctionStruct(letFunction.Function)) is { } explicitReturnType &&
+            TypeInference.GetFunctionReturnType(letFunction.Function) is { } explicitReturnType &&
             explicitReturnType is not TypeInference.InferredType.UnknownType
             ?
             explicitReturnType
@@ -650,28 +617,26 @@ public static class BuiltinOperatorLowering
             inferred.returnType;
 
         return
-            new SyntaxTypes.Expression.LetDeclaration.LetFunction(
+            new SyntaxTypes.LetDeclaration.LetFunction(
                 letFunction.Function with
                 {
                     Declaration =
-                    new Node<SyntaxTypes.FunctionImplementation>(
-                        letFunction.Function.Declaration.Range,
-                        implementation with
-                        {
-                            Expression = RewriteExpression(implementation.Expression, nestedContext, expectedReturnType)
-                        })
+                    implementation with
+                    {
+                        Expression = RewriteExpression(implementation.Expression, nestedContext, expectedReturnType)
+                    }
                 });
     }
 
-    private static SyntaxTypes.LambdaStruct RewriteLambda(
-        SyntaxTypes.LambdaStruct lambda,
+    private static SyntaxTypes.Expression.LambdaExpression RewriteLambda(
+        SyntaxTypes.Expression.LambdaExpression lambda,
         RewriteContext context,
         TypeInference.InferredType? expectedType)
     {
         var inferred =
             TypeInference.InferFunctionDeclarationType(
-                ElmSyntaxAbstractConversion.FromExpression(lambda.Expression.Value),
-                [.. lambda.Arguments.Select(arg => ElmSyntaxAbstractConversion.FromPattern(arg.Value))],
+                lambda.Expression,
+                lambda.Arguments,
                 context.CurrentModuleName,
                 context.FunctionSignatures);
 
@@ -702,7 +667,7 @@ public static class BuiltinOperatorLowering
     }
 
     private static ImmutableDictionary<string, TypeInference.InferredType> MergeExpectedLambdaParameterTypes(
-        IReadOnlyList<Node<SyntaxTypes.Pattern>> arguments,
+        IReadOnlyList<SyntaxTypes.Pattern> arguments,
         ImmutableDictionary<string, TypeInference.InferredType> inferredParameterTypes,
         TypeInference.InferredType? expectedType)
     {
@@ -716,7 +681,7 @@ public static class BuiltinOperatorLowering
 
         for (var index = 0; index < arguments.Count; index++)
         {
-            if (arguments[index].Value is not SyntaxTypes.Pattern.VarPattern varPattern ||
+            if (arguments[index] is not SyntaxTypes.Pattern.VarPattern varPattern ||
                 remainingExpectedType is not TypeInference.InferredType.FunctionType functionType)
             {
                 break;
@@ -758,10 +723,10 @@ public static class BuiltinOperatorLowering
         SyntaxTypes.Expression functionExpression)
     {
         if (functionExpression is SyntaxTypes.Expression.FunctionOrValue functionOrValue &&
-            functionOrValue.ModuleName.Count is 1 &&
-            functionOrValue.ModuleName[0] is "Basics")
+            functionOrValue.QualifiedName.Namespaces.Count is 1 &&
+            functionOrValue.QualifiedName.Namespaces[0] is "Basics")
         {
-            return functionOrValue.Name switch
+            return functionOrValue.QualifiedName.DeclName switch
             {
                 "add" => LoweredOperator.IntAdd,
                 "sub" => LoweredOperator.IntSub,
@@ -806,29 +771,11 @@ public static class BuiltinOperatorLowering
 
     private static SyntaxTypes.Expression BuildBuiltinApplication(
         string builtinName,
-        Node<SyntaxTypes.Expression> left,
-        Node<SyntaxTypes.Expression> right)
-    {
-        var builtinReference =
-            new Node<SyntaxTypes.Expression>(
-                s_zeroRange,
-                new SyntaxTypes.Expression.FunctionOrValue(["Pine_builtin"], builtinName));
-
-        var operands =
-            new Node<SyntaxTypes.Expression>(
-                s_zeroRange,
-                new SyntaxTypes.Expression.ListExpr([left, right]));
-
-        return new SyntaxTypes.Expression.Application([builtinReference, operands]);
-    }
-
-    /// <summary>
-    /// Wraps an <see cref="SyntaxTypes.Expression"/> in a synthetic
-    /// <see cref="Node{T}"/> at <see cref="s_zeroRange"/> for use as a child of
-    /// generated syntax produced by lowering.
-    /// </summary>
-    private static Node<SyntaxTypes.Expression> WrapNode(SyntaxTypes.Expression expression) =>
-        new(s_zeroRange, expression);
+        SyntaxTypes.Expression left,
+        SyntaxTypes.Expression right) =>
+        new SyntaxTypes.Expression.Application(
+            SyntaxTypes.Expression.FunctionOrValue.Create(["Pine_builtin"], builtinName),
+            [new SyntaxTypes.Expression.ListExpr([left, right])]);
 
     /// <summary>
     /// Builds a reference to <c>Basics.True</c> or <c>Basics.False</c>, used by the
@@ -838,31 +785,27 @@ public static class BuiltinOperatorLowering
     /// expressions.
     /// </summary>
     private static SyntaxTypes.Expression BuildBasicsBoolReference(bool value) =>
-        new SyntaxTypes.Expression.FunctionOrValue(["Basics"], value ? "True" : "False");
+        SyntaxTypes.Expression.FunctionOrValue.Create(["Basics"], value ? "True" : "False");
 
     /// <summary>
-    /// Builds an <c>if-then-else</c> expression node from the supplied condition,
-    /// then-branch and else-branch expression nodes.
+    /// Builds an <c>if-then-else</c> expression from the supplied condition,
+    /// then-branch and else-branch expressions.
     /// </summary>
     private static SyntaxTypes.Expression BuildIfBlock(
-        Node<SyntaxTypes.Expression> condition,
-        Node<SyntaxTypes.Expression> thenBranch,
-        Node<SyntaxTypes.Expression> elseBranch) =>
+        SyntaxTypes.Expression condition,
+        SyntaxTypes.Expression thenBranch,
+        SyntaxTypes.Expression elseBranch) =>
         new SyntaxTypes.Expression.IfBlock(condition, thenBranch, elseBranch);
 
     private static SyntaxTypes.Expression BuildBuiltinSubtractionApplication(
-        Node<SyntaxTypes.Expression> left,
-        Node<SyntaxTypes.Expression> right)
+        SyntaxTypes.Expression left,
+        SyntaxTypes.Expression right)
     {
         var negatedRight =
-            new Node<SyntaxTypes.Expression>(
-                s_zeroRange,
-                BuildBuiltinApplication(
-                    "int_mul",
-                    new Node<SyntaxTypes.Expression>(
-                        s_zeroRange,
-                        new SyntaxTypes.Expression.Integer(-1)),
-                    right));
+            BuildBuiltinApplication(
+                "int_mul",
+                BuildIntegerLiteral(-1),
+                right);
 
         return BuildBuiltinApplication("int_add", left, negatedRight);
     }
@@ -882,8 +825,8 @@ public static class BuiltinOperatorLowering
     /// </summary>
     private static SyntaxTypes.Expression BuildIntComparisonApplication(
         LoweredOperator loweredOp,
-        Node<SyntaxTypes.Expression> left,
-        Node<SyntaxTypes.Expression> right)
+        SyntaxTypes.Expression left,
+        SyntaxTypes.Expression right)
     {
         var isStrict = loweredOp is LoweredOperator.IntLt or LoweredOperator.IntGt;
         var swapOperands = loweredOp is LoweredOperator.IntGt or LoweredOperator.IntGe;
@@ -903,90 +846,65 @@ public static class BuiltinOperatorLowering
     /// with an offset of +1 on the first operand.
     /// <para>
     /// Since <c>int_is_sorted_asc</c> checks <c>&lt;=</c>, we convert strict <c>&lt;</c>
-    /// to <c>a + 1 &lt;= b</c>. When either operand is a literal, the offset is folded
-    /// into the literal to avoid emitting <c>int_add</c>.
+    /// to <c>a + 1 &lt;= b</c>. When either operand is an integer literal (optionally negated),
+    /// the offset is folded into the literal to avoid emitting <c>int_add</c>.
     /// </para>
     /// </summary>
     private static SyntaxTypes.Expression BuildStrictIntIsSortedAscApplication(
-        Node<SyntaxTypes.Expression> first,
-        Node<SyntaxTypes.Expression> second)
+        SyntaxTypes.Expression first,
+        SyntaxTypes.Expression second)
     {
-        // If the first operand is a literal, fold +1 into it directly.
-        if (first.Value is SyntaxTypes.Expression.Integer firstLiteral)
+        // If the first operand is a literal (or a negation of one), fold +1 into it directly.
+        if (TryGetIntegerLiteralValue(first) is { } firstLiteral)
         {
-            var adjustedFirst =
-                new Node<SyntaxTypes.Expression>(
-                    s_zeroRange,
-                    new SyntaxTypes.Expression.Integer(firstLiteral.Value + 1));
-
-            return BuildIntIsSortedAscApplication([adjustedFirst, second]);
+            return BuildIntIsSortedAscApplication([BuildIntegerLiteral(firstLiteral + 1), second]);
         }
 
-        // If the first operand is a negation of a literal, fold +1 into it.
-        if (first.Value is SyntaxTypes.Expression.Negation { Expression: { Value: SyntaxTypes.Expression.Integer negatedLiteral } })
+        // If the second operand is a literal (or a negation of one), subtract 1 from it
+        // to avoid emitting int_add on the first operand.
+        if (TryGetIntegerLiteralValue(second) is { } secondLiteral)
         {
-            var adjustedFirst =
-                new Node<SyntaxTypes.Expression>(
-                    s_zeroRange,
-                    new SyntaxTypes.Expression.Integer(-negatedLiteral.Value + 1));
-
-            return BuildIntIsSortedAscApplication([adjustedFirst, second]);
-        }
-
-        // If the second operand is a literal, subtract 1 from it to avoid int_add on first.
-        if (second.Value is SyntaxTypes.Expression.Integer secondLiteral)
-        {
-            var adjustedSecond =
-                new Node<SyntaxTypes.Expression>(
-                    s_zeroRange,
-                    new SyntaxTypes.Expression.Integer(secondLiteral.Value - 1));
-
-            return BuildIntIsSortedAscApplication([first, adjustedSecond]);
-        }
-
-        // If the second operand is a negation of a literal, fold -1 into it.
-        if (second.Value is SyntaxTypes.Expression.Negation { Expression: { Value: SyntaxTypes.Expression.Integer negatedSecondLiteral } })
-        {
-            var adjustedSecond =
-                new Node<SyntaxTypes.Expression>(
-                    s_zeroRange,
-                    new SyntaxTypes.Expression.Integer(-negatedSecondLiteral.Value - 1));
-
-            return BuildIntIsSortedAscApplication([first, adjustedSecond]);
+            return BuildIntIsSortedAscApplication([first, BuildIntegerLiteral(secondLiteral - 1)]);
         }
 
         // General case: offset the first operand with int_add [first, 1].
         var offsetFirst =
-            new Node<SyntaxTypes.Expression>(
-                s_zeroRange,
-                BuildBuiltinApplication(
-                    "int_add",
-                    first,
-                    new Node<SyntaxTypes.Expression>(
-                        s_zeroRange,
-                        new SyntaxTypes.Expression.Integer(1))));
+            BuildBuiltinApplication(
+                "int_add",
+                first,
+                BuildIntegerLiteral(1));
 
         return BuildIntIsSortedAscApplication([offsetFirst, second]);
     }
 
     /// <summary>
+    /// Extracts the numeric value of an integer literal, or the negated value of a
+    /// negated integer literal, otherwise <c>null</c>.
+    /// </summary>
+    private static BigInteger? TryGetIntegerLiteralValue(SyntaxTypes.Expression expression) =>
+        expression switch
+        {
+            SyntaxTypes.Expression.Integer integer => integer.Value,
+            SyntaxTypes.Expression.Negation { Expression: SyntaxTypes.Expression.Integer negated } => -negated.Value,
+
+            _ =>
+            null,
+        };
+
+    /// <summary>
+    /// Builds an integer literal expression, precomputing its <see cref="PineValue"/> encoding.
+    /// </summary>
+    private static SyntaxTypes.Expression BuildIntegerLiteral(BigInteger value) =>
+        new SyntaxTypes.Expression.Integer(value, IntegerEncoding.EncodeSignedInteger(value));
+
+    /// <summary>
     /// Builds a <c>Pine_builtin.int_is_sorted_asc</c> application with the given operands list.
     /// </summary>
     private static SyntaxTypes.Expression BuildIntIsSortedAscApplication(
-        IReadOnlyList<Node<SyntaxTypes.Expression>> operands)
-    {
-        var builtinReference =
-            new Node<SyntaxTypes.Expression>(
-                s_zeroRange,
-                new SyntaxTypes.Expression.FunctionOrValue(["Pine_builtin"], "int_is_sorted_asc"));
-
-        var operandsList =
-            new Node<SyntaxTypes.Expression>(
-                s_zeroRange,
-                new SyntaxTypes.Expression.ListExpr([.. operands]));
-
-        return new SyntaxTypes.Expression.Application([builtinReference, operandsList]);
-    }
+        IReadOnlyList<SyntaxTypes.Expression> operands) =>
+        new SyntaxTypes.Expression.Application(
+            SyntaxTypes.Expression.FunctionOrValue.Create(["Pine_builtin"], "int_is_sorted_asc"),
+            [new SyntaxTypes.Expression.ListExpr([.. operands])]);
 
     /// <summary>
     /// Tries to merge two <c>int_is_sorted_asc</c> applications connected by <c>&amp;&amp;</c>
@@ -1023,9 +941,9 @@ public static class BuiltinOperatorLowering
         var rightFirst = rightOperands[0];
 
         // Case 1: Exact match on shared middle operand (e.g., <= chains).
-        if (SyntaxExpressionsAreEqual(leftLast.Value, rightFirst.Value))
+        if (SyntaxExpressionsAreEqual(leftLast, rightFirst))
         {
-            var mergedOperands = new List<Node<SyntaxTypes.Expression>>(leftOperands.Count + rightOperands.Count - 1);
+            var mergedOperands = new List<SyntaxTypes.Expression>(leftOperands.Count + rightOperands.Count - 1);
             mergedOperands.AddRange(leftOperands);
 
             for (var i = 1; i < rightOperands.Count; i++)
@@ -1037,9 +955,9 @@ public static class BuiltinOperatorLowering
         }
 
         // Case 2: Strict chain where rightFirst is int_add [leftLast, 1] (e.g., < chains).
-        if (IsIntAddOffsetByOne(leftLast.Value, rightFirst.Value))
+        if (IsIntAddOffsetByOne(leftLast, rightFirst))
         {
-            var mergedOperands = new List<Node<SyntaxTypes.Expression>>(leftOperands.Count + rightOperands.Count);
+            var mergedOperands = new List<SyntaxTypes.Expression>(leftOperands.Count + rightOperands.Count);
             mergedOperands.AddRange(leftOperands);
             mergedOperands.AddRange(rightOperands);
 
@@ -1058,44 +976,39 @@ public static class BuiltinOperatorLowering
         SyntaxTypes.Expression candidate)
     {
         if (candidate is not SyntaxTypes.Expression.Application app ||
-            app.Arguments.Count is not 2 ||
-            app.Arguments[0].Value is not SyntaxTypes.Expression.FunctionOrValue fv ||
-            fv.ModuleName is not ["Pine_builtin"] ||
-            fv.Name is not "int_add" ||
-            app.Arguments[1].Value is not SyntaxTypes.Expression.ListExpr listExpr ||
+            app.Function is not SyntaxTypes.Expression.FunctionOrValue fv ||
+            fv.QualifiedName.Namespaces is not ["Pine_builtin"] ||
+            fv.QualifiedName.DeclName is not "int_add" ||
+            app.Arguments.Count is not 1 ||
+            app.Arguments[0] is not SyntaxTypes.Expression.ListExpr listExpr ||
             listExpr.Elements.Count is not 2)
         {
             return false;
         }
 
         return
-            (SyntaxExpressionsAreEqual(listExpr.Elements[0].Value, baseExpr) &&
-            listExpr.Elements[1].Value is SyntaxTypes.Expression.Integer { Value: 1 }) ||
-            (SyntaxExpressionsAreEqual(listExpr.Elements[1].Value, baseExpr) &&
-            listExpr.Elements[0].Value is SyntaxTypes.Expression.Integer { Value: 1 });
+            (SyntaxExpressionsAreEqual(listExpr.Elements[0], baseExpr) &&
+            IsIntegerLiteral(listExpr.Elements[1], 1)) ||
+            (SyntaxExpressionsAreEqual(listExpr.Elements[1], baseExpr) &&
+            IsIntegerLiteral(listExpr.Elements[0], 1));
     }
+
+    private static bool IsIntegerLiteral(SyntaxTypes.Expression expression, BigInteger value) =>
+        expression is SyntaxTypes.Expression.Integer integer && integer.Value == value;
 
     /// <summary>
     /// Extracts the operand list from an <c>int_is_sorted_asc</c> application,
     /// or returns null if the expression is not such an application.
     /// </summary>
-    private static IReadOnlyList<Node<SyntaxTypes.Expression>>? TryExtractIntIsSortedAscOperands(
+    private static IReadOnlyList<SyntaxTypes.Expression>? TryExtractIntIsSortedAscOperands(
         SyntaxTypes.Expression expression)
     {
         if (expression is not SyntaxTypes.Expression.Application application ||
-            application.Arguments.Count is not 2)
-        {
-            return null;
-        }
-
-        if (application.Arguments[0].Value is not SyntaxTypes.Expression.FunctionOrValue functionOrValue ||
-            functionOrValue.ModuleName is not ["Pine_builtin"] ||
-            functionOrValue.Name is not "int_is_sorted_asc")
-        {
-            return null;
-        }
-
-        if (application.Arguments[1].Value is not SyntaxTypes.Expression.ListExpr listExpr)
+            application.Function is not SyntaxTypes.Expression.FunctionOrValue functionOrValue ||
+            functionOrValue.QualifiedName.Namespaces is not ["Pine_builtin"] ||
+            functionOrValue.QualifiedName.DeclName is not "int_is_sorted_asc" ||
+            application.Arguments.Count is not 1 ||
+            application.Arguments[0] is not SyntaxTypes.Expression.ListExpr listExpr)
         {
             return null;
         }
@@ -1120,25 +1033,24 @@ public static class BuiltinOperatorLowering
         return (left, right) switch
         {
             (SyntaxTypes.Expression.FunctionOrValue leftFv, SyntaxTypes.Expression.FunctionOrValue rightFv) =>
-            leftFv.Name == rightFv.Name &&
-            leftFv.ModuleName.Count == rightFv.ModuleName.Count &&
-            leftFv.ModuleName.Zip(rightFv.ModuleName).All(pair => pair.First == pair.Second),
+            leftFv.QualifiedName.Equals(rightFv.QualifiedName),
 
             (SyntaxTypes.Expression.Integer leftInt, SyntaxTypes.Expression.Integer rightInt) =>
             leftInt.Value == rightInt.Value,
 
             (SyntaxTypes.Expression.Application leftApp, SyntaxTypes.Expression.Application rightApp) =>
+            SyntaxExpressionsAreEqual(leftApp.Function, rightApp.Function) &&
             leftApp.Arguments.Count == rightApp.Arguments.Count &&
             leftApp.Arguments.Zip(rightApp.Arguments).All(
-                pair => SyntaxExpressionsAreEqual(pair.First.Value, pair.Second.Value)),
+                pair => SyntaxExpressionsAreEqual(pair.First, pair.Second)),
 
             (SyntaxTypes.Expression.ListExpr leftList, SyntaxTypes.Expression.ListExpr rightList) =>
             leftList.Elements.Count == rightList.Elements.Count &&
             leftList.Elements.Zip(rightList.Elements).All(
-                pair => SyntaxExpressionsAreEqual(pair.First.Value, pair.Second.Value)),
+                pair => SyntaxExpressionsAreEqual(pair.First, pair.Second)),
 
             (SyntaxTypes.Expression.Negation leftNeg, SyntaxTypes.Expression.Negation rightNeg) =>
-            SyntaxExpressionsAreEqual(leftNeg.Expression.Value, rightNeg.Expression.Value),
+            SyntaxExpressionsAreEqual(leftNeg.Expression, rightNeg.Expression),
 
             _ =>
             false
@@ -1154,14 +1066,12 @@ public static class BuiltinOperatorLowering
         {
             if (decl is SyntaxTypes.Declaration.FunctionDeclaration declaration)
             {
-                var functionName = declaration.Function.Declaration.Value.Name.Value;
+                var functionName = declaration.Function.Declaration.Name;
 
                 result[QualifiedNameHelper.ToQualifiedNameRef(key.Namespaces, functionName)] =
                     new FunctionTypeInfo(
-                        TypeInference.GetFunctionReturnType(
-                            (ElmSyntax.ElmSyntaxAbstract.Declaration.FunctionDeclaration)ElmSyntaxAbstractConversion.FromDeclaration(declaration)),
-                        TypeInference.GetFunctionParameterTypes(
-                            (ElmSyntax.ElmSyntaxAbstract.Declaration.FunctionDeclaration)ElmSyntaxAbstractConversion.FromDeclaration(declaration)));
+                        TypeInference.GetFunctionReturnType(declaration),
+                        TypeInference.GetFunctionParameterTypes(declaration));
             }
         }
 
@@ -1177,9 +1087,8 @@ public static class BuiltinOperatorLowering
         {
             if (decl is SyntaxTypes.Declaration.AliasDeclaration declaration)
             {
-                result[QualifiedNameHelper.ToQualifiedNameRef(key.Namespaces, declaration.TypeAlias.Name.Value)] =
-                    TypeInference.TypeAnnotationToInferredType(
-                        ElmSyntaxAbstractConversion.FromTypeAnnotation(declaration.TypeAlias.TypeAnnotation.Value));
+                result[QualifiedNameHelper.ToQualifiedNameRef(key.Namespaces, declaration.TypeAlias.Name)] =
+                    TypeInference.TypeAnnotationToInferredType(declaration.TypeAlias.TypeAnnotation);
             }
         }
 
@@ -1196,7 +1105,7 @@ public static class BuiltinOperatorLowering
             var moduleNameString = string.Join(".", key.Namespaces);
 
             TypeInference.CollectFunctionSignaturesFromDeclaration(
-                ElmSyntaxAbstractConversion.FromDeclaration(decl),
+                decl,
                 moduleNameString,
                 builder);
         }
@@ -1205,13 +1114,13 @@ public static class BuiltinOperatorLowering
     }
 
     private static ImmutableDictionary<string, int> BuildParameterNames(
-        IReadOnlyList<Node<SyntaxTypes.Pattern>> arguments)
+        IReadOnlyList<SyntaxTypes.Pattern> arguments)
     {
         var builder = ImmutableDictionary.CreateBuilder<string, int>();
 
         for (var index = 0; index < arguments.Count; index++)
         {
-            if (arguments[index].Value is SyntaxTypes.Pattern.VarPattern varPattern)
+            if (arguments[index] is SyntaxTypes.Pattern.VarPattern varPattern)
             {
                 builder[varPattern.Name] = index;
             }
@@ -1224,18 +1133,20 @@ public static class BuiltinOperatorLowering
         SyntaxTypes.Expression.Application application,
         RewriteContext context)
     {
-        if (application.Arguments.Count is 0 ||
-            application.Arguments[0].Value is not SyntaxTypes.Expression.FunctionOrValue functionOrValue)
+        if (application.Function is not SyntaxTypes.Expression.FunctionOrValue functionOrValue)
         {
             return [];
         }
 
         var qualifiedName =
-            functionOrValue.ModuleName.Count > 0
+            functionOrValue.QualifiedName.Namespaces.Count > 0
             ?
-            QualifiedNameHelper.ToQualifiedNameRef(functionOrValue.ModuleName, functionOrValue.Name)
+            QualifiedNameHelper.ToQualifiedNameRef(
+                functionOrValue.QualifiedName.Namespaces,
+                functionOrValue.QualifiedName.DeclName)
             :
-            QualifiedNameHelper.FromQualifiedNameString(context.CurrentModuleName + "." + functionOrValue.Name);
+            QualifiedNameHelper.FromQualifiedNameString(
+                context.CurrentModuleName + "." + functionOrValue.QualifiedName.DeclName);
 
         if (!context.FunctionTypes.TryGetValue(qualifiedName, out var functionTypeInfo))
         {
@@ -1314,20 +1225,20 @@ public static class BuiltinOperatorLowering
 
     private static TypeInference.InferredType BuildInferredFunctionType(
         SyntaxTypes.Expression expression,
-        IReadOnlyList<Node<SyntaxTypes.Pattern>> arguments,
+        IReadOnlyList<SyntaxTypes.Pattern> arguments,
         string moduleName,
         ImmutableDictionary<string, TypeInference.InferredType> functionSignatures)
     {
         var inferred =
             TypeInference.InferFunctionDeclarationType(
-                ElmSyntaxAbstractConversion.FromExpression(expression),
-                [.. arguments.Select(arg => ElmSyntaxAbstractConversion.FromPattern(arg.Value))],
+                expression,
+                arguments,
                 moduleName,
                 functionSignatures);
 
         return
             TypeInference.BuildFunctionType(
-                [.. arguments.Select(arg => ElmSyntaxAbstractConversion.FromPattern(arg.Value))],
+                arguments,
                 inferred.parameterTypes,
                 inferred.returnType);
     }
@@ -1336,16 +1247,16 @@ public static class BuiltinOperatorLowering
         SyntaxTypes.FunctionStruct function)
     {
         var annotatedParameterTypes =
-            TypeInference.GetFunctionParameterTypes(ElmSyntaxAbstractConversion.FromFunctionStruct(function));
+            TypeInference.GetFunctionParameterTypes(function);
 
         if (annotatedParameterTypes.Count is 0)
             return [];
 
         var builder = ImmutableDictionary.CreateBuilder<string, TypeInference.InferredType>();
 
-        for (var index = 0; index < annotatedParameterTypes.Count && index < function.Declaration.Value.Arguments.Count; index++)
+        for (var index = 0; index < annotatedParameterTypes.Count && index < function.Declaration.Arguments.Count; index++)
         {
-            if (function.Declaration.Value.Arguments[index].Value is SyntaxTypes.Pattern.VarPattern varPattern)
+            if (function.Declaration.Arguments[index] is SyntaxTypes.Pattern.VarPattern varPattern)
             {
                 builder[varPattern.Name] = annotatedParameterTypes[index];
             }

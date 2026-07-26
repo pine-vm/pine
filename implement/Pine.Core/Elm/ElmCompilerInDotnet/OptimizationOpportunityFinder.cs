@@ -1,5 +1,4 @@
 using Pine.Core.CodeAnalysis;
-using Pine.Core.Elm.ElmSyntax;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
@@ -1443,33 +1442,7 @@ public static class OptimizationOpportunityFinder
     private static IReadOnlyDictionary<DeclQualifiedName, SyntaxTypes.Declaration>
         ParseAndCanonicalizeToFlatDict(ModuleName elmModulesTexts)
     {
-        var parsedModules =
-            elmModulesTexts
-            .Select(
-                text =>
-                ElmSyntaxParser.ParseModuleText(text)
-                .Extract(err => throw new System.Exception("Failed parsing: " + err)))
-            .ToList();
-
-        var canonicalized =
-            Canonicalization.Canonicalize(parsedModules)
-            .Extract(err => throw new System.Exception("Failed canonicalization: " + err));
-
-        var orderedCanonicalizedModules =
-            parsedModules
-            .Select(
-                module =>
-                canonicalized[SyntaxModel.Module.GetModuleName(module.ModuleDefinition.Value).Value]
-                .Extract(
-                    err =>
-                    throw new System.Exception(
-                        "Module " +
-                        string.Join(".", SyntaxModel.Module.GetModuleName(module.ModuleDefinition.Value).Value) +
-                        " has errors: " + err)))
-            .Select(SyntaxTypes.FromFullSyntaxModel.Convert)
-            .ToList();
-
-        return ElmCompiler.FlattenModulesToDeclarationDictionary(orderedCanonicalizedModules);
+        throw new System.NotImplementedException();
     }
 
     /// <summary>

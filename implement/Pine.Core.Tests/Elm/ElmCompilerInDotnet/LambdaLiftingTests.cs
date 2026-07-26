@@ -35,11 +35,19 @@ public class LambdaLiftingTests
         return FromFullSyntaxModel.Convert(concreteSyntax);
     }
 
+    // Lambda lifting operates on the abstract syntax model after canonicalization.
+    // Tests parse into the concrete Stil4m model, so bridge to the abstract model,
+    // lift, then bridge back to the concrete model for formatting/inspection.
+    private static File LiftLambdas(File module) =>
+        ElmSyntaxAbstractConversion.ToFile(
+            LambdaLifting.LiftLambdas(
+                ElmSyntaxAbstractConversion.FromFile(module)));
+
     private static string LiftAndFormat(string inputModuleText)
     {
         var parsedModule = ParseModuleText(inputModuleText);
 
-        var liftedModule = LambdaLifting.LiftLambdas(parsedModule);
+        var liftedModule = LiftLambdas(parsedModule);
 
         // Use FormatToString directly which formats and renders in one step
         return
@@ -159,7 +167,7 @@ public class LambdaLiftingTests
 
 
             map__lifted__lambda1 f x acc =
-                f x :: acc
+                (f x) :: acc
             """";
 
         var result = LiftAndFormat(inputModuleText);
@@ -360,7 +368,7 @@ public class LambdaLiftingTests
 
 
             compute__lifted__lambda1 ( a, c ) x =
-                x * a + c
+                (x * a) + c
             """";
 
         var result = LiftAndFormat(inputModuleText);
@@ -460,7 +468,7 @@ public class LambdaLiftingTests
                     1
 
                 else
-                    x * computeFactorial__lifted__factorial_1 (x - 1)
+                    x * (computeFactorial__lifted__factorial_1 (x - 1))
             """";
 
         var result = LiftAndFormat(inputModuleText);
@@ -784,7 +792,7 @@ public class LambdaLiftingTests
         // one this test guards.
         var parsedModule = ParseModuleText(inputModuleText);
 
-        var liftedModule = LambdaLifting.LiftLambdas(parsedModule);
+        var liftedModule = LiftLambdas(parsedModule);
 
         // No declaration in the rewritten module may still contain a
         // LambdaExpression node anywhere in its body — that is the

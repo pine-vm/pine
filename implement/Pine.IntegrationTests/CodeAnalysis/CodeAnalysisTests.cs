@@ -2232,7 +2232,7 @@ public class CodeAnalysisTests
                 includeDeclaration:
                 declName =>
                 {
-                    return declName.FullName == "Test.listRepeatMultiply";
+                    return declName.FullName is "Test.listRepeatMultiply";
                 },
                 parseCache);
 
@@ -2240,14 +2240,24 @@ public class CodeAnalysisTests
 
         wholeProgramText.Trim().Should().Be(
             """"
-            List.repeat param_1 param_2 =
-                List.repeatHelp
+            Test.listRepeatMultiply param_1 param_2 =
+                TestList.repeat
+                    (Pine_kernel.int_mul
+                        [ param_1
+                        , 7
+                        ]
+                    )
+                    param_2
+
+
+            TestList.repeat param_1 param_2 =
+                TestList.repeatHelp
                     []
                     param_1
                     param_2
 
 
-            List.repeatHelp param_1 param_2 param_3 =
+            TestList.repeatHelp param_1 param_2 param_3 =
                 if
                     Pine_kernel.int_is_sorted_asc
                         [ param_2
@@ -2257,7 +2267,7 @@ public class CodeAnalysisTests
                     param_1
 
                 else
-                    List.repeatHelp
+                    TestList.repeatHelp
                         (Pine_kernel.concat
                             [ [ param_3
                               ]
@@ -2270,16 +2280,6 @@ public class CodeAnalysisTests
                             ]
                         )
                         param_3
-
-
-            Test.listRepeatMultiply param_1 param_2 =
-                List.repeat
-                    (Pine_kernel.int_mul
-                        [ param_1
-                        , 7
-                        ]
-                    )
-                    param_2
             
             """"
             .Trim());

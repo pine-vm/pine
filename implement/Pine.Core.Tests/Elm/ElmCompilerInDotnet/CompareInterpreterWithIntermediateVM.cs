@@ -11,10 +11,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
-
-using Stil4mToFull = Pine.Core.Elm.ElmSyntax.Stil4mElmSyntax7.ToFullSyntaxModel;
 using SyntaxModel = Pine.Core.Elm.ElmSyntax.SyntaxModel;
-using Stil4mElmSyntax7 = Pine.Core.Elm.ElmSyntax.Stil4mElmSyntax7;
 using Pine.Core.Internal;
 
 namespace Pine.Core.Tests.Elm.ElmCompilerInDotnet;
@@ -59,14 +56,14 @@ public sealed class CompareInterpreterWithIntermediateVM
     /// pipeline (specialization, higher-order inlining, size-based inlining), which is the
     /// same shape the syntax interpreter dispatches against.
     /// </summary>
-    public IReadOnlyList<Stil4mElmSyntax7.File> PostOptimizationModules { get; }
+    public IReadOnlyList<Core.Elm.ElmSyntax.ElmSyntaxAbstract.File> PostOptimizationModules { get; }
 
     private CompareInterpreterWithIntermediateVM(
         Core.Interpreter.IntermediateVM.PineVM vm,
         IReadOnlyDictionary<DeclQualifiedName, PineValue> entryFunctionValuesByQualifiedName,
         IReadOnlyDictionary<string, DeclQualifiedName> entryQualifiedNameBySimpleName,
         IReadOnlyDictionary<DeclQualifiedName, SyntaxModel.Declaration> interpreterDeclarations,
-        IReadOnlyList<Stil4mElmSyntax7.File> postOptimizationModules)
+        IReadOnlyList<Core.Elm.ElmSyntax.ElmSyntaxAbstract.File> postOptimizationModules)
     {
         _vm = vm;
         _entryFunctionValuesByQualifiedName = entryFunctionValuesByQualifiedName;
@@ -483,9 +480,9 @@ public sealed class CompareInterpreterWithIntermediateVM
         // Step 2: overlay the post-optimization module list. ModulesForCompilation is the
         // exact input the bytecode-emission backend consumes, so the declarations the
         // interpreter sees are aligned with the declarations the VM emitted bytecode for.
-        foreach (var stil4mFile in pipelineStageResults.ModulesForCompilation)
+        foreach (var abstractFile in pipelineStageResults.ModulesForCompilation)
         {
-            var fullModuleFile = Stil4mToFull.Convert(stil4mFile);
+            var fullModuleFile = Core.Elm.ElmSyntax.ElmSyntaxAbstract.ConvertToConcrete.FromFile(abstractFile);
 
             var moduleNameParts =
                 SyntaxModel.Module.GetModuleName(fullModuleFile.ModuleDefinition.Value).Value;

@@ -10,7 +10,6 @@ using System.Linq;
 using System.Text;
 
 using SyntaxModelTypes = Pine.Core.Elm.ElmSyntax.SyntaxModel;
-using Stil4mElmSyntax7 = Pine.Core.Elm.ElmSyntax.Stil4mElmSyntax7;
 using ElmSyntaxAbstract = Pine.Core.Elm.ElmSyntax.ElmSyntaxAbstract;
 
 namespace Pine.Core.Elm.ElmCompilerInDotnet;
@@ -44,33 +43,18 @@ namespace Pine.Core.Elm.ElmCompilerInDotnet;
 /// from the flat declaration dictionary returned by the caller-provided
 /// <c>extractFilteredDeclarations</c> delegate.
 /// </param>
-/// <param name="OptimizationIterations">
-/// When the standard optimization pipeline runs more than one round, this list
-/// captures the intermediate results of each round for inspection and debugging.
-/// Populated only by the back-compat overload of
-/// <see cref="ElmCompiler.LowerToElmSyntaxForCompilation"/>; the generic overload
-/// leaves this <c>null</c> (callers can surface equivalent per-round data
-/// through their own <typeparamref name="LoweredT"/> payload).
-/// </param>
 public record CompilationPipelineStageResults<LoweredT>(
     IReadOnlyList<SyntaxModelTypes.File> Canonicalized,
     LoweredT Lowered,
-    IReadOnlyList<Stil4mElmSyntax7.File> ModulesForCompilation,
-    ImmutableList<OptimizationIterationStageResults>? OptimizationIterations = null);
+    IReadOnlyList<ElmSyntaxAbstract.File> ModulesForCompilation);
 
 /// <summary>
 /// Standard lowering payload produced by the back-compat overload of
 /// <see cref="ElmCompiler.LowerToElmSyntaxForCompilation"/>. Surfaces the
-/// pre-optimization <see cref="LambdaLifted"/> module list and the
-/// post-specialization declaration snapshot via <see cref="Specialized"/>.
+/// pre-optimization <see cref="LambdaLifted"/> module list.
 /// </summary>
 /// <param name="LambdaLifted">
 /// Modules after the initial lambda lifting pass: closures are transformed into top-level functions.
-/// </param>
-/// <param name="Specialized">
-/// Declarations after specialization: specialized function variants are created
-/// for known argument patterns. This is <c>null</c> when <c>disableInlining</c>
-/// is true, as the optimization pipeline is skipped.
 /// </param>
 /// <param name="FilteredDeclarations">
 /// Flat declaration dictionary handed to the compilation backend after
@@ -79,9 +63,8 @@ public record CompilationPipelineStageResults<LoweredT>(
 /// <c>extractFilteredDeclarations</c> delegate.
 /// </param>
 public record DefaultLoweredResults(
-    IReadOnlyList<Stil4mElmSyntax7.File> LambdaLifted,
-    OptimizedElmSyntaxDeclarations? Specialized,
-    ImmutableDictionary<DeclQualifiedName, Stil4mElmSyntax7.Declaration> FilteredDeclarations);
+    IReadOnlyList<ElmSyntaxAbstract.File> LambdaLifted,
+    ImmutableDictionary<DeclQualifiedName, ElmSyntaxAbstract.Declaration> FilteredDeclarations);
 
 /// <summary>
 /// Holds the intermediate results of each stage within a single optimization iteration.
@@ -104,7 +87,7 @@ public class ElmCompiler
 {
     private sealed record CanonicalizationBoundaryResult(
         IReadOnlyList<SyntaxModelTypes.File> ConcreteModules,
-        IReadOnlyList<Stil4mElmSyntax7.File> LoweringModules,
+        IReadOnlyList<ElmSyntaxAbstract.File> LoweringModules,
         HashSet<string> RootModuleNames);
 
     /// <summary>
@@ -147,8 +130,7 @@ public class ElmCompiler
         // them onto the final result (the generic overload itself leaves
         // OptimizationIterations null and reconstructs ModulesForCompilation from the
         // canonicalized module shells).
-        ImmutableList<OptimizationIterationStageResults>? capturedIterations = null;
-        IReadOnlyList<Stil4mElmSyntax7.File>? capturedLambdaLifted = null;
+        IReadOnlyList<ElmSyntaxAbstract.File>? capturedLambdaLifted = null;
 
         var genericResult =
             LowerToElmSyntaxForCompilation<DefaultLoweredResults>(
@@ -173,18 +155,15 @@ public class ElmCompiler
                     if (standardResult.IsErrOrNull() is { } stdErr)
                         return stdErr;
 
-                    if (standardResult.IsOkOrNullable() is not { } stdOkWrapper)
+                    if (standardResult.IsOkOrNull() is not { } stdOk)
                     {
                         throw new NotImplementedException(
                             "Unexpected result type: " + standardResult.GetType().Name);
                     }
 
-                    var (lowered, iterations) = stdOkWrapper;
+                    capturedLambdaLifted = stdOk.LambdaLifted;
 
-                    capturedIterations = iterations;
-                    capturedLambdaLifted = lowered.LambdaLifted;
-
-                    return lowered;
+                    return stdOk;
                 },
                 extractFilteredDeclarations: lowered => lowered.FilteredDeclarations);
 
@@ -215,8 +194,7 @@ public class ElmCompiler
         return
             genericOk with
             {
-                ModulesForCompilation = modulesForCompilation,
-                OptimizationIterations = capturedIterations,
+                ModulesForCompilation = modulesForCompilation
             };
     }
 
@@ -258,10 +236,10 @@ public class ElmCompiler
         FileTree appCodeTree,
         IReadOnlyList<IReadOnlyList<string>> rootFilePaths,
         Func<
-            ImmutableDictionary<DeclQualifiedName, Stil4mElmSyntax7.Declaration>,
+            ImmutableDictionary<DeclQualifiedName, ElmSyntaxAbstract.Declaration>,
             IReadOnlySet<DeclQualifiedName>,
             Result<string, LoweredT>> lower,
-        Func<LoweredT, ImmutableDictionary<DeclQualifiedName, Stil4mElmSyntax7.Declaration>> extractFilteredDeclarations)
+        Func<LoweredT, ImmutableDictionary<DeclQualifiedName, ElmSyntaxAbstract.Declaration>> extractFilteredDeclarations)
     {
         var canonicalizationResult = ParseAndCanonicalizeForLowering(appCodeTree, rootFilePaths);
 
@@ -278,14 +256,29 @@ public class ElmCompiler
         var modulesForLowering = canonicalizationOk.LoweringModules;
         var rootModuleNames = canonicalizationOk.RootModuleNames;
 
-        var flatCanonicalized = FlattenModulesToDeclarationDictionary(modulesForLowering);
+        var flatCanonicalized =
+            FlattenModulesToDeclarationDictionary(modulesForLowering);
+
+        bool IncludeDeclarationAsRoot(DeclQualifiedName declQualifiedName)
+        {
+            // Temp addition to account for some platform interfaces depending on additional function declarations.
+            if (TempIncludedRootDeclarations.Contains(declQualifiedName))
+                return true;
+
+            return rootModuleNames.Contains(string.Join('.', declQualifiedName.Namespaces));
+        }
 
         IReadOnlySet<DeclQualifiedName> rootDeclarationNames =
             flatCanonicalized.Keys
-            .Where(key => rootModuleNames.Contains(string.Join('.', key.Namespaces)))
+            .Where(IncludeDeclarationAsRoot)
             .ToHashSet();
 
-        var lowerResult = lower(flatCanonicalized, rootDeclarationNames);
+        var declarationsToLower =
+            FilterFunctionDeclarationsToRootDependencies(
+                flatCanonicalized,
+                rootDeclarationNames);
+
+        var lowerResult = lower(declarationsToLower, rootDeclarationNames);
 
         if (lowerResult.IsErrOrNull() is { } lowerErr)
         {
@@ -311,8 +304,7 @@ public class ElmCompiler
             new CompilationPipelineStageResults<LoweredT>(
                 Canonicalized: canonicalizedModules,
                 Lowered: loweredValue,
-                ModulesForCompilation: modulesForCompilation,
-                OptimizationIterations: null);
+                ModulesForCompilation: modulesForCompilation);
     }
 
     /// <summary>
@@ -521,7 +513,7 @@ public class ElmCompiler
 
         var modulesForLowering =
             canonicalizedModules
-            .Select(module => Stil4mElmSyntax7.FromFullSyntaxModel.Convert(module with { Imports = [] }))
+            .Select(module => ElmSyntaxAbstract.ConvertFromConcrete.FromFile(module with { Imports = [] }))
             .ToList();
 
         return
@@ -538,13 +530,11 @@ public class ElmCompiler
     /// <paramref name="canonicalizedModules"/> and returns a
     /// <see cref="DefaultLoweredResults"/> capturing the post-lambda-lift module
     /// list, the post-specialization snapshot, and the reachability-filtered
-    /// declaration dictionary. The optional per-round optimization snapshots are
-    /// returned alongside so the caller can surface them through
-    /// <see cref="CompilationPipelineStageResults{LoweredT}.OptimizationIterations"/>.
+    /// declaration dictionary.
     /// </summary>
-    private static Result<string, (DefaultLoweredResults Lowered, ImmutableList<OptimizationIterationStageResults>? Iterations)>
+    private static Result<string, DefaultLoweredResults>
         RunStandardLoweringPipeline(
-        List<Stil4mElmSyntax7.File> canonicalizedModules,
+        List<ElmSyntaxAbstract.File> canonicalizedModules,
         IReadOnlySet<string> rootModuleNames,
         ElmSyntaxOptimizationConfig syntaxOptimization)
     {
@@ -556,7 +546,7 @@ public class ElmCompiler
         // the standard `Select(LiftLambdas)` would have produced — but with anonymous-lambda
         // arguments to higher-order callees already substituted into `__specialized__N`
         // siblings before the lift packs their captured environment into a tuple parameter.
-        List<Stil4mElmSyntax7.File> lambdaLiftedModules;
+        List<ElmSyntaxAbstract.File> lambdaLiftedModules;
 
         lambdaLiftedModules =
             [.. canonicalizedModules.Select(LambdaLifting.LiftLambdas)];
@@ -566,65 +556,31 @@ public class ElmCompiler
 
         OptimizationPipelineStageResults? optimizationResults = null;
 
-        ImmutableDictionary<DeclQualifiedName, Stil4mElmSyntax7.Declaration> filteredDeclarations;
-
         if (syntaxOptimization is not ElmSyntaxOptimizationConfig.SyntaxOptimizationEnabled optimizationEnabled)
         {
-            // No optimization pipeline: the filtered declaration set is simply the flat
-            // representation of the lambda-lifted modules (no reachability filtering is
-            // required because the back-compat path historically used the
-            // lambda-lifted module list verbatim as the compilation input in this case).
-            filteredDeclarations =
-                FlattenModulesToDeclarationDictionary(lambdaLiftedModules);
+            return
+                new DefaultLoweredResults(
+                    LambdaLifted: lambdaLiftedModules,
+                    FilteredDeclarations: FlattenModulesToDeclarationDictionary(lambdaLiftedModules));
         }
-        else
-        {
-            var pipelineResult =
-                ApplyOptimizationPipelineWithStageResults(
-                    lambdaLiftedModules);
 
-            if (pipelineResult.IsErrOrNull() is { } pipelineErr)
-                return pipelineErr;
+        var pipelineResult =
+            ApplyOptimizationPipelineWithStageResults(
+                lambdaLiftedModules);
 
-            optimizationResults =
-                pipelineResult.Extract(err => throw new NotImplementedException());
+        if (pipelineResult.IsErrOrNull() is { } pipelineErr)
+            return pipelineErr;
 
-            var declarationsAfterLowering =
-                ElmSyntaxAbstractConversion.ToDeclarationDictionary(
-                    optimizationResults.AfterLowering.RenderAsFlatDictionary());
+        optimizationResults =
+            pipelineResult.Extract(err => throw new NotImplementedException());
 
-
-            bool IncludeDeclarationAsRoot(DeclQualifiedName declQualifiedName)
-            {
-                // Temp addition to account for some platform interfaces depending on additional function declarations.
-                if (TempIncludedRootDeclarations.Contains(declQualifiedName))
-                    return true;
-
-                return rootModuleNames.Contains(string.Join('.', declQualifiedName.Namespaces));
-            }
-
-            var rootDeclarations =
-                declarationsAfterLowering
-                .Where(kv => IncludeDeclarationAsRoot(kv.Key))
-                .ToImmutableDictionary();
-
-            var reachableFromEntryPoints =
-                OptimizationOpportunityFinder.ComputeReachableDeclarations(
-                    declarationsAfterLowering,
-                    [.. rootDeclarations.Keys]);
-
-            filteredDeclarations =
-                declarationsAfterLowering
-                .Where(kv => reachableFromEntryPoints.Contains(kv.Key))
-                .ToImmutableDictionary(kv => kv.Key, kv => kv.Value);
-        }
+        var declarationsAfterLowering =
+            optimizationResults.AfterLowering.RenderAsFlatDictionary();
 
         return
-            (new DefaultLoweredResults(
+            new DefaultLoweredResults(
                 LambdaLifted: lambdaLiftedModules,
-                Specialized: optimizationResults?.AfterSpecialization,
-                FilteredDeclarations: filteredDeclarations),
-            optimizationResults?.Iterations);
+                FilteredDeclarations: declarationsAfterLowering);
     }
 
     internal static readonly ImmutableHashSet<DeclQualifiedName> TempIncludedRootDeclarations =
@@ -664,47 +620,6 @@ public class ElmCompiler
     }
 
     /// <summary>
-    /// Generic counterpart to <see cref="CompileInteractiveEnvironment"/>. Performs the
-    /// parse + canonicalization stages, hands control to the caller-supplied
-    /// <paramref name="lower"/> delegate (which receives the flat canonicalized
-    /// declaration dictionary together with the set of root-declaration qualified
-    /// names so it can decide which specializations to emit for the applications
-    /// inside the root declarations), then emits the compiled <see cref="PineValue"/>
-    /// environment from the resulting modules.
-    /// </summary>
-    public static Result<string, (PineValue compiledEnvValue, CompilationPipelineStageResults<LoweredT> pipelineStageResults)>
-        CompileInteractiveEnvironment<LoweredT>(
-        FileTree appCodeTree,
-        IReadOnlyList<IReadOnlyList<string>> rootFilePaths,
-        Func<
-                ImmutableDictionary<DeclQualifiedName, Stil4mElmSyntax7.Declaration>,
-                IReadOnlySet<DeclQualifiedName>,
-                Result<string, LoweredT>> lower,
-        Func<LoweredT, ImmutableDictionary<DeclQualifiedName, Stil4mElmSyntax7.Declaration>> extractFilteredDeclarations,
-        bool disableGenericApplicationChainConsolidation = false,
-        IReadOnlyList<DeclQualifiedName>? rootDeclarationsAsPlainValues = null)
-    {
-        var loweringResult =
-            LowerToElmSyntaxForCompilation(
-                appCodeTree,
-                rootFilePaths,
-                lower: lower,
-                extractFilteredDeclarations: extractFilteredDeclarations);
-
-        if (loweringResult.IsErrOrNull() is { } loweringErr)
-            return loweringErr;
-
-        if (loweringResult.IsOkOrNull() is not { } pipelineStageResults)
-            throw new NotImplementedException("Unexpected result type: " + loweringResult.GetType().Name);
-
-        return
-            EmitCompiledEnvironmentFromPipelineResults(
-                pipelineStageResults,
-                disableGenericApplicationChainConsolidation: disableGenericApplicationChainConsolidation,
-                rootDeclarationsAsPlainValues: rootDeclarationsAsPlainValues);
-    }
-
-    /// <summary>
     /// Shared emission helper: takes the post-lowering
     /// <see cref="CompilationPipelineStageResults{LoweredT}"/> and produces the compiled
     /// <see cref="PineValue"/> interactive environment. Used by both the back-compat
@@ -721,25 +636,24 @@ public class ElmCompiler
 
 
         var allFunctions =
-            new Dictionary<SyntaxModelTypes.QualifiedNameRef, (string moduleName, string functionName, Stil4mElmSyntax7.Declaration.FunctionDeclaration declaration)>();
+            new Dictionary<SyntaxModelTypes.QualifiedNameRef, (string moduleName, string functionName, ElmSyntaxAbstract.Declaration.FunctionDeclaration declaration)>();
 
         foreach (var elmModuleSyntax in modulesForCompilation)
         {
             var moduleName =
-                Stil4mElmSyntax7.Module.GetModuleName(elmModuleSyntax.ModuleDefinition.Value).Value;
+                ElmSyntaxAbstract.Module.GetModuleName(elmModuleSyntax.ModuleDefinition);
 
             var moduleNameFlattened =
                 string.Join(".", moduleName);
 
             var declarations =
                 elmModuleSyntax.Declarations
-                .Select(declNode => declNode.Value)
-                .OfType<Stil4mElmSyntax7.Declaration.FunctionDeclaration>();
+                .OfType<ElmSyntaxAbstract.Declaration.FunctionDeclaration>();
 
             foreach (var declaration in declarations)
             {
                 var functionName =
-                    declaration.Function.Declaration.Value.Name.Value;
+                    declaration.Function.Declaration.Name;
 
                 var qualifiedName =
                     QualifiedNameHelper.ToQualifiedNameRef(moduleName, functionName);
@@ -748,18 +662,10 @@ public class ElmCompiler
             }
         }
 
-        var abstractAllFunctions =
-            allFunctions.ToDictionary(
-                kvp => kvp.Key,
-                kvp =>
-                (kvp.Value.moduleName,
-                kvp.Value.functionName,
-                (ElmSyntaxAbstract.Declaration.FunctionDeclaration)ElmSyntaxAbstractConversion.FromDeclaration(kvp.Value.declaration)));
-
         // Build function type metadata dictionary for type inference
         var functionTypes = new Dictionary<SyntaxModelTypes.QualifiedNameRef, FunctionTypeInfo>();
 
-        foreach (var (qualifiedName, (_, _, declaration)) in abstractAllFunctions)
+        foreach (var (qualifiedName, (_, _, declaration)) in allFunctions)
         {
             functionTypes[qualifiedName] =
                 new FunctionTypeInfo(
@@ -776,19 +682,17 @@ public class ElmCompiler
         foreach (var elmModuleSyntax in modulesForCompilation)
         {
             var moduleName =
-                Stil4mElmSyntax7.Module.GetModuleName(elmModuleSyntax.ModuleDefinition.Value).Value;
+                ElmSyntaxAbstract.Module.GetModuleName(elmModuleSyntax.ModuleDefinition);
 
             var typeDeclarations =
                 elmModuleSyntax.Declarations
-                .Select(declNode => declNode.Value)
-                .OfType<Stil4mElmSyntax7.Declaration.CustomTypeDeclaration>();
+                .OfType<ElmSyntaxAbstract.Declaration.ChoiceTypeDeclaration>();
 
             foreach (var typeDecl in typeDeclarations)
             {
-                foreach (var ctorNode in typeDecl.TypeDeclaration.Constructors)
+                foreach (var ctor in typeDecl.TypeDeclaration.Constructors)
                 {
-                    var ctor = ctorNode.Value;
-                    var ctorName = ctor.Name.Value;
+                    var ctorName = ctor.Name;
 
                     var qualifiedCtorName =
                         QualifiedNameHelper.ToQualifiedNameRef(moduleName, ctorName);
@@ -798,8 +702,7 @@ public class ElmCompiler
                     foreach (var argNode in ctor.Arguments)
                     {
                         var argType =
-                            TypeInference.TypeAnnotationToInferredType(
-                                ElmSyntaxAbstractConversion.FromTypeAnnotation(argNode.Value));
+                            TypeInference.TypeAnnotationToInferredType(argNode);
 
                         argTypes.Add(argType);
                     }
@@ -817,25 +720,24 @@ public class ElmCompiler
         foreach (var elmModuleSyntax in modulesForCompilation)
         {
             var moduleName =
-                Stil4mElmSyntax7.Module.GetModuleName(elmModuleSyntax.ModuleDefinition.Value).Value;
+                ElmSyntaxAbstract.Module.GetModuleName(elmModuleSyntax.ModuleDefinition);
 
             var aliasDeclarations =
                 elmModuleSyntax.Declarations
-                .Select(declNode => declNode.Value)
-                .OfType<Stil4mElmSyntax7.Declaration.AliasDeclaration>();
+                .OfType<ElmSyntaxAbstract.Declaration.AliasDeclaration>();
 
             foreach (var aliasDecl in aliasDeclarations)
             {
-                var aliasName = aliasDecl.TypeAlias.Name.Value;
-                var typeAnnotation = aliasDecl.TypeAlias.TypeAnnotation.Value;
+                var aliasName = aliasDecl.TypeAlias.Name;
+                var typeAnnotation = aliasDecl.TypeAlias.TypeAnnotation;
 
                 // Check if the type alias is for a record type
-                if (typeAnnotation is Stil4mElmSyntax7.TypeAnnotation.Record recordType)
+                if (typeAnnotation is ElmSyntaxAbstract.TypeAnnotation.Record recordType)
                 {
                     // Extract field names in declaration order
                     var fieldNames =
                         recordType.RecordDefinition.Fields
-                        .Select(f => f.Value.FieldName.Value)
+                        .Select(f => f.FieldName)
                         .ToList();
 
                     var qualifiedName = QualifiedNameHelper.ToQualifiedNameRef(moduleName, aliasName);
@@ -847,7 +749,7 @@ public class ElmCompiler
         // Create initial compilation context with all available functions
         var initialContext =
             new ModuleCompilationContext(
-                abstractAllFunctions,
+                allFunctions,
                 CompiledFunctionsCache: [],
                 PineKernelModuleNames: s_pineKernelModuleNamesDefault,
                 FunctionTypes: functionTypes,
@@ -1010,7 +912,7 @@ public class ElmCompiler
         foreach (var parsedModule in modulesForCompilation)
         {
             var moduleNameFlattened =
-                string.Join('.', Stil4mElmSyntax7.Module.GetModuleName(parsedModule.ModuleDefinition.Value).Value);
+                string.Join('.', ElmSyntaxAbstract.Module.GetModuleName(parsedModule.ModuleDefinition));
 
             var moduleValue = BuildModuleValue(parsedModule, moduleNameFlattened, compilationContext);
 
@@ -1048,7 +950,7 @@ public class ElmCompiler
     /// </returns>
     public static (IReadOnlyDictionary<string, IReadOnlyList<string>> layouts, IReadOnlyDictionary<string, FunctionScc> functionToScc, IReadOnlyList<FunctionScc> sccsInDependencyOrder)
         ComputeDependencyLayoutsAndSccs(
-        IReadOnlyDictionary<SyntaxModelTypes.QualifiedNameRef, (string moduleName, string functionName, Stil4mElmSyntax7.Declaration.FunctionDeclaration declaration)> allFunctions,
+        IReadOnlyDictionary<SyntaxModelTypes.QualifiedNameRef, (string moduleName, string functionName, ElmSyntaxAbstract.Declaration.FunctionDeclaration declaration)> allFunctions,
         ModuleCompilationContext context)
     {
         var allQualifiedFunctionNames =
@@ -1065,7 +967,7 @@ public class ElmCompiler
                 kvp =>
                 {
                     var (moduleName, functionName, declaration) = kvp.Value;
-                    var functionBody = declaration.Function.Declaration.Value.Expression.Value;
+                    var functionBody = declaration.Function.Declaration.Expression;
                     var dependencies = AnalyzeFunctionDependencies(functionBody, moduleName, context);
                     // Filter to only include functions that are in allFunctions
                     IReadOnlySet<string> filtered =
@@ -1309,15 +1211,14 @@ public class ElmCompiler
     /// All functions should have been compiled in the SCC compilation pass.
     /// </summary>
     private static PineValue BuildModuleValue(
-        Stil4mElmSyntax7.File parsedModule,
+        ElmSyntaxAbstract.File parsedModule,
         string currentModuleName,
         ModuleCompilationContext context)
     {
         // Get declarations in this module (for building the final module value)
         var declarations =
             parsedModule.Declarations
-            .Select(declNode => declNode.Value)
-            .OfType<Stil4mElmSyntax7.Declaration.FunctionDeclaration>()
+            .OfType<ElmSyntaxAbstract.Declaration.FunctionDeclaration>()
             .ToList();
 
         // Collect compiled functions for this module (in declaration order)
@@ -1325,7 +1226,7 @@ public class ElmCompiler
 
         foreach (var declaration in declarations)
         {
-            var funcName = declaration.Function.Declaration.Value.Name.Value;
+            var funcName = declaration.Function.Declaration.Name;
 
             var qualifiedName = currentModuleName + "." + funcName;
 
@@ -1590,40 +1491,41 @@ public class ElmCompiler
     }
 
     private static IReadOnlySet<string> AnalyzeFunctionDependencies(
-        Stil4mElmSyntax7.Expression expression,
+        ElmSyntaxAbstract.Expression expression,
         string currentModuleName,
         ModuleCompilationContext context)
     {
         var dependencies = new HashSet<string>();
 
-        void AnalyzeExpression(Stil4mElmSyntax7.Expression expr)
+        void AnalyzeExpression(ElmSyntaxAbstract.Expression expr)
         {
             switch (expr)
             {
-                case Stil4mElmSyntax7.Expression.Application application:
+                case ElmSyntaxAbstract.Expression.Application application:
 
-                    if (application.Arguments.Count >= 2 &&
-                        application.Arguments[0].Value is Stil4mElmSyntax7.Expression.FunctionOrValue funcRef)
+                    if (application.Arguments.Count >= 1 &&
+                        application.Function is ElmSyntaxAbstract.Expression.FunctionOrValue funcRef)
                     {
                         // Skip Pine_kernel functions
-                        if (funcRef.ModuleName.Count is 1 && context.IsPineKernelModule(funcRef.ModuleName[0]))
+                        if (funcRef.QualifiedName.Namespaces.Count is 1 &&
+                            context.IsPineKernelModule(funcRef.QualifiedName.Namespaces[0]))
                         {
                             // Still recurse into arguments
                             foreach (var arg in application.Arguments)
                             {
-                                AnalyzeExpression(arg.Value);
+                                AnalyzeExpression(arg);
                             }
 
                             break;
                         }
 
                         // Skip choice type tag constructors
-                        if (ElmValueEncoding.StringIsValidTagName(funcRef.Name))
+                        if (ElmValueEncoding.StringIsValidTagName(funcRef.QualifiedName.DeclName))
                         {
                             // Still recurse into arguments
                             foreach (var arg in application.Arguments)
                             {
-                                AnalyzeExpression(arg.Value);
+                                AnalyzeExpression(arg);
                             }
 
                             break;
@@ -1632,122 +1534,120 @@ public class ElmCompiler
                         // Determine qualified name
                         string qualifiedName;
 
-                        if (funcRef.ModuleName.Count > 0)
+                        if (funcRef.QualifiedName.Namespaces.Count > 0)
                         {
-                            qualifiedName = string.Join(".", funcRef.ModuleName) + "." + funcRef.Name;
+                            qualifiedName = funcRef.QualifiedName.FullName;
                         }
                         else
                         {
-                            qualifiedName = currentModuleName + "." + funcRef.Name;
+                            qualifiedName = currentModuleName + "." + funcRef.QualifiedName.DeclName;
                         }
 
                         dependencies.Add(qualifiedName);
                     }
 
+                    AnalyzeExpression(application.Function);
+
                     // Recurse into arguments
                     foreach (var arg in application.Arguments)
                     {
-                        AnalyzeExpression(arg.Value);
+                        AnalyzeExpression(arg);
                     }
 
                     break;
 
-                case Stil4mElmSyntax7.Expression.OperatorApplication operatorApp:
-                    AnalyzeExpression(operatorApp.Left.Value);
-                    AnalyzeExpression(operatorApp.Right.Value);
+                case ElmSyntaxAbstract.Expression.OperatorApplication operatorApp:
+                    AnalyzeExpression(operatorApp.Left);
+                    AnalyzeExpression(operatorApp.Right);
                     return;
 
-                case Stil4mElmSyntax7.Expression.IfBlock ifBlock:
-                    AnalyzeExpression(ifBlock.Condition.Value);
-                    AnalyzeExpression(ifBlock.ThenBlock.Value);
-                    AnalyzeExpression(ifBlock.ElseBlock.Value);
+                case ElmSyntaxAbstract.Expression.IfBlock ifBlock:
+                    AnalyzeExpression(ifBlock.Condition);
+                    AnalyzeExpression(ifBlock.ThenBlock);
+                    AnalyzeExpression(ifBlock.ElseBlock);
                     return;
 
-                case Stil4mElmSyntax7.Expression.LetExpression letExpr:
-                    foreach (var decl in letExpr.Value.Declarations)
+                case ElmSyntaxAbstract.Expression.LetExpression letExpr:
+                    foreach (var decl in letExpr.Declarations)
                     {
-                        switch (decl.Value)
+                        switch (decl)
                         {
-                            case Stil4mElmSyntax7.Expression.LetDeclaration.LetFunction letFunc:
-                                AnalyzeExpression(letFunc.Function.Declaration.Value.Expression.Value);
+                            case ElmSyntaxAbstract.LetDeclaration.LetFunction letFunc:
+                                AnalyzeExpression(letFunc.Function.Declaration.Expression);
                                 break;
 
-                            case Stil4mElmSyntax7.Expression.LetDeclaration.LetDestructuring letDestr:
-                                AnalyzeExpression(letDestr.Expression.Value);
+                            case ElmSyntaxAbstract.LetDeclaration.LetDestructuring letDestr:
+                                AnalyzeExpression(letDestr.Expression);
                                 break;
                         }
                     }
 
-                    AnalyzeExpression(letExpr.Value.Expression.Value);
+                    AnalyzeExpression(letExpr.Expression);
                     return;
 
-                case Stil4mElmSyntax7.Expression.ListExpr listExpr:
+                case ElmSyntaxAbstract.Expression.ListExpr listExpr:
                     foreach (var elem in listExpr.Elements)
                     {
-                        AnalyzeExpression(elem.Value);
+                        AnalyzeExpression(elem);
                     }
 
                     return;
 
-                case Stil4mElmSyntax7.Expression.ParenthesizedExpression parenthesized:
-                    AnalyzeExpression(parenthesized.Expression.Value);
+                case ElmSyntaxAbstract.Expression.Negation negation:
+                    AnalyzeExpression(negation.Expression);
                     return;
 
-                case Stil4mElmSyntax7.Expression.Negation negation:
-                    AnalyzeExpression(negation.Expression.Value);
-                    return;
+                case ElmSyntaxAbstract.Expression.CaseExpression caseExpr:
+                    AnalyzeExpression(caseExpr.Expression);
 
-                case Stil4mElmSyntax7.Expression.CaseExpression caseExpr:
-                    AnalyzeExpression(caseExpr.CaseBlock.Expression.Value);
-
-                    foreach (var caseItem in caseExpr.CaseBlock.Cases)
+                    foreach (var caseItem in caseExpr.Cases)
                     {
-                        AnalyzeExpression(caseItem.Expression.Value);
+                        AnalyzeExpression(caseItem.Expression);
                     }
 
                     return;
 
-                case Stil4mElmSyntax7.Expression.TupledExpression tupledExpr:
+                case ElmSyntaxAbstract.Expression.TupledExpression tupledExpr:
                     foreach (var elem in tupledExpr.Elements)
                     {
-                        AnalyzeExpression(elem.Value);
+                        AnalyzeExpression(elem);
                     }
 
                     return;
 
-                case Stil4mElmSyntax7.Expression.RecordExpr recordExpr:
+                case ElmSyntaxAbstract.Expression.RecordExpr recordExpr:
                     foreach (var field in recordExpr.Fields)
                     {
-                        AnalyzeExpression(field.Value.valueExpr.Value);
+                        AnalyzeExpression(field.Value);
                     }
 
                     return;
 
-                case Stil4mElmSyntax7.Expression.RecordUpdateExpression recordUpdateExpr:
+                case ElmSyntaxAbstract.Expression.RecordUpdateExpression recordUpdateExpr:
                     foreach (var setter in recordUpdateExpr.Fields)
                     {
-                        AnalyzeExpression(setter.Value.valueExpr.Value);
+                        AnalyzeExpression(setter.Value);
                     }
 
                     return;
 
-                case Stil4mElmSyntax7.Expression.RecordAccess recordAccess:
-                    AnalyzeExpression(recordAccess.Record.Value);
+                case ElmSyntaxAbstract.Expression.RecordAccess recordAccess:
+                    AnalyzeExpression(recordAccess.Record);
                     return;
 
-                case Stil4mElmSyntax7.Expression.LambdaExpression lambdaExpr:
-                    AnalyzeExpression(lambdaExpr.Lambda.Expression.Value);
+                case ElmSyntaxAbstract.Expression.LambdaExpression lambdaExpr:
+                    AnalyzeExpression(lambdaExpr.Expression);
                     return;
 
-                case Stil4mElmSyntax7.Expression.FunctionOrValue funcOrValue:
+                case ElmSyntaxAbstract.Expression.FunctionOrValue funcOrValue:
 
-                    if (funcOrValue.Name.Length < 0)
+                    if (funcOrValue.QualifiedName.DeclName.Length < 0)
                     {
                         throw new InvalidOperationException(
                             "Function or value name cannot be empty.");
                     }
 
-                    if (char.IsUpper(funcOrValue.Name[0]))
+                    if (char.IsUpper(funcOrValue.QualifiedName.DeclName[0]))
                     {
                         // This must be a choice type tag constructor or record constructor - cannot contribute to dependencies
                         return;
@@ -1759,20 +1659,20 @@ public class ElmCompiler
 
                         string qualifiedName;
 
-                        if (funcOrValue.ModuleName.Count > 0)
+                        if (funcOrValue.QualifiedName.Namespaces.Count > 0)
                         {
                             // Skip Pine_kernel module functions
-                            if (funcOrValue.ModuleName.Count is 1 &&
-                                context.IsPineKernelModule(funcOrValue.ModuleName[0]))
+                            if (funcOrValue.QualifiedName.Namespaces.Count is 1 &&
+                                context.IsPineKernelModule(funcOrValue.QualifiedName.Namespaces[0]))
                             {
                                 return;
                             }
 
-                            qualifiedName = string.Join(".", funcOrValue.ModuleName) + "." + funcOrValue.Name;
+                            qualifiedName = funcOrValue.QualifiedName.FullName;
                         }
                         else
                         {
-                            qualifiedName = currentModuleName + "." + funcOrValue.Name;
+                            qualifiedName = currentModuleName + "." + funcOrValue.QualifiedName.DeclName;
                         }
 
                         // Only add if it's a known function (not a local variable)
@@ -1784,15 +1684,14 @@ public class ElmCompiler
 
                     return;
 
-                case Stil4mElmSyntax7.Expression.PrefixOperator:
-                case Stil4mElmSyntax7.Expression.UnitExpr:
-                case Stil4mElmSyntax7.Expression.Literal:
-                case Stil4mElmSyntax7.Expression.Integer:
-                case Stil4mElmSyntax7.Expression.CharLiteral:
-                case Stil4mElmSyntax7.Expression.Hex:
-                case Stil4mElmSyntax7.Expression.Floatable:
-                case Stil4mElmSyntax7.Expression.RecordAccessFunction:
-                case Stil4mElmSyntax7.Expression.GLSLExpression:
+                case ElmSyntaxAbstract.Expression.PrefixOperator:
+                case ElmSyntaxAbstract.Expression.UnitExpr:
+                case ElmSyntaxAbstract.Expression.StringLiteral:
+                case ElmSyntaxAbstract.Expression.Integer:
+                case ElmSyntaxAbstract.Expression.CharLiteral:
+                case ElmSyntaxAbstract.Expression.FloatLiteral:
+                case ElmSyntaxAbstract.Expression.RecordAccessFunction:
+                case ElmSyntaxAbstract.Expression.GLSLExpression:
                     return;
 
                 default:
@@ -1931,7 +1830,7 @@ public class ElmCompiler
     }
 
     private static Result<string, OptimizationPipelineStageResults> ApplyOptimizationPipelineWithStageResults(
-        List<Stil4mElmSyntax7.File> lambdaLiftedModules)
+        List<ElmSyntaxAbstract.File> lambdaLiftedModules)
     {
         // Flatten the input modules into a declaration dictionary and lift into the
         // optimization-stage record. The pipeline operates on this structured representation
@@ -1941,13 +1840,12 @@ public class ElmCompiler
 
         var currentDecls =
             OptimizedElmSyntaxDeclarations.FromFlatDictionary(
-                ElmSyntaxAbstractConversion.FromDeclarationDictionary(initialFlat));
+                initialFlat);
 
         {
             var result =
                 BuiltinOperatorLowering.Apply(
-                    ElmSyntaxAbstractConversion.ToDeclarationDictionary(
-                        currentDecls.RenderAsFlatDictionary()));
+                    currentDecls.RenderAsFlatDictionary());
 
             if (result.IsErrOrNull() is { } lowerErr)
                 return "Operator lowering failed: " + lowerErr;
@@ -1957,7 +1855,7 @@ public class ElmCompiler
 
             currentDecls =
                 OptimizedElmSyntaxDeclarations.FromFlatDictionary(
-                    ElmSyntaxAbstractConversion.FromDeclarationDictionary(lowerDict));
+                    lowerDict);
         }
 
         {
@@ -1966,22 +1864,19 @@ public class ElmCompiler
 
             return
                 new OptimizationPipelineStageResults(
-                    AfterSpecialization: currentDecls,
-                    AfterLowering: currentDecls,
-                    Iterations: []);
+                    AfterLowering: currentDecls);
         }
     }
 
     /// <summary>
     /// <see cref="OptimizedElmSyntaxDeclarations"/>-flavoured overload of
-    /// <see cref="CheckForNamingErrors(ImmutableDictionary{DeclQualifiedName, Stil4mElmSyntax7.Declaration}, string)"/>.
+    /// <see cref="CheckForNamingErrors(ImmutableDictionary{DeclQualifiedName, ElmSyntaxAbstract.Declaration}, string)"/>.
     /// </summary>
     private static string? CheckForNamingErrors(
         OptimizedElmSyntaxDeclarations declarations,
         string stageName) =>
         CheckForNamingErrors(
-            ElmSyntaxAbstractConversion.ToDeclarationDictionary(
-                declarations.RenderAsFlatDictionary()),
+            declarations.RenderAsFlatDictionary(),
             stageName);
 
     /// <summary>
@@ -1993,14 +1888,14 @@ public class ElmCompiler
     /// (e.g., inlining introduced a naming conflict).
     /// </summary>
     private static string? CheckForNamingErrors(
-        ImmutableDictionary<DeclQualifiedName, Stil4mElmSyntax7.Declaration> declarations,
+        ImmutableDictionary<DeclQualifiedName, ElmSyntaxAbstract.Declaration> declarations,
         string stageName)
     {
         var (errors, shadowings) =
             NamingErrorDetection.DetectNamingErrorsInFlatDict(
                 declarations.ToImmutableDictionary(
                     item => item.Key,
-                    item => Stil4mElmSyntax7.ToFullSyntaxModel.Convert(item.Value)));
+                    item => ElmSyntaxAbstract.ConvertToConcrete.ToDeclaration(item.Value)));
 
         return FormatNamingErrorProblems(errors, shadowings, stageName);
     }
@@ -2014,7 +1909,7 @@ public class ElmCompiler
     /// (e.g., lambda lifting introduced a naming conflict).
     /// </summary>
     private static string? CheckForNamingErrors(
-        IReadOnlyList<Stil4mElmSyntax7.File> modules,
+        IReadOnlyList<ElmSyntaxAbstract.File> modules,
         string stageName)
     {
         var flatDecls = FlattenModulesToDeclarationDictionary(modules);
@@ -2023,32 +1918,22 @@ public class ElmCompiler
     }
 
     /// <summary>
-    /// <see cref="OptimizedElmSyntaxDeclarations"/>-flavoured overload of
-    /// <see cref="CheckForSyntaxNodesDisallowedInOptimization(ImmutableDictionary{DeclQualifiedName, Stil4mElmSyntax7.Declaration}, string)"/>.
-    /// </summary>
-    private static string? CheckForSyntaxNodesDisallowedInOptimization(
-        OptimizedElmSyntaxDeclarations declarations,
-        string stageName) =>
-        CheckForSyntaxNodesDisallowedInOptimization(
-            ElmSyntaxAbstractConversion.ToDeclarationDictionary(
-                declarations.RenderAsFlatDictionary()),
-            stageName);
-
-    /// <summary>
     /// Checks that declarations do not contain syntax nodes that are disallowed in the
     /// optimization pipeline (e.g., lambda expressions and let-functions that should have
     /// been lifted to top-level functions).
     /// Returns an error message if any disallowed nodes are found, or null if clean.
     /// </summary>
     private static string? CheckForSyntaxNodesDisallowedInOptimization(
-        ImmutableDictionary<DeclQualifiedName, Stil4mElmSyntax7.Declaration> declarations,
+        ImmutableDictionary<DeclQualifiedName, ElmSyntaxAbstract.Declaration> declarations,
         string stageName)
     {
         var disallowedLocations = new List<(DeclQualifiedName DeclName, string Detail)>();
 
-        foreach (var (qualifiedName, decl) in declarations)
+        foreach (var (qualifiedName, abstractDecl) in declarations)
         {
-            Stil4mElmSyntax7.ReportSyntaxNodes.ReportViaCallback(
+            var decl = ElmSyntaxAbstract.ConvertToConcrete.ToDeclaration(abstractDecl);
+
+            SyntaxModelTypes.ReportSyntaxNodes.ReportViaCallback(
                 decl,
                 reportLambda:
                 _ =>
@@ -2105,7 +1990,7 @@ public class ElmCompiler
     /// Returns an error message if any disallowed nodes are found, or null if clean.
     /// </summary>
     private static string? CheckForSyntaxNodesDisallowedInOptimization(
-        IReadOnlyList<Stil4mElmSyntax7.File> modules,
+        IReadOnlyList<ElmSyntaxAbstract.File> modules,
         string stageName)
     {
         var flatDecls = FlattenModulesToDeclarationDictionary(modules);
@@ -2114,99 +1999,11 @@ public class ElmCompiler
     }
 
     /// <summary>
-    /// Checks that all <see cref="Stil4mElmSyntax7.Expression.FunctionOrValue"/>
-    /// references in <paramref name="declarations"/> are either fully
-    /// qualified (have a module name) or refer to a local binding.
-    /// Returns a human-readable error string aggregating up to the
-    /// first few violations, or <see langword="null"/> if every
-    /// declaration satisfies the invariant.
-    /// <para>
-    /// This is the post-stage formulation of the invariant enforced
-    /// in-line by <c>SnapshotTestFormat.RenderQualifiedDeclarations</c>
-    /// (via <c>ValidateFullyQualifiedReferences</c>). Running it as
-    /// part of <see cref="ValidateStage(OptimizedElmSyntaxDeclarations, string)"/>
-    /// catches a regression at the stage that introduced it, rather
-    /// than at the downstream rendering site of an unrelated test.
-    /// See §11.10 in
-    /// <c>explore/internal-analysis/2026-05-18-eliminate-higher-order-parameters-in-focused-tests.md</c>.
-    /// </para>
-    /// </summary>
-    private static string? CheckForUnqualifiedReferences(
-        ImmutableDictionary<DeclQualifiedName, Stil4mElmSyntax7.Declaration> declarations,
-        string stageName)
-    {
-        const int maxReportedViolations = 5;
-        List<string>? violations = null;
-
-        foreach (var (declName, decl) in declarations)
-        {
-            try
-            {
-                ElmSyntax.SnapshotTestFormat.ValidateFullyQualifiedReferences(declName, decl);
-            }
-            catch (InvalidOperationException ex)
-            {
-                violations ??= [];
-
-                if (violations.Count < maxReportedViolations)
-                    violations.Add(ex.Message);
-
-                else
-                {
-                    violations.Add("(further violations suppressed)");
-                    break;
-                }
-            }
-        }
-
-        if (violations is null)
-            return null;
-
-        return
-            stageName + " produced " + violations.Count +
-            " unqualified-reference invariant violation(s):\n" +
-            string.Join("\n", violations);
-    }
-
-    private static string? CheckForUnqualifiedReferences(
-        OptimizedElmSyntaxDeclarations declarations,
-        string stageName) =>
-        CheckForUnqualifiedReferences(
-            ElmSyntaxAbstractConversion.ToDeclarationDictionary(
-                declarations.RenderAsFlatDictionary()),
-            stageName);
-
-    /// <summary>
-    /// Runs the standard pair of post-stage validation checks
-    /// (<see cref="CheckForNamingErrors(OptimizedElmSyntaxDeclarations, string)"/> and
-    /// <see cref="CheckForSyntaxNodesDisallowedInOptimization(OptimizedElmSyntaxDeclarations, string)"/>)
-    /// against the supplied declarations and returns the first error message produced,
-    /// or <see langword="null"/> if both checks pass. Factored out of
-    /// <c>ApplyOptimizationPipelineWithStageResults</c> so each pipeline stage transition
-    /// reads as a single guard call instead of repeating the two-check boilerplate.
-    /// </summary>
-    private static string? ValidateStage(
-        OptimizedElmSyntaxDeclarations declarations,
-        string stageName)
-    {
-        if (CheckForNamingErrors(declarations, stageName) is { } namingErr)
-            return namingErr;
-
-        if (CheckForSyntaxNodesDisallowedInOptimization(declarations, stageName) is { } disallowedErr)
-            return disallowedErr;
-
-        if (CheckForUnqualifiedReferences(declarations, stageName) is { } unqualifiedErr)
-            return unqualifiedErr;
-
-        return null;
-    }
-
-    /// <summary>
     /// Module-list flavoured overload of
     /// <see cref="ValidateStage(OptimizedElmSyntaxDeclarations, string)"/>.
     /// </summary>
     private static string? ValidateStage(
-        IReadOnlyList<Stil4mElmSyntax7.File> modules,
+        IReadOnlyList<ElmSyntaxAbstract.File> modules,
         string stageName)
     {
         if (CheckForNamingErrors(modules, stageName) is { } namingErr)
@@ -2297,19 +2094,18 @@ public class ElmCompiler
     /// Flattens a list of modules into an immutable dictionary of declarations keyed by
     /// their fully qualified name.
     /// </summary>
-    internal static ImmutableDictionary<DeclQualifiedName, Stil4mElmSyntax7.Declaration>
+    internal static ImmutableDictionary<DeclQualifiedName, ElmSyntaxAbstract.Declaration>
         FlattenModulesToDeclarationDictionary(
-        IReadOnlyList<Stil4mElmSyntax7.File> modules)
+        IReadOnlyList<ElmSyntaxAbstract.File> modules)
     {
-        var builder = ImmutableDictionary.CreateBuilder<DeclQualifiedName, Stil4mElmSyntax7.Declaration>();
+        var builder = ImmutableDictionary.CreateBuilder<DeclQualifiedName, ElmSyntaxAbstract.Declaration>();
 
         foreach (var module in modules)
         {
-            var moduleName = Stil4mElmSyntax7.Module.GetModuleName(module.ModuleDefinition.Value).Value;
+            var moduleName = ElmSyntaxAbstract.Module.GetModuleName(module.ModuleDefinition);
 
-            foreach (var declNode in module.Declarations)
+            foreach (var decl in module.Declarations)
             {
-                var decl = declNode.Value;
                 var declName = GetDeclarationName(decl);
 
                 if (declName is null)
@@ -2327,6 +2123,51 @@ public class ElmCompiler
         return builder.ToImmutable();
     }
 
+    internal static ImmutableDictionary<DeclQualifiedName, ElmSyntaxAbstract.Declaration>
+        FilterFunctionDeclarationsToRootDependencies(
+        ImmutableDictionary<DeclQualifiedName, ElmSyntaxAbstract.Declaration> declarations,
+        IReadOnlySet<DeclQualifiedName> roots)
+    {
+        var includedFunctions = new HashSet<DeclQualifiedName>();
+
+        var pendingFunctions =
+            new Stack<DeclQualifiedName>(
+                roots
+                .Concat(TempIncludedRootDeclarations)
+                .Where(
+                    name =>
+                    declarations.TryGetValue(name, out var declaration) &&
+                    declaration is ElmSyntaxAbstract.Declaration.FunctionDeclaration));
+
+        while (pendingFunctions.TryPop(out var functionName))
+        {
+            if (!includedFunctions.Add(functionName))
+                continue;
+
+            var functionDeclaration =
+                (ElmSyntaxAbstract.Declaration.FunctionDeclaration)declarations[functionName];
+
+            foreach (var referencedName in
+                ElmSyntaxOptimization.CollectFunctionReferences(
+                    functionDeclaration.Function.Declaration.Expression))
+            {
+                if (declarations.TryGetValue(referencedName, out var referencedDeclaration) &&
+                    referencedDeclaration is ElmSyntaxAbstract.Declaration.FunctionDeclaration)
+                {
+                    pendingFunctions.Push(referencedName);
+                }
+            }
+        }
+
+        return
+            declarations
+            .Where(
+                declaration =>
+                declaration.Value is not ElmSyntaxAbstract.Declaration.FunctionDeclaration ||
+                includedFunctions.Contains(declaration.Key))
+            .ToImmutableDictionary();
+    }
+
     /// <summary>
     /// Builds a minimal set of module shells (one per distinct namespace appearing in
     /// <paramref name="flatDecls"/>) suitable as input to the per-module lambda-lifting
@@ -2335,11 +2176,11 @@ public class ElmCompiler
     /// order — imports, comments and exposing lists are left empty because the
     /// downstream stages do not consult them.
     /// </summary>
-    internal static List<Stil4mElmSyntax7.File> BuildModuleShellsFromFlatDeclarations(
-        ImmutableDictionary<DeclQualifiedName, Stil4mElmSyntax7.Declaration> flatDecls)
+    internal static List<ElmSyntaxAbstract.File> BuildModuleShellsFromFlatDeclarations(
+        ImmutableDictionary<DeclQualifiedName, ElmSyntaxAbstract.Declaration> flatDecls)
     {
         var declsByNamespace =
-            new Dictionary<IReadOnlyList<string>, List<KeyValuePair<DeclQualifiedName, Stil4mElmSyntax7.Declaration>>>(
+            new Dictionary<IReadOnlyList<string>, List<KeyValuePair<DeclQualifiedName, ElmSyntaxAbstract.Declaration>>>(
                 EnumerableExtensions.EqualityComparer<IReadOnlyList<string>>());
 
         foreach (var entry in flatDecls.OrderBy(kvp => kvp.Key))
@@ -2358,37 +2199,26 @@ public class ElmCompiler
             .OrderBy(ns => string.Join('.', ns), StringComparer.Ordinal)
             .ToList();
 
-        var result = new List<Stil4mElmSyntax7.File>(orderedNamespaces.Count);
+        var result = new List<ElmSyntaxAbstract.File>(orderedNamespaces.Count);
 
         foreach (var ns in orderedNamespaces)
         {
             var moduleDefinition =
-                new SyntaxModelTypes.Node<Stil4mElmSyntax7.Module>(
-                    ElmSyntaxTransformations.s_zeroRange,
-                    new Stil4mElmSyntax7.Module.NormalModule(
-                        new Stil4mElmSyntax7.DefaultModuleData(
-                            ModuleName: new SyntaxModelTypes.Node<IReadOnlyList<string>>(
-                                ElmSyntaxTransformations.s_zeroRange,
-                                ns),
-                            ExposingList: new SyntaxModelTypes.Node<Stil4mElmSyntax7.Exposing>(
-                                ElmSyntaxTransformations.s_zeroRange,
-                                new Stil4mElmSyntax7.Exposing.All(ElmSyntaxTransformations.s_zeroRange)))));
+                new ElmSyntaxAbstract.Module.NormalModule(
+                    new ElmSyntaxAbstract.DefaultModuleData(
+                        ModuleName: ns,
+                        ExposingList: new ElmSyntaxAbstract.Exposing.All()));
 
             var declarations =
                 declsByNamespace[ns]
-                .Select(
-                    kvp =>
-                    new SyntaxModelTypes.Node<Stil4mElmSyntax7.Declaration>(
-                        ElmSyntaxTransformations.s_zeroRange,
-                        kvp.Value))
+                .Select(kvp => kvp.Value)
                 .ToList();
 
             result.Add(
-                new Stil4mElmSyntax7.File(
+                new ElmSyntaxAbstract.File(
                     ModuleDefinition: moduleDefinition,
                     Imports: [],
-                    Declarations: declarations,
-                    Comments: []));
+                    Declarations: declarations));
         }
 
         return result;
@@ -2403,26 +2233,26 @@ public class ElmCompiler
     /// New declarations that were added by the pipeline (e.g., specializations) are appended
     /// to their respective module.
     /// </summary>
-    internal static List<Stil4mElmSyntax7.File> ReconstructModulesFromFlatDict(
-        ImmutableDictionary<DeclQualifiedName, Stil4mElmSyntax7.Declaration> flatDecls,
-        IReadOnlyList<Stil4mElmSyntax7.File> originalModules)
+    internal static List<ElmSyntaxAbstract.File> ReconstructModulesFromFlatDict(
+        ImmutableDictionary<DeclQualifiedName, ElmSyntaxAbstract.Declaration> flatDecls,
+        IReadOnlyList<ElmSyntaxAbstract.File> originalModules)
     {
         // Track which declarations from the flat dict we've placed into a module.
         var placedKeys = new HashSet<DeclQualifiedName>();
 
-        var result = new List<Stil4mElmSyntax7.File>(originalModules.Count);
+        var result = new List<ElmSyntaxAbstract.File>(originalModules.Count);
 
         foreach (var originalModule in originalModules)
         {
-            var moduleName = Stil4mElmSyntax7.Module.GetModuleName(originalModule.ModuleDefinition.Value).Value;
+            var moduleName = ElmSyntaxAbstract.Module.GetModuleName(originalModule.ModuleDefinition);
 
-            var newDeclarations = new List<SyntaxModelTypes.Node<Stil4mElmSyntax7.Declaration>>();
+            var newDeclarations = new List<ElmSyntaxAbstract.Declaration>();
 
             // Walk the original declarations in order, replacing function declarations
             // from the flat dict and keeping non-function declarations as-is.
-            foreach (var declNode in originalModule.Declarations)
+            foreach (var decl in originalModule.Declarations)
             {
-                var declName = GetDeclarationName(declNode.Value);
+                var declName = GetDeclarationName(decl);
 
                 if (declName is null)
                     continue;
@@ -2434,12 +2264,12 @@ public class ElmCompiler
 
                 if (flatDecls.TryGetValue(qualifiedName, out var replacementDecl))
                 {
-                    newDeclarations.Add(declNode with { Value = replacementDecl });
+                    newDeclarations.Add(replacementDecl);
                     placedKeys.Add(qualifiedName);
                     continue;
                 }
 
-                if (declNode.Value is Stil4mElmSyntax7.Declaration.FunctionDeclaration)
+                if (decl is ElmSyntaxAbstract.Declaration.FunctionDeclaration)
                 {
                     // Function declarations are only kept if appearing in the dependency tree from the entry points.
                     continue;
@@ -2447,7 +2277,7 @@ public class ElmCompiler
 
                 // Declaration not in the flat dict (e.g., was removed or is unknown type).
                 // Keep the original.
-                newDeclarations.Add(declNode);
+                newDeclarations.Add(decl);
             }
 
             // Append any new declarations for this module that weren't in the original.
@@ -2460,10 +2290,7 @@ public class ElmCompiler
 
             foreach (var (key, decl) in newModuleDecls)
             {
-                newDeclarations.Add(
-                    new SyntaxModelTypes.Node<Stil4mElmSyntax7.Declaration>(
-                        ElmSyntaxTransformations.s_zeroRange,
-                        decl));
+                newDeclarations.Add(decl);
 
                 placedKeys.Add(key);
             }
@@ -2481,23 +2308,23 @@ public class ElmCompiler
     /// <summary>
     /// Extracts the declaration name from a syntax declaration.
     /// </summary>
-    internal static string? GetDeclarationName(Stil4mElmSyntax7.Declaration decl) =>
+    internal static string? GetDeclarationName(ElmSyntaxAbstract.Declaration decl) =>
         decl switch
         {
-            Stil4mElmSyntax7.Declaration.FunctionDeclaration funcDecl =>
-            funcDecl.Function.Declaration.Value.Name.Value,
+            ElmSyntaxAbstract.Declaration.FunctionDeclaration funcDecl =>
+            funcDecl.Function.Declaration.Name,
 
-            Stil4mElmSyntax7.Declaration.CustomTypeDeclaration typeDecl =>
-            typeDecl.TypeDeclaration.Name.Value,
+            ElmSyntaxAbstract.Declaration.ChoiceTypeDeclaration typeDecl =>
+            typeDecl.TypeDeclaration.Name,
 
-            Stil4mElmSyntax7.Declaration.AliasDeclaration aliasDecl =>
-            aliasDecl.TypeAlias.Name.Value,
+            ElmSyntaxAbstract.Declaration.AliasDeclaration aliasDecl =>
+            aliasDecl.TypeAlias.Name,
 
-            Stil4mElmSyntax7.Declaration.PortDeclaration portDecl =>
-            portDecl.Signature.Name.Value,
+            ElmSyntaxAbstract.Declaration.PortDeclaration portDecl =>
+            portDecl.Signature.Name,
 
-            Stil4mElmSyntax7.Declaration.InfixDeclaration infixDecl =>
-            infixDecl.Infix.Operator.Value,
+            ElmSyntaxAbstract.Declaration.InfixDeclaration infixDecl =>
+            infixDecl.Infix.Operator,
 
             _ =>
             throw new NotImplementedException(

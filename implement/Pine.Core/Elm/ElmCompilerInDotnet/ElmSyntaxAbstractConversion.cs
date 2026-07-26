@@ -11,6 +11,9 @@ internal static class ElmSyntaxAbstractConversion
     public static Abstract.File FromFile(Concrete.File file) =>
         Abstract.ConvertFromConcrete.FromFile(Concrete.ToFullSyntaxModel.Convert(file));
 
+    public static Concrete.File ToFile(Abstract.File file) =>
+        Concrete.FromFullSyntaxModel.Convert(Abstract.ConvertToConcrete.FromFile(file));
+
     public static Abstract.Expression FromExpression(Concrete.Expression expression) =>
         Abstract.ConvertFromConcrete.FromExpression(Concrete.ToFullSyntaxModel.Convert(expression));
 

@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Linq;
 
 using SyntaxTypes = Pine.Core.Elm.ElmSyntax.Stil4mElmSyntax7;
+using Abstract = Pine.Core.Elm.ElmSyntax.ElmSyntaxAbstract;
 
 namespace Pine.Core.Elm.ElmCompilerInDotnet;
 
@@ -87,6 +88,19 @@ public static class LambdaLiftingValidator
     }
 
     /// <summary>
+    /// Abstract-model overload of
+    /// <see cref="Validate(SyntaxTypes.File, IReadOnlySet{string})"/>.
+    /// Bridges the abstract post-lifting file to the concrete model
+    /// consumed by the structural validator.
+    /// </summary>
+    public static void Validate(
+        Abstract.File module,
+        IReadOnlySet<string> liftedFunctionNames) =>
+        Validate(
+            ElmSyntaxAbstractConversion.ToFile(module),
+            liftedFunctionNames);
+
+    /// <summary>
     /// Convenience overload that treats every top-level function declared
     /// in <paramref name="module"/> as a candidate. Intended for tests that
     /// hand-construct post-lifting modules containing only lifter-emitted
@@ -122,6 +136,19 @@ public static class LambdaLiftingValidator
             throw new LambdaLiftingValidationException(violations);
         }
     }
+
+    /// <summary>
+    /// Abstract-model overload of
+    /// <see cref="Validate(IEnumerable{SyntaxTypes.Declaration}, IReadOnlySet{string})"/>.
+    /// Bridges the abstract per-module declaration slice to the concrete
+    /// model consumed by the structural validator.
+    /// </summary>
+    public static void Validate(
+        IEnumerable<Abstract.Declaration> declarations,
+        IReadOnlySet<string> liftedFunctionNames) =>
+        Validate(
+            declarations.Select(ElmSyntaxAbstractConversion.ToDeclaration),
+            liftedFunctionNames);
 
     /// <summary>
     /// Validates a per-module slice of post-lifting declarations and

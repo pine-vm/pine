@@ -955,7 +955,7 @@ public class BuiltinOperatorLoweringTests
             new[] { SyntaxTypes.FromFullSyntaxModel.Convert(parsedModule) };
 
         var canonicalizedModules =
-            Canonicalization.Canonicalize(parsedModules)
+            Canonicalization.Canonicalize([parsedModule])
             .Extract(err => throw new Exception("Failed canonicalization: " + err));
 
         var orderedCanonicalizedModules =
@@ -966,17 +966,27 @@ public class BuiltinOperatorLoweringTests
                 .Extract(err => throw new Exception("Module has errors: " + err)))
             .ToList();
 
-        var flatDecls = ElmCompiler.FlattenModulesToDeclarationDictionary(orderedCanonicalizedModules);
+        var orderedCanonicalizedModulesAbstract =
+            orderedCanonicalizedModules
+            .Select(Core.Elm.ElmSyntax.ElmSyntaxAbstract.ConvertFromConcrete.FromFile)
+            .ToList();
+
+        var flatDecls = ElmCompiler.FlattenModulesToDeclarationDictionary(orderedCanonicalizedModulesAbstract);
 
         var loweredDecls =
             BuiltinOperatorLowering.Apply(flatDecls)
             .Extract(err => throw new Exception("Failed builtin operator lowering: " + err));
 
-        var loweredModules = ElmCompiler.ReconstructModulesFromFlatDict(loweredDecls, orderedCanonicalizedModules);
+        var loweredModules =
+            ElmCompiler.ReconstructModulesFromFlatDict(
+                loweredDecls,
+                orderedCanonicalizedModulesAbstract);
 
-        return
+        var moduleAbstract =
             loweredModules
-            .Single(m => SyntaxTypes.Module.GetModuleName(m.ModuleDefinition.Value).Value.SequenceEqual(["Test"]));
+            .Single(m => Core.Elm.ElmSyntax.ElmSyntaxAbstract.Module.GetModuleName(m.ModuleDefinition).SequenceEqual(["Test"]));
+
+        return ElmSyntaxAbstractConversion.ToFile(moduleAbstract);
     }
 
     private static string RenderCanonicalized(SyntaxTypes.File module) =>

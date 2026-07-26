@@ -14,7 +14,7 @@ using System.Collections.Immutable;
 using System.Linq;
 using System.Text;
 
-using AbstractSyntaxTypes = Pine.Core.Elm.ElmSyntax.Stil4mElmSyntax7;
+using Stil4mElmSyntax7 = Pine.Core.Elm.ElmSyntax.Stil4mElmSyntax7;
 using ConcreteSyntaxTypes = Pine.Core.Elm.ElmSyntax.SyntaxModel;
 
 namespace Pine.Core.Tests.Elm.ElmCompilerInDotnet;
@@ -251,7 +251,7 @@ public class ElmCompilerTestHelper
             .ToImmutableArray();
 
         var parsedModulesBeforeCanonicalize =
-            new List<AbstractSyntaxTypes.File>();
+            new List<Stil4mElmSyntax7.File>();
 
         foreach (var moduleFile in elmModuleFiles)
         {
@@ -296,24 +296,27 @@ public class ElmCompilerTestHelper
 
         var lambdaLiftedModules =
             canonicalizedModules
-            .Select(LambdaLifting.LiftLambdas)
+            .Select(module =>
+                ElmSyntaxAbstractConversion.ToFile(
+                    LambdaLifting.LiftLambdas(
+                        ElmSyntaxAbstractConversion.FromFile(module))))
             .ToList();
 
         // Collect all functions
         var allFunctions =
-            new Dictionary<ConcreteSyntaxTypes.QualifiedNameRef, (string moduleName, string functionName, AbstractSyntaxTypes.Declaration.FunctionDeclaration declaration)>();
+            new Dictionary<ConcreteSyntaxTypes.QualifiedNameRef, (string moduleName, string functionName, Stil4mElmSyntax7.Declaration.FunctionDeclaration declaration)>();
 
         foreach (var elmModuleSyntax in lambdaLiftedModules)
         {
             var moduleName =
-                AbstractSyntaxTypes.Module.GetModuleName(elmModuleSyntax.ModuleDefinition.Value).Value;
+                Stil4mElmSyntax7.Module.GetModuleName(elmModuleSyntax.ModuleDefinition.Value).Value;
 
             var moduleNameFlattened = string.Join(".", moduleName);
 
             var declarations =
                 elmModuleSyntax.Declarations
                 .Select(declNode => declNode.Value)
-                .OfType<AbstractSyntaxTypes.Declaration.FunctionDeclaration>();
+                .OfType<Stil4mElmSyntax7.Declaration.FunctionDeclaration>();
 
             foreach (var declaration in declarations)
             {
@@ -330,9 +333,15 @@ public class ElmCompilerTestHelper
                 CompiledFunctionsCache: [],
                 PineKernelModuleNames: s_pineBuiltinModuleNamesDefault);
 
+        var allFunctionsAbstract =
+            allFunctions
+            .ToImmutableDictionary(
+                kvp => kvp.Key,
+                kvp => (kvp.Value.moduleName, kvp.Value.functionName, (Core.Elm.ElmSyntax.ElmSyntaxAbstract.Declaration.FunctionDeclaration)ElmSyntaxAbstractConversion.FromDeclaration(kvp.Value.declaration)));
+
         // Compute and return dependency layouts
         var (layouts, _, _) =
-            ElmCompiler.ComputeDependencyLayoutsAndSccs(allFunctions, initialContext);
+            ElmCompiler.ComputeDependencyLayoutsAndSccs(allFunctionsAbstract, initialContext);
 
         return layouts;
     }
@@ -649,7 +658,7 @@ public class ElmCompilerTestHelper
                 var abstractArguments =
                     funcDecl.Function.Declaration.Value.Arguments
                     .Select(
-                        arg => new Node<AbstractSyntaxTypes.Pattern>(
+                        arg => new Node<Stil4mElmSyntax7.Pattern>(
                             arg.Range,
                             FromFullSyntaxModel.Convert(arg.Value)))
                     .ToList();
@@ -675,7 +684,7 @@ public class ElmCompilerTestHelper
     }
 
     // Helper to extract a canonicalized module by name from the result dictionary
-    public static AbstractSyntaxTypes.File GetCanonicalizedModule(
+    public static Stil4mElmSyntax7.File GetCanonicalizedModule(
         Result<string, IReadOnlyDictionary<IReadOnlyList<string>, Result<string, ConcreteSyntaxTypes.File>>> canonicalizeResult,
         string[] moduleName)
     {
@@ -699,7 +708,7 @@ public class ElmCompilerTestHelper
         return FromFullSyntaxModel.Convert(concreteFile with { Imports = [] });
     }
 
-    public static AbstractSyntaxTypes.File CanonicalizeAndGetSingleModule(
+    public static Stil4mElmSyntax7.File CanonicalizeAndGetSingleModule(
         IReadOnlyList<string> elmModulesTexts,
         IReadOnlyList<string> moduleName)
     {

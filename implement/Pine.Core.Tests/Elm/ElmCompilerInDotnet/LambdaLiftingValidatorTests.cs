@@ -41,8 +41,13 @@ public class LambdaLiftingValidatorTests
         return FromFullSyntaxModel.Convert(concreteSyntax);
     }
 
+    // Lambda lifting operates on the abstract syntax model after canonicalization.
+    // Bridge the concrete parse result to the abstract model, lift, then bridge back
+    // to the concrete model so the concrete validator/inspection can be reused.
     private static File ParseAndLift(string moduleText) =>
-        LambdaLifting.LiftLambdas(ParseModuleText(moduleText));
+        ElmSyntaxAbstractConversion.ToFile(
+            LambdaLifting.LiftLambdas(
+                ElmSyntaxAbstractConversion.FromFile(ParseModuleText(moduleText))));
 
     [Fact]
     public void Validator_accepts_simplest_closure_lifted_output()
