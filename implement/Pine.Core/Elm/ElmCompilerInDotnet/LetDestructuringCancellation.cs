@@ -1,13 +1,9 @@
 using Pine.Core.CodeAnalysis;
-using Pine.Core.Elm.ElmSyntax.SyntaxModel;
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 
-using SyntaxTypes = Pine.Core.Elm.ElmSyntax.Stil4mElmSyntax7;
-
-// Alias to avoid ambiguity with System.Range.
-using Range = Pine.Core.Elm.ElmSyntax.SyntaxModel.Range;
+using SyntaxTypes = Pine.Core.Elm.ElmSyntax.ElmSyntaxAbstract;
 
 namespace Pine.Core.Elm.ElmCompilerInDotnet;
 
@@ -48,23 +44,23 @@ namespace Pine.Core.Elm.ElmCompilerInDotnet;
 /// The peephole only fires when:
 /// </para>
 /// <list type="bullet">
-///   <item>The destructure pattern peels to a
+///   <item>The destructure pattern is a
 ///   <see cref="SyntaxTypes.Pattern.NamedPattern"/> with no
-///   <see cref="SyntaxTypes.Pattern.AsPattern"/> aliases at the level
+///   <see cref="SyntaxTypes.Pattern.AsPattern"/> alias at the level
 ///   that would be removed (otherwise the alias binding would silently
 ///   disappear).</item>
 ///   <item>The RHS expression deconstructs as a constructor
 ///   application via
-///   <see cref="ElmSyntaxTransformations.TryDeconstructConstructorApplication(SyntaxTypes.Expression)"/>.</item>
+///   <see cref="ElmSyntaxAbstractTransformations.TryDeconstructConstructorApplication(SyntaxTypes.Expression)"/>.</item>
 ///   <item>The constructor names are equivalent
-///   (<see cref="ElmSyntaxTransformations.AreEquivalentConstructorNames(SyntaxTypes.QualifiedNameRef, SyntaxTypes.QualifiedNameRef)"/>)
+///   (<see cref="ElmSyntaxAbstractTransformations.AreEquivalentConstructorNames(SyntaxTypes.QualifiedNameRef, DeclQualifiedName)"/>)
 ///   and the argument arities match.</item>
 /// </list>
 ///
 /// <para>
-/// On a successful match, the single <see cref="SyntaxTypes.Expression.LetDeclaration.LetDestructuring"/>
+/// On a successful match, the single <see cref="SyntaxTypes.LetDeclaration.LetDestructuring"/>
 /// declaration is replaced by N sibling
-/// <see cref="SyntaxTypes.Expression.LetDeclaration.LetDestructuring"/>
+/// <see cref="SyntaxTypes.LetDeclaration.LetDestructuring"/>
 /// declarations — one per constructor argument — preserving any names
 /// bound by the inner sub-patterns. Zero-arity constructors (e.g.
 /// <c>Nothing = Nothing</c>) elide the binding entirely. The
@@ -74,10 +70,6 @@ namespace Pine.Core.Elm.ElmCompilerInDotnet;
 /// </summary>
 internal static class LetDestructuringCancellation
 {
-    private static readonly Location s_zeroLoc = new(Row: 0, Column: 0);
-
-    private static readonly Range s_zeroRange = new(Start: s_zeroLoc, End: s_zeroLoc);
-
     /// <summary>
     /// <see cref="OptimizedElmSyntaxDeclarations"/>-flavoured overload of
     /// <see cref="RewriteDeclarationDictionary(ImmutableDictionary{DeclQualifiedName, SyntaxTypes.Declaration})"/>.
@@ -113,32 +105,21 @@ internal static class LetDestructuringCancellation
         {
             case SyntaxTypes.Declaration.FunctionDeclaration funcDecl:
                 {
-                    var impl = funcDecl.Function.Declaration.Value;
+                    var impl = funcDecl.Function.Declaration;
 
-                    var newBody = RewriteExpression(impl.Expression.Value);
+                    var newBody = RewriteExpression(impl.Expression);
 
-                    if (ReferenceEquals(newBody, impl.Expression.Value))
+                    if (ReferenceEquals(newBody, impl.Expression))
                         return decl;
 
-                    var newImpl =
-                        impl with
-                        {
-                            Expression = new Node<SyntaxTypes.Expression>(impl.Expression.Range, newBody),
-                        };
+                    var newImpl = impl with { Expression = newBody };
 
-                    var newFunc =
-                        funcDecl.Function with
-                        {
-                            Declaration =
-                            new Node<SyntaxTypes.FunctionImplementation>(
-                                funcDecl.Function.Declaration.Range,
-                                newImpl),
-                        };
+                    var newFunc = funcDecl.Function with { Declaration = newImpl };
 
                     return new SyntaxTypes.Declaration.FunctionDeclaration(newFunc);
                 }
 
-            case SyntaxTypes.Declaration.CustomTypeDeclaration:
+            case SyntaxTypes.Declaration.ChoiceTypeDeclaration:
             case SyntaxTypes.Declaration.AliasDeclaration:
             case SyntaxTypes.Declaration.PortDeclaration:
             case SyntaxTypes.Declaration.InfixDeclaration:
@@ -154,7 +135,7 @@ internal static class LetDestructuringCancellation
     /// <summary>
     /// Bottom-up rewrite over an expression tree. Recurses into all
     /// children first via
-    /// <see cref="ElmSyntaxTransformations.MapChildExpressions"/>, then
+    /// <see cref="ElmSyntaxAbstractTransformations.MapChildExpressions"/>, then
     /// applies <see cref="TryCancelLocal"/> at the current node. If the
     /// local rewrite fires, the result is re-rewritten to allow
     /// cascading cancellations (e.g. when peeling exposes another
@@ -165,18 +146,18 @@ internal static class LetDestructuringCancellation
     {
         var anyChildChanged = false;
 
-        Node<SyntaxTypes.Expression> RecurseNode(Node<SyntaxTypes.Expression> child)
+        SyntaxTypes.Expression RecurseChild(SyntaxTypes.Expression child)
         {
-            var rewrittenChild = RewriteExpression(child.Value);
+            var rewrittenChild = RewriteExpression(child);
 
-            if (ReferenceEquals(rewrittenChild, child.Value))
+            if (ReferenceEquals(rewrittenChild, child))
                 return child;
 
             anyChildChanged = true;
-            return new Node<SyntaxTypes.Expression>(child.Range, rewrittenChild);
+            return rewrittenChild;
         }
 
-        var withChildrenRewritten = ElmSyntaxTransformations.MapChildExpressions(expr, RecurseNode);
+        var withChildrenRewritten = ElmSyntaxAbstractTransformations.MapChildExpressions(expr, RecurseChild);
 
         var afterChildRecursion = anyChildChanged ? withChildrenRewritten : expr;
 
@@ -193,7 +174,7 @@ internal static class LetDestructuringCancellation
     /// <summary>
     /// Pure local peephole: returns a non-null rewritten
     /// <see cref="SyntaxTypes.Expression.LetExpression"/> iff at least
-    /// one of its <see cref="SyntaxTypes.Expression.LetDeclaration.LetDestructuring"/>
+    /// one of its <see cref="SyntaxTypes.LetDeclaration.LetDestructuring"/>
     /// declarations matches the cancellation shape. Does NOT recurse
     /// into children — call <see cref="RewriteExpression"/> for the
     /// full bottom-up walk.
@@ -204,19 +185,19 @@ internal static class LetDestructuringCancellation
         if (expr is not SyntaxTypes.Expression.LetExpression letExpr)
             return null;
 
-        var originalDecls = letExpr.Value.Declarations;
+        var originalDecls = letExpr.Declarations;
 
-        var newDecls = new List<Node<SyntaxTypes.Expression.LetDeclaration>>(capacity: originalDecls.Count);
+        var newDecls = new List<SyntaxTypes.LetDeclaration>(capacity: originalDecls.Count);
 
         var anyChanged = false;
 
         for (var i = 0; i < originalDecls.Count; i++)
         {
-            var declNode = originalDecls[i];
+            var declaration = originalDecls[i];
 
-            if (declNode.Value is not SyntaxTypes.Expression.LetDeclaration.LetDestructuring letDestr)
+            if (declaration is not SyntaxTypes.LetDeclaration.LetDestructuring letDestr)
             {
-                newDecls.Add(declNode);
+                newDecls.Add(declaration);
                 continue;
             }
 
@@ -224,7 +205,7 @@ internal static class LetDestructuringCancellation
 
             if (cancelled is null)
             {
-                newDecls.Add(declNode);
+                newDecls.Add(declaration);
                 continue;
             }
 
@@ -240,31 +221,26 @@ internal static class LetDestructuringCancellation
         // directly. Otherwise re-emit the LetExpression with the
         // rewritten declaration list.
         if (newDecls.Count is 0)
-            return letExpr.Value.Expression.Value;
+            return letExpr.Expression;
 
-        return
-            new SyntaxTypes.Expression.LetExpression(
-                new SyntaxTypes.Expression.LetBlock(
-                    Declarations: newDecls,
-                    Expression: letExpr.Value.Expression));
+        return new SyntaxTypes.Expression.LetExpression(newDecls, letExpr.Expression);
     }
 
     /// <summary>
     /// Attempts to cancel a single
-    /// <see cref="SyntaxTypes.Expression.LetDeclaration.LetDestructuring"/>.
+    /// <see cref="SyntaxTypes.LetDeclaration.LetDestructuring"/>.
     /// Returns the replacement declarations (possibly empty for a
     /// zero-arity elision, possibly N declarations for N-arg
     /// cancellation) on success; <see langword="null"/> when no
     /// cancellation applies.
     /// </summary>
-    private static IReadOnlyList<Node<SyntaxTypes.Expression.LetDeclaration>>? TryCancelLetDestructuring(
-        SyntaxTypes.Expression.LetDeclaration.LetDestructuring letDestr)
+    private static IReadOnlyList<SyntaxTypes.LetDeclaration>? TryCancelLetDestructuring(
+        SyntaxTypes.LetDeclaration.LetDestructuring letDestr)
     {
-        // The pattern at the LetDestructuring node may be wrapped in
-        // ParenthesizedPattern; an AsPattern at this level would bind
-        // an alias name that we cannot drop, so we refuse to cancel in
-        // that case (the alias would silently disappear).
-        var topPattern = SyntaxTypes.SyntaxAnalysis.UnwrapParenthesized(letDestr.Pattern.Value);
+        // An AsPattern at this level would bind an alias name that we
+        // cannot drop, so we refuse to cancel in that case (the alias
+        // would silently disappear).
+        var topPattern = letDestr.Pattern;
 
         if (topPattern is SyntaxTypes.Pattern.AsPattern)
             return null;
@@ -273,12 +249,12 @@ internal static class LetDestructuringCancellation
             return null;
 
         var ctorApp =
-            ElmSyntaxTransformations.TryDeconstructConstructorApplication(letDestr.Expression.Value);
+            ElmSyntaxAbstractTransformations.TryDeconstructConstructorApplication(letDestr.Expression);
 
         if (ctorApp is null)
             return null;
 
-        if (!ElmSyntaxTransformations.AreEquivalentConstructorNames(namedPattern.Name, ctorApp.ConstructorName))
+        if (!ElmSyntaxAbstractTransformations.AreEquivalentConstructorNames(namedPattern.Name, ctorApp.ConstructorName))
             return null;
 
         if (namedPattern.Arguments.Count != ctorApp.FieldExpressions.Count)
@@ -287,33 +263,21 @@ internal static class LetDestructuringCancellation
         // Cancellation applies. Emit N sibling LetDestructuring
         // declarations — one per constructor argument. Skip
         // AllPattern arguments (which bind no names).
-        var result = new List<Node<SyntaxTypes.Expression.LetDeclaration>>(capacity: namedPattern.Arguments.Count);
+        var result = new List<SyntaxTypes.LetDeclaration>(capacity: namedPattern.Arguments.Count);
 
         for (var i = 0; i < namedPattern.Arguments.Count; i++)
         {
             var argPattern = namedPattern.Arguments[i];
             var argExpr = ctorApp.FieldExpressions[i];
 
-            var peeledArgPattern = SyntaxTypes.SyntaxAnalysis.UnwrapParenthesized(argPattern.Value);
-
             // A wildcard pattern binds nothing — elide the let entirely.
-            if (peeledArgPattern is SyntaxTypes.Pattern.AllPattern)
+            if (argPattern is SyntaxTypes.Pattern.AllPattern)
                 continue;
 
-            var newLetDestr =
-                new SyntaxTypes.Expression.LetDeclaration.LetDestructuring(
-                    Pattern: argPattern,
-                    Expression: argExpr);
-
-            // Use the constructor-argument expression's range as the
-            // surrounding LetDeclaration range. Using s_zeroRange here
-            // confuses the snapshot formatter's SpansMultipleRows
-            // heuristic (which compares row numbers across child
-            // nodes), producing spurious multi-line layouts for what
-            // is structurally a one-line decl. The argument expression
-            // already carries an accurate parsed range.
             result.Add(
-                new Node<SyntaxTypes.Expression.LetDeclaration>(argExpr.Range, newLetDestr));
+                new SyntaxTypes.LetDeclaration.LetDestructuring(
+                    Pattern: argPattern,
+                    Expression: argExpr));
         }
 
         return result;

@@ -60,14 +60,12 @@ public static class OptimizedRuntimeBehaviorVerification
     public static void VerifyOptimizedRuntimeBehavior(
         IReadOnlyList<string> elmModuleTexts,
         IReadOnlyList<DeclQualifiedName> entryPoints,
-        IReadOnlyList<KeyValuePair<string, string>> usages,
-        int maxOptimizationRounds = 2)
+        IReadOnlyList<KeyValuePair<string, string>> usages)
     {
         var framework =
             CompareInterpreterWithIntermediateVM.Prepare(
                 elmModuleTexts: elmModuleTexts,
-                entryPoints: entryPoints,
-                maxOptimizationRounds: maxOptimizationRounds);
+                entryPoints: entryPoints);
 
         VerifyWithFramework(
             framework,
@@ -86,15 +84,13 @@ public static class OptimizedRuntimeBehaviorVerification
         FileTree appCodeTree,
         IReadOnlyList<IReadOnlyList<string>> rootFilePaths,
         IReadOnlyList<DeclQualifiedName> entryPoints,
-        IReadOnlyList<KeyValuePair<string, string>> usages,
-        int maxOptimizationRounds = 2)
+        IReadOnlyList<KeyValuePair<string, string>> usages)
     {
         var framework =
             CompareInterpreterWithIntermediateVM.Prepare(
                 appCodeTree: appCodeTree,
                 rootFilePaths: rootFilePaths,
-                entryPoints: entryPoints,
-                maxOptimizationRounds: maxOptimizationRounds);
+                entryPoints: entryPoints);
 
         VerifyWithFramework(
             framework,

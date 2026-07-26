@@ -2,14 +2,14 @@ using Pine.Core.CodeAnalysis;
 using System;
 using System.Collections.Immutable;
 
-using SyntaxTypes = Pine.Core.Elm.ElmSyntax.Stil4mElmSyntax7;
+using SyntaxTypes = Pine.Core.Elm.ElmSyntax.ElmSyntaxAbstract;
 
 namespace Pine.Core.Elm.ElmCompilerInDotnet;
 
 /// <summary>
 /// Application-normalization glue: rewrites every <see cref="SyntaxTypes.Expression.Application"/>
 /// so that no Application has another Application as its head, via
-/// <see cref="ElmSyntaxTransformations.FlattenAllNestedApplicationHeads"/>.
+/// <see cref="ElmSyntaxAbstractTransformations.FlattenAllNestedApplicationHeads"/>.
 /// Extracted as a sibling partial-class file of <see cref="ElmSyntaxOptimization"/> so the
 /// driver/specialization/inlining file is not also responsible for this small,
 /// independently-callable rewrite.
@@ -24,12 +24,13 @@ public partial class ElmSyntaxOptimization
         NormalizeApplicationsInDeclarationDictionary(
         OptimizedElmSyntaxDeclarations declarations) =>
         OptimizedElmSyntaxDeclarations.FromFlatDictionary(
-            NormalizeApplicationsInDeclarationDictionary(declarations.RenderAsFlatDictionary()));
+            NormalizeApplicationsInDeclarationDictionary(
+                declarations.RenderAsFlatDictionary()));
 
     /// <summary>
     /// Returns a copy of <paramref name="declarations"/> where every
     /// expression body has been rewritten with
-    /// <see cref="ElmSyntaxTransformations.FlattenAllNestedApplicationHeads"/>
+    /// <see cref="ElmSyntaxAbstractTransformations.FlattenAllNestedApplicationHeads"/>
     /// so that no <see cref="SyntaxTypes.Expression.Application"/> in the
     /// output has another <see cref="SyntaxTypes.Expression.Application"/>
     /// as its head. See the helper's documentation for why this matters
@@ -60,7 +61,7 @@ public partial class ElmSyntaxOptimization
 
             // Type/alias/port/infix declarations contain no expression bodies
             // that can host nested Application form.
-            SyntaxTypes.Declaration.CustomTypeDeclaration or
+            SyntaxTypes.Declaration.ChoiceTypeDeclaration or
             SyntaxTypes.Declaration.AliasDeclaration or
             SyntaxTypes.Declaration.PortDeclaration or
             SyntaxTypes.Declaration.InfixDeclaration =>
@@ -76,10 +77,9 @@ public partial class ElmSyntaxOptimization
     private static SyntaxTypes.FunctionStruct NormalizeApplicationsInFunction(
         SyntaxTypes.FunctionStruct function)
     {
-        var declValue = function.Declaration.Value;
-
         var rewrittenBody =
-            ElmSyntaxTransformations.FlattenAllNestedApplicationHeads(declValue.Expression);
+            ElmSyntaxAbstractTransformations.FlattenAllNestedApplicationHeads(
+                function.Declaration.Expression);
 
         return
             function with
@@ -87,11 +87,7 @@ public partial class ElmSyntaxOptimization
                 Declaration =
                 function.Declaration with
                 {
-                    Value =
-                    declValue with
-                    {
-                        Expression = rewrittenBody
-                    }
+                    Expression = rewrittenBody
                 }
             };
     }

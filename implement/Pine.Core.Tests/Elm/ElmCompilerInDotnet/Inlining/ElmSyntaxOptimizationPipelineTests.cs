@@ -143,7 +143,8 @@ public class ElmSyntaxOptimizationPipelineTests
 
         var specializedDecls =
             ElmSyntaxOptimization.SpecializeDeclarations(
-                OptimizedElmSyntaxDeclarations.FromFlatDictionary(flatDecls),
+                OptimizedElmSyntaxDeclarations.FromFlatDictionary(
+                    InliningTestHelper.ToAbstract(flatDecls)),
                 config)
             .Extract(err => throw new System.Exception("Failed specialization: " + err));
 
@@ -152,7 +153,10 @@ public class ElmSyntaxOptimizationPipelineTests
             .Extract(err => throw new System.Exception("Failed inlining stage: " + err))
             .RenderAsFlatDictionary();
 
-        var resultModules = ElmCompiler.ReconstructModulesFromFlatDict(inlinedDecls, orderedModules);
+        var resultModules =
+            ElmCompiler.ReconstructModulesFromFlatDict(
+                InliningTestHelper.ToStil4m(inlinedDecls),
+                orderedModules);
 
         return
             resultModules

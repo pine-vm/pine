@@ -1,9 +1,10 @@
 using AwesomeAssertions;
+using Pine.Core.CodeAnalysis;
 using Pine.Core.Elm.ElmCompilerInDotnet;
 using System.Collections.Generic;
 using Xunit;
 
-using SyntaxTypes = Pine.Core.Elm.ElmSyntax.Stil4mElmSyntax7;
+using SyntaxTypes = Pine.Core.Elm.ElmSyntax.ElmSyntaxAbstract;
 
 namespace Pine.Core.Tests.Elm.ElmCompilerInDotnet.Inlining;
 
@@ -13,15 +14,17 @@ namespace Pine.Core.Tests.Elm.ElmCompilerInDotnet.Inlining;
 /// emits Pine code in <see cref="ExpressionCompiler.CompileApplication"/>).
 /// 
 /// <para>
-/// Background: the Elm syntax type <see cref="SyntaxTypes.Expression.Application"/>
-/// is a single flat list <c>[head, arg1, arg2, ...]</c>. The parser emits
-/// a flat list from source like <c>f a b c</c>. However, several
+/// Background: in the abstract syntax model an
+/// <see cref="SyntaxTypes.Expression.Application"/> carries a dedicated head in its
+/// <see cref="SyntaxTypes.Expression.Application.Function"/> field plus an
+/// <see cref="SyntaxTypes.Expression.Application.Arguments"/> list, so the natural form of
+/// <c>f a b c</c> is <c>Application(f, [a, b, c])</c>. However, several
 /// transformations that <em>build</em> an Application from pieces
 /// (most notably the pipe-operator desugaring inside
 /// <see cref="ElmSyntaxOptimization.InlineApplication"/>, but also any substitution
 /// that replaces a function reference by an Application-typed expression)
 /// can produce nested form
-/// <c>Application[Application[h, a], b]</c> when the head provided to
+/// <c>Application(Application(h, [a]), [b])</c> when the head provided to
 /// the new Application is itself an Application. Both forms render
 /// identically (<c>h a b</c>) in the snapshot output, but they compile
 /// differently:
@@ -29,12 +32,12 @@ namespace Pine.Core.Tests.Elm.ElmCompilerInDotnet.Inlining;
 /// 
 /// <list type="bullet">
 /// <item>
-/// Flat form (<c>Application[h, a, b]</c>): when <c>h</c> is a
+/// Flat form (<c>Application(h, [a, b])</c>): when <c>h</c> is a
 /// statically-known top-level function with arity 2, the call hits the
 /// fast direct-call path and no closure is allocated.
 /// </item>
 /// <item>
-/// Nested form (<c>Application[Application[h, a], b]</c>): the inner
+/// Nested form (<c>Application(Application(h, [a]), [b])</c>): the inner
 /// Application is recognized as a partial application of <c>h</c> with
 /// arity 2 and only one supplied argument, forcing
 /// <see cref="CodeGen.FunctionValueBuilder"/>
@@ -55,19 +58,20 @@ public class NestedApplicationFlatteningTests
 {
     /// <summary>
     /// Counts every <see cref="SyntaxTypes.Expression.Application"/> node
-    /// in the module whose first argument (head position) is itself an
-    /// <see cref="SyntaxTypes.Expression.Application"/> after
-    /// parenthesis unwrapping.
+    /// across the declarations whose head
+    /// (<see cref="SyntaxTypes.Expression.Application.Function"/>) is itself an
+    /// <see cref="SyntaxTypes.Expression.Application"/>.
     /// </summary>
-    private static int CountNestedApplicationHeads(SyntaxTypes.File module)
+    private static int CountNestedApplicationHeads(
+        IReadOnlyDictionary<DeclQualifiedName, SyntaxTypes.Declaration> declarations)
     {
         var count = 0;
 
-        foreach (var declNode in module.Declarations)
+        foreach (var decl in declarations.Values)
         {
-            if (declNode.Value is SyntaxTypes.Declaration.FunctionDeclaration funcDecl)
+            if (decl is SyntaxTypes.Declaration.FunctionDeclaration funcDecl)
             {
-                CountInExpression(funcDecl.Function.Declaration.Value.Expression.Value, ref count);
+                CountInExpression(funcDecl.Function.Declaration.Expression, ref count);
             }
         }
 
@@ -76,14 +80,10 @@ public class NestedApplicationFlatteningTests
 
     private static void CountInExpression(SyntaxTypes.Expression expr, ref int count)
     {
-        if (expr is SyntaxTypes.Expression.Application app && app.Arguments.Count >= 2)
+        if (expr is SyntaxTypes.Expression.Application app &&
+            app.Function is SyntaxTypes.Expression.Application)
         {
-            var head = UnwrapParens(app.Arguments[0].Value);
-
-            if (head is SyntaxTypes.Expression.Application)
-            {
-                count++;
-            }
+            count++;
         }
 
         foreach (var child in EnumerateChildExpressions(expr))
@@ -92,105 +92,92 @@ public class NestedApplicationFlatteningTests
         }
     }
 
-    private static SyntaxTypes.Expression UnwrapParens(SyntaxTypes.Expression expr)
-    {
-        while (expr is SyntaxTypes.Expression.ParenthesizedExpression paren)
-        {
-            expr = paren.Expression.Value;
-        }
-
-        return expr;
-    }
-
     private static IEnumerable<SyntaxTypes.Expression> EnumerateChildExpressions(SyntaxTypes.Expression expr)
     {
         switch (expr)
         {
             case SyntaxTypes.Expression.Application app:
+                yield return app.Function;
+
                 foreach (var arg in app.Arguments)
-                    yield return arg.Value;
+                    yield return arg;
 
                 break;
 
             case SyntaxTypes.Expression.OperatorApplication opApp:
-                yield return opApp.Left.Value;
-                yield return opApp.Right.Value;
+                yield return opApp.Left;
+                yield return opApp.Right;
                 break;
 
             case SyntaxTypes.Expression.IfBlock ifBlock:
-                yield return ifBlock.Condition.Value;
-                yield return ifBlock.ThenBlock.Value;
-                yield return ifBlock.ElseBlock.Value;
-                break;
-
-            case SyntaxTypes.Expression.ParenthesizedExpression paren:
-                yield return paren.Expression.Value;
+                yield return ifBlock.Condition;
+                yield return ifBlock.ThenBlock;
+                yield return ifBlock.ElseBlock;
                 break;
 
             case SyntaxTypes.Expression.Negation neg:
-                yield return neg.Expression.Value;
+                yield return neg.Expression;
                 break;
 
             case SyntaxTypes.Expression.ListExpr listExpr:
                 foreach (var item in listExpr.Elements)
-                    yield return item.Value;
+                    yield return item;
 
                 break;
 
             case SyntaxTypes.Expression.TupledExpression tupled:
                 foreach (var item in tupled.Elements)
-                    yield return item.Value;
+                    yield return item;
 
                 break;
 
             case SyntaxTypes.Expression.LambdaExpression lambda:
-                yield return lambda.Lambda.Expression.Value;
+                yield return lambda.Expression;
                 break;
 
             case SyntaxTypes.Expression.LetExpression letExpr:
-                foreach (var letDecl in letExpr.Value.Declarations)
+                foreach (var letDecl in letExpr.Declarations)
                 {
-                    if (letDecl.Value is SyntaxTypes.Expression.LetDeclaration.LetFunction letFn)
-                        yield return letFn.Function.Declaration.Value.Expression.Value;
+                    if (letDecl is SyntaxTypes.LetDeclaration.LetFunction letFn)
+                        yield return letFn.Function.Declaration.Expression;
 
-                    if (letDecl.Value is SyntaxTypes.Expression.LetDeclaration.LetDestructuring letDestr)
-                        yield return letDestr.Expression.Value;
+                    if (letDecl is SyntaxTypes.LetDeclaration.LetDestructuring letDestr)
+                        yield return letDestr.Expression;
                 }
 
-                yield return letExpr.Value.Expression.Value;
+                yield return letExpr.Expression;
                 break;
 
             case SyntaxTypes.Expression.CaseExpression caseExpr:
-                yield return caseExpr.CaseBlock.Expression.Value;
+                yield return caseExpr.Expression;
 
-                foreach (var caseItem in caseExpr.CaseBlock.Cases)
-                    yield return caseItem.Expression.Value;
+                foreach (var caseItem in caseExpr.Cases)
+                    yield return caseItem.Expression;
 
                 break;
 
             case SyntaxTypes.Expression.RecordExpr rec:
                 foreach (var field in rec.Fields)
-                    yield return field.Value.valueExpr.Value;
+                    yield return field.Value;
 
                 break;
 
             case SyntaxTypes.Expression.RecordAccess access:
-                yield return access.Record.Value;
+                yield return access.Record;
                 break;
 
             case SyntaxTypes.Expression.RecordUpdateExpression upd:
                 foreach (var field in upd.Fields)
-                    yield return field.Value.valueExpr.Value;
+                    yield return field.Value;
 
                 break;
 
             // Leaves — no child expressions.
             case SyntaxTypes.Expression.UnitExpr:
-            case SyntaxTypes.Expression.Literal:
+            case SyntaxTypes.Expression.StringLiteral:
             case SyntaxTypes.Expression.CharLiteral:
             case SyntaxTypes.Expression.Integer:
-            case SyntaxTypes.Expression.Hex:
-            case SyntaxTypes.Expression.Floatable:
+            case SyntaxTypes.Expression.FloatLiteral:
             case SyntaxTypes.Expression.FunctionOrValue:
             case SyntaxTypes.Expression.PrefixOperator:
             case SyntaxTypes.Expression.RecordAccessFunction:
@@ -246,13 +233,12 @@ public class NestedApplicationFlatteningTests
                     |> mapTwice double increment
             """";
 
-        var module =
-            InliningTestHelper.CanonicalizeAndInlineAndGetSingleModule(
+        var declarations =
+            InliningTestHelper.CanonicalizeAndInlineToAbstractDeclarations(
                 [elmModuleText],
-                ["App"],
                 ElmSyntaxOptimization.Config.OnlyFunctions);
 
-        var nestedHeadCount = CountNestedApplicationHeads(module);
+        var nestedHeadCount = CountNestedApplicationHeads(declarations);
 
         nestedHeadCount.Should().Be(
             0,
@@ -298,13 +284,12 @@ public class NestedApplicationFlatteningTests
                 mapTwice double increment <| input
             """";
 
-        var module =
-            InliningTestHelper.CanonicalizeAndInlineAndGetSingleModule(
+        var declarations =
+            InliningTestHelper.CanonicalizeAndInlineToAbstractDeclarations(
                 [elmModuleText],
-                ["App"],
                 ElmSyntaxOptimization.Config.OnlyFunctions);
 
-        var nestedHeadCount = CountNestedApplicationHeads(module);
+        var nestedHeadCount = CountNestedApplicationHeads(declarations);
 
         nestedHeadCount.Should().Be(
             0,
@@ -352,13 +337,12 @@ public class NestedApplicationFlatteningTests
                 partial input
             """";
 
-        var module =
-            InliningTestHelper.CanonicalizeAndInlineAndGetSingleModule(
+        var declarations =
+            InliningTestHelper.CanonicalizeAndInlineToAbstractDeclarations(
                 [elmModuleText],
-                ["App"],
                 ElmSyntaxOptimization.Config.OnlyFunctions);
 
-        var nestedHeadCount = CountNestedApplicationHeads(module);
+        var nestedHeadCount = CountNestedApplicationHeads(declarations);
 
         nestedHeadCount.Should().Be(
             0,
@@ -400,13 +384,12 @@ public class NestedApplicationFlatteningTests
                 mapTwice double increment input
             """";
 
-        var module =
-            InliningTestHelper.CanonicalizeAndInlineAndGetSingleModule(
+        var declarations =
+            InliningTestHelper.CanonicalizeAndInlineToAbstractDeclarations(
                 [elmModuleText],
-                ["App"],
                 ElmSyntaxOptimization.Config.OnlyFunctions);
 
-        var nestedHeadCount = CountNestedApplicationHeads(module);
+        var nestedHeadCount = CountNestedApplicationHeads(declarations);
 
         nestedHeadCount.Should().Be(
             0,

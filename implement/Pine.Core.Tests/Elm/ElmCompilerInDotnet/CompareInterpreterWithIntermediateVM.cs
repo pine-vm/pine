@@ -44,12 +44,6 @@ namespace Pine.Core.Tests.Elm.ElmCompilerInDotnet;
 /// </summary>
 public sealed class CompareInterpreterWithIntermediateVM
 {
-    /// <summary>
-    /// The optimization-round count used during preparation. Captured here so callers
-    /// can include it in diagnostics or assertion messages.
-    /// </summary>
-    public int MaxOptimizationRounds { get; }
-
     private readonly Core.Interpreter.IntermediateVM.PineVM _vm;
 
     private readonly IReadOnlyDictionary<DeclQualifiedName, PineValue> _entryFunctionValuesByQualifiedName;
@@ -68,14 +62,12 @@ public sealed class CompareInterpreterWithIntermediateVM
     public IReadOnlyList<Stil4mElmSyntax7.File> PostOptimizationModules { get; }
 
     private CompareInterpreterWithIntermediateVM(
-        int maxOptimizationRounds,
         Core.Interpreter.IntermediateVM.PineVM vm,
         IReadOnlyDictionary<DeclQualifiedName, PineValue> entryFunctionValuesByQualifiedName,
         IReadOnlyDictionary<string, DeclQualifiedName> entryQualifiedNameBySimpleName,
         IReadOnlyDictionary<DeclQualifiedName, SyntaxModel.Declaration> interpreterDeclarations,
         IReadOnlyList<Stil4mElmSyntax7.File> postOptimizationModules)
     {
-        MaxOptimizationRounds = maxOptimizationRounds;
         _vm = vm;
         _entryFunctionValuesByQualifiedName = entryFunctionValuesByQualifiedName;
         _entryQualifiedNameBySimpleName = entryQualifiedNameBySimpleName;
@@ -111,10 +103,7 @@ public sealed class CompareInterpreterWithIntermediateVM
     public static CompareInterpreterWithIntermediateVM Prepare(
         FileTree appCodeTree,
         IReadOnlyList<IReadOnlyList<string>> rootFilePaths,
-        IReadOnlyList<DeclQualifiedName> entryPoints,
-        int maxOptimizationRounds,
-        bool runSpecializationBeforeLambdaLifting = false,
-        bool inlineLetDestructureThunks = false)
+        IReadOnlyList<DeclQualifiedName> entryPoints)
     {
         if (entryPoints is null || entryPoints.Count is 0)
         {
@@ -128,10 +117,7 @@ public sealed class CompareInterpreterWithIntermediateVM
                 appCodeTree,
                 rootFilePaths: rootFilePaths,
                 syntaxOptimization:
-                    new ElmSyntaxOptimizationConfig.SyntaxOptimizationEnabled(
-                        MaxOptimizationRounds: maxOptimizationRounds,
-                        RunSpecializationBeforeLambdaLifting: runSpecializationBeforeLambdaLifting,
-                        InlineLetDestructureThunks: inlineLetDestructureThunks))
+                new ElmSyntaxOptimizationConfig.SyntaxOptimizationEnabled())
             .Extract(
                 err => throw new Exception(
                     "CompareInterpreterWithIntermediateVM: failed compiling: " + err));
@@ -195,7 +181,6 @@ public sealed class CompareInterpreterWithIntermediateVM
 
         return
             new CompareInterpreterWithIntermediateVM(
-                maxOptimizationRounds: maxOptimizationRounds,
                 vm: vm,
                 entryFunctionValuesByQualifiedName: entryFunctionValuesByQualifiedName,
                 entryQualifiedNameBySimpleName: entryQualifiedNameBySimpleName,
@@ -211,8 +196,7 @@ public sealed class CompareInterpreterWithIntermediateVM
     /// </summary>
     public static CompareInterpreterWithIntermediateVM Prepare(
         IReadOnlyList<string> elmModuleTexts,
-        IReadOnlyList<DeclQualifiedName> entryPoints,
-        int maxOptimizationRounds)
+        IReadOnlyList<DeclQualifiedName> entryPoints)
     {
         var testCase =
             Elm.ElmCompilerTests.TestCase.DefaultAppWithoutPackages(elmModuleTexts);
@@ -229,8 +213,7 @@ public sealed class CompareInterpreterWithIntermediateVM
             Prepare(
                 appCodeTree: appCodeTree,
                 rootFilePaths: rootFilePaths,
-                entryPoints: entryPoints,
-                maxOptimizationRounds: maxOptimizationRounds);
+                entryPoints: entryPoints);
     }
 
     /// <summary>

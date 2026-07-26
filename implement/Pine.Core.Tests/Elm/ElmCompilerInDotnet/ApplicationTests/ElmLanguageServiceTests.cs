@@ -110,16 +110,9 @@ public class ElmLanguageServiceTests
     /// <summary>
     /// Builds the parsed interactive environment containing the bundled language
     /// service sources together with <see cref="TestModuleText"/>.
-    /// Parameters control how aggressively the optimization pipeline is applied —
-    /// see <see cref="ElmCompiler.CompileInteractiveEnvironment(FileTree, IReadOnlyList{IReadOnlyList{string}}, bool, int, bool, IReadOnlyList{DeclQualifiedName})"/>.
-    /// When <paramref name="maxOptimizationRounds"/> is <c>null</c>, the call
-    /// inherits the API default (<see cref="ElmCompiler.OptimizationRoundsDefault"/>),
-    /// matching the configuration used by the productive
-    /// <c>LanguageServiceCompilation.CompileLanguageServiceEnv</c> path.
     /// </summary>
     private static ElmInteractiveEnvironment.ParsedInteractiveEnvironment BuildLanguageServiceEnv(
-        bool disableInlining,
-        int? maxOptimizationRounds = null)
+        bool disableInlining)
     {
         var bundledTree =
             BundledFiles.CompilerSourceContainerFilesDefault.Value;
@@ -181,15 +174,7 @@ public class ElmLanguageServiceTests
             ?
             (ElmSyntaxOptimizationConfig)new ElmSyntaxOptimizationConfig.SyntaxOptimizationDisabled()
             :
-            maxOptimizationRounds is { } rounds
-            ?
-            new ElmSyntaxOptimizationConfig.SyntaxOptimizationEnabled(
-                MaxOptimizationRounds: rounds,
-                InlineLetDestructureThunks: true)
-            :
-            new ElmSyntaxOptimizationConfig.SyntaxOptimizationEnabled(
-                RunSpecializationBeforeLambdaLifting: true,
-                InlineLetDestructureThunks: true);
+            new ElmSyntaxOptimizationConfig.SyntaxOptimizationEnabled();
 
         var compiledEnv =
             ElmCompiler.CompileInteractiveEnvironment(
@@ -515,20 +500,20 @@ public class ElmLanguageServiceTests
 
         PerformanceCountersFormatting.FormatCounts(aggregateCounters).Should().Be(
             """
-            InvocationCount: 1_854
-            BuildListCount: 4_367
-            LoopIterationCount: 579
-            InstructionCount: 66_909
+            InvocationCount: 4_553
+            BuildListCount: 20_283
+            LoopIterationCount: 669
+            InstructionCount: 139_701
             """);
 
         InvocationCountReportFormatting.FormatCounts(aggregateInvocationCounts).Should().Be(
             """
-            CompiledExpressionCount: 193
-            InvocationCountTotal: 1_278
-            InvocationCountAverage: 7
-            InvocationCountPercentile10: 1
-            InvocationCountMedian: 3
-            InvocationCountPercentile90: 10
+            CompiledExpressionCount: 197
+            InvocationCountTotal: 2_350
+            InvocationCountAverage: 12
+            InvocationCountPercentile10: 2
+            InvocationCountMedian: 4
+            InvocationCountPercentile90: 24
             """);
     }
 
@@ -853,20 +838,20 @@ public class ElmLanguageServiceTests
 
         PerformanceCountersFormatting.FormatCounts(aggregateCounters).Should().Be(
             """
-            InvocationCount: 5_066
-            BuildListCount: 13_709
-            LoopIterationCount: 1_891
-            InstructionCount: 207_471
+            InvocationCount: 12_840
+            BuildListCount: 66_151
+            LoopIterationCount: 1_855
+            InstructionCount: 427_545
             """);
 
         InvocationCountReportFormatting.FormatCounts(aggregateInvocationCounts).Should().Be(
             """
-            CompiledExpressionCount: 226
-            InvocationCountTotal: 3_422
-            InvocationCountAverage: 15
+            CompiledExpressionCount: 227
+            InvocationCountTotal: 6_424
+            InvocationCountAverage: 28
             InvocationCountPercentile10: 2
-            InvocationCountMedian: 5
-            InvocationCountPercentile90: 21
+            InvocationCountMedian: 8
+            InvocationCountPercentile90: 62
             """);
     }
 
@@ -984,20 +969,20 @@ public class ElmLanguageServiceTests
 
         PerformanceCountersFormatting.FormatCounts(aggregateCounters).Should().Be(
             """
-            InvocationCount: 5_820
-            BuildListCount: 15_803
-            LoopIterationCount: 2_066
-            InstructionCount: 231_034
+            InvocationCount: 11_962
+            BuildListCount: 62_859
+            LoopIterationCount: 1_715
+            InstructionCount: 398_291
             """);
 
         InvocationCountReportFormatting.FormatCounts(aggregateInvocationCounts).Should().Be(
             """
-            CompiledExpressionCount: 227
-            InvocationCountTotal: 3_884
-            InvocationCountAverage: 17
+            CompiledExpressionCount: 228
+            InvocationCountTotal: 5_945
+            InvocationCountAverage: 26
             InvocationCountPercentile10: 2
-            InvocationCountMedian: 6
-            InvocationCountPercentile90: 26
+            InvocationCountMedian: 7
+            InvocationCountPercentile90: 61
             """);
     }
 
@@ -1235,203 +1220,5 @@ public class ElmLanguageServiceTests
 
         sb.Append('"');
         return sb.ToString();
-    }
-
-    /// <summary>
-    /// Analog of <see cref="References_request_finds_usage_across_modules"/> that
-    /// targets the optimization pipeline behind <c>ElmCompiler.ApplyOptimizationPipelineWithStageResults</c>.
-    /// The same end-to-end language-service scenario (initialize state → add two
-    /// workspace files → request references for <c>helper</c>) is compiled and
-    /// executed multiple times — each time with a different <c>maxRounds</c>
-    /// value (0, 1, 2, 3) for the optimization pipeline. The rendered Elm
-    /// expression of the references response (or any error message thrown) is
-    /// captured per iteration and all results are compared. If any optimization
-    /// iteration produces a response that differs from the others, the test
-    /// fails and reports both the differing values and the iteration counts that
-    /// produced them, surfacing optimization passes that break program
-    /// semantics.
-    /// </summary>
-    [Fact(Skip = "")]
-    public void References_request_finds_usage_across_modules_optimization_pipeline_iterations()
-    {
-        var maxRoundsValues = new[] { 0, 1, 2, 3 };
-
-        // Capture the rendered response (or the error message) per maxRounds value.
-        var renderedPerMaxRounds = new Dictionary<int, string>();
-
-        foreach (var maxRounds in maxRoundsValues)
-        {
-            try
-            {
-                renderedPerMaxRounds[maxRounds] = RunReferencesScenario(maxRounds);
-            }
-            catch (Exception ex)
-            {
-                // Normalize the captured exception message so that a successful
-                // bisection across optimization rounds is not foiled by purely
-                // statistical noise: when an evaluation error bubbles up via
-                // <see cref="EvaluationError.ToString"/> its trailing
-                // " - stack frames: N - instructions: N - invocations: N -
-                // build lists: N - loop iterations: N" suffix encodes the
-                // VM performance counters of the failing run, which legitimately
-                // change as the optimization pipeline does more or less work.
-                // The semantic part of the error is everything before that
-                // suffix, so we strip the suffix here before comparing across
-                // iterations.
-                renderedPerMaxRounds[maxRounds] =
-                    "ERROR: " + StripEvaluationErrorPerformanceCounters(ex.Message);
-            }
-        }
-
-        // Compare every iteration's result against the baseline (maxRounds = 0)
-        // — any divergence indicates that an optimization round broke the
-        // program code.
-        var baselineMaxRounds = maxRoundsValues[0];
-        var baseline = renderedPerMaxRounds[baselineMaxRounds];
-
-        var divergences = new List<string>();
-
-        foreach (var maxRounds in maxRoundsValues)
-        {
-            if (maxRounds == baselineMaxRounds)
-                continue;
-
-            var actual = renderedPerMaxRounds[maxRounds];
-
-            if (actual != baseline)
-            {
-                divergences.Add(
-                    "After " + maxRounds + " optimization round(s) the result " +
-                    "differs from the baseline (" + baselineMaxRounds + " round(s)):\n" +
-                    "  baseline (" + baselineMaxRounds + " round(s)): " + baseline + "\n" +
-                    "  actual   (" + maxRounds + " round(s)): " + actual);
-            }
-        }
-
-        divergences.Should().BeEmpty(
-            "the optimization pipeline must not change the observable behaviour of the program — " +
-            "each iteration of ApplyOptimizationPipelineWithStageResults should preserve program semantics");
-    }
-
-    /// <summary>
-    /// Removes the performance-counter suffix that
-    /// <see cref="EvaluationError.ToString"/>
-    /// appends to its <c>Message</c> (i.e. everything starting from the first
-    /// occurrence of <c>" - stack frames: "</c>). When an evaluation error is
-    /// stringified through that <c>ToString</c> the resulting text mixes a
-    /// stable semantic prefix (the actual error message) with run-dependent
-    /// counter values (instruction / invocation / build-list / loop-iteration
-    /// counts and the captured stack-frame depth). For tests that compare
-    /// error messages across compiler configurations, those counter values
-    /// would otherwise fool an exact-string comparison into reporting a
-    /// divergence even when both runs hit the very same defect.
-    /// Returns the original string unchanged if the suffix marker is not
-    /// present.
-    /// </summary>
-    private static string StripEvaluationErrorPerformanceCounters(string message)
-    {
-        const string suffixMarker = " - stack frames: ";
-
-        var suffixStart = message.IndexOf(suffixMarker, StringComparison.Ordinal);
-
-        if (suffixStart < 0)
-            return message;
-
-        return message[..suffixStart];
-    }
-
-    /// <summary>
-    /// Compiles the language-service test environment with the given
-    /// <paramref name="maxOptimizationRounds"/> for
-    /// <c>ApplyOptimizationPipelineWithStageResults</c> and runs the same
-    /// references scenario as <see cref="References_request_finds_usage_across_modules"/>:
-    /// initialize state, add ModuleA + ModuleB, then request references for the
-    /// <c>helper</c> declaration. Returns the rendered Elm expression of the
-    /// response.
-    /// </summary>
-    private static string RunReferencesScenario(int maxOptimizationRounds)
-    {
-        var env =
-            BuildLanguageServiceEnv(
-                disableInlining: false,
-                maxOptimizationRounds: maxOptimizationRounds);
-
-        // initState is a 0-argument top-level binding. Under the current
-        // "Approach A1" compilation, its raw declaration value is a
-        // function-record wrapper; we must evaluate it to obtain the actual
-        // initial LanguageServiceState record value.
-        var initStatePine = EvaluateZeroArgTestDeclaration(env, "initState");
-
-        var moduleAText =
-            """
-            module ModuleA exposing (helper)
-
-
-            helper : Int -> Int
-            helper x =
-                x + 1
-            """;
-
-        var (addModuleAResult, _) =
-            ApplyWithProfiling(
-                env,
-                "addWorkspaceFile",
-                [
-                ElmValueEncoding.ElmValueAsPineValue(ElmString("src/ModuleA.elm")),
-                ElmValueEncoding.ElmValueAsPineValue(ElmString(moduleAText)),
-                initStatePine,
-                ]);
-
-        var stateAfterModuleA =
-            ((PineValue.ListValue)addModuleAResult).Items.Span[1];
-
-        var moduleBText =
-            """
-            module ModuleB exposing (doWork)
-
-            import ModuleA
-
-
-            doWork : Int -> Int
-            doWork n =
-                ModuleA.helper n + ModuleA.helper (n + 1)
-            """;
-
-        var (addModuleBResult, _) =
-            ApplyWithProfiling(
-                env,
-                "addWorkspaceFile",
-                [
-                ElmValueEncoding.ElmValueAsPineValue(ElmString("src/ModuleB.elm")),
-                ElmValueEncoding.ElmValueAsPineValue(ElmString(moduleBText)),
-                stateAfterModuleA,
-                ]);
-
-        var stateAfterModuleB =
-            ((PineValue.ListValue)addModuleBResult).Items.Span[1];
-
-        // Request references for `helper`. Row 4 lands on the `helper` name in
-        // the type signature (`helper : Int -> Int`) of `src/ModuleA.elm`,
-        // matching the position used by the working analog in
-        // `LanguageServiceReferencesTests.References_request_finds_usage_across_modules`.
-        var (refsResult, _) =
-            ApplyWithProfiling(
-                env,
-                "textDocumentReferences",
-                [
-                ElmValueEncoding.ElmValueAsPineValue(ElmString("src/ModuleA.elm")),
-                ElmValueEncoding.ElmValueAsPineValue(Integer(4)),
-                ElmValueEncoding.ElmValueAsPineValue(Integer(1)),
-                stateAfterModuleB,
-                ]);
-
-        var responsePine =
-            ((PineValue.ListValue)refsResult).Items.Span[0];
-
-        var responseElmValue =
-            ElmValueEncoding.PineValueAsElmValue(responsePine, null, null)
-            .Extract(err => throw new Exception("Failed to decode response: " + err));
-
-        return ElmValue.RenderAsElmExpression(responseElmValue).expressionString;
     }
 }

@@ -86,7 +86,10 @@ public static class LambdaLifting
     public static OptimizedElmSyntaxDeclarations LiftLambdas(
         OptimizedElmSyntaxDeclarations declarations) =>
         OptimizedElmSyntaxDeclarations.FromFlatDictionary(
-            LiftLambdas(declarations.RenderAsFlatDictionary()));
+            ElmSyntaxAbstractConversion.FromDeclarationDictionary(
+                LiftLambdas(
+                    ElmSyntaxAbstractConversion.ToDeclarationDictionary(
+                        declarations.RenderAsFlatDictionary()))));
 
     /// <summary>
     /// Performs lambda lifting on a flat declaration dictionary.

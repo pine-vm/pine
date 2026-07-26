@@ -154,35 +154,34 @@ public class InliningCrossModuleTests
 
             App.capture : ParserFast.Range -> Char -> App.Captured
             App.capture range char =
-                { startColumn = range.start.column
+                { char = char
                 , endColumn = range.end.column
-                , char = char
+                , startColumn = range.start.column
                 }
 
 
             App.charLiteral : ParserFast.Parser App.Captured
             App.charLiteral =
-                (App.followedBySymbol__specialized__2
+                App.followedBySymbol__specialized__2
                     "'"
-                )
 
 
             App.charLiteral__lifted__lambda1 () =
                 App.capture
-                    { start =
-                        { row = 11
-                        , column =
+                    { end =
+                        { column =
+                            Pine_builtin.int_add
+                                [ 44, 1 ]
+                        , row = 33
+                        }
+                    , start =
+                        { column =
                             Pine_builtin.int_add
                                 [ 22
                                 , Pine_builtin.int_mul
                                     [ -1, 1 ]
                                 ]
-                        }
-                    , end =
-                        { row = 33
-                        , column =
-                            Pine_builtin.int_add
-                                [ 44, 1 ]
+                        , row = 11
                         }
                     }
                     (Elm.Parser.Tokens.identityChar
@@ -350,7 +349,7 @@ public class InliningCrossModuleTests
             """";
 
         var expectedTokensModuleText =
-            """"            
+            """"
             Elm.Parser.Tokens.isAlphaNumOrUnderscore : Char -> Bool
             Elm.Parser.Tokens.isAlphaNumOrUnderscore char =
                 if
@@ -361,7 +360,7 @@ public class InliningCrossModuleTests
 
                 else
                     Pine_kernel.equal
-                        [ char, 0x5F ]
+                        [ char, 95 ]
 
 
             Elm.Parser.Tokens.skipWhileWithoutLinebreakHelp__specialized__1 offset row col srcBytes indent =
@@ -684,16 +683,14 @@ public class InliningCrossModuleTests
             Elm.Parser.Declarations.infixDirectionOnlyTwo_noRange =
                 let
                     (ParserFast.Parser attemptFirst) =
-                        (ParserFast.keyword
+                        ParserFast.keyword
                             "right"
                             Elm.Parser.Declarations.Right
-                        )
 
                     (ParserFast.Parser attemptSecond) =
-                        (ParserFast.keyword
+                        ParserFast.keyword
                             "left"
                             Elm.Parser.Declarations.Left
-                        )
                 in
                 ParserFast.Parser
                     (Elm.Parser.Declarations.infixDirectionOnlyTwo_noRange__lifted__lambda1
@@ -932,22 +929,20 @@ public class InliningCrossModuleTests
             Elm.Parser.Declarations.infixDirectionOnlyTwo =
                 let
                     (ParserFast.Parser attemptFirst) =
-                        (ParserFast.mapWithRange
+                        ParserFast.mapWithRange
                             ParserFast.Node
                             (ParserFast.keyword
                                 "right"
                                 Infix.Right
                             )
-                        )
 
                     (ParserFast.Parser attemptSecond) =
-                        (ParserFast.mapWithRange
+                        ParserFast.mapWithRange
                             ParserFast.Node
                             (ParserFast.keyword
                                 "left"
                                 Infix.Left
                             )
-                        )
                 in
                 ParserFast.Parser
                     (Elm.Parser.Declarations.infixDirectionOnlyTwo__lifted__lambda1
@@ -1338,56 +1333,50 @@ public class InliningCrossModuleTests
                          ParserFast.Parser
                             (ParserFast.followedBySymbol__lifted__lambda1
                                 ( Elm.Parser.Expression.oneOf2MapWithStartRowColumnAndEndRowColumn__specialized__1__lifted__lambda1
-                                    ( (Elm.Parser.Expression.symbolFollowedBy__stripped__specialized__1
+                                    ( Elm.Parser.Expression.symbolFollowedBy__stripped__specialized__1
                                         "\\"
                                         (let
                                             (ParserFast.Parser attempt0) =
-                                                (ParserFast.symbol
+                                                ParserFast.symbol
                                                     "'"
                                                     (Basics.identity
                                                         '\''
                                                     )
-                                                )
 
                                             (ParserFast.Parser attempt1) =
-                                                (ParserFast.symbol
+                                                ParserFast.symbol
                                                     "\""
                                                     (Basics.identity
                                                         '"'
                                                     )
-                                                )
 
                                             (ParserFast.Parser attempt2) =
-                                                (ParserFast.symbol
+                                                ParserFast.symbol
                                                     "n"
                                                     (Basics.identity
                                                         '\n'
                                                     )
-                                                )
 
                                             (ParserFast.Parser attempt3) =
-                                                (ParserFast.symbol
+                                                ParserFast.symbol
                                                     "t"
                                                     (Basics.identity
                                                         '\t'
                                                     )
-                                                )
 
                                             (ParserFast.Parser attempt4) =
-                                                (ParserFast.symbol
+                                                ParserFast.symbol
                                                     "r"
                                                     (Basics.identity
                                                         '\u{000D}'
                                                     )
-                                                )
 
                                             (ParserFast.Parser attempt5) =
-                                                (ParserFast.symbol
+                                                ParserFast.symbol
                                                     "\\"
                                                     (Basics.identity
                                                         '\\'
                                                     )
-                                                )
                                          in
                                          Elm.Parser.Tokens.escapedCharValueMap__lifted__lambda2
                                             ( attempt0
@@ -1406,7 +1395,6 @@ public class InliningCrossModuleTests
                                                 )
                                             )
                                         )
-                                      )
                                     , Elm.Parser.Expression.charLiteralExpression__lifted__lambda1
                                     , Elm.Parser.Expression.charLiteralExpression__lifted__lambda1
                                     )
@@ -1424,20 +1412,20 @@ public class InliningCrossModuleTests
                 ParserWithComments.WithComments
                     Rope.empty
                     (Elm.Syntax.Node.Node
-                        { start =
-                            { row = startRow
-                            , column =
+                        { end =
+                            { column =
+                                Pine_builtin.int_add
+                                    [ endColumn, 1 ]
+                            , row = endRow
+                            }
+                        , start =
+                            { column =
                                 Pine_builtin.int_add
                                     [ startColumn
                                     , Pine_builtin.int_mul
                                         [ -1, 1 ]
                                     ]
-                            }
-                        , end =
-                            { row = endRow
-                            , column =
-                                Pine_builtin.int_add
-                                    [ endColumn, 1 ]
+                            , row = startRow
                             }
                         }
                         (Elm.Parser.Expression.CharLiteral

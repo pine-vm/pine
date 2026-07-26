@@ -139,7 +139,9 @@ internal static class NewtypeWrapperAnalysis
     public static ImmutableDictionary<DeclQualifiedName, NewtypeShapeInfo>
         BuildNewtypeRegistry(
         OptimizedElmSyntaxDeclarations declarations) =>
-        BuildNewtypeRegistry(declarations.RenderAsFlatDictionary());
+        BuildNewtypeRegistry(
+            ElmSyntaxAbstractConversion.ToDeclarationDictionary(
+                declarations.RenderAsFlatDictionary()));
 
     /// <summary>
     /// Result of matching a function body against the wrapper-return

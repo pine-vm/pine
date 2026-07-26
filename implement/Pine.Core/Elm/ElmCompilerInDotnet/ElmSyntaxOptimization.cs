@@ -295,7 +295,8 @@ public partial class ElmSyntaxOptimization
                 declsByModule[entry.Key.Namespaces] = moduleBuilder;
             }
 
-            moduleBuilder[entry.Key] = entry.Value;
+            moduleBuilder[entry.Key] =
+                ElmSyntaxAbstractConversion.ToDeclaration(entry.Value);
         }
 
         var resultBuilder =
@@ -320,7 +321,9 @@ public partial class ElmSyntaxOptimization
         // rewrite passes can each take and return
         // OptimizedElmSyntaxDeclarations.
         var current =
-            OptimizedElmSyntaxDeclarations.FromFlatDictionary(resultBuilder.ToImmutable());
+            OptimizedElmSyntaxDeclarations.FromFlatDictionary(
+                ElmSyntaxAbstractConversion.FromDeclarationDictionary(
+                    resultBuilder.ToImmutable()));
 
         // Lambda lifting: lift any lambdas or local functions introduced during
         // inlining/specialization so that the output is free of disallowed nodes.
@@ -679,7 +682,9 @@ public partial class ElmSyntaxOptimization
 
     internal static ImmutableDictionary<DeclQualifiedName, FunctionInfo> BuildFunctionDictionary(
         OptimizedElmSyntaxDeclarations declarations) =>
-        BuildFunctionDictionary(declarations.RenderAsFlatDictionary());
+        BuildFunctionDictionary(
+            ElmSyntaxAbstractConversion.ToDeclarationDictionary(
+                declarations.RenderAsFlatDictionary()));
 
     internal static ImmutableDictionary<DeclQualifiedName, FunctionInfo> BuildFunctionDictionary(
         ImmutableDictionary<DeclQualifiedName, SyntaxTypes.Declaration> declarations)
@@ -705,7 +710,9 @@ public partial class ElmSyntaxOptimization
     /// </summary>
     private static ImmutableDictionary<SyntaxTypes.QualifiedNameRef, SingleChoiceConstructorInfo> BuildSingleChoiceConstructors(
         OptimizedElmSyntaxDeclarations declarations) =>
-        BuildSingleChoiceConstructors(declarations.RenderAsFlatDictionary());
+        BuildSingleChoiceConstructors(
+            ElmSyntaxAbstractConversion.ToDeclarationDictionary(
+                declarations.RenderAsFlatDictionary()));
 
     private static ImmutableDictionary<SyntaxTypes.QualifiedNameRef, SingleChoiceConstructorInfo> BuildSingleChoiceConstructors(
         ImmutableDictionary<DeclQualifiedName, SyntaxTypes.Declaration> declarations)
@@ -743,7 +750,9 @@ public partial class ElmSyntaxOptimization
     /// </summary>
     private static ImmutableDictionary<string, TypeInference.InferredType> BuildFunctionSignatures(
         OptimizedElmSyntaxDeclarations declarations) =>
-        BuildFunctionSignatures(declarations.RenderAsFlatDictionary());
+        BuildFunctionSignatures(
+            ElmSyntaxAbstractConversion.ToDeclarationDictionary(
+                declarations.RenderAsFlatDictionary()));
 
     private static ImmutableDictionary<string, TypeInference.InferredType> BuildFunctionSignatures(
         ImmutableDictionary<DeclQualifiedName, SyntaxTypes.Declaration> declarations)

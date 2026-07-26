@@ -182,18 +182,9 @@ public class ElmParserExpressionTests
     /// <c>Eval(...)</c> call.
     /// </summary>
     private static readonly Lazy<CompareInterpreterWithIntermediateVM> s_compareFramework =
-        new(() => BuildCompareFramework(maxOptimizationRounds: 1));
+        new(BuildCompareFramework);
 
-    /// <summary>
-    /// As <see cref="s_compareFramework"/>, but built with <c>maxOptimizationRounds = 2</c>.
-    /// Used to demonstrate that the additional optimization round produces VM bytecode that
-    /// is more expensive at runtime for some scenarios — the snapshot assertions on tests
-    /// using this instance are expected to differ from their single-round counterparts.
-    /// </summary>
-    private static readonly Lazy<CompareInterpreterWithIntermediateVM> s_compareFrameworkRounds2 =
-        new(() => BuildCompareFramework(maxOptimizationRounds: 2));
-
-    private static CompareInterpreterWithIntermediateVM BuildCompareFramework(int maxOptimizationRounds)
+    private static CompareInterpreterWithIntermediateVM BuildCompareFramework()
     {
         var bundledTree =
             BundledFiles.CompilerSourceContainerFilesDefault.Value;
@@ -238,10 +229,7 @@ public class ElmParserExpressionTests
                 DeclQualifiedName.Create(
                     ["ElmParserExpressionTestModule"],
                     "parseExpression"),
-                ],
-                maxOptimizationRounds: maxOptimizationRounds,
-                runSpecializationBeforeLambdaLifting: false,
-                inlineLetDestructureThunks: false);
+                ]);
     }
 
     private static ElmValue Integer(long i) =>
@@ -284,10 +272,10 @@ public class ElmParserExpressionTests
 
         PerformanceCountersFormatting.FormatCounts(report).Should().Be(
             """
-            InvocationCount: 46
-            BuildListCount: 87
+            InvocationCount: 98
+            BuildListCount: 421
             LoopIterationCount: 0
-            InstructionCount: 1_283
+            InstructionCount: 3_525
             """);
     }
 
@@ -304,10 +292,10 @@ public class ElmParserExpressionTests
 
         PerformanceCountersFormatting.FormatCounts(report).Should().Be(
             """
-            InvocationCount: 58
-            BuildListCount: 104
+            InvocationCount: 163
+            BuildListCount: 873
             LoopIterationCount: 0
-            InstructionCount: 1_540
+            InstructionCount: 5_120
             """);
     }
 
@@ -320,10 +308,10 @@ public class ElmParserExpressionTests
 
         PerformanceCountersFormatting.FormatCounts(report.VmCounters).Should().Be(
             """
-            InvocationCount: 80
-            BuildListCount: 669
+            InvocationCount: 111
+            BuildListCount: 761
             LoopIterationCount: 0
-            InstructionCount: 4_017
+            InstructionCount: 4_310
             """);
 
         // Snapshot of the Elm syntax interpreter's metrics for the same root expression.
@@ -335,9 +323,9 @@ public class ElmParserExpressionTests
         // optimization opportunities.
         ElmSyntaxInterpreterPerformanceCountersFormatting.FormatCounts(report.InterpreterCounters).Should().Be(
             """
-            InstructionLoopCount: 1_994
-            DirectFunctionApplicationCount: 345
-            FunctionValueApplicationCount: 31
+            InstructionLoopCount: 2_370
+            DirectFunctionApplicationCount: 417
+            FunctionValueApplicationCount: 47
             PineBuiltinInvocationCount: 116
             """);
     }
@@ -355,10 +343,10 @@ public class ElmParserExpressionTests
 
         PerformanceCountersFormatting.FormatCounts(report).Should().Be(
             """
-            InvocationCount: 52
-            BuildListCount: 138
+            InvocationCount: 109
+            BuildListCount: 530
             LoopIterationCount: 0
-            InstructionCount: 1_567
+            InstructionCount: 4_128
             """);
     }
 
@@ -374,10 +362,10 @@ public class ElmParserExpressionTests
 
         PerformanceCountersFormatting.FormatCounts(report.VmCounters).Should().Be(
             """
-            InvocationCount: 201
-            BuildListCount: 1_039
+            InvocationCount: 230
+            BuildListCount: 1_036
             LoopIterationCount: 0
-            InstructionCount: 8_305
+            InstructionCount: 8_043
             """);
 
         // Snapshot of the Elm syntax interpreter's metrics for the same root expression.
@@ -386,52 +374,9 @@ public class ElmParserExpressionTests
         // VM's optimized cost.
         ElmSyntaxInterpreterPerformanceCountersFormatting.FormatCounts(report.InterpreterCounters).Should().Be(
             """
-            InstructionLoopCount: 3_978
-            DirectFunctionApplicationCount: 732
-            FunctionValueApplicationCount: 78
-            PineBuiltinInvocationCount: 176
-            """);
-    }
-
-    /// <summary>
-    /// Variant of <see cref="Expression_list_one_item"/> that uses
-    /// <c>maxOptimizationRounds = 2</c>. Captured as a separate test so the per-round VM
-    /// performance counters and interpreter counters are visible side-by-side at test-review
-    /// time.
-    /// <para>
-    /// Comparing the two snapshots demonstrates the phenomenon the
-    /// <see cref="CompareInterpreterWithIntermediateVM"/> framework was built to investigate:
-    /// the second optimization round produces VM bytecode that is *more* expensive at runtime
-    /// for this scenario (~12% more <c>InstructionCount</c>, ~28% more <c>BuildListCount</c>)
-    /// while the interpreter-side counts barely move (the source-level work being done is
-    /// almost identical). This is a candidate worth investigating for further optimization
-    /// improvements; the framework also makes the matching application traces available for
-    /// follow-up analysis.
-    /// </para>
-    /// </summary>
-    [Fact]
-    public void Expression_list_one_item_max_rounds_2()
-    {
-        var report = s_compareFrameworkRounds2.Value.Eval("""parseExpression "[1]" """);
-
-        report.Value.Should().Be(
-            Ok(
-                ListExpr(
-                    Node(1, 2, 1, 3, IntegerExpr(1)))));
-
-        PerformanceCountersFormatting.FormatCounts(report.VmCounters).Should().Be(
-            """
-            InvocationCount: 201
-            BuildListCount: 1_039
-            LoopIterationCount: 0
-            InstructionCount: 8_305
-            """);
-
-        ElmSyntaxInterpreterPerformanceCountersFormatting.FormatCounts(report.InterpreterCounters).Should().Be(
-            """
-            InstructionLoopCount: 3_978
-            DirectFunctionApplicationCount: 732
-            FunctionValueApplicationCount: 78
+            InstructionLoopCount: 5_058
+            DirectFunctionApplicationCount: 968
+            FunctionValueApplicationCount: 103
             PineBuiltinInvocationCount: 176
             """);
     }
@@ -461,10 +406,10 @@ public class ElmParserExpressionTests
 
         PerformanceCountersFormatting.FormatCounts(report).Should().Be(
             """
-            InvocationCount: 702
-            BuildListCount: 1_214
+            InvocationCount: 1_412
+            BuildListCount: 5_422
             LoopIterationCount: 0
-            InstructionCount: 17_071
+            InstructionCount: 43_074
             """);
     }
 
@@ -485,10 +430,10 @@ public class ElmParserExpressionTests
 
         PerformanceCountersFormatting.FormatCounts(report).Should().Be(
             """
-            InvocationCount: 494
-            BuildListCount: 977
+            InvocationCount: 1_018
+            BuildListCount: 6_727
             LoopIterationCount: 0
-            InstructionCount: 13_810
+            InstructionCount: 37_505
             """);
     }
 
@@ -547,10 +492,10 @@ public class ElmParserExpressionTests
 
         PerformanceCountersFormatting.FormatCounts(report).Should().Be(
             """
-            InvocationCount: 2_692
-            BuildListCount: 4_464
+            InvocationCount: 5_462
+            BuildListCount: 20_152
             LoopIterationCount: 0
-            InstructionCount: 64_084
+            InstructionCount: 160_749
             """);
     }
 
@@ -633,10 +578,10 @@ public class ElmParserExpressionTests
 
         PerformanceCountersFormatting.FormatCounts(report).Should().Be(
             """
-            InvocationCount: 2_980
-            BuildListCount: 5_124
+            InvocationCount: 6_014
+            BuildListCount: 22_636
             LoopIterationCount: 0
-            InstructionCount: 71_560
+            InstructionCount: 179_297
             """);
     }
 

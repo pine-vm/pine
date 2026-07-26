@@ -90,8 +90,7 @@ public class CompareInterpreterWithIntermediateVMTests
                 DeclQualifiedName.Create(moduleNs, "incrementInt"),
                 DeclQualifiedName.Create(moduleNs, "sumList"),
                 DeclQualifiedName.Create(moduleNs, "mapWithLambda"),
-                ],
-                maxOptimizationRounds: 1);
+                ]);
     }
 
     /// <summary>

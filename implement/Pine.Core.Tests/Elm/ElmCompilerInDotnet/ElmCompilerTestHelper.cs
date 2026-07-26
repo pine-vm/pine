@@ -110,17 +110,12 @@ public class ElmCompilerTestHelper
     /// <see cref="ElmCompiler.CompileInteractiveEnvironment"/>.
     /// </summary>
     public static ElmSyntaxOptimizationConfig SyntaxOptimizationFromDisableInlining(
-        bool disableInlining,
-        int? maxOptimizationRounds = null) =>
+        bool disableInlining) =>
         disableInlining
         ?
         new ElmSyntaxOptimizationConfig.SyntaxOptimizationDisabled()
         :
-        ElmCompiler.SyntaxOptimizationConfigDefault
-        with
-        {
-            MaxOptimizationRounds = maxOptimizationRounds ?? ElmCompiler.SyntaxOptimizationConfigDefault.MaxOptimizationRounds
-        };
+        ElmCompiler.SyntaxOptimizationConfigDefault;
 
     /// <summary>
     /// Compiles Elm modules and returns the parsed environment together with intermediate pipeline stage results.
@@ -130,8 +125,7 @@ public class ElmCompilerTestHelper
     public static (ElmInteractiveEnvironment.ParsedInteractiveEnvironment parsedEnv, CompilationPipelineStageResults<DefaultLoweredResults> pipelineStageResults)
         CompileElmModules(
         IReadOnlyList<string> elmModulesTexts,
-        bool disableInlining,
-        int? maxOptimizationRounds = null)
+        bool disableInlining)
     {
         var testCase =
             TestCase.DefaultAppWithoutPackages(elmModulesTexts);
@@ -149,7 +143,7 @@ public class ElmCompilerTestHelper
                 appCodeTree,
                 rootFilePaths: rootFilePaths,
                 syntaxOptimization:
-                    SyntaxOptimizationFromDisableInlining(disableInlining, maxOptimizationRounds))
+                SyntaxOptimizationFromDisableInlining(disableInlining))
             .Extract(err => throw new Exception(err));
 
         var parsedEnv =

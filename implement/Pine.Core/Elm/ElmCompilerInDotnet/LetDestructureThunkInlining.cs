@@ -126,7 +126,10 @@ internal static class LetDestructureThunkInlining
     public static OptimizedElmSyntaxDeclarations
         RewriteDeclarationDictionary(OptimizedElmSyntaxDeclarations declarations) =>
         OptimizedElmSyntaxDeclarations.FromFlatDictionary(
-            RewriteDeclarationDictionary(declarations.RenderAsFlatDictionary()));
+            ElmSyntaxAbstractConversion.FromDeclarationDictionary(
+                RewriteDeclarationDictionary(
+                    ElmSyntaxAbstractConversion.ToDeclarationDictionary(
+                        declarations.RenderAsFlatDictionary()))));
 
     private static SyntaxTypes.Declaration RewriteDeclaration(
         SyntaxTypes.Declaration decl,

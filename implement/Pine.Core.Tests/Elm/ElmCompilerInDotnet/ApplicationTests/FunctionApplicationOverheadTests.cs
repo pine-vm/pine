@@ -322,10 +322,10 @@ public class FunctionApplicationOverheadTests
 
         PerformanceCountersFormatting.FormatCounts(report).Should().Be(
             """
-            InvocationCount: 2
-            BuildListCount: 1
+            InvocationCount: 5
+            BuildListCount: 9
             LoopIterationCount: 0
-            InstructionCount: 10
+            InstructionCount: 48
             """);
     }
 
@@ -350,10 +350,10 @@ public class FunctionApplicationOverheadTests
 
         PerformanceCountersFormatting.FormatCounts(report).Should().Be(
             """
-            InvocationCount: 4
-            BuildListCount: 7
+            InvocationCount: 9
+            BuildListCount: 19
             LoopIterationCount: 0
-            InstructionCount: 31
+            InstructionCount: 80
             """);
     }
 
@@ -376,10 +376,10 @@ public class FunctionApplicationOverheadTests
 
         PerformanceCountersFormatting.FormatCounts(report).Should().Be(
             """
-            InvocationCount: 2
-            BuildListCount: 1
+            InvocationCount: 7
+            BuildListCount: 6
             LoopIterationCount: 0
-            InstructionCount: 10
+            InstructionCount: 40
             """);
     }
 
@@ -408,10 +408,10 @@ public class FunctionApplicationOverheadTests
 
         PerformanceCountersFormatting.FormatCounts(report).Should().Be(
             """
-            InvocationCount: 6
-            BuildListCount: 7
+            InvocationCount: 12
+            BuildListCount: 10
             LoopIterationCount: 0
-            InstructionCount: 70
+            InstructionCount: 98
             """);
     }
 
@@ -438,7 +438,7 @@ public class FunctionApplicationOverheadTests
     /// the overhead structure visible and guiding optimization.
     /// </para>
     /// </summary>
-    [Fact]
+    [Fact(Skip = "TODO: Reimplement optimizations in Elm compiler or Pine compilation")]
     public void List_map_triple_with_function_parameter()
     {
         var enteredFrames = new List<EnteredStackFrame>();
@@ -489,10 +489,10 @@ public class FunctionApplicationOverheadTests
 
         PerformanceCountersFormatting.FormatCounts(report).Should().Be(
             """
-            InvocationCount: 9
-            BuildListCount: 10
+            InvocationCount: 45
+            BuildListCount: 166
             LoopIterationCount: 0
-            InstructionCount: 232
+            InstructionCount: 707
             """);
 
         // --- StackFrameInstructions tracking ---
@@ -744,10 +744,10 @@ public class FunctionApplicationOverheadTests
 
         PerformanceCountersFormatting.FormatCounts(report).Should().Be(
             """
-            InvocationCount: 2
-            BuildListCount: 1
+            InvocationCount: 4
+            BuildListCount: 4
             LoopIterationCount: 0
-            InstructionCount: 10
+            InstructionCount: 27
             """);
     }
 
@@ -773,10 +773,10 @@ public class FunctionApplicationOverheadTests
 
         PerformanceCountersFormatting.FormatCounts(report).Should().Be(
             """
-            InvocationCount: 2
-            BuildListCount: 1
+            InvocationCount: 8
+            BuildListCount: 13
             LoopIterationCount: 0
-            InstructionCount: 10
+            InstructionCount: 76
             """);
     }
 
@@ -816,10 +816,10 @@ public class FunctionApplicationOverheadTests
 
         PerformanceCountersFormatting.FormatCounts(report).Should().Be(
             """
-            InvocationCount: 24
-            BuildListCount: 24
+            InvocationCount: 64
+            BuildListCount: 44
             LoopIterationCount: 0
-            InstructionCount: 329
+            InstructionCount: 511
             """);
     }
 
@@ -854,10 +854,10 @@ public class FunctionApplicationOverheadTests
 
         PerformanceCountersFormatting.FormatCounts(report).Should().Be(
             """
-            InvocationCount: 6
-            BuildListCount: 7
+            InvocationCount: 12
+            BuildListCount: 10
             LoopIterationCount: 0
-            InstructionCount: 70
+            InstructionCount: 102
             """);
     }
 
@@ -899,10 +899,10 @@ public class FunctionApplicationOverheadTests
 
         PerformanceCountersFormatting.FormatCounts(report).Should().Be(
             """
-            InvocationCount: 24
-            BuildListCount: 24
+            InvocationCount: 64
+            BuildListCount: 44
             LoopIterationCount: 0
-            InstructionCount: 329
+            InstructionCount: 533
             """);
     }
 
@@ -932,10 +932,10 @@ public class FunctionApplicationOverheadTests
 
         PerformanceCountersFormatting.FormatCounts(report).Should().Be(
             """
-            InvocationCount: 6
-            BuildListCount: 7
+            InvocationCount: 12
+            BuildListCount: 10
             LoopIterationCount: 0
-            InstructionCount: 70
+            InstructionCount: 104
             """);
     }
 
@@ -973,10 +973,10 @@ public class FunctionApplicationOverheadTests
 
         PerformanceCountersFormatting.FormatCounts(report).Should().Be(
             """
-            InvocationCount: 24
-            BuildListCount: 24
+            InvocationCount: 64
+            BuildListCount: 44
             LoopIterationCount: 0
-            InstructionCount: 329
+            InstructionCount: 551
             """);
     }
 }

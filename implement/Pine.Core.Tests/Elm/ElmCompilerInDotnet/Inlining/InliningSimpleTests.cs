@@ -103,9 +103,8 @@ public class InliningSimpleTests
 
             App.result =
                 Pine_kernel.int_add
-                    [ (Pine_kernel.int_multiply
+                    [ Pine_kernel.int_multiply
                         [ 3, 2 ]
-                      )
                     , 1
                     ]
             """";

@@ -113,7 +113,11 @@ internal static class WrapUnwrapCancellation
         OptimizedElmSyntaxDeclarations declarations,
         ImmutableDictionary<DeclQualifiedName, GeneratedSiblingDecl> siblingsByOriginal) =>
         OptimizedElmSyntaxDeclarations.FromFlatDictionary(
-            RewriteDeclarationDictionary(declarations.RenderAsFlatDictionary(), siblingsByOriginal));
+            ElmSyntaxAbstractConversion.FromDeclarationDictionary(
+                RewriteDeclarationDictionary(
+                    ElmSyntaxAbstractConversion.ToDeclarationDictionary(
+                        declarations.RenderAsFlatDictionary()),
+                    siblingsByOriginal)));
 
     /// <summary>
     /// <see cref="OptimizedElmSyntaxDeclarations"/>-flavoured overload of

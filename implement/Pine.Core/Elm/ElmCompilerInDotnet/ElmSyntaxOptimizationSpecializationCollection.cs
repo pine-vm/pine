@@ -200,7 +200,10 @@ public partial class ElmSyntaxOptimization
     private static CollectedSpecializations CollectSpecializationsFromDeclarations(
         OptimizedElmSyntaxDeclarations declarations,
         InliningContext context) =>
-        CollectSpecializationsFromDeclarations(declarations.RenderAsFlatDictionary(), context);
+        CollectSpecializationsFromDeclarations(
+            ElmSyntaxAbstractConversion.ToDeclarationDictionary(
+                declarations.RenderAsFlatDictionary()),
+            context);
 
     private static CollectedSpecializations CollectSpecializationsFromDeclarations(
         ImmutableDictionary<DeclQualifiedName, SyntaxTypes.Declaration> declarations,
@@ -977,7 +980,7 @@ public partial class ElmSyntaxOptimization
 
             foreach (var (spec, specDecl) in optimized.Specializations)
             {
-                var specName = specDecl.Function.Declaration.Value.Name.Value;
+                var specName = specDecl.Function.Declaration.Name;
 
                 preExisting.Add(new NamedSpecialization(origName, spec, specName));
                 usedNames.Add(specName);

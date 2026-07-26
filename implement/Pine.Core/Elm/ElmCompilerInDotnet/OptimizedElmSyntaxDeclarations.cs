@@ -1,7 +1,7 @@
 using Pine.Core.CodeAnalysis;
 using System.Collections.Immutable;
 
-using SyntaxTypes = Pine.Core.Elm.ElmSyntax.Stil4mElmSyntax7;
+using SyntaxTypes = Pine.Core.Elm.ElmSyntax.ElmSyntaxAbstract;
 
 namespace Pine.Core.Elm.ElmCompilerInDotnet;
 
@@ -107,7 +107,7 @@ public record OptimizedElmSyntaxDeclarations(
             foreach (var (_, specialization) in optimized.Specializations)
             {
                 var specializationDeclName =
-                    specialization.Function.Declaration.Value.Name.Value;
+                    specialization.Function.Declaration.Name;
 
                 var specializationQualifiedName =
                     DeclQualifiedName.Create(
@@ -151,7 +151,7 @@ public record OptimizedElmSyntaxDeclarations(
             foreach (var (_, specialization) in optimized.Specializations)
             {
                 var specializationDeclName =
-                    specialization.Function.Declaration.Value.Name.Value;
+                    specialization.Function.Declaration.Name;
 
                 var specializationQualifiedName =
                     DeclQualifiedName.Create(

@@ -86,7 +86,11 @@ internal static class CaseBlockConsolidation
         OptimizedElmSyntaxDeclarations declarations,
         CaseConsolidationConfig config) =>
         OptimizedElmSyntaxDeclarations.FromFlatDictionary(
-            RewriteDeclarationDictionary(declarations.RenderAsFlatDictionary(), config));
+            ElmSyntaxAbstractConversion.FromDeclarationDictionary(
+                RewriteDeclarationDictionary(
+                    ElmSyntaxAbstractConversion.ToDeclarationDictionary(
+                        declarations.RenderAsFlatDictionary()),
+                    config)));
 
     /// <summary>
     /// Walks every function declaration's body bottom-up and applies the

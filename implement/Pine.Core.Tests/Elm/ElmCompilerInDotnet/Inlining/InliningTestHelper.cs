@@ -1,6 +1,7 @@
 using Pine.Core.Elm.ElmCompilerInDotnet;
 using Pine.Core.Elm.ElmSyntax;
 using Pine.Core.Elm.ElmSyntax.SyntaxModel;
+using Pine.Core.CodeAnalysis;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
@@ -8,9 +9,26 @@ using System.Linq;
 namespace Pine.Core.Tests.Elm.ElmCompilerInDotnet.Inlining;
 
 using Stil4mElmSyntax7 = Core.Elm.ElmSyntax.Stil4mElmSyntax7;
+using AbstractSyntax = Core.Elm.ElmSyntax.ElmSyntaxAbstract;
 
 public class InliningTestHelper
 {
+    internal static ImmutableDictionary<DeclQualifiedName, AbstractSyntax.Declaration> ToAbstract(
+        ImmutableDictionary<DeclQualifiedName, Stil4mElmSyntax7.Declaration> declarations) =>
+        declarations.ToImmutableDictionary(
+            item => item.Key,
+            item =>
+            AbstractSyntax.ConvertFromConcrete.FromDeclaration(
+                Stil4mElmSyntax7.ToFullSyntaxModel.Convert(item.Value)));
+
+    internal static ImmutableDictionary<DeclQualifiedName, Stil4mElmSyntax7.Declaration> ToStil4m(
+        ImmutableDictionary<DeclQualifiedName, AbstractSyntax.Declaration> declarations) =>
+        declarations.ToImmutableDictionary(
+            item => item.Key,
+            item =>
+            Stil4mElmSyntax7.FromFullSyntaxModel.Convert(
+                AbstractSyntax.ConvertToConcrete.ToDeclaration(item.Value)));
+
     private static readonly ImmutableDictionary<QualifiedNameRef, QualifiedNameRef> s_renderingNameMap =
         ImmutableDictionary<QualifiedNameRef, QualifiedNameRef>.Empty
         .SetItem(QualifiedNameRef.FromFullName("Basics.Int"), QualifiedNameRef.FromFullName("Int"))
@@ -362,16 +380,64 @@ public class InliningTestHelper
         var flatDecls = ElmCompiler.FlattenModulesToDeclarationDictionary(orderedModules);
 
         var inlinedDecls =
-            ElmSyntaxOptimization.OptimizeRounds(OptimizedElmSyntaxDeclarations.FromFlatDictionary(flatDecls), config)
+            ElmSyntaxOptimization.OptimizeRounds(
+                OptimizedElmSyntaxDeclarations.FromFlatDictionary(ToAbstract(flatDecls)),
+                config)
             .Extract(err => throw new System.Exception("Failed inlining: " + err))
             .RenderAsFlatDictionary();
 
-        var inlinedModules = ElmCompiler.ReconstructModulesFromFlatDict(inlinedDecls, orderedModules);
+        var inlinedModules =
+            ElmCompiler.ReconstructModulesFromFlatDict(ToStil4m(inlinedDecls), orderedModules);
 
         return
             inlinedModules
             .Single(
                 m => Stil4mElmSyntax7.Module.GetModuleName(m.ModuleDefinition.Value).Value.SequenceEqual(moduleName));
+    }
+
+    /// <summary>
+    /// Runs canonicalization and the inlining pipeline like
+    /// <see cref="CanonicalizeAndInlineAndGetSingleModule"/>, but returns the inlined
+    /// declarations in the <see cref="AbstractSyntax"/> model (the pipeline's native
+    /// representation) instead of reconstructing concrete modules. This lets tests assert on
+    /// pipeline output without a detour through the concrete model.
+    /// </summary>
+    public static ImmutableDictionary<DeclQualifiedName, AbstractSyntax.Declaration>
+        CanonicalizeAndInlineToAbstractDeclarations(
+        IReadOnlyList<string> elmModulesTexts,
+        ElmSyntaxOptimization.Config config)
+    {
+        var parsedModules =
+            elmModulesTexts
+            .Select(
+                text =>
+                ElmSyntaxParser.ParseModuleText(text)
+                .Extract(err => throw new System.Exception("Failed parsing: " + err)))
+            .Select(Stil4mElmSyntax7.FromFullSyntaxModel.Convert)
+            .ToList();
+
+        var modulesDict =
+            Canonicalization.Canonicalize(parsedModules)
+            .Extract(err => throw new System.Exception("Failed canonicalization: " + err));
+
+        var allCanonicalizedModules =
+            modulesDict
+            .ToDictionary(
+                kvp => kvp.Key,
+                kvp => kvp.Value
+                .Extract(err => throw new System.Exception($"Module {string.Join(".", kvp.Key)} has errors: " + err)));
+
+        var orderedModules =
+            allCanonicalizedModules.Values.ToList();
+
+        var flatDecls = ElmCompiler.FlattenModulesToDeclarationDictionary(orderedModules);
+
+        return
+            ElmSyntaxOptimization.OptimizeRounds(
+                OptimizedElmSyntaxDeclarations.FromFlatDictionary(ToAbstract(flatDecls)),
+                config)
+            .Extract(err => throw new System.Exception("Failed inlining: " + err))
+            .RenderAsFlatDictionary();
     }
 
     public static Stil4mElmSyntax7.File CanonicalizeAndOptimizeAndGetSingleModule(
@@ -413,19 +479,18 @@ public class InliningTestHelper
 
         var specializedDecls =
             ElmSyntaxOptimization.SpecializeDeclarations(
-                OptimizedElmSyntaxDeclarations.FromFlatDictionary(flatDecls),
+                OptimizedElmSyntaxDeclarations.FromFlatDictionary(ToAbstract(flatDecls)),
                 config)
             .Extract(err => throw new System.Exception("Failed specialization: " + err));
 
         var inlinedDecls =
             ElmSyntaxOptimization.SpecializeAndInlineDeclarationsCombined(specializedDecls, config)
-            .Extract(err => throw new System.Exception("Failed inlining stage: " + err))
-            .RenderAsFlatDictionary();
+            .Extract(err => throw new System.Exception("Failed inlining stage: " + err));
 
         var liftedDecls = LambdaLifting.LiftLambdas(inlinedDecls);
 
         var loweredDecls =
-            BuiltinOperatorLowering.Apply(liftedDecls)
+            BuiltinOperatorLowering.Apply(ToStil4m(liftedDecls.RenderAsFlatDictionary()))
             .Extract(err => throw new System.Exception("Failed builtin operator lowering: " + err));
 
         var loweredModules = ElmCompiler.ReconstructModulesFromFlatDict(loweredDecls, canonicalizedOrderedModules);
@@ -474,12 +539,14 @@ public class InliningTestHelper
         var flatDecls = ElmCompiler.FlattenModulesToDeclarationDictionary(orderedCanonicalizedModules);
 
         var inlinedDecls =
-            ElmSyntaxOptimization.OptimizeRounds(OptimizedElmSyntaxDeclarations.FromFlatDictionary(flatDecls), config)
+            ElmSyntaxOptimization.OptimizeRounds(
+                OptimizedElmSyntaxDeclarations.FromFlatDictionary(ToAbstract(flatDecls)),
+                config)
             .Extract(err => throw new System.Exception("Failed inlining: " + err))
             .RenderAsFlatDictionary();
 
         var loweredDecls =
-            BuiltinOperatorLowering.Apply(inlinedDecls)
+            BuiltinOperatorLowering.Apply(ToStil4m(inlinedDecls))
             .Extract(err => throw new System.Exception("Failed builtin operator lowering: " + err));
 
         var loweredModules = ElmCompiler.ReconstructModulesFromFlatDict(loweredDecls, orderedCanonicalizedModules);

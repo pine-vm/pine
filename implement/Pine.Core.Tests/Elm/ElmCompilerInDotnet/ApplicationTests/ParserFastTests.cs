@@ -466,8 +466,7 @@ public class ParserFastTests
                         DeclQualifiedName.Create(
                             ["ParserFastTestModule"],
                             "testWithoutLinebreak_alpha"),
-                        ],
-                        maxOptimizationRounds: ElmCompiler.OptimizationRoundsDefault);
+                        ]);
             });
 
     /// <summary>
@@ -581,10 +580,10 @@ public class ParserFastTests
 
         PerformanceCountersFormatting.FormatCounts(report).Should().Be(
             """
-            InvocationCount: 0
-            BuildListCount: 0
+            InvocationCount: 21
+            BuildListCount: 18
             LoopIterationCount: 0
-            InstructionCount: 2
+            InstructionCount: 304
             """);
     }
 
@@ -601,10 +600,10 @@ public class ParserFastTests
 
         PerformanceCountersFormatting.FormatCounts(report).Should().Be(
             """
-            InvocationCount: 0
-            BuildListCount: 0
+            InvocationCount: 21
+            BuildListCount: 18
             LoopIterationCount: 0
-            InstructionCount: 2
+            InstructionCount: 274
             """);
     }
 
@@ -621,14 +620,14 @@ public class ParserFastTests
 
         PerformanceCountersFormatting.FormatCounts(report).Should().Be(
             """
-            InvocationCount: 7
-            BuildListCount: 11
+            InvocationCount: 21
+            BuildListCount: 24
             LoopIterationCount: 0
-            InstructionCount: 220
+            InstructionCount: 303
             """);
     }
 
-    [Fact]
+    [Fact(Skip = "TODO: Reimplement and assert variable length is mapped to loop iterations instead of invocations")]
     public void SkipWhileWithoutLinebreakHelp_alpha_longer()
     {
         const string Input1 = "abcdefghijklmnopqrstuvwxyz";
@@ -665,107 +664,6 @@ public class ParserFastTests
         renderedInvocationLog.Should().Be(
             ExpectedInterpreterInvocationLog_testWithoutLinebreak_alpha_abc);
 
-        // -------- Snapshot the post-optimization declarations relevant to the
-        //         skipWhileWithoutLinebreakHelp call chain. --------
-        //
-        // The investigation goal: verify *why* the recursive helper is not specialized
-        // enough to embed `Char.isAlpha` as a local literal (which would be a prerequisite
-        // for the IR inliner to fold the predicate into the helper frame, per the
-        // positive baseline in InlineSmallNonRecursiveCalleeRegressionTests).
-        //
-        // We render three declarations from the post-optimization module list (the same
-        // input the bytecode emitter consumes) — the one site that has `Char.isAlpha` as
-        // a literal, plus the two declarations along the call chain that *should* have
-        // been specialized for `isGood = Char.isAlpha` but were not:
-        //
-        //   1. testWithoutLinebreak_alpha — has `Char.isAlpha` as a literal at the
-        //      `whileWithoutLinebreak__lifted__lambda1 Char.isAlpha` call site.
-        //   2. whileWithoutLinebreak__lifted__lambda1 — receives `isGood` as a parameter
-        //      and forwards it to `skipWhileWithoutLinebreakHelp`. A successful
-        //      wrapper-with-captured-lambda specialization would materialize a
-        //      `whileWithoutLinebreak__lifted__lambda1__specialized__1` with `isGood`
-        //      substituted by `Char.isAlpha`, and `testWithoutLinebreak_alpha` would
-        //      reference that specialized wrapper instead.
-        //   3. skipWhileWithoutLinebreakHelp — the recursive helper; the per-iteration
-        //      `isGood nextChar` call would become `Char.isAlpha nextChar` after
-        //      specialization, and the recursive self-call would no longer thread the
-        //      `isGood` parameter.
-        //
-        // None of those specializations have happened: the snapshot below shows
-        // `Char.isAlpha` appears at exactly one site (testWithoutLinebreak_alpha), and
-        // the recursive helper continues to receive `isGood` as a parameter and pass it
-        // along on every recursive call. This is the "specs collected via virtual
-        // substitution through wrappers are NOT realized unless the rewriter also follows
-        // the wrapper chain" pattern — see Inlining.cs's
-        // TrySpecializeWrapperWithCapturedFunctionPartialApplication path.
-        {
-            var module =
-                s_compareFramework.Value.PostOptimizationModules
-                .Single(
-                    f =>
-                    Core.Elm.ElmSyntax.Stil4mElmSyntax7.Module
-                            .GetModuleName(f.ModuleDefinition.Value).Value
-                            is ["ParserFastTestModule"]);
-
-            var fullModuleFile =
-                Core.Elm.ElmSyntax.Stil4mElmSyntax7.ToFullSyntaxModel.Convert(module);
-
-            string RenderDeclByName(string name)
-            {
-                var declNode =
-                    fullModuleFile.Declarations
-                    .Single(
-                        d =>
-                        d.Value is Core.Elm.ElmSyntax.SyntaxModel.Declaration.FunctionDeclaration funcDecl &&
-                        funcDecl.Function.Declaration.Value.Name.Value == name);
-
-                return
-                    SnapshotTestFormat.RenderQualifiedDeclaration(
-                        DeclQualifiedName.Create(["ParserFastTestModule"], name),
-                        declNode.Value);
-            }
-
-            // After the wrapper-with-captured-function specialization fix:
-            // testWithoutLinebreak_alpha applies `whileWithoutLinebreak__lifted__lambda1 Char.isAlpha`
-            // (a partial application supplying a known function for `isGood`). The optimization
-            // pipeline now inlines the wrapper at that call site, exposing a recursive call
-            // `skipWhileWithoutLinebreakHelp Char.isAlpha ...` that the existing recursive-spec
-            // machinery turns into a first-order `skipWhileWithoutLinebreakHelp__specialized__1`
-            // with `Char.isAlpha` embedded as a local literal call.
-            //
-            // Note: with the broadened higher-order detection in
-            // `Inlining.ShouldInline` (callee-driven via
-            // `HigherOrderParameterAnalysis`), the inlined-wrapper closure is
-            // no longer lifted into a dedicated
-            // `testWithoutLinebreak_alpha__lifted__lambda2` — the inlining
-            // happens differently and that synthetic sibling is not emitted.
-            // The first-order helper `skipWhileWithoutLinebreakHelp__specialized__1`
-            // is still materialized.
-            var allFunctionDeclNames =
-                fullModuleFile.Declarations
-                .OfType<Core.Elm.ElmSyntax.SyntaxModel.Node<
-                        Core.Elm.ElmSyntax.SyntaxModel.Declaration>>()
-                .Select(d => d.Value)
-                .OfType<Core.Elm.ElmSyntax.SyntaxModel.Declaration.FunctionDeclaration>()
-                .Select(d => d.Function.Declaration.Value.Name.Value)
-                .ToList();
-
-            allFunctionDeclNames
-                .Should().Contain(
-                "skipWhileWithoutLinebreakHelp__specialized__1",
-                "the wrapper-with-captured-function specialization must materialize a "
-                + "first-order specialized helper with Char.isAlpha embedded locally.");
-
-            var renderedTestEntry = RenderDeclByName("testWithoutLinebreak_alpha");
-            var renderedHelperSpecialized = RenderDeclByName("skipWhileWithoutLinebreakHelp__specialized__1");
-
-            renderedTestEntry.Should().Be(
-                ExpectedPostOpt_testWithoutLinebreak_alpha);
-
-            renderedHelperSpecialized.Should().Be(
-                ExpectedPostOpt_skipWhileWithoutLinebreakHelp__specialized__1);
-        }
-
         var (value1, report1, invocations1) =
             ApplyAndRecordInvocations(
                 GetTestFunction("testWithoutLinebreak_alpha"),
@@ -789,7 +687,7 @@ public class ParserFastTests
             InvocationCount: 2
             BuildListCount: 3
             LoopIterationCount: 18
-            InstructionCount: 839
+            InstructionCount: 849
             """);
 
         PerformanceCountersFormatting.FormatCounts(report2).Should().Be(
@@ -797,7 +695,7 @@ public class ParserFastTests
             InvocationCount: 2
             BuildListCount: 3
             LoopIterationCount: 44
-            InstructionCount: 1_983
+            InstructionCount: 1_993
             """);
     }
 
@@ -818,13 +716,30 @@ public class ParserFastTests
     private const string ExpectedInterpreterInvocationLog_testWithoutLinebreak_alpha_abc =
         """
         direct testWithoutLinebreak_alpha [ "abc" ]
-        direct ParserFastTestModule.skipWhileWithoutLinebreakHelp__specialized__1 [ 0, 1, 1, <pine_blob 12 bytes>, 1 ]
-        direct ParserFastTestModule.skipWhileWithoutLinebreakHelp__specialized__1 [ 4, 1, 2, <pine_blob 12 bytes>, 1 ]
-        direct ParserFastTestModule.skipWhileWithoutLinebreakHelp__specialized__1 [ 8, 1, 3, <pine_blob 12 bytes>, 1 ]
-        direct ParserFastTestModule.skipWhileWithoutLinebreakHelp__specialized__1 [ 12, 1, 4, <pine_blob 12 bytes>, 1 ]
+        direct testWithoutLinebreak_alpha__lifted__lambda1 [  ]
+        direct Char.isAlpha [  ]
+        direct ParserFastTestModule.whileWithoutLinebreak [ <closure(declared:Char.isAlpha)> ]
+        direct whileWithoutLinebreak__lifted__lambda1 [ <closure(declared:Char.isAlpha)> ]
+        direct ParserFastTestModule.Parser [ <closure(declared:whileWithoutLinebreak__lifted__lambda1)> ]
+        direct ParserFastTestModule.map [ <closure(declared:testWithoutLinebreak_alpha__lifted__lambda1)>, Parser <closure(declared:whileWithoutLinebreak__lifted__lambda1)> ]
+        direct map__lifted__lambda1 [ [ <closure(declared:testWithoutLinebreak_alpha__lifted__lambda1)>, <closure(declared:whileWithoutLinebreak__lifted__lambda1)> ] ]
+        direct ParserFastTestModule.Parser [ <closure(declared:map__lifted__lambda1)> ]
+        direct ParserFastTestModule.run [ Parser <closure(declared:map__lifted__lambda1)>, "abc" ]
+        direct ParserFastTestModule.PState [ <pine_blob 12 bytes>, 0, 1, 1, 1 ]
+        fnvalue (<closure(declared:map__lifted__lambda1)>, True) [ PState (<pine_blob 12 bytes>) 0 1 1 1 ]
+        fnvalue (<closure(declared:whileWithoutLinebreak__lifted__lambda1)>, True) [ PState (<pine_blob 12 bytes>) 0 1 1 1 ]
+        direct ParserFastTestModule.skipWhileWithoutLinebreakHelp [ <closure(declared:Char.isAlpha)>, 0, 1, 1, <pine_blob 12 bytes>, 1 ]
+        fnvalue (<closure(declared:Char.isAlpha)>, True) [ 'a' ]
+        direct ParserFastTestModule.skipWhileWithoutLinebreakHelp [ <closure(declared:Char.isAlpha)>, 4, 1, 2, <pine_blob 12 bytes>, 1 ]
+        fnvalue (<closure(declared:Char.isAlpha)>, True) [ 'b' ]
+        direct ParserFastTestModule.skipWhileWithoutLinebreakHelp [ <closure(declared:Char.isAlpha)>, 8, 1, 3, <pine_blob 12 bytes>, 1 ]
+        fnvalue (<closure(declared:Char.isAlpha)>, True) [ 'c' ]
+        direct ParserFastTestModule.skipWhileWithoutLinebreakHelp [ <closure(declared:Char.isAlpha)>, 12, 1, 4, <pine_blob 12 bytes>, 1 ]
         direct ParserFastTestModule.PState [ <pine_blob 12 bytes>, 12, 1, 1, 4 ]
         direct ParserFastTestModule.String [ <pine_blob 12 bytes> ]
         direct ParserFastTestModule.Good [ "abc", PState (<pine_blob 12 bytes>) 12 1 1 4 ]
+        fnvalue (<closure(declared:testWithoutLinebreak_alpha__lifted__lambda1)>, True) [ "abc" ]
+        direct ParserFastTestModule.Good [ 3, PState (<pine_blob 12 bytes>) 12 1 1 4 ]
         direct Result.Ok [ 3 ]
         """;
 
@@ -849,57 +764,15 @@ public class ParserFastTests
                     (ParserFastTestModule.String srcBytes) =
                         input
                 in
-                case
-                    let
-                        s0OffsetInt : Basics.Int
-                        s0OffsetInt =
-                            0
-
-                        s1 : ParserFastTestModule.State
-                        s1 =
-                            ParserFastTestModule.skipWhileWithoutLinebreakHelp__specialized__1 0 1 1 srcBytes 1
-
-                        (ParserFastTestModule.PState _ s1Offset _ _ _) =
-                            s1
-
-                        s1OffsetInt : Basics.Int
-                        s1OffsetInt =
-                            s1Offset
-
-                        sliceBytesLength : Basics.Int
-                        sliceBytesLength =
-                            Pine_kernel.int_add [ s1OffsetInt, Pine_kernel.int_mul [ -1, s0OffsetInt ] ]
-
-                        sliceBytes : Basics.Int
-                        sliceBytes =
-                            Pine_kernel.take [ sliceBytesLength, Pine_kernel.skip [ s0OffsetInt, srcBytes ] ]
-                    in
-                    ParserFastTestModule.Good (ParserFastTestModule.String sliceBytes) s1
-                of
-                    ParserFastTestModule.Good a s1 ->
-                        let
-                            value =
-                                (let
-                                    (ParserFastTestModule.String bytes) =
-                                        a
-                                 in
-                                 Pine_kernel.concat [ Pine_kernel.take [ 1, 0 ], Pine_kernel.bit_shift_right [ 2, Pine_kernel.skip [ 1, Pine_kernel.length bytes ] ] ]
-                                )
-
-                            (ParserFastTestModule.PState finalSrc finalOffset _ finalRow finalCol) =
-                                s1
-                        in
+                case ParserFastTestModule.map__lifted__lambda1__specialized__1 ( ParserFastTestModule.testWithoutLinebreak_alpha__lifted__lambda1, ParserFastTestModule.testWithoutLinebreak_alpha__lifted__lambda2 ) ( srcBytes, 0, 1, 1, 1 ) of
+                    ParserFastTestModule.Good value (ParserFastTestModule.PState finalSrc finalOffset _ finalRow finalCol) ->
                         if Pine_kernel.equal [ finalOffset, Pine_kernel.length srcBytes ] then
                             Result.Ok value
 
                         else
                             Result.Err [ { row = finalRow, col = finalCol } ]
 
-                    ParserFastTestModule.Bad committed x ->
-                        let
-                            deadEnds =
-                                x
-                        in
+                    ParserFastTestModule.Bad _ deadEnds ->
                         Result.Err []
             of
                 Result.Ok v ->

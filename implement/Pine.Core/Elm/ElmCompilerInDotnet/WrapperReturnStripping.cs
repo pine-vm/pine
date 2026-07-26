@@ -265,7 +265,9 @@ internal static class WrapperReturnStripping
     public static ImmutableDictionary<DeclQualifiedName, GeneratedSiblingDecl>
         ReconstructSiblingRegistry(
         OptimizedElmSyntaxDeclarations declarations) =>
-        ReconstructSiblingRegistry(declarations.RenderAsFlatDictionary());
+        ReconstructSiblingRegistry(
+            ElmSyntaxAbstractConversion.ToDeclarationDictionary(
+                declarations.RenderAsFlatDictionary()));
 
     /// <summary>
     /// Flat-dictionary overload of <see cref="ReconstructSiblingRegistry(OptimizedElmSyntaxDeclarations)"/>.
@@ -365,7 +367,10 @@ internal static class WrapperReturnStripping
         BuildStripPlans(
         OptimizedElmSyntaxDeclarations declarations,
         ImmutableDictionary<DeclQualifiedName, NewtypeWrapperAnalysis.NewtypeShapeInfo> registry) =>
-        BuildStripPlans(declarations.RenderAsFlatDictionary(), registry);
+        BuildStripPlans(
+            ElmSyntaxAbstractConversion.ToDeclarationDictionary(
+                declarations.RenderAsFlatDictionary()),
+            registry);
 
     public static ImmutableDictionary<DeclQualifiedName, WrapperStripPlan>
         BuildStripPlans(
@@ -739,7 +744,10 @@ internal static class WrapperReturnStripping
         RewriteDeclarationDictionary(
         OptimizedElmSyntaxDeclarations declarations) =>
         OptimizedElmSyntaxDeclarations.FromFlatDictionary(
-            RewriteDeclarationDictionary(declarations.RenderAsFlatDictionary()));
+            ElmSyntaxAbstractConversion.FromDeclarationDictionary(
+                RewriteDeclarationDictionary(
+                    ElmSyntaxAbstractConversion.ToDeclarationDictionary(
+                        declarations.RenderAsFlatDictionary()))));
 
     public static ImmutableDictionary<DeclQualifiedName, SyntaxTypes.Declaration>
         RewriteDeclarationDictionary(

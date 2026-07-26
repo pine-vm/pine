@@ -1,5 +1,8 @@
 namespace Pine.Core.Elm.ElmCompilerInDotnet;
 
+using Pine.Core.CodeAnalysis;
+using System.Collections.Immutable;
+
 using Abstract = ElmSyntax.ElmSyntaxAbstract;
 using Concrete = ElmSyntax.Stil4mElmSyntax7;
 
@@ -22,4 +25,19 @@ internal static class ElmSyntaxAbstractConversion
 
     public static Abstract.FunctionStruct FromFunctionStruct(Concrete.FunctionStruct functionStruct) =>
         Abstract.ConvertFromConcrete.FromFunctionStruct(Concrete.ToFullSyntaxModel.Convert(functionStruct));
+
+    public static Concrete.Declaration ToDeclaration(Abstract.Declaration declaration) =>
+        Concrete.FromFullSyntaxModel.Convert(Abstract.ConvertToConcrete.ToDeclaration(declaration));
+
+    public static ImmutableDictionary<DeclQualifiedName, Abstract.Declaration> FromDeclarationDictionary(
+        ImmutableDictionary<DeclQualifiedName, Concrete.Declaration> declarations) =>
+        declarations.ToImmutableDictionary(
+            item => item.Key,
+            item => FromDeclaration(item.Value));
+
+    public static ImmutableDictionary<DeclQualifiedName, Concrete.Declaration> ToDeclarationDictionary(
+        ImmutableDictionary<DeclQualifiedName, Abstract.Declaration> declarations) =>
+        declarations.ToImmutableDictionary(
+            item => item.Key,
+            item => ToDeclaration(item.Value));
 }
