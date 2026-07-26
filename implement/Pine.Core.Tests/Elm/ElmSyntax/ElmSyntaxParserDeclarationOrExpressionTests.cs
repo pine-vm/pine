@@ -73,7 +73,7 @@ public class ElmSyntaxParserDeclarationOrExpressionTests
     }
 
     private static Abstract.Expression IntegerExpr(long value) =>
-        new Abstract.Expression.Integer(
+        new Abstract.Expression.IntegerLiteral(
             new BigInteger(value),
             IntegerEncoding.EncodeSignedInteger(value));
 
@@ -108,8 +108,8 @@ public class ElmSyntaxParserDeclarationOrExpressionTests
                         new Abstract.Expression.OperatorApplication(
                             "+",
                             Concrete.InfixDirection.Left,
-                            Abstract.Expression.FunctionOrValue.Create([], "a"),
-                            Abstract.Expression.FunctionOrValue.Create([], "b"))))));
+                            Abstract.Expression.Identifier.Create([], "a"),
+                            Abstract.Expression.Identifier.Create([], "b"))))));
     }
 
     [Fact]

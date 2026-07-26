@@ -313,7 +313,7 @@ public static class ConvertFromConcrete
             SyntaxModel.Expression.UnitExpr =>
             Expression.UnitExpr.Instance,
 
-            SyntaxModel.Expression.Literal literal =>
+            SyntaxModel.Expression.StringLiteral literal =>
             Expression.StringLiteral.Create(literal.Value),
 
             SyntaxModel.Expression.MultilineStringLiteral multiline =>
@@ -322,7 +322,7 @@ public static class ConvertFromConcrete
             SyntaxModel.Expression.CharLiteral charLiteral =>
             Expression.CharLiteral.Create(charLiteral.Value),
 
-            SyntaxModel.Expression.Integer integer =>
+            SyntaxModel.Expression.IntegerLiteral integer =>
             MakeInteger(ParseIntegerLiteral(integer.LiteralText)),
 
             SyntaxModel.Expression.FloatLiteral floatable =>
@@ -335,8 +335,8 @@ public static class ConvertFromConcrete
             new Expression.ListExpr(
                 [.. listExpr.Elements.Nodes.Select(node => FromExpression(node.Value))]),
 
-            SyntaxModel.Expression.FunctionOrValue functionOrValue =>
-            Expression.FunctionOrValue.Create(functionOrValue.ModuleName, functionOrValue.Name),
+            SyntaxModel.Expression.Identifier functionOrValue =>
+            Expression.Identifier.Create(functionOrValue.ModuleName, functionOrValue.Name),
 
             SyntaxModel.Expression.IfBlock ifBlock =>
             new Expression.IfBlock(
@@ -347,7 +347,7 @@ public static class ConvertFromConcrete
             SyntaxModel.Expression.PrefixOperator prefixOperator =>
             new Expression.PrefixOperator(prefixOperator.Operator),
 
-            SyntaxModel.Expression.ParenthesizedExpression parenthesizedExpression =>
+            SyntaxModel.Expression.Parenthesized parenthesizedExpression =>
             FromExpression(parenthesizedExpression.Expression.Value),
 
             SyntaxModel.Expression.Application application =>
@@ -412,7 +412,7 @@ public static class ConvertFromConcrete
                 "Unexpected expression type: " + expression.GetType().FullName)
         };
 
-    private static Expression.Integer MakeInteger(BigInteger value) =>
+    private static Expression.IntegerLiteral MakeInteger(BigInteger value) =>
         new(value, IntegerEncoding.EncodeSignedInteger(value));
 
     private static Expression.FloatLiteral MakeFloatable(string literalText)

@@ -50,7 +50,7 @@ public class ValuesEqualInProcessTests
         new ElmInterpreter.ElmClosureInProcess.SourceRef.Lambda(
             new AbstractExpr.LambdaExpression(
                 [],
-                new AbstractExpr.Integer(
+                new AbstractExpr.IntegerLiteral(
                     literal,
                     IntegerEncoding.EncodeSignedInteger(literal))));
 

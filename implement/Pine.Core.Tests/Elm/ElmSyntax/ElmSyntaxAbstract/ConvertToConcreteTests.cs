@@ -113,7 +113,7 @@ public class ConvertToConcreteTests
         var concrete = Abstract.ConvertToConcrete.ToExpression(abstractExpression);
 
         var application = concrete.Should().BeOfType<Concrete.Expression.Application>().Subject;
-        application.Arguments[0].Value.Should().BeOfType<Concrete.Expression.ParenthesizedExpression>();
+        application.Arguments[0].Value.Should().BeOfType<Concrete.Expression.Parenthesized>();
     }
 
     [Fact]
@@ -124,7 +124,7 @@ public class ConvertToConcreteTests
         var concrete = Abstract.ConvertToConcrete.ToExpression(abstractExpression);
 
         var application = concrete.Should().BeOfType<Concrete.Expression.Application>().Subject;
-        application.Function.Value.Should().BeOfType<Concrete.Expression.ParenthesizedExpression>();
+        application.Function.Value.Should().BeOfType<Concrete.Expression.Parenthesized>();
     }
 
     [Fact]
@@ -208,9 +208,9 @@ public class ConvertToConcreteTests
     {
         var concrete =
             Abstract.ConvertToConcrete.ToExpression(
-                Abstract.ConvertFromConcrete.FromExpression(new Concrete.Expression.Integer("42")));
+                Abstract.ConvertFromConcrete.FromExpression(new Concrete.Expression.IntegerLiteral("42")));
 
-        var integer = concrete.Should().BeOfType<Concrete.Expression.Integer>().Subject;
+        var integer = concrete.Should().BeOfType<Concrete.Expression.IntegerLiteral>().Subject;
 
         integer.LiteralText.Should().Be("42");
     }
@@ -221,9 +221,9 @@ public class ConvertToConcreteTests
         // The abstract model normalizes away the hex/decimal distinction, so the concrete value is decimal.
         var concrete =
             Abstract.ConvertToConcrete.ToExpression(
-                Abstract.ConvertFromConcrete.FromExpression(new Concrete.Expression.Integer("0xFF")));
+                Abstract.ConvertFromConcrete.FromExpression(new Concrete.Expression.IntegerLiteral("0xFF")));
 
-        var integer = concrete.Should().BeOfType<Concrete.Expression.Integer>().Subject;
+        var integer = concrete.Should().BeOfType<Concrete.Expression.IntegerLiteral>().Subject;
 
         integer.LiteralText.Should().Be("255");
     }
@@ -233,9 +233,9 @@ public class ConvertToConcreteTests
     {
         var concrete =
             Abstract.ConvertToConcrete.ToExpression(
-                Abstract.ConvertFromConcrete.FromExpression(new Concrete.Expression.Integer("-123")));
+                Abstract.ConvertFromConcrete.FromExpression(new Concrete.Expression.IntegerLiteral("-123")));
 
-        var integer = concrete.Should().BeOfType<Concrete.Expression.Integer>().Subject;
+        var integer = concrete.Should().BeOfType<Concrete.Expression.IntegerLiteral>().Subject;
 
         integer.LiteralText.Should().Be("-123");
     }

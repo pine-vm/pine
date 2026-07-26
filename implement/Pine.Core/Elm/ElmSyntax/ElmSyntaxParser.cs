@@ -1747,7 +1747,7 @@ public class ElmSyntaxParser
                     {
                         if (recordField.FieldName.Value is "command")
                         {
-                            if (recordField.ValueExpr.Value is not SyntaxTypes.Expression.FunctionOrValue functionOrValue)
+                            if (recordField.ValueExpr.Value is not SyntaxTypes.Expression.Identifier functionOrValue)
                             {
                                 return
                                     ErrorAtCurrentLocation(
@@ -1763,7 +1763,7 @@ public class ElmSyntaxParser
 
                         if (recordField.FieldName.Value is "subscription")
                         {
-                            if (recordField.ValueExpr.Value is not SyntaxTypes.Expression.FunctionOrValue functionOrValue)
+                            if (recordField.ValueExpr.Value is not SyntaxTypes.Expression.Identifier functionOrValue)
                             {
                                 return
                                     ErrorAtCurrentLocation(
@@ -3627,7 +3627,7 @@ public class ElmSyntaxParser
                     return stringLiteralErr;
 
                 var literalExpr =
-                    new SyntaxTypes.Expression.Literal(
+                    new SyntaxTypes.Expression.StringLiteral(
                         stringLiteral.Lexeme,
                         SourceText: stringLiteral.RawText);
 
@@ -3923,7 +3923,7 @@ public class ElmSyntaxParser
                         MakeRange(
                             firstIdentifierToken.Start,
                             identifiers[^1].End),
-                        new SyntaxTypes.Expression.FunctionOrValue(
+                        new SyntaxTypes.Expression.Identifier(
                             [.. identifiers.SkipLast(1).Select(t => t.Lexeme)],
                             identifiers[^1].Lexeme));
 
@@ -4070,7 +4070,7 @@ public class ElmSyntaxParser
                     if (furtherItems.Count is 0)
                     {
                         var parenthesizedExpr =
-                            new SyntaxTypes.Expression.ParenthesizedExpression(
+                            new SyntaxTypes.Expression.Parenthesized(
                                 Expression: firstItemExpr);
 
                         return new Node<SyntaxTypes.Expression>(parenRange, parenthesizedExpr);
@@ -4291,7 +4291,7 @@ public class ElmSyntaxParser
             if (expression.StartsWith("0x") || expression.StartsWith("-0x"))
             {
                 // Hexadecimal integer - preserve the original literal string
-                return new SyntaxTypes.Expression.Integer(expression);
+                return new SyntaxTypes.Expression.IntegerLiteral(expression);
             }
 
             // Check if the number contains a decimal point or exponent notation
@@ -4302,7 +4302,7 @@ public class ElmSyntaxParser
             }
 
             // Decimal integer - preserve the original literal string
-            return new SyntaxTypes.Expression.Integer(expression);
+            return new SyntaxTypes.Expression.IntegerLiteral(expression);
         }
 
         private ParseResult<Node<SyntaxTypes.Case>> ParseCaseBranch(int indentMin)

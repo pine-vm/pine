@@ -1115,7 +1115,7 @@ public class Rendering
                 context.Append("()");
                 break;
 
-            case ExpressionSyntax.Literal literal:
+            case ExpressionSyntax.StringLiteral literal:
 
                 if (literal.SourceText is { } rawLiteralText)
                 {
@@ -1157,7 +1157,7 @@ public class Rendering
                 context.Append(RenderCharLiteral(charLiteral.Value));
                 break;
 
-            case ExpressionSyntax.Integer integer:
+            case ExpressionSyntax.IntegerLiteral integer:
                 context.Append(integer.LiteralText);
                 break;
 
@@ -1182,7 +1182,7 @@ public class Rendering
                 context.Append("]");
                 break;
 
-            case ExpressionSyntax.FunctionOrValue funcOrValue:
+            case ExpressionSyntax.Identifier funcOrValue:
                 if (funcOrValue.ModuleName.Count > 0)
                 {
                     context.Append(string.Join(".", funcOrValue.ModuleName) + "." + funcOrValue.Name);
@@ -1210,7 +1210,7 @@ public class Rendering
                 context.Append($"({prefixOp.Operator})");
                 break;
 
-            case ExpressionSyntax.ParenthesizedExpression parenExpr:
+            case ExpressionSyntax.Parenthesized parenExpr:
 
                 // expressionNode.Range.Start is the open paren location (already advanced to)
                 context.Append("(");

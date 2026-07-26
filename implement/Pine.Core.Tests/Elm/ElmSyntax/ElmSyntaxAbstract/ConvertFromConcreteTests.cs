@@ -44,9 +44,9 @@ public class ConvertFromConcreteTests
     [Fact]
     public void Decimal_integer_literal_is_normalized_with_pine_value()
     {
-        var converted = Abstract.ConvertFromConcrete.FromExpression(new Concrete.Expression.Integer("42"));
+        var converted = Abstract.ConvertFromConcrete.FromExpression(new Concrete.Expression.IntegerLiteral("42"));
 
-        var integer = converted.Should().BeOfType<Abstract.Expression.Integer>().Subject;
+        var integer = converted.Should().BeOfType<Abstract.Expression.IntegerLiteral>().Subject;
 
         integer.Value.Should().Be(new BigInteger(42));
         integer.ValueAsPineValue.Should().Be(IntegerEncoding.EncodeSignedInteger(42));
@@ -55,9 +55,9 @@ public class ConvertFromConcreteTests
     [Fact]
     public void Hexadecimal_integer_literal_is_normalized()
     {
-        var converted = Abstract.ConvertFromConcrete.FromExpression(new Concrete.Expression.Integer("0xFF"));
+        var converted = Abstract.ConvertFromConcrete.FromExpression(new Concrete.Expression.IntegerLiteral("0xFF"));
 
-        var integer = converted.Should().BeOfType<Abstract.Expression.Integer>().Subject;
+        var integer = converted.Should().BeOfType<Abstract.Expression.IntegerLiteral>().Subject;
 
         integer.Value.Should().Be(new BigInteger(255));
         integer.ValueAsPineValue.Should().Be(IntegerEncoding.EncodeSignedInteger(255));
@@ -66,9 +66,9 @@ public class ConvertFromConcreteTests
     [Fact]
     public void Negative_integer_literal_is_normalized()
     {
-        var converted = Abstract.ConvertFromConcrete.FromExpression(new Concrete.Expression.Integer("-123"));
+        var converted = Abstract.ConvertFromConcrete.FromExpression(new Concrete.Expression.IntegerLiteral("-123"));
 
-        var integer = converted.Should().BeOfType<Abstract.Expression.Integer>().Subject;
+        var integer = converted.Should().BeOfType<Abstract.Expression.IntegerLiteral>().Subject;
 
         integer.Value.Should().Be(new BigInteger(-123));
         integer.ValueAsPineValue.Should().Be(IntegerEncoding.EncodeSignedInteger(-123));
@@ -125,7 +125,7 @@ public class ConvertFromConcreteTests
         // (SourceText). ConvertFromConcrete normalizes the literal to its decoded value and drops the
         // varied source representation, precomputing the encoded Pine value.
         var concrete =
-            new Concrete.Expression.Literal(
+            new Concrete.Expression.StringLiteral(
                 Value: "line1\nline2",
                 SourceText: "line1\\nline2");
 
@@ -147,11 +147,11 @@ public class ConvertFromConcreteTests
         // representations must normalize to the same abstract string literal.
         var fromEscape =
             Abstract.ConvertFromConcrete.FromExpression(
-                new Concrete.Expression.Literal("A", SourceText: "\\u{0041}"));
+                new Concrete.Expression.StringLiteral("A", SourceText: "\\u{0041}"));
 
         var fromLiteral =
             Abstract.ConvertFromConcrete.FromExpression(
-                new Concrete.Expression.Literal("A", SourceText: "A"));
+                new Concrete.Expression.StringLiteral("A", SourceText: "A"));
 
         fromEscape.Should().Be(fromLiteral);
         fromEscape.Should().Be(Abstract.Expression.StringLiteral.Create("A"));
@@ -179,7 +179,7 @@ public class ConvertFromConcreteTests
         // Literals produced without source text (for example synthesized during lowering) are
         // normalized from their value alone.
         var converted =
-            Abstract.ConvertFromConcrete.FromExpression(new Concrete.Expression.Literal("plain"));
+            Abstract.ConvertFromConcrete.FromExpression(new Concrete.Expression.StringLiteral("plain"));
 
         converted.Should().Be(Abstract.Expression.StringLiteral.Create("plain"));
     }
@@ -189,7 +189,7 @@ public class ConvertFromConcreteTests
     {
         var converted = ParseAndConvertExpression("(42)");
 
-        converted.Should().BeOfType<Abstract.Expression.Integer>();
+        converted.Should().BeOfType<Abstract.Expression.IntegerLiteral>();
     }
 
     [Fact]
@@ -201,7 +201,7 @@ public class ConvertFromConcreteTests
 
         recordAccess.FieldName.Should().Be("field");
         recordAccess.FieldNameValue.Should().Be(StringEncoding.ValueFromString("field"));
-        recordAccess.Record.Should().BeOfType<Abstract.Expression.FunctionOrValue>();
+        recordAccess.Record.Should().BeOfType<Abstract.Expression.Identifier>();
     }
 
     [Fact]
@@ -250,7 +250,7 @@ public class ConvertFromConcreteTests
 
         var application = converted.Should().BeOfType<Abstract.Expression.Application>().Subject;
 
-        application.Function.Should().BeOfType<Abstract.Expression.FunctionOrValue>();
+        application.Function.Should().BeOfType<Abstract.Expression.Identifier>();
         application.Arguments.Should().HaveCount(2);
     }
 
@@ -270,7 +270,7 @@ public class ConvertFromConcreteTests
         var lambda = converted.Should().BeOfType<Abstract.Expression.LambdaExpression>().Subject;
 
         lambda.Arguments.Should().HaveCount(2);
-        lambda.Expression.Should().BeOfType<Abstract.Expression.FunctionOrValue>();
+        lambda.Expression.Should().BeOfType<Abstract.Expression.Identifier>();
     }
 
     [Fact]
@@ -377,7 +377,7 @@ public class ConvertFromConcreteTests
         var letExpression = converted.Should().BeOfType<Abstract.Expression.LetExpression>().Subject;
 
         letExpression.Declarations.Should().HaveCount(1);
-        letExpression.Expression.Should().BeOfType<Abstract.Expression.FunctionOrValue>();
+        letExpression.Expression.Should().BeOfType<Abstract.Expression.Identifier>();
     }
 
     [Fact]

@@ -179,7 +179,7 @@ public class FromFullSyntaxModelTests
     [Fact]
     public void Expression_Integer_converts_correctly()
     {
-        var fullExpr = new FullTypes.Expression.Integer("42");
+        var fullExpr = new FullTypes.Expression.IntegerLiteral("42");
 
         var result = Core.Elm.ElmSyntax.Stil4mElmSyntax7.FromFullSyntaxModel.Convert(fullExpr);
 
@@ -191,7 +191,7 @@ public class FromFullSyntaxModelTests
     [Fact]
     public void Expression_Integer_hex_converts_correctly()
     {
-        var fullExpr = new FullTypes.Expression.Integer("0x49");
+        var fullExpr = new FullTypes.Expression.IntegerLiteral("0x49");
 
         var result = Core.Elm.ElmSyntax.Stil4mElmSyntax7.FromFullSyntaxModel.Convert(fullExpr);
 
@@ -203,7 +203,7 @@ public class FromFullSyntaxModelTests
     [Fact]
     public void Expression_Literal_converts_correctly()
     {
-        var fullExpr = new FullTypes.Expression.Literal("hello");
+        var fullExpr = new FullTypes.Expression.StringLiteral("hello");
 
         var result = Core.Elm.ElmSyntax.Stil4mElmSyntax7.FromFullSyntaxModel.Convert(fullExpr);
 
@@ -238,11 +238,11 @@ public class FromFullSyntaxModelTests
         var fullExpr =
             new FullTypes.Expression.IfBlock(
                 ifLoc,
-                new Node<FullTypes.Expression>(range, new FullTypes.Expression.Integer("1")),
+                new Node<FullTypes.Expression>(range, new FullTypes.Expression.IntegerLiteral("1")),
                 thenLoc,
-                new Node<FullTypes.Expression>(range, new FullTypes.Expression.Integer("2")),
+                new Node<FullTypes.Expression>(range, new FullTypes.Expression.IntegerLiteral("2")),
                 elseLoc,
-                new Node<FullTypes.Expression>(range, new FullTypes.Expression.Integer("3")));
+                new Node<FullTypes.Expression>(range, new FullTypes.Expression.IntegerLiteral("3")));
 
         var result = Core.Elm.ElmSyntax.Stil4mElmSyntax7.FromFullSyntaxModel.Convert(fullExpr);
 
@@ -260,9 +260,9 @@ public class FromFullSyntaxModelTests
         var fullExpr =
             new FullTypes.Expression.ListExpr(
                 CreateSeparatedList(
-                    new Node<FullTypes.Expression>(range, new FullTypes.Expression.Integer("1")),
+                    new Node<FullTypes.Expression>(range, new FullTypes.Expression.IntegerLiteral("1")),
                     commaLoc,
-                    new Node<FullTypes.Expression>(range, new FullTypes.Expression.Integer("2"))));
+                    new Node<FullTypes.Expression>(range, new FullTypes.Expression.IntegerLiteral("2"))));
 
         var result = Core.Elm.ElmSyntax.Stil4mElmSyntax7.FromFullSyntaxModel.Convert(fullExpr);
 
@@ -276,7 +276,7 @@ public class FromFullSyntaxModelTests
     public void Expression_FunctionOrValue_converts_correctly()
     {
         ModuleName moduleName = ["List"];
-        var fullExpr = new FullTypes.Expression.FunctionOrValue(moduleName, "map");
+        var fullExpr = new FullTypes.Expression.Identifier(moduleName, "map");
 
         var result = Core.Elm.ElmSyntax.Stil4mElmSyntax7.FromFullSyntaxModel.Convert(fullExpr);
 
@@ -359,7 +359,7 @@ public class FromFullSyntaxModelTests
                 backslashLoc,
                 [new Node<Pattern>(range, new Pattern.VarPattern("x"))],
                 arrowLoc,
-                new Node<FullTypes.Expression>(range, new FullTypes.Expression.Integer("42")));
+                new Node<FullTypes.Expression>(range, new FullTypes.Expression.IntegerLiteral("42")));
 
         var result = Core.Elm.ElmSyntax.Stil4mElmSyntax7.FromFullSyntaxModel.Convert(fullLambda);
 
@@ -378,13 +378,13 @@ public class FromFullSyntaxModelTests
         var fullCaseBlock =
             new CaseBlock(
                 caseLoc,
-                new Node<FullTypes.Expression>(range, new FullTypes.Expression.Integer("1")),
+                new Node<FullTypes.Expression>(range, new FullTypes.Expression.IntegerLiteral("1")),
                 ofLoc,
                 [
                 new Case(
                     new Node<Pattern>(range, new Pattern.VarPattern("x")),
                     arrowLoc,
-                    new Node<FullTypes.Expression>(range, new FullTypes.Expression.Integer("42")))
+                    new Node<FullTypes.Expression>(range, new FullTypes.Expression.IntegerLiteral("42")))
                 ]);
 
         var result = Core.Elm.ElmSyntax.Stil4mElmSyntax7.FromFullSyntaxModel.Convert(fullCaseBlock);

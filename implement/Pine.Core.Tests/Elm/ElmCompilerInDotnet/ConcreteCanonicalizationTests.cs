@@ -61,10 +61,10 @@ public class ConcreteCanonicalizationTests
                 .Which.Rest.Select(item => item.SeparatorLocation));
 
         canonicalizedList.Elements.Last().Value
-            .Should().Be(new SyntaxModel.Expression.Integer("0x2A"));
+            .Should().Be(new SyntaxModel.Expression.IntegerLiteral("0x2A"));
 
         canonicalizedList.Elements.ElementAt(1).Value
-            .Should().Be(new SyntaxModel.Expression.Literal("line\n", """line\n"""));
+            .Should().Be(new SyntaxModel.Expression.StringLiteral("line\n", """line\n"""));
     }
 
     [Fact]

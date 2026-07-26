@@ -133,8 +133,8 @@ public class SnapshotTestFormat
                 new ExpressionSyntax.TupledExpression(
                     Elements: MapSeparatedList(tuple.Elements, FormatExpression)),
 
-                ExpressionSyntax.ParenthesizedExpression paren =>
-                new ExpressionSyntax.ParenthesizedExpression(
+                ExpressionSyntax.Parenthesized paren =>
+                new ExpressionSyntax.Parenthesized(
                     Expression: FormatExpression(paren.Expression)),
 
                 ExpressionSyntax.LambdaExpression lambda =>
@@ -219,10 +219,10 @@ public class SnapshotTestFormat
                             })
                         ])),
 
-                ExpressionSyntax.FunctionOrValue funcOrVal =>
+                ExpressionSyntax.Identifier funcOrVal =>
                 funcOrVal,
 
-                ExpressionSyntax.Literal literal =>
+                ExpressionSyntax.StringLiteral literal =>
                 literal,
 
                 ExpressionSyntax.MultilineStringLiteral multiline =>
@@ -231,7 +231,7 @@ public class SnapshotTestFormat
                 ExpressionSyntax.CharLiteral charLiteral =>
                 charLiteral,
 
-                ExpressionSyntax.Integer intLiteral =>
+                ExpressionSyntax.IntegerLiteral intLiteral =>
                 intLiteral,
 
                 ExpressionSyntax.UnitExpr unitExpr =>
@@ -325,7 +325,7 @@ public class SnapshotTestFormat
         }
 
         // For parenthesized expressions containing multiline content, update the range
-        if (formattedValue is ExpressionSyntax.ParenthesizedExpression parenExpr)
+        if (formattedValue is ExpressionSyntax.Parenthesized parenExpr)
         {
             var innerRange = parenExpr.Expression.Range;
             // Check if inner expression spans multiple rows OR is an application (which should always be multiline)
@@ -426,14 +426,14 @@ public class SnapshotTestFormat
     /// Returns true when <paramref name="expression"/> would render across
     /// multiple lines in snapshot format, so a containing tuple or list
     /// must switch to multi-line layout. Peels
-    /// <see cref="ExpressionSyntax.ParenthesizedExpression"/> wrappers
+    /// <see cref="ExpressionSyntax.Parenthesized"/> wrappers
     /// before classifying because parens are surface-only.
     /// </summary>
     private static bool IsComplexElementForListOrTupleLayout(ExpressionSyntax expression)
     {
         // Peel ParenthesizedExpression wrappers — they only add surface
         // parens and never change whether the inner content needs to wrap.
-        while (expression is ExpressionSyntax.ParenthesizedExpression paren)
+        while (expression is ExpressionSyntax.Parenthesized paren)
         {
             expression = paren.Expression.Value;
         }

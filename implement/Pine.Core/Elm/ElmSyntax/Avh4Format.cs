@@ -494,14 +494,14 @@ public class Avh4Format
 
     /// <summary>
     /// Like <see cref="IsIntrinsicallyMultilineExpression"/> but peels any
-    /// surrounding <see cref="ExpressionSyntax.ParenthesizedExpression"/>
+    /// surrounding <see cref="ExpressionSyntax.Parenthesized"/>
     /// wrappers first. Used to decide whether an application argument like
     /// <c>(let ... in ...)</c> should force its enclosing application into
     /// the multi-line layout.
     /// </summary>
     private static bool IsIntrinsicallyMultilineExpressionPeelingParens(ExpressionSyntax expression)
     {
-        while (expression is ExpressionSyntax.ParenthesizedExpression paren)
+        while (expression is ExpressionSyntax.Parenthesized paren)
         {
             expression = paren.Expression.Value;
         }
@@ -511,7 +511,7 @@ public class Avh4Format
 
     private static bool ExpressionForcesMultilineLayout(ExpressionSyntax expression)
     {
-        while (expression is ExpressionSyntax.ParenthesizedExpression parenthesized)
+        while (expression is ExpressionSyntax.Parenthesized parenthesized)
         {
             expression = parenthesized.Expression.Value;
         }
@@ -526,12 +526,12 @@ public class Avh4Format
 
     private static bool IsZeroIntegerLiteral(ExpressionSyntax expression)
     {
-        while (expression is ExpressionSyntax.ParenthesizedExpression parenthesized)
+        while (expression is ExpressionSyntax.Parenthesized parenthesized)
         {
             expression = parenthesized.Expression.Value;
         }
 
-        if (expression is not ExpressionSyntax.Integer integer)
+        if (expression is not ExpressionSyntax.IntegerLiteral integer)
             return false;
 
         var digits =
@@ -670,11 +670,11 @@ public class Avh4Format
     /// (which already have their own delimiters).
     /// </summary>
     private static bool IsSimpleExpressionThatDoesNotNeedParens(ExpressionSyntax expr) =>
-        expr is ExpressionSyntax.Literal
+        expr is ExpressionSyntax.StringLiteral
             or ExpressionSyntax.CharLiteral
-            or ExpressionSyntax.Integer
+            or ExpressionSyntax.IntegerLiteral
             or ExpressionSyntax.FloatLiteral
-            or ExpressionSyntax.FunctionOrValue
+            or ExpressionSyntax.Identifier
             or ExpressionSyntax.UnitExpr
             or ExpressionSyntax.RecordExpr
             or ExpressionSyntax.ListExpr
@@ -4398,7 +4398,7 @@ public class Avh4Format
                 case ExpressionSyntax.UnitExpr:
                     return FormattingResult<ExpressionSyntax>.Create(expr, context.Advance(2)); // "()"
 
-                case ExpressionSyntax.Literal literal:
+                case ExpressionSyntax.StringLiteral literal:
                     {
                         // Use the rendered representation to calculate the correct length
                         // since the value may contain escaped characters
@@ -4464,7 +4464,7 @@ public class Avh4Format
                             charLit,
                             context.Advance(Rendering.RenderCharLiteral(charLit.Value).Length));
 
-                case ExpressionSyntax.Integer intLit:
+                case ExpressionSyntax.IntegerLiteral intLit:
                     return FormattingResult<ExpressionSyntax>.Create(intLit, context.Advance(intLit.LiteralText.Length));
 
                 case ExpressionSyntax.FloatLiteral floatLit:
@@ -4473,7 +4473,7 @@ public class Avh4Format
                             floatLit,
                             context.Advance(floatLit.LiteralText.Length));
 
-                case ExpressionSyntax.FunctionOrValue funcOrVal:
+                case ExpressionSyntax.Identifier funcOrVal:
                     var funcName =
                         funcOrVal.ModuleName.Count > 0
                         ?
@@ -4490,7 +4490,7 @@ public class Avh4Format
                         {
                             var zeroExpression = negation.Expression;
 
-                            while (zeroExpression.Value is ExpressionSyntax.ParenthesizedExpression parenthesized)
+                            while (zeroExpression.Value is ExpressionSyntax.Parenthesized parenthesized)
                             {
                                 zeroExpression = parenthesized.Expression;
                             }
@@ -4796,7 +4796,7 @@ public class Avh4Format
                                 finalContext);
                     }
 
-                case ExpressionSyntax.ParenthesizedExpression parenExpr:
+                case ExpressionSyntax.Parenthesized parenExpr:
                     {
                         // Trim duplicate parentheses: ((expr)) -> (expr)
                         // Following elm-format behavior, when there are multiple levels of nested
@@ -4805,7 +4805,7 @@ public class Avh4Format
                         // so circular references are not possible and depth is bounded by source nesting.
                         var innerExpr = parenExpr.Expression;
 
-                        while (innerExpr.Value is ExpressionSyntax.ParenthesizedExpression nestedParen)
+                        while (innerExpr.Value is ExpressionSyntax.Parenthesized nestedParen)
                         {
                             innerExpr = nestedParen.Expression;
                         }
@@ -4912,7 +4912,7 @@ public class Avh4Format
 
                         return
                             FormattingResult<ExpressionSyntax>.Create(
-                                new ExpressionSyntax.ParenthesizedExpression(innerResult.FormattedNode),
+                                new ExpressionSyntax.Parenthesized(innerResult.FormattedNode),
                                 afterCloseParen);
                     }
 
@@ -5236,7 +5236,7 @@ public class Avh4Format
             FormattingContext context,
             int? chainBaseColumn = null)
         {
-            if (ifBlock.ElseBlock.Value is ExpressionSyntax.ParenthesizedExpression parenthesizedElse &&
+            if (ifBlock.ElseBlock.Value is ExpressionSyntax.Parenthesized parenthesizedElse &&
                 parenthesizedElse.Expression.Value is ExpressionSyntax.IfBlock &&
                 !commentQueries.HasWithinRange(ifBlock.ElseBlock.Range))
             {

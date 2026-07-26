@@ -798,7 +798,6 @@ public record QualifiedNameRef(
 
 /// <summary>
 /// Elm expressions: literals, applications, control flow, data structures, lambda, let, case, etc.
-/// A more concrete form of <see cref="Stil4mElmSyntax7.Expression"/>.
 /// </summary>
 public abstract record Expression
 {
@@ -810,7 +809,7 @@ public abstract record Expression
     /// Simple (single-quoted) string literal expression.
     /// Triple-quoted multiline string literals are represented by <see cref="MultilineStringLiteral"/>.
     /// </summary>
-    public sealed record Literal(
+    public sealed record StringLiteral(
         string Value,
 
         /*
@@ -829,7 +828,7 @@ public abstract record Expression
     /// Triple-quoted (multiline) string literal expression.
     /// </summary>
     /// <remarks>
-    /// In contrast to <see cref="Literal"/>, the original source representation is modelled as an
+    /// In contrast to <see cref="StringLiteral"/>, the original source representation is modelled as an
     /// immutable array of lines (<see cref="SourceLines"/>) rather than a single string. The lines
     /// are the original source text content (between the opening and closing <c>"""</c> delimiters)
     /// split on physical line endings, with escape sequences preserved verbatim. Storing the content
@@ -884,7 +883,7 @@ public abstract record Expression
     /// The original literal string is preserved to enable exact roundtripping of source code.
     /// The string may represent a decimal (e.g., "42", "-123") or hexadecimal (e.g., "0xFF", "-0x1A") literal.
     /// </remarks>
-    public sealed record Integer(
+    public sealed record IntegerLiteral(
         string LiteralText)
         : Expression;
 
@@ -908,13 +907,13 @@ public abstract record Expression
         : Expression;
 
     /// <summary>Reference to a function or value.</summary>
-    public sealed record FunctionOrValue(
+    public sealed record Identifier(
         ModuleName ModuleName,
         string Name)
-        : Expression, System.IEquatable<FunctionOrValue>
+        : Expression, System.IEquatable<Identifier>
     {
         /// <inheritdoc/>
-        public bool Equals(FunctionOrValue? other) =>
+        public bool Equals(Identifier? other) =>
             other is not null &&
             Name == other.Name &&
             Enumerable.SequenceEqual(ModuleName, other.ModuleName);
@@ -935,10 +934,10 @@ public abstract record Expression
         }
 
         /// <summary>
-        /// Creates a new instance of <see cref="FunctionOrValue"/> from a fully qualified name, splitting the name into
+        /// Creates a new instance of <see cref="Identifier"/> from a fully qualified name, splitting the name into
         /// module and value components.
         /// </summary>
-        public static FunctionOrValue FromFullName(string fullName)
+        public static Identifier FromFullName(string fullName)
         {
             var parts = fullName.Split('.');
 
@@ -954,7 +953,7 @@ public abstract record Expression
                 :
                 [];
 
-            return new FunctionOrValue(moduleName, value);
+            return new Identifier(moduleName, value);
         }
     }
 
@@ -974,7 +973,7 @@ public abstract record Expression
         : Expression;
 
     /// <summary>Parenthesized subexpression.</summary>
-    public sealed record ParenthesizedExpression(
+    public sealed record Parenthesized(
         Node<Expression> Expression)
         : Expression;
 

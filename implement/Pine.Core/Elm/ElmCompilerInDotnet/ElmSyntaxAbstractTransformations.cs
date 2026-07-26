@@ -27,7 +27,7 @@ internal static class ElmSyntaxAbstractTransformations
     /// Rebuilds an expression by applying <paramref name="mapChild"/> to all immediate child
     /// expression nodes. This centralizes the expression-variant reconstruction pattern for
     /// tree-mapping operations (substitution, rewriting, flattening). Leaf expressions
-    /// (<see cref="SyntaxTypes.Expression.FunctionOrValue"/>, literals, etc.) are returned
+    /// (<see cref="SyntaxTypes.Expression.Identifier"/>, literals, etc.) are returned
     /// unchanged.
     /// </summary>
     public static SyntaxTypes.Expression MapChildExpressions(
@@ -140,9 +140,9 @@ internal static class ElmSyntaxAbstractTransformations
             case SyntaxTypes.Expression.UnitExpr:
             case SyntaxTypes.Expression.StringLiteral:
             case SyntaxTypes.Expression.CharLiteral:
-            case SyntaxTypes.Expression.Integer:
+            case SyntaxTypes.Expression.IntegerLiteral:
             case SyntaxTypes.Expression.FloatLiteral:
-            case SyntaxTypes.Expression.FunctionOrValue:
+            case SyntaxTypes.Expression.Identifier:
             case SyntaxTypes.Expression.PrefixOperator:
             case SyntaxTypes.Expression.RecordAccessFunction:
             case SyntaxTypes.Expression.GLSLExpression:
@@ -197,7 +197,7 @@ internal static class ElmSyntaxAbstractTransformations
     /// name and argument (field) expressions. Abstract-model counterpart of the
     /// concrete <c>ElmSyntaxTransformations.ConstructorApplication</c>. The constructor
     /// name is a <see cref="DeclQualifiedName"/> (as carried by
-    /// <see cref="SyntaxTypes.Expression.FunctionOrValue.QualifiedName"/>).
+    /// <see cref="SyntaxTypes.Expression.Identifier.QualifiedName"/>).
     /// </summary>
     internal sealed record ConstructorApplication(
         DeclQualifiedName ConstructorName,
@@ -205,9 +205,9 @@ internal static class ElmSyntaxAbstractTransformations
 
     /// <summary>
     /// Attempts to view an expression as a constructor (tag) application: either a bare
-    /// <see cref="SyntaxTypes.Expression.FunctionOrValue"/> (zero-arity constructor) or an
+    /// <see cref="SyntaxTypes.Expression.Identifier"/> (zero-arity constructor) or an
     /// <see cref="SyntaxTypes.Expression.Application"/> whose head function is a
-    /// <see cref="SyntaxTypes.Expression.FunctionOrValue"/>. Returns <see langword="null"/>
+    /// <see cref="SyntaxTypes.Expression.Identifier"/>. Returns <see langword="null"/>
     /// for any other shape. Abstract-model counterpart of the concrete
     /// <c>ElmSyntaxTransformations.TryDeconstructConstructorApplication</c>; the abstract
     /// model has no parentheses to unwrap and already separates the application head from
@@ -218,11 +218,11 @@ internal static class ElmSyntaxAbstractTransformations
     {
         switch (expr)
         {
-            case SyntaxTypes.Expression.FunctionOrValue funcOrValue:
+            case SyntaxTypes.Expression.Identifier funcOrValue:
                 return new ConstructorApplication(funcOrValue.QualifiedName, []);
 
             case SyntaxTypes.Expression.Application app
-            when app.Function is SyntaxTypes.Expression.FunctionOrValue constructorRef:
+            when app.Function is SyntaxTypes.Expression.Identifier constructorRef:
                 return new ConstructorApplication(constructorRef.QualifiedName, app.Arguments);
 
             default:
@@ -245,14 +245,14 @@ internal static class ElmSyntaxAbstractTransformations
         (left.ModuleName.Count is 0 || left.ModuleName.SequenceEqual(right.Namespaces));
 
     /// <summary>
-    /// Resolves a <see cref="SyntaxTypes.Expression.FunctionOrValue"/> reference into a
+    /// Resolves a <see cref="SyntaxTypes.Expression.Identifier"/> reference into a
     /// fully-qualified name. References without an explicit module qualifier (empty
     /// <see cref="DeclQualifiedName.Namespaces"/>) are interpreted as belonging to the
     /// declaring module <paramref name="currentModuleName"/>. Abstract-model counterpart of
     /// the concrete <c>ElmSyntaxTransformations.ResolveReference</c>.
     /// </summary>
     public static DeclQualifiedName ResolveReference(
-        SyntaxTypes.Expression.FunctionOrValue reference,
+        SyntaxTypes.Expression.Identifier reference,
         IReadOnlyList<string> currentModuleName) =>
         reference.QualifiedName.Namespaces.Count is 0
         ?

@@ -36,7 +36,7 @@ public class ElmSyntaxParserTests
 
         funcDecl.Should().NotBeNull();
 
-        var expr = funcDecl!.Function.Declaration.Value.Expression.Value as ExpressionSyntax.Integer;
+        var expr = funcDecl!.Function.Declaration.Value.Expression.Value as ExpressionSyntax.IntegerLiteral;
 
         expr.Should().NotBeNull("the expression should be parsed as an integer, not a float");
 
@@ -114,9 +114,9 @@ public class ElmSyntaxParserTests
 
         expr.Should().NotBeNull();
         expr!.Arguments.Should().HaveCount(2);
-        expr.Function.Value.Should().Be(new ExpressionSyntax.FunctionOrValue([], "foo"));
-        expr.Arguments[0].Value.Should().Be(new ExpressionSyntax.FunctionOrValue([], "bar"));
-        expr.Arguments[1].Value.Should().Be(new ExpressionSyntax.FunctionOrValue([], "baz"));
+        expr.Function.Value.Should().Be(new ExpressionSyntax.Identifier([], "foo"));
+        expr.Arguments[0].Value.Should().Be(new ExpressionSyntax.Identifier([], "bar"));
+        expr.Arguments[1].Value.Should().Be(new ExpressionSyntax.Identifier([], "baz"));
     }
 
     [Fact]
@@ -292,7 +292,7 @@ public class ElmSyntaxParserTests
             .Subject;
 
         nestedCase.CaseBlock.Cases.Should().HaveCount(2);
-        outerCase.CaseBlock.Cases[1].Expression.Value.Should().BeOfType<ExpressionSyntax.FunctionOrValue>();
+        outerCase.CaseBlock.Cases[1].Expression.Value.Should().BeOfType<ExpressionSyntax.Identifier>();
     }
 
     [Fact]

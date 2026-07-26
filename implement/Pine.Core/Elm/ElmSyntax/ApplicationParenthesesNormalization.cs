@@ -31,7 +31,7 @@ namespace Pine.Core.Elm.ElmSyntax;
 /// position, <c>(f a) b</c>, is flattened to the curried form <c>f a b</c>,
 /// which is exactly the normalisation elm-format performs. Only <em>bare</em>
 /// nested applications are flattened — an application already wrapped in an
-/// explicit <see cref="ExpressionSyntax.ParenthesizedExpression"/> is left
+/// explicit <see cref="ExpressionSyntax.Parenthesized"/> is left
 /// untouched, so inputs that were parsed from real source (which carry their
 /// parentheses explicitly) are never altered.
 /// </item>
@@ -83,8 +83,8 @@ public static class ApplicationParenthesesNormalization
                     PipeLocation: recordUpdate.PipeLocation,
                     Fields: MapSeparatedList(recordUpdate.Fields, NormalizeRecordField)),
 
-                ExpressionSyntax.ParenthesizedExpression parenExpr =>
-                new ExpressionSyntax.ParenthesizedExpression(
+                ExpressionSyntax.Parenthesized parenExpr =>
+                new ExpressionSyntax.Parenthesized(
                     Expression: NormalizeExpression(parenExpr.Expression)),
 
                 ExpressionSyntax.Negation negation =>
@@ -180,7 +180,7 @@ public static class ApplicationParenthesesNormalization
         return
             node with
             {
-                Value = new ExpressionSyntax.ParenthesizedExpression(node),
+                Value = new ExpressionSyntax.Parenthesized(node),
             };
     }
 

@@ -341,14 +341,14 @@ public class SetTypeAnnotation
                 var updatedOpApp = opApp with { Left = updatedLeft, Right = updatedRight };
                 return expression with { Value = updatedOpApp };
 
-            case ExpressionSyntax.ParenthesizedExpression parenExpr:
+            case ExpressionSyntax.Parenthesized parenExpr:
                 var updatedInner =
                     UpdateExpressionTypeAnnotations(
                         parenExpr.Expression,
                         parentPath,
                         declarationsTypeAnnotations);
 
-                return expression with { Value = new ExpressionSyntax.ParenthesizedExpression(updatedInner) };
+                return expression with { Value = new ExpressionSyntax.Parenthesized(updatedInner) };
 
             case ExpressionSyntax.TupledExpression tupledExpr:
                 var updatedElements =
@@ -409,10 +409,10 @@ public class SetTypeAnnotation
                 return expression with { Value = new ExpressionSyntax.Negation(updatedNegationExpr) };
 
             // Leaf expressions that don't contain nested expressions
-            case ExpressionSyntax.FunctionOrValue:
-            case ExpressionSyntax.Integer:
+            case ExpressionSyntax.Identifier:
+            case ExpressionSyntax.IntegerLiteral:
             case ExpressionSyntax.FloatLiteral:
-            case ExpressionSyntax.Literal:
+            case ExpressionSyntax.StringLiteral:
             case ExpressionSyntax.CharLiteral:
             case ExpressionSyntax.UnitExpr:
             case ExpressionSyntax.PrefixOperator:

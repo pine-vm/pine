@@ -64,12 +64,12 @@ public static class ReportSyntaxNodes
         switch (expression)
         {
             case Expression.UnitExpr:
-            case Expression.Literal:
+            case Expression.StringLiteral:
             case Expression.MultilineStringLiteral:
             case Expression.CharLiteral:
-            case Expression.Integer:
+            case Expression.IntegerLiteral:
             case Expression.FloatLiteral:
-            case Expression.FunctionOrValue:
+            case Expression.Identifier:
             case Expression.PrefixOperator:
             case Expression.RecordAccessFunction:
             case Expression.GLSLExpression:
@@ -93,7 +93,7 @@ public static class ReportSyntaxNodes
                 ReportExpression(ifBlock.ElseBlock.Value, reportLambda, reportLetBlock, reportLetFunction);
                 break;
 
-            case Expression.ParenthesizedExpression paren:
+            case Expression.Parenthesized paren:
                 ReportExpression(paren.Expression.Value, reportLambda, reportLetBlock, reportLetFunction);
                 break;
 

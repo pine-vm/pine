@@ -33,10 +33,10 @@ public class ToFullSyntaxModelTests
 
         var application = (FullTypes.Expression.Application)result;
 
-        application.Function.Value.Should().Be(new FullTypes.Expression.FunctionOrValue(["Basics"], "add"));
+        application.Function.Value.Should().Be(new FullTypes.Expression.Identifier(["Basics"], "add"));
         application.Arguments.Should().HaveCount(2);
-        application.Arguments[0].Value.Should().Be(new FullTypes.Expression.Integer("1"));
-        application.Arguments[1].Value.Should().Be(new FullTypes.Expression.Integer("2"));
+        application.Arguments[0].Value.Should().Be(new FullTypes.Expression.IntegerLiteral("1"));
+        application.Arguments[1].Value.Should().Be(new FullTypes.Expression.IntegerLiteral("2"));
     }
 
     [Fact]

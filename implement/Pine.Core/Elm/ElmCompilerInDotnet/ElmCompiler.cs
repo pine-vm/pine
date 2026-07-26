@@ -1504,7 +1504,7 @@ public class ElmCompiler
                 case ElmSyntaxAbstract.Expression.Application application:
 
                     if (application.Arguments.Count >= 1 &&
-                        application.Function is ElmSyntaxAbstract.Expression.FunctionOrValue funcRef)
+                        application.Function is ElmSyntaxAbstract.Expression.Identifier funcRef)
                     {
                         // Skip Pine_kernel functions
                         if (funcRef.QualifiedName.Namespaces.Count is 1 &&
@@ -1639,7 +1639,7 @@ public class ElmCompiler
                     AnalyzeExpression(lambdaExpr.Expression);
                     return;
 
-                case ElmSyntaxAbstract.Expression.FunctionOrValue funcOrValue:
+                case ElmSyntaxAbstract.Expression.Identifier funcOrValue:
 
                     if (funcOrValue.QualifiedName.DeclName.Length < 0)
                     {
@@ -1687,7 +1687,7 @@ public class ElmCompiler
                 case ElmSyntaxAbstract.Expression.PrefixOperator:
                 case ElmSyntaxAbstract.Expression.UnitExpr:
                 case ElmSyntaxAbstract.Expression.StringLiteral:
-                case ElmSyntaxAbstract.Expression.Integer:
+                case ElmSyntaxAbstract.Expression.IntegerLiteral:
                 case ElmSyntaxAbstract.Expression.CharLiteral:
                 case ElmSyntaxAbstract.Expression.FloatLiteral:
                 case ElmSyntaxAbstract.Expression.RecordAccessFunction:

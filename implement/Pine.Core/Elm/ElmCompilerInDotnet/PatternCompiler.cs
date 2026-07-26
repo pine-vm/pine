@@ -321,7 +321,7 @@ public class PatternCompiler
 
             var nameExprResult =
                 ExpressionCompiler.CompileFunctionOrValue(
-                    SyntaxTypes.Expression.FunctionOrValue.Create(moduleName: [], name),
+                    SyntaxTypes.Expression.Identifier.Create(moduleName: [], name),
                     outerContext);
 
             if (nameExprResult.IsErrOrNull() is { } nameExprErr)

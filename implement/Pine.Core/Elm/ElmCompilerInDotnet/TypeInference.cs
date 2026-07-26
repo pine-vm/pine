@@ -1414,7 +1414,7 @@ public static class TypeInference
         IReadOnlyDictionary<QualifiedNameRef, FunctionTypeInfo>? functionTypes)
     {
         // Integer literal - in Elm, this has type "number" (polymorphic), not forced to Int
-        if (expression is SyntaxTypes.Expression.Integer)
+        if (expression is SyntaxTypes.Expression.IntegerLiteral)
         {
             return s_numberType;
         }
@@ -1464,7 +1464,7 @@ public static class TypeInference
         }
 
         // Boolean values
-        if (expression is SyntaxTypes.Expression.FunctionOrValue funcOrValue &&
+        if (expression is SyntaxTypes.Expression.Identifier funcOrValue &&
             funcOrValue.QualifiedName.Namespaces.Count is 0 &&
             (funcOrValue.QualifiedName.DeclName is "True" || funcOrValue.QualifiedName.DeclName is "False"))
         {
@@ -1473,7 +1473,7 @@ public static class TypeInference
 
         // Local binding reference - look up the type from local binding types
         // Check local bindings FIRST because they may shadow parameters or have more precise types
-        if (expression is SyntaxTypes.Expression.FunctionOrValue localRef &&
+        if (expression is SyntaxTypes.Expression.Identifier localRef &&
             localRef.QualifiedName.Namespaces.Count is 0 &&
             localBindingTypes is not null &&
             localBindingTypes.TryGetValue(localRef.QualifiedName.DeclName, out var localType))
@@ -1482,7 +1482,7 @@ public static class TypeInference
         }
 
         // Parameter reference - look up the type from annotations
-        if (expression is SyntaxTypes.Expression.FunctionOrValue paramRef &&
+        if (expression is SyntaxTypes.Expression.Identifier paramRef &&
             paramRef.QualifiedName.Namespaces.Count is 0 &&
             parameterTypes.TryGetValue(paramRef.QualifiedName.DeclName, out var paramType))
         {
@@ -1491,7 +1491,7 @@ public static class TypeInference
 
         // Function or constructor reference - look up type from function signatures
         // This handles cases like `ChoiceD` which should return `Bool -> Beta`
-        if (expression is SyntaxTypes.Expression.FunctionOrValue funcOrValueRef &&
+        if (expression is SyntaxTypes.Expression.Identifier funcOrValueRef &&
             functionTypes is not null)
         {
             var qualifiedFuncName =
@@ -1544,7 +1544,7 @@ public static class TypeInference
             application.Arguments.Count >= 1)
         {
             // Check if the first argument is a FunctionOrValue
-            if (application.Function is SyntaxTypes.Expression.FunctionOrValue funcRef)
+            if (application.Function is SyntaxTypes.Expression.Identifier funcRef)
             {
                 // Check if this is a qualified Basics module function with known return type
                 // Only use core library type info for qualified references (e.g., Basics.modBy)
@@ -2174,7 +2174,7 @@ public static class TypeInference
                 // In the abstract model the function head is separate from Arguments,
                 // so a single-argument constructor application has Arguments.Count == 1.
                 if (application.Arguments.Count >= 1 &&
-                    application.Function is SyntaxTypes.Expression.FunctionOrValue tagFuncRef &&
+                    application.Function is SyntaxTypes.Expression.Identifier tagFuncRef &&
                     ElmValueEncoding.StringIsValidTagName(tagFuncRef.QualifiedName.DeclName))
                 {
                     // This is a tag constructor application
@@ -2193,7 +2193,7 @@ public static class TypeInference
 
                             // If the argument is a simple variable reference, constrain its type
                             // (only if not already constrained, to avoid overwriting existing constraints)
-                            if (argExpr is SyntaxTypes.Expression.FunctionOrValue tagVarRef &&
+                            if (argExpr is SyntaxTypes.Expression.Identifier tagVarRef &&
                                 tagVarRef.QualifiedName.Namespaces.Count is 0 &&
                                 !ElmValueEncoding.StringIsValidTagName(tagVarRef.QualifiedName.DeclName) &&
                                 !constraints.ContainsKey(tagVarRef.QualifiedName.DeclName))
@@ -2345,7 +2345,7 @@ public static class TypeInference
 
                 // Check if this is a function application (not a tag constructor)
                 if (application.Arguments.Count >= 1 &&
-                    application.Function is SyntaxTypes.Expression.FunctionOrValue funcRef &&
+                    application.Function is SyntaxTypes.Expression.Identifier funcRef &&
                     !ElmValueEncoding.StringIsValidTagName(funcRef.QualifiedName.DeclName))
                 {
                     var qualifiedFuncName =
@@ -2573,7 +2573,7 @@ public static class TypeInference
     {
         switch (expression)
         {
-            case SyntaxTypes.Expression.FunctionOrValue varRef:
+            case SyntaxTypes.Expression.Identifier varRef:
 
                 // Simple variable reference - constrain its type if not already constrained
                 if (varRef.QualifiedName.Namespaces.Count is 0 &&
@@ -2615,7 +2615,7 @@ public static class TypeInference
                 // Handle canonicalized operators (Basics.add, Basics.sub, Basics.mul)
                 // After canonicalization, `x + 7` becomes `Basics.add x 7`
                 if (application.Arguments.Count >= 2 &&
-                    application.Function is SyntaxTypes.Expression.FunctionOrValue funcRef &&
+                    application.Function is SyntaxTypes.Expression.Identifier funcRef &&
                     funcRef.QualifiedName.Namespaces.Count is 1 && funcRef.QualifiedName.Namespaces[0] is "Basics" &&
                     targetType is InferredType.IntType or InferredType.FloatType)
                 {
@@ -3173,7 +3173,7 @@ public static class TypeInference
             case SyntaxTypes.Expression.Application app when app.Arguments.Count >= 1:
 
                 // Check if first argument is a function reference with known signature
-                if (app.Function is SyntaxTypes.Expression.FunctionOrValue funcRef)
+                if (app.Function is SyntaxTypes.Expression.Identifier funcRef)
                 {
                     // Try both qualified and unqualified names
                     InferredType? funcType = null;
@@ -3203,7 +3203,7 @@ public static class TypeInference
                         // Match application arguments with function parameter types
                         for (var i = 1; i < app.Arguments.Count + 1 && i - 1 < argTypes.Count; i++)
                         {
-                            if (app.Arguments[i - 1] is SyntaxTypes.Expression.FunctionOrValue argRef &&
+                            if (app.Arguments[i - 1] is SyntaxTypes.Expression.Identifier argRef &&
                                 argRef.QualifiedName.Namespaces.Count is 0 &&
                                 parameterNames.ContainsKey(argRef.QualifiedName.DeclName) &&
                                 !parameterTypes.ContainsKey(argRef.QualifiedName.DeclName))
@@ -3258,7 +3258,7 @@ public static class TypeInference
                         // their fields via unification, mirroring the behaviour of
                         // multiple `r.field` accesses on the same parameter.
                         if (letDestr.Pattern is SyntaxTypes.Pattern.RecordPattern recordPattern &&
-                            letDestr.Expression is SyntaxTypes.Expression.FunctionOrValue scrutineeRef &&
+                            letDestr.Expression is SyntaxTypes.Expression.Identifier scrutineeRef &&
                             scrutineeRef.QualifiedName.Namespaces.Count is 0 &&
                             parameterNames.ContainsKey(scrutineeRef.QualifiedName.DeclName))
                         {
@@ -3560,7 +3560,7 @@ public static class TypeInference
                 // r.fieldName: if r is a parameter, constrain it to an open record
                 // requiring at least 'fieldName'. Multiple accesses on the same parameter
                 // accumulate fields via unification.
-                if (recordAccess.Record is SyntaxTypes.Expression.FunctionOrValue accessedVar &&
+                if (recordAccess.Record is SyntaxTypes.Expression.Identifier accessedVar &&
                     accessedVar.QualifiedName.Namespaces.Count is 0 &&
                     parameterNames.ContainsKey(accessedVar.QualifiedName.DeclName))
                 {
@@ -3683,7 +3683,7 @@ public static class TypeInference
     {
         switch (expression)
         {
-            case SyntaxTypes.Expression.FunctionOrValue varRef:
+            case SyntaxTypes.Expression.Identifier varRef:
 
                 // If this is a parameter variable, constrain its type
                 if (varRef.QualifiedName.Namespaces.Count is 0 &&
@@ -3722,7 +3722,7 @@ public static class TypeInference
                 // constrain it to an open record where the accessed field has
                 // exactly that type. Multiple constraints accumulate via unification
                 // of the open-record types.
-                if (recordAccess.Record is SyntaxTypes.Expression.FunctionOrValue accessedRef &&
+                if (recordAccess.Record is SyntaxTypes.Expression.Identifier accessedRef &&
                     accessedRef.QualifiedName.Namespaces.Count is 0 &&
                     parameterNames.ContainsKey(accessedRef.QualifiedName.DeclName))
                 {

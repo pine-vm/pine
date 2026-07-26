@@ -426,13 +426,13 @@ public static class ConvertToConcrete
             new SyntaxModel.Expression.UnitExpr(),
 
             Expression.StringLiteral stringLiteral =>
-            new SyntaxModel.Expression.Literal(stringLiteral.Value),
+            new SyntaxModel.Expression.StringLiteral(stringLiteral.Value),
 
             Expression.CharLiteral charLiteral =>
             new SyntaxModel.Expression.CharLiteral(charLiteral.Value),
 
-            Expression.Integer integer =>
-            new SyntaxModel.Expression.Integer(IntegerLiteralText(integer.Value)),
+            Expression.IntegerLiteral integer =>
+            new SyntaxModel.Expression.IntegerLiteral(IntegerLiteralText(integer.Value)),
 
             Expression.FloatLiteral floatable =>
             new SyntaxModel.Expression.FloatLiteral(FloatLiteralText(floatable.Numerator, floatable.Denominator)),
@@ -445,8 +445,8 @@ public static class ConvertToConcrete
                 ToSeparatedList(
                     [.. listExpr.Elements.Select(element => Node(ToExpression(element)))])),
 
-            Expression.FunctionOrValue functionOrValue =>
-            new SyntaxModel.Expression.FunctionOrValue(
+            Expression.Identifier functionOrValue =>
+            new SyntaxModel.Expression.Identifier(
                 functionOrValue.QualifiedName.Namespaces,
                 functionOrValue.QualifiedName.DeclName),
 
@@ -538,13 +538,13 @@ public static class ConvertToConcrete
         if (!NeedsParenthesesInApplicationPosition(expression))
             return converted;
 
-        return new SyntaxModel.Expression.ParenthesizedExpression(Node(converted));
+        return new SyntaxModel.Expression.Parenthesized(Node(converted));
     }
 
     private static SyntaxModel.Expression ToExpressionInOperatorOperandPosition(Expression expression) =>
         NeedsParenthesesInApplicationPosition(expression)
         ?
-        new SyntaxModel.Expression.ParenthesizedExpression(Node(ToExpression(expression)))
+        new SyntaxModel.Expression.Parenthesized(Node(ToExpression(expression)))
         :
         ToExpression(expression);
 
@@ -575,10 +575,10 @@ public static class ConvertToConcrete
             Expression.UnitExpr or
             Expression.StringLiteral or
             Expression.CharLiteral or
-            Expression.Integer or
+            Expression.IntegerLiteral or
             Expression.FloatLiteral or
             Expression.ListExpr or
-            Expression.FunctionOrValue or
+            Expression.Identifier or
             Expression.PrefixOperator or
             Expression.TupledExpression or
             Expression.RecordExpr or

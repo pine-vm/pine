@@ -807,7 +807,7 @@ public partial class ElmSyntaxInterpreter
         /// When all arguments are collected, the application is resolved.
         /// </summary>
         public sealed record BuildArgs(
-            ElmSyntaxAbstract.Expression.FunctionOrValue FunctionOrValue,
+            ElmSyntaxAbstract.Expression.Identifier FunctionOrValue,
             IReadOnlyList<ElmSyntaxAbstract.Expression> Arguments,
             int NextIndex,
             PineValueInProcess[] Accumulated,
@@ -815,7 +815,7 @@ public partial class ElmSyntaxInterpreter
 
         /// <summary>
         /// Building the argument list for an application whose function position is an arbitrary
-        /// expression (not a bare <see cref="SyntaxModel.Expression.FunctionOrValue"/> name) — for
+        /// expression (not a bare <see cref="SyntaxModel.Expression.Identifier"/> name) — for
         /// example a parenthesised lambda, an <c>if</c>-expression that yields a function, or a
         /// record-field access. Behaves like <see cref="BuildArgs"/> for argument evaluation;
         /// once all arguments are collected, evaluation switches to <see cref="FunctionExpr"/>
@@ -943,7 +943,7 @@ public partial class ElmSyntaxInterpreter
         /// <summary>
         /// Building a record-update expression <c>{ record | f1 = e1, f2 = e2 }</c>.
         /// First the original record value is obtained (by evaluating its name as a
-        /// <see cref="SyntaxModel.Expression.FunctionOrValue"/>); afterwards each
+        /// <see cref="SyntaxModel.Expression.Identifier"/>); afterwards each
         /// field-update value expression is evaluated in source order. <see cref="OriginalRecord"/>
         /// is <c>null</c> while the original record is still being computed; once obtained it is
         /// captured here so the update field expressions can be collected. <see cref="NextIndex"/>
@@ -1061,7 +1061,7 @@ public partial class ElmSyntaxInterpreter
                         currentExpr = null;
                         break;
 
-                    case ElmSyntaxAbstract.Expression.Integer integer:
+                    case ElmSyntaxAbstract.Expression.IntegerLiteral integer:
                         currentValue = PineValueInProcess.Create(integer.ValueAsPineValue);
                         currentExpr = null;
                         break;
@@ -1154,7 +1154,7 @@ public partial class ElmSyntaxInterpreter
                             break;
                         }
 
-                    case ElmSyntaxAbstract.Expression.FunctionOrValue functionOrValue:
+                    case ElmSyntaxAbstract.Expression.Identifier functionOrValue:
                         {
                             // Bare name lookup. If it resolves to a local binding, return it directly;
                             // otherwise it's a nullary application which is handled by the same path
@@ -1230,7 +1230,7 @@ public partial class ElmSyntaxInterpreter
 
                             var accumulated = new PineValueInProcess[args.Count];
 
-                            if (functionExpression is ElmSyntaxAbstract.Expression.FunctionOrValue fnOrVal)
+                            if (functionExpression is ElmSyntaxAbstract.Expression.Identifier fnOrVal)
                             {
                                 kstack.Push(
                                     new Kont.BuildArgs(
@@ -1410,7 +1410,7 @@ public partial class ElmSyntaxInterpreter
                             // First evaluate the record name as a bare FunctionOrValue so the
                             // existing local-binding / top-level lookup machinery applies.
                             var recordNameExpr =
-                                ElmSyntaxAbstract.Expression.FunctionOrValue.Create(
+                                ElmSyntaxAbstract.Expression.Identifier.Create(
                                     moduleName: [],
                                     name: recordUpdate.RecordName);
 
@@ -1446,7 +1446,7 @@ public partial class ElmSyntaxInterpreter
                             }
 
                             var functionRef =
-                                ElmSyntaxAbstract.Expression.FunctionOrValue.Create(
+                                ElmSyntaxAbstract.Expression.Identifier.Create(
                                     moduleName: opFunctionName.Namespaces,
                                     name: opFunctionName.DeclName);
 
@@ -1477,7 +1477,7 @@ public partial class ElmSyntaxInterpreter
                             }
 
                             currentExpr =
-                                ElmSyntaxAbstract.Expression.FunctionOrValue.Create(
+                                ElmSyntaxAbstract.Expression.Identifier.Create(
                                     moduleName: opFunctionName.Namespaces,
                                     name: opFunctionName.DeclName);
 
@@ -2197,7 +2197,7 @@ public partial class ElmSyntaxInterpreter
     }
 
     private static Result<ElmInterpretationError, ApplyCallOutcome> ApplyFunctionOrValue(
-        ElmSyntaxAbstract.Expression.FunctionOrValue functionOrValue,
+        ElmSyntaxAbstract.Expression.Identifier functionOrValue,
         IReadOnlyList<PineValueInProcess> arguments,
         ApplicationContext env,
         System.Func<Application, ApplicationResolution> resolveApplication,
@@ -3343,7 +3343,7 @@ public partial class ElmSyntaxInterpreter
     }
 
     /// <summary>
-    /// Collects bare-name references (i.e. <see cref="SyntaxModel.Expression.FunctionOrValue"/>
+    /// Collects bare-name references (i.e. <see cref="SyntaxModel.Expression.Identifier"/>
     /// nodes with empty module name) appearing free in <paramref name="expression"/> into
     /// <paramref name="free"/>. Names introduced by lambdas, case alternatives, nested let
     /// blocks, or function-parameter patterns shadow outer references and are tracked through
@@ -3366,7 +3366,7 @@ public partial class ElmSyntaxInterpreter
             case ElmSyntaxAbstract.Expression.UnitExpr:
             case ElmSyntaxAbstract.Expression.StringLiteral:
             case ElmSyntaxAbstract.Expression.CharLiteral:
-            case ElmSyntaxAbstract.Expression.Integer:
+            case ElmSyntaxAbstract.Expression.IntegerLiteral:
             case ElmSyntaxAbstract.Expression.FloatLiteral:
             case ElmSyntaxAbstract.Expression.PrefixOperator:
             case ElmSyntaxAbstract.Expression.RecordAccessFunction:
@@ -3401,7 +3401,7 @@ public partial class ElmSyntaxInterpreter
 
                 break;
 
-            case ElmSyntaxAbstract.Expression.FunctionOrValue functionOrValue:
+            case ElmSyntaxAbstract.Expression.Identifier functionOrValue:
                 if (functionOrValue.QualifiedName.Namespaces.Count is 0
                     && !shadowed.Contains(functionOrValue.QualifiedName.DeclName))
                 {

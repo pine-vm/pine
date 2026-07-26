@@ -30,7 +30,7 @@ public class ExpressionCompiler
             SyntaxTypes.Expression.UnitExpr =>
             Expression.LitralInst(PineValue.EmptyList),
 
-            SyntaxTypes.Expression.Integer expr =>
+            SyntaxTypes.Expression.IntegerLiteral expr =>
             CompileInteger(expr),
 
             SyntaxTypes.Expression.FloatLiteral expr =>
@@ -42,7 +42,7 @@ public class ExpressionCompiler
             SyntaxTypes.Expression.CharLiteral expr =>
             CompileCharLiteral(expr),
 
-            SyntaxTypes.Expression.FunctionOrValue expr =>
+            SyntaxTypes.Expression.Identifier expr =>
             CompileFunctionOrValue(expr, context),
 
             SyntaxTypes.Expression.Application expr =>
@@ -89,7 +89,7 @@ public class ExpressionCompiler
         };
 
     private static Result<CompilationError, Expression> CompileInteger(
-        SyntaxTypes.Expression.Integer expr) =>
+        SyntaxTypes.Expression.IntegerLiteral expr) =>
         Expression.LitralInst(EmitIntegerLiteral(expr.Value));
 
     private static Result<CompilationError, Expression> CompileFloatLiteral(
@@ -114,7 +114,7 @@ public class ExpressionCompiler
         Expression.LitralInst(EmitCharLiteral(expr.Value));
 
     internal static Result<CompilationError, Expression> CompileFunctionOrValue(
-        SyntaxTypes.Expression.FunctionOrValue expr,
+        SyntaxTypes.Expression.Identifier expr,
         ExpressionCompilationContext context)
     {
         if (expr.QualifiedName.Namespaces.Count is 0)
@@ -294,7 +294,7 @@ public class ExpressionCompiler
         var functionExpr = expr.Function;
 
         // Check if this is a Pine_kernel application
-        if (functionExpr is SyntaxTypes.Expression.FunctionOrValue kernelFunc &&
+        if (functionExpr is SyntaxTypes.Expression.Identifier kernelFunc &&
             kernelFunc.QualifiedName.Namespaces.Count is 1 &&
             context.ModuleCompilationContext.IsPineKernelModule(kernelFunc.QualifiedName.Namespaces[0]))
         {
@@ -352,7 +352,7 @@ public class ExpressionCompiler
         }
 
         // Check if this is a function application or choice type tag application
-        if (functionExpr is SyntaxTypes.Expression.FunctionOrValue funcRef)
+        if (functionExpr is SyntaxTypes.Expression.Identifier funcRef)
         {
             if (funcRef.QualifiedName.Namespaces.Count is 1 &&
                 funcRef.QualifiedName.Namespaces[0] is "Debug" &&
@@ -1146,7 +1146,7 @@ public class ExpressionCompiler
         ExpressionCompilationContext context)
     {
         // Check if the expression is a simple variable reference
-        if (expression is SyntaxTypes.Expression.FunctionOrValue funcOrValue &&
+        if (expression is SyntaxTypes.Expression.Identifier funcOrValue &&
             funcOrValue.QualifiedName.Namespaces.Count is 0)
         {
             var varName = funcOrValue.QualifiedName.DeclName;
@@ -1229,7 +1229,7 @@ public class ExpressionCompiler
         SyntaxTypes.Expression.Negation expr,
         ExpressionCompilationContext context)
     {
-        if (expr.Expression is SyntaxTypes.Expression.Integer intLiteral)
+        if (expr.Expression is SyntaxTypes.Expression.IntegerLiteral intLiteral)
         {
             return Expression.LitralInst(EmitIntegerLiteral(-intLiteral.Value));
         }
@@ -1472,7 +1472,7 @@ public class ExpressionCompiler
     {
         switch (expression)
         {
-            case SyntaxTypes.Expression.FunctionOrValue funcOrVal:
+            case SyntaxTypes.Expression.Identifier funcOrVal:
                 if (funcOrVal.QualifiedName.Namespaces.Count is 0)
                 {
                     refs.Add(funcOrVal.QualifiedName.DeclName);

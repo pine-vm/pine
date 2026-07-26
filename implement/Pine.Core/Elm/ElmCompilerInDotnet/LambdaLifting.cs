@@ -276,12 +276,12 @@ public static class LambdaLifting
         IReadOnlyList<string> moduleNamespaces,
         Func<string, bool> isLiftedName)
     {
-        if (expr is SyntaxTypes.Expression.FunctionOrValue funcOrVal &&
+        if (expr is SyntaxTypes.Expression.Identifier funcOrVal &&
             funcOrVal.QualifiedName.Namespaces.Count is 0 &&
             isLiftedName(funcOrVal.QualifiedName.DeclName))
         {
             return
-                new SyntaxTypes.Expression.FunctionOrValue(
+                new SyntaxTypes.Expression.Identifier(
                     DeclQualifiedName.Create(moduleNamespaces, funcOrVal.QualifiedName.DeclName));
         }
 
@@ -544,8 +544,8 @@ public static class LambdaLifting
                 return TransformNegation(negation, context, liftedFunctions);
 
             // Leaf expressions - no transformation needed
-            case SyntaxTypes.Expression.FunctionOrValue:
-            case SyntaxTypes.Expression.Integer:
+            case SyntaxTypes.Expression.Identifier:
+            case SyntaxTypes.Expression.IntegerLiteral:
             case SyntaxTypes.Expression.StringLiteral:
             case SyntaxTypes.Expression.CharLiteral:
             case SyntaxTypes.Expression.FloatLiteral:
@@ -1166,13 +1166,13 @@ public static class LambdaLifting
     {
         switch (expr)
         {
-            case SyntaxTypes.Expression.FunctionOrValue funcOrVal:
+            case SyntaxTypes.Expression.Identifier funcOrVal:
 
                 // Only substitute local references (empty namespace)
                 if (funcOrVal.QualifiedName.Namespaces.Count is 0 &&
                     substitutions.TryGetValue(funcOrVal.QualifiedName.DeclName, out var newName))
                 {
-                    return SyntaxTypes.Expression.FunctionOrValue.Create([], newName);
+                    return SyntaxTypes.Expression.Identifier.Create([], newName);
                 }
 
                 return funcOrVal;
@@ -1228,7 +1228,7 @@ public static class LambdaLifting
     {
         switch (expr)
         {
-            case SyntaxTypes.Expression.FunctionOrValue funcOrVal:
+            case SyntaxTypes.Expression.Identifier funcOrVal:
 
                 if (funcOrVal.QualifiedName.Namespaces.Count is 0 &&
                     funcOrVal.QualifiedName.DeclName == selfName)
@@ -1242,7 +1242,7 @@ public static class LambdaLifting
 
             case SyntaxTypes.Expression.Application appExpr:
 
-                if (appExpr.Function is SyntaxTypes.Expression.FunctionOrValue headRef &&
+                if (appExpr.Function is SyntaxTypes.Expression.Identifier headRef &&
                     headRef.QualifiedName.Namespaces.Count is 0 &&
                     headRef.QualifiedName.DeclName == selfName)
                 {
@@ -1362,7 +1362,7 @@ public static class LambdaLifting
         // reference (used at reuse sites where the post-pass qualification step would not otherwise
         // cover the name); otherwise emit an unqualified reference relying on the post-pass.
         var funcRef =
-            new SyntaxTypes.Expression.FunctionOrValue(
+            new SyntaxTypes.Expression.Identifier(
                 DeclQualifiedName.Create(moduleNamespaces ?? [], functionName));
 
         if (capturedVariables.Count is 0)
@@ -1373,7 +1373,7 @@ public static class LambdaLifting
         else if (capturedVariables.Count is 1)
         {
             // Single capture: function application with single argument
-            var argRef = SyntaxTypes.Expression.FunctionOrValue.Create([], capturedVariables[0]);
+            var argRef = SyntaxTypes.Expression.Identifier.Create([], capturedVariables[0]);
 
             return new SyntaxTypes.Expression.Application(funcRef, [argRef]);
         }
@@ -1382,7 +1382,7 @@ public static class LambdaLifting
             // Multiple captures: function application with tuple argument
             var tupleElements =
                 capturedVariables
-                .Select(v => (SyntaxTypes.Expression)SyntaxTypes.Expression.FunctionOrValue.Create([], v))
+                .Select(v => (SyntaxTypes.Expression)SyntaxTypes.Expression.Identifier.Create([], v))
                 .ToList();
 
             var tupleExpr = new SyntaxTypes.Expression.TupledExpression(tupleElements);
@@ -1397,7 +1397,7 @@ public static class LambdaLifting
     {
         switch (expr)
         {
-            case SyntaxTypes.Expression.FunctionOrValue funcOrVal:
+            case SyntaxTypes.Expression.Identifier funcOrVal:
 
                 // Only consider local variables (empty namespace)
                 if (funcOrVal.QualifiedName.Namespaces.Count is 0 &&
@@ -1536,7 +1536,7 @@ public static class LambdaLifting
                 return FindFreeVariables(negation.Expression, boundVariables);
 
             // Leaf expressions - no variables
-            case SyntaxTypes.Expression.Integer:
+            case SyntaxTypes.Expression.IntegerLiteral:
             case SyntaxTypes.Expression.StringLiteral:
             case SyntaxTypes.Expression.CharLiteral:
             case SyntaxTypes.Expression.FloatLiteral:

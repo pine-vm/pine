@@ -218,12 +218,12 @@ public static class NamingErrorDetection
         switch (expr)
         {
             case SyntaxTypes.Expression.UnitExpr:
-            case SyntaxTypes.Expression.Literal:
+            case SyntaxTypes.Expression.StringLiteral:
             case SyntaxTypes.Expression.MultilineStringLiteral:
             case SyntaxTypes.Expression.CharLiteral:
-            case SyntaxTypes.Expression.Integer:
+            case SyntaxTypes.Expression.IntegerLiteral:
             case SyntaxTypes.Expression.FloatLiteral:
-            case SyntaxTypes.Expression.FunctionOrValue:
+            case SyntaxTypes.Expression.Identifier:
             case SyntaxTypes.Expression.PrefixOperator:
             case SyntaxTypes.Expression.RecordAccessFunction:
             case SyntaxTypes.Expression.GLSLExpression:
@@ -255,7 +255,7 @@ public static class NamingErrorDetection
                         ifBlock.ThenBlock,
                         ifBlock.ElseBlock);
 
-            case SyntaxTypes.Expression.ParenthesizedExpression parenExpr:
+            case SyntaxTypes.Expression.Parenthesized parenExpr:
                 return
                     DetectNamingErrorsInExpression(
                         parenExpr.Expression.Value,

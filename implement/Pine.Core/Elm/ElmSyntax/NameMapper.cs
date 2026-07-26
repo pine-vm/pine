@@ -324,8 +324,8 @@ public class NameMapper
                 ExpressionSyntax.Negation negation =>
                 new ExpressionSyntax.Negation(MapExpression(negation.Expression, mapQualifiedName)),
 
-                ExpressionSyntax.ParenthesizedExpression parenExpr =>
-                new ExpressionSyntax.ParenthesizedExpression(
+                ExpressionSyntax.Parenthesized parenExpr =>
+                new ExpressionSyntax.Parenthesized(
                     Expression: MapExpression(parenExpr.Expression, mapQualifiedName)),
 
                 ExpressionSyntax.RecordAccess recordAccess =>
@@ -334,9 +334,9 @@ public class NameMapper
                     FieldName: recordAccess.FieldName),
 
                 // These expression types don't contain type annotations or expressions to traverse
-                ExpressionSyntax.Integer or ExpressionSyntax.Literal or ExpressionSyntax.CharLiteral or
+                ExpressionSyntax.IntegerLiteral or ExpressionSyntax.StringLiteral or ExpressionSyntax.CharLiteral or
                 ExpressionSyntax.FloatLiteral or ExpressionSyntax.UnitExpr or
-                ExpressionSyntax.FunctionOrValue or ExpressionSyntax.RecordAccessFunction or
+                ExpressionSyntax.Identifier or ExpressionSyntax.RecordAccessFunction or
                 ExpressionSyntax.PrefixOperator =>
                 exprNode.Value,
 

@@ -543,7 +543,7 @@ public class CaseBlockTests
             """
             Case expression did not match any arm.
             Scrutinee value: Nothing
-            Scrutinee expression: FunctionOrValue { QualifiedName = m }
+            Scrutinee expression: Identifier { QualifiedName = m }
             Elm call stack (innermost first):
               at classify Nothing
             """);

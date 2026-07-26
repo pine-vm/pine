@@ -455,7 +455,7 @@ public static class OperatorLowering
         Expression.Application application,
         RewriteContext context)
     {
-        if (application.Function is not Expression.FunctionOrValue functionOrValue)
+        if (application.Function is not Expression.Identifier functionOrValue)
             return [];
 
         if (!context.FunctionParameterTypes.TryGetValue(functionOrValue.QualifiedName.DeclName, out var parameterTypes))
@@ -483,7 +483,7 @@ public static class OperatorLowering
         if (!config.LowerPipes)
             return null;
 
-        if (application.Function is not Expression.FunctionOrValue functionOrValue)
+        if (application.Function is not Expression.Identifier functionOrValue)
             return null;
 
         if (functionOrValue.QualifiedName.Namespaces is not ["Basics"])
@@ -648,7 +648,7 @@ public static class OperatorLowering
         Expression function,
         Config config)
     {
-        if (function is not Expression.FunctionOrValue functionOrValue)
+        if (function is not Expression.Identifier functionOrValue)
             return null;
 
         if (functionOrValue.QualifiedName.Namespaces is not ["Basics"])
@@ -742,7 +742,7 @@ public static class OperatorLowering
     private static Expression BuildIntIsSortedAscApplication(
         IReadOnlyList<Expression> operands) =>
         new Expression.Application(
-            Expression.FunctionOrValue.Create(["Pine_builtin"], "int_is_sorted_asc"),
+            Expression.Identifier.Create(["Pine_builtin"], "int_is_sorted_asc"),
             [new Expression.ListExpr([.. operands])]);
 
     /// <summary>
@@ -811,7 +811,7 @@ public static class OperatorLowering
         Expression candidate)
     {
         if (candidate is not Expression.Application app ||
-            app.Function is not Expression.FunctionOrValue fv ||
+            app.Function is not Expression.Identifier fv ||
             fv.QualifiedName.Namespaces is not ["Pine_builtin"] ||
             fv.QualifiedName.DeclName is not "int_add" ||
             app.Arguments.Count is not 1 ||
@@ -834,7 +834,7 @@ public static class OperatorLowering
         Expression expression)
     {
         if (expression is not Expression.Application application ||
-            application.Function is not Expression.FunctionOrValue functionOrValue ||
+            application.Function is not Expression.Identifier functionOrValue ||
             functionOrValue.QualifiedName.Namespaces is not ["Pine_builtin"] ||
             functionOrValue.QualifiedName.DeclName is not "int_is_sorted_asc" ||
             application.Arguments.Count is not 1 ||
@@ -847,13 +847,13 @@ public static class OperatorLowering
     }
 
     private static bool IsIntegerLiteral(Expression expression, BigInteger value) =>
-        expression is Expression.Integer integer && integer.Value == value;
+        expression is Expression.IntegerLiteral integer && integer.Value == value;
 
     private static BigInteger? TryGetIntegerLiteralValue(Expression expression) =>
         expression switch
         {
-            Expression.Integer integer => integer.Value,
-            Expression.Negation { Expression: Expression.Integer negated } => -negated.Value,
+            Expression.IntegerLiteral integer => integer.Value,
+            Expression.Negation { Expression: Expression.IntegerLiteral negated } => -negated.Value,
 
             _ =>
             null,
@@ -863,7 +863,7 @@ public static class OperatorLowering
         string builtinName,
         IReadOnlyList<Expression> operands) =>
         new Expression.Application(
-            Expression.FunctionOrValue.Create(["Pine_builtin"], builtinName),
+            Expression.Identifier.Create(["Pine_builtin"], builtinName),
             [new Expression.ListExpr(operands)]);
 
     /// <summary>
@@ -872,8 +872,8 @@ public static class OperatorLowering
     /// <c>Basics.and</c> / <c>Basics.or</c> applications) into <c>if-then-else</c> expressions.
     /// </summary>
     private static Expression BuildBasicsBoolReference(bool value) =>
-        Expression.FunctionOrValue.Create(["Basics"], value ? "True" : "False");
+        Expression.Identifier.Create(["Basics"], value ? "True" : "False");
 
     private static Expression BuildIntegerLiteral(BigInteger value) =>
-        new Expression.Integer(value, IntegerEncoding.EncodeSignedInteger(value));
+        new Expression.IntegerLiteral(value, IntegerEncoding.EncodeSignedInteger(value));
 }

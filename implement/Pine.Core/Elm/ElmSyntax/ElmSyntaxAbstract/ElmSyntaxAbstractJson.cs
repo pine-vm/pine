@@ -24,7 +24,7 @@ namespace Pine.Core.Elm.ElmSyntax.ElmSyntaxAbstract;
 /// <see cref="PineValue"/> instances are recomputed on deserialization.
 /// </para>
 /// <para>
-/// The <see cref="DeclQualifiedName"/> carried by <see cref="Expression.FunctionOrValue"/> is encoded as its
+/// The <see cref="DeclQualifiedName"/> carried by <see cref="Expression.Identifier"/> is encoded as its
 /// <see cref="DeclQualifiedName.FullName"/> string (see <see cref="DeclQualifiedNameJsonConverter"/>).
 /// </para>
 /// </summary>

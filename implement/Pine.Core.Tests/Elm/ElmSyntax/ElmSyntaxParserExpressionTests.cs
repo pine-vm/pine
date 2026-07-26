@@ -69,7 +69,7 @@ public class ElmSyntaxParserExpressionTests
     }
 
     private static Abstract.Expression IntegerExpr(long value) =>
-        new Abstract.Expression.Integer(
+        new Abstract.Expression.IntegerLiteral(
             new BigInteger(value),
             IntegerEncoding.EncodeSignedInteger(value));
 
@@ -112,14 +112,14 @@ public class ElmSyntaxParserExpressionTests
     public void Parses_function_or_value_reference()
     {
         ParseAndConvert("foo")
-            .Should().Be(Abstract.Expression.FunctionOrValue.Create([], "foo"));
+            .Should().Be(Abstract.Expression.Identifier.Create([], "foo"));
     }
 
     [Fact]
     public void Parses_qualified_function_or_value_reference()
     {
         ParseAndConvert("String.fromInt")
-            .Should().Be(Abstract.Expression.FunctionOrValue.Create(["String"], "fromInt"));
+            .Should().Be(Abstract.Expression.Identifier.Create(["String"], "fromInt"));
     }
 
     [Fact]
@@ -165,7 +165,7 @@ public class ElmSyntaxParserExpressionTests
         ParseAndConvert("String.fromInt 42")
             .Should().Be(
             new Abstract.Expression.Application(
-                Abstract.Expression.FunctionOrValue.Create(["String"], "fromInt"),
+                Abstract.Expression.Identifier.Create(["String"], "fromInt"),
                 [IntegerExpr(42)]));
     }
 
@@ -175,7 +175,7 @@ public class ElmSyntaxParserExpressionTests
         ParseAndConvert("if cond then 1 else 2")
             .Should().Be(
             new Abstract.Expression.IfBlock(
-                Abstract.Expression.FunctionOrValue.Create([], "cond"),
+                Abstract.Expression.Identifier.Create([], "cond"),
                 IntegerExpr(1),
                 IntegerExpr(2)));
     }
@@ -186,7 +186,7 @@ public class ElmSyntaxParserExpressionTests
         ParseAndConvert("-x")
             .Should().Be(
             new Abstract.Expression.Negation(
-                Abstract.Expression.FunctionOrValue.Create([], "x")));
+                Abstract.Expression.Identifier.Create([], "x")));
     }
 
     [Fact]

@@ -709,7 +709,7 @@ public class ReportSyntaxNodesTests
     [Fact]
     public void ReportExpression_on_integer_literal_reports_nothing()
     {
-        var expr = new ExpressionSyntax.Integer("42");
+        var expr = new ExpressionSyntax.IntegerLiteral("42");
 
         var (lambdas, letBlocks, letFunctions) = CollectReportsFromExpression(expr);
 

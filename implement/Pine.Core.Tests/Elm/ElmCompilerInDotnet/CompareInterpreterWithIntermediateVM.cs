@@ -366,14 +366,14 @@ public sealed class CompareInterpreterWithIntermediateVM
 
         switch (innerExpression)
         {
-            case SyntaxModel.Expression.FunctionOrValue zeroArgRef:
+            case SyntaxModel.Expression.Identifier zeroArgRef:
                 return (ResolveEntryPointName(zeroArgRef), []);
 
             case SyntaxModel.Expression.Application application:
                 {
                     var head = UnwrapParenthesized(application.Function.Value);
 
-                    if (head is not SyntaxModel.Expression.FunctionOrValue funcRef)
+                    if (head is not SyntaxModel.Expression.Identifier funcRef)
                     {
                         throw new InvalidOperationException(
                             "CompareInterpreterWithIntermediateVM only supports root expressions whose "
@@ -403,7 +403,7 @@ public sealed class CompareInterpreterWithIntermediateVM
 
     private static SyntaxModel.Expression UnwrapParenthesized(SyntaxModel.Expression expression)
     {
-        while (expression is SyntaxModel.Expression.ParenthesizedExpression parens)
+        while (expression is SyntaxModel.Expression.Parenthesized parens)
         {
             expression = parens.Expression.Value;
         }
@@ -411,7 +411,7 @@ public sealed class CompareInterpreterWithIntermediateVM
         return expression;
     }
 
-    private DeclQualifiedName ResolveEntryPointName(SyntaxModel.Expression.FunctionOrValue functionOrValue)
+    private DeclQualifiedName ResolveEntryPointName(SyntaxModel.Expression.Identifier functionOrValue)
     {
         if (functionOrValue.ModuleName.Count is 0)
         {

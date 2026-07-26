@@ -61,7 +61,7 @@ public interface IInvocationLogger
 
     /// <summary>
     /// Called when the interpreter dispatches a direct (name-based) function application —
-    /// i.e. every <see cref="SyntaxModel.Expression.FunctionOrValue"/> reference that resolves
+    /// i.e. every <see cref="SyntaxModel.Expression.Identifier"/> reference that resolves
     /// to a top-level user-defined function, constructor, or built-in identified by name.
     /// </summary>
     void OnDirectFunctionApplication(ElmSyntaxInterpreter.Application application);

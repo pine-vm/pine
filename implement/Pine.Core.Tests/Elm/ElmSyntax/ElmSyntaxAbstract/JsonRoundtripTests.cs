@@ -19,7 +19,7 @@ using Expression = Core.Elm.ElmSyntax.ElmSyntaxAbstract.Expression;
 /// </summary>
 public class JsonRoundtripTests
 {
-    private static Expression.Integer IntExpr(int value) =>
+    private static Expression.IntegerLiteral IntExpr(int value) =>
         new(value, IntegerEncoding.EncodeSignedInteger(value));
 
     private static RecordSetter Setter(string name, Expression value) =>
@@ -51,10 +51,10 @@ public class JsonRoundtripTests
         AssertRoundtrip<Expression>(Expression.CharLiteral.Create(0x1F600));
         AssertRoundtrip<Expression>(IntExpr(0));
         AssertRoundtrip<Expression>(IntExpr(42));
-        AssertRoundtrip<Expression>(new Expression.Integer(-7, IntegerEncoding.EncodeSignedInteger(-7)));
+        AssertRoundtrip<Expression>(new Expression.IntegerLiteral(-7, IntegerEncoding.EncodeSignedInteger(-7)));
 
         AssertRoundtrip<Expression>(
-            new Expression.Integer(
+            new Expression.IntegerLiteral(
                 BigInteger.Parse("123456789012345678901234567890"),
                 IntegerEncoding.EncodeSignedInteger(BigInteger.Parse("123456789012345678901234567890"))));
 
@@ -72,14 +72,14 @@ public class JsonRoundtripTests
         AssertRoundtrip<Expression>(new Expression.ListExpr([IntExpr(1), IntExpr(2), IntExpr(3)]));
         AssertRoundtrip<Expression>(new Expression.ListExpr([]));
 
-        AssertRoundtrip<Expression>(Expression.FunctionOrValue.Create(["List", "Extra"], "foldl1"));
-        AssertRoundtrip<Expression>(Expression.FunctionOrValue.Create([], "x"));
+        AssertRoundtrip<Expression>(Expression.Identifier.Create(["List", "Extra"], "foldl1"));
+        AssertRoundtrip<Expression>(Expression.Identifier.Create([], "x"));
 
         AssertRoundtrip<Expression>(new Expression.IfBlock(IntExpr(1), IntExpr(2), IntExpr(3)));
 
         AssertRoundtrip<Expression>(
             new Expression.Application(
-                Expression.FunctionOrValue.Create([], "f"),
+                Expression.Identifier.Create([], "f"),
                 [IntExpr(1), IntExpr(2)]));
 
         AssertRoundtrip<Expression>(
@@ -99,8 +99,8 @@ public class JsonRoundtripTests
                 new Expression.OperatorApplication(
                     "+",
                     InfixDirection.Left,
-                    Expression.FunctionOrValue.Create([], "x"),
-                    Expression.FunctionOrValue.Create([], "y"))));
+                    Expression.Identifier.Create([], "x"),
+                    Expression.Identifier.Create([], "y"))));
     }
 
     [Fact]
@@ -117,7 +117,7 @@ public class JsonRoundtripTests
 
         AssertRoundtrip<Expression>(
             new Expression.RecordAccess(
-                Expression.FunctionOrValue.Create([], "r"),
+                Expression.Identifier.Create([], "r"),
                 "field",
                 StringEncoding.ValueFromString("field")));
 
@@ -133,7 +133,7 @@ public class JsonRoundtripTests
     {
         AssertRoundtrip<Expression>(
             new Expression.CaseExpression(
-                Expression.FunctionOrValue.Create([], "x"),
+                Expression.Identifier.Create([], "x"),
                 [
                     new Case(new Pattern.IntPattern(0), Expression.StringLiteral.Create("zero")),
                     new Case(new Pattern.AllPattern(), Expression.StringLiteral.Create("other")),
@@ -151,13 +151,13 @@ public class JsonRoundtripTests
                                 new Expression.OperatorApplication(
                                     "*",
                                     InfixDirection.Left,
-                                    Expression.FunctionOrValue.Create([], "n"),
+                                    Expression.Identifier.Create([], "n"),
                                     IntExpr(2))))),
                     new LetDeclaration.LetDestructuring(
                         new Pattern.TuplePattern([new Pattern.VarPattern("a"), new Pattern.VarPattern("b")]),
                         new Expression.TupledExpression([IntExpr(1), IntExpr(2)])),
                 ],
-                Expression.FunctionOrValue.Create([], "doubled")));
+                Expression.Identifier.Create([], "doubled")));
     }
 
     [Fact]
@@ -251,8 +251,8 @@ public class JsonRoundtripTests
                         new Expression.OperatorApplication(
                             "+",
                             InfixDirection.Left,
-                            Expression.FunctionOrValue.Create([], "a"),
-                            Expression.FunctionOrValue.Create([], "b"))))));
+                            Expression.Identifier.Create([], "a"),
+                            Expression.Identifier.Create([], "b"))))));
 
         AssertRoundtrip<Declaration>(
             new Declaration.ChoiceTypeDeclaration(

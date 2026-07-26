@@ -442,7 +442,7 @@ public static class FromFullSyntaxModel
             FullTypes.Expression.UnitExpr =>
             new Expression.UnitExpr(),
 
-            FullTypes.Expression.Literal literal =>
+            FullTypes.Expression.StringLiteral literal =>
             new Expression.Literal(literal.Value, IsTripleQuoted: false),
 
             FullTypes.Expression.MultilineStringLiteral multiline =>
@@ -451,7 +451,7 @@ public static class FromFullSyntaxModel
             FullTypes.Expression.CharLiteral charLiteral =>
             new Expression.CharLiteral(charLiteral.Value),
 
-            FullTypes.Expression.Integer integer =>
+            FullTypes.Expression.IntegerLiteral integer =>
             ConvertIntegerExpression(integer),
 
             FullTypes.Expression.FloatLiteral floatable =>
@@ -465,7 +465,7 @@ public static class FromFullSyntaxModel
             new Expression.ListExpr(
                 ConvertExpressionNodes(listExpr.Elements)),
 
-            FullTypes.Expression.FunctionOrValue functionOrValue =>
+            FullTypes.Expression.Identifier functionOrValue =>
             new Expression.FunctionOrValue(
                 functionOrValue.ModuleName,
                 functionOrValue.Name),
@@ -479,7 +479,7 @@ public static class FromFullSyntaxModel
             FullTypes.Expression.PrefixOperator prefixOperator =>
             new Expression.PrefixOperator(prefixOperator.Operator),
 
-            FullTypes.Expression.ParenthesizedExpression parenthesizedExpression =>
+            FullTypes.Expression.Parenthesized parenthesizedExpression =>
             new Expression.ParenthesizedExpression(
                 ConvertExpressionNode(parenthesizedExpression.Expression)),
 
@@ -688,7 +688,7 @@ public static class FromFullSyntaxModel
     /// Store raw string for numbers in the AST: <see href="https://github.com/stil4m/elm-syntax/issues/108"/>
     /// </para>
     /// </summary>
-    private static Expression ConvertIntegerExpression(FullTypes.Expression.Integer integer)
+    private static Expression ConvertIntegerExpression(FullTypes.Expression.IntegerLiteral integer)
     {
         var literalText = integer.LiteralText;
 

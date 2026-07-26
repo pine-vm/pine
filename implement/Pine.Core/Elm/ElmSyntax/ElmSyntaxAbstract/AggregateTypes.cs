@@ -1146,7 +1146,7 @@ public abstract record Expression
     /// <see cref="IntegerEncoding.EncodeSignedInteger(BigInteger)"/>, so an
     /// interpreter operating on <see cref="PineValue"/> can reuse the instance instead of repeating the conversion.
     /// </param>
-    public sealed record Integer(
+    public sealed record IntegerLiteral(
         BigInteger Value,
         PineValue ValueAsPineValue)
         : Expression;
@@ -1197,14 +1197,14 @@ public abstract record Expression
     }
 
     /// <summary>Reference to a function or value.</summary>
-    public sealed record FunctionOrValue(
+    public sealed record Identifier(
         DeclQualifiedName QualifiedName)
         : Expression
     {
         /// <summary>
-        /// Creates a new <see cref="FunctionOrValue"/> from the given namespace and declaration name components.
+        /// Creates a new <see cref="Identifier"/> from the given namespace and declaration name components.
         /// </summary>
-        public static FunctionOrValue Create(
+        public static Identifier Create(
             ModuleName moduleName,
             string name) =>
             new(DeclQualifiedName.Create(moduleName, name));

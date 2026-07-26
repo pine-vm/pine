@@ -1810,7 +1810,7 @@ public class Canonicalization
                 SyntaxTypes.Expression.UnitExpr unitExpr =>
                 NoErrors((SyntaxTypes.Expression)unitExpr),
 
-                SyntaxTypes.Expression.Literal literal =>
+                SyntaxTypes.Expression.StringLiteral literal =>
                 NoErrors((SyntaxTypes.Expression)literal),
 
                 SyntaxTypes.Expression.MultilineStringLiteral multilineString =>
@@ -1819,7 +1819,7 @@ public class Canonicalization
                 SyntaxTypes.Expression.CharLiteral charLiteral =>
                 NoErrors((SyntaxTypes.Expression)charLiteral),
 
-                SyntaxTypes.Expression.Integer integer =>
+                SyntaxTypes.Expression.IntegerLiteral integer =>
                 NoErrors((SyntaxTypes.Expression)integer),
 
                 SyntaxTypes.Expression.FloatLiteral floatable =>
@@ -1835,7 +1835,7 @@ public class Canonicalization
                     elements =>
                     (SyntaxTypes.Expression)new SyntaxTypes.Expression.ListExpr(RebuildSeparated(list.Elements, [.. elements]))),
 
-                SyntaxTypes.Expression.FunctionOrValue funcOrValue =>
+                SyntaxTypes.Expression.Identifier funcOrValue =>
                 CanonicalizeFunctionOrValue(funcOrValue, exprNode.Range, context)
                 .MapValue(f => (SyntaxTypes.Expression)f),
 
@@ -1855,9 +1855,9 @@ public class Canonicalization
                 SyntaxTypes.Expression.PrefixOperator prefixOperator =>
                 NoErrors((SyntaxTypes.Expression)prefixOperator),
 
-                SyntaxTypes.Expression.ParenthesizedExpression parenExpr =>
+                SyntaxTypes.Expression.Parenthesized parenExpr =>
                 CanonicalizeExpressionNode(parenExpr.Expression, context)
-                .MapValue(inner => (SyntaxTypes.Expression)new SyntaxTypes.Expression.ParenthesizedExpression(inner)),
+                .MapValue(inner => (SyntaxTypes.Expression)new SyntaxTypes.Expression.Parenthesized(inner)),
 
                 SyntaxTypes.Expression.Application application =>
                 CanonicalizationResultExtensions.Map2(
@@ -1948,7 +1948,7 @@ public class Canonicalization
         {
             // Convert operator application to function application: func left right
             var funcOrValue =
-                new SyntaxTypes.Expression.FunctionOrValue(
+                new SyntaxTypes.Expression.Identifier(
                     ModuleName: funcMapping.ModuleName,
                     Name: funcMapping.FunctionName);
 
@@ -1981,8 +1981,8 @@ public class Canonicalization
                 (left, right) => (SyntaxTypes.Expression)new SyntaxTypes.Expression.OperatorApplication(opApp.Operator, opApp.Direction, left, right));
     }
 
-    private static CanonicalizationResult<SyntaxTypes.Expression.FunctionOrValue> CanonicalizeFunctionOrValue(
-        SyntaxTypes.Expression.FunctionOrValue funcOrValue,
+    private static CanonicalizationResult<SyntaxTypes.Expression.Identifier> CanonicalizeFunctionOrValue(
+        SyntaxTypes.Expression.Identifier funcOrValue,
         Range range,
         CanonicalizationContext context)
     {
@@ -1998,11 +1998,11 @@ public class Canonicalization
                 context.ModuleLevelDeclarations);
 
         var canonicalizedFuncOrValue =
-            new SyntaxTypes.Expression.FunctionOrValue(
+            new SyntaxTypes.Expression.Identifier(
                 ModuleName: resolvedModuleName,
                 Name: funcOrValue.Name);
 
-        return new CanonicalizationResult<SyntaxTypes.Expression.FunctionOrValue>(canonicalizedFuncOrValue, errors);
+        return new CanonicalizationResult<SyntaxTypes.Expression.Identifier>(canonicalizedFuncOrValue, errors);
     }
 
     private static CanonicalizationResult<ModuleName> ResolveModuleName(

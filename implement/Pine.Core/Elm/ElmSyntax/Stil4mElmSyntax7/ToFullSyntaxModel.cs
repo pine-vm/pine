@@ -446,16 +446,16 @@ public static class ToFullSyntaxModel
             ?
             new FullTypes.Expression.MultilineStringLiteral(literal.Value)
             :
-            new FullTypes.Expression.Literal(literal.Value),
+            new FullTypes.Expression.StringLiteral(literal.Value),
 
             Expression.CharLiteral charLiteral =>
             new FullTypes.Expression.CharLiteral(charLiteral.Value),
 
             Expression.Integer integer =>
-            new FullTypes.Expression.Integer(integer.Value.ToString()),
+            new FullTypes.Expression.IntegerLiteral(integer.Value.ToString()),
 
             Expression.Hex hex =>
-            new FullTypes.Expression.Integer(FormatHexLiteral(hex.Value)),
+            new FullTypes.Expression.IntegerLiteral(FormatHexLiteral(hex.Value)),
 
             Expression.Floatable floatable =>
             new FullTypes.Expression.FloatLiteral(floatable.LiteralText),
@@ -469,7 +469,7 @@ public static class ToFullSyntaxModel
                 Elements: ToSeparatedList(listExpr.Elements, Convert)),
 
             Expression.FunctionOrValue functionOrValue =>
-            new FullTypes.Expression.FunctionOrValue(
+            new FullTypes.Expression.Identifier(
                 functionOrValue.ModuleName,
                 functionOrValue.Name),
 
@@ -486,7 +486,7 @@ public static class ToFullSyntaxModel
             new FullTypes.Expression.PrefixOperator(prefixOperator.Operator),
 
             Expression.ParenthesizedExpression parenthesizedExpression =>
-            new FullTypes.Expression.ParenthesizedExpression(
+            new FullTypes.Expression.Parenthesized(
                 Expression: ConvertNode(parenthesizedExpression.Expression, Convert)),
 
             Expression.Application application =>

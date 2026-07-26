@@ -722,7 +722,7 @@ public static class BuiltinOperatorLowering
     private static LoweredOperator? TryMapBuiltinOperator(
         SyntaxTypes.Expression functionExpression)
     {
-        if (functionExpression is SyntaxTypes.Expression.FunctionOrValue functionOrValue &&
+        if (functionExpression is SyntaxTypes.Expression.Identifier functionOrValue &&
             functionOrValue.QualifiedName.Namespaces.Count is 1 &&
             functionOrValue.QualifiedName.Namespaces[0] is "Basics")
         {
@@ -774,7 +774,7 @@ public static class BuiltinOperatorLowering
         SyntaxTypes.Expression left,
         SyntaxTypes.Expression right) =>
         new SyntaxTypes.Expression.Application(
-            SyntaxTypes.Expression.FunctionOrValue.Create(["Pine_builtin"], builtinName),
+            SyntaxTypes.Expression.Identifier.Create(["Pine_builtin"], builtinName),
             [new SyntaxTypes.Expression.ListExpr([left, right])]);
 
     /// <summary>
@@ -785,7 +785,7 @@ public static class BuiltinOperatorLowering
     /// expressions.
     /// </summary>
     private static SyntaxTypes.Expression BuildBasicsBoolReference(bool value) =>
-        SyntaxTypes.Expression.FunctionOrValue.Create(["Basics"], value ? "True" : "False");
+        SyntaxTypes.Expression.Identifier.Create(["Basics"], value ? "True" : "False");
 
     /// <summary>
     /// Builds an <c>if-then-else</c> expression from the supplied condition,
@@ -884,8 +884,8 @@ public static class BuiltinOperatorLowering
     private static BigInteger? TryGetIntegerLiteralValue(SyntaxTypes.Expression expression) =>
         expression switch
         {
-            SyntaxTypes.Expression.Integer integer => integer.Value,
-            SyntaxTypes.Expression.Negation { Expression: SyntaxTypes.Expression.Integer negated } => -negated.Value,
+            SyntaxTypes.Expression.IntegerLiteral integer => integer.Value,
+            SyntaxTypes.Expression.Negation { Expression: SyntaxTypes.Expression.IntegerLiteral negated } => -negated.Value,
 
             _ =>
             null,
@@ -895,7 +895,7 @@ public static class BuiltinOperatorLowering
     /// Builds an integer literal expression, precomputing its <see cref="PineValue"/> encoding.
     /// </summary>
     private static SyntaxTypes.Expression BuildIntegerLiteral(BigInteger value) =>
-        new SyntaxTypes.Expression.Integer(value, IntegerEncoding.EncodeSignedInteger(value));
+        new SyntaxTypes.Expression.IntegerLiteral(value, IntegerEncoding.EncodeSignedInteger(value));
 
     /// <summary>
     /// Builds a <c>Pine_builtin.int_is_sorted_asc</c> application with the given operands list.
@@ -903,7 +903,7 @@ public static class BuiltinOperatorLowering
     private static SyntaxTypes.Expression BuildIntIsSortedAscApplication(
         IReadOnlyList<SyntaxTypes.Expression> operands) =>
         new SyntaxTypes.Expression.Application(
-            SyntaxTypes.Expression.FunctionOrValue.Create(["Pine_builtin"], "int_is_sorted_asc"),
+            SyntaxTypes.Expression.Identifier.Create(["Pine_builtin"], "int_is_sorted_asc"),
             [new SyntaxTypes.Expression.ListExpr([.. operands])]);
 
     /// <summary>
@@ -976,7 +976,7 @@ public static class BuiltinOperatorLowering
         SyntaxTypes.Expression candidate)
     {
         if (candidate is not SyntaxTypes.Expression.Application app ||
-            app.Function is not SyntaxTypes.Expression.FunctionOrValue fv ||
+            app.Function is not SyntaxTypes.Expression.Identifier fv ||
             fv.QualifiedName.Namespaces is not ["Pine_builtin"] ||
             fv.QualifiedName.DeclName is not "int_add" ||
             app.Arguments.Count is not 1 ||
@@ -994,7 +994,7 @@ public static class BuiltinOperatorLowering
     }
 
     private static bool IsIntegerLiteral(SyntaxTypes.Expression expression, BigInteger value) =>
-        expression is SyntaxTypes.Expression.Integer integer && integer.Value == value;
+        expression is SyntaxTypes.Expression.IntegerLiteral integer && integer.Value == value;
 
     /// <summary>
     /// Extracts the operand list from an <c>int_is_sorted_asc</c> application,
@@ -1004,7 +1004,7 @@ public static class BuiltinOperatorLowering
         SyntaxTypes.Expression expression)
     {
         if (expression is not SyntaxTypes.Expression.Application application ||
-            application.Function is not SyntaxTypes.Expression.FunctionOrValue functionOrValue ||
+            application.Function is not SyntaxTypes.Expression.Identifier functionOrValue ||
             functionOrValue.QualifiedName.Namespaces is not ["Pine_builtin"] ||
             functionOrValue.QualifiedName.DeclName is not "int_is_sorted_asc" ||
             application.Arguments.Count is not 1 ||
@@ -1032,10 +1032,10 @@ public static class BuiltinOperatorLowering
     {
         return (left, right) switch
         {
-            (SyntaxTypes.Expression.FunctionOrValue leftFv, SyntaxTypes.Expression.FunctionOrValue rightFv) =>
+            (SyntaxTypes.Expression.Identifier leftFv, SyntaxTypes.Expression.Identifier rightFv) =>
             leftFv.QualifiedName.Equals(rightFv.QualifiedName),
 
-            (SyntaxTypes.Expression.Integer leftInt, SyntaxTypes.Expression.Integer rightInt) =>
+            (SyntaxTypes.Expression.IntegerLiteral leftInt, SyntaxTypes.Expression.IntegerLiteral rightInt) =>
             leftInt.Value == rightInt.Value,
 
             (SyntaxTypes.Expression.Application leftApp, SyntaxTypes.Expression.Application rightApp) =>
@@ -1133,7 +1133,7 @@ public static class BuiltinOperatorLowering
         SyntaxTypes.Expression.Application application,
         RewriteContext context)
     {
-        if (application.Function is not SyntaxTypes.Expression.FunctionOrValue functionOrValue)
+        if (application.Function is not SyntaxTypes.Expression.Identifier functionOrValue)
         {
             return [];
         }
