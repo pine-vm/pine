@@ -246,10 +246,13 @@ public static class StackInstructionTraceRenderer
                     blobRepresentations: blobRepresentations,
                     renderBlobContents: renderBlobContents));
 
-        if (details.Arguments.Count is 0)
+        var displayComponents =
+            details.Display();
+
+        if (displayComponents.Arguments.Count is 0)
             return instruction.Kind.ToString();
 
-        return instruction.Kind + " (" + string.Join(" , ", details.Arguments) + ")";
+        return instruction.Kind + " (" + string.Join(" , ", displayComponents.Arguments) + ")";
     }
 
     private static string RenderLiteral(
