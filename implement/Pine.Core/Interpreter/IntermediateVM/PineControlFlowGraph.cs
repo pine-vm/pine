@@ -56,6 +56,15 @@ public abstract record PineControlFlowTerminator
         StackInstruction Instruction) : PineControlFlowTerminator;
 
     /// <summary>
+    /// Consumes a value and transfers control based on an equality jump table.
+    /// </summary>
+    public sealed record Switch(
+        PineBlockId FallThrough,
+        ImmutableDictionary<PineValue, PineBlockId> Branches,
+        ImmutableArray<PineVirtualValueId> Arguments,
+        StackInstruction Instruction) : PineControlFlowTerminator;
+
+    /// <summary>
     /// Invokes another frame and continues in a return block.
     /// </summary>
     public sealed record Invoke(
@@ -122,6 +131,33 @@ public sealed record PineControlFlowGraph(
                     }
 
                     leaders.Add(targetIndex);
+
+                    if (instructionIndex + 1 < instructions.Count)
+                    {
+                        leaders.Add(instructionIndex + 1);
+                    }
+
+                    break;
+
+                case StackInstructionKind.Switch_Jump_If_Equal_Const:
+                    var switchJumpTable =
+                        instruction.SwitchJumpTable
+                        ??
+                        throw new InvalidOperationException(
+                            $"Switch without jump table at instruction {instructionIndex}.");
+
+                    foreach (var jumpOffset in switchJumpTable.Values)
+                    {
+                        var switchTargetIndex = instructionIndex + jumpOffset;
+
+                        if (switchTargetIndex < 0 || switchTargetIndex >= instructions.Count)
+                        {
+                            throw new InvalidOperationException(
+                                $"Switch at instruction {instructionIndex} targets {switchTargetIndex} outside the frame.");
+                        }
+
+                        leaders.Add(switchTargetIndex);
+                    }
 
                     if (instructionIndex + 1 < instructions.Count)
                     {
@@ -336,6 +372,19 @@ public sealed record PineControlFlowGraph(
 
                     break;
 
+                case PineControlFlowTerminator.Switch switchTerminator:
+                    result.Add(
+                        switchTerminator.Instruction with
+                        {
+                            SwitchJumpTable =
+                            switchTerminator.Branches
+                            .ToImmutableDictionary(
+                                branch => branch.Key,
+                                branch => firstInstructionIndexByBlock[branch.Value] - result.Count)
+                        });
+
+                    break;
+
                 case PineControlFlowTerminator.Invoke invoke:
                     result.Add(invoke.Instruction);
 
@@ -409,6 +458,24 @@ public sealed record PineControlFlowGraph(
                         blockFromInstructionIndex),
                     FallThroughArguments: [],
                     BranchArguments: [],
+                    Instruction: last),
+
+                StackInstructionKind.Switch_Jump_If_Equal_Const =>
+                new PineControlFlowTerminator.Switch(
+                    FallThrough: ResolveBlock(
+                        endInstructionIndexExclusive,
+                        blockFromInstructionIndex),
+                    Branches:
+                    (last.SwitchJumpTable ??
+                    throw new InvalidOperationException(
+                        $"Switch at {endInstructionIndexExclusive - 1} has no jump table."))
+                    .ToImmutableDictionary(
+                        branch => branch.Key,
+                        branch =>
+                        ResolveBlock(
+                            endInstructionIndexExclusive - 1 + branch.Value,
+                            blockFromInstructionIndex)),
+                    Arguments: [],
                     Instruction: last),
 
                 StackInstructionKind.Eval_Binary =>
@@ -524,6 +591,10 @@ public sealed record PineControlFlowGraph(
                 Apply(conditional.Instruction);
                 break;
 
+            case PineControlFlowTerminator.Switch switchTerminator:
+                Apply(switchTerminator.Instruction);
+                break;
+
             case PineControlFlowTerminator.Invoke invoke:
                 Apply(invoke.Instruction);
                 break;
@@ -560,6 +631,9 @@ public sealed record PineControlFlowGraph(
 
             PineControlFlowTerminator.ConditionalJump conditional =>
             ApplyStackEffect(conditional.Instruction, depth, blockId),
+
+            PineControlFlowTerminator.Switch switchTerminator =>
+            ApplyStackEffect(switchTerminator.Instruction, depth, blockId),
 
             PineControlFlowTerminator.Invoke invoke =>
             ApplyStackEffect(invoke.Instruction, depth, blockId),
@@ -614,6 +688,9 @@ public sealed record PineControlFlowGraph(
                     BranchArguments = arguments
                 },
 
+                PineControlFlowTerminator.Switch switchTerminator =>
+                switchTerminator with { Arguments = arguments },
+
                 PineControlFlowTerminator.Invoke invoke =>
                 invoke with { Arguments = arguments },
 
@@ -644,6 +721,9 @@ public sealed record PineControlFlowGraph(
 
                 PineControlFlowTerminator.ConditionalJump conditional =>
                 [conditional.Instruction],
+
+                PineControlFlowTerminator.Switch switchTerminator =>
+                [switchTerminator.Instruction],
 
                 PineControlFlowTerminator.Invoke invoke =>
                 [invoke.Instruction],
@@ -685,6 +765,16 @@ public sealed record PineControlFlowGraph(
             case PineControlFlowTerminator.ConditionalJump conditional:
                 yield return (conditional.FallThrough, conditional.FallThroughArguments);
                 yield return (conditional.Branch, conditional.BranchArguments);
+                yield break;
+
+            case PineControlFlowTerminator.Switch switchTerminator:
+                yield return (switchTerminator.FallThrough, switchTerminator.Arguments);
+
+                foreach (var branch in switchTerminator.Branches.Values)
+                {
+                    yield return (branch, switchTerminator.Arguments);
+                }
+
                 yield break;
 
             case PineControlFlowTerminator.Invoke invoke:
@@ -741,6 +831,7 @@ public sealed record PineControlFlowGraph(
             PineControlFlowTerminator.Return => 1,
             PineControlFlowTerminator.Jump jump => jump.Instruction is null ? 0 : 1,
             PineControlFlowTerminator.ConditionalJump => 1,
+            PineControlFlowTerminator.Switch => 1,
             PineControlFlowTerminator.Invoke => 1,
             PineControlFlowTerminator.TailInvoke => 2,
 

@@ -2,6 +2,8 @@ using Pine.Core.CommonEncodings;
 using Pine.Core.PineVM;
 using System;
 using System.Collections.Generic;
+using System.Collections.Immutable;
+using System.Linq;
 using System.Numerics;
 
 namespace Pine.Core.Interpreter.IntermediateVM;
@@ -441,6 +443,13 @@ public enum StackInstructionKind
     /// Pushes a boolean result.
     /// </summary>
     Starts_With_Const_At_Offset_Var,
+
+    /// <summary>
+    /// Analog to <see cref="Jump_If_Equal_Const"/>, pops the topmost value from the stack for equality checks,
+    /// but combines an arbitrary number of equality checks in a single statement.
+    /// Depends on the property <see cref="StackInstruction.SwitchJumpTable"/>.
+    /// </summary>
+    Switch_Jump_If_Equal_Const,
 }
 
 /// <summary>
@@ -501,7 +510,12 @@ public record DirectInvocation(
 /// such as <see cref="StackInstructionKind.Length_Equal_Const"/>,
 /// <see cref="StackInstructionKind.Int_Add_Const"/>,
 /// and <see cref="StackInstructionKind.Int_Mul_Const"/>.</param>
-/// <param name="OptimizedInvocation">An optional <see cref="DirectInvocation"/> describing a direct stack-frame invocation target.</param>
+/// <param name="OptimizedInvocation">
+/// An optional <see cref="DirectInvocation"/> describing a direct stack-frame invocation target.
+/// </param>
+/// <param name="SwitchJumpTable">
+/// Table of jump offsets for equality, see <see cref="StackInstructionKind.Switch_Jump_If_Equal_Const"/>
+/// </param>
 public record StackInstruction(
     StackInstructionKind Kind,
     PineValue? Literal = null,
@@ -511,7 +525,8 @@ public record StackInstruction(
     int? TakeCount = null,
     int? JumpOffset = null,
     int? ShiftCount = null,
-    DirectInvocation? OptimizedInvocation = null)
+    DirectInvocation? OptimizedInvocation = null,
+    ImmutableDictionary<PineValue, int>? SwitchJumpTable = null)
 {
     /// <summary>
     /// The linked target stack-frame instructions, delegated from <see cref="OptimizedInvocation"/>.
@@ -1049,20 +1064,39 @@ public record StackInstruction(
     /// </summary>
     public static string RenderInstructionDisplay(
         StackInstruction instruction,
-        Func<PineValue, string> literalDisplayString)
+        Func<PineValue, string> literalDisplayString,
+        int? detailLinesIndent = 2)
     {
         var details = GetDetails(instruction, literalDisplayString);
 
-        var detailsText =
-            details.Display().Arguments.Count is 0
+        var rendered = details.Display();
+
+        var argumentsText =
+            rendered.Arguments.Count is 0
             ?
             ""
             :
             " (" +
-            string.Join(" , ", details.Display().Arguments)
+            string.Join(" , ", rendered.Arguments)
             + ")";
 
-        return instruction.Kind.ToString() + detailsText;
+        var headerText = instruction.Kind.ToString() + argumentsText;
+
+        if (rendered.DetailLines.Count is 0 || !detailLinesIndent.HasValue)
+            return headerText;
+
+        var indent = new string(' ', detailLinesIndent.Value);
+
+        var stringBuilder = new System.Text.StringBuilder(headerText);
+
+        foreach (var line in rendered.DetailLines)
+        {
+            stringBuilder.Append("\n");
+            stringBuilder.Append(indent);
+            stringBuilder.Append(line);
+        }
+
+        return stringBuilder.ToString();
     }
 
     /// <summary>
@@ -1134,12 +1168,20 @@ public record StackInstruction(
     /// Describes the display arguments of a single instruction.
     /// </summary>
     public record struct InstructionDisplay(
-        IReadOnlyList<string> Arguments)
+        IReadOnlyList<string> Arguments,
+        IReadOnlyList<string> DetailLines)
     {
         /// <summary>
         /// Instance of <see cref="InstructionDisplay"/> with no display arguments.
         /// </summary>
-        public static readonly InstructionDisplay NoDetails = new(Arguments: []);
+        public static readonly InstructionDisplay NoDetails =
+            new(Arguments: [], DetailLines: []);
+
+        /// <summary>
+        /// Construct an instance without <see cref="DetailLines"/>
+        /// </summary>
+        public static InstructionDisplay WithoutDetailLines(IReadOnlyList<string> Arguments) =>
+            new(Arguments: Arguments, DetailLines: []);
     }
 
     /// <summary>
@@ -1164,7 +1206,7 @@ public record StackInstruction(
             new InstructionDetails(
                 PopCount: 0,
                 PushCount: 1,
-                Display: () => new InstructionDisplay(
+                Display: () => InstructionDisplay.WithoutDetailLines(
                     [
                     literalDisplayString(
                         instruction.Literal
@@ -1177,7 +1219,7 @@ public record StackInstruction(
                 PopCount: 0,
                 PushCount: 0,
                 Display:
-                () => new InstructionDisplay(
+                () => InstructionDisplay.WithoutDetailLines(
                     [
                     instruction.LocalIndex?.ToString()
                     ?? throw new Exception(
@@ -1189,7 +1231,7 @@ public record StackInstruction(
                 PopCount: 0,
                 PushCount: 1,
                 Display:
-                () => new InstructionDisplay(
+                () => InstructionDisplay.WithoutDetailLines(
                     [
                     instruction.LocalIndex?.ToString()
                     ?? throw new Exception(
@@ -1215,7 +1257,7 @@ public record StackInstruction(
                 PopCount: 1,
                 PushCount: 1,
                 Display:
-                () => new InstructionDisplay(
+                () => InstructionDisplay.WithoutDetailLines(
                     [
                     instruction.IntegerLiteral?.ToString()
                     ?? throw new Exception(
@@ -1244,7 +1286,7 @@ public record StackInstruction(
                     "Missing TakeCount for Prepend_List_Items instruction")) + 1,
                 PushCount: 1,
                 Display:
-                () => new InstructionDisplay(
+                () => InstructionDisplay.WithoutDetailLines(
                     [
                     instruction.TakeCount?.ToString()
                     ?? throw new Exception(
@@ -1259,7 +1301,7 @@ public record StackInstruction(
                     "Missing TakeCount for Append_List_Items instruction")) + 1,
                 PushCount: 1,
                 Display:
-                () => new InstructionDisplay(
+                () => InstructionDisplay.WithoutDetailLines(
                     [
                     instruction.TakeCount?.ToString()
                     ?? throw new Exception(
@@ -1278,7 +1320,7 @@ public record StackInstruction(
                 PopCount: 2,
                 PushCount: 1,
                 Display:
-                () => new InstructionDisplay(
+                () => InstructionDisplay.WithoutDetailLines(
                     [
                     instruction.TakeCount?.ToString()
                     ??
@@ -1305,7 +1347,7 @@ public record StackInstruction(
                 PopCount: 1,
                 PushCount: 1,
                 Display:
-                () => new InstructionDisplay(
+                () => InstructionDisplay.WithoutDetailLines(
                     [
                     instruction.SkipCount?.ToString()
                     ??
@@ -1329,7 +1371,7 @@ public record StackInstruction(
             new InstructionDetails(
                 PopCount: 1,
                 PushCount: 1,
-                Display: () => new InstructionDisplay(
+                Display: () => InstructionDisplay.WithoutDetailLines(
                     [
                     instruction.TakeCount?.ToString()
                     ??
@@ -1341,7 +1383,7 @@ public record StackInstruction(
             new InstructionDetails(
                 PopCount: 1,
                 PushCount: 1,
-                Display: () => new InstructionDisplay(
+                Display: () => InstructionDisplay.WithoutDetailLines(
                     [
                     instruction.TakeCount?.ToString()
                     ??
@@ -1359,7 +1401,7 @@ public record StackInstruction(
             new InstructionDetails(
                 PopCount: 1,
                 PushCount: 1,
-                Display: () => new InstructionDisplay(
+                Display: () => InstructionDisplay.WithoutDetailLines(
                     [
                     instruction.SkipCount?.ToString()
                     ??
@@ -1386,7 +1428,7 @@ public record StackInstruction(
                 ?? throw new Exception(
                     "Missing TakeCount for BuildList instruction"),
                 PushCount: 1,
-                Display: () => new InstructionDisplay(
+                Display: () => InstructionDisplay.WithoutDetailLines(
                     [
                     instruction.TakeCount?.ToString()
                     ?? throw new Exception(
@@ -1400,7 +1442,7 @@ public record StackInstruction(
                 ?? throw new Exception(
                     "Missing TakeCount for BuildList instruction"),
                 PushCount: 1,
-                Display: () => new InstructionDisplay(
+                Display: () => InstructionDisplay.WithoutDetailLines(
                     [
                     literalDisplayString(
                         instruction.Literal
@@ -1427,7 +1469,7 @@ public record StackInstruction(
             new InstructionDetails(
                 PopCount: 1,
                 PushCount: 1,
-                Display: () => new InstructionDisplay(
+                Display: () => InstructionDisplay.WithoutDetailLines(
                     [
                     literalDisplayString(
                         instruction.Literal
@@ -1439,7 +1481,7 @@ public record StackInstruction(
             new InstructionDetails(
                 PopCount: 1,
                 PushCount: 1,
-                Display: () => new InstructionDisplay(
+                Display: () => InstructionDisplay.WithoutDetailLines(
                     [
                     literalDisplayString(
                         instruction.Literal
@@ -1493,7 +1535,7 @@ public record StackInstruction(
             new InstructionDetails(
                 PopCount: 1,
                 PushCount: 1,
-                Display: () => new InstructionDisplay(
+                Display: () => InstructionDisplay.WithoutDetailLines(
                     [
                     instruction.IntegerLiteral?.ToString()
                     ?? throw new Exception(
@@ -1504,7 +1546,7 @@ public record StackInstruction(
             new InstructionDetails(
                 PopCount: 1,
                 PushCount: 1,
-                Display: () => new InstructionDisplay(
+                Display: () => InstructionDisplay.WithoutDetailLines(
                     [
                     instruction.IntegerLiteral?.ToString()
                     ?? throw new Exception(
@@ -1515,7 +1557,7 @@ public record StackInstruction(
             new InstructionDetails(
                 PopCount: 1,
                 PushCount: 1,
-                Display: () => new InstructionDisplay(
+                Display: () => InstructionDisplay.WithoutDetailLines(
                     [
                     instruction.IntegerLiteral?.ToString()
                     ?? throw new Exception(
@@ -1526,7 +1568,7 @@ public record StackInstruction(
             new InstructionDetails(
                 PopCount: 1,
                 PushCount: 1,
-                Display: () => new InstructionDisplay(
+                Display: () => InstructionDisplay.WithoutDetailLines(
                     [
                     instruction.IntegerLiteral?.ToString()
                     ?? throw new Exception(
@@ -1537,7 +1579,7 @@ public record StackInstruction(
             new InstructionDetails(
                 PopCount: 1,
                 PushCount: 1,
-                Display: () => new InstructionDisplay(
+                Display: () => InstructionDisplay.WithoutDetailLines(
                     [
                     instruction.IntegerLiteral?.ToString()
                     ?? throw new Exception(
@@ -1548,7 +1590,7 @@ public record StackInstruction(
             new InstructionDetails(
                 PopCount: 1,
                 PushCount: 0,
-                Display: () => new InstructionDisplay(
+                Display: () => InstructionDisplay.WithoutDetailLines(
                     [
                     literalDisplayString(
                         instruction.Literal
@@ -1563,7 +1605,7 @@ public record StackInstruction(
             new InstructionDetails(
                 PopCount: 0,
                 PushCount: 0,
-                Display: () => new InstructionDisplay(
+                Display: () => InstructionDisplay.WithoutDetailLines(
                     [
                     instruction.JumpOffset?.ToString()
                     ?? throw new Exception(
@@ -1589,7 +1631,7 @@ public record StackInstruction(
                 ?? throw new Exception(
                     "Missing TakeCount for Invoke_StackFrame_Const instruction"),
                 PushCount: 1,
-                Display: () => new InstructionDisplay(
+                Display: () => InstructionDisplay.WithoutDetailLines(
                     [
                     RenderInvocationExpression(
                         instruction.OptimizedInvocation?.Expression
@@ -1610,7 +1652,7 @@ public record StackInstruction(
             new InstructionDetails(
                 PopCount: 1,
                 PushCount: 1,
-                Display: () => new InstructionDisplay(
+                Display: () => InstructionDisplay.WithoutDetailLines(
                     [
                     instruction.IntegerLiteral?.ToString()
                     ?? throw new Exception(
@@ -1621,7 +1663,7 @@ public record StackInstruction(
             new InstructionDetails(
                 PopCount: 1,
                 PushCount: 1,
-                Display: () => new InstructionDisplay(
+                Display: () => InstructionDisplay.WithoutDetailLines(
                     [
                     instruction.IntegerLiteral?.ToString()
                     ?? throw new Exception(
@@ -1650,7 +1692,7 @@ public record StackInstruction(
             new InstructionDetails(
                 PopCount: 1,
                 PushCount: 1,
-                Display: () => new InstructionDisplay(
+                Display: () => InstructionDisplay.WithoutDetailLines(
                     [
                     instruction.IntegerLiteral?.ToString()
                     ?? throw new Exception(
@@ -1679,7 +1721,7 @@ public record StackInstruction(
             new InstructionDetails(
                 PopCount: 1,
                 PushCount: 1,
-                Display: () => new InstructionDisplay(
+                Display: () => InstructionDisplay.WithoutDetailLines(
                     [
                     literalDisplayString(
                         instruction.Literal
@@ -1703,7 +1745,7 @@ public record StackInstruction(
             new InstructionDetails(
                 PopCount: 1,
                 PushCount: 1,
-                Display: () => new InstructionDisplay(
+                Display: () => InstructionDisplay.WithoutDetailLines(
                     [
                     literalDisplayString(
                         instruction.Literal
@@ -1739,7 +1781,7 @@ public record StackInstruction(
             new InstructionDetails(
                 PopCount: 1,
                 PushCount: 1,
-                Display: () => new InstructionDisplay(
+                Display: () => InstructionDisplay.WithoutDetailLines(
                     [
                     instruction.ShiftCount?.ToString()
                     ?? throw new Exception(
@@ -1762,7 +1804,7 @@ public record StackInstruction(
             new InstructionDetails(
                 PopCount: 1,
                 PushCount: 1,
-                Display: () => new InstructionDisplay(
+                Display: () => InstructionDisplay.WithoutDetailLines(
                     [
                     instruction.ShiftCount?.ToString()
                     ?? throw new Exception(
@@ -1791,7 +1833,7 @@ public record StackInstruction(
             new InstructionDetails(
                 PopCount: 2,
                 PushCount: 1,
-                Display: () => new InstructionDisplay(
+                Display: () => InstructionDisplay.WithoutDetailLines(
                     [
                     literalDisplayString(
                         instruction.Literal
@@ -1799,8 +1841,47 @@ public record StackInstruction(
                         throw new Exception("Missing Literal for Starts_With_Const_At_Offset_Var instruction"))
                     ])),
 
+            StackInstructionKind.Switch_Jump_If_Equal_Const =>
+            new InstructionDetails(
+                PopCount: 1,
+                PushCount: 0,
+                Display:
+                () => Render_Switch_Jump_If_Equal_Const_Details(instruction, literalDisplayString)),
+
             var otherKind =>
             throw new NotImplementedException(
                 "Unknown StackInstructionKind: " + otherKind)
         };
+
+    private static InstructionDisplay Render_Switch_Jump_If_Equal_Const_Details(
+        StackInstruction instruction,
+        Func<PineValue, string> literalDisplayString)
+    {
+        var switchJumpTable =
+            instruction.SwitchJumpTable
+            ?? throw new Exception("Missing SwitchTable for Switch_Equal instruction");
+
+        var detailLines = new string[switchJumpTable.Count];
+
+        var entriesOrdered =
+            switchJumpTable
+            .OrderBy(kvp => kvp.Value)
+            .ThenBy(kvp => literalDisplayString(kvp.Key), StringComparer.Ordinal)
+            .ToArray();
+
+        for (var i = 0; i < entriesOrdered.Length; i++)
+        {
+            var kvp = entriesOrdered[i];
+
+            detailLines[i] =
+                "case " + literalDisplayString(kvp.Key) + ": jump " + kvp.Value;
+        }
+
+        return
+            new InstructionDisplay(
+                Arguments:
+                [switchJumpTable.Count.ToString()],
+                DetailLines:
+                detailLines);
+    }
 }

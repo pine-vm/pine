@@ -1,0 +1,11 @@
+Local_Get (0)
+Switch_Jump_If_Equal_Const (5)
+  case Blob [2] (int 0): jump 3
+  case Blob [2] (int 1): jump 3
+  case Blob [2] (int 2): jump 3
+  case Blob [2] (int 3): jump 3
+  case Blob [2] (int 4): jump 3
+Push_Literal (Blob [1] (0x02))
+Return
+Push_Literal (Blob [1] (0x04))
+Return

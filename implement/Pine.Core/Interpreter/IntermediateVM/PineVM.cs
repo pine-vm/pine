@@ -1152,7 +1152,8 @@ public class PineVM : IPineVM
                 if (!_expressionCompilationDict.ContainsKey(expression) &&
                     !(_expressionCompilationOverrides?.ContainsKey(expression) ?? false))
                 {
-                    if (!_disableDirectContinueForSimpleEval && DirectContinuationIfSimpleEnough(expression, environmentValue) is { } directContResult)
+                    if (!_disableDirectContinueForSimpleEval &&
+                        DirectContinuationIfSimpleEnough(expression, environmentValue) is { } directContResult)
                     {
                         var encodedExprValueMaterialized = directContResult.EncodedExprValue.Evaluate();
 
@@ -2619,6 +2620,35 @@ public class PineVM : IPineVM
                             continue;
                         }
 
+                    case StackInstructionKind.Switch_Jump_If_Equal_Const:
+                        {
+                            var conditionValue = currentFrame.PopTopmostFromStack().Evaluate();
+
+                            var jumpTable =
+                                currentInstruction.SwitchJumpTable
+                                ??
+                                throw new Exception("Invalid operation form: Missing switch jump table");
+
+                            if (jumpTable.TryGetValue(conditionValue, out var jumpOffset))
+                            {
+                                currentFrame.InstructionPointer += jumpOffset;
+
+                                if (jumpOffset < 0)
+                                {
+                                    if (IncrementLoopIterationCountAndEnforceLimits(currentFrame) is { } loopLimitError)
+                                    {
+                                        return loopLimitError;
+                                    }
+                                }
+
+                                continue;
+                            }
+
+                            currentFrame.InstructionPointer++;
+
+                            continue;
+                        }
+
                     case StackInstructionKind.Bit_And_Binary:
                         {
                             var right = currentFrame.PopTopmostFromStack().Evaluate();
@@ -3011,10 +3041,11 @@ public class PineVM : IPineVM
         var aggregatePerformanceCounters =
             PerformanceCounters.Add(encodedExprValue.Value.perfCounts, innerEnvValue.Value.perfCounts);
 
-        return new DirectContinuation(
-            EncodedExprValue: encodedExprValue.Value.value,
-            EnvironmentValue: innerEnvValue.Value.value,
-            PerformanceCounters: aggregatePerformanceCounters);
+        return
+            new DirectContinuation(
+                EncodedExprValue: encodedExprValue.Value.value,
+                EnvironmentValue: innerEnvValue.Value.value,
+                PerformanceCounters: aggregatePerformanceCounters);
     }
 
     private static (PineValueInProcess value, PerformanceCounters perfCounts)? DirectEvalIfSimpleTemplate(

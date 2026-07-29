@@ -1,0 +1,58 @@
+Local_Get (0)
+Switch_Jump_If_Equal_Const (22)
+  case Blob [2] (int 0): jump 3
+  case Blob [2] (int 1): jump 5
+  case Blob [2] (int 2): jump 7
+  case Blob [2] (int 3): jump 9
+  case Blob [2] (int 4): jump 11
+  case Blob [2] (int 5): jump 13
+  case Blob [2] (int 6): jump 15
+  case Blob [2] (int 7): jump 17
+  case Blob [2] (int 8): jump 19
+  case Blob [2] (int 9): jump 21
+  case Blob [2] (int 10): jump 23
+  case Blob [2] (int 11): jump 23
+  case Blob [2] (int 12): jump 25
+  case Blob [2] (int 13): jump 25
+  case Blob [2] (int 14): jump 27
+  case Blob [2] (int 15): jump 27
+  case Blob [2] (int 16): jump 29
+  case Blob [2] (int 17): jump 29
+  case Blob [2] (int 18): jump 31
+  case Blob [2] (int 19): jump 31
+  case Blob [2] (int 20): jump 33
+  case Blob [2] (int 21): jump 33
+Push_Literal (Blob [2] (int -1))
+Return
+Push_Literal (Blob [2] (int 0))
+Return
+Push_Literal (Blob [2] (int 1))
+Return
+Push_Literal (Blob [2] (int 2))
+Return
+Push_Literal (Blob [2] (int 3))
+Return
+Push_Literal (Blob [2] (int 4))
+Return
+Push_Literal (Blob [2] (int 5))
+Return
+Push_Literal (Blob [2] (int 6))
+Return
+Push_Literal (Blob [2] (int 7))
+Return
+Push_Literal (Blob [2] (int 8))
+Return
+Push_Literal (Blob [2] (int 9))
+Return
+Push_Literal (Blob [2] (int 10))
+Return
+Push_Literal (Blob [2] (int 11))
+Return
+Push_Literal (Blob [2] (int 12))
+Return
+Push_Literal (Blob [2] (int 13))
+Return
+Push_Literal (Blob [2] (int 14))
+Return
+Push_Literal (Blob [2] (int 15))
+Return

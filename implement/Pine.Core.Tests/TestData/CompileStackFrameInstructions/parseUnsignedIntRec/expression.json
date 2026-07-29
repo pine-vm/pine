@@ -1,0 +1,285 @@
+{
+  "Conditional": [
+    {
+      "Builtin": [
+        "equal",
+        {
+          "List": [
+            [
+              {
+                "Environment": []
+              },
+              {
+                "Litral": [
+                  0
+                ]
+              }
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "Conditional": [
+        {
+          "Builtin": [
+            "equal",
+            {
+              "List": [
+                [
+                  {
+                    "Environment": []
+                  },
+                  {
+                    "Litral": [
+                      1
+                    ]
+                  }
+                ]
+              ]
+            }
+          ]
+        },
+        {
+          "Conditional": [
+            {
+              "Builtin": [
+                "equal",
+                {
+                  "List": [
+                    [
+                      {
+                        "Environment": []
+                      },
+                      {
+                        "Litral": [
+                          2
+                        ]
+                      }
+                    ]
+                  ]
+                }
+              ]
+            },
+            {
+              "Conditional": [
+                {
+                  "Builtin": [
+                    "equal",
+                    {
+                      "List": [
+                        [
+                          {
+                            "Environment": []
+                          },
+                          {
+                            "Litral": [
+                              3
+                            ]
+                          }
+                        ]
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "Conditional": [
+                    {
+                      "Builtin": [
+                        "equal",
+                        {
+                          "List": [
+                            [
+                              {
+                                "Environment": []
+                              },
+                              {
+                                "Litral": [
+                                  4
+                                ]
+                              }
+                            ]
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "Conditional": [
+                        {
+                          "Builtin": [
+                            "equal",
+                            {
+                              "List": [
+                                [
+                                  {
+                                    "Environment": []
+                                  },
+                                  {
+                                    "Litral": [
+                                      5
+                                    ]
+                                  }
+                                ]
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "Conditional": [
+                            {
+                              "Builtin": [
+                                "equal",
+                                {
+                                  "List": [
+                                    [
+                                      {
+                                        "Environment": []
+                                      },
+                                      {
+                                        "Litral": [
+                                          6
+                                        ]
+                                      }
+                                    ]
+                                  ]
+                                }
+                              ]
+                            },
+                            {
+                              "Conditional": [
+                                {
+                                  "Builtin": [
+                                    "equal",
+                                    {
+                                      "List": [
+                                        [
+                                          {
+                                            "Environment": []
+                                          },
+                                          {
+                                            "Litral": [
+                                              7
+                                            ]
+                                          }
+                                        ]
+                                      ]
+                                    }
+                                  ]
+                                },
+                                {
+                                  "Conditional": [
+                                    {
+                                      "Builtin": [
+                                        "equal",
+                                        {
+                                          "List": [
+                                            [
+                                              {
+                                                "Environment": []
+                                              },
+                                              {
+                                                "Litral": [
+                                                  8
+                                                ]
+                                              }
+                                            ]
+                                          ]
+                                        }
+                                      ]
+                                    },
+                                    {
+                                      "Conditional": [
+                                        {
+                                          "Builtin": [
+                                            "equal",
+                                            {
+                                              "List": [
+                                                [
+                                                  {
+                                                    "Environment": []
+                                                  },
+                                                  {
+                                                    "Litral": [
+                                                      9
+                                                    ]
+                                                  }
+                                                ]
+                                              ]
+                                            }
+                                          ]
+                                        },
+                                        {
+                                          "Litral": [
+                                            -1
+                                          ]
+                                        },
+                                        {
+                                          "Litral": [
+                                            91
+                                          ]
+                                        }
+                                      ]
+                                    },
+                                    {
+                                      "Litral": [
+                                        81
+                                      ]
+                                    }
+                                  ]
+                                },
+                                {
+                                  "Litral": [
+                                    71
+                                  ]
+                                }
+                              ]
+                            },
+                            {
+                              "Litral": [
+                                61
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "Litral": [
+                            51
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "Litral": [
+                        41
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "Litral": [
+                    31
+                  ]
+                }
+              ]
+            },
+            {
+              "Litral": [
+                21
+              ]
+            }
+          ]
+        },
+        {
+          "Litral": [
+            11
+          ]
+        }
+      ]
+    },
+    {
+      "Litral": [
+        1
+      ]
+    }
+  ]
+}

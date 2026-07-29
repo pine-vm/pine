@@ -585,6 +585,11 @@ public class PineIRCompiler
         NodeCompilationResult prior,
         PineVMParseCache parseCache)
     {
+        if (TryCompileSwitchEqual(conditional, context, prior, parseCache) is { } switchCompilation)
+        {
+            return switchCompilation;
+        }
+
         // Fuse the condition into a Jump_If_Equal_Const instruction by analyzing the
         // condition expression and extracting a comparison value.
         // This loop peels nested layers of equal/negate to produce the most efficient jump.
@@ -648,6 +653,188 @@ public class PineIRCompiler
                 context: context,
                 prior: prior,
                 parseCache: parseCache);
+    }
+
+    private static NodeCompilationResult? TryCompileSwitchEqual(
+        Expression.Conditional conditional,
+        CompilationContext context,
+        NodeCompilationResult prior,
+        PineVMParseCache parseCache)
+    {
+        if (TryParseEqualCondition(conditional.Condition, parseCache) is not { } firstCondition)
+        {
+            return null;
+        }
+
+        var cases =
+            new List<(PineValue Literal, Expression Branch)>
+            {
+                (firstCondition.Literal, conditional.TrueBranch)
+            };
+
+        var comparedExpression = firstCondition.ComparedExpression;
+        var defaultBranch = conditional.FalseBranch;
+
+        while (defaultBranch is Expression.Conditional nestedConditional &&
+            TryParseEqualCondition(nestedConditional.Condition, parseCache) is { } nestedCondition &&
+            nestedCondition.ComparedExpression == comparedExpression)
+        {
+            if (cases.Any(item => item.Literal == nestedCondition.Literal))
+            {
+                return null;
+            }
+
+            cases.Add((nestedCondition.Literal, nestedConditional.TrueBranch));
+            defaultBranch = nestedConditional.FalseBranch;
+        }
+
+        if (cases.Count < 2)
+        {
+            return null;
+        }
+
+        var afterCondition =
+            CompileExpressionTransitive(
+                comparedExpression,
+                context with { IsTailPosition = false },
+                prior,
+                parseCache);
+
+        var defaultBranchInstructions =
+            CompileExpressionTransitive(
+                defaultBranch,
+                context.AddInstructionOffset(afterCondition.Instructions.Count + 1),
+                new NodeCompilationResult(
+                    Instructions: [],
+                    LocalsSet: afterCondition.LocalsSet),
+                parseCache)
+            .Instructions;
+
+        var distinctCaseBranches = new List<Expression>();
+        var distinctCaseBranchIndexes = new Dictionary<Expression, int>();
+        var caseBranchIndexes = new int[cases.Count];
+
+        for (var caseIndex = 0; caseIndex < cases.Count; caseIndex++)
+        {
+            if (!distinctCaseBranchIndexes.TryGetValue(cases[caseIndex].Branch, out var branchIndex))
+            {
+                branchIndex = distinctCaseBranches.Count;
+                distinctCaseBranches.Add(cases[caseIndex].Branch);
+                distinctCaseBranchIndexes.Add(cases[caseIndex].Branch, branchIndex);
+            }
+
+            caseBranchIndexes[caseIndex] = branchIndex;
+        }
+
+        var caseInstructions = new ImmutableList<StackInstruction>[distinctCaseBranches.Count];
+        var nextCaseOffset = 1 + defaultBranchInstructions.Count + 1;
+
+        for (var branchIndex = 0; branchIndex < distinctCaseBranches.Count; branchIndex++)
+        {
+            var compiledCase =
+                CompileExpressionTransitive(
+                    distinctCaseBranches[branchIndex],
+                    context.AddInstructionOffset(afterCondition.Instructions.Count + nextCaseOffset),
+                    new NodeCompilationResult(
+                        Instructions: [],
+                        LocalsSet: afterCondition.LocalsSet),
+                    parseCache)
+                .Instructions;
+
+            caseInstructions[branchIndex] = compiledCase;
+            nextCaseOffset += compiledCase.Count;
+
+            if (branchIndex < distinctCaseBranches.Count - 1)
+            {
+                nextCaseOffset++;
+            }
+        }
+
+        var jumpTableBuilder = ImmutableDictionary.CreateBuilder<PineValue, int>();
+        var caseOffset = 1 + defaultBranchInstructions.Count + 1;
+        var caseOffsets = new int[caseInstructions.Length];
+
+        for (var branchIndex = 0; branchIndex < caseInstructions.Length; branchIndex++)
+        {
+            caseOffsets[branchIndex] = caseOffset;
+            caseOffset += caseInstructions[branchIndex].Count;
+
+            if (branchIndex < caseInstructions.Length - 1)
+            {
+                caseOffset++;
+            }
+        }
+
+        for (var caseIndex = 0; caseIndex < cases.Count; caseIndex++)
+        {
+            jumpTableBuilder.Add(
+                cases[caseIndex].Literal,
+                caseOffsets[caseBranchIndexes[caseIndex]]);
+        }
+
+        var switchInstruction =
+            new StackInstruction(
+                StackInstructionKind.Switch_Jump_If_Equal_Const,
+                SwitchJumpTable: jumpTableBuilder.ToImmutable());
+
+        var branchInstructions =
+            new List<StackInstruction>
+            {
+                switchInstruction
+            };
+
+        branchInstructions.AddRange(defaultBranchInstructions);
+
+        var instructionsAfterConditionCount =
+            1 +
+            defaultBranchInstructions.Count +
+            1 +
+            caseInstructions.Sum(instructions => instructions.Count) +
+            caseInstructions.Length - 1;
+
+        branchInstructions.Add(
+            StackInstruction.Jump_Unconditional(
+                instructionsAfterConditionCount - branchInstructions.Count));
+
+        for (var branchIndex = 0; branchIndex < caseInstructions.Length; branchIndex++)
+        {
+            branchInstructions.AddRange(caseInstructions[branchIndex]);
+
+            if (branchIndex < caseInstructions.Length - 1)
+            {
+                branchInstructions.Add(
+                    StackInstruction.Jump_Unconditional(
+                        instructionsAfterConditionCount - branchInstructions.Count));
+            }
+        }
+
+        return afterCondition.AppendInstructions(branchInstructions);
+    }
+
+    private static (Expression ComparedExpression, PineValue Literal)? TryParseEqualCondition(
+        Expression condition,
+        PineVMParseCache parseCache)
+    {
+        if (condition is not Expression.Builtin
+            {
+                Function: nameof(BuiltinFunction.equal),
+                Input: Expression.List { Items.Count: 2 } equalInput
+            })
+        {
+            return null;
+        }
+
+        if (TryEvalIndependent(equalInput.Items[0], parseCache) is { } leftLiteral)
+        {
+            return (equalInput.Items[1], leftLiteral);
+        }
+
+        if (TryEvalIndependent(equalInput.Items[1], parseCache) is { } rightLiteral)
+        {
+            return (equalInput.Items[0], rightLiteral);
+        }
+
+        return null;
     }
 
     /// <summary>

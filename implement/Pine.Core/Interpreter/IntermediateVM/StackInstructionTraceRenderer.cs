@@ -237,22 +237,14 @@ public static class StackInstructionTraceRenderer
         IReadOnlyList<BlobRepresentation>? blobRepresentations,
         Func<PineValue.BlobValue, IReadOnlyList<string>, string>? renderBlobContents)
     {
-        var details =
-            StackInstruction.GetDetails(
+        return
+            StackInstruction.RenderInstructionDisplay(
                 instruction,
-                literalDisplayString:
-                value => RenderLiteral(
+                literalDisplayString: value =>
+                RenderLiteral(
                     value,
                     blobRepresentations: blobRepresentations,
                     renderBlobContents: renderBlobContents));
-
-        var displayComponents =
-            details.Display();
-
-        if (displayComponents.Arguments.Count is 0)
-            return instruction.Kind.ToString();
-
-        return instruction.Kind + " (" + string.Join(" , ", displayComponents.Arguments) + ")";
     }
 
     private static string RenderLiteral(

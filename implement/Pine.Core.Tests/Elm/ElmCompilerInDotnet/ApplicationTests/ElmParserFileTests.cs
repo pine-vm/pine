@@ -231,7 +231,7 @@ public class ElmParserFileTests
             InvocationCount: 684
             BuildListCount: 7_437
             LoopIterationCount: 12
-            InstructionCount: 28_683
+            InstructionCount: 28_128
             """);
     }
 
@@ -249,7 +249,7 @@ public class ElmParserFileTests
             InvocationCount: 991
             BuildListCount: 9_201
             LoopIterationCount: 26
-            InstructionCount: 36_722
+            InstructionCount: 36_218
             """);
     }
 

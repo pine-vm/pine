@@ -66,6 +66,21 @@ public record StackFrameInstructions(
 
                     break;
 
+                case StackInstructionKind.Switch_Jump_If_Equal_Const:
+
+                    yield return instructionIndex + 1;
+
+                    foreach (var jumpOffset in
+                        (inst.SwitchJumpTable ??
+                        throw new InvalidOperationException(
+                            $"Switch without jump table at {instructionIndex}."))
+                        .Values)
+                    {
+                        yield return instructionIndex + jumpOffset;
+                    }
+
+                    break;
+
                 default:
 
                     // ordinary instruction

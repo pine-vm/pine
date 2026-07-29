@@ -1,0 +1,157 @@
+{
+  "Conditional": [
+    {
+      "Builtin": [
+        "equal",
+        {
+          "List": [
+            [
+              {
+                "Environment": []
+              },
+              {
+                "Litral": [
+                  0
+                ]
+              }
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "Conditional": [
+        {
+          "Builtin": [
+            "equal",
+            {
+              "List": [
+                [
+                  {
+                    "Environment": []
+                  },
+                  {
+                    "Litral": [
+                      1
+                    ]
+                  }
+                ]
+              ]
+            }
+          ]
+        },
+        {
+          "Conditional": [
+            {
+              "Builtin": [
+                "equal",
+                {
+                  "List": [
+                    [
+                      {
+                        "Environment": []
+                      },
+                      {
+                        "Litral": [
+                          2
+                        ]
+                      }
+                    ]
+                  ]
+                }
+              ]
+            },
+            {
+              "Conditional": [
+                {
+                  "Builtin": [
+                    "equal",
+                    {
+                      "List": [
+                        [
+                          {
+                            "Environment": []
+                          },
+                          {
+                            "Litral": [
+                              3
+                            ]
+                          }
+                        ]
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "Conditional": [
+                    {
+                      "Builtin": [
+                        "equal",
+                        {
+                          "List": [
+                            [
+                              {
+                                "Environment": []
+                              },
+                              {
+                                "Litral": [
+                                  4
+                                ]
+                              }
+                            ]
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "Litral": [
+                        {
+                          "AsBase64": "Ag=="
+                        }
+                      ]
+                    },
+                    {
+                      "Litral": [
+                        {
+                          "AsBase64": "BA=="
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "Litral": [
+                    {
+                      "AsBase64": "BA=="
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "Litral": [
+                {
+                  "AsBase64": "BA=="
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "Litral": [
+            {
+              "AsBase64": "BA=="
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "Litral": [
+        {
+          "AsBase64": "BA=="
+        }
+      ]
+    }
+  ]
+}
