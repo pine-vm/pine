@@ -276,14 +276,14 @@ public static class BuiltinFunctionSpecialized
     {
         if (valueA is PineValue.ListValue listA)
         {
-            if (valueB is not PineValue.ListValue listB)
-            {
-                return PineValue.EmptyList;
-            }
-
             if (listA.Items.Length is 0)
             {
                 return valueB;
+            }
+
+            if (valueB is not PineValue.ListValue listB)
+            {
+                return PineValue.EmptyList;
             }
 
             if (listB.Items.Length is 0)
@@ -305,7 +305,12 @@ public static class BuiltinFunctionSpecialized
         {
             if (valueB is not PineValue.BlobValue blobB)
             {
-                return valueA;
+                if (valueB is PineValue.ListValue listB && listB.Items.Length is 0)
+                {
+                    return valueA;
+                }
+
+                return PineValue.EmptyList;
             }
 
             if (blobA.Bytes.Length is 0)
