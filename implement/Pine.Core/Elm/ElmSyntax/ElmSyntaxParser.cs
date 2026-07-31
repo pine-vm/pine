@@ -2645,8 +2645,10 @@ public class ElmSyntaxParser
 
                 ConsumeAllTrivia();
 
-                var constructors =
-                    new List<(Location? PipeTokenLocation, Node<SyntaxTypes.ValueConstructor> Constructor)>();
+                Node<SyntaxTypes.ValueConstructor>? firstConstructor = null;
+
+                var remainingConstructors =
+                    new List<(Location SeparatorLocation, Node<SyntaxTypes.ValueConstructor> Node)>();
 
                 Location? pipeLocation = null;
 
@@ -2684,15 +2686,20 @@ public class ElmSyntaxParser
                         :
                         constructorArguments.Last().Range.End;
 
-                    constructors.Add(
-                        (PipeTokenLocation: pipeLocation,
-                        Constructor: new Node<SyntaxTypes.ValueConstructor>(
+                    var constructor =
+                        new Node<SyntaxTypes.ValueConstructor>(
                             MakeRange(constructorNameToken.Start, constructorEnd),
                             new SyntaxTypes.ValueConstructor(
                                 new Node<string>(
                                     MakeRange(constructorNameToken.Start, constructorNameToken.End),
                                     constructorNameToken.Lexeme),
-                                constructorArguments))));
+                                constructorArguments));
+
+                    if (firstConstructor is null)
+                        firstConstructor = constructor;
+
+                    else
+                        remainingConstructors.Add((pipeLocation!.Value, constructor));
 
                     ConsumeAllTrivia();
 
@@ -2718,9 +2725,15 @@ public class ElmSyntaxParser
 
                 return
                     new Node<SyntaxTypes.Declaration>(
-                        MakeRange(rangeStart, constructors.Last().Constructor.Range.End),
+                        MakeRange(
+                            rangeStart,
+                            (remainingConstructors.Count is 0
+                            ?
+                            firstConstructor
+                            :
+                            remainingConstructors[^1].Node).Range.End),
                         new SyntaxTypes.Declaration.ChoiceTypeDeclaration(
-                            new SyntaxTypes.TypeStruct(
+                            new SyntaxTypes.ChoiceTypeStruct(
                                 Documentation:
                                 docComment is null
                                 ?
@@ -2736,7 +2749,10 @@ public class ElmSyntaxParser
                                     typeNameToken.Lexeme),
                                 Generics: typeParameters,
                                 EqualsTokenLocation: equalToken.Start,
-                                Constructors: constructors)));
+                                Constructors:
+                                new SeparatedSyntaxList<Node<SyntaxTypes.ValueConstructor>>.NonEmpty(
+                                    firstConstructor,
+                                    remainingConstructors))));
             }
         }
 

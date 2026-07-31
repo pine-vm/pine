@@ -232,7 +232,7 @@ public static class ToFullSyntaxModel
     /// <summary>
     /// Converts a TypeStruct.
     /// </summary>
-    public static FullTypes.TypeStruct Convert(
+    public static FullTypes.ChoiceTypeStruct Convert(
         TypeStruct typeStruct) =>
         new(
             Documentation: typeStruct.Documentation is { } doc ? ConvertNodePreserveValue(doc) : null,
@@ -241,12 +241,17 @@ public static class ToFullSyntaxModel
             Generics: ConvertNodesPreserveValue(typeStruct.Generics),
             EqualsTokenLocation: s_defaultLocation,
             Constructors:
-            [
-            .. typeStruct.Constructors
-            .Select(
-                (c, i) => (PipeTokenLocation: i > 0 ? s_defaultLocation : (Location?)null,
-                Constructor: ConvertNode(c, Convert)))
-            ]);
+            typeStruct.Constructors.Count is 0
+            ?
+            new SeparatedSyntaxList<Node<FullTypes.ValueConstructor>>.Empty()
+            :
+            new SeparatedSyntaxList<Node<FullTypes.ValueConstructor>>.NonEmpty(
+                ConvertNode(typeStruct.Constructors[0], Convert),
+                [
+                .. typeStruct.Constructors
+                .Skip(1)
+                .Select(c => (s_defaultLocation, ConvertNode(c, Convert)))
+                ]));
 
     /// <summary>
     /// Converts a ValueConstructor.

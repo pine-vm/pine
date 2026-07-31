@@ -3195,12 +3195,24 @@ public class Avh4Format
             var afterEquals = constructorIndentContext.Advance(Keywords.Equals.Length).AdvanceSpaceSeparator();
 
             // Format constructors
-            var formattedConstructors = new List<(Location? PipeLocation, Node<ValueConstructor> Constructor)>();
+            Node<ValueConstructor>? formattedFirstConstructor = null;
+
+            var formattedRemainingConstructors =
+                new List<(Location SeparatorLocation, Node<ValueConstructor> Node)>();
+
             var constructorCtx = afterEquals;
 
             for (var i = 0; i < choiceTypeDecl.TypeDeclaration.Constructors.Count; i++)
             {
-                var (pipeLocation, constructor) = choiceTypeDecl.TypeDeclaration.Constructors[i];
+                var constructor = choiceTypeDecl.TypeDeclaration.Constructors[i];
+
+                var pipeLocation =
+                    i is 0
+                    ?
+                    (Location?)null
+                    :
+                    ((SeparatedSyntaxList<Node<ValueConstructor>>.NonEmpty)
+                        choiceTypeDecl.TypeDeclaration.Constructors).Rest[i - 1].SeparatorLocation;
 
                 Location? formattedPipeLoc = null;
 
@@ -3307,7 +3319,7 @@ public class Avh4Format
                 else
                 {
                     // Check for comments between this and previous constructor
-                    var prevConstructor = choiceTypeDecl.TypeDeclaration.Constructors[i - 1].Constructor;
+                    var prevConstructor = choiceTypeDecl.TypeDeclaration.Constructors[i - 1];
 
                     var commentsBetweenConstructors =
                         commentQueries.GetBetweenRanges(prevConstructor.Range, constructor.Range).ToList();
@@ -3511,21 +3523,34 @@ public class Avh4Format
                             constructor.Value.Name.Value),
                         formattedArgs);
 
-                formattedConstructors.Add(
-                    (formattedPipeLoc, MakeNode(constructorStartLoc, argCtx.CurrentLocation(), formattedConstructor)));
+                var formattedConstructorNode =
+                    MakeNode(constructorStartLoc, argCtx.CurrentLocation(), formattedConstructor);
+
+                if (formattedFirstConstructor is null)
+                    formattedFirstConstructor = formattedConstructorNode;
+
+                else
+                    formattedRemainingConstructors.Add((formattedPipeLoc!.Value, formattedConstructorNode));
 
                 // Restore constructor-level indent after formatting arguments
                 constructorCtx = argCtx.ReturnToIndent(constructorIndentContext);
             }
 
             var formattedTypeStruct =
-                new TypeStruct(
+                new ChoiceTypeStruct(
                     Documentation: choiceTypeDecl.TypeDeclaration.Documentation,
                     TypeTokenLocation: typeTokenLoc,
                     Name: MakeNode(afterType.CurrentLocation(), afterName.CurrentLocation(), typeName),
                     Generics: formattedGenerics,
                     EqualsTokenLocation: equalsLoc,
-                    Constructors: formattedConstructors);
+                    Constructors:
+                    formattedFirstConstructor is null
+                    ?
+                    new SeparatedSyntaxList<Node<ValueConstructor>>.Empty()
+                    :
+                    new SeparatedSyntaxList<Node<ValueConstructor>>.NonEmpty(
+                        formattedFirstConstructor,
+                        formattedRemainingConstructors));
 
             var finalContext = constructorCtx.ReturnToIndent(startContext);
             var range = MakeRange(startContext.CurrentLocation(), constructorCtx.CurrentLocation());

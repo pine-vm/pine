@@ -550,7 +550,12 @@ public class ReducePineExpression
                     case nameof(BuiltinFunction.head):
                         {
                             if (ApplyBuiltinFunctionHeadToAllBranches(rootBuiltinExpr.Input) is { } reducedBranches)
-                                return reducedBranches;
+                            {
+                                return
+                                    SearchForExpressionReduction(reducedBranches, envConstraintId, parseCache)
+                                    ??
+                                    reducedBranches;
+                            }
 
                             return AttemptReduceViaEval();
                         }
@@ -568,7 +573,10 @@ public class ReducePineExpression
                                 {
                                     if (ApplyBuiltinFunctionSkipToAllBranches((int)(okSkipCount < 0 ? 0 : okSkipCount), seqExpr) is { } reducedSkip)
                                     {
-                                        return reducedSkip;
+                                        return
+                                            SearchForExpressionReduction(reducedSkip, envConstraintId, parseCache)
+                                            ??
+                                            reducedSkip;
                                     }
                                 }
 
@@ -591,7 +599,10 @@ public class ReducePineExpression
                                 {
                                     if (ApplyBuiltinFunctionTakeToAllBranches((int)okTakeCount, srcExpr) is { } reducedTake)
                                     {
-                                        return reducedTake;
+                                        return
+                                            SearchForExpressionReduction(reducedTake, envConstraintId, parseCache)
+                                            ??
+                                            reducedTake;
                                     }
                                 }
 
@@ -605,7 +616,10 @@ public class ReducePineExpression
                         {
                             if (ApplyBuiltinFunctionReverseToAllBranches(rootBuiltinExpr.Input) is { } reducedRev)
                             {
-                                return reducedRev;
+                                return
+                                    SearchForExpressionReduction(reducedRev, envConstraintId, parseCache)
+                                    ??
+                                    reducedRev;
                             }
 
                             return AttemptReduceViaEval();

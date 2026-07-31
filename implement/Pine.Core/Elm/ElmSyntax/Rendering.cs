@@ -850,15 +850,17 @@ public class Rendering
         context.AdvanceToLocation(choiceTypeDecl.TypeDeclaration.EqualsTokenLocation);
         context.Append("=");
 
-        for (var i = 0; i < choiceTypeDecl.TypeDeclaration.Constructors.Count; i++)
-        {
-            var (pipeLocation, constructor) = choiceTypeDecl.TypeDeclaration.Constructors[i];
+        if (choiceTypeDecl.TypeDeclaration.Constructors is not
+            SeparatedSyntaxList<Node<ValueConstructor>>.NonEmpty constructors)
+            return;
 
-            if (pipeLocation is { } pipe)
-            {
-                context.AdvanceToLocation(pipe);
-                context.Append("|");
-            }
+        context.AdvanceToLocation(constructors.First.Range.Start);
+        RenderValueConstructor(constructors.First, context);
+
+        foreach (var (pipeLocation, constructor) in constructors.Rest)
+        {
+            context.AdvanceToLocation(pipeLocation);
+            context.Append("|");
 
             context.AdvanceToLocation(constructor.Range.Start);
             RenderValueConstructor(constructor, context);

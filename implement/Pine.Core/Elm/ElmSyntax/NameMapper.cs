@@ -144,33 +144,32 @@ public class NameMapper
                 TypeAnnotation: MapTypeAnnotation(alias.TypeAnnotation, mapQualifiedName));
     }
 
-    private static TypeStruct MapTypeStruct(
-        TypeStruct typeStruct,
+    private static ChoiceTypeStruct MapTypeStruct(
+        ChoiceTypeStruct typeStruct,
         Func<QualifiedNameRef, QualifiedNameRef> mapQualifiedName)
     {
         return
-            new TypeStruct(
+            new ChoiceTypeStruct(
                 Documentation: typeStruct.Documentation,
                 TypeTokenLocation: typeStruct.TypeTokenLocation,
                 Name: typeStruct.Name,
                 Generics: typeStruct.Generics,
                 EqualsTokenLocation: typeStruct.EqualsTokenLocation,
-                Constructors: [.. typeStruct.Constructors.Select(c => MapValueConstructor(c, mapQualifiedName))]);
+                Constructors: typeStruct.Constructors.Map(c => MapValueConstructor(c, mapQualifiedName)));
     }
 
-    private static (Location? PipeTokenLocation, Node<ValueConstructor> Constructor) MapValueConstructor(
-        (Location? PipeTokenLocation, Node<ValueConstructor> Constructor) constructorItem,
+    private static Node<ValueConstructor> MapValueConstructor(
+        Node<ValueConstructor> constructorItem,
         Func<QualifiedNameRef, QualifiedNameRef> mapQualifiedName)
     {
-        var constructor = constructorItem.Constructor.Value;
+        var constructor = constructorItem.Value;
 
         return
-            (constructorItem.PipeTokenLocation,
             new Node<ValueConstructor>(
-                constructorItem.Constructor.Range,
+                constructorItem.Range,
                 new ValueConstructor(
                     Name: constructor.Name,
-                    Arguments: [.. constructor.Arguments.Select(a => MapTypeAnnotation(a, mapQualifiedName))])));
+                    Arguments: [.. constructor.Arguments.Select(a => MapTypeAnnotation(a, mapQualifiedName))]));
     }
 
     private static Node<TypeAnnotation> MapTypeAnnotation(

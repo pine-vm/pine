@@ -209,19 +209,24 @@ public static class ConvertToConcrete
             s_zeroLocation,
             Node(ToTypeAnnotation(typeAlias.TypeAnnotation)));
 
-    private static SyntaxModel.TypeStruct ToTypeStruct(TypeStruct typeStruct) =>
+    private static SyntaxModel.ChoiceTypeStruct ToTypeStruct(TypeStruct typeStruct) =>
         new(
             Documentation: null,
             s_zeroLocation,
             Node(typeStruct.Name),
             [.. typeStruct.Generics.Select(Node)],
             s_zeroLocation,
-            [
-            .. typeStruct.Constructors.Select(
-                (constructor, index) =>
-                ((SyntaxModel.Location?)(index is 0 ? null : s_zeroLocation),
-                Node(ToValueConstructor(constructor))))
-            ]);
+            typeStruct.Constructors.Count is 0
+            ?
+            new SyntaxModel.SeparatedSyntaxList<SyntaxModel.Node<SyntaxModel.ValueConstructor>>.Empty()
+            :
+            new SyntaxModel.SeparatedSyntaxList<SyntaxModel.Node<SyntaxModel.ValueConstructor>>.NonEmpty(
+                Node(ToValueConstructor(typeStruct.Constructors[0])),
+                [
+                .. typeStruct.Constructors
+                .Skip(1)
+                .Select(constructor => (s_zeroLocation, Node(ToValueConstructor(constructor))))
+                ]));
 
     private static SyntaxModel.ValueConstructor ToValueConstructor(ValueConstructor valueConstructor) =>
         new(

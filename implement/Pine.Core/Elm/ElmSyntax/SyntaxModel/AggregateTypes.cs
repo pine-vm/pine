@@ -91,6 +91,25 @@ public abstract record SeparatedSyntaxList<TNode>
         };
 
     /// <summary>
+    /// Maps the nodes while preserving separator locations.
+    /// </summary>
+    public SeparatedSyntaxList<TResult> Map<TResult>(System.Func<TNode, TResult> map) =>
+        this switch
+        {
+            Empty =>
+            new SeparatedSyntaxList<TResult>.Empty(),
+
+            NonEmpty nonEmpty =>
+            new SeparatedSyntaxList<TResult>.NonEmpty(
+                map(nonEmpty.First),
+                [.. nonEmpty.Rest.Select(item => (item.SeparatorLocation, map(item.Node)))]),
+
+            _ =>
+            throw new System.NotImplementedException(
+                "Unexpected type: " + GetType().FullName)
+        };
+
+    /// <summary>
     /// Gets the element at the specified index.
     /// </summary>
     public TNode this[int index] => this switch
@@ -283,7 +302,7 @@ public abstract record Declaration
 
     /// <summary>Choice type declaration.</summary>
     public sealed record ChoiceTypeDeclaration(
-        TypeStruct TypeDeclaration)
+        ChoiceTypeStruct TypeDeclaration)
         : Declaration;
 
     /// <summary>Type alias declaration.</summary>
@@ -368,16 +387,16 @@ public record TypeAlias(
 /// <summary>
 /// Choice type declaration including constructors.
 /// </summary>
-public record TypeStruct(
+public record ChoiceTypeStruct(
     Node<string>? Documentation,
     Location TypeTokenLocation,
     Node<string> Name,
     IReadOnlyList<Node<string>> Generics,
     Location EqualsTokenLocation,
-    IReadOnlyList<(Location? PipeTokenLocation, Node<ValueConstructor> Constructor)> Constructors)
+    SeparatedSyntaxList<Node<ValueConstructor>> Constructors)
 {
     /// <inheritdoc/>
-    public virtual bool Equals(TypeStruct? other)
+    public virtual bool Equals(ChoiceTypeStruct? other)
     {
         if (ReferenceEquals(this, other))
             return true;
@@ -391,7 +410,7 @@ public record TypeStruct(
             Name.Equals(other.Name) &&
             Enumerable.SequenceEqual(Generics, other.Generics) &&
             EqualsTokenLocation.Equals(other.EqualsTokenLocation) &&
-            Enumerable.SequenceEqual(Constructors, other.Constructors);
+            Constructors.Equals(other.Constructors);
     }
 
     /// <inheritdoc/>
@@ -408,8 +427,7 @@ public record TypeStruct(
 
         hashCode.Add(EqualsTokenLocation);
 
-        foreach (var item in Constructors)
-            hashCode.Add(item);
+        hashCode.Add(Constructors);
 
         return hashCode.ToHashCode();
     }

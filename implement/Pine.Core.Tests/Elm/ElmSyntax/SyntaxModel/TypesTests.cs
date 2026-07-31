@@ -111,6 +111,24 @@ public class TypesTests
     }
 
     [Fact]
+    public void SeparatedSyntaxList_Map_preserves_separator_locations()
+    {
+        var separatorLocation = new Location(1, 5);
+
+        var list =
+            new SeparatedSyntaxList<string>.NonEmpty(
+                "first",
+                [(separatorLocation, "second")]);
+
+        var mapped = list.Map(item => item.Length);
+
+        ((object)mapped).Should().Be(
+            new SeparatedSyntaxList<int>.NonEmpty(
+                5,
+                [(separatorLocation, 6)]));
+    }
+
+    [Fact]
     public void Import_value_equality()
     {
         var range = new Range(new Location(1, 1), new Location(1, 10));
@@ -621,24 +639,39 @@ public class TypesTests
         var range = new Range(new Location(1, 1), new Location(1, 10));
         var typeLoc = new Location(1, 1);
         var equalsLoc = new Location(1, 15);
+        var pipeLoc = new Location(1, 25);
+
+        var firstConstructor =
+            new Node<ValueConstructor>(
+                range,
+                new ValueConstructor(new Node<string>(range, "First"), []));
+
+        var secondConstructor =
+            new Node<ValueConstructor>(
+                range,
+                new ValueConstructor(new Node<string>(range, "Second"), []));
 
         var type1 =
-            new TypeStruct(
+            new ChoiceTypeStruct(
                 null,
                 typeLoc,
                 new Node<string>(range, "MyType"),
                 [],
                 equalsLoc,
-                []);
+                new SeparatedSyntaxList<Node<ValueConstructor>>.NonEmpty(
+                    firstConstructor,
+                    [(pipeLoc, secondConstructor)]));
 
         var type2 =
-            new TypeStruct(
+            new ChoiceTypeStruct(
                 null,
                 typeLoc,
                 new Node<string>(range, "MyType"),
                 [],
                 equalsLoc,
-                []);
+                new SeparatedSyntaxList<Node<ValueConstructor>>.NonEmpty(
+                    firstConstructor,
+                    [(pipeLoc, secondConstructor)]));
 
         type1.Should().Be(type2);
         type1.GetHashCode().Should().Be(type2.GetHashCode());

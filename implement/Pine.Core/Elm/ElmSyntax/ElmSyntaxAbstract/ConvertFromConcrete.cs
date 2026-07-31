@@ -150,11 +150,11 @@ public static class ConvertFromConcrete
             [.. typeAlias.Generics.Select(generic => generic.Value)],
             FromTypeAnnotation(typeAlias.TypeAnnotation.Value));
 
-    private static TypeStruct FromTypeStruct(SyntaxModel.TypeStruct typeStruct) =>
+    private static TypeStruct FromTypeStruct(SyntaxModel.ChoiceTypeStruct typeStruct) =>
         new(
             typeStruct.Name.Value,
             [.. typeStruct.Generics.Select(generic => generic.Value)],
-            [.. typeStruct.Constructors.Select(constructor => FromValueConstructor(constructor.Constructor.Value))]);
+            [.. typeStruct.Constructors.Select(constructor => FromValueConstructor(constructor.Value))]);
 
     private static ValueConstructor FromValueConstructor(SyntaxModel.ValueConstructor valueConstructor) =>
         ValueConstructor.Create(

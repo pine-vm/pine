@@ -5,7 +5,6 @@ using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
 
-
 namespace Pine.Core.Elm.ElmSyntax;
 
 /// <summary>

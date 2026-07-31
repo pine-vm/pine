@@ -2796,7 +2796,7 @@ public partial class ElmSyntaxInterpreter
 
     /// <summary>
     /// Structural equality of two captured-binding environments: same set of names, each
-    /// bound to a <see cref="ValuesEqualInProcess"/>-equal value. Part of the recursion
+    /// bound to a <see cref="ValuesEqualInProcess(PineValueInProcess, PineValueInProcess)"/>-equal value. Part of the recursion
     /// identity so that two distinct closures built from the same lambda AST node but
     /// capturing different free variables (for example separate <c>ParserFast</c> combinator
     /// applications) are not mistaken for a single self-recursive call.
@@ -3014,7 +3014,8 @@ public partial class ElmSyntaxInterpreter
                     capturedTopLevel: outerTopLevel);
         }
 
-        return Result<ElmInterpretationError, IReadOnlyList<ElmSyntaxAbstract.LetDeclaration>>
+        return
+            Result<ElmInterpretationError, IReadOnlyList<ElmSyntaxAbstract.LetDeclaration>>
             .ok(plan.SortedNonFunctionDecls);
     }
 
@@ -3025,7 +3026,8 @@ public partial class ElmSyntaxInterpreter
     /// across every evaluation of the same let node.
     /// </summary>
     private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<
-        ElmSyntaxAbstract.Expression.LetExpression, LetGroupPlan> s_letGroupPlanCache = new();
+        ElmSyntaxAbstract.Expression.LetExpression, LetGroupPlan>
+        s_letGroupPlanCache = new();
 
     /// <summary>
     /// Result of the static analysis of a <c>let</c> binding group. All fields are derived
@@ -3115,10 +3117,11 @@ public partial class ElmSyntaxInterpreter
 
         if (nonFunctionDecls.Count is 0)
         {
-            return new LetGroupPlan(
-                ParameterisedFunctions: parameterisedFunctions,
-                SortedNonFunctionDecls: nonFunctionDecls,
-                CycleErrorMessage: null);
+            return
+                new LetGroupPlan(
+                    ParameterisedFunctions: parameterisedFunctions,
+                    SortedNonFunctionDecls: nonFunctionDecls,
+                    CycleErrorMessage: null);
         }
 
         // Build the dependency graph among non-function bindings: index i depends on
@@ -3238,10 +3241,11 @@ public partial class ElmSyntaxInterpreter
                                 dfsStack.Pop().deps.Dispose();
                             }
 
-                            return new LetGroupPlan(
-                                ParameterisedFunctions: parameterisedFunctions,
-                                SortedNonFunctionDecls: [],
-                                CycleErrorMessage:
+                            return
+                                new LetGroupPlan(
+                                    ParameterisedFunctions: parameterisedFunctions,
+                                    SortedNonFunctionDecls: [],
+                                    CycleErrorMessage:
                                     "Cyclic let binding detected among non-function bindings: "
                                     + string.Join(" -> ", pathNames));
                         }
@@ -3274,10 +3278,11 @@ public partial class ElmSyntaxInterpreter
             }
         }
 
-        return new LetGroupPlan(
-            ParameterisedFunctions: parameterisedFunctions,
-            SortedNonFunctionDecls: sorted,
-            CycleErrorMessage: null);
+        return
+            new LetGroupPlan(
+                ParameterisedFunctions: parameterisedFunctions,
+                SortedNonFunctionDecls: sorted,
+                CycleErrorMessage: null);
     }
 
     /// <summary>

@@ -77,7 +77,7 @@ public static class NamingErrorDetection
             {
                 foreach (var ctor in choiceTypeDecl.TypeDeclaration.Constructors)
                 {
-                    builder.Add(ctor.Constructor.Value.Name.Value);
+                    builder.Add(ctor.Value.Name.Value);
                 }
             }
         }

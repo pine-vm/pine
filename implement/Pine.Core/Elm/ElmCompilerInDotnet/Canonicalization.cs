@@ -536,7 +536,7 @@ public class Canonicalization
             {
                 foreach (var ctor in choiceTypeDecl.TypeDeclaration.Constructors)
                 {
-                    localDeclarationsBuilder.Add(ctor.Constructor.Value.Name.Value);
+                    localDeclarationsBuilder.Add(ctor.Value.Name.Value);
                 }
             }
         }
@@ -592,13 +592,13 @@ public class Canonicalization
                         // Also check type constructors
                         foreach (var ctor in typeDecl.TypeDeclaration.Constructors)
                         {
-                            if (valueImportMap.ContainsKey(ctor.Constructor.Value.Name.Value) &&
-                                !shadowings.ContainsKey(ctor.Constructor.Value.Name.Value))
+                            if (valueImportMap.ContainsKey(ctor.Value.Name.Value) &&
+                                !shadowings.ContainsKey(ctor.Value.Name.Value))
                             {
                                 shadowings =
                                     shadowings.Add(
-                                        ctor.Constructor.Value.Name.Value,
-                                        new ShadowingLocation(ctor.Constructor.Value.Name.Range, emptyPath));
+                                        ctor.Value.Name.Value,
+                                        new ShadowingLocation(ctor.Value.Name.Range, emptyPath));
                             }
                         }
 
@@ -736,7 +736,7 @@ public class Canonicalization
 
                             foreach (var ctor in typeDecl.TypeDeclaration.Constructors)
                             {
-                                var ctorName = ctor.Constructor.Value.Name.Value;
+                                var ctorName = ctor.Value.Name.Value;
                                 valueExportsBuilder.Add(ctorName);
                                 constructorsBuilder.Add(ctorName);
                             }
@@ -814,7 +814,7 @@ public class Canonicalization
 
                                 foreach (var ctor in choiceTypeDecl.TypeDeclaration.Constructors)
                                 {
-                                    var ctorName = ctor.Constructor.Value.Name.Value;
+                                    var ctorName = ctor.Value.Name.Value;
                                     valueExportsBuilder.Add(ctorName);
                                     constructorsBuilder.Add(ctorName);
                                 }
@@ -1558,8 +1558,8 @@ public class Canonicalization
                 typeAnnotationResult.Shadowings);
     }
 
-    private static CanonicalizationResult<TypeStruct> CanonicalizeTypeStruct(
-        TypeStruct typeStruct,
+    private static CanonicalizationResult<ChoiceTypeStruct> CanonicalizeTypeStruct(
+        ChoiceTypeStruct typeStruct,
         CanonicalizationContext context)
     {
         return
@@ -1567,20 +1567,24 @@ public class Canonicalization
                 typeStruct.Constructors,
                 ctor => CanonicalizeValueConstructorNode(ctor, context))
             .MapValue(
-                canonicalizedConstructors => new TypeStruct(
-                    Documentation: typeStruct.Documentation,
-                    TypeTokenLocation: typeStruct.TypeTokenLocation,
-                    Name: typeStruct.Name,
-                    Generics: typeStruct.Generics,
-                    EqualsTokenLocation: typeStruct.EqualsTokenLocation,
-                    Constructors: [.. canonicalizedConstructors]));
+                canonicalizedConstructors =>
+                {
+                    var constructorIndex = 0;
+
+                    return new ChoiceTypeStruct(
+                        Documentation: typeStruct.Documentation,
+                        TypeTokenLocation: typeStruct.TypeTokenLocation,
+                        Name: typeStruct.Name,
+                        Generics: typeStruct.Generics,
+                        EqualsTokenLocation: typeStruct.EqualsTokenLocation,
+                        Constructors: typeStruct.Constructors.Map(_ => canonicalizedConstructors[constructorIndex++]));
+                });
     }
 
-    private static CanonicalizationResult<(Location? PipeTokenLocation, Node<ValueConstructor> Constructor)> CanonicalizeValueConstructorNode(
-        (Location? PipeTokenLocation, Node<ValueConstructor> Constructor) ctorEntry,
+    private static CanonicalizationResult<Node<ValueConstructor>> CanonicalizeValueConstructorNode(
+        Node<ValueConstructor> ctorNode,
         CanonicalizationContext context)
     {
-        var ctorNode = ctorEntry.Constructor;
         var ctor = ctorNode.Value;
 
         return
@@ -1589,12 +1593,11 @@ public class Canonicalization
                 arg => CanonicalizeTypeAnnotationNode(arg, context))
             .MapValue(
                 canonicalizedArguments =>
-                (ctorEntry.PipeTokenLocation,
                 new Node<ValueConstructor>(
                     ctorNode.Range,
                     new ValueConstructor(
                         Name: ctor.Name,
-                        Arguments: [.. canonicalizedArguments]))));
+                        Arguments: [.. canonicalizedArguments])));
     }
 
     private static CanonicalizationResult<TypeAlias> CanonicalizeTypeAlias(

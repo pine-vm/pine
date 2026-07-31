@@ -210,12 +210,12 @@ public static class FromFullSyntaxModel
     /// Converts a <see cref="TypeStruct"/>
     /// </summary>
     public static TypeStruct Convert(
-        FullTypes.TypeStruct typeStruct) =>
+        FullTypes.ChoiceTypeStruct typeStruct) =>
         new(
             Documentation: typeStruct.Documentation,
             Name: typeStruct.Name,
             Generics: typeStruct.Generics,
-            Constructors: [.. typeStruct.Constructors.Select(c => ConvertNode(c.Constructor, Convert))]);
+            Constructors: [.. typeStruct.Constructors.Select(c => ConvertNode(c, Convert))]);
 
     /// <summary>
     /// Converts a <see cref="ValueConstructor"/>
