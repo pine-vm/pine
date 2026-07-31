@@ -256,7 +256,7 @@ public class JsonRoundtripTests
 
         AssertRoundtrip<Declaration>(
             new Declaration.ChoiceTypeDeclaration(
-                new TypeStruct(
+                new ChoiceTypeStruct(
                     "Maybe",
                     ["a"],
                     [

@@ -414,12 +414,12 @@ public class ModelTests
 
         AssertValueEqual(
             new Declaration.ChoiceTypeDeclaration(
-                new TypeStruct(
+                new ChoiceTypeStruct(
                     "T",
                     ["a"],
                     [ValueConstructor.Create("Ctor", [new TypeAnnotation.GenericType("a")])])),
             new Declaration.ChoiceTypeDeclaration(
-                new TypeStruct(
+                new ChoiceTypeStruct(
                     "T",
                     ["a"],
                     [ValueConstructor.Create("Ctor", [new TypeAnnotation.GenericType("a")])])));

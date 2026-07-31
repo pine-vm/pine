@@ -386,7 +386,7 @@ public abstract record Declaration
 
     /// <summary>Choice type declaration.</summary>
     public sealed record ChoiceTypeDeclaration(
-        TypeStruct TypeDeclaration)
+        ChoiceTypeStruct TypeDeclaration)
         : Declaration;
 
     /// <summary>Type alias declaration.</summary>
@@ -460,7 +460,7 @@ public record TypeAlias(
 /// <summary>
 /// Choice type declaration including constructors.
 /// </summary>
-public record TypeStruct(
+public record ChoiceTypeStruct(
     string Name,
     ModuleName Generics,
     IReadOnlyList<ValueConstructor> Constructors)
@@ -482,7 +482,7 @@ public record TypeStruct(
     }
 
     /// <inheritdoc/>
-    public virtual bool Equals(TypeStruct? other)
+    public virtual bool Equals(ChoiceTypeStruct? other)
     {
         if (ReferenceEquals(this, other))
             return true;

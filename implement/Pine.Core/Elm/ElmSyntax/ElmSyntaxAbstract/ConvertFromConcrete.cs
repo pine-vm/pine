@@ -150,7 +150,7 @@ public static class ConvertFromConcrete
             [.. typeAlias.Generics.Select(generic => generic.Value)],
             FromTypeAnnotation(typeAlias.TypeAnnotation.Value));
 
-    private static TypeStruct FromTypeStruct(SyntaxModel.ChoiceTypeStruct typeStruct) =>
+    private static ChoiceTypeStruct FromTypeStruct(SyntaxModel.ChoiceTypeStruct typeStruct) =>
         new(
             typeStruct.Name.Value,
             [.. typeStruct.Generics.Select(generic => generic.Value)],

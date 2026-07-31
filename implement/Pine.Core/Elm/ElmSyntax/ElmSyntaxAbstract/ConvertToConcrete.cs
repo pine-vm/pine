@@ -209,7 +209,7 @@ public static class ConvertToConcrete
             s_zeroLocation,
             Node(ToTypeAnnotation(typeAlias.TypeAnnotation)));
 
-    private static SyntaxModel.ChoiceTypeStruct ToTypeStruct(TypeStruct typeStruct) =>
+    private static SyntaxModel.ChoiceTypeStruct ToTypeStruct(ChoiceTypeStruct typeStruct) =>
         new(
             Documentation: null,
             s_zeroLocation,
