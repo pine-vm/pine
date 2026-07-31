@@ -24,6 +24,8 @@ public class PineValueInProcess
 {
     private const int ShortBlobLengthThreshold = 8;
 
+    private const int ConcatDirectThreshold = 16;
+
     private PineValue? _evaluated;
 
     private ImmutableSliceBuilder? _sliceBuilder;
@@ -816,6 +818,16 @@ public class PineValueInProcess
         if (length is 1)
             return input.GetElementAt(0);
 
+        if (length is 2)
+        {
+            if (input._list is { } list &&
+                list[0]._evaluated is not null &&
+                list[1]._evaluated is not null)
+            {
+                return ConcatBinary(list[0], list[1]);
+            }
+        }
+
         // Skip over any leading empty lists, mirroring BuiltinFunctionSpecialized.concat, so that
         // the first remaining part determines whether this is a list or blob concatenation.
         var firstNonEmptyIndex = 0;
@@ -980,6 +992,56 @@ public class PineValueInProcess
 
         var leftEval = left.Evaluate();
         var rightEval = right.Evaluate();
+
+        if (leftEval is PineValue.ListValue leftList)
+        {
+            if (leftList.Items.Length is 0)
+            {
+                return right;
+            }
+
+            if (rightEval is PineValue.ListValue rightList)
+            {
+                if (rightList.Items.Length is 0)
+                {
+                    return left;
+                }
+
+                var length = leftList.Items.Length + rightList.Items.Length;
+
+                if (length < ConcatDirectThreshold)
+                {
+                    return Create(BuiltinFunctionSpecialized.concat(leftList, rightList));
+                }
+            }
+            else
+            {
+                return EmptyList;
+            }
+        }
+
+        if (leftEval is PineValue.BlobValue leftBlob)
+        {
+            if (rightEval is PineValue.BlobValue rightBlob)
+            {
+                var length = leftBlob.Bytes.Length + rightBlob.Bytes.Length;
+
+                if (length < ConcatDirectThreshold)
+                {
+                    return Create(BuiltinFunctionSpecialized.concat(leftBlob, rightBlob));
+                }
+            }
+
+            if (rightEval is PineValue.ListValue rightList)
+            {
+                if (rightList.Items.Length is 0)
+                {
+                    return left;
+                }
+
+                return EmptyList;
+            }
+        }
 
         return
             new PineValueInProcess

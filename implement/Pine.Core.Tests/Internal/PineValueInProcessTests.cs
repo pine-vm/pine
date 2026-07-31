@@ -1,10 +1,15 @@
 using AwesomeAssertions;
+using Pine.Core.CodeAnalysis;
 using Pine.Core.CommonEncodings;
 using Pine.Core.Internal;
+using System.Collections.Immutable;
 using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
 using Xunit;
+
+using AbstractExpr = Pine.Core.Elm.ElmSyntax.ElmSyntaxAbstract.Expression;
+using ElmInterpreter = Pine.Core.Elm.ElmSyntax.ElmSyntaxInterpreter;
 
 namespace Pine.Core.Tests.Internal;
 
@@ -508,6 +513,33 @@ public class PineValueInProcessTests
 
         evaluated.Should().Be(expected);
         VerifyConsistencyOfDerivedProperties(result);
+    }
+
+    [Fact]
+    public void Concat_two_lists_preserves_interpreter_closure()
+    {
+        var closure =
+            new ElmInterpreter.ElmClosureInProcess(
+                new ElmInterpreter.ElmClosureInProcess.SourceRef.Lambda(
+                    new AbstractExpr.LambdaExpression([], AbstractExpr.UnitExpr.Instance)),
+                parameterCount: 1,
+                argumentsAlreadyCollected: [],
+                capturedBindings: ImmutableDictionary<string, PineValueInProcess>.Empty,
+                capturedTopLevel: DeclQualifiedName.Create([], "Top"));
+
+        var input =
+            PineValueInProcess.CreateList(
+                [
+                PineValueInProcess.CreateList([closure]),
+                PineValueInProcess.CreateList(
+                    [PineValueInProcess.Create(PineValue.Blob([1]))])
+                ]);
+
+        var result = PineValueInProcess.Concat(input);
+
+        result.GetLength().Should().Be(2);
+        result.GetElementAt(0).Should().BeSameAs(closure);
+        result.GetElementAt(1).Evaluate().Should().Be(PineValue.Blob([1]));
     }
 
     [Fact]
