@@ -50,93 +50,114 @@ tokenize input =
 
 tokenizeHelp : String -> Position -> List Token.Token -> Result String (List Token.Token)
 tokenizeHelp source position tokensRev =
-    case classifyAt source position.offset of
-        AtEnd ->
-            Ok (List.reverse tokensRev)
+    if
+        position.offset >= 0
+        {-
+        Add an explicit branch to make it trivial to prove that `position.offset` is >= 0 for all usages below.
+        Based on that proof, compiler have an easier way to prove that `String.slice` is always called non-negative offsets,
+        which in turn allows the compile-time removal of the branches in those instances of `String.slice`
+        -}
+    then
+        case classifyAt source position.offset of
+            AtEnd ->
+                Ok (List.reverse tokensRev)
 
-        AtNewlineLF ->
-            emitNewline source position 1 tokensRev
+            AtNewlineLF ->
+                emitNewline source position 1 tokensRev
 
-        AtNewlineCRLF ->
-            emitNewline source position 2 tokensRev
+            AtNewlineCRLF ->
+                emitNewline source position 2 tokensRev
 
-        AtNewlineCR ->
-            emitNewline source position 1 tokensRev
+            AtNewlineCR ->
+                emitNewline source position 1 tokensRev
 
-        AtChar first ->
-            if isWhitespace first then
-                let
-                    endOffset =
-                        takeWhileEnd isWhitespace source position.offset
+            AtChar first ->
+                if isWhitespace first then
+                    let
+                        endOffset =
+                            takeWhileEnd isWhitespace source position.offset
 
-                    lexeme =
-                        String.slice position.offset endOffset source
+                        lexeme =
+                            String.slice position.offset endOffset source
 
-                    nextPosition =
-                        { offset = endOffset
-                        , row = position.row
-                        , column = position.column + (endOffset - position.offset)
-                        }
-                in
-                tokenizeHelp source
-                    nextPosition
-                    (makeToken Token.Whitespace
-                        lexeme
-                        (positionLocation position)
-                        (positionLocation nextPosition)
-                        Nothing :: tokensRev
-                    )
+                        nextPosition =
+                            { offset = endOffset
+                            , row = position.row
+                            , column = position.column + (endOffset - position.offset)
+                            }
+                    in
+                    tokenizeHelp
+                        source
+                        nextPosition
+                        (makeToken
+                            Token.Whitespace
+                            lexeme
+                            (positionLocation position)
+                            (positionLocation nextPosition)
+                            Nothing
+                            :: tokensRev
+                        )
 
-            else if isDigit first then
-                let
-                    endOffset =
-                        numberEnd source position.offset
+                else if isDigit first then
+                    let
+                        endOffset =
+                            numberEnd source position.offset
 
-                    lexeme =
-                        String.slice position.offset endOffset source
+                        lexeme =
+                            String.slice position.offset endOffset source
 
-                    nextPosition =
-                        { offset = endOffset
-                        , row = position.row
-                        , column = position.column + (endOffset - position.offset)
-                        }
-                in
-                tokenizeHelp source
-                    nextPosition
-                    (makeToken
-                        Token.NumberLiteral
-                        lexeme
-                        (positionLocation position)
-                        (positionLocation nextPosition)
-                        Nothing :: tokensRev
-                    )
+                        nextPosition =
+                            { offset = endOffset
+                            , row = position.row
+                            , column = position.column + (endOffset - position.offset)
+                            }
+                    in
+                    tokenizeHelp
+                        source
+                        nextPosition
+                        (makeToken
+                            Token.NumberLiteral
+                            lexeme
+                            (positionLocation position)
+                            (positionLocation nextPosition)
+                            Nothing
+                            :: tokensRev
+                        )
 
-            else if isIdentifierStart first then
-                let
-                    endOffset =
-                        takeWhileEnd isIdentifierChar source position.offset
+                else if isIdentifierStart first then
+                    let
+                        endOffset =
+                            takeWhileEnd isIdentifierChar source position.offset
 
-                    lexeme =
-                        String.slice position.offset endOffset source
+                        lexeme =
+                            String.slice position.offset endOffset source
 
-                    nextPosition =
-                        { offset = endOffset
-                        , row = position.row
-                        , column = position.column + (endOffset - position.offset)
-                        }
-                in
-                tokenizeHelp source
-                    nextPosition
-                    (makeToken
-                        Token.Identifier
-                        lexeme
-                        (positionLocation position)
-                        (positionLocation nextPosition)
-                        Nothing :: tokensRev
-                    )
+                        nextPosition =
+                            { offset = endOffset
+                            , row = position.row
+                            , column = position.column + (endOffset - position.offset)
+                            }
+                    in
+                    tokenizeHelp
+                        source
+                        nextPosition
+                        (makeToken
+                            Token.Identifier
+                            lexeme
+                            (positionLocation position)
+                            (positionLocation nextPosition)
+                            Nothing
+                            :: tokensRev
+                        )
 
-            else
-                tokenizeSymbol source position tokensRev
+                else
+                    tokenizeSymbol source position tokensRev
+
+    else
+        Err
+            ("Internal error: negative offset "
+            ++ String.fromInt position.offset ++ " at " ++ locationString (positionLocation position) ++ "."
+            )
 
 
 {-| Emits a single `Newline` token whose lexeme is always `"\n"`, regardless of whether the
@@ -150,9 +171,17 @@ emitNewline source position consumedLength tokensRev =
         nextPosition =
             { offset = position.offset + consumedLength, row = position.row + 1, column = 1 }
     in
-    tokenizeHelp source
+    tokenizeHelp
+        source
         nextPosition
-        (makeToken Token.Newline "\n" (positionLocation position) (positionLocation nextPosition) Nothing :: tokensRev)
+        (makeToken
+            Token.Newline
+            "\n"
+            (positionLocation position)
+            (positionLocation nextPosition)
+            Nothing
+            :: tokensRev
+        )
 
 
 {-| Classifies the source at a given offset as either the end of input, one of the three
@@ -202,9 +231,17 @@ tokenizeSymbol source position tokensRev =
                     , column = position.column + consumedLength
                     }
             in
-            tokenizeHelp source
+            tokenizeHelp
+                source
                 nextPosition
-                (makeToken tokenType lexeme (positionLocation position) (positionLocation nextPosition) Nothing :: tokensRev)
+                (makeToken
+                    tokenType
+                    lexeme
+                    (positionLocation position)
+                    (positionLocation nextPosition)
+                    Nothing
+                    :: tokensRev
+                )
 
         addSingle : Token.TokenType -> Result String (List Token.Token)
         addSingle tokenType =
@@ -236,7 +273,8 @@ tokenizeSymbol source position tokensRev =
                             lexeme
                             (positionLocation position)
                             (positionLocation nextPosition)
-                            Nothing :: tokensRev
+                            Nothing
+                            :: tokensRev
                         )
 
                 ">" ->
@@ -662,7 +700,10 @@ tokenizeMultilineComment source position start tokensRev depth accumulated =
         AtNewlineLF ->
             let
                 nextPosition =
-                    { offset = positionAfterRun.offset + 1, row = positionAfterRun.row + 1, column = 1 }
+                    { offset = positionAfterRun.offset + 1
+                    , row = positionAfterRun.row + 1
+                    , column = 1
+                    }
             in
             tokenizeMultilineComment
                 source
@@ -675,7 +716,10 @@ tokenizeMultilineComment source position start tokensRev depth accumulated =
         AtNewlineCRLF ->
             let
                 nextPosition =
-                    { offset = positionAfterRun.offset + 2, row = positionAfterRun.row + 1, column = 1 }
+                    { offset = positionAfterRun.offset + 2
+                    , row = positionAfterRun.row + 1
+                    , column = 1
+                    }
             in
             tokenizeMultilineComment
                 source
@@ -688,9 +732,18 @@ tokenizeMultilineComment source position start tokensRev depth accumulated =
         AtNewlineCR ->
             let
                 nextPosition =
-                    { offset = positionAfterRun.offset + 1, row = positionAfterRun.row + 1, column = 1 }
+                    { offset = positionAfterRun.offset + 1
+                    , row = positionAfterRun.row + 1
+                    , column = 1
+                    }
             in
-            tokenizeMultilineComment source nextPosition start tokensRev depth (accumulatedAfterRun ++ "\n")
+            tokenizeMultilineComment
+                source
+                nextPosition
+                start
+                tokensRev
+                depth
+                (accumulatedAfterRun ++ "\n")
 
         AtChar "{" ->
             if String.slice (positionAfterRun.offset + 1) (positionAfterRun.offset + 2) source == "-" then
@@ -749,7 +802,13 @@ tokenizeMultilineComment source position start tokensRev depth accumulated =
                         )
 
                 else
-                    tokenizeMultilineComment source endPosition start tokensRev (depth - 1) finalLexeme
+                    tokenizeMultilineComment
+                        source
+                        endPosition
+                        start
+                        tokensRev
+                        (depth - 1)
+                        finalLexeme
 
             else
                 let
@@ -820,10 +879,6 @@ minusIsOperator source position tokensRev =
 
         next ->
             isWhitespace next
-                || next
-                == "\n"
-                || next
-                == "\u{000D}"
                 || (case next of
                         ")" ->
                             True
@@ -1199,6 +1254,12 @@ isWhitespace character =
         " " ->
             True
 
+        "\u{000D}" ->
+            True
+
+        "\n" ->
+            True
+
         "\t" ->
             True
 
@@ -1208,7 +1269,168 @@ isWhitespace character =
 
 isIdentifierStart : String -> Bool
 isIdentifierStart character =
-    character == "_" || (not (String.isEmpty character) && String.all Char.isAlpha character)
+    case character of
+        "_" ->
+            True
+
+        "a" ->
+            True
+
+        "b" ->
+            True
+
+        "c" ->
+            True
+
+        "d" ->
+            True
+
+        "e" ->
+            True
+
+        "f" ->
+            True
+
+        "g" ->
+            True
+
+        "h" ->
+            True
+
+        "i" ->
+            True
+
+        "j" ->
+            True
+
+        "k" ->
+            True
+
+        "l" ->
+            True
+
+        "m" ->
+            True
+
+        "n" ->
+            True
+
+        "o" ->
+            True
+
+        "p" ->
+            True
+
+        "q" ->
+            True
+
+        "r" ->
+            True
+
+        "s" ->
+            True
+
+        "t" ->
+            True
+
+        "u" ->
+            True
+
+        "v" ->
+            True
+
+        "w" ->
+            True
+
+        "x" ->
+            True
+
+        "y" ->
+            True
+
+        "z" ->
+            True
+
+        "A" ->
+            True
+
+        "B" ->
+            True
+
+        "C" ->
+            True
+
+        "D" ->
+            True
+
+        "E" ->
+            True
+
+        "F" ->
+            True
+
+        "G" ->
+            True
+
+        "H" ->
+            True
+
+        "I" ->
+            True
+
+        "J" ->
+            True
+
+        "K" ->
+            True
+
+        "L" ->
+            True
+
+        "M" ->
+            True
+
+        "N" ->
+            True
+
+        "O" ->
+            True
+
+        "P" ->
+            True
+
+        "Q" ->
+            True
+
+        "R" ->
+            True
+
+        "S" ->
+            True
+
+        "T" ->
+            True
+
+        "U" ->
+            True
+
+        "V" ->
+            True
+
+        "W" ->
+            True
+
+        "X" ->
+            True
+
+        "Y" ->
+            True
+
+        "Z" ->
+            True
+
+        _ ->
+            False
 
 
 isIdentifierChar : String -> Bool
@@ -1221,6 +1443,10 @@ isIdentifierChar character =
 
 isOperatorChar : String -> Bool
 isOperatorChar character =
+    {-
+    TODO: Expand code analysis to optimize form using `List.member` to get the same level of efficiency:
+    List.member char [ '+', '-', '/', '*', '=', '.', '$', '<', '>', ':', '&', '|', '^', '?', '%', '#', '!' ]
+    -}
     case character of
         "+" ->
             True
