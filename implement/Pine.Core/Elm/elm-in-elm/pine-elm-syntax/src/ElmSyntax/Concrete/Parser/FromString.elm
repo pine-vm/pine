@@ -1,14 +1,18 @@
 module ElmSyntax.Concrete.Parser.FromString exposing (..)
 
 import Char
+import ElmSyntax.Concrete.Declaration as Declaration
 import ElmSyntax.Concrete.Expression as Expression
+import ElmSyntax.Concrete.File as File
 import ElmSyntax.Concrete.Infix as Infix
 import ElmSyntax.Concrete.Node as Node exposing (Node(..))
+import ElmSyntax.Concrete.Parser.DeclarationOrExpression as DeclarationOrExpression exposing (DeclarationOrExpression)
 import ElmSyntax.Concrete.Parser.Token as Token
 import ElmSyntax.Concrete.Parser.TokensFromString as TokensFromString
 import ElmSyntax.Concrete.Pattern as Pattern
 import ElmSyntax.Concrete.Range exposing (Location, Range)
 import ElmSyntax.Concrete.SeparatedSyntaxList as SeparatedSyntaxList
+import ElmSyntax.Concrete.TypeAnnotation as TypeAnnotation
 
 
 parseExpression : String -> Result String Expression.Expression
@@ -19,6 +23,1327 @@ parseExpression input =
 
         Err error ->
             Err error
+
+
+parseFile : String -> Result String File.File
+parseFile input =
+    Err "parseFile is not implemented yet."
+
+
+parseDeclarationOrExpression : String -> Result String DeclarationOrExpression
+parseDeclarationOrExpression input =
+    case TokensFromString.parseExpression input of
+        Ok tokens ->
+            parseDeclarationOrExpressionTokens tokens
+
+        Err error ->
+            Err error
+
+
+parseDeclarationOrExpressionTokens : List Token.Token -> Result String DeclarationOrExpression
+parseDeclarationOrExpressionTokens tokens =
+    case dropTrivia tokens of
+        [] ->
+            Err "No tokens to parse as a declaration or expression."
+
+        firstToken :: _ ->
+            let
+                startsWithDeclarationKeyword =
+                    firstToken.tokenType
+                        == Token.Identifier
+                        && (firstToken.lexeme
+                                == "type"
+                                || firstToken.lexeme
+                                == "port"
+                                || firstToken.lexeme
+                                == "infix"
+                           )
+            in
+            if startsWithDeclarationKeyword then
+                case parseDeclarationTokens tokens of
+                    Ok ( declaration, remaining ) ->
+                        case dropTrivia remaining of
+                            [] ->
+                                Ok (DeclarationOrExpression.Declaration declaration)
+
+                            nextToken :: _ ->
+                                Err
+                                    ("Unexpected token '"
+                                        ++ nextToken.lexeme
+                                        ++ "' after parsing declaration."
+                                    )
+
+                    Err error ->
+                        Err ("Failed to parse declaration or expression: " ++ error)
+
+            else
+                case parseDeclarationTokens tokens of
+                    Ok ( declaration, remaining ) ->
+                        case dropTrivia remaining of
+                            [] ->
+                                Ok (DeclarationOrExpression.Declaration declaration)
+
+                            _ ->
+                                parseAsExpressionFallback tokens
+
+                    Err _ ->
+                        parseAsExpressionFallback tokens
+
+
+parseAsExpressionFallback : List Token.Token -> Result String DeclarationOrExpression
+parseAsExpressionFallback tokens =
+    case parseExpressionNode tokens of
+        Ok ( expressionNode, remaining ) ->
+            case dropTrivia remaining of
+                [] ->
+                    Ok (DeclarationOrExpression.Expression (Node.value expressionNode))
+
+                nextToken :: _ ->
+                    Err
+                        ("Unexpected token '"
+                            ++ nextToken.lexeme
+                            ++ "' after parsing expression."
+                        )
+
+        Err error ->
+            Err ("Failed to parse declaration or expression: " ++ error)
+
+
+parseDeclarationTokens : List Token.Token -> Result String ( Declaration.Declaration, List Token.Token )
+parseDeclarationTokens tokens =
+    case dropTrivia tokens of
+        firstToken :: _ ->
+            if firstToken.tokenType == Token.Identifier && firstToken.lexeme == "infix" then
+                parseInfixDeclaration tokens
+
+            else if firstToken.tokenType == Token.Identifier && firstToken.lexeme == "type" then
+                parseTypeDeclarationTokens tokens
+
+            else if firstToken.tokenType == Token.Identifier && firstToken.lexeme == "port" then
+                parsePortDeclarationTokens tokens
+
+            else
+                parseFunctionDeclarationTokens tokens
+
+        [] ->
+            Err "Expected a declaration."
+
+
+parseInfixDeclaration : List Token.Token -> Result String ( Declaration.Declaration, List Token.Token )
+parseInfixDeclaration tokens =
+    case consumeKeyword "infix" tokens of
+        Err e ->
+            Err e
+
+        Ok ( infixToken, afterInfix ) ->
+            case dropTrivia afterInfix of
+                directionToken :: afterDirection ->
+                    if directionToken.tokenType /= Token.Identifier then
+                        Err
+                            ("Expected infix direction, but found '"
+                                ++ directionToken.lexeme
+                                ++ "'."
+                            )
+
+                    else
+                        case parseInfixDirection directionToken.lexeme of
+                            Nothing ->
+                                Err
+                                    ("Infix direction is not a valid value: "
+                                        ++ directionToken.lexeme
+                                    )
+
+                            Just direction ->
+                                case dropTrivia afterDirection of
+                                    precedenceToken :: afterPrecedence ->
+                                        if precedenceToken.tokenType /= Token.NumberLiteral then
+                                            Err
+                                                ("Expected infix precedence, but found '"
+                                                    ++ precedenceToken.lexeme
+                                                    ++ "'."
+                                                )
+
+                                        else
+                                            case String.toInt precedenceToken.lexeme of
+                                                Nothing ->
+                                                    Err
+                                                        ("Infix precedence is not a number: "
+                                                            ++ precedenceToken.lexeme
+                                                        )
+
+                                                Just precedence ->
+                                                    case consumeToken Token.OpenParen "'('" (dropTrivia afterPrecedence) of
+                                                        Err e ->
+                                                            Err e
+
+                                                        Ok ( openParen, afterOpen ) ->
+                                                            case dropTrivia afterOpen of
+                                                                operatorToken :: afterOperator ->
+                                                                    if operatorToken.tokenType /= Token.Operator then
+                                                                        Err
+                                                                            ("Expected operator symbol, but found '"
+                                                                                ++ operatorToken.lexeme
+                                                                                ++ "'."
+                                                                            )
+
+                                                                    else
+                                                                        case consumeToken Token.CloseParen "')'" (dropTrivia afterOperator) of
+                                                                            Err e ->
+                                                                                Err e
+
+                                                                            Ok ( closeParen, afterClose ) ->
+                                                                                case consumeToken Token.Equal "'='" (dropTrivia afterClose) of
+                                                                                    Err e ->
+                                                                                        Err e
+
+                                                                                    Ok ( _, afterEqual ) ->
+                                                                                        case dropTrivia afterEqual of
+                                                                                            funcNameToken :: afterFuncName ->
+                                                                                                if funcNameToken.tokenType /= Token.Identifier then
+                                                                                                    Err
+                                                                                                        ("Expected function name, but found '"
+                                                                                                            ++ funcNameToken.lexeme
+                                                                                                            ++ "'."
+                                                                                                        )
+
+                                                                                                else
+                                                                                                    let
+                                                                                                        infixValue =
+                                                                                                            { direction =
+                                                                                                                Node
+                                                                                                                    (tokenRange directionToken)
+                                                                                                                    direction
+                                                                                                            , precedence =
+                                                                                                                Node
+                                                                                                                    (tokenRange precedenceToken)
+                                                                                                                    precedence
+                                                                                                            , operator =
+                                                                                                                Node
+                                                                                                                    { start = openParen.start
+                                                                                                                    , end = closeParen.end
+                                                                                                                    }
+                                                                                                                    operatorToken.lexeme
+                                                                                                            , function =
+                                                                                                                Node
+                                                                                                                    (tokenRange funcNameToken)
+                                                                                                                    funcNameToken.lexeme
+                                                                                                            }
+
+                                                                                                        declRange =
+                                                                                                            { start = infixToken.start
+                                                                                                            , end = funcNameToken.end
+                                                                                                            }
+                                                                                                    in
+                                                                                                    Ok
+                                                                                                        ( Declaration.InfixDeclaration
+                                                                                                            (Node declRange infixValue)
+                                                                                                        , afterFuncName
+                                                                                                        )
+
+                                                                                            [] ->
+                                                                                                Err "Expected function name after '='."
+
+                                                                _ ->
+                                                                    Err "Expected operator symbol after '('."
+
+                                    [] ->
+                                        Err "Expected infix precedence."
+
+                [] ->
+                    Err "Expected infix direction."
+
+
+parseInfixDirection : String -> Maybe Infix.InfixDirection
+parseInfixDirection s =
+    case s of
+        "left" ->
+            Just Infix.Left
+
+        "right" ->
+            Just Infix.Right
+
+        "non" ->
+            Just Infix.Non
+
+        _ ->
+            Nothing
+
+
+parseTypeDeclarationTokens : List Token.Token -> Result String ( Declaration.Declaration, List Token.Token )
+parseTypeDeclarationTokens tokens =
+    case consumeKeyword "type" tokens of
+        Err e ->
+            Err e
+
+        Ok ( typeToken, afterType ) ->
+            let
+                remaining =
+                    dropTrivia afterType
+            in
+            case remaining of
+                firstToken :: _ ->
+                    if firstToken.tokenType == Token.Identifier && firstToken.lexeme == "alias" then
+                        parseAliasDeclaration typeToken remaining
+
+                    else
+                        parseChoiceTypeDeclaration typeToken remaining
+
+                [] ->
+                    Err "Expected type name or 'alias' keyword."
+
+
+parseAliasDeclaration :
+    Token.Token
+    -> List Token.Token
+    -> Result String ( Declaration.Declaration, List Token.Token )
+parseAliasDeclaration typeToken tokens =
+    case consumeKeyword "alias" tokens of
+        Err e ->
+            Err e
+
+        Ok ( aliasToken, afterAlias ) ->
+            case dropTrivia afterAlias of
+                nameToken :: afterName ->
+                    if nameToken.tokenType /= Token.Identifier then
+                        Err "Expected type alias name."
+
+                    else
+                        let
+                            ( generics, afterGenerics ) =
+                                collectTypeGenerics afterName []
+                        in
+                        case consumeToken Token.Equal "'='" afterGenerics of
+                            Err e ->
+                                Err e
+
+                            Ok ( equalToken, afterEqual ) ->
+                                case parseTypeAnnotation 0 (dropTrivia afterEqual) of
+                                    Err e ->
+                                        Err e
+
+                                    Ok ( typeAnnotationNode, remaining ) ->
+                                        let
+                                            typeAlias =
+                                                { documentation = Nothing
+                                                , typeTokenLocation = typeToken.start
+                                                , aliasTokenLocation = aliasToken.start
+                                                , name =
+                                                    Node (tokenRange nameToken) nameToken.lexeme
+                                                , generics = generics
+                                                , equalsTokenLocation = equalToken.start
+                                                , typeAnnotation = typeAnnotationNode
+                                                }
+
+                                            declRange =
+                                                { start = typeToken.start
+                                                , end = (Node.range typeAnnotationNode).end
+                                                }
+                                        in
+                                        Ok
+                                            ( Declaration.AliasDeclaration (Node declRange typeAlias)
+                                            , remaining
+                                            )
+
+                [] ->
+                    Err "Expected type alias name."
+
+
+parseChoiceTypeDeclaration :
+    Token.Token
+    -> List Token.Token
+    -> Result String ( Declaration.Declaration, List Token.Token )
+parseChoiceTypeDeclaration typeToken tokens =
+    case dropTrivia tokens of
+        nameToken :: afterName ->
+            if nameToken.tokenType /= Token.Identifier then
+                Err "Expected type name."
+
+            else
+                let
+                    ( generics, afterGenerics ) =
+                        collectTypeGenerics afterName []
+                in
+                case consumeToken Token.Equal "'='" afterGenerics of
+                    Err e ->
+                        Err e
+
+                    Ok ( equalToken, afterEqual ) ->
+                        case dropTrivia afterEqual of
+                            firstConstructorNameToken :: afterFirstConstructorName ->
+                                if firstConstructorNameToken.tokenType /= Token.Identifier then
+                                    Err
+                                        ("Expected constructor name, but found '"
+                                            ++ firstConstructorNameToken.lexeme
+                                            ++ "'."
+                                        )
+
+                                else
+                                    case
+                                        parseChoiceTypeConstructorArgs
+                                            firstConstructorNameToken.start.column
+                                            []
+                                            afterFirstConstructorName
+                                    of
+                                        Err e ->
+                                            Err e
+
+                                        Ok ( firstArgs, afterFirstArgs ) ->
+                                            let
+                                                firstConstructorEnd =
+                                                    case List.reverse firstArgs of
+                                                        lastArg :: _ ->
+                                                            (Node.range lastArg).end
+
+                                                        [] ->
+                                                            firstConstructorNameToken.end
+
+                                                firstConstructor =
+                                                    Node
+                                                        { start = firstConstructorNameToken.start
+                                                        , end = firstConstructorEnd
+                                                        }
+                                                        { name =
+                                                            Node
+                                                                (tokenRange firstConstructorNameToken)
+                                                                firstConstructorNameToken.lexeme
+                                                        , arguments = firstArgs
+                                                        }
+                                            in
+                                            case parseMoreChoiceConstructors firstConstructor [] afterFirstArgs of
+                                                Err e ->
+                                                    Err e
+
+                                                Ok ( constructors, remaining ) ->
+                                                    let
+                                                        lastConstructorEnd =
+                                                            case constructors of
+                                                                SeparatedSyntaxList.NonEmpty first rest ->
+                                                                    case List.reverse rest of
+                                                                        ( _, lastNode ) :: _ ->
+                                                                            (Node.range lastNode).end
+
+                                                                        [] ->
+                                                                            (Node.range first).end
+
+                                                                SeparatedSyntaxList.Empty ->
+                                                                    firstConstructorEnd
+
+                                                        choiceStruct =
+                                                            { documentation = Nothing
+                                                            , typeTokenLocation = typeToken.start
+                                                            , name =
+                                                                Node (tokenRange nameToken) nameToken.lexeme
+                                                            , generics = generics
+                                                            , equalsTokenLocation = equalToken.start
+                                                            , constructors = constructors
+                                                            }
+
+                                                        declRange =
+                                                            { start = typeToken.start
+                                                            , end = lastConstructorEnd
+                                                            }
+                                                    in
+                                                    Ok
+                                                        ( Declaration.ChoiceTypeDeclaration
+                                                            (Node declRange choiceStruct)
+                                                        , remaining
+                                                        )
+
+                            [] ->
+                                Err "Expected constructor name."
+
+        [] ->
+            Err "Expected type name."
+
+
+parseMoreChoiceConstructors :
+    Node Declaration.ValueConstructor
+    -> List ( Location, Node Declaration.ValueConstructor )
+    -> List Token.Token
+    -> Result String ( SeparatedSyntaxList.SeparatedSyntaxList (Node Declaration.ValueConstructor), List Token.Token )
+parseMoreChoiceConstructors firstConstructor restRev tokens =
+    case dropTrivia tokens of
+        pipeToken :: afterPipe ->
+            if pipeToken.tokenType == Token.Pipe then
+                case dropTrivia afterPipe of
+                    nameToken :: afterName ->
+                        if nameToken.tokenType /= Token.Identifier then
+                            Err
+                                ("Expected constructor name after '|', but found '"
+                                    ++ nameToken.lexeme
+                                    ++ "'."
+                                )
+
+                        else
+                            case parseChoiceTypeConstructorArgs nameToken.start.column [] afterName of
+                                Err e ->
+                                    Err e
+
+                                Ok ( args, remaining ) ->
+                                    let
+                                        constructorEnd =
+                                            case List.reverse args of
+                                                lastArg :: _ ->
+                                                    (Node.range lastArg).end
+
+                                                [] ->
+                                                    nameToken.end
+
+                                        constructorNode =
+                                            Node
+                                                { start = nameToken.start, end = constructorEnd }
+                                                { name =
+                                                    Node (tokenRange nameToken) nameToken.lexeme
+                                                , arguments = args
+                                                }
+                                    in
+                                    parseMoreChoiceConstructors
+                                        firstConstructor
+                                        (( pipeToken.start, constructorNode ) :: restRev)
+                                        remaining
+
+                    [] ->
+                        Err "Expected constructor name after '|'."
+
+            else
+                Ok
+                    ( SeparatedSyntaxList.NonEmpty firstConstructor (List.reverse restRev)
+                    , tokens
+                    )
+
+        [] ->
+            Ok ( SeparatedSyntaxList.NonEmpty firstConstructor (List.reverse restRev), [] )
+
+
+parseChoiceTypeConstructorArgs :
+    Int
+    -> List (Node TypeAnnotation.TypeAnnotation)
+    -> List Token.Token
+    -> Result String ( List (Node TypeAnnotation.TypeAnnotation), List Token.Token )
+parseChoiceTypeConstructorArgs constructorCol argsRev tokens =
+    case dropTrivia tokens of
+        nextToken :: _ ->
+            if nextToken.start.column >= constructorCol && canStartTypeAnnotation nextToken then
+                case parseTypeAnnotationTypedArg constructorCol tokens of
+                    Err e ->
+                        Err e
+
+                    Ok ( arg, remaining ) ->
+                        parseChoiceTypeConstructorArgs
+                            constructorCol
+                            (arg :: argsRev)
+                            remaining
+
+            else
+                Ok ( List.reverse argsRev, tokens )
+
+        [] ->
+            Ok ( List.reverse argsRev, [] )
+
+
+collectTypeGenerics :
+    List Token.Token
+    -> List (Node String)
+    -> ( List (Node String), List Token.Token )
+collectTypeGenerics tokens genericsRev =
+    case dropTrivia tokens of
+        token :: rest ->
+            if token.tokenType == Token.Identifier then
+                collectTypeGenerics rest (Node (tokenRange token) token.lexeme :: genericsRev)
+
+            else
+                ( List.reverse genericsRev, tokens )
+
+        [] ->
+            ( List.reverse genericsRev, [] )
+
+
+parsePortDeclarationTokens : List Token.Token -> Result String ( Declaration.Declaration, List Token.Token )
+parsePortDeclarationTokens tokens =
+    case consumeKeyword "port" tokens of
+        Err e ->
+            Err e
+
+        Ok ( portToken, afterPort ) ->
+            case dropTrivia afterPort of
+                portNameToken :: afterPortName ->
+                    if portNameToken.tokenType /= Token.Identifier then
+                        Err "Expected port name."
+
+                    else
+                        case consumeToken Token.Colon "':'" (dropTrivia afterPortName) of
+                            Err e ->
+                                Err e
+
+                            Ok ( colonToken, afterColon ) ->
+                                case parseTypeAnnotation 0 (dropTrivia afterColon) of
+                                    Err e ->
+                                        Err e
+
+                                    Ok ( typeAnnotationNode, remaining ) ->
+                                        let
+                                            signature =
+                                                { name =
+                                                    Node (tokenRange portNameToken) portNameToken.lexeme
+                                                , colonLocation = colonToken.start
+                                                , typeAnnotation = typeAnnotationNode
+                                                }
+
+                                            signatureRange =
+                                                { start = portToken.start
+                                                , end = (Node.range typeAnnotationNode).end
+                                                }
+                                        in
+                                        Ok
+                                            ( Declaration.PortDeclaration (Node signatureRange signature)
+                                            , remaining
+                                            )
+
+                [] ->
+                    Err "Expected port name."
+
+
+parseFunctionDeclarationTokens : List Token.Token -> Result String ( Declaration.Declaration, List Token.Token )
+parseFunctionDeclarationTokens tokens =
+    case dropTrivia tokens of
+        firstNameToken :: afterFirstName ->
+            if firstNameToken.tokenType /= Token.Identifier then
+                Err
+                    ("Expected function name, but found '"
+                        ++ firstNameToken.lexeme
+                        ++ "'."
+                    )
+
+            else
+                case dropTrivia afterFirstName of
+                    colonToken :: afterColon ->
+                        if colonToken.tokenType == Token.Colon then
+                            case
+                                parseTypeAnnotation
+                                    firstNameToken.start.column
+                                    (dropTrivia afterColon)
+                            of
+                                Err e ->
+                                    Err e
+
+                                Ok ( sigTypeAnnotation, afterSigAnnotation ) ->
+                                    case dropTrivia afterSigAnnotation of
+                                        secondNameToken :: afterSecondName ->
+                                            if secondNameToken.tokenType /= Token.Identifier then
+                                                Err
+                                                    ("Expected function name after signature, but found '"
+                                                        ++ secondNameToken.lexeme
+                                                        ++ "'."
+                                                    )
+
+                                            else if secondNameToken.lexeme /= firstNameToken.lexeme then
+                                                Err
+                                                    ("Function name does not match signature: "
+                                                        ++ secondNameToken.lexeme
+                                                        ++ " != "
+                                                        ++ firstNameToken.lexeme
+                                                    )
+
+                                            else
+                                                let
+                                                    signatureNode =
+                                                        Node
+                                                            { start = firstNameToken.start
+                                                            , end = (Node.range sigTypeAnnotation).end
+                                                            }
+                                                            { name =
+                                                                Node
+                                                                    (tokenRange firstNameToken)
+                                                                    firstNameToken.lexeme
+                                                            , colonLocation = colonToken.start
+                                                            , typeAnnotation = sigTypeAnnotation
+                                                            }
+                                                in
+                                                finishFunctionDeclaration
+                                                    firstNameToken
+                                                    secondNameToken
+                                                    (Just signatureNode)
+                                                    afterSecondName
+
+                                        [] ->
+                                            Err "Expected function name after signature."
+
+                        else
+                            finishFunctionDeclaration
+                                firstNameToken
+                                firstNameToken
+                                Nothing
+                                afterFirstName
+
+                    [] ->
+                        finishFunctionDeclaration firstNameToken firstNameToken Nothing []
+
+        [] ->
+            Err "Expected function name."
+
+
+finishFunctionDeclaration :
+    Token.Token
+    -> Token.Token
+    -> Maybe (Node Expression.Signature)
+    -> List Token.Token
+    -> Result String ( Declaration.Declaration, List Token.Token )
+finishFunctionDeclaration firstNameToken implNameToken maybeSignature tokens =
+    case collectFunctionArguments firstNameToken.start.column [] tokens of
+        Err e ->
+            Err e
+
+        Ok ( arguments, afterArguments ) ->
+            case consumeToken Token.Equal "'='" afterArguments of
+                Err e ->
+                    Err e
+
+                Ok ( equalToken, afterEqual ) ->
+                    case
+                        parseExpressionNodeAt
+                            (firstNameToken.start.column + 1)
+                            0
+                            (dropTrivia afterEqual)
+                    of
+                        Err e ->
+                            Err e
+
+                        Ok ( bodyExpr, remaining ) ->
+                            let
+                                implRange =
+                                    { start = implNameToken.start
+                                    , end = (Node.range bodyExpr).end
+                                    }
+
+                                functionImpl =
+                                    { name =
+                                        Node (tokenRange implNameToken) implNameToken.lexeme
+                                    , arguments = arguments
+                                    , equalsTokenLocation = equalToken.start
+                                    , expression = bodyExpr
+                                    }
+
+                                functionStruct =
+                                    { documentation = Nothing
+                                    , signature = maybeSignature
+                                    , declaration = Node implRange functionImpl
+                                    }
+
+                                declRange =
+                                    { start = firstNameToken.start
+                                    , end = (Node.range bodyExpr).end
+                                    }
+                            in
+                            Ok
+                                ( Declaration.FunctionDeclaration (Node declRange functionStruct)
+                                , remaining
+                                )
+
+
+collectFunctionArguments :
+    Int
+    -> List (Node Pattern.Pattern)
+    -> List Token.Token
+    -> Result String ( List (Node Pattern.Pattern), List Token.Token )
+collectFunctionArguments indentMin argsRev tokens =
+    case dropTrivia tokens of
+        nextToken :: _ ->
+            if canStartArgumentPattern nextToken then
+                case parsePatternAtomic indentMin tokens of
+                    Err e ->
+                        Err e
+
+                    Ok ( arg, remaining ) ->
+                        collectFunctionArguments indentMin (arg :: argsRev) remaining
+
+            else
+                Ok ( List.reverse argsRev, tokens )
+
+        [] ->
+            Ok ( List.reverse argsRev, [] )
+
+
+canStartArgumentPattern : Token.Token -> Bool
+canStartArgumentPattern token =
+    case token.tokenType of
+        Token.Identifier ->
+            True
+
+        Token.OpenParen ->
+            True
+
+        Token.OpenBrace ->
+            True
+
+        Token.OpenBracket ->
+            True
+
+        _ ->
+            False
+
+
+canStartTypeAnnotation : Token.Token -> Bool
+canStartTypeAnnotation token =
+    case token.tokenType of
+        Token.Identifier ->
+            True
+
+        Token.OpenParen ->
+            True
+
+        Token.OpenBrace ->
+            True
+
+        _ ->
+            False
+
+
+parseTypeAnnotation :
+    Int
+    -> List Token.Token
+    -> Result String ( Node TypeAnnotation.TypeAnnotation, List Token.Token )
+parseTypeAnnotation indentMin tokens =
+    case parseTypeAnnotationFunctionParam indentMin tokens of
+        Err e ->
+            Err e
+
+        Ok ( paramType, remaining ) ->
+            case dropTrivia remaining of
+                arrowToken :: afterArrow ->
+                    if arrowToken.tokenType == Token.Arrow then
+                        case
+                            parseTypeAnnotation
+                                (Node.range paramType).start.column
+                                (dropTrivia afterArrow)
+                        of
+                            Err e ->
+                                Err e
+
+                            Ok ( returnType, afterReturn ) ->
+                                let
+                                    range =
+                                        { start = (Node.range paramType).start
+                                        , end = (Node.range returnType).end
+                                        }
+                                in
+                                Ok
+                                    ( Node range
+                                        (TypeAnnotation.FunctionTypeAnnotation
+                                            paramType
+                                            arrowToken.start
+                                            returnType
+                                        )
+                                    , afterReturn
+                                    )
+
+                    else
+                        Ok ( paramType, remaining )
+
+                [] ->
+                    Ok ( paramType, [] )
+
+
+parseTypeAnnotationFunctionParam :
+    Int
+    -> List Token.Token
+    -> Result String ( Node TypeAnnotation.TypeAnnotation, List Token.Token )
+parseTypeAnnotationFunctionParam indentMin tokens =
+    case parseTypeAnnotationTypedArg indentMin tokens of
+        Err e ->
+            Err e
+
+        Ok ( lessApp, remaining ) ->
+            case Node.value lessApp of
+                TypeAnnotation.Typed typedName [] ->
+                    let
+                        lessAppStartCol =
+                            (Node.range lessApp).start.column
+                    in
+                    collectTypeApplicationArgs
+                        indentMin
+                        lessAppStartCol
+                        typedName
+                        lessApp
+                        []
+                        (dropTrivia remaining)
+
+                _ ->
+                    Ok ( lessApp, remaining )
+
+
+collectTypeApplicationArgs :
+    Int
+    -> Int
+    -> Node ( List String, String )
+    -> Node TypeAnnotation.TypeAnnotation
+    -> List (Node TypeAnnotation.TypeAnnotation)
+    -> List Token.Token
+    -> Result String ( Node TypeAnnotation.TypeAnnotation, List Token.Token )
+collectTypeApplicationArgs indentMin lessAppStartCol typedName lessApp argsRev tokens =
+    case tokens of
+        nextToken :: _ ->
+            if
+                nextToken.start.column
+                    > lessAppStartCol
+                    && nextToken.start.column
+                    > indentMin
+                    && canStartTypeAnnotation nextToken
+            then
+                case parseTypeAnnotationTypedArg indentMin tokens of
+                    Err e ->
+                        Err e
+
+                    Ok ( arg, remaining ) ->
+                        collectTypeApplicationArgs
+                            indentMin
+                            lessAppStartCol
+                            typedName
+                            lessApp
+                            (arg :: argsRev)
+                            (dropTrivia remaining)
+
+            else
+                buildTypedResult lessApp typedName argsRev tokens
+
+        [] ->
+            buildTypedResult lessApp typedName argsRev []
+
+
+buildTypedResult :
+    Node TypeAnnotation.TypeAnnotation
+    -> Node ( List String, String )
+    -> List (Node TypeAnnotation.TypeAnnotation)
+    -> List Token.Token
+    -> Result String ( Node TypeAnnotation.TypeAnnotation, List Token.Token )
+buildTypedResult lessApp typedName argsRev remaining =
+    let
+        args =
+            List.reverse argsRev
+
+        range =
+            case List.reverse argsRev of
+                lastArg :: _ ->
+                    { start = (Node.range lessApp).start
+                    , end = (Node.range lastArg).end
+                    }
+
+                [] ->
+                    Node.range lessApp
+    in
+    Ok ( Node range (TypeAnnotation.Typed typedName args), remaining )
+
+
+parseTypeAnnotationTypedArg :
+    Int
+    -> List Token.Token
+    -> Result String ( Node TypeAnnotation.TypeAnnotation, List Token.Token )
+parseTypeAnnotationTypedArg indentMin tokens =
+    case dropTrivia tokens of
+        [] ->
+            Err "Expected a type annotation."
+
+        firstToken :: rest ->
+            case firstToken.tokenType of
+                Token.OpenParen ->
+                    parseParenthesizedTypeAnnotation indentMin firstToken rest
+
+                Token.OpenBrace ->
+                    parseRecordTypeAnnotation firstToken rest
+
+                Token.Identifier ->
+                    if startsWithUpper firstToken.lexeme then
+                        let
+                            ( nameTokens, remaining ) =
+                                parseQualifiedName [ firstToken ] rest
+                        in
+                        case List.reverse nameTokens of
+                            typeNameToken :: reversedModuleTokens ->
+                                let
+                                    moduleNames =
+                                        List.reverse reversedModuleTokens
+                                            |> List.map .lexeme
+
+                                    typeRange =
+                                        { start = firstToken.start
+                                        , end = typeNameToken.end
+                                        }
+                                in
+                                Ok
+                                    ( Node typeRange
+                                        (TypeAnnotation.Typed
+                                            (Node typeRange ( moduleNames, typeNameToken.lexeme ))
+                                            []
+                                        )
+                                    , remaining
+                                    )
+
+                            [] ->
+                                Err "Expected a type name."
+
+                    else
+                        Ok
+                            ( Node (tokenRange firstToken) (TypeAnnotation.GenericType firstToken.lexeme)
+                            , rest
+                            )
+
+                _ ->
+                    Err
+                        ("Unsupported type annotation start: '"
+                            ++ firstToken.lexeme
+                            ++ "'."
+                        )
+
+
+parseParenthesizedTypeAnnotation :
+    Int
+    -> Token.Token
+    -> List Token.Token
+    -> Result String ( Node TypeAnnotation.TypeAnnotation, List Token.Token )
+parseParenthesizedTypeAnnotation indentMin openParen tokens =
+    case dropTrivia tokens of
+        closeToken :: rest ->
+            if closeToken.tokenType == Token.CloseParen then
+                Ok
+                    ( Node { start = openParen.start, end = closeToken.end } TypeAnnotation.Unit
+                    , rest
+                    )
+
+            else
+                case parseTypeAnnotation indentMin tokens of
+                    Err e ->
+                        Err e
+
+                    Ok ( firstAnnotation, afterFirst ) ->
+                        parseFurtherTypeAnnotations indentMin openParen firstAnnotation [] afterFirst
+
+        [] ->
+            Err "Expected ')' or a type annotation after '('."
+
+
+parseFurtherTypeAnnotations :
+    Int
+    -> Token.Token
+    -> Node TypeAnnotation.TypeAnnotation
+    -> List ( Location, Node TypeAnnotation.TypeAnnotation )
+    -> List Token.Token
+    -> Result String ( Node TypeAnnotation.TypeAnnotation, List Token.Token )
+parseFurtherTypeAnnotations indentMin openParen first restRev tokens =
+    case dropTrivia tokens of
+        token :: rest ->
+            if token.tokenType == Token.CloseParen then
+                let
+                    range =
+                        { start = openParen.start, end = token.end }
+
+                    annotation =
+                        TypeAnnotation.Tupled
+                            (SeparatedSyntaxList.NonEmpty first (List.reverse restRev))
+                in
+                Ok ( Node range annotation, rest )
+
+            else if token.tokenType == Token.Comma then
+                case parseTypeAnnotation indentMin (dropTrivia rest) of
+                    Err e ->
+                        Err e
+
+                    Ok ( nextAnnotation, remaining ) ->
+                        parseFurtherTypeAnnotations
+                            indentMin
+                            openParen
+                            first
+                            (( token.start, nextAnnotation ) :: restRev)
+                            remaining
+
+            else
+                Err
+                    ("Expected ',' or ')' in type annotation, but found '"
+                        ++ token.lexeme
+                        ++ "'."
+                    )
+
+        [] ->
+            Err "Expected ')' in type annotation."
+
+
+parseRecordTypeAnnotation :
+    Token.Token
+    -> List Token.Token
+    -> Result String ( Node TypeAnnotation.TypeAnnotation, List Token.Token )
+parseRecordTypeAnnotation openBrace tokens =
+    case dropTrivia tokens of
+        closeToken :: rest ->
+            if closeToken.tokenType == Token.CloseBrace then
+                Ok
+                    ( Node { start = openBrace.start, end = closeToken.end }
+                        (TypeAnnotation.Record SeparatedSyntaxList.Empty)
+                    , rest
+                    )
+
+            else
+                case dropTrivia tokens of
+                    firstIdToken :: afterFirstId ->
+                        if firstIdToken.tokenType /= Token.Identifier then
+                            Err
+                                ("Expected record field name, but found '"
+                                    ++ firstIdToken.lexeme
+                                    ++ "'."
+                                )
+
+                        else
+                            case dropTrivia afterFirstId of
+                                pipeToken :: afterPipe ->
+                                    if pipeToken.tokenType == Token.Pipe then
+                                        parseGenericRecordBody
+                                            openBrace
+                                            firstIdToken
+                                            pipeToken
+                                            (dropTrivia afterPipe)
+
+                                    else
+                                        parseRecordTypeFields
+                                            openBrace
+                                            firstIdToken
+                                            (dropTrivia afterFirstId)
+
+                                [] ->
+                                    Err "Expected '|' or ':' in record type annotation."
+
+                    [] ->
+                        Err "Expected record field name."
+
+        [] ->
+            Err "Expected '}' in record type annotation."
+
+
+parseGenericRecordBody :
+    Token.Token
+    -> Token.Token
+    -> Token.Token
+    -> List Token.Token
+    -> Result String ( Node TypeAnnotation.TypeAnnotation, List Token.Token )
+parseGenericRecordBody openBrace genericName pipeToken tokens =
+    case tokens of
+        closeToken :: rest ->
+            if closeToken.tokenType == Token.CloseBrace then
+                let
+                    nodeRecordDefRange =
+                        { start = pipeToken.end, end = pipeToken.end }
+
+                    range =
+                        { start = openBrace.start, end = closeToken.end }
+                in
+                Ok
+                    ( Node range
+                        (TypeAnnotation.GenericRecord
+                            (Node (tokenRange genericName) genericName.lexeme)
+                            pipeToken.start
+                            (Node nodeRecordDefRange SeparatedSyntaxList.Empty)
+                        )
+                    , rest
+                    )
+
+            else
+                parseGenericRecordFields openBrace genericName pipeToken pipeToken.end Nothing [] tokens
+
+        [] ->
+            Err "Expected '}' in generic record type annotation."
+
+
+parseGenericRecordFields :
+    Token.Token
+    -> Token.Token
+    -> Token.Token
+    -> Location
+    -> Maybe (Node TypeAnnotation.RecordField)
+    -> List ( Location, Node TypeAnnotation.RecordField )
+    -> List Token.Token
+    -> Result String ( Node TypeAnnotation.TypeAnnotation, List Token.Token )
+parseGenericRecordFields openBrace genericName pipeToken nodeRecordDefStart maybeFirst restRev tokens =
+    case parseTypeRecordFieldFromName tokens of
+        Err e ->
+            Err e
+
+        Ok ( fieldNode, fieldEnd, afterField ) ->
+            case maybeFirst of
+                Nothing ->
+                    finishOrContinueGenericRecord
+                        openBrace
+                        genericName
+                        pipeToken
+                        nodeRecordDefStart
+                        fieldNode
+                        fieldEnd
+                        []
+                        (dropTrivia afterField)
+
+                Just firstField ->
+                    Err "Internal error: expected to parse first field in generic record."
+
+
+finishOrContinueGenericRecord :
+    Token.Token
+    -> Token.Token
+    -> Token.Token
+    -> Location
+    -> Node TypeAnnotation.RecordField
+    -> Location
+    -> List ( Location, Node TypeAnnotation.RecordField )
+    -> List Token.Token
+    -> Result String ( Node TypeAnnotation.TypeAnnotation, List Token.Token )
+finishOrContinueGenericRecord openBrace genericName pipeToken nodeRecordDefStart firstField lastEnd restRev tokens =
+    case tokens of
+        token :: rest ->
+            if token.tokenType == Token.CloseBrace then
+                let
+                    fieldsList =
+                        SeparatedSyntaxList.NonEmpty firstField (List.reverse restRev)
+
+                    nodeRecordDefRange =
+                        { start = nodeRecordDefStart, end = lastEnd }
+
+                    range =
+                        { start = openBrace.start, end = token.end }
+                in
+                Ok
+                    ( Node range
+                        (TypeAnnotation.GenericRecord
+                            (Node (tokenRange genericName) genericName.lexeme)
+                            pipeToken.start
+                            (Node nodeRecordDefRange fieldsList)
+                        )
+                    , rest
+                    )
+
+            else if token.tokenType == Token.Comma then
+                case parseTypeRecordFieldFromName (dropTrivia rest) of
+                    Err e ->
+                        Err e
+
+                    Ok ( nextField, nextEnd, afterNext ) ->
+                        finishOrContinueGenericRecord
+                            openBrace
+                            genericName
+                            pipeToken
+                            nodeRecordDefStart
+                            firstField
+                            nextEnd
+                            (( token.start, nextField ) :: restRev)
+                            (dropTrivia afterNext)
+
+            else
+                Err
+                    ("Expected ',' or '}' in generic record type annotation, but found '"
+                        ++ token.lexeme
+                        ++ "'."
+                    )
+
+        [] ->
+            Err "Expected '}' in generic record type annotation."
+
+
+parseRecordTypeFields :
+    Token.Token
+    -> Token.Token
+    -> List Token.Token
+    -> Result String ( Node TypeAnnotation.TypeAnnotation, List Token.Token )
+parseRecordTypeFields openBrace firstFieldName tokens =
+    case parseTypeRecordFieldFromName (firstFieldName :: tokens) of
+        Err e ->
+            Err e
+
+        Ok ( firstField, _, afterFirst ) ->
+            finishOrContinueRecord openBrace firstField [] (dropTrivia afterFirst)
+
+
+finishOrContinueRecord :
+    Token.Token
+    -> Node TypeAnnotation.RecordField
+    -> List ( Location, Node TypeAnnotation.RecordField )
+    -> List Token.Token
+    -> Result String ( Node TypeAnnotation.TypeAnnotation, List Token.Token )
+finishOrContinueRecord openBrace firstField restRev tokens =
+    case tokens of
+        token :: rest ->
+            if token.tokenType == Token.CloseBrace then
+                let
+                    fieldsList =
+                        SeparatedSyntaxList.NonEmpty firstField (List.reverse restRev)
+
+                    range =
+                        { start = openBrace.start, end = token.end }
+                in
+                Ok
+                    ( Node range (TypeAnnotation.Record fieldsList)
+                    , rest
+                    )
+
+            else if token.tokenType == Token.Comma then
+                case parseTypeRecordFieldFromName (dropTrivia rest) of
+                    Err e ->
+                        Err e
+
+                    Ok ( nextField, _, afterNext ) ->
+                        finishOrContinueRecord
+                            openBrace
+                            firstField
+                            (( token.start, nextField ) :: restRev)
+                            (dropTrivia afterNext)
+
+            else
+                Err
+                    ("Expected ',' or '}' in record type annotation, but found '"
+                        ++ token.lexeme
+                        ++ "'."
+                    )
+
+        [] ->
+            Err "Expected '}' in record type annotation."
+
+
+parseTypeRecordFieldFromName :
+    List Token.Token
+    -> Result String ( Node TypeAnnotation.RecordField, Location, List Token.Token )
+parseTypeRecordFieldFromName tokens =
+    case dropTrivia tokens of
+        fieldNameToken :: afterFieldName ->
+            if fieldNameToken.tokenType /= Token.Identifier then
+                Err
+                    ("Expected record field name, but found '"
+                        ++ fieldNameToken.lexeme
+                        ++ "'."
+                    )
+
+            else
+                case consumeToken Token.Colon "':'" (dropTrivia afterFieldName) of
+                    Err e ->
+                        Err e
+
+                    Ok ( colonToken, afterColon ) ->
+                        case parseTypeAnnotation fieldNameToken.start.column (dropTrivia afterColon) of
+                            Err e ->
+                                Err e
+
+                            Ok ( fieldTypeNode, remaining ) ->
+                                let
+                                    fieldEnd =
+                                        (Node.range fieldTypeNode).end
+
+                                    fieldRecord =
+                                        { fieldName =
+                                            Node (tokenRange fieldNameToken) fieldNameToken.lexeme
+                                        , colonLocation = colonToken.start
+                                        , fieldType = fieldTypeNode
+                                        }
+
+                                    fieldNode =
+                                        Node
+                                            { start = fieldNameToken.start, end = fieldEnd }
+                                            fieldRecord
+                                in
+                                Ok ( fieldNode, fieldEnd, remaining )
+
+        [] ->
+            Err "Expected record field name."
 
 
 parseExpressionTokens : List Token.Token -> Result String Expression.Expression
@@ -1762,9 +3087,18 @@ isClosingToken token =
 
 isTrivia : Token.Token -> Bool
 isTrivia token =
-    token.tokenType == Token.Whitespace
-        || token.tokenType == Token.Newline
-        || token.tokenType == Token.Comment
+    case token.tokenType of
+        Token.Whitespace ->
+            True
+
+        Token.Newline ->
+            True
+
+        Token.Comment ->
+            True
+
+        _ ->
+            False
 
 
 dropTrivia : List Token.Token -> List Token.Token

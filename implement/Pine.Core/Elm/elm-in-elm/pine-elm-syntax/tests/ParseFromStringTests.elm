@@ -1,12 +1,16 @@
 module ParseFromStringTests exposing (..)
 
+import ElmSyntax.Concrete.Declaration as Declaration
 import ElmSyntax.Concrete.Expression as Expression
+import ElmSyntax.Concrete.Infix as Infix
 import ElmSyntax.Concrete.Node as Node exposing (Node(..))
+import ElmSyntax.Concrete.Parser.DeclarationOrExpression as DeclarationOrExpression exposing (DeclarationOrExpression)
 import ElmSyntax.Concrete.Parser.FromString
 import ElmSyntax.Concrete.Parser.Token as Token
 import ElmSyntax.Concrete.Parser.TokensFromString as TokensFromString
 import ElmSyntax.Concrete.Pattern as Pattern
 import ElmSyntax.Concrete.SeparatedSyntaxList as SeparatedSyntaxList
+import ElmSyntax.Concrete.TypeAnnotation as TypeAnnotation
 import Expect
 import Test exposing (Test)
 
@@ -22,6 +26,12 @@ suite =
             nestedPatternAndBoundarySuite
         , Test.describe "parseExpression_err"
             expressionErrSuite
+        , Test.describe "parseDeclarationOrExpression_ok"
+            declarationOrExpressionOkSuite
+        , Test.describe "parseDeclarationOrExpression_kind"
+            declarationOrExpressionKindSuite
+        , Test.describe "parseDeclarationOrExpression_err"
+            declarationOrExpressionErrSuite
         , Test.describe "mixed line breaks"
             mixedLineBreakSuite
         , Test.describe "literal and comment tokens"
@@ -132,6 +142,196 @@ expressionErrSuite =
                             Err _ ->
                                 Expect.pass
             )
+
+
+declarationOrExpressionOkSuite : List Test
+declarationOrExpressionOkSuite =
+    [ { input = "x = 71"
+      , expectedOk =
+            DeclarationOrExpression.Declaration
+                (Declaration.FunctionDeclaration
+                    (Node (range 1 1 1 7)
+                        { documentation = Nothing
+                        , signature = Nothing
+                        , declaration =
+                            Node (range 1 1 1 7)
+                                { name = Node (range 1 1 1 2) "x"
+                                , arguments = []
+                                , equalsTokenLocation = location 1 3
+                                , expression = Node (range 1 5 1 7) (Expression.IntegerLiteral "71")
+                                }
+                        }
+                    )
+                )
+      }
+    , { input = "f x = x"
+      , expectedOk =
+            DeclarationOrExpression.Declaration
+                (Declaration.FunctionDeclaration
+                    (Node (range 1 1 1 8)
+                        { documentation = Nothing
+                        , signature = Nothing
+                        , declaration =
+                            Node (range 1 1 1 8)
+                                { name = Node (range 1 1 1 2) "f"
+                                , arguments =
+                                    [ Node (range 1 3 1 4) (Pattern.VarPattern "x") ]
+                                , equalsTokenLocation = location 1 5
+                                , expression = Node (range 1 7 1 8) (Expression.Identifier [] "x")
+                                }
+                        }
+                    )
+                )
+      }
+    , { input = "type alias Name = String"
+      , expectedOk =
+            DeclarationOrExpression.Declaration
+                (Declaration.AliasDeclaration
+                    (Node (range 1 1 1 25)
+                        { documentation = Nothing
+                        , typeTokenLocation = location 1 1
+                        , aliasTokenLocation = location 1 6
+                        , name = Node (range 1 12 1 16) "Name"
+                        , generics = []
+                        , equalsTokenLocation = location 1 17
+                        , typeAnnotation =
+                            Node (range 1 19 1 25)
+                                (TypeAnnotation.Typed
+                                    (Node (range 1 19 1 25) ( [], "String" ))
+                                    []
+                                )
+                        }
+                    )
+                )
+      }
+    , { input = "infix left 6 (+) = add"
+      , expectedOk =
+            DeclarationOrExpression.Declaration
+                (Declaration.InfixDeclaration
+                    (Node (range 1 1 1 23)
+                        { direction = Node (range 1 7 1 11) Infix.Left
+                        , precedence = Node (range 1 12 1 13) 6
+                        , operator = Node (range 1 14 1 17) "+"
+                        , function = Node (range 1 20 1 23) "add"
+                        }
+                    )
+                )
+      }
+    , { input = "42"
+      , expectedOk =
+            DeclarationOrExpression.Expression
+                (Expression.IntegerLiteral "42")
+      }
+    , { input = "let\n    x = 1\nin\nx"
+      , expectedOk =
+            DeclarationOrExpression.Expression
+                (Expression.LetExpression
+                    { letTokenLocation = location 1 1
+                    , declarations =
+                        [ Node (range 2 5 2 10)
+                            (Expression.LetFunction
+                                { documentation = Nothing
+                                , signature = Nothing
+                                , declaration =
+                                    Node (range 2 5 2 10)
+                                        { name = Node (range 2 5 2 6) "x"
+                                        , arguments = []
+                                        , equalsTokenLocation = location 2 7
+                                        , expression = Node (range 2 9 2 10) (Expression.IntegerLiteral "1")
+                                        }
+                                }
+                            )
+                        ]
+                    , inTokenLocation = location 3 1
+                    , expression = Node (range 4 1 4 2) (Expression.Identifier [] "x")
+                    }
+                )
+      }
+    ]
+        |> List.map
+            (\testCase ->
+                Test.test ("parseDeclarationOrExpression_ok: " ++ testCase.input) <|
+                    \_ ->
+                        case ElmSyntax.Concrete.Parser.FromString.parseDeclarationOrExpression testCase.input of
+                            Ok actual ->
+                                Expect.equal actual testCase.expectedOk
+
+                            Err err ->
+                                Expect.fail ("Expected Ok, but got Err: " ++ err)
+            )
+
+
+declarationOrExpressionKindSuite : List Test
+declarationOrExpressionKindSuite =
+    [ ( "identity : a -> a\nidentity x = x", "Declaration/FunctionDeclaration" )
+    , ( "type Color = Red | Green | Blue", "Declaration/ChoiceTypeDeclaration" )
+    , ( "type Tree a = Leaf | Node a (Tree a)", "Declaration/ChoiceTypeDeclaration" )
+    , ( "port sendMessage : String -> Cmd msg", "Declaration/PortDeclaration" )
+    , ( "1 + 2", "Expression/OperatorApplication" )
+    , ( "x", "Expression/Identifier" )
+    ]
+        |> List.map
+            (\( input, expectedKind ) ->
+                Test.test ("parseDeclarationOrExpression_kind: " ++ input) <|
+                    \_ ->
+                        case ElmSyntax.Concrete.Parser.FromString.parseDeclarationOrExpression input of
+                            Ok actual ->
+                                Expect.equal expectedKind (declarationOrExpressionKind actual)
+
+                            Err err ->
+                                Expect.fail ("Expected Ok, but got Err: " ++ err)
+            )
+
+
+declarationOrExpressionErrSuite : List Test
+declarationOrExpressionErrSuite =
+    [ ""
+    , "port"
+    , "type"
+    , "infix left"
+    , "= x"
+    ]
+        |> List.map
+            (\input ->
+                Test.test ("parseDeclarationOrExpression_err: " ++ Debug.toString input) <|
+                    \_ ->
+                        case ElmSyntax.Concrete.Parser.FromString.parseDeclarationOrExpression input of
+                            Ok actual ->
+                                Expect.fail
+                                    ("Expected Err, but got Ok: " ++ Debug.toString actual)
+
+                            Err _ ->
+                                Expect.pass
+            )
+
+
+declarationOrExpressionKind : DeclarationOrExpression -> String
+declarationOrExpressionKind doe =
+    case doe of
+        DeclarationOrExpression.Declaration declaration ->
+            "Declaration/" ++ declarationKind declaration
+
+        DeclarationOrExpression.Expression expression ->
+            "Expression/" ++ expressionKind expression
+
+
+declarationKind : Declaration.Declaration -> String
+declarationKind declaration =
+    case declaration of
+        Declaration.FunctionDeclaration _ ->
+            "FunctionDeclaration"
+
+        Declaration.ChoiceTypeDeclaration _ ->
+            "ChoiceTypeDeclaration"
+
+        Declaration.AliasDeclaration _ ->
+            "AliasDeclaration"
+
+        Declaration.PortDeclaration _ ->
+            "PortDeclaration"
+
+        Declaration.InfixDeclaration _ ->
+            "InfixDeclaration"
 
 
 mixedLineBreakSuite : List Test
