@@ -3,6 +3,8 @@ module ParseFromStringTests exposing (..)
 import ElmSyntax.Concrete.Expression as Expression
 import ElmSyntax.Concrete.Node as Node exposing (Node(..))
 import ElmSyntax.Concrete.Parser.FromString
+import ElmSyntax.Concrete.Parser.Token as Token
+import ElmSyntax.Concrete.Parser.TokensFromString as TokensFromString
 import ElmSyntax.Concrete.Pattern as Pattern
 import ElmSyntax.Concrete.SeparatedSyntaxList as SeparatedSyntaxList
 import Expect
@@ -20,6 +22,10 @@ suite =
             nestedPatternAndBoundarySuite
         , Test.describe "parseExpression_err"
             expressionErrSuite
+        , Test.describe "mixed line breaks"
+            mixedLineBreakSuite
+        , Test.describe "literal and comment tokens"
+            literalAndCommentTokenSuite
         ]
 
 
@@ -125,6 +131,114 @@ expressionErrSuite =
 
                             Err _ ->
                                 Expect.pass
+            )
+
+
+mixedLineBreakSuite : List Test
+mixedLineBreakSuite =
+    [ { description = "LF followed by CRLF"
+      , input = "alpha\nbeta\u{000D}\ngamma"
+      , expectedTokens = threeLineIdentifierTokens
+      }
+    , { description = "CRLF followed by LF"
+      , input = "alpha\u{000D}\nbeta\ngamma"
+      , expectedTokens = threeLineIdentifierTokens
+      }
+    , { description = "lone CR only"
+      , input = "alpha\u{000D}beta\u{000D}gamma"
+      , expectedTokens = threeLineIdentifierTokens
+      }
+    , { description = "LF, then CRLF, then lone CR combined"
+      , input = "a\nb\u{000D}\nc\u{000D}d"
+      , expectedTokens =
+            [ token Token.Identifier "a" 1 1 1 2
+            , token Token.Newline "\n" 1 2 2 1
+            , token Token.Identifier "b" 2 1 2 2
+            , token Token.Newline "\n" 2 2 3 1
+            , token Token.Identifier "c" 3 1 3 2
+            , token Token.Newline "\n" 3 2 4 1
+            , token Token.Identifier "d" 4 1 4 2
+            ]
+      }
+    ]
+        |> List.map
+            (\testCase ->
+                Test.test testCase.description <|
+                    \_ ->
+                        case TokensFromString.parseExpression testCase.input of
+                            Ok actual ->
+                                Expect.equal testCase.expectedTokens actual
+
+                            Err err ->
+                                Expect.fail ("Expected Ok, but got Err: " ++ err)
+            )
+
+
+threeLineIdentifierTokens : List Token.Token
+threeLineIdentifierTokens =
+    [ token Token.Identifier "alpha" 1 1 1 6
+    , token Token.Newline "\n" 1 6 2 1
+    , token Token.Identifier "beta" 2 1 2 5
+    , token Token.Newline "\n" 2 5 3 1
+    , token Token.Identifier "gamma" 3 1 3 6
+    ]
+
+
+{-| Covers literal decoding/raw-text preservation (escapes, unicode escapes, triple-quoted
+strings spanning mixed line breaks) and multi-line comments with a line break inside, all as
+single-token expectations exercising the offset/String-based scanners directly.
+-}
+literalAndCommentTokenSuite : List Test
+literalAndCommentTokenSuite =
+    [ { description = "string literal with backslash escapes"
+      , input = "\"a\\nb\\tc\""
+      , expectedTokens =
+            [ tokenWithRaw Token.StringLiteral "a\nb\tc" "a\\nb\\tc" 1 1 1 10 ]
+      }
+    , { description = "string literal with unicode escape"
+      , input = "\"\\u{1F600}\""
+      , expectedTokens =
+            [ tokenWithRaw Token.StringLiteral "\u{1F600}" "\\u{1F600}" 1 1 1 12 ]
+      }
+    , { description = "char literal"
+      , input = "'x'"
+      , expectedTokens =
+            [ tokenWithRaw Token.CharLiteral "x" "x" 1 1 1 4 ]
+      }
+    , { description = "hexadecimal integer literal"
+      , input = "0xFF"
+      , expectedTokens =
+            [ token Token.NumberLiteral "0xFF" 1 1 1 5 ]
+      }
+    , { description = "minus immediately after identifier is an operator"
+      , input = "x-y"
+      , expectedTokens =
+            [ token Token.Identifier "x" 1 1 1 2
+            , token Token.Operator "-" 1 2 1 3
+            , token Token.Identifier "y" 1 3 1 4
+            ]
+      }
+    , { description = "triple-quoted string spanning LF and CRLF line breaks"
+      , input = "\"\"\"a\nb\u{000D}\nc\"\"\""
+      , expectedTokens =
+            [ tokenWithRaw Token.TripleQuotedStringLiteral "a\nb\nc" "a\nb\nc" 1 1 3 5 ]
+      }
+    , { description = "nested multi-line comment with a CRLF line break inside"
+      , input = "{- outer\u{000D}\n {- inner -} end -}"
+      , expectedTokens =
+            [ token Token.Comment "{- outer\n {- inner -} end -}" 1 1 2 20 ]
+      }
+    ]
+        |> List.map
+            (\testCase ->
+                Test.test testCase.description <|
+                    \_ ->
+                        case TokensFromString.parseExpression testCase.input of
+                            Ok actual ->
+                                Expect.equal testCase.expectedTokens actual
+
+                            Err err ->
+                                Expect.fail ("Expected Ok, but got Err: " ++ err)
             )
 
 
@@ -471,4 +585,24 @@ range : Int -> Int -> Int -> Int -> { start : { row : Int, column : Int }, end :
 range startRow startColumn endRow endColumn =
     { start = location startRow startColumn
     , end = location endRow endColumn
+    }
+
+
+token : Token.TokenType -> String -> Int -> Int -> Int -> Int -> Token.Token
+token tokenType lexeme startRow startColumn endRow endColumn =
+    { tokenType = tokenType
+    , lexeme = lexeme
+    , start = location startRow startColumn
+    , end = location endRow endColumn
+    , rawText = Nothing
+    }
+
+
+tokenWithRaw : Token.TokenType -> String -> String -> Int -> Int -> Int -> Int -> Token.Token
+tokenWithRaw tokenType lexeme rawText startRow startColumn endRow endColumn =
+    { tokenType = tokenType
+    , lexeme = lexeme
+    , start = location startRow startColumn
+    , end = location endRow endColumn
+    , rawText = Just rawText
     }

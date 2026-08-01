@@ -13,22 +13,27 @@ import ElmSyntax.Concrete.SeparatedSyntaxList as SeparatedSyntaxList
 
 parseExpression : String -> Result String Expression.Expression
 parseExpression input =
-    TokensFromString.parseExpression input
-        |> Result.andThen parseExpressionTokens
+    case TokensFromString.parseExpression input of
+        Ok tokens ->
+            parseExpressionTokens tokens
+
+        Err error ->
+            Err error
 
 
 parseExpressionTokens : List Token.Token -> Result String Expression.Expression
 parseExpressionTokens tokens =
-    parseExpressionNode tokens
-        |> Result.andThen
-            (\( expressionNode, remaining ) ->
-                case dropTrivia remaining of
-                    [] ->
-                        Ok (Node.value expressionNode)
+    case parseExpressionNode tokens of
+        Ok ( expressionNode, remaining ) ->
+            case dropTrivia remaining of
+                [] ->
+                    Ok (Node.value expressionNode)
 
-                    nextToken :: _ ->
-                        Err ("Unexpected token '" ++ nextToken.lexeme ++ "' after parsing expression.")
-            )
+                nextToken :: _ ->
+                    Err ("Unexpected token '" ++ nextToken.lexeme ++ "' after parsing expression.")
+
+        Err error ->
+            Err error
 
 
 parseExpressionNode : List Token.Token -> Result String ( Node Expression.Expression, List Token.Token )
@@ -42,8 +47,12 @@ parseExpressionNodeAt :
     -> List Token.Token
     -> Result String ( Node Expression.Expression, List Token.Token )
 parseExpressionNodeAt indentMin minPrecedence tokens =
-    parseApplication indentMin tokens
-        |> Result.andThen (parseOperators indentMin minPrecedence)
+    case parseApplication indentMin tokens of
+        Ok parsedApplication ->
+            parseOperators indentMin minPrecedence parsedApplication
+
+        Err error ->
+            Err error
 
 
 parseOperators :
@@ -68,24 +77,25 @@ parseOperators indentMin minPrecedence ( left, tokens ) =
                                 else
                                     precedence
                         in
-                        parseExpressionNodeAt indentMin nextMinPrecedence afterOperator
-                            |> Result.andThen
-                                (\( right, remaining ) ->
-                                    parseOperators indentMin
-                                        minPrecedence
-                                        ( Node
-                                            { start = (Node.range left).start
-                                            , end = (Node.range right).end
-                                            }
-                                            (Expression.OperatorApplication
-                                                (Node (tokenRange operatorToken) operatorToken.lexeme)
-                                                direction
-                                                left
-                                                right
-                                            )
-                                        , remaining
+                        case parseExpressionNodeAt indentMin nextMinPrecedence afterOperator of
+                            Ok ( right, remaining ) ->
+                                parseOperators indentMin
+                                    minPrecedence
+                                    ( Node
+                                        { start = (Node.range left).start
+                                        , end = (Node.range right).end
+                                        }
+                                        (Expression.OperatorApplication
+                                            (Node (tokenRange operatorToken) operatorToken.lexeme)
+                                            direction
+                                            left
+                                            right
                                         )
-                                )
+                                    , remaining
+                                    )
+
+                            Err error ->
+                                Err error
 
                 Nothing ->
                     Ok ( left, tokens )
@@ -99,11 +109,12 @@ parseApplication :
     -> List Token.Token
     -> Result String ( Node Expression.Expression, List Token.Token )
 parseApplication indentMin tokens =
-    parseBasicExpression indentMin tokens
-        |> Result.andThen
-            (\( function, remaining ) ->
-                parseApplicationArguments indentMin function [] remaining
-            )
+    case parseBasicExpression indentMin tokens of
+        Ok ( function, remaining ) ->
+            parseApplicationArguments indentMin function [] remaining
+
+        Err error ->
+            Err error
 
 
 parseApplicationArguments :
@@ -116,11 +127,12 @@ parseApplicationArguments indentMin function argumentsRev tokens =
     case dropTrivia tokens of
         next :: _ ->
             if next.start.column > indentMin && canStartArgumentExpression next then
-                parseBasicExpression indentMin tokens
-                    |> Result.andThen
-                        (\( argument, remaining ) ->
-                            parseApplicationArguments indentMin function (argument :: argumentsRev) remaining
-                        )
+                case parseBasicExpression indentMin tokens of
+                    Ok ( argument, remaining ) ->
+                        parseApplicationArguments indentMin function (argument :: argumentsRev) remaining
+
+                    Err error ->
+                        Err error
 
             else
                 finishApplication function argumentsRev tokens
@@ -160,8 +172,12 @@ parseBasicExpression :
     -> List Token.Token
     -> Result String ( Node Expression.Expression, List Token.Token )
 parseBasicExpression indentMin tokens =
-    parseAtomicExpression indentMin tokens
-        |> Result.andThen (parseRecordAccesses indentMin)
+    case parseAtomicExpression indentMin tokens of
+        Ok parsedAtomicExpression ->
+            parseRecordAccesses indentMin parsedAtomicExpression
+
+        Err error ->
+            Err error
 
 
 parseRecordAccesses :
@@ -218,21 +234,30 @@ parseAtomicExpression indentMin tokens =
                         )
 
                 Token.TripleQuotedStringLiteral ->
-                    Ok
-                        ( Node (tokenRange token)
-                            (Expression.MultilineStringLiteral token.lexeme
-                                (Maybe.map (String.split "\n") token.rawText)
-                            )
-                        , rest
-                        )
+                    case token.rawText of
+                        Just rawText ->
+                            Ok
+                                ( Node (tokenRange token)
+                                    (Expression.MultilineStringLiteral token.lexeme
+                                        (Just (String.split "\n" rawText))
+                                    )
+                                , rest
+                                )
+
+                        Nothing ->
+                            Ok
+                                ( Node (tokenRange token)
+                                    (Expression.MultilineStringLiteral token.lexeme Nothing)
+                                , rest
+                                )
 
                 Token.CharLiteral ->
-                    case String.uncons token.lexeme of
-                        Just ( char, "" ) ->
+                    case String.toList token.lexeme of
+                        [ char ] ->
                             Ok ( Node (tokenRange token) (Expression.CharLiteral (Char.toCode char)), rest )
 
                         _ ->
-                            Err ("Invalid character literal at " ++ locationString token.start ++ ".")
+                            Err ("Invalid character literal '" ++ token.lexeme ++ "'.")
 
                 Token.NumberLiteral ->
                     Ok ( Node (tokenRange token) (parseNumber token.lexeme), rest )
@@ -260,15 +285,17 @@ parseAtomicExpression indentMin tokens =
                     parseRecord indentMin token rest
 
                 Token.Negation ->
-                    parseBasicExpression indentMin rest
-                        |> Result.map
-                            (\( negated, remaining ) ->
+                    case parseBasicExpression indentMin rest of
+                        Ok ( negated, remaining ) ->
+                            Ok
                                 ( Node
                                     { start = token.start, end = (Node.range negated).end }
                                     (Expression.Negation negated)
                                 , remaining
                                 )
-                            )
+
+                        Err error ->
+                            Err error
 
                 Token.Lambda ->
                     parseLambda indentMin token rest
@@ -341,15 +368,17 @@ parseList :
     -> List Token.Token
     -> Result String ( Node Expression.Expression, List Token.Token )
 parseList indentMin openToken tokens =
-    parseSeparatedExpressions indentMin Token.CloseBracket tokens
-        |> Result.map
-            (\( elements, closeToken, remaining ) ->
+    case parseSeparatedExpressions indentMin Token.CloseBracket tokens of
+        Ok ( elements, closeToken, remaining ) ->
+            Ok
                 ( Node
                     { start = openToken.start, end = closeToken.end }
                     (Expression.ListExpr elements)
                 , remaining
                 )
-            )
+
+        Err error ->
+            Err error
 
 
 parseParenthesizedOrTuple :
@@ -395,29 +424,32 @@ parseNonEmptyParenthesized :
     -> List Token.Token
     -> Result String ( Node Expression.Expression, List Token.Token )
 parseNonEmptyParenthesized indentMin openToken tokens =
-    parseExpressionNodeAt indentMin 0 tokens
-        |> Result.andThen
-            (\( first, afterFirst ) ->
-                parseFurtherSeparatedExpressions indentMin Token.CloseParen afterFirst []
-                    |> Result.map
-                        (\( further, closeToken, remaining ) ->
-                            let
-                                expression =
-                                    case further of
-                                        [] ->
-                                            Expression.Parenthesized first
+    case parseExpressionNodeAt indentMin 0 tokens of
+        Ok ( first, afterFirst ) ->
+            case parseFurtherSeparatedExpressions indentMin Token.CloseParen afterFirst [] of
+                Ok ( further, closeToken, remaining ) ->
+                    let
+                        expression =
+                            case further of
+                                [] ->
+                                    Expression.Parenthesized first
 
-                                        _ ->
-                                            Expression.TupledExpression
-                                                (SeparatedSyntaxList.NonEmpty first further)
-                            in
-                            ( Node
-                                { start = openToken.start, end = closeToken.end }
-                                expression
-                            , remaining
-                            )
+                                _ ->
+                                    Expression.TupledExpression
+                                        (SeparatedSyntaxList.NonEmpty first further)
+                    in
+                    Ok
+                        ( Node
+                            { start = openToken.start, end = closeToken.end }
+                            expression
+                        , remaining
                         )
-            )
+
+                Err error ->
+                    Err error
+
+        Err error ->
+            Err error
 
 
 parseSeparatedExpressions :
@@ -444,15 +476,17 @@ parseNonEmptySeparatedExpressions :
     -> List Token.Token
     -> Result String ( SeparatedSyntaxList.SeparatedSyntaxList (Node Expression.Expression), Token.Token, List Token.Token )
 parseNonEmptySeparatedExpressions indentMin closingType tokens =
-    parseExpressionNodeAt indentMin 0 tokens
-        |> Result.andThen
-            (\( first, afterFirst ) ->
-                parseFurtherSeparatedExpressions indentMin closingType afterFirst []
-                    |> Result.map
-                        (\( further, closeToken, remaining ) ->
-                            ( SeparatedSyntaxList.NonEmpty first further, closeToken, remaining )
-                        )
-            )
+    case parseExpressionNodeAt indentMin 0 tokens of
+        Ok ( first, afterFirst ) ->
+            case parseFurtherSeparatedExpressions indentMin closingType afterFirst [] of
+                Ok ( further, closeToken, remaining ) ->
+                    Ok ( SeparatedSyntaxList.NonEmpty first further, closeToken, remaining )
+
+                Err error ->
+                    Err error
+
+        Err error ->
+            Err error
 
 
 parseFurtherSeparatedExpressions :
@@ -468,14 +502,15 @@ parseFurtherSeparatedExpressions indentMin closingType tokens furtherRev =
                 Ok ( List.reverse furtherRev, token, rest )
 
             else if token.tokenType == Token.Comma then
-                parseExpressionNodeAt indentMin 0 rest
-                    |> Result.andThen
-                        (\( expression, remaining ) ->
-                            parseFurtherSeparatedExpressions indentMin
-                                closingType
-                                remaining
-                                (( token.start, expression ) :: furtherRev)
-                        )
+                case parseExpressionNodeAt indentMin 0 rest of
+                    Ok ( expression, remaining ) ->
+                        parseFurtherSeparatedExpressions indentMin
+                            closingType
+                            remaining
+                            (( token.start, expression ) :: furtherRev)
+
+                    Err error ->
+                        Err error
 
             else
                 Err ("Expected ',' or a closing delimiter, but found '" ++ token.lexeme ++ "'.")
@@ -494,40 +529,46 @@ parseIfBlock indentMin ifToken tokens =
         branchIndentMin =
             min indentMin ifToken.start.column
     in
-    parseExpressionNodeAt branchIndentMin 0 tokens
-        |> Result.andThen
-            (\( condition, afterCondition ) ->
-                consumeKeyword "then" afterCondition
-                    |> Result.andThen
-                        (\( thenToken, afterThen ) ->
-                            parseExpressionNodeAt branchIndentMin 0 afterThen
-                                |> Result.andThen
-                                    (\( thenBranch, afterThenBranch ) ->
-                                        consumeKeyword "else" afterThenBranch
-                                            |> Result.andThen
-                                                (\( elseToken, afterElse ) ->
-                                                    parseExpressionNodeAt branchIndentMin 0 afterElse
-                                                        |> Result.map
-                                                            (\( elseBranch, remaining ) ->
-                                                                ( Node
-                                                                    { start = ifToken.start
-                                                                    , end = (Node.range elseBranch).end
-                                                                    }
-                                                                    (Expression.IfBlock
-                                                                        ifToken.start
-                                                                        condition
-                                                                        thenToken.start
-                                                                        thenBranch
-                                                                        elseToken.start
-                                                                        elseBranch
-                                                                    )
-                                                                , remaining
-                                                                )
-                                                            )
+    case parseExpressionNodeAt branchIndentMin 0 tokens of
+        Ok ( condition, afterCondition ) ->
+            case consumeKeyword "then" afterCondition of
+                Ok ( thenToken, afterThen ) ->
+                    case parseExpressionNodeAt branchIndentMin 0 afterThen of
+                        Ok ( thenBranch, afterThenBranch ) ->
+                            case consumeKeyword "else" afterThenBranch of
+                                Ok ( elseToken, afterElse ) ->
+                                    case parseExpressionNodeAt branchIndentMin 0 afterElse of
+                                        Ok ( elseBranch, remaining ) ->
+                                            Ok
+                                                ( Node
+                                                    { start = ifToken.start
+                                                    , end = (Node.range elseBranch).end
+                                                    }
+                                                    (Expression.IfBlock
+                                                        ifToken.start
+                                                        condition
+                                                        thenToken.start
+                                                        thenBranch
+                                                        elseToken.start
+                                                        elseBranch
+                                                    )
+                                                , remaining
                                                 )
-                                    )
-                        )
-            )
+
+                                        Err error ->
+                                            Err error
+
+                                Err error ->
+                                    Err error
+
+                        Err error ->
+                            Err error
+
+                Err error ->
+                    Err error
+
+        Err error ->
+            Err error
 
 
 parseLambda :
@@ -536,29 +577,32 @@ parseLambda :
     -> List Token.Token
     -> Result String ( Node Expression.Expression, List Token.Token )
 parseLambda indentMin lambdaToken tokens =
-    parseLambdaArguments indentMin tokens []
-        |> Result.andThen
-            (\( arguments, arrowToken, afterArrow ) ->
-                if List.isEmpty arguments then
-                    Err "Expected at least one argument in lambda expression."
+    case parseLambdaArguments indentMin tokens [] of
+        Ok ( arguments, arrowToken, afterArrow ) ->
+            if List.isEmpty arguments then
+                Err "Expected at least one argument in lambda expression."
 
-                else
-                    parseExpressionNodeAt indentMin 0 afterArrow
-                        |> Result.map
-                            (\( body, remaining ) ->
-                                ( Node
-                                    { start = lambdaToken.start, end = (Node.range body).end }
-                                    (Expression.LambdaExpression
-                                        { backslashLocation = lambdaToken.start
-                                        , arguments = arguments
-                                        , arrowLocation = arrowToken.start
-                                        , expression = body
-                                        }
-                                    )
-                                , remaining
+            else
+                case parseExpressionNodeAt indentMin 0 afterArrow of
+                    Ok ( body, remaining ) ->
+                        Ok
+                            ( Node
+                                { start = lambdaToken.start, end = (Node.range body).end }
+                                (Expression.LambdaExpression
+                                    { backslashLocation = lambdaToken.start
+                                    , arguments = arguments
+                                    , arrowLocation = arrowToken.start
+                                    , expression = body
+                                    }
                                 )
+                            , remaining
                             )
-            )
+
+                    Err error ->
+                        Err error
+
+        Err error ->
+            Err error
 
 
 parseLambdaArguments :
@@ -576,11 +620,12 @@ parseLambdaArguments indentMin tokens argumentsRev =
                 Ok ( List.reverse argumentsRev, token, rest )
 
             else
-                parsePatternNodeAt indentMin (token :: rest)
-                    |> Result.andThen
-                        (\( argument, remaining ) ->
-                            parseLambdaArguments indentMin remaining (argument :: argumentsRev)
-                        )
+                case parsePatternNodeAt indentMin (token :: rest) of
+                    Ok ( argument, remaining ) ->
+                        parseLambdaArguments indentMin remaining (argument :: argumentsRev)
+
+                    Err error ->
+                        Err error
 
 
 parseLetBlock :
@@ -589,29 +634,32 @@ parseLetBlock :
     -> List Token.Token
     -> Result String ( Node Expression.Expression, List Token.Token )
 parseLetBlock indentMin letToken tokens =
-    parseLetDeclarations (min indentMin letToken.start.column) tokens []
-        |> Result.andThen
-            (\( declarations, inToken, afterIn ) ->
-                if List.isEmpty declarations then
-                    Err "Expected at least one declaration in let expression."
+    case parseLetDeclarations (min indentMin letToken.start.column) tokens [] of
+        Ok ( declarations, inToken, afterIn ) ->
+            if List.isEmpty declarations then
+                Err "Expected at least one declaration in let expression."
 
-                else
-                    parseExpressionNodeAt indentMin 0 afterIn
-                        |> Result.map
-                            (\( body, remaining ) ->
-                                ( Node
-                                    { start = letToken.start, end = (Node.range body).end }
-                                    (Expression.LetExpression
-                                        { letTokenLocation = letToken.start
-                                        , declarations = declarations
-                                        , inTokenLocation = inToken.start
-                                        , expression = body
-                                        }
-                                    )
-                                , remaining
+            else
+                case parseExpressionNodeAt indentMin 0 afterIn of
+                    Ok ( body, remaining ) ->
+                        Ok
+                            ( Node
+                                { start = letToken.start, end = (Node.range body).end }
+                                (Expression.LetExpression
+                                    { letTokenLocation = letToken.start
+                                    , declarations = declarations
+                                    , inTokenLocation = inToken.start
+                                    , expression = body
+                                    }
                                 )
+                            , remaining
                             )
-            )
+
+                    Err error ->
+                        Err error
+
+        Err error ->
+            Err error
 
 
 parseLetDeclarations :
@@ -632,11 +680,12 @@ parseLetDeclarations indentMin tokens declarationsRev =
                 Err ("Expected 'in' in let expression, but found '" ++ token.lexeme ++ "'.")
 
             else
-                parseLetDeclaration token.start.column (token :: rest)
-                    |> Result.andThen
-                        (\( declaration, remaining ) ->
-                            parseLetDeclarations indentMin remaining (declaration :: declarationsRev)
-                        )
+                case parseLetDeclaration token.start.column (token :: rest) of
+                    Ok ( declaration, remaining ) ->
+                        parseLetDeclarations indentMin remaining (declaration :: declarationsRev)
+
+                    Err error ->
+                        Err error
 
 
 parseLetDeclaration :
@@ -647,54 +696,61 @@ parseLetDeclaration declarationIndent tokens =
     case dropTrivia tokens of
         nameToken :: rest ->
             if nameToken.tokenType == Token.Identifier then
-                parsePatternsUntilEqual declarationIndent rest []
-                    |> Result.andThen
-                        (\( arguments, equalToken, afterEqual ) ->
-                            parseExpressionNodeAt declarationIndent 0 afterEqual
-                                |> Result.map
-                                    (\( body, remaining ) ->
-                                        let
-                                            declarationRange =
-                                                { start = nameToken.start, end = (Node.range body).end }
-                                        in
-                                        ( Node declarationRange
-                                            (Expression.LetFunction
-                                                { documentation = Nothing
-                                                , signature = Nothing
-                                                , declaration =
-                                                    Node declarationRange
-                                                        { name = Node (tokenRange nameToken) nameToken.lexeme
-                                                        , arguments = arguments
-                                                        , equalsTokenLocation = equalToken.start
-                                                        , expression = body
-                                                        }
-                                                }
-                                            )
-                                        , remaining
+                case parsePatternsUntilEqual declarationIndent rest [] of
+                    Ok ( arguments, equalToken, afterEqual ) ->
+                        case parseExpressionNodeAt declarationIndent 0 afterEqual of
+                            Ok ( body, remaining ) ->
+                                let
+                                    declarationRange =
+                                        { start = nameToken.start, end = (Node.range body).end }
+                                in
+                                Ok
+                                    ( Node declarationRange
+                                        (Expression.LetFunction
+                                            { documentation = Nothing
+                                            , signature = Nothing
+                                            , declaration =
+                                                Node declarationRange
+                                                    { name = Node (tokenRange nameToken) nameToken.lexeme
+                                                    , arguments = arguments
+                                                    , equalsTokenLocation = equalToken.start
+                                                    , expression = body
+                                                    }
+                                            }
                                         )
+                                    , remaining
                                     )
-                        )
+
+                            Err error ->
+                                Err error
+
+                    Err error ->
+                        Err error
 
             else
-                parsePatternNodeAt declarationIndent (nameToken :: rest)
-                    |> Result.andThen
-                        (\( pattern, afterPattern ) ->
-                            consumeToken Token.Equal "'='" afterPattern
-                                |> Result.andThen
-                                    (\( equalToken, afterEqual ) ->
-                                        parseExpressionNodeAt declarationIndent 0 afterEqual
-                                            |> Result.map
-                                                (\( body, remaining ) ->
-                                                    ( Node
-                                                        { start = (Node.range pattern).start
-                                                        , end = (Node.range body).end
-                                                        }
-                                                        (Expression.LetDestructuring pattern equalToken.start body)
-                                                    , remaining
-                                                    )
-                                                )
-                                    )
-                        )
+                case parsePatternNodeAt declarationIndent (nameToken :: rest) of
+                    Ok ( pattern, afterPattern ) ->
+                        case consumeToken Token.Equal "'='" afterPattern of
+                            Ok ( equalToken, afterEqual ) ->
+                                case parseExpressionNodeAt declarationIndent 0 afterEqual of
+                                    Ok ( body, remaining ) ->
+                                        Ok
+                                            ( Node
+                                                { start = (Node.range pattern).start
+                                                , end = (Node.range body).end
+                                                }
+                                                (Expression.LetDestructuring pattern equalToken.start body)
+                                            , remaining
+                                            )
+
+                                    Err error ->
+                                        Err error
+
+                            Err error ->
+                                Err error
+
+                    Err error ->
+                        Err error
 
         [] ->
             Err "Expected a declaration in let expression."
@@ -715,11 +771,12 @@ parsePatternsUntilEqual indentMin tokens patternsRev =
                 Ok ( List.reverse patternsRev, token, rest )
 
             else
-                parsePatternNodeAt indentMin (token :: rest)
-                    |> Result.andThen
-                        (\( pattern, remaining ) ->
-                            parsePatternsUntilEqual indentMin remaining (pattern :: patternsRev)
-                        )
+                case parsePatternNodeAt indentMin (token :: rest) of
+                    Ok ( pattern, remaining ) ->
+                        parsePatternsUntilEqual indentMin remaining (pattern :: patternsRev)
+
+                    Err error ->
+                        Err error
 
 
 parseCaseBlock :
@@ -728,46 +785,51 @@ parseCaseBlock :
     -> List Token.Token
     -> Result String ( Node Expression.Expression, List Token.Token )
 parseCaseBlock indentMin caseToken tokens =
-    parseExpressionNodeAt caseToken.start.column 0 tokens
-        |> Result.andThen
-            (\( subject, afterSubject ) ->
-                consumeKeyword "of" afterSubject
-                    |> Result.andThen
-                        (\( ofToken, afterOf ) ->
-                            case dropTrivia afterOf of
-                                firstBranchToken :: _ ->
-                                    parseCaseBranches
-                                        (min firstBranchToken.start.column (indentMin + 1))
-                                        firstBranchToken.start.column
-                                        afterOf
-                                        []
-                                        |> Result.andThen
-                                            (\( branches, remaining ) ->
-                                                case List.reverse branches of
-                                                    [] ->
-                                                        Err "Expected at least one case branch after 'of'."
+    case parseExpressionNodeAt caseToken.start.column 0 tokens of
+        Ok ( subject, afterSubject ) ->
+            case consumeKeyword "of" afterSubject of
+                Ok ( ofToken, afterOf ) ->
+                    case dropTrivia afterOf of
+                        firstBranchToken :: _ ->
+                            case
+                                parseCaseBranches
+                                    (min firstBranchToken.start.column (indentMin + 1))
+                                    firstBranchToken.start.column
+                                    afterOf
+                                    []
+                            of
+                                Ok ( branches, remaining ) ->
+                                    case List.reverse branches of
+                                        [] ->
+                                            Err "Expected at least one case branch after 'of'."
 
-                                                    lastBranch :: _ ->
-                                                        Ok
-                                                            ( Node
-                                                                { start = caseToken.start
-                                                                , end = (Node.range lastBranch.expression).end
-                                                                }
-                                                                (Expression.CaseExpression
-                                                                    { caseTokenLocation = caseToken.start
-                                                                    , expression = subject
-                                                                    , ofTokenLocation = ofToken.start
-                                                                    , cases = branches
-                                                                    }
-                                                                )
-                                                            , remaining
-                                                            )
-                                            )
+                                        lastBranch :: _ ->
+                                            Ok
+                                                ( Node
+                                                    { start = caseToken.start
+                                                    , end = (Node.range lastBranch.expression).end
+                                                    }
+                                                    (Expression.CaseExpression
+                                                        { caseTokenLocation = caseToken.start
+                                                        , expression = subject
+                                                        , ofTokenLocation = ofToken.start
+                                                        , cases = branches
+                                                        }
+                                                    )
+                                                , remaining
+                                                )
 
-                                [] ->
-                                    Err "Expected at least one case branch after 'of'."
-                        )
-            )
+                                Err error ->
+                                    Err error
+
+                        [] ->
+                            Err "Expected at least one case branch after 'of'."
+
+                Err error ->
+                    Err error
+
+        Err error ->
+            Err error
 
 
 parseCaseBranches :
@@ -786,11 +848,12 @@ parseCaseBranches lowerBound branchIndent tokens branchesRev =
                 Ok ( List.reverse branchesRev, tokens )
 
             else
-                parseCaseBranch branchIndent tokens
-                    |> Result.andThen
-                        (\( branch, remaining ) ->
-                            parseCaseBranches lowerBound branchIndent remaining (branch :: branchesRev)
-                        )
+                case parseCaseBranch branchIndent tokens of
+                    Ok ( branch, remaining ) ->
+                        parseCaseBranches lowerBound branchIndent remaining (branch :: branchesRev)
+
+                    Err error ->
+                        Err error
 
 
 parseCaseBranch :
@@ -798,24 +861,28 @@ parseCaseBranch :
     -> List Token.Token
     -> Result String ( Expression.Case, List Token.Token )
 parseCaseBranch branchIndent tokens =
-    parsePatternNodeAt branchIndent tokens
-        |> Result.andThen
-            (\( pattern, afterPattern ) ->
-                consumeToken Token.Arrow "'->'" afterPattern
-                    |> Result.andThen
-                        (\( arrowToken, afterArrow ) ->
-                            parseExpressionNodeAt branchIndent 0 afterArrow
-                                |> Result.map
-                                    (\( body, remaining ) ->
-                                        ( { pattern = pattern
-                                          , arrowLocation = arrowToken.start
-                                          , expression = body
-                                          }
-                                        , remaining
-                                        )
-                                    )
-                        )
-            )
+    case parsePatternNodeAt branchIndent tokens of
+        Ok ( pattern, afterPattern ) ->
+            case consumeToken Token.Arrow "'->'" afterPattern of
+                Ok ( arrowToken, afterArrow ) ->
+                    case parseExpressionNodeAt branchIndent 0 afterArrow of
+                        Ok ( body, remaining ) ->
+                            Ok
+                                ( { pattern = pattern
+                                  , arrowLocation = arrowToken.start
+                                  , expression = body
+                                  }
+                                , remaining
+                                )
+
+                        Err error ->
+                            Err error
+
+                Err error ->
+                    Err error
+
+        Err error ->
+            Err error
 
 
 parseRecord :
@@ -856,9 +923,9 @@ parseNonEmptyRecord indentMin openToken tokens =
                 case dropTrivia afterName of
                     pipeToken :: afterPipe ->
                         if pipeToken.tokenType == Token.Pipe then
-                            parseRecordFields indentMin afterPipe
-                                |> Result.map
-                                    (\( fields, closeToken, remaining ) ->
+                            case parseRecordFields indentMin afterPipe of
+                                Ok ( fields, closeToken, remaining ) ->
+                                    Ok
                                         ( Node
                                             { start = openToken.start, end = closeToken.end }
                                             (Expression.RecordUpdateExpression
@@ -868,18 +935,22 @@ parseNonEmptyRecord indentMin openToken tokens =
                                             )
                                         , remaining
                                         )
-                                    )
+
+                                Err error ->
+                                    Err error
 
                         else
-                            parseRecordFieldsWithFirst indentMin nameToken afterName
-                                |> Result.map
-                                    (\( fields, closeToken, remaining ) ->
+                            case parseRecordFieldsWithFirst indentMin nameToken afterName of
+                                Ok ( fields, closeToken, remaining ) ->
+                                    Ok
                                         ( Node
                                             { start = openToken.start, end = closeToken.end }
                                             (Expression.RecordExpr fields)
                                         , remaining
                                         )
-                                    )
+
+                                Err error ->
+                                    Err error
 
                     [] ->
                         Err "Expected '=' or '|' in record expression."
@@ -911,18 +982,21 @@ parseRecordFieldsWithFirst :
     -> List Token.Token
     -> Result String ( SeparatedSyntaxList.SeparatedSyntaxList Expression.RecordExprField, Token.Token, List Token.Token )
 parseRecordFieldsWithFirst indentMin fieldName tokens =
-    parseRecordField indentMin fieldName tokens
-        |> Result.andThen
-            (\( firstField, remaining ) ->
-                parseFurtherRecordFields indentMin remaining []
-                    |> Result.map
-                        (\( furtherFields, closeToken, afterClose ) ->
-                            ( SeparatedSyntaxList.NonEmpty firstField furtherFields
-                            , closeToken
-                            , afterClose
-                            )
+    case parseRecordField indentMin fieldName tokens of
+        Ok ( firstField, remaining ) ->
+            case parseFurtherRecordFields indentMin remaining [] of
+                Ok ( furtherFields, closeToken, afterClose ) ->
+                    Ok
+                        ( SeparatedSyntaxList.NonEmpty firstField furtherFields
+                        , closeToken
+                        , afterClose
                         )
-            )
+
+                Err error ->
+                    Err error
+
+        Err error ->
+            Err error
 
 
 parseRecordField :
@@ -935,20 +1009,23 @@ parseRecordField indentMin fieldName tokens =
         Err ("Expected a record field name, but found '" ++ fieldName.lexeme ++ "'.")
 
     else
-        consumeToken Token.Equal "'='" tokens
-            |> Result.andThen
-                (\( equalToken, afterEqual ) ->
-                    parseExpressionNodeAt indentMin 0 afterEqual
-                        |> Result.map
-                            (\( valueExpression, remaining ) ->
-                                ( { fieldName = Node (tokenRange fieldName) fieldName.lexeme
-                                  , equalsLocation = equalToken.start
-                                  , valueExpr = valueExpression
-                                  }
-                                , remaining
-                                )
+        case consumeToken Token.Equal "'='" tokens of
+            Ok ( equalToken, afterEqual ) ->
+                case parseExpressionNodeAt indentMin 0 afterEqual of
+                    Ok ( valueExpression, remaining ) ->
+                        Ok
+                            ( { fieldName = Node (tokenRange fieldName) fieldName.lexeme
+                              , equalsLocation = equalToken.start
+                              , valueExpr = valueExpression
+                              }
+                            , remaining
                             )
-                )
+
+                    Err error ->
+                        Err error
+
+            Err error ->
+                Err error
 
 
 parseFurtherRecordFields :
@@ -965,13 +1042,14 @@ parseFurtherRecordFields indentMin tokens fieldsRev =
             else if token.tokenType == Token.Comma then
                 case dropTrivia rest of
                     fieldName :: afterName ->
-                        parseRecordField indentMin fieldName afterName
-                            |> Result.andThen
-                                (\( field, remaining ) ->
-                                    parseFurtherRecordFields indentMin
-                                        remaining
-                                        (( token.start, field ) :: fieldsRev)
-                                )
+                        case parseRecordField indentMin fieldName afterName of
+                            Ok ( field, remaining ) ->
+                                parseFurtherRecordFields indentMin
+                                    remaining
+                                    (( token.start, field ) :: fieldsRev)
+
+                            Err error ->
+                                Err error
 
                     [] ->
                         Err "Expected a record field after ','."
@@ -993,12 +1071,17 @@ parsePatternNodeAt :
     -> List Token.Token
     -> Result String ( Node Pattern.Pattern, List Token.Token )
 parsePatternNodeAt indentMin tokens =
-    parsePatternAtomic indentMin tokens
-        |> Result.andThen
-            (\( pattern, remaining ) ->
-                parseNamedPatternArguments indentMin pattern remaining
-                    |> Result.andThen (parsePatternSuffix indentMin)
-            )
+    case parsePatternAtomic indentMin tokens of
+        Ok ( pattern, remaining ) ->
+            case parseNamedPatternArguments indentMin pattern remaining of
+                Ok parsedNamedPattern ->
+                    parsePatternSuffix indentMin parsedNamedPattern
+
+                Err error ->
+                    Err error
+
+        Err error ->
+            Err error
 
 
 parseNamedPatternArguments :
@@ -1026,11 +1109,12 @@ parsePatternArguments indentMin name original argumentsRev tokens =
     case dropTrivia tokens of
         next :: _ ->
             if next.start.column >= indentMin && canStartNamedPatternArgument next then
-                parsePatternAtomic indentMin tokens
-                    |> Result.andThen
-                        (\( argument, remaining ) ->
-                            parsePatternArguments indentMin name original (argument :: argumentsRev) remaining
-                        )
+                case parsePatternAtomic indentMin tokens of
+                    Ok ( argument, remaining ) ->
+                        parsePatternArguments indentMin name original (argument :: argumentsRev) remaining
+
+                    Err error ->
+                        Err error
 
             else
                 finishNamedPattern name original argumentsRev tokens
@@ -1074,9 +1158,9 @@ parsePatternSuffix indentMin ( pattern, tokens ) =
     case dropTrivia tokens of
         token :: rest ->
             if token.tokenType == Token.Operator && token.lexeme == "::" then
-                parsePatternNodeAt indentMin rest
-                    |> Result.map
-                        (\( tailPattern, remaining ) ->
+                case parsePatternNodeAt indentMin rest of
+                    Ok ( tailPattern, remaining ) ->
+                        Ok
                             ( Node
                                 { start = (Node.range pattern).start
                                 , end = (Node.range tailPattern).end
@@ -1084,7 +1168,9 @@ parsePatternSuffix indentMin ( pattern, tokens ) =
                                 (Pattern.UnConsPattern pattern token.start tailPattern)
                             , remaining
                             )
-                        )
+
+                    Err error ->
+                        Err error
 
             else if token.tokenType == Token.Identifier && token.lexeme == "as" then
                 case dropTrivia rest of
@@ -1161,12 +1247,12 @@ parsePatternAtomic indentMin tokens =
                     Ok ( Node (tokenRange token) (Pattern.StringPattern token.lexeme), rest )
 
                 Token.CharLiteral ->
-                    case String.uncons token.lexeme of
-                        Just ( char, "" ) ->
+                    case String.toList token.lexeme of
+                        [ char ] ->
                             Ok ( Node (tokenRange token) (Pattern.CharPattern (Char.toCode char)), rest )
 
                         _ ->
-                            Err "Invalid character pattern."
+                            Err ("Invalid character pattern '" ++ token.lexeme ++ "'.")
 
                 Token.NumberLiteral ->
                     if String.startsWith "0x" token.lexeme then
@@ -1233,26 +1319,29 @@ parseNonEmptyTuplePattern :
     -> List Token.Token
     -> Result String ( Node Pattern.Pattern, List Token.Token )
 parseNonEmptyTuplePattern indentMin openToken tokens =
-    parsePatternNodeAt indentMin tokens
-        |> Result.andThen
-            (\( first, afterFirst ) ->
-                parseFurtherPatterns indentMin Token.CloseParen afterFirst []
-                    |> Result.map
-                        (\( further, closeToken, remaining ) ->
-                            let
-                                pattern =
-                                    case further of
-                                        [] ->
-                                            Pattern.ParenthesizedPattern first
+    case parsePatternNodeAt indentMin tokens of
+        Ok ( first, afterFirst ) ->
+            case parseFurtherPatterns indentMin Token.CloseParen afterFirst [] of
+                Ok ( further, closeToken, remaining ) ->
+                    let
+                        pattern =
+                            case further of
+                                [] ->
+                                    Pattern.ParenthesizedPattern first
 
-                                        _ ->
-                                            Pattern.TuplePattern (SeparatedSyntaxList.NonEmpty first further)
-                            in
-                            ( Node { start = openToken.start, end = closeToken.end } pattern
-                            , remaining
-                            )
+                                _ ->
+                                    Pattern.TuplePattern (SeparatedSyntaxList.NonEmpty first further)
+                    in
+                    Ok
+                        ( Node { start = openToken.start, end = closeToken.end } pattern
+                        , remaining
                         )
-            )
+
+                Err error ->
+                    Err error
+
+        Err error ->
+            Err error
 
 
 parseListPattern :
@@ -1272,19 +1361,22 @@ parseListPattern indentMin openToken tokens =
                     )
 
             else
-                parsePatternNodeAt indentMin tokens
-                    |> Result.andThen
-                        (\( first, afterFirst ) ->
-                            parseFurtherPatterns indentMin Token.CloseBracket afterFirst []
-                                |> Result.map
-                                    (\( further, closing, remaining ) ->
-                                        ( Node
-                                            { start = openToken.start, end = closing.end }
-                                            (Pattern.ListPattern (SeparatedSyntaxList.NonEmpty first further))
-                                        , remaining
-                                        )
+                case parsePatternNodeAt indentMin tokens of
+                    Ok ( first, afterFirst ) ->
+                        case parseFurtherPatterns indentMin Token.CloseBracket afterFirst [] of
+                            Ok ( further, closing, remaining ) ->
+                                Ok
+                                    ( Node
+                                        { start = openToken.start, end = closing.end }
+                                        (Pattern.ListPattern (SeparatedSyntaxList.NonEmpty first further))
+                                    , remaining
                                     )
-                        )
+
+                            Err error ->
+                                Err error
+
+                    Err error ->
+                        Err error
 
         [] ->
             Err "Expected ']' in pattern."
@@ -1303,14 +1395,15 @@ parseFurtherPatterns indentMin closingType tokens furtherRev =
                 Ok ( List.reverse furtherRev, token, rest )
 
             else if token.tokenType == Token.Comma then
-                parsePatternNodeAt indentMin rest
-                    |> Result.andThen
-                        (\( pattern, remaining ) ->
-                            parseFurtherPatterns indentMin
-                                closingType
-                                remaining
-                                (( token.start, pattern ) :: furtherRev)
-                        )
+                case parsePatternNodeAt indentMin rest of
+                    Ok ( pattern, remaining ) ->
+                        parseFurtherPatterns indentMin
+                            closingType
+                            remaining
+                            (( token.start, pattern ) :: furtherRev)
+
+                    Err error ->
+                        Err error
 
             else
                 Err ("Expected ',' or a closing delimiter in pattern, but found '" ++ token.lexeme ++ "'.")
@@ -1324,15 +1417,17 @@ parseRecordPattern :
     -> List Token.Token
     -> Result String ( Node Pattern.Pattern, List Token.Token )
 parseRecordPattern openToken tokens =
-    parseRecordPatternFields tokens Nothing []
-        |> Result.map
-            (\( fields, closeToken, remaining ) ->
+    case parseRecordPatternFields tokens Nothing [] of
+        Ok ( fields, closeToken, remaining ) ->
+            Ok
                 ( Node
                     { start = openToken.start, end = closeToken.end }
                     (Pattern.RecordPattern fields)
                 , remaining
                 )
-            )
+
+        Err error ->
+            Err error
 
 
 parseRecordPatternFields :
@@ -1517,18 +1612,40 @@ operatorInfo token =
 canStartArgumentExpression : Token.Token -> Bool
 canStartArgumentExpression token =
     not (isKeyword token)
-        && List.member token.tokenType
-            [ Token.StringLiteral
-            , Token.TripleQuotedStringLiteral
-            , Token.CharLiteral
-            , Token.NumberLiteral
-            , Token.Identifier
-            , Token.OpenParen
-            , Token.OpenBrace
-            , Token.OpenBracket
-            , Token.Negation
-            , Token.Dot
-            ]
+        && (case token.tokenType of
+                Token.StringLiteral ->
+                    True
+
+                Token.TripleQuotedStringLiteral ->
+                    True
+
+                Token.CharLiteral ->
+                    True
+
+                Token.NumberLiteral ->
+                    True
+
+                Token.Identifier ->
+                    True
+
+                Token.OpenParen ->
+                    True
+
+                Token.OpenBrace ->
+                    True
+
+                Token.OpenBracket ->
+                    True
+
+                Token.Negation ->
+                    True
+
+                Token.Dot ->
+                    True
+
+                _ ->
+                    False
+           )
 
 
 canStartNamedPatternArgument : Token.Token -> Bool
@@ -1537,39 +1654,110 @@ canStartNamedPatternArgument token =
         && not
             (token.tokenType
                 == Token.Identifier
-                && List.member token.lexeme [ "as", "of", "then", "else", "in", "let" ]
+                && (case token.lexeme of
+                        "as" ->
+                            True
+
+                        "of" ->
+                            True
+
+                        "then" ->
+                            True
+
+                        "else" ->
+                            True
+
+                        "in" ->
+                            True
+
+                        "let" ->
+                            True
+
+                        _ ->
+                            False
+                   )
             )
 
 
 canStartPattern : Token.Token -> Bool
 canStartPattern token =
-    List.member token.tokenType
-        [ Token.StringLiteral
-        , Token.TripleQuotedStringLiteral
-        , Token.CharLiteral
-        , Token.NumberLiteral
-        , Token.Identifier
-        , Token.OpenParen
-        , Token.OpenBrace
-        , Token.OpenBracket
-        ]
+    case token.tokenType of
+        Token.StringLiteral ->
+            True
+
+        Token.TripleQuotedStringLiteral ->
+            True
+
+        Token.CharLiteral ->
+            True
+
+        Token.NumberLiteral ->
+            True
+
+        Token.Identifier ->
+            True
+
+        Token.OpenParen ->
+            True
+
+        Token.OpenBrace ->
+            True
+
+        Token.OpenBracket ->
+            True
+
+        _ ->
+            False
 
 
 isKeyword : Token.Token -> Bool
 isKeyword token =
     token.tokenType
         == Token.Identifier
-        && List.member token.lexeme [ "if", "then", "else", "let", "in", "case", "of" ]
+        && (case token.lexeme of
+                "if" ->
+                    True
+
+                "then" ->
+                    True
+
+                "else" ->
+                    True
+
+                "let" ->
+                    True
+
+                "in" ->
+                    True
+
+                "case" ->
+                    True
+
+                "of" ->
+                    True
+
+                _ ->
+                    False
+           )
 
 
 isClosingToken : Token.Token -> Bool
 isClosingToken token =
-    List.member token.tokenType
-        [ Token.Comma
-        , Token.CloseParen
-        , Token.CloseBracket
-        , Token.CloseBrace
-        ]
+    case token.tokenType of
+        Token.Comma ->
+            True
+
+        Token.CloseParen ->
+            True
+
+        Token.CloseBracket ->
+            True
+
+        Token.CloseBrace ->
+            True
+
+        _ ->
+            False
 
 
 isTrivia : Token.Token -> Bool
@@ -1600,83 +1788,83 @@ tokenRange token =
 
 startsWithUpper : String -> Bool
 startsWithUpper name =
-    case String.uncons name of
-        Just ( 'A', _ ) ->
+    case String.slice 0 1 name of
+        "A" ->
             True
 
-        Just ( 'B', _ ) ->
+        "B" ->
             True
 
-        Just ( 'C', _ ) ->
+        "C" ->
             True
 
-        Just ( 'D', _ ) ->
+        "D" ->
             True
 
-        Just ( 'E', _ ) ->
+        "E" ->
             True
 
-        Just ( 'F', _ ) ->
+        "F" ->
             True
 
-        Just ( 'G', _ ) ->
+        "G" ->
             True
 
-        Just ( 'H', _ ) ->
+        "H" ->
             True
 
-        Just ( 'I', _ ) ->
+        "I" ->
             True
 
-        Just ( 'J', _ ) ->
+        "J" ->
             True
 
-        Just ( 'K', _ ) ->
+        "K" ->
             True
 
-        Just ( 'L', _ ) ->
+        "L" ->
             True
 
-        Just ( 'M', _ ) ->
+        "M" ->
             True
 
-        Just ( 'N', _ ) ->
+        "N" ->
             True
 
-        Just ( 'O', _ ) ->
+        "O" ->
             True
 
-        Just ( 'P', _ ) ->
+        "P" ->
             True
 
-        Just ( 'Q', _ ) ->
+        "Q" ->
             True
 
-        Just ( 'R', _ ) ->
+        "R" ->
             True
 
-        Just ( 'S', _ ) ->
+        "S" ->
             True
 
-        Just ( 'T', _ ) ->
+        "T" ->
             True
 
-        Just ( 'U', _ ) ->
+        "U" ->
             True
 
-        Just ( 'V', _ ) ->
+        "V" ->
             True
 
-        Just ( 'W', _ ) ->
+        "W" ->
             True
 
-        Just ( 'X', _ ) ->
+        "X" ->
             True
 
-        Just ( 'Y', _ ) ->
+        "Y" ->
             True
 
-        Just ( 'Z', _ ) ->
+        "Z" ->
             True
 
         _ ->
@@ -1695,92 +1883,13 @@ parseNumber literal =
         Expression.IntegerLiteral literal
 
 
+{-| Delegates to `TokensFromString.hexStringToInt`, which parses a string of ASCII hex digits
+using specialized first-order recursion. Sharing this implementation keeps hexadecimal
+integer/pattern literals here and `\u{...}` escapes in the tokenizer consistent.
+-}
 hexStringToInt : String -> Maybe Int
 hexStringToInt string =
-    case String.toList string of
-        [] ->
-            Nothing
-
-        chars ->
-            hexCharsToInt 0 chars
-
-
-hexCharsToInt : Int -> List Char -> Maybe Int
-hexCharsToInt accumulated chars =
-    case chars of
-        [] ->
-            Just accumulated
-
-        char :: remaining ->
-            case char of
-                '0' ->
-                    hexCharsToInt (accumulated * 16) remaining
-
-                '1' ->
-                    hexCharsToInt (accumulated * 16 + 1) remaining
-
-                '2' ->
-                    hexCharsToInt (accumulated * 16 + 2) remaining
-
-                '3' ->
-                    hexCharsToInt (accumulated * 16 + 3) remaining
-
-                '4' ->
-                    hexCharsToInt (accumulated * 16 + 4) remaining
-
-                '5' ->
-                    hexCharsToInt (accumulated * 16 + 5) remaining
-
-                '6' ->
-                    hexCharsToInt (accumulated * 16 + 6) remaining
-
-                '7' ->
-                    hexCharsToInt (accumulated * 16 + 7) remaining
-
-                '8' ->
-                    hexCharsToInt (accumulated * 16 + 8) remaining
-
-                '9' ->
-                    hexCharsToInt (accumulated * 16 + 9) remaining
-
-                'a' ->
-                    hexCharsToInt (accumulated * 16 + 10) remaining
-
-                'A' ->
-                    hexCharsToInt (accumulated * 16 + 10) remaining
-
-                'b' ->
-                    hexCharsToInt (accumulated * 16 + 11) remaining
-
-                'B' ->
-                    hexCharsToInt (accumulated * 16 + 11) remaining
-
-                'c' ->
-                    hexCharsToInt (accumulated * 16 + 12) remaining
-
-                'C' ->
-                    hexCharsToInt (accumulated * 16 + 12) remaining
-
-                'd' ->
-                    hexCharsToInt (accumulated * 16 + 13) remaining
-
-                'D' ->
-                    hexCharsToInt (accumulated * 16 + 13) remaining
-
-                'e' ->
-                    hexCharsToInt (accumulated * 16 + 14) remaining
-
-                'E' ->
-                    hexCharsToInt (accumulated * 16 + 14) remaining
-
-                'f' ->
-                    hexCharsToInt (accumulated * 16 + 15) remaining
-
-                'F' ->
-                    hexCharsToInt (accumulated * 16 + 15) remaining
-
-                _ ->
-                    Nothing
+    TokensFromString.hexStringToInt string
 
 
 locationString : Location -> String
