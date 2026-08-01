@@ -52,10 +52,16 @@ parseFileTokens tokens =
                 Ok ( imports, afterImports ) ->
                     let
                         previousRangeEndRow =
-                            imports
-                                |> List.reverse
-                                |> List.head
-                                |> Maybe.map (Node.range >> .end >> .row)
+                            case List.reverse imports of
+                                importNode :: _ ->
+                                    let
+                                        (Node importRange _) =
+                                            importNode
+                                    in
+                                    Just importRange.end.row
+
+                                [] ->
+                                    Nothing
                     in
                     case parseFileDeclarations [] [] previousRangeEndRow afterImports of
                         Err error ->
@@ -66,7 +72,11 @@ parseFileTokens tokens =
                                 isDocumentationComment token =
                                     List.any
                                         (\documentation ->
-                                            tokenRange token == Node.range documentation
+                                            let
+                                                (Node documentationRange _) =
+                                                    documentation
+                                            in
+                                            tokenRange token == documentationRange
                                         )
                                         documentationComments
 
@@ -163,13 +173,16 @@ parseFileDeclarations declarationsRev documentationCommentsRev previousRangeEndR
                                     Just documentationNode ->
                                         documentationNode :: documentationCommentsRev
 
+                            declarationRange =
+                                rangeOfDeclaration declarationWithDocumentation
+
                             declarationNode =
-                                Node (rangeOfDeclaration declarationWithDocumentation) declarationWithDocumentation
+                                Node declarationRange declarationWithDocumentation
                         in
                         parseFileDeclarations
                             (declarationNode :: declarationsRev)
                             nextDocumentationCommentsRev
-                            (Just (Node.range declarationNode).end.row)
+                            (Just declarationRange.end.row)
                             remaining
 
 
@@ -206,11 +219,12 @@ documentationCommentBefore previousRangeEndRow declarationRow tokens =
                 && isAfterPreviousRange
                 && not hasInterveningComment
     in
-    leadingComments
-        |> List.filter canAttach
-        |> List.reverse
-        |> List.head
-        |> Maybe.map (\token -> Node (tokenRange token) token.lexeme)
+    case List.reverse (List.filter canAttach leadingComments) of
+        token :: _ ->
+            Just (Node (tokenRange token) token.lexeme)
+
+        [] ->
+            Nothing
 
 
 takeLeadingTrivia : List Token.Token -> List Token.Token
@@ -253,11 +267,18 @@ rangeOfDeclaration : Declaration.Declaration -> Range
 rangeOfDeclaration declaration =
     case declaration of
         Declaration.FunctionDeclaration function ->
+            let
+                (Node functionRange _) =
+                    function.declaration
+            in
             { start =
-                function.signature
-                    |> Maybe.map (Node.range >> .start)
-                    |> Maybe.withDefault (Node.range function.declaration).start
-            , end = (Node.range function.declaration).end
+                case function.signature of
+                    Nothing ->
+                        functionRange.start
+
+                    Just (Node signatureRange _) ->
+                        signatureRange.start
+            , end = functionRange.end
             }
 
         Declaration.ChoiceTypeDeclaration choiceType ->
@@ -267,28 +288,52 @@ rangeOfDeclaration declaration =
                     SeparatedSyntaxList.NonEmpty first rest ->
                         case List.reverse rest of
                             ( _, last ) :: _ ->
-                                (Node.range last).end
+                                let
+                                    (Node lastRange _) =
+                                        last
+                                in
+                                lastRange.end
 
                             [] ->
-                                (Node.range first).end
+                                let
+                                    (Node firstRange _) =
+                                        first
+                                in
+                                firstRange.end
 
                     SeparatedSyntaxList.Empty ->
-                        (Node.range choiceType.name).end
+                        let
+                            (Node nameRange _) =
+                                choiceType.name
+                        in
+                        nameRange.end
             }
 
         Declaration.AliasDeclaration typeAlias ->
+            let
+                (Node typeAnnotationRange _) =
+                    typeAlias.typeAnnotation
+            in
             { start = typeAlias.typeTokenLocation
-            , end = (Node.range typeAlias.typeAnnotation).end
+            , end = typeAnnotationRange.end
             }
 
         Declaration.PortDeclaration portTokenLocation signature ->
+            let
+                (Node typeAnnotationRange _) =
+                    signature.typeAnnotation
+            in
             { start = portTokenLocation
-            , end = (Node.range signature.typeAnnotation).end
+            , end = typeAnnotationRange.end
             }
 
         Declaration.InfixDeclaration infix ->
+            let
+                (Node functionRange _) =
+                    infix.function
+            in
             { start = infix.infixTokenLocation
-            , end = (Node.range infix.function).end
+            , end = functionRange.end
             }
 
 
@@ -326,8 +371,12 @@ parseDefaultModule moduleConstructor firstKeyword tokens =
                         Ok afterFirstKeyword
 
                     else
-                        consumeKeyword "module" afterFirstKeyword
-                            |> Result.map Tuple.second
+                        case consumeKeyword "module" afterFirstKeyword of
+                            Ok ( _, afterModuleKeyword ) ->
+                                Ok afterModuleKeyword
+
+                            Err error ->
+                                Err error
             in
             case consumeModuleKeyword of
                 Err error ->
@@ -344,10 +393,14 @@ parseDefaultModule moduleConstructor firstKeyword tokens =
                                     Err error
 
                                 Ok ( exposingList, remaining ) ->
+                                    let
+                                        (Node exposingRange _) =
+                                            exposingList
+                                    in
                                     Ok
                                         ( Node
                                             { start = firstToken.start
-                                            , end = (Node.range exposingList).end
+                                            , end = exposingRange.end
                                             }
                                             (moduleConstructor
                                                 { moduleName = moduleName
@@ -385,10 +438,14 @@ parseEffectModule tokens =
                                             Err error
 
                                         Ok ( exposingList, remaining ) ->
+                                            let
+                                                (Node exposingRange _) =
+                                                    exposingList
+                                            in
                                             Ok
                                                 ( Node
                                                     { start = effectToken.start
-                                                    , end = (Node.range exposingList).end
+                                                    , end = exposingRange.end
                                                     }
                                                     (Module.EffectModule
                                                         { moduleName = moduleName
@@ -450,8 +507,11 @@ parseEffectWhereFields command subscription tokens =
 
                             Ok ( valueNode, afterValue ) ->
                                 let
+                                    (Node valueRange valueNames) =
+                                        valueNode
+
                                     valueName =
-                                        case List.reverse (Node.value valueNode) of
+                                        case List.reverse valueNames of
                                             name :: _ ->
                                                 name
 
@@ -459,7 +519,7 @@ parseEffectWhereFields command subscription tokens =
                                                 ""
 
                                     value =
-                                        Node (Node.range valueNode) valueName
+                                        Node valueRange valueName
 
                                     nextCommand =
                                         if closeBrace.lexeme == "command" then
@@ -519,15 +579,27 @@ parseImportTokens tokens =
                                         importEnd =
                                             case exposingList of
                                                 Just ( _, exposingNode ) ->
-                                                    (Node.range exposingNode).end
+                                                    let
+                                                        (Node exposingRange _) =
+                                                            exposingNode
+                                                    in
+                                                    exposingRange.end
 
                                                 Nothing ->
                                                     case moduleAlias of
                                                         Just ( _, aliasNode ) ->
-                                                            (Node.range aliasNode).end
+                                                            let
+                                                                (Node aliasRange _) =
+                                                                    aliasNode
+                                                            in
+                                                            aliasRange.end
 
                                                         Nothing ->
-                                                            (Node.range moduleName).end
+                                                            let
+                                                                (Node moduleNameRange _) =
+                                                                    moduleName
+                                                            in
+                                                            moduleNameRange.end
                                     in
                                     Ok
                                         ( Node
@@ -584,11 +656,12 @@ parseOptionalExposing tokens =
     case dropTrivia tokens of
         exposingToken :: _ ->
             if exposingToken.tokenType == Token.Identifier && exposingToken.lexeme == "exposing" then
-                parseExposingTokens tokens
-                    |> Result.map
-                        (\( exposingNode, remaining ) ->
-                            ( Just ( exposingToken.start, exposingNode ), remaining )
-                        )
+                case parseExposingTokens tokens of
+                    Ok ( exposingNode, remaining ) ->
+                        Ok ( Just ( exposingToken.start, exposingNode ), remaining )
+
+                    Err error ->
+                        Err error
 
             else
                 Ok ( Nothing, tokens )
@@ -922,10 +995,10 @@ parseDeclarationOrExpressionTokens tokens =
 parseAsExpressionFallback : List Token.Token -> Result String DeclarationOrExpression
 parseAsExpressionFallback tokens =
     case parseExpressionNode tokens of
-        Ok ( expressionNode, remaining ) ->
+        Ok ( Node _ expression, remaining ) ->
             case dropTrivia remaining of
                 [] ->
-                    Ok (DeclarationOrExpression.Expression (Node.value expressionNode))
+                    Ok (DeclarationOrExpression.Expression expression)
 
                 nextToken :: _ ->
                     Err
@@ -1211,8 +1284,8 @@ parseChoiceTypeDeclaration typeToken tokens =
                                             let
                                                 firstConstructorEnd =
                                                     case List.reverse firstArgs of
-                                                        lastArg :: _ ->
-                                                            (Node.range lastArg).end
+                                                        Node lastArgRange _ :: _ ->
+                                                            lastArgRange.end
 
                                                         [] ->
                                                             firstConstructorNameToken.end
@@ -1237,13 +1310,13 @@ parseChoiceTypeDeclaration typeToken tokens =
                                                     let
                                                         lastConstructorEnd =
                                                             case constructors of
-                                                                SeparatedSyntaxList.NonEmpty first rest ->
+                                                                SeparatedSyntaxList.NonEmpty (Node firstRange _) rest ->
                                                                     case List.reverse rest of
-                                                                        ( _, lastNode ) :: _ ->
-                                                                            (Node.range lastNode).end
+                                                                        ( _, Node lastRange _ ) :: _ ->
+                                                                            lastRange.end
 
                                                                         [] ->
-                                                                            (Node.range first).end
+                                                                            firstRange.end
 
                                                                 SeparatedSyntaxList.Empty ->
                                                                     firstConstructorEnd
@@ -1297,8 +1370,8 @@ parseMoreChoiceConstructors firstConstructor restRev tokens =
                                     let
                                         constructorEnd =
                                             case List.reverse args of
-                                                lastArg :: _ ->
-                                                    (Node.range lastArg).end
+                                                Node lastArgRange _ :: _ ->
+                                                    lastArgRange.end
 
                                                 [] ->
                                                     nameToken.end
@@ -1435,7 +1508,7 @@ parseFunctionDeclarationTokens tokens =
                                 Err e ->
                                     Err e
 
-                                Ok ( sigTypeAnnotation, afterSigAnnotation ) ->
+                                Ok ( ((Node sigTypeAnnotationRange _) as sigTypeAnnotation), afterSigAnnotation ) ->
                                     case dropTrivia afterSigAnnotation of
                                         secondNameToken :: afterSecondName ->
                                             if secondNameToken.tokenType /= Token.Identifier then
@@ -1458,7 +1531,7 @@ parseFunctionDeclarationTokens tokens =
                                                     signatureNode =
                                                         Node
                                                             { start = firstNameToken.start
-                                                            , end = (Node.range sigTypeAnnotation).end
+                                                            , end = sigTypeAnnotationRange.end
                                                             }
                                                             { name =
                                                                 Node
@@ -1517,11 +1590,11 @@ finishFunctionDeclaration firstNameToken implNameToken maybeSignature tokens =
                         Err e ->
                             Err e
 
-                        Ok ( bodyExpr, remaining ) ->
+                        Ok ( ((Node bodyRange _) as bodyExpr), remaining ) ->
                             let
                                 implRange =
                                     { start = implNameToken.start
-                                    , end = (Node.range bodyExpr).end
+                                    , end = bodyRange.end
                                     }
 
                                 functionImpl =
@@ -1615,23 +1688,24 @@ parseTypeAnnotation indentMin tokens =
             case dropTrivia remaining of
                 arrowToken :: afterArrow ->
                     if arrowToken.tokenType == Token.Arrow then
-                        case
-                            parseTypeAnnotation
-                                (Node.range paramType).start.column
-                                (dropTrivia afterArrow)
-                        of
+                        let
+                            (Node paramTypeRange _) =
+                                paramType
+                        in
+                        case parseTypeAnnotation paramTypeRange.start.column (dropTrivia afterArrow) of
                             Err e ->
                                 Err e
 
                             Ok ( returnType, afterReturn ) ->
                                 let
-                                    range =
-                                        { start = (Node.range paramType).start
-                                        , end = (Node.range returnType).end
-                                        }
+                                    (Node returnTypeRange _) =
+                                        returnType
                                 in
                                 Ok
-                                    ( Node range
+                                    ( Node
+                                        { start = paramTypeRange.start
+                                        , end = returnTypeRange.end
+                                        }
                                         (TypeAnnotation.FunctionTypeAnnotation
                                             paramType
                                             arrowToken.start
@@ -1656,16 +1730,12 @@ parseTypeAnnotationFunctionParam indentMin tokens =
         Err e ->
             Err e
 
-        Ok ( lessApp, remaining ) ->
-            case Node.value lessApp of
+        Ok ( ((Node lessAppRange lessAppValue) as lessApp), remaining ) ->
+            case lessAppValue of
                 TypeAnnotation.Typed typedName [] ->
-                    let
-                        lessAppStartCol =
-                            (Node.range lessApp).start.column
-                    in
                     collectTypeApplicationArgs
                         indentMin
-                        lessAppStartCol
+                        lessAppRange.start.column
                         typedName
                         lessApp
                         []
@@ -1719,20 +1789,20 @@ buildTypedResult :
     -> List (Node TypeAnnotation.TypeAnnotation)
     -> List Token.Token
     -> Result String ( Node TypeAnnotation.TypeAnnotation, List Token.Token )
-buildTypedResult lessApp typedName argsRev remaining =
+buildTypedResult ((Node lessAppRange _) as lessApp) typedName argsRev remaining =
     let
         args =
             List.reverse argsRev
 
         range =
             case List.reverse argsRev of
-                lastArg :: _ ->
-                    { start = (Node.range lessApp).start
-                    , end = (Node.range lastArg).end
+                Node lastArgRange _ :: _ ->
+                    { start = lessAppRange.start
+                    , end = lastArgRange.end
                     }
 
                 [] ->
-                    Node.range lessApp
+                    lessAppRange
     in
     Ok ( Node range (TypeAnnotation.Typed typedName args), remaining )
 
@@ -2127,10 +2197,10 @@ parseTypeRecordFieldFromName tokens =
                             Err e ->
                                 Err e
 
-                            Ok ( fieldTypeNode, remaining ) ->
+                            Ok ( ((Node fieldTypeRange _) as fieldTypeNode), remaining ) ->
                                 let
                                     fieldEnd =
-                                        (Node.range fieldTypeNode).end
+                                        fieldTypeRange.end
 
                                     fieldRecord =
                                         { fieldName =
@@ -2153,10 +2223,10 @@ parseTypeRecordFieldFromName tokens =
 parseExpressionTokens : List Token.Token -> Result String Expression.Expression
 parseExpressionTokens tokens =
     case parseExpressionNode tokens of
-        Ok ( expressionNode, remaining ) ->
+        Ok ( Node _ expression, remaining ) ->
             case dropTrivia remaining of
                 [] ->
-                    Ok (Node.value expressionNode)
+                    Ok expression
 
                 nextToken :: _ ->
                     Err ("Unexpected token '" ++ nextToken.lexeme ++ "' after parsing expression.")
@@ -2208,11 +2278,18 @@ parseOperators indentMin minPrecedence ( left, tokens ) =
                         in
                         case parseExpressionNodeAt indentMin nextMinPrecedence afterOperator of
                             Ok ( right, remaining ) ->
+                                let
+                                    (Node leftRange _) =
+                                        left
+
+                                    (Node rightRange _) =
+                                        right
+                                in
                                 parseOperators indentMin
                                     minPrecedence
                                     ( Node
-                                        { start = (Node.range left).start
-                                        , end = (Node.range right).end
+                                        { start = leftRange.start
+                                        , end = rightRange.end
                                         }
                                         (Expression.OperatorApplication
                                             (Node (tokenRange operatorToken) operatorToken.lexeme)
@@ -2283,10 +2360,17 @@ finishApplication function argumentsRev remaining =
         arguments ->
             case List.reverse arguments of
                 lastArgument :: _ ->
+                    let
+                        (Node functionRange _) =
+                            function
+
+                        (Node lastArgumentRange _) =
+                            lastArgument
+                    in
                     Ok
                         ( Node
-                            { start = (Node.range function).start
-                            , end = (Node.range lastArgument).end
+                            { start = functionRange.start
+                            , end = lastArgumentRange.end
                             }
                             (Expression.Application function arguments)
                         , remaining
@@ -2316,12 +2400,16 @@ parseRecordAccesses :
 parseRecordAccesses indentMin ( record, tokens ) =
     case dropTrivia tokens of
         dotToken :: fieldToken :: rest ->
+            let
+                (Node recordRange _) =
+                    record
+            in
             if
                 dotToken.tokenType
                     == Token.Dot
                     && fieldToken.tokenType
                     == Token.Identifier
-                    && (Node.range record).end
+                    && recordRange.end
                     == dotToken.start
                     && dotToken.end
                     == fieldToken.start
@@ -2329,7 +2417,7 @@ parseRecordAccesses indentMin ( record, tokens ) =
                 let
                     access =
                         Node
-                            { start = (Node.range record).start, end = fieldToken.end }
+                            { start = recordRange.start, end = fieldToken.end }
                             (Expression.RecordAccess
                                 record
                                 (Node (tokenRange fieldToken) fieldToken.lexeme)
@@ -2415,10 +2503,10 @@ parseAtomicExpression indentMin tokens =
 
                 Token.Negation ->
                     case parseBasicExpression indentMin rest of
-                        Ok ( negated, remaining ) ->
+                        Ok ( ((Node negatedRange _) as negated), remaining ) ->
                             Ok
                                 ( Node
-                                    { start = token.start, end = (Node.range negated).end }
+                                    { start = token.start, end = negatedRange.end }
                                     (Expression.Negation negated)
                                 , remaining
                                 )
@@ -2667,11 +2755,11 @@ parseIfBlock indentMin ifToken tokens =
                             case consumeKeyword "else" afterThenBranch of
                                 Ok ( elseToken, afterElse ) ->
                                     case parseExpressionNodeAt branchIndentMin 0 afterElse of
-                                        Ok ( elseBranch, remaining ) ->
+                                        Ok ( ((Node elseBranchRange _) as elseBranch), remaining ) ->
                                             Ok
                                                 ( Node
                                                     { start = ifToken.start
-                                                    , end = (Node.range elseBranch).end
+                                                    , end = elseBranchRange.end
                                                     }
                                                     (Expression.IfBlock
                                                         ifToken.start
@@ -2713,10 +2801,10 @@ parseLambda indentMin lambdaToken tokens =
 
             else
                 case parseExpressionNodeAt indentMin 0 afterArrow of
-                    Ok ( body, remaining ) ->
+                    Ok ( ((Node bodyRange _) as body), remaining ) ->
                         Ok
                             ( Node
-                                { start = lambdaToken.start, end = (Node.range body).end }
+                                { start = lambdaToken.start, end = bodyRange.end }
                                 (Expression.LambdaExpression
                                     { backslashLocation = lambdaToken.start
                                     , arguments = arguments
@@ -2770,10 +2858,10 @@ parseLetBlock indentMin letToken tokens =
 
             else
                 case parseExpressionNodeAt indentMin 0 afterIn of
-                    Ok ( body, remaining ) ->
+                    Ok ( ((Node bodyRange _) as body), remaining ) ->
                         Ok
                             ( Node
-                                { start = letToken.start, end = (Node.range body).end }
+                                { start = letToken.start, end = bodyRange.end }
                                 (Expression.LetExpression
                                     { letTokenLocation = letToken.start
                                     , declarations = declarations
@@ -2829,7 +2917,7 @@ parseLetDeclaration declarationIndent tokens =
                     colonToken :: afterColon ->
                         if colonToken.tokenType == Token.Colon then
                             case parseTypeAnnotation declarationIndent (dropTrivia afterColon) of
-                                Ok ( typeAnnotation, afterTypeAnnotation ) ->
+                                Ok ( ((Node typeAnnotationRange _) as typeAnnotation), afterTypeAnnotation ) ->
                                     case dropTrivia afterTypeAnnotation of
                                         implementationNameToken :: afterImplementationName ->
                                             if implementationNameToken.tokenType /= Token.Identifier then
@@ -2854,7 +2942,7 @@ parseLetDeclaration declarationIndent tokens =
                                                     (Just
                                                         (Node
                                                             { start = nameToken.start
-                                                            , end = (Node.range typeAnnotation).end
+                                                            , end = typeAnnotationRange.end
                                                             }
                                                             { name = Node (tokenRange nameToken) nameToken.lexeme
                                                             , colonLocation = colonToken.start
@@ -2878,15 +2966,15 @@ parseLetDeclaration declarationIndent tokens =
 
             else
                 case parsePatternNodeAt declarationIndent (nameToken :: rest) of
-                    Ok ( pattern, afterPattern ) ->
+                    Ok ( ((Node patternRange _) as pattern), afterPattern ) ->
                         case consumeToken Token.Equal "'='" afterPattern of
                             Ok ( equalToken, afterEqual ) ->
                                 case parseExpressionNodeAt declarationIndent 0 afterEqual of
-                                    Ok ( body, remaining ) ->
+                                    Ok ( ((Node bodyRange _) as body), remaining ) ->
                                         Ok
                                             ( Node
-                                                { start = (Node.range pattern).start
-                                                , end = (Node.range body).end
+                                                { start = patternRange.start
+                                                , end = bodyRange.end
                                                 }
                                                 (Expression.LetDestructuring pattern equalToken.start body)
                                             , remaining
@@ -2916,13 +3004,13 @@ finishLetFunctionDeclaration declarationIndent firstNameToken implementationName
     case parsePatternsUntilEqual declarationIndent tokens [] of
         Ok ( arguments, equalToken, afterEqual ) ->
             case parseExpressionNodeAt declarationIndent 0 afterEqual of
-                Ok ( body, remaining ) ->
+                Ok ( ((Node bodyRange _) as body), remaining ) ->
                     let
                         implementationRange =
-                            { start = implementationNameToken.start, end = (Node.range body).end }
+                            { start = implementationNameToken.start, end = bodyRange.end }
 
                         declarationRange =
-                            { start = firstNameToken.start, end = (Node.range body).end }
+                            { start = firstNameToken.start, end = bodyRange.end }
                     in
                     Ok
                         ( Node declarationRange
@@ -2999,10 +3087,14 @@ parseCaseBlock indentMin caseToken tokens =
                                             Err "Expected at least one case branch after 'of'."
 
                                         lastBranch :: _ ->
+                                            let
+                                                (Node lastExpressionRange _) =
+                                                    lastBranch.expression
+                                            in
                                             Ok
                                                 ( Node
                                                     { start = caseToken.start
-                                                    , end = (Node.range lastBranch.expression).end
+                                                    , end = lastExpressionRange.end
                                                     }
                                                     (Expression.CaseExpression
                                                         { caseTokenLocation = caseToken.start
@@ -3284,8 +3376,8 @@ parseNamedPatternArguments :
     -> Node Pattern.Pattern
     -> List Token.Token
     -> Result String ( Node Pattern.Pattern, List Token.Token )
-parseNamedPatternArguments indentMin pattern tokens =
-    case Node.value pattern of
+parseNamedPatternArguments indentMin ((Node _ patternValue) as pattern) tokens =
+    case patternValue of
         Pattern.NamedPattern name [] ->
             parsePatternArguments indentMin name pattern [] tokens
 
@@ -3332,10 +3424,17 @@ finishNamedPattern name original argumentsRev tokens =
         arguments ->
             case List.reverse arguments of
                 lastArgument :: _ ->
+                    let
+                        (Node originalRange _) =
+                            original
+
+                        (Node lastArgumentRange _) =
+                            lastArgument
+                    in
                     Ok
                         ( Node
-                            { start = (Node.range original).start
-                            , end = (Node.range lastArgument).end
+                            { start = originalRange.start
+                            , end = lastArgumentRange.end
                             }
                             (Pattern.NamedPattern name arguments)
                         , tokens
@@ -3355,10 +3454,17 @@ parsePatternSuffix indentMin ( pattern, tokens ) =
             if token.tokenType == Token.Operator && token.lexeme == "::" then
                 case parsePatternNodeAt indentMin rest of
                     Ok ( tailPattern, remaining ) ->
+                        let
+                            (Node patternRange _) =
+                                pattern
+
+                            (Node tailPatternRange _) =
+                                tailPattern
+                        in
                         Ok
                             ( Node
-                                { start = (Node.range pattern).start
-                                , end = (Node.range tailPattern).end
+                                { start = patternRange.start
+                                , end = tailPatternRange.end
                                 }
                                 (Pattern.UnConsPattern pattern token.start tailPattern)
                             , remaining
@@ -3371,9 +3477,13 @@ parsePatternSuffix indentMin ( pattern, tokens ) =
                 case dropTrivia rest of
                     nameToken :: remaining ->
                         if nameToken.tokenType == Token.Identifier then
+                            let
+                                (Node patternRange _) =
+                                    pattern
+                            in
                             Ok
                                 ( Node
-                                    { start = (Node.range pattern).start, end = nameToken.end }
+                                    { start = patternRange.start, end = nameToken.end }
                                     (Pattern.AsPattern
                                         pattern
                                         token.start

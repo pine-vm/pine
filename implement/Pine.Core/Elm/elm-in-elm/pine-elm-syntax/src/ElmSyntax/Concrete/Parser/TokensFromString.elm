@@ -75,7 +75,7 @@ tokenizeHelp source position tokensRev =
                 if isWhitespace first then
                     let
                         endOffset =
-                            takeWhileEnd isWhitespace source position.offset
+                            skipAllWhitespace source position.offset
 
                         lexeme =
                             String.slice position.offset endOffset source
@@ -127,7 +127,7 @@ tokenizeHelp source position tokensRev =
                 else if isIdentifierStart first then
                     let
                         endOffset =
-                            takeWhileEnd isIdentifierChar source position.offset
+                            skipToIdentifierEnd source position.offset
 
                         lexeme =
                             String.slice position.offset endOffset source
@@ -613,7 +613,7 @@ consumeUnicodeEscape termination source start escapeStart decodedAcc rawAcc =
     if String.slice afterPrefixOffset (afterPrefixOffset + 1) source == "{" then
         let
             digitsEndOffset =
-                takeWhileEnd isAsciiHexDigit source (afterPrefixOffset + 1)
+                skipToAsciiHexDigitEnd source (afterPrefixOffset + 1)
         in
         if String.slice digitsEndOffset (digitsEndOffset + 1) source == "}" then
             let
@@ -950,18 +950,18 @@ makeToken tokenType lexeme start end rawText =
 numberEnd : String -> Int -> Int
 numberEnd source startOffset =
     if String.slice startOffset (startOffset + 2) source == "0x" then
-        takeWhileEnd isAsciiHexDigit source (startOffset + 2)
+        skipToAsciiHexDigitEnd source (startOffset + 2)
 
     else
         let
             afterInteger =
-                takeWhileEnd isDigit source startOffset
+                skipToAsciiDecimalDigitEnd source startOffset
 
             afterFraction =
                 case String.slice afterInteger (afterInteger + 1) source of
                     "." ->
                         if isDigit (String.slice (afterInteger + 1) (afterInteger + 2) source) then
-                            takeWhileEnd isDigit source (afterInteger + 1)
+                            skipToAsciiDecimalDigitEnd source (afterInteger + 1)
 
                         else
                             afterInteger
@@ -994,17 +994,40 @@ exponentEnd source offset =
                 _ ->
                     offset
     in
-    takeWhileEnd isDigit source afterSign
+    skipToAsciiDecimalDigitEnd source afterSign
 
 
-{-| Finds the offset at which the run of characters satisfying `predicate`, starting at
-`offset`, ends. The caller is expected to take a single `String.slice offset endOffset source`
-afterward rather than accumulating matched characters one at a time.
--}
-takeWhileEnd : (String -> Bool) -> String -> Int -> Int
-takeWhileEnd predicate source offset =
-    if predicate (String.slice offset (offset + 1) source) then
-        takeWhileEnd predicate source (offset + 1)
+skipAllWhitespace : String -> Int -> Int
+skipAllWhitespace source offset =
+    if isWhitespace (String.slice offset (offset + 1) source) then
+        skipAllWhitespace source (offset + 1)
+
+    else
+        offset
+
+
+skipToIdentifierEnd : String -> Int -> Int
+skipToIdentifierEnd source offset =
+    if isIdentifierChar (String.slice offset (offset + 1) source) then
+        skipToIdentifierEnd source (offset + 1)
+
+    else
+        offset
+
+
+skipToAsciiDecimalDigitEnd : String -> Int -> Int
+skipToAsciiDecimalDigitEnd source offset =
+    if isDigit (String.slice offset (offset + 1) source) then
+        skipToAsciiDecimalDigitEnd source (offset + 1)
+
+    else
+        offset
+
+
+skipToAsciiHexDigitEnd : String -> Int -> Int
+skipToAsciiHexDigitEnd source offset =
+    if isAsciiHexDigit (String.slice offset (offset + 1) source) then
+        skipToAsciiHexDigitEnd source (offset + 1)
 
     else
         offset
@@ -1031,111 +1054,151 @@ and `\u{...}` escapes use the same implementation.
 -}
 hexStringToInt : String -> Maybe Int
 hexStringToInt digits =
-    case String.uncons digits of
-        Nothing ->
-            Nothing
+    case String.slice 0 1 digits of
+        "0" ->
+            Just 0
 
-        Just ( first, remaining ) ->
-            let
-                firstValue =
-                    hexDigitValue first
-            in
-            if firstValue < 0 then
-                Nothing
+        "1" ->
+            convert0OrMoreHexadecimalValue 1 1 digits
 
-            else
-                hexStringToIntHelp firstValue remaining
+        "2" ->
+            convert0OrMoreHexadecimalValue 2 1 digits
 
+        "3" ->
+            convert0OrMoreHexadecimalValue 3 1 digits
 
-hexStringToIntHelp : Int -> String -> Maybe Int
-hexStringToIntHelp value remaining =
-    case String.uncons remaining of
-        Nothing ->
-            Just value
+        "4" ->
+            convert0OrMoreHexadecimalValue 4 1 digits
 
-        Just ( next, rest ) ->
-            let
-                digitValue =
-                    hexDigitValue next
-            in
-            if digitValue < 0 then
-                Nothing
+        "5" ->
+            convert0OrMoreHexadecimalValue 5 1 digits
 
-            else
-                hexStringToIntHelp (value * 16 + digitValue) rest
+        "6" ->
+            convert0OrMoreHexadecimalValue 6 1 digits
 
+        "7" ->
+            convert0OrMoreHexadecimalValue 7 1 digits
 
-hexDigitValue : Char -> Int
-hexDigitValue char =
-    case char of
-        '0' ->
-            0
+        "8" ->
+            convert0OrMoreHexadecimalValue 8 1 digits
 
-        '1' ->
-            1
+        "9" ->
+            convert0OrMoreHexadecimalValue 9 1 digits
 
-        '2' ->
-            2
+        "a" ->
+            convert0OrMoreHexadecimalValue 10 1 digits
 
-        '3' ->
-            3
+        "A" ->
+            convert0OrMoreHexadecimalValue 10 1 digits
 
-        '4' ->
-            4
+        "b" ->
+            convert0OrMoreHexadecimalValue 11 1 digits
 
-        '5' ->
-            5
+        "B" ->
+            convert0OrMoreHexadecimalValue 11 1 digits
 
-        '6' ->
-            6
+        "c" ->
+            convert0OrMoreHexadecimalValue 12 1 digits
 
-        '7' ->
-            7
+        "C" ->
+            convert0OrMoreHexadecimalValue 12 1 digits
 
-        '8' ->
-            8
+        "d" ->
+            convert0OrMoreHexadecimalValue 13 1 digits
 
-        '9' ->
-            9
+        "D" ->
+            convert0OrMoreHexadecimalValue 13 1 digits
 
-        'a' ->
-            10
+        "e" ->
+            convert0OrMoreHexadecimalValue 14 1 digits
 
-        'A' ->
-            10
+        "E" ->
+            convert0OrMoreHexadecimalValue 14 1 digits
 
-        'b' ->
-            11
+        "f" ->
+            convert0OrMoreHexadecimalValue 15 1 digits
 
-        'B' ->
-            11
-
-        'c' ->
-            12
-
-        'C' ->
-            12
-
-        'd' ->
-            13
-
-        'D' ->
-            13
-
-        'e' ->
-            14
-
-        'E' ->
-            14
-
-        'f' ->
-            15
-
-        'F' ->
-            15
+        "F" ->
+            convert0OrMoreHexadecimalValue 15 1 digits
 
         _ ->
-            -1
+            Nothing
+
+
+convert0OrMoreHexadecimalValue : Int -> Int -> String -> Maybe Int
+convert0OrMoreHexadecimalValue value offset source =
+    case String.slice offset (offset + 1) source of
+        "" ->
+            Just value
+
+        "0" ->
+            convert0OrMoreHexadecimalValue (value * 16) (offset + 1) source
+
+        "1" ->
+            convert0OrMoreHexadecimalValue (value * 16 + 1) (offset + 1) source
+
+        "2" ->
+            convert0OrMoreHexadecimalValue (value * 16 + 2) (offset + 1) source
+
+        "3" ->
+            convert0OrMoreHexadecimalValue (value * 16 + 3) (offset + 1) source
+
+        "4" ->
+            convert0OrMoreHexadecimalValue (value * 16 + 4) (offset + 1) source
+
+        "5" ->
+            convert0OrMoreHexadecimalValue (value * 16 + 5) (offset + 1) source
+
+        "6" ->
+            convert0OrMoreHexadecimalValue (value * 16 + 6) (offset + 1) source
+
+        "7" ->
+            convert0OrMoreHexadecimalValue (value * 16 + 7) (offset + 1) source
+
+        "8" ->
+            convert0OrMoreHexadecimalValue (value * 16 + 8) (offset + 1) source
+
+        "9" ->
+            convert0OrMoreHexadecimalValue (value * 16 + 9) (offset + 1) source
+
+        "a" ->
+            convert0OrMoreHexadecimalValue (value * 16 + 10) (offset + 1) source
+
+        "A" ->
+            convert0OrMoreHexadecimalValue (value * 16 + 10) (offset + 1) source
+
+        "b" ->
+            convert0OrMoreHexadecimalValue (value * 16 + 11) (offset + 1) source
+
+        "B" ->
+            convert0OrMoreHexadecimalValue (value * 16 + 11) (offset + 1) source
+
+        "c" ->
+            convert0OrMoreHexadecimalValue (value * 16 + 12) (offset + 1) source
+
+        "C" ->
+            convert0OrMoreHexadecimalValue (value * 16 + 12) (offset + 1) source
+
+        "d" ->
+            convert0OrMoreHexadecimalValue (value * 16 + 13) (offset + 1) source
+
+        "D" ->
+            convert0OrMoreHexadecimalValue (value * 16 + 13) (offset + 1) source
+
+        "e" ->
+            convert0OrMoreHexadecimalValue (value * 16 + 14) (offset + 1) source
+
+        "E" ->
+            convert0OrMoreHexadecimalValue (value * 16 + 14) (offset + 1) source
+
+        "f" ->
+            convert0OrMoreHexadecimalValue (value * 16 + 15) (offset + 1) source
+
+        "F" ->
+            convert0OrMoreHexadecimalValue (value * 16 + 15) (offset + 1) source
+
+        _ ->
+            Nothing
 
 
 isAsciiHexDigit : String -> Bool
