@@ -148,12 +148,15 @@ type alias Model = Int
 
 type Message = Increment | Set Int
 
-initial : Int
-initial = 0
-
 infix left 6 (+) = add
 
 port sendMessage : String -> Cmd msg
+
+initial : Int
+initial = 0
+
+declA =
+    [ 71, 0x4F, 0x051 ]
 """
 
                 expected =
@@ -190,19 +193,6 @@ port sendMessage : String -> Cmd msg
                                   }
                                 ]
                             }
-                        , AbstractDeclaration.FunctionDeclaration
-                            { signature =
-                                Just
-                                    { name = "initial"
-                                    , typeAnnotation =
-                                        AbstractTypeAnnotation.Typed [] "Int" []
-                                    }
-                            , declaration =
-                                { name = "initial"
-                                , arguments = []
-                                , expression = AbstractExpression.IntegerLiteral 0
-                                }
-                            }
                         , AbstractDeclaration.InfixDeclaration
                             { direction = AbstractInfix.Left
                             , precedence = 6
@@ -218,6 +208,32 @@ port sendMessage : String -> Cmd msg
                                         "Cmd"
                                         [ AbstractTypeAnnotation.GenericType "msg" ]
                                     )
+                            }
+                        , AbstractDeclaration.FunctionDeclaration
+                            { signature =
+                                Just
+                                    { name = "initial"
+                                    , typeAnnotation =
+                                        AbstractTypeAnnotation.Typed [] "Int" []
+                                    }
+                            , declaration =
+                                { name = "initial"
+                                , arguments = []
+                                , expression = AbstractExpression.IntegerLiteral 0
+                                }
+                            }
+                        , AbstractDeclaration.FunctionDeclaration
+                            { signature = Nothing
+                            , declaration =
+                                { name = "declA"
+                                , arguments = []
+                                , expression =
+                                    AbstractExpression.ListExpr
+                                        [ AbstractExpression.IntegerLiteral 71
+                                        , AbstractExpression.IntegerLiteral 0x4F
+                                        , AbstractExpression.IntegerLiteral 0x051
+                                        ]
+                                }
                             }
                         ]
                     }
@@ -501,6 +517,20 @@ declarationOrExpressionOkSuite =
                     , inTokenLocation = location 3 1
                     , expression = Node (range 4 1 4 2) (Expression.Identifier [] "x")
                     }
+                )
+      }
+    , { input = "func \"\"\"multi\nline\"\"\""
+      , expectedOk =
+            DeclarationOrExpression.Expression
+                (Expression.Application
+                    (Node
+                        (range 1 1 1 5)
+                        (Expression.Identifier [] "func")
+                    )
+                    [ Node
+                        (range 1 6 2 8)
+                        (Expression.MultilineStringLiteral "multi\nline" (Just [ "multi", "line" ]))
+                    ]
                 )
       }
     ]
