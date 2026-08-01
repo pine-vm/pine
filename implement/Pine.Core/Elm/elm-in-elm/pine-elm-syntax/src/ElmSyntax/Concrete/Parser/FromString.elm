@@ -2,9 +2,12 @@ module ElmSyntax.Concrete.Parser.FromString exposing (..)
 
 import Char
 import ElmSyntax.Concrete.Declaration as Declaration
+import ElmSyntax.Concrete.Exposing as Exposing
 import ElmSyntax.Concrete.Expression as Expression
 import ElmSyntax.Concrete.File as File
+import ElmSyntax.Concrete.Import as Import
 import ElmSyntax.Concrete.Infix as Infix
+import ElmSyntax.Concrete.Module as Module
 import ElmSyntax.Concrete.Node as Node exposing (Node(..))
 import ElmSyntax.Concrete.Parser.DeclarationOrExpression as DeclarationOrExpression exposing (DeclarationOrExpression)
 import ElmSyntax.Concrete.Parser.Token as Token
@@ -27,7 +30,809 @@ parseExpression input =
 
 parseFile : String -> Result String File.File
 parseFile input =
-    Err "parseFile is not implemented yet."
+    case TokensFromString.parseFile input of
+        Ok tokens ->
+            parseFileTokens tokens
+
+        Err error ->
+            Err error
+
+
+parseFileTokens : List Token.Token -> Result String File.File
+parseFileTokens tokens =
+    case parseModuleTokens tokens of
+        Err error ->
+            Err error
+
+        Ok ( moduleDefinition, afterModule ) ->
+            case parseImports [] afterModule of
+                Err error ->
+                    Err error
+
+                Ok ( imports, afterImports ) ->
+                    let
+                        previousRangeEndRow =
+                            imports
+                                |> List.reverse
+                                |> List.head
+                                |> Maybe.map (Node.range >> .end >> .row)
+                    in
+                    case parseFileDeclarations [] [] previousRangeEndRow afterImports of
+                        Err error ->
+                            Err error
+
+                        Ok ( declarations, documentationComments ) ->
+                            let
+                                isDocumentationComment token =
+                                    List.any
+                                        (\documentation ->
+                                            tokenRange token == Node.range documentation
+                                        )
+                                        documentationComments
+
+                                comments =
+                                    tokens
+                                        |> List.filter
+                                            (\token ->
+                                                token.tokenType == Token.Comment
+                                                    && not (isDocumentationComment token)
+                                            )
+                                        |> List.map
+                                            (\token ->
+                                                Node (tokenRange token) token.lexeme
+                                            )
+                            in
+                            Ok
+                                { moduleDefinition = moduleDefinition
+                                , imports = imports
+                                , declarations = declarations
+                                , comments = comments
+                                , incompleteDeclarations = []
+                                }
+
+
+parseImports :
+    List (Node Import.Import)
+    -> List Token.Token
+    -> Result String ( List (Node Import.Import), List Token.Token )
+parseImports importsRev tokens =
+    case dropTrivia tokens of
+        next :: _ ->
+            if next.tokenType == Token.Identifier && next.lexeme == "import" then
+                case parseImportTokens tokens of
+                    Ok ( importNode, remaining ) ->
+                        parseImports (importNode :: importsRev) remaining
+
+                    Err error ->
+                        Err error
+
+            else
+                Ok ( List.reverse importsRev, tokens )
+
+        [] ->
+            Ok ( List.reverse importsRev, [] )
+
+
+parseFileDeclarations :
+    List (Node Declaration.Declaration)
+    -> List (Node String)
+    -> Maybe Int
+    -> List Token.Token
+    -> Result String ( List (Node Declaration.Declaration), List (Node String) )
+parseFileDeclarations declarationsRev documentationCommentsRev previousRangeEndRow tokens =
+    case dropTrivia tokens of
+        [] ->
+            Ok ( List.reverse declarationsRev, List.reverse documentationCommentsRev )
+
+        firstToken :: _ ->
+            if firstToken.start.column /= 1 then
+                Err
+                    ("Unexpected token '"
+                        ++ firstToken.lexeme
+                        ++ "' after parsing "
+                        ++ String.fromInt (List.length declarationsRev)
+                        ++ " declarations."
+                    )
+
+            else
+                case parseDeclarationTokens tokens of
+                    Err error ->
+                        Err error
+
+                    Ok ( declaration, remaining ) ->
+                        let
+                            documentation =
+                                documentationCommentBefore
+                                    previousRangeEndRow
+                                    firstToken.start.row
+                                    tokens
+
+                            declarationWithDocumentation =
+                                case documentation of
+                                    Nothing ->
+                                        declaration
+
+                                    Just documentationNode ->
+                                        setDeclarationDocumentation documentationNode declaration
+
+                            nextDocumentationCommentsRev =
+                                case documentation of
+                                    Nothing ->
+                                        documentationCommentsRev
+
+                                    Just documentationNode ->
+                                        documentationNode :: documentationCommentsRev
+
+                            declarationNode =
+                                Node (rangeOfDeclaration declarationWithDocumentation) declarationWithDocumentation
+                        in
+                        parseFileDeclarations
+                            (declarationNode :: declarationsRev)
+                            nextDocumentationCommentsRev
+                            (Just (Node.range declarationNode).end.row)
+                            remaining
+
+
+documentationCommentBefore : Maybe Int -> Int -> List Token.Token -> Maybe (Node String)
+documentationCommentBefore previousRangeEndRow declarationRow tokens =
+    let
+        leadingComments =
+            tokens
+                |> takeLeadingTrivia
+                |> List.filter (\token -> token.tokenType == Token.Comment)
+
+        canAttach token =
+            let
+                hasInterveningComment =
+                    List.any
+                        (\other ->
+                            not (String.startsWith "{-|" other.lexeme)
+                                && other.start.row
+                                > token.end.row
+                        )
+                        leadingComments
+
+                isAfterPreviousRange =
+                    case previousRangeEndRow of
+                        Nothing ->
+                            token.end.row + 1 == declarationRow
+
+                        Just previousEndRow ->
+                            previousEndRow < token.end.row
+            in
+            String.startsWith "{-|" token.lexeme
+                && token.end.row
+                < declarationRow
+                && isAfterPreviousRange
+                && not hasInterveningComment
+    in
+    leadingComments
+        |> List.filter canAttach
+        |> List.reverse
+        |> List.head
+        |> Maybe.map (\token -> Node (tokenRange token) token.lexeme)
+
+
+takeLeadingTrivia : List Token.Token -> List Token.Token
+takeLeadingTrivia tokens =
+    case tokens of
+        token :: rest ->
+            if isTrivia token then
+                token :: takeLeadingTrivia rest
+
+            else
+                []
+
+        [] ->
+            []
+
+
+setDeclarationDocumentation : Node String -> Declaration.Declaration -> Declaration.Declaration
+setDeclarationDocumentation documentation declaration =
+    case declaration of
+        Declaration.FunctionDeclaration (Node range_ function) ->
+            Declaration.FunctionDeclaration
+                (Node range_ { function | documentation = Just documentation })
+
+        Declaration.ChoiceTypeDeclaration (Node range_ choiceType) ->
+            Declaration.ChoiceTypeDeclaration
+                (Node range_ { choiceType | documentation = Just documentation })
+
+        Declaration.AliasDeclaration (Node range_ typeAlias) ->
+            Declaration.AliasDeclaration
+                (Node range_ { typeAlias | documentation = Just documentation })
+
+        Declaration.PortDeclaration _ ->
+            declaration
+
+        Declaration.InfixDeclaration _ ->
+            declaration
+
+
+rangeOfDeclaration : Declaration.Declaration -> Range
+rangeOfDeclaration declaration =
+    case declaration of
+        Declaration.FunctionDeclaration node ->
+            Node.range node
+
+        Declaration.ChoiceTypeDeclaration node ->
+            Node.range node
+
+        Declaration.AliasDeclaration node ->
+            Node.range node
+
+        Declaration.PortDeclaration node ->
+            Node.range node
+
+        Declaration.InfixDeclaration node ->
+            Node.range node
+
+
+parseModuleTokens : List Token.Token -> Result String ( Node Module.Module, List Token.Token )
+parseModuleTokens tokens =
+    case dropTrivia tokens of
+        firstToken :: _ ->
+            if firstToken.tokenType == Token.Identifier && firstToken.lexeme == "effect" then
+                parseEffectModule tokens
+
+            else if firstToken.tokenType == Token.Identifier && firstToken.lexeme == "port" then
+                parseDefaultModule Module.PortModule "port" tokens
+
+            else
+                parseDefaultModule Module.NormalModule "module" tokens
+
+        [] ->
+            Err "Expected a module declaration."
+
+
+parseDefaultModule :
+    (Module.DefaultModuleData -> Module.Module)
+    -> String
+    -> List Token.Token
+    -> Result String ( Node Module.Module, List Token.Token )
+parseDefaultModule moduleConstructor firstKeyword tokens =
+    case consumeKeyword firstKeyword tokens of
+        Err error ->
+            Err error
+
+        Ok ( firstToken, afterFirstKeyword ) ->
+            let
+                consumeModuleKeyword =
+                    if firstKeyword == "module" then
+                        Ok afterFirstKeyword
+
+                    else
+                        consumeKeyword "module" afterFirstKeyword
+                            |> Result.map Tuple.second
+            in
+            case consumeModuleKeyword of
+                Err error ->
+                    Err error
+
+                Ok afterModuleKeyword ->
+                    case parseModuleName afterModuleKeyword of
+                        Err error ->
+                            Err error
+
+                        Ok ( moduleName, afterModuleName ) ->
+                            case parseExposingTokens afterModuleName of
+                                Err error ->
+                                    Err error
+
+                                Ok ( exposingList, remaining ) ->
+                                    Ok
+                                        ( Node
+                                            { start = firstToken.start
+                                            , end = (Node.range exposingList).end
+                                            }
+                                            (moduleConstructor
+                                                { moduleName = moduleName
+                                                , exposingList = exposingList
+                                                }
+                                            )
+                                        , remaining
+                                        )
+
+
+parseEffectModule : List Token.Token -> Result String ( Node Module.Module, List Token.Token )
+parseEffectModule tokens =
+    case consumeKeyword "effect" tokens of
+        Err error ->
+            Err error
+
+        Ok ( effectToken, afterEffect ) ->
+            case consumeKeyword "module" afterEffect of
+                Err error ->
+                    Err error
+
+                Ok ( _, afterModule ) ->
+                    case parseModuleName afterModule of
+                        Err error ->
+                            Err error
+
+                        Ok ( moduleName, afterModuleName ) ->
+                            case parseEffectWhere afterModuleName of
+                                Err error ->
+                                    Err error
+
+                                Ok ( command, subscription, afterWhere ) ->
+                                    case parseExposingTokens afterWhere of
+                                        Err error ->
+                                            Err error
+
+                                        Ok ( exposingList, remaining ) ->
+                                            Ok
+                                                ( Node
+                                                    { start = effectToken.start
+                                                    , end = (Node.range exposingList).end
+                                                    }
+                                                    (Module.EffectModule
+                                                        { moduleName = moduleName
+                                                        , exposingList = exposingList
+                                                        , command = command
+                                                        , subscription = subscription
+                                                        }
+                                                    )
+                                                , remaining
+                                                )
+
+
+parseEffectWhere :
+    List Token.Token
+    -> Result String ( Maybe (Node String), Maybe (Node String), List Token.Token )
+parseEffectWhere tokens =
+    case dropTrivia tokens of
+        whereToken :: _ ->
+            if whereToken.tokenType == Token.Identifier && whereToken.lexeme == "where" then
+                case consumeKeyword "where" tokens of
+                    Err error ->
+                        Err error
+
+                    Ok ( _, afterWhere ) ->
+                        case consumeToken Token.OpenBrace "'{'" (dropTrivia afterWhere) of
+                            Err error ->
+                                Err error
+
+                            Ok ( _, afterOpenBrace ) ->
+                                parseEffectWhereFields Nothing Nothing afterOpenBrace
+
+            else
+                Ok ( Nothing, Nothing, tokens )
+
+        [] ->
+            Ok ( Nothing, Nothing, [] )
+
+
+parseEffectWhereFields :
+    Maybe (Node String)
+    -> Maybe (Node String)
+    -> List Token.Token
+    -> Result String ( Maybe (Node String), Maybe (Node String), List Token.Token )
+parseEffectWhereFields command subscription tokens =
+    case dropTrivia tokens of
+        closeBrace :: rest ->
+            if closeBrace.tokenType == Token.CloseBrace then
+                Ok ( command, subscription, rest )
+
+            else if closeBrace.tokenType == Token.Identifier then
+                case consumeToken Token.Equal "'='" (dropTrivia rest) of
+                    Err error ->
+                        Err error
+
+                    Ok ( _, afterEqual ) ->
+                        case parseModuleName afterEqual of
+                            Err error ->
+                                Err error
+
+                            Ok ( valueNode, afterValue ) ->
+                                let
+                                    valueName =
+                                        case List.reverse (Node.value valueNode) of
+                                            name :: _ ->
+                                                name
+
+                                            [] ->
+                                                ""
+
+                                    value =
+                                        Node (Node.range valueNode) valueName
+
+                                    nextCommand =
+                                        if closeBrace.lexeme == "command" then
+                                            Just value
+
+                                        else
+                                            command
+
+                                    nextSubscription =
+                                        if closeBrace.lexeme == "subscription" then
+                                            Just value
+
+                                        else
+                                            subscription
+                                in
+                                case dropTrivia afterValue of
+                                    comma :: afterComma ->
+                                        if comma.tokenType == Token.Comma then
+                                            parseEffectWhereFields nextCommand nextSubscription afterComma
+
+                                        else
+                                            parseEffectWhereFields nextCommand nextSubscription afterValue
+
+                                    [] ->
+                                        Err "Expected '}' after effect module fields."
+
+            else
+                Err ("Expected an effect module field or '}', but found '" ++ closeBrace.lexeme ++ "'.")
+
+        [] ->
+            Err "Expected '}' after effect module fields."
+
+
+parseImportTokens : List Token.Token -> Result String ( Node Import.Import, List Token.Token )
+parseImportTokens tokens =
+    case consumeKeyword "import" tokens of
+        Err error ->
+            Err error
+
+        Ok ( importToken, afterImport ) ->
+            case parseModuleName afterImport of
+                Err error ->
+                    Err error
+
+                Ok ( moduleName, afterModuleName ) ->
+                    case parseImportAlias afterModuleName of
+                        Err error ->
+                            Err error
+
+                        Ok ( moduleAlias, afterAlias ) ->
+                            case parseOptionalExposing afterAlias of
+                                Err error ->
+                                    Err error
+
+                                Ok ( exposingList, remaining ) ->
+                                    let
+                                        importEnd =
+                                            case exposingList of
+                                                Just ( _, exposingNode ) ->
+                                                    (Node.range exposingNode).end
+
+                                                Nothing ->
+                                                    case moduleAlias of
+                                                        Just ( _, aliasNode ) ->
+                                                            (Node.range aliasNode).end
+
+                                                        Nothing ->
+                                                            (Node.range moduleName).end
+                                    in
+                                    Ok
+                                        ( Node
+                                            { start = importToken.start, end = importEnd }
+                                            { importTokenLocation = importToken.start
+                                            , moduleName = moduleName
+                                            , moduleAlias = moduleAlias
+                                            , exposingList = exposingList
+                                            }
+                                        , remaining
+                                        )
+
+
+parseImportAlias :
+    List Token.Token
+    -> Result String ( Maybe ( Location, Node Module.ModuleName ), List Token.Token )
+parseImportAlias tokens =
+    case dropTrivia tokens of
+        asToken :: _ ->
+            if asToken.tokenType == Token.Identifier && asToken.lexeme == "as" then
+                case consumeKeyword "as" tokens of
+                    Err error ->
+                        Err error
+
+                    Ok ( consumedAs, afterAs ) ->
+                        case dropTrivia afterAs of
+                            aliasToken :: rest ->
+                                if aliasToken.tokenType == Token.Identifier then
+                                    Ok
+                                        ( Just
+                                            ( consumedAs.start
+                                            , Node (tokenRange aliasToken) [ aliasToken.lexeme ]
+                                            )
+                                        , rest
+                                        )
+
+                                else
+                                    Err ("Expected module alias, but found '" ++ aliasToken.lexeme ++ "'.")
+
+                            [] ->
+                                Err "Expected module alias."
+
+            else
+                Ok ( Nothing, tokens )
+
+        [] ->
+            Ok ( Nothing, [] )
+
+
+parseOptionalExposing :
+    List Token.Token
+    -> Result String ( Maybe ( Location, Node Exposing.Exposing ), List Token.Token )
+parseOptionalExposing tokens =
+    case dropTrivia tokens of
+        exposingToken :: _ ->
+            if exposingToken.tokenType == Token.Identifier && exposingToken.lexeme == "exposing" then
+                parseExposingTokens tokens
+                    |> Result.map
+                        (\( exposingNode, remaining ) ->
+                            ( Just ( exposingToken.start, exposingNode ), remaining )
+                        )
+
+            else
+                Ok ( Nothing, tokens )
+
+        [] ->
+            Ok ( Nothing, [] )
+
+
+parseModuleName :
+    List Token.Token
+    -> Result String ( Node Module.ModuleName, List Token.Token )
+parseModuleName tokens =
+    case dropTrivia tokens of
+        firstToken :: rest ->
+            if firstToken.tokenType == Token.Identifier then
+                parseModuleNameRest
+                    firstToken.start
+                    firstToken.end
+                    [ firstToken.lexeme ]
+                    rest
+
+            else
+                Err ("Expected module name, but found '" ++ firstToken.lexeme ++ "'.")
+
+        [] ->
+            Err "Expected module name."
+
+
+parseModuleNameRest :
+    Location
+    -> Location
+    -> List String
+    -> List Token.Token
+    -> Result String ( Node Module.ModuleName, List Token.Token )
+parseModuleNameRest start end partsRev tokens =
+    case tokens of
+        dotToken :: nameToken :: rest ->
+            if dotToken.tokenType == Token.Dot && nameToken.tokenType == Token.Identifier then
+                parseModuleNameRest start nameToken.end (nameToken.lexeme :: partsRev) rest
+
+            else if dotToken.tokenType == Token.Dot then
+                Err ("Expected module name part, but found '" ++ nameToken.lexeme ++ "'.")
+
+            else
+                Ok ( Node { start = start, end = end } (List.reverse partsRev), tokens )
+
+        dotToken :: [] ->
+            if dotToken.tokenType == Token.Dot then
+                Err "Expected module name part."
+
+            else
+                Ok ( Node { start = start, end = end } (List.reverse partsRev), tokens )
+
+        [] ->
+            Ok ( Node { start = start, end = end } (List.reverse partsRev), [] )
+
+
+parseExposingTokens :
+    List Token.Token
+    -> Result String ( Node Exposing.Exposing, List Token.Token )
+parseExposingTokens tokens =
+    case consumeKeyword "exposing" tokens of
+        Err error ->
+            Err error
+
+        Ok ( exposingToken, afterExposing ) ->
+            case consumeToken Token.OpenParen "'('" (dropTrivia afterExposing) of
+                Err error ->
+                    Err error
+
+                Ok ( openParen, afterOpenParen ) ->
+                    case dropTrivia afterOpenParen of
+                        dotDotToken :: afterDotDot ->
+                            if dotDotToken.tokenType == Token.DotDot then
+                                case consumeToken Token.CloseParen "')'" (dropTrivia afterDotDot) of
+                                    Err error ->
+                                        Err error
+
+                                    Ok ( closeParen, remaining ) ->
+                                        Ok
+                                            ( Node
+                                                { start = exposingToken.start, end = closeParen.end }
+                                                (Exposing.All (tokenRange dotDotToken))
+                                            , remaining
+                                            )
+
+                            else
+                                parseExplicitExposing
+                                    exposingToken
+                                    openParen
+                                    Nothing
+                                    []
+                                    afterOpenParen
+
+                        [] ->
+                            Err "Expected ')' to close exposing list."
+
+
+parseExplicitExposing :
+    Token.Token
+    -> Token.Token
+    -> Maybe (Node Exposing.TopLevelExpose)
+    -> List ( Location, Node Exposing.TopLevelExpose )
+    -> List Token.Token
+    -> Result String ( Node Exposing.Exposing, List Token.Token )
+parseExplicitExposing exposingToken openParen first restRev tokens =
+    case dropTrivia tokens of
+        token :: remaining ->
+            if token.tokenType == Token.CloseParen then
+                let
+                    nodes =
+                        case first of
+                            Nothing ->
+                                SeparatedSyntaxList.Empty
+
+                            Just firstNode ->
+                                SeparatedSyntaxList.NonEmpty firstNode (List.reverse restRev)
+                in
+                Ok
+                    ( Node
+                        { start = exposingToken.start, end = token.end }
+                        (Exposing.Explicit openParen.start nodes token.start)
+                    , remaining
+                    )
+
+            else
+                case first of
+                    Nothing ->
+                        case parseTopLevelExpose tokens of
+                            Err error ->
+                                Err error
+
+                            Ok ( exposeNode, afterExpose ) ->
+                                parseExplicitExposing
+                                    exposingToken
+                                    openParen
+                                    (Just exposeNode)
+                                    restRev
+                                    afterExpose
+
+                    Just _ ->
+                        if token.tokenType == Token.Comma then
+                            case parseTopLevelExpose remaining of
+                                Err error ->
+                                    Err error
+
+                                Ok ( exposeNode, afterExpose ) ->
+                                    parseExplicitExposing
+                                        exposingToken
+                                        openParen
+                                        first
+                                        (( token.start, exposeNode ) :: restRev)
+                                        afterExpose
+
+                        else
+                            Err "Expected ',' before exposing list item."
+
+        [] ->
+            Err "Expected ')' to close exposing list."
+
+
+parseTopLevelExpose :
+    List Token.Token
+    -> Result String ( Node Exposing.TopLevelExpose, List Token.Token )
+parseTopLevelExpose tokens =
+    case dropTrivia tokens of
+        token :: rest ->
+            if token.tokenType == Token.OpenParen then
+                case rest of
+                    operatorToken :: closeParen :: remaining ->
+                        if
+                            operatorToken.tokenType
+                                == Token.Operator
+                                && closeParen.tokenType
+                                == Token.CloseParen
+                        then
+                            Ok
+                                ( Node
+                                    { start = token.start, end = closeParen.end }
+                                    (Exposing.InfixExpose operatorToken.lexeme)
+                                , remaining
+                                )
+
+                        else
+                            Err "Expected an operator followed by ')' in exposing list."
+
+                    _ ->
+                        Err "Expected an operator followed by ')' in exposing list."
+
+            else if token.tokenType == Token.Identifier then
+                if startsWithUpper token.lexeme then
+                    parseUpperExpose token rest
+
+                else
+                    Ok
+                        ( Node (tokenRange token) (Exposing.FunctionExpose token.lexeme)
+                        , rest
+                        )
+
+            else
+                Err ("Unexpected token '" ++ token.lexeme ++ "' in exposing list.")
+
+        [] ->
+            Err "Expected exposing list item."
+
+
+parseUpperExpose :
+    Token.Token
+    -> List Token.Token
+    -> Result String ( Node Exposing.TopLevelExpose, List Token.Token )
+parseUpperExpose nameToken tokens =
+    case dropTrivia tokens of
+        openParen :: afterOpenParen ->
+            if openParen.tokenType == Token.OpenParen then
+                case dropTrivia afterOpenParen of
+                    dotDot :: afterDotDot ->
+                        if dotDot.tokenType == Token.DotDot then
+                            case consumeToken Token.CloseParen "')'" (dropTrivia afterDotDot) of
+                                Err error ->
+                                    Err error
+
+                                Ok ( closeParen, remaining ) ->
+                                    Ok
+                                        ( Node
+                                            { start = nameToken.start, end = closeParen.end }
+                                            (Exposing.TypeExpose
+                                                { name = nameToken.lexeme
+                                                , open =
+                                                    Just
+                                                        { start = openParen.start
+                                                        , end = closeParen.end
+                                                        }
+                                                }
+                                            )
+                                        , remaining
+                                        )
+
+                        else if dotDot.tokenType == Token.CloseParen then
+                            Ok
+                                ( Node
+                                    { start = nameToken.start, end = dotDot.end }
+                                    (Exposing.TypeExpose
+                                        { name = nameToken.lexeme, open = Nothing }
+                                    )
+                                , afterDotDot
+                                )
+
+                        else
+                            Err "Expected '..' or ')' after exposed type name."
+
+                    [] ->
+                        Err "Expected ')' after exposed type name."
+
+            else
+                Ok
+                    ( Node
+                        (tokenRange nameToken)
+                        (Exposing.TypeOrAliasExpose nameToken.lexeme)
+                    , tokens
+                    )
+
+        [] ->
+            Ok
+                ( Node
+                    (tokenRange nameToken)
+                    (Exposing.TypeOrAliasExpose nameToken.lexeme)
+                , []
+                )
 
 
 parseDeclarationOrExpression : String -> Result String DeclarationOrExpression
@@ -2021,36 +2826,56 @@ parseLetDeclaration declarationIndent tokens =
     case dropTrivia tokens of
         nameToken :: rest ->
             if nameToken.tokenType == Token.Identifier then
-                case parsePatternsUntilEqual declarationIndent rest [] of
-                    Ok ( arguments, equalToken, afterEqual ) ->
-                        case parseExpressionNodeAt declarationIndent 0 afterEqual of
-                            Ok ( body, remaining ) ->
-                                let
-                                    declarationRange =
-                                        { start = nameToken.start, end = (Node.range body).end }
-                                in
-                                Ok
-                                    ( Node declarationRange
-                                        (Expression.LetFunction
-                                            { documentation = Nothing
-                                            , signature = Nothing
-                                            , declaration =
-                                                Node declarationRange
-                                                    { name = Node (tokenRange nameToken) nameToken.lexeme
-                                                    , arguments = arguments
-                                                    , equalsTokenLocation = equalToken.start
-                                                    , expression = body
-                                                    }
-                                            }
-                                        )
-                                    , remaining
-                                    )
+                case dropTrivia rest of
+                    colonToken :: afterColon ->
+                        if colonToken.tokenType == Token.Colon then
+                            case parseTypeAnnotation declarationIndent (dropTrivia afterColon) of
+                                Ok ( typeAnnotation, afterTypeAnnotation ) ->
+                                    case dropTrivia afterTypeAnnotation of
+                                        implementationNameToken :: afterImplementationName ->
+                                            if implementationNameToken.tokenType /= Token.Identifier then
+                                                Err
+                                                    ("Expected function name after signature, but found '"
+                                                        ++ implementationNameToken.lexeme
+                                                        ++ "'."
+                                                    )
 
-                            Err error ->
-                                Err error
+                                            else if implementationNameToken.lexeme /= nameToken.lexeme then
+                                                Err
+                                                    ("Function name does not match signature: "
+                                                        ++ implementationNameToken.lexeme
+                                                        ++ " != "
+                                                        ++ nameToken.lexeme
+                                                    )
 
-                    Err error ->
-                        Err error
+                                            else
+                                                finishLetFunctionDeclaration declarationIndent
+                                                    nameToken
+                                                    implementationNameToken
+                                                    (Just
+                                                        (Node
+                                                            { start = nameToken.start
+                                                            , end = (Node.range typeAnnotation).end
+                                                            }
+                                                            { name = Node (tokenRange nameToken) nameToken.lexeme
+                                                            , colonLocation = colonToken.start
+                                                            , typeAnnotation = typeAnnotation
+                                                            }
+                                                        )
+                                                    )
+                                                    afterImplementationName
+
+                                        [] ->
+                                            Err "Expected function name after signature."
+
+                                Err error ->
+                                    Err error
+
+                        else
+                            finishLetFunctionDeclaration declarationIndent nameToken nameToken Nothing rest
+
+                    [] ->
+                        finishLetFunctionDeclaration declarationIndent nameToken nameToken Nothing []
 
             else
                 case parsePatternNodeAt declarationIndent (nameToken :: rest) of
@@ -2079,6 +2904,52 @@ parseLetDeclaration declarationIndent tokens =
 
         [] ->
             Err "Expected a declaration in let expression."
+
+
+finishLetFunctionDeclaration :
+    Int
+    -> Token.Token
+    -> Token.Token
+    -> Maybe (Node Expression.Signature)
+    -> List Token.Token
+    -> Result String ( Node Expression.LetDeclaration, List Token.Token )
+finishLetFunctionDeclaration declarationIndent firstNameToken implementationNameToken maybeSignature tokens =
+    case parsePatternsUntilEqual declarationIndent tokens [] of
+        Ok ( arguments, equalToken, afterEqual ) ->
+            case parseExpressionNodeAt declarationIndent 0 afterEqual of
+                Ok ( body, remaining ) ->
+                    let
+                        implementationRange =
+                            { start = implementationNameToken.start, end = (Node.range body).end }
+
+                        declarationRange =
+                            { start = firstNameToken.start, end = (Node.range body).end }
+                    in
+                    Ok
+                        ( Node declarationRange
+                            (Expression.LetFunction
+                                { documentation = Nothing
+                                , signature = maybeSignature
+                                , declaration =
+                                    Node implementationRange
+                                        { name =
+                                            Node
+                                                (tokenRange implementationNameToken)
+                                                implementationNameToken.lexeme
+                                        , arguments = arguments
+                                        , equalsTokenLocation = equalToken.start
+                                        , expression = body
+                                        }
+                                }
+                            )
+                        , remaining
+                        )
+
+                Err error ->
+                    Err error
+
+        Err error ->
+            Err error
 
 
 parsePatternsUntilEqual :

@@ -1,8 +1,17 @@
 module ParseFromStringTests exposing (..)
 
+import ElmSyntax.Abstract.ConvertFromConcrete as Convert
+import ElmSyntax.Abstract.Declaration as AbstractDeclaration
+import ElmSyntax.Abstract.Exposing as AbstractExposing
+import ElmSyntax.Abstract.Expression as AbstractExpression
+import ElmSyntax.Abstract.Infix as AbstractInfix
+import ElmSyntax.Abstract.Module as AbstractModule
+import ElmSyntax.Abstract.TypeAnnotation as AbstractTypeAnnotation
 import ElmSyntax.Concrete.Declaration as Declaration
+import ElmSyntax.Concrete.Exposing as Exposing
 import ElmSyntax.Concrete.Expression as Expression
 import ElmSyntax.Concrete.Infix as Infix
+import ElmSyntax.Concrete.Module as Module
 import ElmSyntax.Concrete.Node as Node exposing (Node(..))
 import ElmSyntax.Concrete.Parser.DeclarationOrExpression as DeclarationOrExpression exposing (DeclarationOrExpression)
 import ElmSyntax.Concrete.Parser.FromString
@@ -36,7 +45,215 @@ suite =
             mixedLineBreakSuite
         , Test.describe "literal and comment tokens"
             literalAndCommentTokenSuite
+        , Test.describe "parseFile concrete model"
+            concreteFileSuite
+        , Test.describe "parseFile abstract model"
+            abstractFileSuite
         ]
+
+
+concreteFileSuite : List Test
+concreteFileSuite =
+    [ Test.test "parses module, import, comments, and multiple declarations with ranges" <|
+        \_ ->
+            let
+                source =
+                    """
+module Main exposing (..)
+
+-- file comment
+import Html as H exposing (Html)
+
+first = 1
+
+second = first
+"""
+
+                expected =
+                    { moduleDefinition =
+                        Node (range 1 1 1 26)
+                            (Module.NormalModule
+                                { moduleName = Node (range 1 8 1 12) [ "Main" ]
+                                , exposingList =
+                                    Node (range 1 13 1 26)
+                                        (Exposing.All (range 1 23 1 25))
+                                }
+                            )
+                    , imports =
+                        [ Node (range 4 1 4 33)
+                            { importTokenLocation = location 4 1
+                            , moduleName = Node (range 4 8 4 12) [ "Html" ]
+                            , moduleAlias =
+                                Just
+                                    ( location 4 13
+                                    , Node (range 4 16 4 17) [ "H" ]
+                                    )
+                            , exposingList =
+                                Just
+                                    ( location 4 18
+                                    , Node (range 4 18 4 33)
+                                        (Exposing.Explicit
+                                            (location 4 27)
+                                            (SeparatedSyntaxList.NonEmpty
+                                                (Node (range 4 28 4 32)
+                                                    (Exposing.TypeOrAliasExpose "Html")
+                                                )
+                                                []
+                                            )
+                                            (location 4 32)
+                                        )
+                                    )
+                            }
+                        ]
+                    , declarations =
+                        [ simpleFunctionDeclaration
+                            (range 6 1 6 10)
+                            (range 6 1 6 6)
+                            (location 6 7)
+                            (Node (range 6 9 6 10) (Expression.IntegerLiteral "1"))
+                            "first"
+                        , simpleFunctionDeclaration
+                            (range 8 1 8 15)
+                            (range 8 1 8 7)
+                            (location 8 8)
+                            (Node (range 8 10 8 15) (Expression.Identifier [] "first"))
+                            "second"
+                        ]
+                    , comments =
+                        [ Node (range 3 1 3 16) "-- file comment" ]
+                    , incompleteDeclarations = []
+                    }
+            in
+            case ElmSyntax.Concrete.Parser.FromString.parseFile (String.trim source) of
+                Ok actual ->
+                    Expect.equal expected actual
+
+                Err error ->
+                    Expect.fail error
+    ]
+
+
+abstractFileSuite : List Test
+abstractFileSuite =
+    [ Test.test "parses a complete module into the abstract model" <|
+        \_ ->
+            let
+                source =
+                    """
+module Example exposing (..)
+
+import Html exposing (Html)
+
+type alias Model = Int
+
+type Message = Increment | Set Int
+
+initial : Int
+initial = 0
+
+infix left 6 (+) = add
+
+port sendMessage : String -> Cmd msg
+"""
+
+                expected =
+                    { moduleDefinition =
+                        AbstractModule.NormalModule
+                            { moduleName = [ "Example" ]
+                            , exposingList = AbstractExposing.All
+                            }
+                    , imports =
+                        [ { moduleName = [ "Html" ]
+                          , moduleAlias = Nothing
+                          , exposingList =
+                                Just
+                                    (AbstractExposing.Explicit
+                                        [ AbstractExposing.TypeOrAliasExpose "Html" ]
+                                    )
+                          }
+                        ]
+                    , declarations =
+                        [ AbstractDeclaration.AliasDeclaration
+                            { name = "Model"
+                            , generics = []
+                            , typeAnnotation =
+                                AbstractTypeAnnotation.Typed [] "Int" []
+                            }
+                        , AbstractDeclaration.ChoiceTypeDeclaration
+                            { name = "Message"
+                            , generics = []
+                            , constructors =
+                                [ { name = "Increment", arguments = [] }
+                                , { name = "Set"
+                                  , arguments =
+                                        [ AbstractTypeAnnotation.Typed [] "Int" [] ]
+                                  }
+                                ]
+                            }
+                        , AbstractDeclaration.FunctionDeclaration
+                            { signature =
+                                Just
+                                    { name = "initial"
+                                    , typeAnnotation =
+                                        AbstractTypeAnnotation.Typed [] "Int" []
+                                    }
+                            , declaration =
+                                { name = "initial"
+                                , arguments = []
+                                , expression = AbstractExpression.IntegerLiteral 0
+                                }
+                            }
+                        , AbstractDeclaration.InfixDeclaration
+                            { direction = AbstractInfix.Left
+                            , precedence = 6
+                            , operator = "+"
+                            , functionName = "add"
+                            }
+                        , AbstractDeclaration.PortDeclaration
+                            { name = "sendMessage"
+                            , typeAnnotation =
+                                AbstractTypeAnnotation.FunctionTypeAnnotation
+                                    (AbstractTypeAnnotation.Typed [] "String" [])
+                                    (AbstractTypeAnnotation.Typed []
+                                        "Cmd"
+                                        [ AbstractTypeAnnotation.GenericType "msg" ]
+                                    )
+                            }
+                        ]
+                    }
+            in
+            case ElmSyntax.Concrete.Parser.FromString.parseFile (String.trim source) of
+                Ok concrete ->
+                    Expect.equal expected (Convert.fromFile concrete)
+
+                Err error ->
+                    Expect.fail error
+    ]
+
+
+simpleFunctionDeclaration :
+    { start : { row : Int, column : Int }, end : { row : Int, column : Int } }
+    -> { start : { row : Int, column : Int }, end : { row : Int, column : Int } }
+    -> { row : Int, column : Int }
+    -> Node Expression.Expression
+    -> String
+    -> Node Declaration.Declaration
+simpleFunctionDeclaration declarationRange_ nameRange equalsLocation expression name =
+    Node declarationRange_
+        (Declaration.FunctionDeclaration
+            (Node declarationRange_
+                { documentation = Nothing
+                , signature = Nothing
+                , declaration =
+                    Node declarationRange_
+                        { name = Node nameRange name
+                        , arguments = []
+                        , equalsTokenLocation = equalsLocation
+                        , expression = expression
+                        }
+                }
+            )
+        )
 
 
 expressionOkSuite : List Test
@@ -86,6 +303,53 @@ expressionOkSuite =
                     ]
                 , inTokenLocation = location 3 1
                 , expression = Node (range 4 1 4 2) (Expression.Identifier [] "x")
+                }
+      }
+    , { input = "let\n    identity : a -> a\n    identity value = value\nin\nidentity 1"
+      , expectedOk =
+            Expression.LetExpression
+                { letTokenLocation = location 1 1
+                , declarations =
+                    [ Node (range 2 5 3 27)
+                        (Expression.LetFunction
+                            { documentation = Nothing
+                            , signature =
+                                Just
+                                    (Node (range 2 5 2 22)
+                                        { name = Node (range 2 5 2 13) "identity"
+                                        , colonLocation = location 2 14
+                                        , typeAnnotation =
+                                            Node (range 2 16 2 22)
+                                                (TypeAnnotation.FunctionTypeAnnotation
+                                                    (Node (range 2 16 2 17)
+                                                        (TypeAnnotation.GenericType "a")
+                                                    )
+                                                    (location 2 18)
+                                                    (Node (range 2 21 2 22)
+                                                        (TypeAnnotation.GenericType "a")
+                                                    )
+                                                )
+                                        }
+                                    )
+                            , declaration =
+                                Node (range 3 5 3 27)
+                                    { name = Node (range 3 5 3 13) "identity"
+                                    , arguments =
+                                        [ Node (range 3 14 3 19) (Pattern.VarPattern "value") ]
+                                    , equalsTokenLocation = location 3 20
+                                    , expression =
+                                        Node (range 3 22 3 27) (Expression.Identifier [] "value")
+                                    }
+                            }
+                        )
+                    ]
+                , inTokenLocation = location 4 1
+                , expression =
+                    Node (range 5 1 5 11)
+                        (Expression.Application
+                            (Node (range 5 1 5 9) (Expression.Identifier [] "identity"))
+                            [ Node (range 5 10 5 11) (Expression.IntegerLiteral "1") ]
+                        )
                 }
       }
     , { input = "case value of\n    Nothing -> 0\n    result -> 71"
@@ -265,8 +529,9 @@ declarationOrExpressionKindSuite : List Test
 declarationOrExpressionKindSuite =
     [ ( "identity : a -> a\nidentity x = x", "Declaration/FunctionDeclaration" )
     , ( "type Color = Red | Green | Blue", "Declaration/ChoiceTypeDeclaration" )
-    , ( "type Tree a = Leaf | Node a (Tree a)", "Declaration/ChoiceTypeDeclaration" )
+    , ( "type alias Name = String", "Declaration/AliasDeclaration" )
     , ( "port sendMessage : String -> Cmd msg", "Declaration/PortDeclaration" )
+    , ( "infix left 6 (+) = add", "Declaration/InfixDeclaration" )
     , ( "1 + 2", "Expression/OperatorApplication" )
     , ( "x", "Expression/Identifier" )
     ]
@@ -480,7 +745,11 @@ expressionVariantSuite =
             )
         |> (\variantTests ->
                 variantTests
-                    ++ [ Test.test "nested expressions retain every nested node" <|
+                    ++ [ Test.test "covers the GLSL expression variant" <|
+                            \_ ->
+                                Expect.equal "GLSLExpression"
+                                    (expressionKind (Expression.GLSLExpression "void main() {}"))
+                       , Test.test "nested expressions retain every nested node" <|
                             \_ ->
                                 let
                                     input =
@@ -534,25 +803,62 @@ nestedPatternAndBoundarySuite =
             expectParseOk "\\{ first, second } -> first"
     , Test.test "case branches cover every pattern form" <|
         \_ ->
-            expectParseOk
-                (String.trim
-                    """
-                    case value of
-                        _ -> 0
-                        () -> 1
-                        'a' -> 2
-                        "text" -> 3
-                        4 -> 4
-                        0xF -> 5
-                        1.5 -> 6
-                        ( x, y ) -> 7
-                        { x, y } -> 8
-                        head :: tail -> 9
-                        [ x, y ] -> 10
-                        Just x -> 11
-                        (Just x) as whole -> 12
-                    """
-                )
+            let
+                input =
+                    String.trim
+                        """
+                        case value of
+                            _ -> 0
+                            () -> 1
+                            'a' -> 2
+                            "text" -> 3
+                            4 -> 4
+                            0xF -> 5
+                            1.5 -> 6
+                            ( x, y ) -> 7
+                            { x, y } -> 8
+                            head :: tail -> 9
+                            [ x, y ] -> 10
+                            Just x -> 11
+                            (Just x) as whole -> 12
+                        """
+
+                expectedKinds =
+                    [ "AllPattern"
+                    , "UnitPattern"
+                    , "CharPattern"
+                    , "StringPattern"
+                    , "IntPattern"
+                    , "HexPattern"
+                    , "FloatPattern"
+                    , "TuplePattern"
+                    , "VarPattern"
+                    , "VarPattern"
+                    , "RecordPattern"
+                    , "UnConsPattern"
+                    , "VarPattern"
+                    , "VarPattern"
+                    , "ListPattern"
+                    , "VarPattern"
+                    , "VarPattern"
+                    , "NamedPattern"
+                    , "VarPattern"
+                    , "AsPattern"
+                    , "ParenthesizedPattern"
+                    , "NamedPattern"
+                    , "VarPattern"
+                    ]
+            in
+            case ElmSyntax.Concrete.Parser.FromString.parseExpression input of
+                Ok (Expression.CaseExpression caseBlock) ->
+                    Expect.equal expectedKinds
+                        (List.concatMap (.pattern >> Node.value >> patternKinds) caseBlock.cases)
+
+                Ok actual ->
+                    Expect.fail ("Expected a case expression, but got: " ++ Debug.toString actual)
+
+                Err err ->
+                    Expect.fail ("Expected Ok, but got Err: " ++ err)
     , Test.test "let destructuring contains a nested application body" <|
         \_ ->
             case
@@ -774,6 +1080,98 @@ letDeclarationExpressionKinds (Node _ declaration) =
 
         Expression.LetDestructuring _ _ expression ->
             nodeExpressionKinds expression
+
+
+patternKinds : Pattern.Pattern -> List String
+patternKinds pattern =
+    patternKind pattern
+        :: (case pattern of
+                Pattern.TuplePattern elements ->
+                    separatedPatternKinds elements
+
+                Pattern.UnConsPattern head _ tail ->
+                    nodePatternKinds head ++ nodePatternKinds tail
+
+                Pattern.ListPattern elements ->
+                    separatedPatternKinds elements
+
+                Pattern.NamedPattern _ arguments ->
+                    List.concatMap nodePatternKinds arguments
+
+                Pattern.AsPattern nested _ _ ->
+                    nodePatternKinds nested
+
+                Pattern.ParenthesizedPattern nested ->
+                    nodePatternKinds nested
+
+                _ ->
+                    []
+           )
+
+
+patternKind : Pattern.Pattern -> String
+patternKind pattern =
+    case pattern of
+        Pattern.AllPattern ->
+            "AllPattern"
+
+        Pattern.VarPattern _ ->
+            "VarPattern"
+
+        Pattern.UnitPattern ->
+            "UnitPattern"
+
+        Pattern.CharPattern _ ->
+            "CharPattern"
+
+        Pattern.StringPattern _ ->
+            "StringPattern"
+
+        Pattern.IntPattern _ ->
+            "IntPattern"
+
+        Pattern.HexPattern _ ->
+            "HexPattern"
+
+        Pattern.FloatPattern _ ->
+            "FloatPattern"
+
+        Pattern.TuplePattern _ ->
+            "TuplePattern"
+
+        Pattern.RecordPattern _ ->
+            "RecordPattern"
+
+        Pattern.UnConsPattern _ _ _ ->
+            "UnConsPattern"
+
+        Pattern.ListPattern _ ->
+            "ListPattern"
+
+        Pattern.NamedPattern _ _ ->
+            "NamedPattern"
+
+        Pattern.AsPattern _ _ _ ->
+            "AsPattern"
+
+        Pattern.ParenthesizedPattern _ ->
+            "ParenthesizedPattern"
+
+
+nodePatternKinds : Node Pattern.Pattern -> List String
+nodePatternKinds (Node _ pattern) =
+    patternKinds pattern
+
+
+separatedPatternKinds : SeparatedSyntaxList.SeparatedSyntaxList (Node Pattern.Pattern) -> List String
+separatedPatternKinds separated =
+    case separated of
+        SeparatedSyntaxList.Empty ->
+            []
+
+        SeparatedSyntaxList.NonEmpty first rest ->
+            nodePatternKinds first
+                ++ List.concatMap (Tuple.second >> nodePatternKinds) rest
 
 
 location : Int -> Int -> { row : Int, column : Int }

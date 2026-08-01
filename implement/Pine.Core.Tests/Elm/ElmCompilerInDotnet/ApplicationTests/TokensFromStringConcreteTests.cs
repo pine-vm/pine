@@ -108,6 +108,43 @@ public class TokensFromStringConcreteTests
         return ElmValue.RenderAsElmExpression(value).expressionString;
     }
 
+    private static string ParseFileAndRender(string input)
+    {
+        var function =
+            GetModuleFunction("ElmSyntax.Concrete.Parser.FromString", "parseFile");
+
+        var (value, _) =
+            CoreLibraryModule.CoreLibraryTestHelper.ApplyAndProfileUnary(
+                function,
+                ElmString(input),
+                s_vm);
+
+        return ElmValue.RenderAsElmExpression(value).expressionString;
+    }
+
+    [Fact]
+    public void Parse_file_with_import_comment_and_multiple_declarations()
+    {
+        var source =
+            """
+            module Main exposing (..)
+
+            -- file comment
+            import Html as H exposing (Html)
+
+            first = 1
+
+            second = first
+            """;
+
+        var rendered = ParseFileAndRender(source);
+
+        rendered.Should().Be(
+            """
+            Ok { comments = [ Node { end = { column = 16, row = 3 }, start = { column = 1, row = 3 } } "-- file comment" ], declarations = [ Node { end = { column = 10, row = 6 }, start = { column = 1, row = 6 } } (FunctionDeclaration (Node { end = { column = 10, row = 6 }, start = { column = 1, row = 6 } } { declaration = Node { end = { column = 10, row = 6 }, start = { column = 1, row = 6 } } { arguments = [], equalsTokenLocation = { column = 7, row = 6 }, expression = Node { end = { column = 10, row = 6 }, start = { column = 9, row = 6 } } (IntegerLiteral "1"), name = Node { end = { column = 6, row = 6 }, start = { column = 1, row = 6 } } "first" }, documentation = Nothing, signature = Nothing })), Node { end = { column = 15, row = 8 }, start = { column = 1, row = 8 } } (FunctionDeclaration (Node { end = { column = 15, row = 8 }, start = { column = 1, row = 8 } } { declaration = Node { end = { column = 15, row = 8 }, start = { column = 1, row = 8 } } { arguments = [], equalsTokenLocation = { column = 8, row = 8 }, expression = Node { end = { column = 15, row = 8 }, start = { column = 10, row = 8 } } (Identifier [] "first"), name = Node { end = { column = 7, row = 8 }, start = { column = 1, row = 8 } } "second" }, documentation = Nothing, signature = Nothing })) ], imports = [ Node { end = { column = 33, row = 4 }, start = { column = 1, row = 4 } } { exposingList = Just ({ column = 18, row = 4 }, Node { end = { column = 33, row = 4 }, start = { column = 18, row = 4 } } (Explicit { column = 27, row = 4 } (NonEmpty (Node { end = { column = 32, row = 4 }, start = { column = 28, row = 4 } } (TypeOrAliasExpose "Html")) []) { column = 32, row = 4 })), importTokenLocation = { column = 1, row = 4 }, moduleAlias = Just ({ column = 13, row = 4 }, Node { end = { column = 17, row = 4 }, start = { column = 16, row = 4 } } [ "H" ]), moduleName = Node { end = { column = 12, row = 4 }, start = { column = 8, row = 4 } } [ "Html" ] } ], incompleteDeclarations = [], moduleDefinition = Node { end = { column = 26, row = 1 }, start = { column = 1, row = 1 } } (NormalModule { exposingList = Node { end = { column = 26, row = 1 }, start = { column = 13, row = 1 } } (All { end = { column = 25, row = 1 }, start = { column = 23, row = 1 } }), moduleName = Node { end = { column = 12, row = 1 }, start = { column = 8, row = 1 } } [ "Main" ] }) }
+            """.Trim());
+    }
+
     [Theory]
     [InlineData(
         "LF only",
@@ -221,7 +258,10 @@ public class TokensFromStringConcreteTests
     [InlineData("float", "3.14", "FloatLiteral")]
     [InlineData("string", "\"hello\"", "StringLiteral")]
     [InlineData("operator application", "1 + 2 * 3", "OperatorApplication")]
-    public void FromString_still_parses_expressions_after_refactor(string description, string input, string expectedTagName)
+    public void FromString_still_parses_expressions_after_refactor(
+        string description,
+        string input,
+        string expectedTagName)
     {
         _ = description;
 
