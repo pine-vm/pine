@@ -118,16 +118,16 @@ hexStringBytesToInt offset sum srcBytes =
     let
         nextChar : Char
         nextChar =
-            Pine_kernel.take [ 4, Pine_kernel.skip [ offset, srcBytes ] ]
+            Pine_builtin.take [ 4, Pine_builtin.skip [ offset, srcBytes ] ]
     in
-    if Pine_kernel.equal [ Pine_kernel.length nextChar, 0 ] then
+    if Pine_builtin.equal [ Pine_builtin.length nextChar, 0 ] then
         sum
 
     else
         hexStringBytesToInt
-            (Pine_kernel.int_add [ offset, 4 ])
-            (Pine_kernel.int_add
-                [ Pine_kernel.int_mul [ 16, sum ]
+            (Pine_builtin.int_add [ offset, 4 ])
+            (Pine_builtin.int_add
+                [ Pine_builtin.int_mul [ 16, sum ]
                 , charToHex nextChar
                 ]
             )

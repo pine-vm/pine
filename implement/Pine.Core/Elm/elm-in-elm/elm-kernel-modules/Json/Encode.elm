@@ -54,39 +54,39 @@ object =
 
 encode : Int -> Value -> String
 encode indent value =
-    String (Pine_kernel.concat (encodeUtf32ChunksWithoutIndent value))
+    String (Pine_builtin.concat (encodeUtf32ChunksWithoutIndent value))
 
 
 encodeUtf32ChunksWithoutIndent : Value -> List Int
 encodeUtf32ChunksWithoutIndent value =
     case value of
         NullValue ->
-            [ Pine_kernel.concat [ 'n', 'u', 'l', 'l' ] ]
+            [ Pine_builtin.concat [ 'n', 'u', 'l', 'l' ] ]
 
         BoolValue True ->
-            [ Pine_kernel.concat [ 't', 'r', 'u', 'e' ] ]
+            [ Pine_builtin.concat [ 't', 'r', 'u', 'e' ] ]
 
         BoolValue False ->
-            [ Pine_kernel.concat [ 'f', 'a', 'l', 's', 'e' ] ]
+            [ Pine_builtin.concat [ 'f', 'a', 'l', 's', 'e' ] ]
 
         IntValue intVal ->
             String.toList (String.fromInt intVal)
 
         StringValue (String stringBytes) ->
             [ '"'
-            , Pine_kernel.concat (encodeStringUtf32ChunksFromBytes 0 [] stringBytes)
+            , Pine_builtin.concat (encodeStringUtf32ChunksFromBytes 0 [] stringBytes)
             , '"'
             ]
 
         ArrayValue values ->
             [ '['
-            , Pine_kernel.concat (encodeArrayItemsUtf32ChunksWithoutIndent 0 [] values)
+            , Pine_builtin.concat (encodeArrayItemsUtf32ChunksWithoutIndent 0 [] values)
             , ']'
             ]
 
         ObjectValue fields ->
             [ '{'
-            , Pine_kernel.concat (encodeFieldsUtf32ChunksWithoutIndent 0 [] fields)
+            , Pine_builtin.concat (encodeFieldsUtf32ChunksWithoutIndent 0 [] fields)
             , '}'
             ]
 
@@ -96,21 +96,21 @@ encodeUtf32ChunksWithoutIndent value =
 
 encodeArrayItemsUtf32ChunksWithoutIndent : Int -> List Value -> List Int -> List Int
 encodeArrayItemsUtf32ChunksWithoutIndent itemIndex encodedChunks items =
-    if Pine_kernel.equal [ Pine_kernel.length items, itemIndex ] then
+    if Pine_builtin.equal [ Pine_builtin.length items, itemIndex ] then
         encodedChunks
 
     else
         let
             nextItem =
-                Pine_kernel.head
-                    (Pine_kernel.take [ 1, Pine_kernel.skip [ itemIndex, items ] ])
+                Pine_builtin.head
+                    (Pine_builtin.take [ 1, Pine_builtin.skip [ itemIndex, items ] ])
         in
         encodeArrayItemsUtf32ChunksWithoutIndent
-            (Pine_kernel.int_add [ itemIndex, 1 ])
-            (Pine_kernel.concat
+            (Pine_builtin.int_add [ itemIndex, 1 ])
+            (Pine_builtin.concat
                 [ encodedChunks
                 , encodeUtf32ChunksWithoutIndent nextItem
-                , if Pine_kernel.equal [ Pine_kernel.length items, Pine_kernel.int_add [ itemIndex, 1 ] ] then
+                , if Pine_builtin.equal [ Pine_builtin.length items, Pine_builtin.int_add [ itemIndex, 1 ] ] then
                     []
 
                   else
@@ -122,21 +122,21 @@ encodeArrayItemsUtf32ChunksWithoutIndent itemIndex encodedChunks items =
 
 encodeFieldsUtf32ChunksWithoutIndent : Int -> List Int -> List ( String, Value ) -> List Int
 encodeFieldsUtf32ChunksWithoutIndent fieldIndex encodedChunks fields =
-    if Pine_kernel.equal [ Pine_kernel.length fields, fieldIndex ] then
+    if Pine_builtin.equal [ Pine_builtin.length fields, fieldIndex ] then
         encodedChunks
 
     else
         let
             nextField =
-                Pine_kernel.head
-                    (Pine_kernel.take [ 1, Pine_kernel.skip [ fieldIndex, fields ] ])
+                Pine_builtin.head
+                    (Pine_builtin.take [ 1, Pine_builtin.skip [ fieldIndex, fields ] ])
         in
         encodeFieldsUtf32ChunksWithoutIndent
-            (Pine_kernel.int_add [ fieldIndex, 1 ])
-            (Pine_kernel.concat
+            (Pine_builtin.int_add [ fieldIndex, 1 ])
+            (Pine_builtin.concat
                 [ encodedChunks
                 , encodeFieldUtf32ChunksWithoutIndent nextField
-                , if Pine_kernel.equal [ Pine_kernel.length fields, Pine_kernel.int_add [ fieldIndex, 1 ] ] then
+                , if Pine_builtin.equal [ Pine_builtin.length fields, Pine_builtin.int_add [ fieldIndex, 1 ] ] then
                     []
 
                   else
@@ -149,9 +149,9 @@ encodeFieldsUtf32ChunksWithoutIndent fieldIndex encodedChunks fields =
 encodeFieldUtf32ChunksWithoutIndent : ( String, Value ) -> List Int
 encodeFieldUtf32ChunksWithoutIndent ( String keyBytes, value ) =
     [ '"'
-    , Pine_kernel.concat (encodeStringUtf32ChunksFromBytes 0 [] keyBytes)
-    , Pine_kernel.concat [ '"', ':' ]
-    , Pine_kernel.concat (encodeUtf32ChunksWithoutIndent value)
+    , Pine_builtin.concat (encodeStringUtf32ChunksFromBytes 0 [] keyBytes)
+    , Pine_builtin.concat [ '"', ':' ]
+    , Pine_builtin.concat (encodeUtf32ChunksWithoutIndent value)
     ]
 
 
@@ -164,67 +164,67 @@ encodeStringUtf32ChunksFromBytes offset encodedChunks sourceBytes =
 
         simpleLen : Int
         simpleLen =
-            Pine_kernel.int_add [ simpleEnd, Pine_kernel.int_mul [ offset, -1 ] ]
+            Pine_builtin.int_add [ simpleEnd, Pine_builtin.int_mul [ offset, -1 ] ]
 
         simpleSlice =
-            Pine_kernel.take [ simpleLen, Pine_kernel.skip [ offset, sourceBytes ] ]
+            Pine_builtin.take [ simpleLen, Pine_builtin.skip [ offset, sourceBytes ] ]
 
         chunksWithSimple : List Int
         chunksWithSimple =
-            if Pine_kernel.equal [ simpleLen, 0 ] then
+            if Pine_builtin.equal [ simpleLen, 0 ] then
                 encodedChunks
 
             else
-                Pine_kernel.concat [ encodedChunks, [ simpleSlice ] ]
+                Pine_builtin.concat [ encodedChunks, [ simpleSlice ] ]
 
         nextChar =
-            Pine_kernel.take [ 4, Pine_kernel.skip [ simpleEnd, sourceBytes ] ]
+            Pine_builtin.take [ 4, Pine_builtin.skip [ simpleEnd, sourceBytes ] ]
     in
-    if Pine_kernel.equal [ Pine_kernel.length nextChar, 0 ] then
+    if Pine_builtin.equal [ Pine_builtin.length nextChar, 0 ] then
         chunksWithSimple
 
     else
         case nextChar of
             '\u{0008}' ->
                 encodeStringUtf32ChunksFromBytes
-                    (Pine_kernel.int_add [ simpleEnd, 4 ])
-                    (Pine_kernel.concat [ chunksWithSimple, [ '\\', 'b' ] ])
+                    (Pine_builtin.int_add [ simpleEnd, 4 ])
+                    (Pine_builtin.concat [ chunksWithSimple, [ '\\', 'b' ] ])
                     sourceBytes
 
             '\t' ->
                 encodeStringUtf32ChunksFromBytes
-                    (Pine_kernel.int_add [ simpleEnd, 4 ])
-                    (Pine_kernel.concat [ chunksWithSimple, [ '\\', 't' ] ])
+                    (Pine_builtin.int_add [ simpleEnd, 4 ])
+                    (Pine_builtin.concat [ chunksWithSimple, [ '\\', 't' ] ])
                     sourceBytes
 
             '\n' ->
                 encodeStringUtf32ChunksFromBytes
-                    (Pine_kernel.int_add [ simpleEnd, 4 ])
-                    (Pine_kernel.concat [ chunksWithSimple, [ '\\', 'n' ] ])
+                    (Pine_builtin.int_add [ simpleEnd, 4 ])
+                    (Pine_builtin.concat [ chunksWithSimple, [ '\\', 'n' ] ])
                     sourceBytes
 
             '\u{000C}' ->
                 encodeStringUtf32ChunksFromBytes
-                    (Pine_kernel.int_add [ simpleEnd, 4 ])
-                    (Pine_kernel.concat [ chunksWithSimple, [ '\\', 'f' ] ])
+                    (Pine_builtin.int_add [ simpleEnd, 4 ])
+                    (Pine_builtin.concat [ chunksWithSimple, [ '\\', 'f' ] ])
                     sourceBytes
 
             '\u{000D}' ->
                 encodeStringUtf32ChunksFromBytes
-                    (Pine_kernel.int_add [ simpleEnd, 4 ])
-                    (Pine_kernel.concat [ chunksWithSimple, [ '\\', 'r' ] ])
+                    (Pine_builtin.int_add [ simpleEnd, 4 ])
+                    (Pine_builtin.concat [ chunksWithSimple, [ '\\', 'r' ] ])
                     sourceBytes
 
             '"' ->
                 encodeStringUtf32ChunksFromBytes
-                    (Pine_kernel.int_add [ simpleEnd, 4 ])
-                    (Pine_kernel.concat [ chunksWithSimple, [ '\\', '"' ] ])
+                    (Pine_builtin.int_add [ simpleEnd, 4 ])
+                    (Pine_builtin.concat [ chunksWithSimple, [ '\\', '"' ] ])
                     sourceBytes
 
             '\\' ->
                 encodeStringUtf32ChunksFromBytes
-                    (Pine_kernel.int_add [ simpleEnd, 4 ])
-                    (Pine_kernel.concat [ chunksWithSimple, [ '\\', '\\' ] ])
+                    (Pine_builtin.int_add [ simpleEnd, 4 ])
+                    (Pine_builtin.concat [ chunksWithSimple, [ '\\', '\\' ] ])
                     sourceBytes
 
             _ ->
@@ -235,8 +235,8 @@ encodeStringUtf32ChunksFromBytes offset encodedChunks sourceBytes =
 
                     unicodeEscape : List Int
                     unicodeEscape =
-                        if Pine_kernel.int_is_sorted_asc [ 0, code, 0xFFFF ] then
-                            Pine_kernel.concat
+                        if Pine_builtin.int_is_sorted_asc [ 0, code, 0xFFFF ] then
+                            Pine_builtin.concat
                                 [ [ '\\', 'u' ]
                                 , hex4 code
                                 ]
@@ -244,21 +244,21 @@ encodeStringUtf32ChunksFromBytes offset encodedChunks sourceBytes =
                         else
                             let
                                 codePrime =
-                                    Pine_kernel.int_add [ code, -0x00010000 ]
+                                    Pine_builtin.int_add [ code, -0x00010000 ]
 
                                 hi10 =
-                                    Pine_kernel.bit_shift_right [ 10, codePrime ]
+                                    Pine_builtin.bit_shift_right [ 10, codePrime ]
 
                                 lo10 =
-                                    Pine_kernel.bit_and [ 0x03FF, codePrime ]
+                                    Pine_builtin.bit_and [ 0x03FF, codePrime ]
 
                                 hiUnit =
-                                    Pine_kernel.int_add [ 0xD800, hi10 ]
+                                    Pine_builtin.int_add [ 0xD800, hi10 ]
 
                                 loUnit =
-                                    Pine_kernel.int_add [ 0xDC00, lo10 ]
+                                    Pine_builtin.int_add [ 0xDC00, lo10 ]
                             in
-                            Pine_kernel.concat
+                            Pine_builtin.concat
                                 [ [ '\\', 'u' ]
                                 , hex4 hiUnit
                                 , [ '\\', 'u' ]
@@ -266,8 +266,8 @@ encodeStringUtf32ChunksFromBytes offset encodedChunks sourceBytes =
                                 ]
                 in
                 encodeStringUtf32ChunksFromBytes
-                    (Pine_kernel.int_add [ simpleEnd, 4 ])
-                    (Pine_kernel.concat [ chunksWithSimple, unicodeEscape ])
+                    (Pine_builtin.int_add [ simpleEnd, 4 ])
+                    (Pine_builtin.concat [ chunksWithSimple, unicodeEscape ])
                     sourceBytes
 
 
@@ -280,12 +280,12 @@ advanceUtf32OffsetForSimpleChars : Int -> Int -> Int
 advanceUtf32OffsetForSimpleChars sourceBytes offset =
     let
         nextChar =
-            Pine_kernel.take
+            Pine_builtin.take
                 [ 4
-                , Pine_kernel.skip [ offset, sourceBytes ]
+                , Pine_builtin.skip [ offset, sourceBytes ]
                 ]
     in
-    if Pine_kernel.equal [ Pine_kernel.length nextChar, 0 ] then
+    if Pine_builtin.equal [ Pine_builtin.length nextChar, 0 ] then
         offset
 
     else
@@ -298,17 +298,17 @@ advanceUtf32OffsetForSimpleChars sourceBytes offset =
 
             _ ->
                 if
-                    Pine_kernel.int_is_sorted_asc
+                    Pine_builtin.int_is_sorted_asc
                         [ 0x20
 
                         -- Prepend sign byte to nextChar to compare as Int
-                        , Pine_kernel.concat [ Pine_kernel.take [ 1, 0 ], nextChar ]
+                        , Pine_builtin.concat [ Pine_builtin.take [ 1, 0 ], nextChar ]
                         , 0x0010FFFF
                         ]
                 then
                     advanceUtf32OffsetForSimpleChars
                         sourceBytes
-                        (Pine_kernel.int_add [ offset, 4 ])
+                        (Pine_builtin.int_add [ offset, 4 ])
 
                 else
                     offset
@@ -323,29 +323,29 @@ hex4 : Int -> List Int
 hex4 n =
     let
         uintBytes =
-            Pine_kernel.skip [ 1, n ]
+            Pine_builtin.skip [ 1, n ]
 
         n3 =
-            Pine_kernel.bit_and
-                [ Pine_kernel.skip [ 1, 15 ]
-                , Pine_kernel.bit_shift_right [ 12, uintBytes ]
+            Pine_builtin.bit_and
+                [ Pine_builtin.skip [ 1, 15 ]
+                , Pine_builtin.bit_shift_right [ 12, uintBytes ]
                 ]
 
         n2 =
-            Pine_kernel.bit_and
-                [ Pine_kernel.skip [ 1, 15 ]
-                , Pine_kernel.bit_shift_right [ 8, uintBytes ]
+            Pine_builtin.bit_and
+                [ Pine_builtin.skip [ 1, 15 ]
+                , Pine_builtin.bit_shift_right [ 8, uintBytes ]
                 ]
 
         n1 =
-            Pine_kernel.bit_and
-                [ Pine_kernel.skip [ 1, 15 ]
-                , Pine_kernel.bit_shift_right [ 4, uintBytes ]
+            Pine_builtin.bit_and
+                [ Pine_builtin.skip [ 1, 15 ]
+                , Pine_builtin.bit_shift_right [ 4, uintBytes ]
                 ]
 
         n0 =
-            Pine_kernel.bit_and
-                [ Pine_kernel.skip [ 1, 15 ]
+            Pine_builtin.bit_and
+                [ Pine_builtin.skip [ 1, 15 ]
                 , uintBytes
                 ]
     in
@@ -359,129 +359,129 @@ hex4 n =
 hexDigitCharFromNibble : Int -> Int
 hexDigitCharFromNibble nibble =
     if
-        Pine_kernel.equal
+        Pine_builtin.equal
             [ nibble
-            , Pine_kernel.skip [ 1, 0 ]
+            , Pine_builtin.skip [ 1, 0 ]
             ]
     then
         '0'
 
     else if
-        Pine_kernel.equal
+        Pine_builtin.equal
             [ nibble
-            , Pine_kernel.skip [ 1, 1 ]
+            , Pine_builtin.skip [ 1, 1 ]
             ]
     then
         '1'
 
     else if
-        Pine_kernel.equal
+        Pine_builtin.equal
             [ nibble
-            , Pine_kernel.skip [ 1, 2 ]
+            , Pine_builtin.skip [ 1, 2 ]
             ]
     then
         '2'
 
     else if
-        Pine_kernel.equal
+        Pine_builtin.equal
             [ nibble
-            , Pine_kernel.skip [ 1, 3 ]
+            , Pine_builtin.skip [ 1, 3 ]
             ]
     then
         '3'
 
     else if
-        Pine_kernel.equal
+        Pine_builtin.equal
             [ nibble
-            , Pine_kernel.skip [ 1, 4 ]
+            , Pine_builtin.skip [ 1, 4 ]
             ]
     then
         '4'
 
     else if
-        Pine_kernel.equal
+        Pine_builtin.equal
             [ nibble
-            , Pine_kernel.skip [ 1, 5 ]
+            , Pine_builtin.skip [ 1, 5 ]
             ]
     then
         '5'
 
     else if
-        Pine_kernel.equal
+        Pine_builtin.equal
             [ nibble
-            , Pine_kernel.skip [ 1, 6 ]
+            , Pine_builtin.skip [ 1, 6 ]
             ]
     then
         '6'
 
     else if
-        Pine_kernel.equal
+        Pine_builtin.equal
             [ nibble
-            , Pine_kernel.skip [ 1, 7 ]
+            , Pine_builtin.skip [ 1, 7 ]
             ]
     then
         '7'
 
     else if
-        Pine_kernel.equal
+        Pine_builtin.equal
             [ nibble
-            , Pine_kernel.skip [ 1, 8 ]
+            , Pine_builtin.skip [ 1, 8 ]
             ]
     then
         '8'
 
     else if
-        Pine_kernel.equal
+        Pine_builtin.equal
             [ nibble
-            , Pine_kernel.skip [ 1, 9 ]
+            , Pine_builtin.skip [ 1, 9 ]
             ]
     then
         '9'
 
     else if
-        Pine_kernel.equal
+        Pine_builtin.equal
             [ nibble
-            , Pine_kernel.skip [ 1, 10 ]
+            , Pine_builtin.skip [ 1, 10 ]
             ]
     then
         'A'
 
     else if
-        Pine_kernel.equal
+        Pine_builtin.equal
             [ nibble
-            , Pine_kernel.skip [ 1, 11 ]
+            , Pine_builtin.skip [ 1, 11 ]
             ]
     then
         'B'
 
     else if
-        Pine_kernel.equal
+        Pine_builtin.equal
             [ nibble
-            , Pine_kernel.skip [ 1, 12 ]
+            , Pine_builtin.skip [ 1, 12 ]
             ]
     then
         'C'
 
     else if
-        Pine_kernel.equal
+        Pine_builtin.equal
             [ nibble
-            , Pine_kernel.skip [ 1, 13 ]
+            , Pine_builtin.skip [ 1, 13 ]
             ]
     then
         'D'
 
     else if
-        Pine_kernel.equal
+        Pine_builtin.equal
             [ nibble
-            , Pine_kernel.skip [ 1, 14 ]
+            , Pine_builtin.skip [ 1, 14 ]
             ]
     then
         'E'
 
     else if
-        Pine_kernel.equal
+        Pine_builtin.equal
             [ nibble
-            , Pine_kernel.skip [ 1, 15 ]
+            , Pine_builtin.skip [ 1, 15 ]
             ]
     then
         'F'

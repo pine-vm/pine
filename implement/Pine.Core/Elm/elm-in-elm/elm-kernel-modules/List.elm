@@ -54,7 +54,7 @@ repeat n value =
 
 repeatHelp : List a -> Int -> a -> List a
 repeatHelp result n value =
-    if Pine_kernel.int_is_sorted_asc [ n, 0 ] then
+    if Pine_builtin.int_is_sorted_asc [ n, 0 ] then
         result
 
     else
@@ -68,7 +68,7 @@ range lo hi =
 
 rangeHelp : Int -> Int -> List Int -> List Int
 rangeHelp lo hi list =
-    if Pine_kernel.int_is_sorted_asc [ lo, hi ] then
+    if Pine_builtin.int_is_sorted_asc [ lo, hi ] then
         rangeHelp lo (hi - 1) (cons hi list)
 
     else
@@ -77,7 +77,7 @@ rangeHelp lo hi list =
 
 cons : a -> List a -> List a
 cons element list =
-    Pine_kernel.concat [ [ element ], list ]
+    Pine_builtin.concat [ [ element ], list ]
 
 
 map : (a -> b) -> List a -> List b
@@ -89,10 +89,10 @@ mapHelp : (a -> b) -> List a -> List b -> List b
 mapHelp f remaining acc =
     case remaining of
         x :: xs ->
-            mapHelp f xs (Pine_kernel.concat [ [ f x ], acc ])
+            mapHelp f xs (Pine_builtin.concat [ [ f x ], acc ])
 
         _ ->
-            Pine_kernel.reverse acc
+            Pine_builtin.reverse acc
 
 
 indexedMap : (Int -> a -> b) -> List a -> List b
@@ -108,10 +108,10 @@ indexedMapHelp f index xs acc =
                 f
                 (index + 1)
                 following
-                (Pine_kernel.concat [ [ f index x ], acc ])
+                (Pine_builtin.concat [ [ f index x ], acc ])
 
         _ ->
-            Pine_kernel.reverse acc
+            Pine_builtin.reverse acc
 
 
 foldl : (a -> b -> b) -> b -> List a -> b
@@ -128,7 +128,7 @@ foldr : (a -> b -> b) -> b -> List a -> b
 foldr func acc list =
     foldl func
         acc
-        (Pine_kernel.reverse list)
+        (Pine_builtin.reverse list)
 
 
 filter : (a -> Bool) -> List a -> List a
@@ -140,11 +140,11 @@ filterHelp : (a -> Bool) -> List a -> List a -> List a
 filterHelp isGood list acc =
     case list of
         [] ->
-            Pine_kernel.reverse acc
+            Pine_builtin.reverse acc
 
         x :: xs ->
             if isGood x then
-                filterHelp isGood xs (Pine_kernel.concat [ [ x ], acc ])
+                filterHelp isGood xs (Pine_builtin.concat [ [ x ], acc ])
 
             else
                 filterHelp isGood xs acc
@@ -159,12 +159,12 @@ filterMapHelp : (a -> Maybe b) -> List a -> List b -> List b
 filterMapHelp f xs acc =
     case xs of
         [] ->
-            Pine_kernel.reverse acc
+            Pine_builtin.reverse acc
 
         x :: remaining ->
             case f x of
                 Just value ->
-                    filterMapHelp f remaining (Pine_kernel.concat [ [ value ], acc ])
+                    filterMapHelp f remaining (Pine_builtin.concat [ [ value ], acc ])
 
                 Nothing ->
                     filterMapHelp f remaining acc
@@ -182,12 +182,12 @@ maybeCons f mx xs =
 
 length : List a -> Int
 length list =
-    Pine_kernel.length list
+    Pine_builtin.length list
 
 
 reverse : List a -> List a
 reverse list =
-    Pine_kernel.reverse list
+    Pine_builtin.reverse list
 
 
 member : a -> List a -> Bool
@@ -264,19 +264,19 @@ product numbers =
 
 append : List a -> List a -> List a
 append xs ys =
-    Pine_kernel.concat [ xs, ys ]
+    Pine_builtin.concat [ xs, ys ]
 
 
 concat : List (List a) -> List a
 concat lists =
-    Pine_kernel.concat lists
+    Pine_builtin.concat lists
 
 
 concatMap : (a -> List b) -> List a -> List b
 concatMap f list =
     case list of
         x :: xs ->
-            Pine_kernel.concat [ f x, concatMap f xs ]
+            Pine_builtin.concat [ f x, concatMap f xs ]
 
         _ ->
             []
@@ -285,7 +285,7 @@ concatMap f list =
 intersperse : a -> List a -> List a
 intersperse sep xs =
     intersperseHelp
-        (Pine_kernel.take [ 1, xs ])
+        (Pine_builtin.take [ 1, xs ])
         1
         sep
         xs
@@ -293,10 +293,10 @@ intersperse sep xs =
 
 intersperseHelp : List a -> Int -> a -> List a -> List a
 intersperseHelp acc offset sep xs =
-    case Pine_kernel.take [ 1, Pine_kernel.skip [ offset, xs ] ] of
+    case Pine_builtin.take [ 1, Pine_builtin.skip [ offset, xs ] ] of
         [ x ] ->
             intersperseHelp
-                (Pine_kernel.concat [ acc, [ sep, x ] ])
+                (Pine_builtin.concat [ acc, [ sep, x ] ])
                 (offset + 1)
                 sep
                 xs
@@ -362,7 +362,7 @@ map5 mapItems listA listB listC listD listE =
 
 isEmpty : List a -> Bool
 isEmpty xs =
-    if Pine_kernel.equal [ Pine_kernel.length xs, 0 ] then
+    if Pine_builtin.equal [ Pine_builtin.length xs, 0 ] then
         True
 
     else
@@ -391,12 +391,12 @@ tail list =
 
 take : Int -> List a -> List a
 take n list =
-    Pine_kernel.take [ n, list ]
+    Pine_builtin.take [ n, list ]
 
 
 drop : Int -> List a -> List a
 drop n list =
-    Pine_kernel.skip [ n, list ]
+    Pine_builtin.skip [ n, list ]
 
 
 partition : (a -> Bool) -> List a -> ( List a, List a )
@@ -459,10 +459,10 @@ sortWithSplit : List a -> ( List a, List a )
 sortWithSplit list =
     let
         middleIndex =
-            Pine_kernel.length list // 2
+            Pine_builtin.length list // 2
     in
-    ( Pine_kernel.take [ middleIndex, list ]
-    , Pine_kernel.skip [ middleIndex, list ]
+    ( Pine_builtin.take [ middleIndex, list ]
+    , Pine_builtin.skip [ middleIndex, list ]
     )
 
 
@@ -478,7 +478,7 @@ sortWithMerge left right compareFunc =
         ( x :: xs, y :: ys ) ->
             case compareFunc x y of
                 GT ->
-                    Pine_kernel.concat [ [ y ], sortWithMerge left ys compareFunc ]
+                    Pine_builtin.concat [ [ y ], sortWithMerge left ys compareFunc ]
 
                 _ ->
-                    Pine_kernel.concat [ [ x ], sortWithMerge xs right compareFunc ]
+                    Pine_builtin.concat [ [ x ], sortWithMerge xs right compareFunc ]

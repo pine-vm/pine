@@ -110,12 +110,12 @@ public class CharBuiltinTests
         // The builtin resolves the call directly: exactly one Char.isAlphaNum application and
         // no nested Pine_kernel.int_is_sorted_asc range checks.
         withBuiltin.Count(name => name is "Char.isAlphaNum").Should().Be(1);
-        withBuiltin.Should().NotContain("Pine_kernel.int_is_sorted_asc");
+        withBuiltin.Should().NotContain("Pine_builtin.int_is_sorted_asc");
 
         var withoutBuiltin = LogDirectApplications("Char.isAlphaNum 'a'", enableDefaultBuiltins: false);
 
         // The Elm implementation re-enters the interpreter for its range checks.
-        withoutBuiltin.Should().Contain("Pine_kernel.int_is_sorted_asc");
+        withoutBuiltin.Should().Contain("Pine_builtin.int_is_sorted_asc");
     }
 
     private static IReadOnlyList<string> LogDirectApplications(string expression, bool enableDefaultBuiltins)

@@ -126,21 +126,21 @@ type Set t
 
 eq : a -> a -> Bool
 eq a b =
-    if Pine_kernel.equal [ a, b ] then
+    if Pine_builtin.equal [ a, b ] then
         True
 
     else
         case ( a, b ) of
             ( Elm_Float numA denomA, intB ) ->
-                if Pine_kernel.equal [ numA, intB ] then
-                    Pine_kernel.equal [ denomA, 1 ]
+                if Pine_builtin.equal [ numA, intB ] then
+                    Pine_builtin.equal [ denomA, 1 ]
 
                 else
                     False
 
             ( intA, Elm_Float numB denomB ) ->
-                if Pine_kernel.equal [ intA, numB ] then
-                    Pine_kernel.equal [ denomB, 1 ]
+                if Pine_builtin.equal [ intA, numB ] then
+                    Pine_builtin.equal [ denomB, 1 ]
 
                 else
                     False
@@ -149,20 +149,20 @@ eq a b =
                 if isPineBlob a then
                     False
 
-                else if Pine_kernel.equal [ Pine_kernel.length a, Pine_kernel.length b ] then
+                else if Pine_builtin.equal [ Pine_builtin.length a, Pine_builtin.length b ] then
                     case a of
                         String _ ->
                             False
 
                         RBNode_elm_builtin _ _ _ _ _ ->
-                            Pine_kernel.equal [ dictToList a, dictToList b ]
+                            Pine_builtin.equal [ dictToList a, dictToList b ]
 
                         Set_elm_builtin dictA ->
                             let
                                 (Set_elm_builtin dictB) =
                                     b
                             in
-                            Pine_kernel.equal [ dictKeys dictA, dictKeys dictB ]
+                            Pine_builtin.equal [ dictKeys dictA, dictKeys dictB ]
 
                         _ ->
                             listsEqualRecursive a b
@@ -173,13 +173,13 @@ eq a b =
 
 listsEqualRecursive : List comparable -> List comparable -> Bool
 listsEqualRecursive listA listB =
-    if Pine_kernel.equal [ listA, [] ] then
+    if Pine_builtin.equal [ listA, [] ] then
         True
 
-    else if eq (Pine_kernel.head listA) (Pine_kernel.head listB) then
+    else if eq (Pine_builtin.head listA) (Pine_builtin.head listB) then
         listsEqualRecursive
-            (Pine_kernel.skip [ 1, listA ])
-            (Pine_kernel.skip [ 1, listB ])
+            (Pine_builtin.skip [ 1, listA ])
+            (Pine_builtin.skip [ 1, listB ])
 
     else
         False
@@ -192,7 +192,7 @@ dictToList dict =
             []
 
         RBNode_elm_builtin _ key value left right ->
-            Pine_kernel.concat [ dictToList left, [ ( key, value ) ], dictToList right ]
+            Pine_builtin.concat [ dictToList left, [ ( key, value ) ], dictToList right ]
 
 
 dictKeys : Dict k v -> List k
@@ -202,7 +202,7 @@ dictKeys dict =
             []
 
         RBNode_elm_builtin _ key value left right ->
-            Pine_kernel.concat [ dictKeys left, [ key ], dictKeys right ]
+            Pine_builtin.concat [ dictKeys left, [ key ], dictKeys right ]
 
 
 neq : a -> a -> Bool
@@ -212,14 +212,14 @@ neq a b =
 
 add : number -> number -> number
 add a b =
-    Pine_kernel.int_add [ a, b ]
+    Pine_builtin.int_add [ a, b ]
 
 
 sub : number -> number -> number
 sub a b =
-    Pine_kernel.int_add
+    Pine_builtin.int_add
         [ a
-        , Pine_kernel.int_mul [ -1, b ]
+        , Pine_builtin.int_mul [ -1, b ]
         ]
 
 
@@ -229,78 +229,78 @@ mul a b =
         ( Elm_Float numA denomA, Elm_Float numB denomB ) ->
             let
                 newNumerator =
-                    Pine_kernel.int_mul [ numA, numB ]
+                    Pine_builtin.int_mul [ numA, numB ]
 
                 newDenominator =
-                    Pine_kernel.int_mul [ denomA, denomB ]
+                    Pine_builtin.int_mul [ denomA, denomB ]
             in
             canonicalFloat ( newNumerator, newDenominator )
 
         ( Elm_Float numA denomA, intB ) ->
             let
                 newNumerator =
-                    Pine_kernel.int_mul [ numA, intB ]
+                    Pine_builtin.int_mul [ numA, intB ]
             in
             canonicalFloat ( newNumerator, denomA )
 
         ( intA, Elm_Float numB denomB ) ->
             let
                 newNumerator =
-                    Pine_kernel.int_mul [ intA, numB ]
+                    Pine_builtin.int_mul [ intA, numB ]
             in
             canonicalFloat ( newNumerator, denomB )
 
         _ ->
-            Pine_kernel.int_mul [ a, b ]
+            Pine_builtin.int_mul [ a, b ]
 
 
 idiv : Int -> Int -> Int
 idiv dividend divisor =
-    if Pine_kernel.equal [ divisor, 0 ] then
+    if Pine_builtin.equal [ divisor, 0 ] then
         0
 
     else
         let
             ( dividendNegative, absDividend ) =
-                if Pine_kernel.int_is_sorted_asc [ 0, dividend ] then
+                if Pine_builtin.int_is_sorted_asc [ 0, dividend ] then
                     ( False
                     , dividend
                     )
 
                 else
                     ( True
-                    , Pine_kernel.int_mul [ dividend, -1 ]
+                    , Pine_builtin.int_mul [ dividend, -1 ]
                     )
 
             ( divisorNegative, absDivisor ) =
-                if Pine_kernel.int_is_sorted_asc [ 0, divisor ] then
+                if Pine_builtin.int_is_sorted_asc [ 0, divisor ] then
                     ( False
                     , divisor
                     )
 
                 else
                     ( True
-                    , Pine_kernel.int_mul [ divisor, -1 ]
+                    , Pine_builtin.int_mul [ divisor, -1 ]
                     )
 
             absQuotient : Int
             absQuotient =
                 idivHelper absDividend absDivisor 0
         in
-        if Pine_kernel.equal [ dividendNegative, divisorNegative ] then
+        if Pine_builtin.equal [ dividendNegative, divisorNegative ] then
             absQuotient
 
         else
-            Pine_kernel.int_mul [ absQuotient, -1 ]
+            Pine_builtin.int_mul [ absQuotient, -1 ]
 
 
 idivHelper : Int -> Int -> Int -> Int
 idivHelper dividend divisor quotient =
     let
         scaledDivisor =
-            Pine_kernel.int_mul [ divisor, 16 ]
+            Pine_builtin.int_mul [ divisor, 16 ]
     in
-    if Pine_kernel.int_is_sorted_asc [ scaledDivisor, dividend ] then
+    if Pine_builtin.int_is_sorted_asc [ scaledDivisor, dividend ] then
         let
             scaledQuotient =
                 idivHelper
@@ -309,28 +309,28 @@ idivHelper dividend divisor quotient =
                     0
 
             scaledQuotientSum =
-                Pine_kernel.int_mul [ scaledQuotient, 16 ]
+                Pine_builtin.int_mul [ scaledQuotient, 16 ]
 
             remainder =
-                Pine_kernel.int_add
+                Pine_builtin.int_add
                     [ dividend
-                    , Pine_kernel.int_mul [ scaledQuotient, scaledDivisor, -1 ]
+                    , Pine_builtin.int_mul [ scaledQuotient, scaledDivisor, -1 ]
                     ]
 
             remainderQuotient =
                 idivHelper remainder divisor 0
         in
-        Pine_kernel.int_add [ scaledQuotientSum, remainderQuotient ]
+        Pine_builtin.int_add [ scaledQuotientSum, remainderQuotient ]
 
-    else if Pine_kernel.int_is_sorted_asc [ divisor, dividend ] then
+    else if Pine_builtin.int_is_sorted_asc [ divisor, dividend ] then
         idivHelper
-            (Pine_kernel.int_add
+            (Pine_builtin.int_add
                 [ dividend
-                , Pine_kernel.int_mul [ divisor, -1 ]
+                , Pine_builtin.int_mul [ divisor, -1 ]
                 ]
             )
             divisor
-            (Pine_kernel.int_add [ quotient, 1 ])
+            (Pine_builtin.int_add [ quotient, 1 ])
 
     else
         quotient
@@ -348,7 +348,7 @@ canonicalFloat ( numerator, denominator ) =
         simplifiedDenominator =
             idiv denominator gcdValue
     in
-    if Pine_kernel.equal [ simplifiedDenominator, 1 ] then
+    if Pine_builtin.equal [ simplifiedDenominator, 1 ] then
         simplifiedNumerator
 
     else
@@ -357,7 +357,7 @@ canonicalFloat ( numerator, denominator ) =
 
 gcd : Int -> Int -> Int
 gcd a b =
-    if Pine_kernel.equal [ b, 0 ] then
+    if Pine_builtin.equal [ b, 0 ] then
         a
 
     else
@@ -366,7 +366,7 @@ gcd a b =
 
 pow : Int -> Int -> Int
 pow base exponent =
-    if Pine_kernel.int_is_sorted_asc [ exponent, 0 ] then
+    if Pine_builtin.int_is_sorted_asc [ exponent, 0 ] then
         1
 
     else
@@ -375,11 +375,11 @@ pow base exponent =
 
 powHelper : Int -> Int -> Int -> Int
 powHelper base exponent accumulator =
-    if Pine_kernel.equal [ exponent, 0 ] then
+    if Pine_builtin.equal [ exponent, 0 ] then
         accumulator
 
     else
-        powHelper base (Pine_kernel.int_add [ exponent, -1 ]) (Pine_kernel.int_mul [ base, accumulator ])
+        powHelper base (Pine_builtin.int_add [ exponent, -1 ]) (Pine_builtin.int_mul [ base, accumulator ])
 
 
 and : Bool -> Bool -> Bool
@@ -404,38 +404,38 @@ append : appendable -> appendable -> appendable
 append a b =
     case ( a, b ) of
         ( String stringA, String stringB ) ->
-            String (Pine_kernel.concat [ stringA, stringB ])
+            String (Pine_builtin.concat [ stringA, stringB ])
 
         _ ->
-            Pine_kernel.concat [ a, b ]
+            Pine_builtin.concat [ a, b ]
 
 
 lt : comparable -> comparable -> Bool
 lt a b =
-    Pine_kernel.equal [ compare a b, LT ]
+    Pine_builtin.equal [ compare a b, LT ]
 
 
 gt : comparable -> comparable -> Bool
 gt a b =
-    Pine_kernel.equal [ compare a b, GT ]
+    Pine_builtin.equal [ compare a b, GT ]
 
 
 le : comparable -> comparable -> Bool
 le a b =
-    if Pine_kernel.equal [ a, b ] then
+    if Pine_builtin.equal [ a, b ] then
         True
 
     else
-        Pine_kernel.equal [ compare a b, LT ]
+        Pine_builtin.equal [ compare a b, LT ]
 
 
 ge : comparable -> comparable -> Bool
 ge a b =
-    if Pine_kernel.equal [ a, b ] then
+    if Pine_builtin.equal [ a, b ] then
         True
 
     else
-        Pine_kernel.equal [ compare a b, GT ]
+        Pine_builtin.equal [ compare a b, GT ]
 
 
 {-| Find the smaller of two comparables.
@@ -502,7 +502,7 @@ always a _ =
 
 not : Bool -> Bool
 not bool =
-    Pine_kernel.equal [ bool, False ]
+    Pine_builtin.equal [ bool, False ]
 
 
 {-| Compare any two comparable values. Comparable values include `String`,
@@ -518,7 +518,7 @@ are also the only values that work as `Dict` keys or `Set` members.
 -}
 compare : comparable -> comparable -> Order
 compare a b =
-    if Pine_kernel.equal [ a, b ] then
+    if Pine_builtin.equal [ a, b ] then
         EQ
 
     else
@@ -529,15 +529,15 @@ compare a b =
             ( Elm_Float numA denomA, Elm_Float numB denomB ) ->
                 let
                     leftProduct =
-                        Pine_kernel.int_mul [ numA, denomB ]
+                        Pine_builtin.int_mul [ numA, denomB ]
 
                     rightProduct =
-                        Pine_kernel.int_mul [ numB, denomA ]
+                        Pine_builtin.int_mul [ numB, denomA ]
                 in
-                if Pine_kernel.equal [ leftProduct, rightProduct ] then
+                if Pine_builtin.equal [ leftProduct, rightProduct ] then
                     EQ
 
-                else if Pine_kernel.int_is_sorted_asc [ leftProduct, rightProduct ] then
+                else if Pine_builtin.int_is_sorted_asc [ leftProduct, rightProduct ] then
                     LT
 
                 else
@@ -549,12 +549,12 @@ compare a b =
                         numA
 
                     rightProduct =
-                        Pine_kernel.int_mul [ denomA, intB ]
+                        Pine_builtin.int_mul [ denomA, intB ]
                 in
-                if Pine_kernel.equal [ leftProduct, rightProduct ] then
+                if Pine_builtin.equal [ leftProduct, rightProduct ] then
                     EQ
 
-                else if Pine_kernel.int_is_sorted_asc [ leftProduct, rightProduct ] then
+                else if Pine_builtin.int_is_sorted_asc [ leftProduct, rightProduct ] then
                     LT
 
                 else
@@ -563,15 +563,15 @@ compare a b =
             ( intA, Elm_Float numB denomB ) ->
                 let
                     leftProduct =
-                        Pine_kernel.int_mul [ intA, denomB ]
+                        Pine_builtin.int_mul [ intA, denomB ]
 
                     rightProduct =
                         numB
                 in
-                if Pine_kernel.equal [ leftProduct, rightProduct ] then
+                if Pine_builtin.equal [ leftProduct, rightProduct ] then
                     EQ
 
-                else if Pine_kernel.int_is_sorted_asc [ leftProduct, rightProduct ] then
+                else if Pine_builtin.int_is_sorted_asc [ leftProduct, rightProduct ] then
                     LT
 
                 else
@@ -581,7 +581,7 @@ compare a b =
                 if isPineList a then
                     compareList a b
 
-                else if Pine_kernel.int_is_sorted_asc [ a, b ] then
+                else if Pine_builtin.int_is_sorted_asc [ a, b ] then
                     LT
 
                 else
@@ -609,7 +609,7 @@ compareList listA listB =
                         headOrder =
                             compare headA headB
                     in
-                    if Pine_kernel.equal [ headOrder, EQ ] then
+                    if Pine_builtin.equal [ headOrder, EQ ] then
                         compareList tailA tailB
 
                     else
@@ -620,38 +620,38 @@ compareStrings : Int -> Int -> Int -> Order
 compareStrings offset stringA stringB =
     let
         charA =
-            Pine_kernel.take
+            Pine_builtin.take
                 [ 4
-                , Pine_kernel.skip [ offset, stringA ]
+                , Pine_builtin.skip [ offset, stringA ]
                 ]
 
         charB =
-            Pine_kernel.take
+            Pine_builtin.take
                 [ 4
-                , Pine_kernel.skip [ offset, stringB ]
+                , Pine_builtin.skip [ offset, stringB ]
                 ]
     in
-    if Pine_kernel.equal [ Pine_kernel.length charA, 0 ] then
-        if Pine_kernel.equal [ Pine_kernel.length charB, 0 ] then
+    if Pine_builtin.equal [ Pine_builtin.length charA, 0 ] then
+        if Pine_builtin.equal [ Pine_builtin.length charB, 0 ] then
             EQ
 
         else
             LT
 
-    else if Pine_kernel.equal [ Pine_kernel.length charB, 0 ] then
+    else if Pine_builtin.equal [ Pine_builtin.length charB, 0 ] then
         GT
 
-    else if Pine_kernel.equal [ charA, charB ] then
+    else if Pine_builtin.equal [ charA, charB ] then
         compareStrings
-            (Pine_kernel.int_add [ offset, 4 ])
+            (Pine_builtin.int_add [ offset, 4 ])
             stringA
             stringB
 
     else if
-        -- Pine_kernel.int_is_sorted_asc only works with signed integers. Therefore prepend sign to each character.
-        Pine_kernel.int_is_sorted_asc
-            [ Pine_kernel.concat [ 0, charA ]
-            , Pine_kernel.concat [ 0, charB ]
+        -- Pine_builtin.int_is_sorted_asc only works with signed integers. Therefore prepend sign to each character.
+        Pine_builtin.int_is_sorted_asc
+            [ Pine_builtin.concat [ 0, charA ]
+            , Pine_builtin.concat [ 0, charB ]
             ]
     then
         LT
@@ -662,7 +662,7 @@ compareStrings offset stringA stringB =
 
 modBy : Int -> Int -> Int
 modBy divisor dividend =
-    if Pine_kernel.equal [ divisor, 1 ] then
+    if Pine_builtin.equal [ divisor, 1 ] then
         0
 
     else
@@ -670,24 +670,24 @@ modBy divisor dividend =
             remainder =
                 remainderBy divisor dividend
         in
-        if Pine_kernel.int_is_sorted_asc [ 0, remainder ] then
+        if Pine_builtin.int_is_sorted_asc [ 0, remainder ] then
             remainder
 
         else
-            Pine_kernel.int_add [ remainder, divisor ]
+            Pine_builtin.int_add [ remainder, divisor ]
 
 
 remainderBy : Int -> Int -> Int
 remainderBy divisor dividend =
-    if Pine_kernel.equal [ divisor, 1 ] then
+    if Pine_builtin.equal [ divisor, 1 ] then
         0
 
     else
-        Pine_kernel.int_add
+        Pine_builtin.int_add
             [ dividend
-            , Pine_kernel.int_mul
+            , Pine_builtin.int_mul
                 [ -1
-                , Pine_kernel.int_mul
+                , Pine_builtin.int_mul
                     [ divisor
                     , idiv dividend divisor
                     ]
@@ -709,11 +709,11 @@ negate n =
     case n of
         Elm_Float numerator denominator ->
             Elm_Float
-                (Pine_kernel.int_mul [ -1, numerator ])
+                (Pine_builtin.int_mul [ -1, numerator ])
                 denominator
 
         _ ->
-            Pine_kernel.int_mul [ -1, n ]
+            Pine_builtin.int_mul [ -1, n ]
 
 
 {-| Get the [absolute value][abs] of a number.
@@ -731,11 +731,11 @@ negate n =
 -}
 abs : number -> number
 abs n =
-    if Pine_kernel.int_is_sorted_asc [ 0, n ] then
+    if Pine_builtin.int_is_sorted_asc [ 0, n ] then
         n
 
     else
-        Pine_kernel.int_mul [ -1, n ]
+        Pine_builtin.int_mul [ -1, n ]
 
 
 {-| Clamps a number within a given range. With the expression
@@ -759,11 +759,11 @@ clamp low high number =
 
 
 isPineList a =
-    Pine_kernel.equal [ Pine_kernel.take [ 0, a ], [] ]
+    Pine_builtin.equal [ Pine_builtin.take [ 0, a ], [] ]
 
 
 isPineBlob a =
-    Pine_kernel.equal [ Pine_kernel.take [ 0, a ], Pine_kernel.take [ 0, 0 ] ]
+    Pine_builtin.equal [ Pine_builtin.take [ 0, a ], Pine_builtin.take [ 0, 0 ] ]
 
 
 toFloat : number -> Float
@@ -780,13 +780,13 @@ floor : Float -> Int
 floor number =
     case number of
         Elm_Float numerator denom ->
-            if Pine_kernel.int_is_sorted_asc [ 0, numerator ] then
+            if Pine_builtin.int_is_sorted_asc [ 0, numerator ] then
                 ratioFloor numerator denom
 
             else
-                Pine_kernel.int_mul
+                Pine_builtin.int_mul
                     [ -1
-                    , ratioFloor (Pine_kernel.int_mul [ -1, numerator ]) denom
+                    , ratioFloor (Pine_builtin.int_mul [ -1, numerator ]) denom
                     ]
 
         _ ->
@@ -800,7 +800,7 @@ ratioFloor numerator denom =
             findMultiplierToDecimal 1 denom
     in
     idiv
-        (Pine_kernel.int_mul [ numerator, multiplier ])
+        (Pine_builtin.int_mul [ numerator, multiplier ])
         denomProd
 
 
@@ -808,35 +808,35 @@ findMultiplierToDecimal : Int -> Int -> ( Int, Int, Int )
 findMultiplierToDecimal factor denom =
     let
         denomProd =
-            Pine_kernel.int_mul [ denom, factor ]
+            Pine_builtin.int_mul [ denom, factor ]
 
         lowerPowerOfTen =
             findLowerPowerOfTen denomProd
     in
-    if Pine_kernel.equal [ pow 10 lowerPowerOfTen, denomProd ] then
+    if Pine_builtin.equal [ pow 10 lowerPowerOfTen, denomProd ] then
         ( factor, denomProd )
 
     else
         findMultiplierToDecimal
-            (Pine_kernel.int_add [ factor, 1 ])
+            (Pine_builtin.int_add [ factor, 1 ])
             denom
 
 
 findLowerPowerOfTen : Int -> Int
 findLowerPowerOfTen int =
-    if Pine_kernel.int_is_sorted_asc [ int, 9 ] then
+    if Pine_builtin.int_is_sorted_asc [ int, 9 ] then
         0
 
     else
-        Pine_kernel.int_add [ findLowerPowerOfTen (idiv int 10), 1 ]
+        Pine_builtin.int_add [ findLowerPowerOfTen (idiv int 10), 1 ]
 
 
 isNaN : Float -> Bool
 isNaN number =
     case number of
         Elm_Float numerator denom ->
-            if Pine_kernel.equal [ denom, 0 ] then
-                Pine_kernel.equal [ numerator, 0 ]
+            if Pine_builtin.equal [ denom, 0 ] then
+                Pine_builtin.equal [ numerator, 0 ]
 
             else
                 False

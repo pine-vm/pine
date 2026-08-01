@@ -202,7 +202,7 @@ run : Parser a -> String -> Result (List Parser.DeadEnd) a
 run (Parser parse) (String srcBytes) =
     case parse (PState srcBytes 0 1 1 1) of
         Good value (PState finalSrc finalOffset _ finalRow finalCol) ->
-            if Pine_kernel.equal [ finalOffset, Pine_kernel.length srcBytes ] then
+            if Pine_builtin.equal [ finalOffset, Pine_builtin.length srcBytes ] then
                 Ok value
 
             else
@@ -1739,23 +1739,23 @@ integerDecimalMapWithRange rangeAndIntToRes =
                 s1 =
                     convertIntegerDecimal s0Offset s0SrcBytes
             in
-            if Pine_kernel.equal [ s1.offset, -1 ] then
+            if Pine_builtin.equal [ s1.offset, -1 ] then
                 Bad False (ExpectingNumber s0Row s0Col)
 
             else
                 let
                     numberBytesLength : Int
                     numberBytesLength =
-                        Pine_kernel.int_add
+                        Pine_builtin.int_add
                             [ s1.offset
-                            , Pine_kernel.int_mul [ -1, s0Offset ]
+                            , Pine_builtin.int_mul [ -1, s0Offset ]
                             ]
 
                     numberCharsLength : Int
                     numberCharsLength =
-                        Pine_kernel.concat
-                            [ Pine_kernel.take [ 1, 0 ]
-                            , Pine_kernel.bit_shift_right [ 2, Pine_kernel.skip [ 1, numberBytesLength ] ]
+                        Pine_builtin.concat
+                            [ Pine_builtin.take [ 1, 0 ]
+                            , Pine_builtin.bit_shift_right [ 2, Pine_builtin.skip [ 1, numberBytesLength ] ]
                             ]
 
                     newColumn : Int
@@ -1817,16 +1817,16 @@ integerDecimalOrHexadecimalMapWithRange rangeAndIntDecimalToRes rangeAndIntHexad
                 let
                     numberBytesLength : Int
                     numberBytesLength =
-                        Pine_kernel.int_add
+                        Pine_builtin.int_add
                             [ s1.offsetAndInt.offset
-                            , Pine_kernel.int_mul [ -1, s0Offset ]
+                            , Pine_builtin.int_mul [ -1, s0Offset ]
                             ]
 
                     numberCharsLength : Int
                     numberCharsLength =
-                        Pine_kernel.concat
-                            [ Pine_kernel.take [ 1, 0 ]
-                            , Pine_kernel.bit_shift_right [ 2, Pine_kernel.skip [ 1, numberBytesLength ] ]
+                        Pine_builtin.concat
+                            [ Pine_builtin.take [ 1, 0 ]
+                            , Pine_builtin.bit_shift_right [ 2, Pine_builtin.skip [ 1, numberBytesLength ] ]
                             ]
 
                     newColumn : Int
@@ -1902,16 +1902,16 @@ floatOrIntegerDecimalOrHexadecimalMapWithRange rangeAndFloatToRes rangeAndIntDec
                     let
                         numberBytesLength : Int
                         numberBytesLength =
-                            Pine_kernel.int_add
+                            Pine_builtin.int_add
                                 [ s1.offsetAndInt.offset
-                                , Pine_kernel.int_mul [ -1, s0OffsetInt ]
+                                , Pine_builtin.int_mul [ -1, s0OffsetInt ]
                                 ]
 
                         numberCharsLength : Int
                         numberCharsLength =
-                            Pine_kernel.concat
-                                [ Pine_kernel.take [ 1, 0 ]
-                                , Pine_kernel.bit_shift_right [ 2, Pine_kernel.skip [ 1, numberBytesLength ] ]
+                            Pine_builtin.concat
+                                [ Pine_builtin.take [ 1, 0 ]
+                                , Pine_builtin.bit_shift_right [ 2, Pine_builtin.skip [ 1, numberBytesLength ] ]
                                 ]
 
                         newColumn : Int
@@ -1944,16 +1944,16 @@ floatOrIntegerDecimalOrHexadecimalMapWithRange rangeAndFloatToRes rangeAndIntDec
                     let
                         sliceBytesLength : Int
                         sliceBytesLength =
-                            Pine_kernel.int_add
+                            Pine_builtin.int_add
                                 [ offsetAfterFloat
-                                , Pine_kernel.int_mul [ -1, s0OffsetInt ]
+                                , Pine_builtin.int_mul [ -1, s0OffsetInt ]
                                 ]
 
                         sliceBytes : Int
                         sliceBytes =
-                            Pine_kernel.take
+                            Pine_builtin.take
                                 [ sliceBytesLength
-                                , Pine_kernel.skip [ s0OffsetInt, s0SrcBytes ]
+                                , Pine_builtin.skip [ s0OffsetInt, s0SrcBytes ]
                                 ]
                     in
                     case String.toFloat (String sliceBytes) of
@@ -1961,16 +1961,16 @@ floatOrIntegerDecimalOrHexadecimalMapWithRange rangeAndFloatToRes rangeAndIntDec
                             let
                                 numberBytesLength : Int
                                 numberBytesLength =
-                                    Pine_kernel.int_add
+                                    Pine_builtin.int_add
                                         [ offsetAfterFloat
-                                        , Pine_kernel.int_mul [ -1, s0OffsetInt ]
+                                        , Pine_builtin.int_mul [ -1, s0OffsetInt ]
                                         ]
 
                                 numberCharsLength : Int
                                 numberCharsLength =
-                                    Pine_kernel.concat
-                                        [ Pine_kernel.take [ 1, 0 ]
-                                        , Pine_kernel.bit_shift_right [ 2, Pine_kernel.skip [ 1, numberBytesLength ] ]
+                                    Pine_builtin.concat
+                                        [ Pine_builtin.take [ 1, 0 ]
+                                        , Pine_builtin.bit_shift_right [ 2, Pine_builtin.skip [ 1, numberBytesLength ] ]
                                         ]
 
                                 newColumn : Int
@@ -1999,7 +1999,7 @@ floatOrIntegerDecimalOrHexadecimalMapWithRange rangeAndFloatToRes rangeAndIntDec
 
 skipFloatAfterIntegerDecimal : Int -> Int -> Int
 skipFloatAfterIntegerDecimal offsetBytes srcBytes =
-    case Pine_kernel.take [ 4, Pine_kernel.skip [ offsetBytes, srcBytes ] ] of
+    case Pine_builtin.take [ 4, Pine_builtin.skip [ offsetBytes, srcBytes ] ] of
         '.' ->
             let
                 offsetAfterDigits : Int
@@ -2010,7 +2010,7 @@ skipFloatAfterIntegerDecimal offsetBytes srcBytes =
                 -1
 
             else
-                case Pine_kernel.take [ 4, Pine_kernel.skip [ offsetAfterDigits, srcBytes ] ] of
+                case Pine_builtin.take [ 4, Pine_builtin.skip [ offsetAfterDigits, srcBytes ] ] of
                     'e' ->
                         skipAfterFloatExponentMark (offsetAfterDigits + 4) srcBytes
 
@@ -2032,7 +2032,7 @@ skipFloatAfterIntegerDecimal offsetBytes srcBytes =
 
 skipAfterFloatExponentMark : Int -> Int -> Int
 skipAfterFloatExponentMark offsetBytes srcBytes =
-    case Pine_kernel.take [ 4, Pine_kernel.skip [ offsetBytes, srcBytes ] ] of
+    case Pine_builtin.take [ 4, Pine_builtin.skip [ offsetBytes, srcBytes ] ] of
         '+' ->
             skip1OrMoreDigits0To9 (offsetBytes + 4) srcBytes
 
@@ -2045,7 +2045,7 @@ skipAfterFloatExponentMark offsetBytes srcBytes =
 
 skip1OrMoreDigits0To9 : Int -> Int -> Int
 skip1OrMoreDigits0To9 offsetBytes srcBytes =
-    case Pine_kernel.take [ 4, Pine_kernel.skip [ offsetBytes, srcBytes ] ] of
+    case Pine_builtin.take [ 4, Pine_builtin.skip [ offsetBytes, srcBytes ] ] of
         '0' ->
             skip0OrMoreDigits0To9 (offsetBytes + 4) srcBytes
 
@@ -2082,7 +2082,7 @@ skip1OrMoreDigits0To9 offsetBytes srcBytes =
 
 skip0OrMoreDigits0To9 : Int -> Int -> Int
 skip0OrMoreDigits0To9 offsetBytes srcBytes =
-    case Pine_kernel.take [ 4, Pine_kernel.skip [ offsetBytes, srcBytes ] ] of
+    case Pine_builtin.take [ 4, Pine_builtin.skip [ offsetBytes, srcBytes ] ] of
         '0' ->
             skip0OrMoreDigits0To9 (offsetBytes + 4) srcBytes
 
@@ -2119,7 +2119,7 @@ skip0OrMoreDigits0To9 offsetBytes srcBytes =
 
 convert1OrMoreHexadecimal : Int -> Int -> { int : Int, offset : Int }
 convert1OrMoreHexadecimal offsetBytes srcBytes =
-    case Pine_kernel.take [ 4, Pine_kernel.skip [ offsetBytes, srcBytes ] ] of
+    case Pine_builtin.take [ 4, Pine_builtin.skip [ offsetBytes, srcBytes ] ] of
         '0' ->
             convert0OrMoreHexadecimal 0 (offsetBytes + 4) srcBytes
 
@@ -2192,7 +2192,7 @@ convert1OrMoreHexadecimal offsetBytes srcBytes =
 
 convert0OrMoreHexadecimal : Int -> Int -> Int -> { int : Int, offset : Int }
 convert0OrMoreHexadecimal soFar offsetBytes srcBytes =
-    case Pine_kernel.take [ 4, Pine_kernel.skip [ offsetBytes, srcBytes ] ] of
+    case Pine_builtin.take [ 4, Pine_builtin.skip [ offsetBytes, srcBytes ] ] of
         '0' ->
             convert0OrMoreHexadecimal (soFar * 16) (offsetBytes + 4) srcBytes
 
@@ -2270,9 +2270,9 @@ type Base
 
 convertIntegerDecimalOrHexadecimal : Int -> Int -> { base : Base, offsetAndInt : { int : Int, offset : Int } }
 convertIntegerDecimalOrHexadecimal offsetBytes srcBytes =
-    case Pine_kernel.take [ 4, Pine_kernel.skip [ offsetBytes, srcBytes ] ] of
+    case Pine_builtin.take [ 4, Pine_builtin.skip [ offsetBytes, srcBytes ] ] of
         '0' ->
-            case Pine_kernel.take [ 4, Pine_kernel.skip [ offsetBytes + 4, srcBytes ] ] of
+            case Pine_builtin.take [ 4, Pine_builtin.skip [ offsetBytes + 4, srcBytes ] ] of
                 'x' ->
                     let
                         --_ = Debug.todo "not huh"
@@ -2323,7 +2323,7 @@ errorAsBaseOffsetAndInt =
 
 convertIntegerDecimal : Int -> Int -> { int : Int, offset : Int }
 convertIntegerDecimal offsetBytes srcBytes =
-    case Pine_kernel.take [ 4, Pine_kernel.skip [ offsetBytes, srcBytes ] ] of
+    case Pine_builtin.take [ 4, Pine_builtin.skip [ offsetBytes, srcBytes ] ] of
         '0' ->
             { int = 0, offset = offsetBytes + 4 }
 
@@ -2365,7 +2365,7 @@ errorAsOffsetAndInt =
 
 convert0OrMore0To9s : Int -> Int -> Int -> { int : Int, offset : Int }
 convert0OrMore0To9s soFar offsetBytes srcBytes =
-    case Pine_kernel.take [ 4, Pine_kernel.skip [ offsetBytes, srcBytes ] ] of
+    case Pine_builtin.take [ 4, Pine_builtin.skip [ offsetBytes, srcBytes ] ] of
         '0' ->
             convert0OrMore0To9s (soFar * 10) (offsetBytes + 4) srcBytes
 
@@ -2417,13 +2417,13 @@ symbol ((String strBytes) as str) res =
     let
         strBytesLength : Int
         strBytesLength =
-            Pine_kernel.length strBytes
+            Pine_builtin.length strBytes
 
         strLength : Int
         strLength =
-            Pine_kernel.concat
-                [ Pine_kernel.take [ 1, 0 ]
-                , Pine_kernel.bit_shift_right [ 2, Pine_kernel.skip [ 1, strBytesLength ] ]
+            Pine_builtin.concat
+                [ Pine_builtin.take [ 1, 0 ]
+                , Pine_builtin.bit_shift_right [ 2, Pine_builtin.skip [ 1, strBytesLength ] ]
                 ]
     in
     Parser
@@ -2438,8 +2438,8 @@ symbol ((String strBytes) as str) res =
                     sCol
             in
             if
-                Pine_kernel.equal
-                    [ Pine_kernel.take [ strBytesLength, Pine_kernel.skip [ sOffsetInt, sSrcBytes ] ]
+                Pine_builtin.equal
+                    [ Pine_builtin.take [ strBytesLength, Pine_builtin.skip [ sOffsetInt, sSrcBytes ] ]
                     , strBytes
                     ]
             then
@@ -2461,13 +2461,13 @@ followedBySymbol ((String strBytes) as str) (Parser parsePrevious) =
     let
         strBytesLength : Int
         strBytesLength =
-            Pine_kernel.length strBytes
+            Pine_builtin.length strBytes
 
         strLength : Int
         strLength =
-            Pine_kernel.concat
-                [ Pine_kernel.take [ 1, 0 ]
-                , Pine_kernel.bit_shift_right [ 2, Pine_kernel.skip [ 1, strBytesLength ] ]
+            Pine_builtin.concat
+                [ Pine_builtin.take [ 1, 0 ]
+                , Pine_builtin.bit_shift_right [ 2, Pine_builtin.skip [ 1, strBytesLength ] ]
                 ]
     in
     Parser
@@ -2484,8 +2484,8 @@ followedBySymbol ((String strBytes) as str) (Parser parsePrevious) =
                             s1Col
                     in
                     if
-                        Pine_kernel.equal
-                            [ Pine_kernel.take [ strBytesLength, Pine_kernel.skip [ s1OffsetInt, s1SrcBytes ] ]
+                        Pine_builtin.equal
+                            [ Pine_builtin.take [ strBytesLength, Pine_builtin.skip [ s1OffsetInt, s1SrcBytes ] ]
                             , strBytes
                             ]
                     then
@@ -2511,13 +2511,13 @@ symbolWithEndLocation ((String strBytes) as str) endLocationToRes =
     let
         strBytesLength : Int
         strBytesLength =
-            Pine_kernel.length strBytes
+            Pine_builtin.length strBytes
 
         strLength : Int
         strLength =
-            Pine_kernel.concat
-                [ Pine_kernel.take [ 1, 0 ]
-                , Pine_kernel.bit_shift_right [ 2, Pine_kernel.skip [ 1, strBytesLength ] ]
+            Pine_builtin.concat
+                [ Pine_builtin.take [ 1, 0 ]
+                , Pine_builtin.bit_shift_right [ 2, Pine_builtin.skip [ 1, strBytesLength ] ]
                 ]
     in
     Parser
@@ -2533,12 +2533,12 @@ symbolWithEndLocation ((String strBytes) as str) endLocationToRes =
 
                 srcSliceBytes : Int
                 srcSliceBytes =
-                    Pine_kernel.take
+                    Pine_builtin.take
                         [ strBytesLength
-                        , Pine_kernel.skip [ sOffsetInt, sSrcBytes ]
+                        , Pine_builtin.skip [ sOffsetInt, sSrcBytes ]
                         ]
             in
-            if Pine_kernel.equal [ srcSliceBytes, strBytes ] then
+            if Pine_builtin.equal [ srcSliceBytes, strBytes ] then
                 let
                     newCol : Int
                     newCol =
@@ -2564,13 +2564,13 @@ symbolWithRange ((String strBytes) as str) startAndEndLocationToRes =
     let
         strBytesLength : Int
         strBytesLength =
-            Pine_kernel.length strBytes
+            Pine_builtin.length strBytes
 
         strLength : Int
         strLength =
-            Pine_kernel.concat
-                [ Pine_kernel.take [ 1, 0 ]
-                , Pine_kernel.bit_shift_right [ 2, Pine_kernel.skip [ 1, strBytesLength ] ]
+            Pine_builtin.concat
+                [ Pine_builtin.take [ 1, 0 ]
+                , Pine_builtin.bit_shift_right [ 2, Pine_builtin.skip [ 1, strBytesLength ] ]
                 ]
     in
     Parser
@@ -2586,12 +2586,12 @@ symbolWithRange ((String strBytes) as str) startAndEndLocationToRes =
 
                 srcSliceBytes : Int
                 srcSliceBytes =
-                    Pine_kernel.take
+                    Pine_builtin.take
                         [ strBytesLength
-                        , Pine_kernel.skip [ sOffsetInt, sSrcBytes ]
+                        , Pine_builtin.skip [ sOffsetInt, sSrcBytes ]
                         ]
             in
-            if Pine_kernel.equal [ srcSliceBytes, strBytes ] then
+            if Pine_builtin.equal [ srcSliceBytes, strBytes ] then
                 let
                     newCol : Int
                     newCol =
@@ -2633,13 +2633,13 @@ symbolFollowedByParser ((String strBytes) as str) (Parser parseNext) (PState sSr
     let
         strBytesLength : Int
         strBytesLength =
-            Pine_kernel.length strBytes
+            Pine_builtin.length strBytes
 
         strLength : Int
         strLength =
-            Pine_kernel.concat
-                [ Pine_kernel.take [ 1, 0 ]
-                , Pine_kernel.bit_shift_right [ 2, Pine_kernel.skip [ 1, strBytesLength ] ]
+            Pine_builtin.concat
+                [ Pine_builtin.take [ 1, 0 ]
+                , Pine_builtin.bit_shift_right [ 2, Pine_builtin.skip [ 1, strBytesLength ] ]
                 ]
 
         sOffsetInt : Int
@@ -2652,12 +2652,12 @@ symbolFollowedByParser ((String strBytes) as str) (Parser parseNext) (PState sSr
 
         strSliceBytes : Int
         strSliceBytes =
-            Pine_kernel.take
+            Pine_builtin.take
                 [ strBytesLength
-                , Pine_kernel.skip [ sOffsetInt, sSrcBytes ]
+                , Pine_builtin.skip [ sOffsetInt, sSrcBytes ]
                 ]
     in
-    if Pine_kernel.equal [ strBytes, strSliceBytes ] then
+    if Pine_builtin.equal [ strBytes, strSliceBytes ] then
         parseNext
             (PState
                 sSrcBytes
@@ -2680,13 +2680,13 @@ symbolBacktrackableFollowedBy ((String strBytes) as str) (Parser parseNext) =
     let
         strBytesLength : Int
         strBytesLength =
-            Pine_kernel.length strBytes
+            Pine_builtin.length strBytes
 
         strLength : Int
         strLength =
-            Pine_kernel.concat
-                [ Pine_kernel.take [ 1, 0 ]
-                , Pine_kernel.bit_shift_right [ 2, Pine_kernel.skip [ 1, strBytesLength ] ]
+            Pine_builtin.concat
+                [ Pine_builtin.take [ 1, 0 ]
+                , Pine_builtin.bit_shift_right [ 2, Pine_builtin.skip [ 1, strBytesLength ] ]
                 ]
     in
     Parser
@@ -2702,12 +2702,12 @@ symbolBacktrackableFollowedBy ((String strBytes) as str) (Parser parseNext) =
 
                 strSliceBytes : Int
                 strSliceBytes =
-                    Pine_kernel.take
+                    Pine_builtin.take
                         [ strBytesLength
-                        , Pine_kernel.skip [ sOffsetInt, sSrcBytes ]
+                        , Pine_builtin.skip [ sOffsetInt, sSrcBytes ]
                         ]
             in
-            if Pine_kernel.equal [ strSliceBytes, strBytes ] then
+            if Pine_builtin.equal [ strSliceBytes, strBytes ] then
                 parseNext
                     (PState
                         sSrcBytes
@@ -2751,13 +2751,13 @@ keyword ((String kwdCharsBytes) as kwd) res =
     let
         kwdCharsBytesLength : Int
         kwdCharsBytesLength =
-            Pine_kernel.length kwdCharsBytes
+            Pine_builtin.length kwdCharsBytes
 
         kwdLength : Int
         kwdLength =
-            Pine_kernel.concat
-                [ Pine_kernel.take [ 1, 0 ]
-                , Pine_kernel.bit_shift_right [ 2, Pine_kernel.skip [ 1, kwdCharsBytesLength ] ]
+            Pine_builtin.concat
+                [ Pine_builtin.take [ 1, 0 ]
+                , Pine_builtin.bit_shift_right [ 2, Pine_builtin.skip [ 1, kwdCharsBytesLength ] ]
                 ]
     in
     Parser
@@ -2778,9 +2778,9 @@ keyword ((String kwdCharsBytes) as kwd) res =
                 -- each char is 4 bytes in UTF-32
             in
             if
-                Pine_kernel.equal
+                Pine_builtin.equal
                     [ kwdCharsBytes
-                    , Pine_kernel.take [ kwdCharsBytesLength, Pine_kernel.skip [ sOffsetInt, sSrcBytes ] ]
+                    , Pine_builtin.take [ kwdCharsBytesLength, Pine_builtin.skip [ sOffsetInt, sSrcBytes ] ]
                     ]
             then
                 if isSubCharAlphaNumOrUnderscore newOffset sSrcBytes then
@@ -2803,7 +2803,7 @@ keyword ((String kwdCharsBytes) as kwd) res =
 
 isSubCharAlphaNumOrUnderscore : Int -> Int -> Bool
 isSubCharAlphaNumOrUnderscore offsetBytes stringBytes =
-    case Pine_kernel.take [ 4, Pine_kernel.skip [ offsetBytes, stringBytes ] ] of
+    case Pine_builtin.take [ 4, Pine_builtin.skip [ offsetBytes, stringBytes ] ] of
         '_' ->
             True
 
@@ -2828,13 +2828,13 @@ keywordFollowedByParser ((String kwdCharsBytes) as kwd) (Parser parseNext) (PSta
     let
         kwdCharsBytesLength : Int
         kwdCharsBytesLength =
-            Pine_kernel.length kwdCharsBytes
+            Pine_builtin.length kwdCharsBytes
 
         kwdLength : Int
         kwdLength =
-            Pine_kernel.concat
-                [ Pine_kernel.take [ 1, 0 ]
-                , Pine_kernel.bit_shift_right [ 2, Pine_kernel.skip [ 1, kwdCharsBytesLength ] ]
+            Pine_builtin.concat
+                [ Pine_builtin.take [ 1, 0 ]
+                , Pine_builtin.bit_shift_right [ 2, Pine_builtin.skip [ 1, kwdCharsBytesLength ] ]
                 ]
 
         sColInt : Int
@@ -2843,16 +2843,16 @@ keywordFollowedByParser ((String kwdCharsBytes) as kwd) (Parser parseNext) (PSta
 
         srcSliceBytes : Int
         srcSliceBytes =
-            Pine_kernel.take
+            Pine_builtin.take
                 [ kwdCharsBytesLength
-                , Pine_kernel.skip [ sOffsetBytes, sSrcBytes ]
+                , Pine_builtin.skip [ sOffsetBytes, sSrcBytes ]
                 ]
 
         newOffset : Int
         newOffset =
-            Pine_kernel.int_add [ sOffsetBytes, kwdCharsBytesLength ]
+            Pine_builtin.int_add [ sOffsetBytes, kwdCharsBytesLength ]
     in
-    if Pine_kernel.equal [ srcSliceBytes, kwdCharsBytes ] then
+    if Pine_builtin.equal [ srcSliceBytes, kwdCharsBytes ] then
         if isSubCharAlphaNumOrUnderscore newOffset sSrcBytes then
             Bad False (ExpectingKeyword sRow sCol kwd)
 
@@ -2912,9 +2912,9 @@ anyChar =
                 let
                     foundChar : Char
                     foundChar =
-                        Pine_kernel.take [ 4, Pine_kernel.skip [ sOffsetBytesInt, sSrcBytes ] ]
+                        Pine_builtin.take [ 4, Pine_builtin.skip [ sOffsetBytesInt, sSrcBytes ] ]
                 in
-                if Pine_kernel.equal [ Pine_kernel.length foundChar, 0 ] then
+                if Pine_builtin.equal [ Pine_builtin.length foundChar, 0 ] then
                     Bad False (ExpectingAnyChar sRowInt sCol)
 
                 else
@@ -2934,15 +2934,15 @@ charOrEnd offsetBytes stringBytes =
     let
         nextCharBytes : Int
         nextCharBytes =
-            Pine_kernel.take
+            Pine_builtin.take
                 [ 4
-                , Pine_kernel.skip [ offsetBytes, stringBytes ]
+                , Pine_builtin.skip [ offsetBytes, stringBytes ]
                 ]
     in
-    if Pine_kernel.equal [ nextCharBytes, '\n' ] then
+    if Pine_builtin.equal [ nextCharBytes, '\n' ] then
         -2
 
-    else if Pine_kernel.equal [ Pine_kernel.length nextCharBytes, 0 ] then
+    else if Pine_builtin.equal [ Pine_builtin.length nextCharBytes, 0 ] then
         -1
 
     else
@@ -2971,16 +2971,16 @@ whileMapWithRange isGood rangeAndConsumedStringToRes =
 
                 sliceBytesLength : Int
                 sliceBytesLength =
-                    Pine_kernel.int_add
+                    Pine_builtin.int_add
                         [ s1OffsetInt
-                        , Pine_kernel.int_mul [ -1, s0OffsetInt ]
+                        , Pine_builtin.int_mul [ -1, s0OffsetInt ]
                         ]
 
                 sliceBytes : Int
                 sliceBytes =
-                    Pine_kernel.take
+                    Pine_builtin.take
                         [ sliceBytesLength
-                        , Pine_kernel.skip [ s0OffsetInt, s0SrcBytes ]
+                        , Pine_builtin.skip [ s0OffsetInt, s0SrcBytes ]
                         ]
             in
             Good
@@ -2999,15 +2999,15 @@ skipWhileHelp isGood offset row col srcBytes indent =
     let
         nextChar : Char
         nextChar =
-            Pine_kernel.take [ 4, Pine_kernel.skip [ offset, srcBytes ] ]
+            Pine_builtin.take [ 4, Pine_builtin.skip [ offset, srcBytes ] ]
     in
     -- Predicate 'isGood' might be lax and return True for an empty blob too, therefore check for end of source
-    if Pine_kernel.equal [ Pine_kernel.length nextChar, 0 ] then
+    if Pine_builtin.equal [ Pine_builtin.length nextChar, 0 ] then
         -- end of source
         PState srcBytes offset indent row col
 
     else if isGood nextChar then
-        if Pine_kernel.equal [ nextChar, '\n' ] then
+        if Pine_builtin.equal [ nextChar, '\n' ] then
             skipWhileHelp
                 isGood
                 (offset + 4)
@@ -3035,9 +3035,9 @@ skipWhileWithoutLinebreakHelp isGood offset row col srcBytes indent =
     let
         nextChar : Int
         nextChar =
-            Pine_kernel.take [ 4, Pine_kernel.skip [ offset, srcBytes ] ]
+            Pine_builtin.take [ 4, Pine_builtin.skip [ offset, srcBytes ] ]
     in
-    if Pine_kernel.equal [ Pine_kernel.length nextChar, 0 ] then
+    if Pine_builtin.equal [ Pine_builtin.length nextChar, 0 ] then
         -- end of source
         PState srcBytes offset indent row col
 
@@ -3057,7 +3057,7 @@ skipWhileWithoutLinebreakHelp isGood offset row col srcBytes indent =
 
 skipWhileWithoutLinebreakAnd2PartUtf16Help : (Char -> Bool) -> Int -> Int -> Int
 skipWhileWithoutLinebreakAnd2PartUtf16Help isGood offset srcBytes =
-    if isGood (Pine_kernel.take [ 4, Pine_kernel.skip [ offset, srcBytes ] ]) then
+    if isGood (Pine_builtin.take [ 4, Pine_builtin.skip [ offset, srcBytes ] ]) then
         skipWhileWithoutLinebreakAnd2PartUtf16Help
             isGood
             (offset + 4)
@@ -3105,7 +3105,7 @@ skipWhileWhitespaceFollowedBy (Parser parseNext) =
 
 skipWhileWhitespaceHelp : Int -> Int -> Int -> Int -> Int -> State
 skipWhileWhitespaceHelp offsetBytes row col srcBytes indent =
-    case Pine_kernel.take [ 4, Pine_kernel.skip [ offsetBytes, srcBytes ] ] of
+    case Pine_builtin.take [ 4, Pine_builtin.skip [ offsetBytes, srcBytes ] ] of
         ' ' ->
             skipWhileWhitespaceHelp
                 (offsetBytes + 4)
@@ -3170,9 +3170,9 @@ withIndentSetToColumnMinus columnToMoveIndentationBaseBackBy (Parser parse) =
 
                 newIndent : Int
                 newIndent =
-                    Pine_kernel.int_add
+                    Pine_builtin.int_add
                         [ s0Col
-                        , Pine_kernel.int_mul [ -1, columnToMoveIndentationBaseBackBy ]
+                        , Pine_builtin.int_mul [ -1, columnToMoveIndentationBaseBackBy ]
                         ]
             in
             case parse (changeIndent newIndent s0) of
@@ -3266,9 +3266,9 @@ ifFollowedByWhileValidateWithoutLinebreakParser firstIsOkay afterFirstIsOkay res
 
         firstChar : Char
         firstChar =
-            Pine_kernel.take
+            Pine_builtin.take
                 [ 4
-                , Pine_kernel.skip [ sOffsetInt, sSrcBytes ]
+                , Pine_builtin.skip [ sOffsetInt, sSrcBytes ]
                 ]
     in
     if firstIsOkay firstChar then
@@ -3288,16 +3288,16 @@ ifFollowedByWhileValidateWithoutLinebreakParser firstIsOkay afterFirstIsOkay res
 
             nameBytesLength : Int
             nameBytesLength =
-                Pine_kernel.int_add
+                Pine_builtin.int_add
                     [ s1Offset
-                    , Pine_kernel.int_mul [ -1, sOffsetInt ]
+                    , Pine_builtin.int_mul [ -1, sOffsetInt ]
                     ]
 
             nameBytes : Int
             nameBytes =
-                Pine_kernel.take
+                Pine_builtin.take
                     [ nameBytesLength
-                    , Pine_kernel.skip [ sOffsetInt, sSrcBytes ]
+                    , Pine_builtin.skip [ sOffsetInt, sSrcBytes ]
                     ]
 
             name : String
@@ -3334,16 +3334,16 @@ whileWithoutLinebreakAnd2PartUtf16ToResultAndThen whileCharIsOkay consumedString
 
                 whileContentBytesLength : Int
                 whileContentBytesLength =
-                    Pine_kernel.int_add
+                    Pine_builtin.int_add
                         [ s1Offset
-                        , Pine_kernel.int_mul [ -1, s0Offset ]
+                        , Pine_builtin.int_mul [ -1, s0Offset ]
                         ]
 
                 whileContentSliceBytes : Int
                 whileContentSliceBytes =
-                    Pine_kernel.take
+                    Pine_builtin.take
                         [ whileContentBytesLength
-                        , Pine_kernel.skip [ s0Offset, s0SrcBytes ]
+                        , Pine_builtin.skip [ s0Offset, s0SrcBytes ]
                         ]
 
                 whileContent : String
@@ -3358,9 +3358,9 @@ whileWithoutLinebreakAnd2PartUtf16ToResultAndThen whileCharIsOkay consumedString
                     let
                         whileContentCharsLength : Int
                         whileContentCharsLength =
-                            Pine_kernel.concat
-                                [ Pine_kernel.take [ 1, 0 ]
-                                , Pine_kernel.bit_shift_right [ 2, Pine_kernel.skip [ 1, whileContentBytesLength ] ]
+                            Pine_builtin.concat
+                                [ Pine_builtin.take [ 1, 0 ]
+                                , Pine_builtin.bit_shift_right [ 2, Pine_builtin.skip [ 1, whileContentBytesLength ] ]
                                 ]
 
                         s1Column : Int
@@ -3392,13 +3392,13 @@ whileWithoutLinebreakAnd2PartUtf16ValidateMapWithRangeBacktrackableFollowedBySym
     let
         mandatoryFinalSymbolBytesLength : Int
         mandatoryFinalSymbolBytesLength =
-            Pine_kernel.length mandatoryFinalSymbolBytes
+            Pine_builtin.length mandatoryFinalSymbolBytes
 
         mandatoryFinalSymbolLength : Int
         mandatoryFinalSymbolLength =
-            Pine_kernel.concat
-                [ Pine_kernel.take [ 1, 0 ]
-                , Pine_kernel.bit_shift_right [ 2, Pine_kernel.skip [ 1, mandatoryFinalSymbolBytesLength ] ]
+            Pine_builtin.concat
+                [ Pine_builtin.take [ 1, 0 ]
+                , Pine_builtin.bit_shift_right [ 2, Pine_builtin.skip [ 1, mandatoryFinalSymbolBytesLength ] ]
                 ]
     in
     Parser
@@ -3417,16 +3417,16 @@ whileWithoutLinebreakAnd2PartUtf16ValidateMapWithRangeBacktrackableFollowedBySym
 
                 whileContentBytesLength : Int
                 whileContentBytesLength =
-                    Pine_kernel.int_add
+                    Pine_builtin.int_add
                         [ s1Offset
-                        , Pine_kernel.int_mul [ -1, s0Offset ]
+                        , Pine_builtin.int_mul [ -1, s0Offset ]
                         ]
 
                 whileContentSliceBytes : Int
                 whileContentSliceBytes =
-                    Pine_kernel.take
+                    Pine_builtin.take
                         [ whileContentBytesLength
-                        , Pine_kernel.skip [ s0Offset, s0SrcBytes ]
+                        , Pine_builtin.skip [ s0Offset, s0SrcBytes ]
                         ]
 
                 whileContent : String
@@ -3435,28 +3435,28 @@ whileWithoutLinebreakAnd2PartUtf16ValidateMapWithRangeBacktrackableFollowedBySym
 
                 finalSymbolSliceBytes : Int
                 finalSymbolSliceBytes =
-                    Pine_kernel.take
+                    Pine_builtin.take
                         [ mandatoryFinalSymbolBytesLength
-                        , Pine_kernel.skip [ s1Offset, s0SrcBytes ]
+                        , Pine_builtin.skip [ s1Offset, s0SrcBytes ]
                         ]
             in
             if
-                Pine_kernel.equal [ finalSymbolSliceBytes, mandatoryFinalSymbolBytes ]
+                Pine_builtin.equal [ finalSymbolSliceBytes, mandatoryFinalSymbolBytes ]
                     && whileResultIsOkay whileContent
             then
                 let
                     skippedBytesLength : Int
                     skippedBytesLength =
-                        Pine_kernel.int_add
+                        Pine_builtin.int_add
                             [ s1Offset
-                            , Pine_kernel.int_mul [ -1, s0Offset ]
+                            , Pine_builtin.int_mul [ -1, s0Offset ]
                             ]
 
                     skippedCharsLength : Int
                     skippedCharsLength =
-                        Pine_kernel.concat
-                            [ Pine_kernel.take [ 1, 0 ]
-                            , Pine_kernel.bit_shift_right [ 2, Pine_kernel.skip [ 1, skippedBytesLength ] ]
+                        Pine_builtin.concat
+                            [ Pine_builtin.take [ 1, 0 ]
+                            , Pine_builtin.bit_shift_right [ 2, Pine_builtin.skip [ 1, skippedBytesLength ] ]
                             ]
 
                     s1Column : Int
@@ -3499,9 +3499,9 @@ ifFollowedByWhileValidateMapWithRangeWithoutLinebreak toResult firstIsOkay after
 
                 nextCharBytes : Int
                 nextCharBytes =
-                    Pine_kernel.take
+                    Pine_builtin.take
                         [ 4
-                        , Pine_kernel.skip [ s0Offset, s0SrcBytes ]
+                        , Pine_builtin.skip [ s0Offset, s0SrcBytes ]
                         ]
             in
             if firstIsOkay nextCharBytes then
@@ -3510,9 +3510,9 @@ ifFollowedByWhileValidateMapWithRangeWithoutLinebreak toResult firstIsOkay after
                     s1 =
                         skipWhileWithoutLinebreakHelp
                             afterFirstIsOkay
-                            (Pine_kernel.int_add [ s0Offset, 4 ])
+                            (Pine_builtin.int_add [ s0Offset, 4 ])
                             s0Row
-                            (Pine_kernel.int_add [ s0ColInt, 1 ])
+                            (Pine_builtin.int_add [ s0ColInt, 1 ])
                             s0SrcBytes
                             s0Indent
 
@@ -3521,16 +3521,16 @@ ifFollowedByWhileValidateMapWithRangeWithoutLinebreak toResult firstIsOkay after
 
                     nameSliceBytesLength : Int
                     nameSliceBytesLength =
-                        Pine_kernel.int_add
+                        Pine_builtin.int_add
                             [ s1Offset
-                            , Pine_kernel.int_mul [ -1, s0Offset ]
+                            , Pine_builtin.int_mul [ -1, s0Offset ]
                             ]
 
                     nameSliceBytes : Int
                     nameSliceBytes =
-                        Pine_kernel.take
+                        Pine_builtin.take
                             [ nameSliceBytesLength
-                            , Pine_kernel.skip [ s0Offset, s0SrcBytes ]
+                            , Pine_builtin.skip [ s0Offset, s0SrcBytes ]
                             ]
 
                     name : String
@@ -3548,7 +3548,7 @@ ifFollowedByWhileValidateMapWithRangeWithoutLinebreak toResult firstIsOkay after
                         s1
 
                 else
-                    Bad False (ExpectingStringSatisfyingPredicate s0Row (Pine_kernel.int_add [ s0ColInt, 1 ]))
+                    Bad False (ExpectingStringSatisfyingPredicate s0Row (Pine_builtin.int_add [ s0ColInt, 1 ]))
 
             else
                 Bad False (ExpectingCharSatisfyingPredicate s0Row s0Col)
@@ -3569,9 +3569,9 @@ ifFollowedByWhileWithoutLinebreak firstIsOkay afterFirstIsOkay =
 
                 nextCharBytes : Int
                 nextCharBytes =
-                    Pine_kernel.take
+                    Pine_builtin.take
                         [ 4
-                        , Pine_kernel.skip [ sOffset, sSrcBytes ]
+                        , Pine_builtin.skip [ sOffset, sSrcBytes ]
                         ]
             in
             if firstIsOkay nextCharBytes then
@@ -3580,7 +3580,7 @@ ifFollowedByWhileWithoutLinebreak firstIsOkay afterFirstIsOkay =
                     s1 =
                         skipWhileWithoutLinebreakHelp
                             afterFirstIsOkay
-                            (Pine_kernel.int_add [ sOffset, 4 ])
+                            (Pine_builtin.int_add [ sOffset, 4 ])
                             sRow
                             (sColInt + 1)
                             sSrcBytes
@@ -3591,16 +3591,16 @@ ifFollowedByWhileWithoutLinebreak firstIsOkay afterFirstIsOkay =
 
                     nameSliceBytesLength : Int
                     nameSliceBytesLength =
-                        Pine_kernel.int_add
+                        Pine_builtin.int_add
                             [ s1Offset
-                            , Pine_kernel.int_mul [ -1, sOffset ]
+                            , Pine_builtin.int_mul [ -1, sOffset ]
                             ]
 
                     nameSliceBytes : Int
                     nameSliceBytes =
-                        Pine_kernel.take
+                        Pine_builtin.take
                             [ nameSliceBytesLength
-                            , Pine_kernel.skip [ sOffset, sSrcBytes ]
+                            , Pine_builtin.skip [ sOffset, sSrcBytes ]
                             ]
                 in
                 Good (String nameSliceBytes) s1
@@ -3621,9 +3621,9 @@ ifFollowedByWhileMapWithRangeWithoutLinebreak rangeAndConsumedStringToRes firstI
             let
                 nextCharBytes : Int
                 nextCharBytes =
-                    Pine_kernel.take
+                    Pine_builtin.take
                         [ 4
-                        , Pine_kernel.skip [ s0Offset, s0SrcBytes ]
+                        , Pine_builtin.skip [ s0Offset, s0SrcBytes ]
                         ]
             in
             if firstIsOkay nextCharBytes then
@@ -3632,9 +3632,9 @@ ifFollowedByWhileMapWithRangeWithoutLinebreak rangeAndConsumedStringToRes firstI
                     s1 =
                         skipWhileWithoutLinebreakHelp
                             afterFirstIsOkay
-                            (Pine_kernel.int_add [ s0Offset, 4 ])
+                            (Pine_builtin.int_add [ s0Offset, 4 ])
                             s0Row
-                            (Pine_kernel.int_add [ s0Col, 1 ])
+                            (Pine_builtin.int_add [ s0Col, 1 ])
                             s0SrcBytes
                             s0Indent
 
@@ -3647,16 +3647,16 @@ ifFollowedByWhileMapWithRangeWithoutLinebreak rangeAndConsumedStringToRes firstI
 
                     consumedBytesLength : Int
                     consumedBytesLength =
-                        Pine_kernel.int_add
+                        Pine_builtin.int_add
                             [ s1OffsetInt
-                            , Pine_kernel.int_mul [ -1, s0Offset ]
+                            , Pine_builtin.int_mul [ -1, s0Offset ]
                             ]
 
                     consumedBytes : Int
                     consumedBytes =
-                        Pine_kernel.take
+                        Pine_builtin.take
                             [ consumedBytesLength
-                            , Pine_kernel.skip [ s0Offset, s0SrcBytes ]
+                            , Pine_builtin.skip [ s0Offset, s0SrcBytes ]
                             ]
                 in
                 Good
@@ -3701,7 +3701,7 @@ ifFollowedByWhileMapWithoutLinebreak consumedStringToRes firstIsOkay afterFirstI
                             afterFirstIsOkay
                             firstOffset
                             s0Row
-                            (Pine_kernel.int_add [ s0ColInt, 1 ])
+                            (Pine_builtin.int_add [ s0ColInt, 1 ])
                             s0SrcBytes
                             s0Indent
 
@@ -3714,16 +3714,16 @@ ifFollowedByWhileMapWithoutLinebreak consumedStringToRes firstIsOkay afterFirstI
 
                     consumedCharsBytesLength : Int
                     consumedCharsBytesLength =
-                        Pine_kernel.int_add
+                        Pine_builtin.int_add
                             [ s1OffsetInt
-                            , Pine_kernel.int_mul [ -1, s0Offset ]
+                            , Pine_builtin.int_mul [ -1, s0Offset ]
                             ]
 
                     consumedCharsBytes : Int
                     consumedCharsBytes =
-                        Pine_kernel.take
+                        Pine_builtin.take
                             [ consumedCharsBytesLength
-                            , Pine_kernel.skip [ s0Offset, s0SrcBytes ]
+                            , Pine_builtin.skip [ s0Offset, s0SrcBytes ]
                             ]
 
                     consumedString : String
@@ -3777,7 +3777,7 @@ nestableMultiCommentMapWithRange rangeContentToRes ( openChar, openTail ) ( clos
                     let
                         newNesting : Int
                         newNesting =
-                            Pine_kernel.int_add [ soFarNesting, nestingChange ]
+                            Pine_builtin.int_add [ soFarNesting, nestingChange ]
                     in
                     if newNesting == 0 then
                         Done soFarContent
@@ -3820,16 +3820,16 @@ while isGood =
 
                 sliceBytesLength : Int
                 sliceBytesLength =
-                    Pine_kernel.int_add
+                    Pine_builtin.int_add
                         [ s1OffsetInt
-                        , Pine_kernel.int_mul [ -1, s0OffsetInt ]
+                        , Pine_builtin.int_mul [ -1, s0OffsetInt ]
                         ]
 
                 sliceBytes : Int
                 sliceBytes =
-                    Pine_kernel.take
+                    Pine_builtin.take
                         [ sliceBytesLength
-                        , Pine_kernel.skip [ s0OffsetInt, s0SrcBytes ]
+                        , Pine_builtin.skip [ s0OffsetInt, s0SrcBytes ]
                         ]
             in
             Good
@@ -3860,16 +3860,16 @@ whileWithoutLinebreak isGood =
 
                 sliceBytesLength : Int
                 sliceBytesLength =
-                    Pine_kernel.int_add
+                    Pine_builtin.int_add
                         [ s1OffsetInt
-                        , Pine_kernel.int_mul [ -1, s0OffsetInt ]
+                        , Pine_builtin.int_mul [ -1, s0OffsetInt ]
                         ]
 
                 sliceBytes : Int
                 sliceBytes =
-                    Pine_kernel.take
+                    Pine_builtin.take
                         [ sliceBytesLength
-                        , Pine_kernel.skip [ s0OffsetInt, s0SrcBytes ]
+                        , Pine_builtin.skip [ s0OffsetInt, s0SrcBytes ]
                         ]
             in
             Good
@@ -3901,8 +3901,8 @@ anyCharFollowedByWhileMap consumedStringToRes afterFirstIsOkay =
                         if firstOffset == -2 then
                             skipWhileHelp
                                 afterFirstIsOkay
-                                (Pine_kernel.int_add [ sOffset, 4 ])
-                                (Pine_kernel.int_add [ sRow, 1 ])
+                                (Pine_builtin.int_add [ sOffset, 4 ])
+                                (Pine_builtin.int_add [ sRow, 1 ])
                                 1
                                 sSrcBytes
                                 sIndent
@@ -3912,7 +3912,7 @@ anyCharFollowedByWhileMap consumedStringToRes afterFirstIsOkay =
                                 afterFirstIsOkay
                                 firstOffset
                                 sRow
-                                (Pine_kernel.int_add [ sCol, 1 ])
+                                (Pine_builtin.int_add [ sCol, 1 ])
                                 sSrcBytes
                                 sIndent
 
@@ -3925,16 +3925,16 @@ anyCharFollowedByWhileMap consumedStringToRes afterFirstIsOkay =
 
                     sliceBytesLength : Int
                     sliceBytesLength =
-                        Pine_kernel.int_add
+                        Pine_builtin.int_add
                             [ s1OffsetInt
-                            , Pine_kernel.int_mul [ -1, sOffset ]
+                            , Pine_builtin.int_mul [ -1, sOffset ]
                             ]
 
                     sliceBytes : Int
                     sliceBytes =
-                        Pine_kernel.take
+                        Pine_builtin.take
                             [ sliceBytesLength
-                            , Pine_kernel.skip [ sOffset, sSrcBytes ]
+                            , Pine_builtin.skip [ sOffset, sSrcBytes ]
                             ]
                 in
                 Good (consumedStringToRes (String sliceBytes)) s1
@@ -4046,9 +4046,9 @@ isSubCharWithoutLinebreak predicate offsetBytes stringBytes =
     let
         nextCharBytes : Int
         nextCharBytes =
-            Pine_kernel.take
+            Pine_builtin.take
                 [ 4
-                , Pine_kernel.skip [ offsetBytes, stringBytes ]
+                , Pine_builtin.skip [ offsetBytes, stringBytes ]
                 ]
     in
     if predicate nextCharBytes then

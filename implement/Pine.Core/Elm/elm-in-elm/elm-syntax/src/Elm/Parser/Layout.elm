@@ -32,12 +32,12 @@ whitespaceAndCommentsOrEmpty =
                         state
 
                     nextTwoChars =
-                        Pine_kernel.take
+                        Pine_builtin.take
                             [ 8
-                            , Pine_kernel.skip [ offsetBytes, sourceBytes ]
+                            , Pine_builtin.skip [ offsetBytes, sourceBytes ]
                             ]
                 in
-                if Pine_kernel.equal [ nextTwoChars, Pine_kernel.concat [ '-', '-' ] ] then
+                if Pine_builtin.equal [ nextTwoChars, Pine_builtin.concat [ '-', '-' ] ] then
                     -- this will always succeed from here, so no need to fall back to Rope.empty
                     let
                         (ParserFast.Parser parse) =
@@ -45,7 +45,7 @@ whitespaceAndCommentsOrEmpty =
                     in
                     parse state
 
-                else if Pine_kernel.equal [ nextTwoChars, Pine_kernel.concat [ '{', '-' ] ] then
+                else if Pine_builtin.equal [ nextTwoChars, Pine_builtin.concat [ '{', '-' ] ] then
                     let
                         (ParserFast.Parser parse) =
                             fromMultilineCommentNodeOrEmptyOnProblem
@@ -105,7 +105,7 @@ endsPositivelyIndented : Parser a -> Parser a
 endsPositivelyIndented parser =
     ParserFast.validateEndColumnIndentation
         (\column indent ->
-            Pine_kernel.int_is_sorted_asc [ Pine_kernel.int_add [ indent, 1 ], column ]
+            Pine_builtin.int_is_sorted_asc [ Pine_builtin.int_add [ indent, 1 ], column ]
         )
         "must be positively indented"
         parser
@@ -122,7 +122,7 @@ positivelyIndentedPlusFollowedBy extraIndent nextParser =
                 (ParserFast.PState _ _ indent row column) =
                     state
             in
-            if Pine_kernel.int_is_sorted_asc [ Pine_kernel.int_add [ indent, extraIndent, 1 ], column ] then
+            if Pine_builtin.int_is_sorted_asc [ Pine_builtin.int_add [ indent, extraIndent, 1 ], column ] then
                 let
                     (ParserFast.Parser nextParser_unwrapped) =
                         nextParser
@@ -142,7 +142,7 @@ positivelyIndentedFollowedBy nextParser =
                 (ParserFast.PState _ _ indent row column) =
                     state
             in
-            if Pine_kernel.int_is_sorted_asc [ Pine_kernel.int_add [ indent, 1 ], column ] then
+            if Pine_builtin.int_is_sorted_asc [ Pine_builtin.int_add [ indent, 1 ], column ] then
                 let
                     (ParserFast.Parser nextParser_unwrapped) =
                         nextParser
@@ -206,7 +206,7 @@ moduleLevelIndentationFollowedBy nextParser =
                 (ParserFast.PState _ _ _ row column) =
                     state
             in
-            if Pine_kernel.equal [ column, 1 ] then
+            if Pine_builtin.equal [ column, 1 ] then
                 let
                     (ParserFast.Parser nextParser_unwrapped) =
                         nextParser
@@ -221,7 +221,7 @@ moduleLevelIndentationFollowedBy nextParser =
 endsTopIndented : Parser a -> Parser a
 endsTopIndented parser =
     ParserFast.validateEndColumnIndentation
-        (\column indent -> Pine_kernel.equal [ column, indent ])
+        (\column indent -> Pine_builtin.equal [ column, indent ])
         "must be on top indentation"
         parser
 
@@ -234,7 +234,7 @@ onTopIndentationFollowedBy nextParser =
                 (ParserFast.PState _ _ indent row column) =
                     state
             in
-            if Pine_kernel.equal [ column, indent ] then
+            if Pine_builtin.equal [ column, indent ] then
                 let
                     (ParserFast.Parser nextParser_unwrapped) =
                         nextParser

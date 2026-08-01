@@ -9,7 +9,7 @@ width : Bytes -> Int
 width bytes =
     case bytes of
         Elm_Bytes list ->
-            Pine_kernel.length list
+            Pine_builtin.length list
 
 
 type Endianness

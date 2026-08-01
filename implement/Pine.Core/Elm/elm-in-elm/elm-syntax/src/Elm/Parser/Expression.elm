@@ -27,7 +27,7 @@ subExpression =
                     state
 
                 (ParserFast.Parser chosen) =
-                    case Pine_kernel.take [ 4, Pine_kernel.skip [ offsetBytes, sourceBytes ] ] of
+                    case Pine_builtin.take [ 4, Pine_builtin.skip [ offsetBytes, sourceBytes ] ] of
                         '"' ->
                             literalExpression
 
@@ -1073,9 +1073,9 @@ negationOperation =
 
                     (ParserFast.Parser chosen) =
                         case
-                            Pine_kernel.take
+                            Pine_builtin.take
                                 [ 4
-                                , Pine_kernel.skip [ Pine_kernel.int_add [ offsetBytes, -8 ], sourceBytes ]
+                                , Pine_builtin.skip [ Pine_builtin.int_add [ offsetBytes, -8 ], sourceBytes ]
                                 ]
                         of
                             ' ' ->
@@ -1285,11 +1285,11 @@ allowedPrefixOperatorFollowedByClosingParensOneOf =
                 (Node
                     { start =
                         { row = operatorRange.start.row
-                        , column = Pine_kernel.int_add [ operatorRange.start.column, -1 ]
+                        , column = Pine_builtin.int_add [ operatorRange.start.column, -1 ]
                         }
                     , end =
                         { row = operatorRange.end.row
-                        , column = Pine_kernel.int_add [ operatorRange.end.column, 1 ]
+                        , column = Pine_builtin.int_add [ operatorRange.end.column, 1 ]
                         }
                     }
                     (PrefixOperator operator)
@@ -1656,7 +1656,7 @@ infixLeft leftPrecedence symbol =
             Layout.maybeLayout
             (extendedSubExpressionOptimisticLayout
                 (\info ->
-                    if Pine_kernel.int_is_sorted_asc [ Pine_kernel.int_add [ leftPrecedence, 1 ], info.leftPrecedence ] then
+                    if Pine_builtin.int_is_sorted_asc [ Pine_builtin.int_add [ leftPrecedence, 1 ], info.leftPrecedence ] then
                         Ok info
 
                     else

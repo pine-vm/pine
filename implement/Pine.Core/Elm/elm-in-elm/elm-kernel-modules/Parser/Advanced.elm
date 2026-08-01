@@ -525,15 +525,15 @@ keyword (Token kwd expecting) =
                 ( newOffset, newRow, newCol ) =
                     Elm.Kernel.Parser.isSubString kwd sOffset sRow sCol srcBytes
             in
-            if Pine_kernel.equal [ newOffset, -1 ] then
+            if Pine_builtin.equal [ newOffset, -1 ] then
                 Bad False (fromState s expecting)
 
             else if
-                Pine_kernel.int_is_sorted_asc
+                Pine_builtin.int_is_sorted_asc
                     [ 0
                     , isSubChar
                         (\c ->
-                            Char.isAlphaNum c || Pine_kernel.equal [ c, '_' ]
+                            Char.isAlphaNum c || Pine_builtin.equal [ c, '_' ]
                         )
                         newOffset
                         srcBytes
@@ -604,7 +604,7 @@ token (Token str expecting) =
                 ( newOffset, newRow, newCol ) =
                     Elm.Kernel.Parser.isSubString str sOffset sRow sCol srcBytes
             in
-            if Pine_kernel.equal [ newOffset, -1 ] then
+            if Pine_builtin.equal [ newOffset, -1 ] then
                 Bad False (fromState s expecting)
 
             else
@@ -717,26 +717,26 @@ number c =
                     s
 
                 firstChar =
-                    Pine_kernel.take [ 4, Pine_kernel.skip [ sOffset, srcBytes ] ]
+                    Pine_builtin.take [ 4, Pine_builtin.skip [ sOffset, srcBytes ] ]
             in
-            if Pine_kernel.equal [ firstChar, '0' ] then
+            if Pine_builtin.equal [ firstChar, '0' ] then
                 let
                     zeroOffset =
-                        Pine_kernel.int_add [ sOffset, 4 ]
+                        Pine_builtin.int_add [ sOffset, 4 ]
 
                     secondChar =
-                        Pine_kernel.take [ 4, Pine_kernel.skip [ zeroOffset, srcBytes ] ]
+                        Pine_builtin.take [ 4, Pine_builtin.skip [ zeroOffset, srcBytes ] ]
 
                     baseOffset =
-                        Pine_kernel.int_add [ zeroOffset, 4 ]
+                        Pine_builtin.int_add [ zeroOffset, 4 ]
                 in
-                if Pine_kernel.equal [ secondChar, 'x' ] then
+                if Pine_builtin.equal [ secondChar, 'x' ] then
                     finalizeInt c.invalid c.hex baseOffset (consumeBase16 baseOffset srcBytes) s
 
-                else if Pine_kernel.equal [ secondChar, 'o' ] then
+                else if Pine_builtin.equal [ secondChar, 'o' ] then
                     finalizeInt c.invalid c.octal baseOffset (consumeBase 8 baseOffset srcBytes) s
 
-                else if Pine_kernel.equal [ secondChar, 'b' ] then
+                else if Pine_builtin.equal [ secondChar, 'b' ] then
                     finalizeInt c.invalid c.binary baseOffset (consumeBase 2 baseOffset srcBytes) s
 
                 else
@@ -768,10 +768,10 @@ finalizeInt invalid handler startOffset ( endOffset, n ) s =
                 (PState srcBytes sOffset sIndent sContext sRow sCol) =
                     s
             in
-            if Pine_kernel.equal [ startOffset, endOffset ] then
+            if Pine_builtin.equal [ startOffset, endOffset ] then
                 Bad
-                    (Pine_kernel.negate
-                        (Pine_kernel.int_is_sorted_asc [ startOffset, sOffset ])
+                    (Pine_builtin.negate
+                        (Pine_builtin.int_is_sorted_asc [ startOffset, sOffset ])
                     )
                     (fromState s invalid)
 
@@ -784,15 +784,15 @@ bumpOffset newOffset (PState srcBytes offset indent context row col) =
     let
         bytesDelta : Int
         bytesDelta =
-            Pine_kernel.int_add [ newOffset, Pine_kernel.negate offset ]
+            Pine_builtin.int_add [ newOffset, Pine_builtin.negate offset ]
 
         charsDelta : Int
         charsDelta =
-            Pine_kernel.concat
-                [ Pine_kernel.take [ 1, 0 ]
-                , Pine_kernel.bit_shift_right
+            Pine_builtin.concat
+                [ Pine_builtin.take [ 1, 0 ]
+                , Pine_builtin.bit_shift_right
                     [ 2
-                    , Pine_kernel.skip [ 1, bytesDelta ]
+                    , Pine_builtin.skip [ 1, bytesDelta ]
                     ]
                 ]
     in
@@ -802,7 +802,7 @@ bumpOffset newOffset (PState srcBytes offset indent context row col) =
         indent
         context
         row
-        (Pine_kernel.int_add [ col, charsDelta ])
+        (Pine_builtin.int_add [ col, charsDelta ])
 
 
 finalizeFloat : x -> x -> Result x (Int -> a) -> Result x (Float -> a) -> ( Int, Int ) -> State c -> PStep c x a
@@ -817,11 +817,11 @@ finalizeFloat invalid expecting intSettings floatSettings intPair s =
         floatOffset =
             consumeDotAndExp intOffset srcBytes
     in
-    if Pine_kernel.int_is_sorted_asc [ 0, floatOffset ] then
-        if Pine_kernel.equal [ sOffset, floatOffset ] then
+    if Pine_builtin.int_is_sorted_asc [ 0, floatOffset ] then
+        if Pine_builtin.equal [ sOffset, floatOffset ] then
             Bad False (fromState s expecting)
 
-        else if Pine_kernel.equal [ intOffset, floatOffset ] then
+        else if Pine_builtin.equal [ intOffset, floatOffset ] then
             finalizeInt invalid intSettings sOffset intPair s
 
         else
@@ -833,13 +833,13 @@ finalizeFloat invalid expecting intSettings floatSettings intPair s =
                     let
                         sliceLength : Int
                         sliceLength =
-                            Pine_kernel.int_add [ floatOffset, Pine_kernel.negate sOffset ]
+                            Pine_builtin.int_add [ floatOffset, Pine_builtin.negate sOffset ]
 
                         sliceBytes : Int
                         sliceBytes =
-                            Pine_kernel.take
+                            Pine_builtin.take
                                 [ sliceLength
-                                , Pine_kernel.skip
+                                , Pine_builtin.skip
                                     [ sOffset
                                     , srcBytes
                                     ]
@@ -858,15 +858,15 @@ finalizeFloat invalid expecting intSettings floatSettings intPair s =
                 sRow
                 (let
                     tempBytes =
-                        Pine_kernel.int_add [ floatOffset, sOffset ]
+                        Pine_builtin.int_add [ floatOffset, sOffset ]
 
                     tempChars =
-                        Pine_kernel.concat
-                            [ Pine_kernel.take [ 1, 0 ]
-                            , Pine_kernel.bit_shift_right [ 2, Pine_kernel.skip [ 1, tempBytes ] ]
+                        Pine_builtin.concat
+                            [ Pine_builtin.take [ 1, 0 ]
+                            , Pine_builtin.bit_shift_right [ 2, Pine_builtin.skip [ 1, tempBytes ] ]
                             ]
                  in
-                 Pine_kernel.int_add [ sCol, Pine_kernel.negate tempChars ]
+                 Pine_builtin.int_add [ sCol, Pine_builtin.negate tempChars ]
                 )
                 invalid
                 sContext
@@ -881,10 +881,10 @@ finalizeFloat invalid expecting intSettings floatSettings intPair s =
 
 consumeDotAndExp : Int -> Int -> Int
 consumeDotAndExp offset charsBytes =
-    if Pine_kernel.equal [ Pine_kernel.take [ 4, Pine_kernel.skip [ offset, charsBytes ] ], '.' ] then
+    if Pine_builtin.equal [ Pine_builtin.take [ 4, Pine_builtin.skip [ offset, charsBytes ] ], '.' ] then
         consumeExp
             (Elm.Kernel.Parser.chompBase10
-                (Pine_kernel.int_add [ offset, 4 ])
+                (Pine_builtin.int_add [ offset, 4 ])
                 charsBytes
             )
             charsBytes
@@ -903,27 +903,27 @@ consumeExp : Int -> Int -> Int
 consumeExp offset charsBytes =
     let
         nextChar =
-            Pine_kernel.take
+            Pine_builtin.take
                 [ 4
-                , Pine_kernel.skip [ offset, charsBytes ]
+                , Pine_builtin.skip [ offset, charsBytes ]
                 ]
     in
-    if Pine_kernel.equal [ nextChar, 'e' ] || Pine_kernel.equal [ nextChar, 'E' ] then
+    if Pine_builtin.equal [ nextChar, 'e' ] || Pine_builtin.equal [ nextChar, 'E' ] then
         let
             eOffset : Int
             eOffset =
-                Pine_kernel.int_add [ offset, 4 ]
+                Pine_builtin.int_add [ offset, 4 ]
 
             charAfterE =
-                Pine_kernel.take
+                Pine_builtin.take
                     [ 4
-                    , Pine_kernel.skip [ eOffset, charsBytes ]
+                    , Pine_builtin.skip [ eOffset, charsBytes ]
                     ]
 
             expOffset : Int
             expOffset =
-                if Pine_kernel.equal [ charAfterE, '+' ] || Pine_kernel.equal [ charAfterE, '-' ] then
-                    Pine_kernel.int_add [ eOffset, 4 ]
+                if Pine_builtin.equal [ charAfterE, '+' ] || Pine_builtin.equal [ charAfterE, '-' ] then
+                    Pine_builtin.int_add [ eOffset, 4 ]
 
                 else
                     eOffset
@@ -932,8 +932,8 @@ consumeExp offset charsBytes =
             newOffset =
                 Elm.Kernel.Parser.chompBase10 expOffset charsBytes
         in
-        if Pine_kernel.equal [ expOffset, newOffset ] then
-            Pine_kernel.negate newOffset
+        if Pine_builtin.equal [ expOffset, newOffset ] then
+            Pine_builtin.negate newOffset
 
         else
             newOffset
@@ -957,7 +957,7 @@ end x =
                 (PState srcBytes sOffset sIndent sContext sRow sCol) =
                     s
             in
-            if Pine_kernel.equal [ Pine_kernel.length srcBytes, sOffset ] then
+            if Pine_builtin.equal [ Pine_builtin.length srcBytes, sOffset ] then
                 Good False () s
 
             else
@@ -996,16 +996,16 @@ mapChompedString func (Parser parse) =
 
                         sliceLength : Int
                         sliceLength =
-                            Pine_kernel.int_add
+                            Pine_builtin.int_add
                                 [ s1Offset
-                                , Pine_kernel.negate sOffset
+                                , Pine_builtin.negate sOffset
                                 ]
 
                         sliceBytes : Int
                         sliceBytes =
-                            Pine_kernel.take
+                            Pine_builtin.take
                                 [ sliceLength
-                                , Pine_kernel.skip
+                                , Pine_builtin.skip
                                     [ sOffset
                                     , srcBytes
                                     ]
@@ -1034,19 +1034,19 @@ chompIf isGood expecting =
                     isSubChar isGood sOffset srcBytes
             in
             -- not found
-            if Pine_kernel.equal [ newOffset, -1 ] then
+            if Pine_builtin.equal [ newOffset, -1 ] then
                 Bad False (fromState s expecting)
                 -- newline
 
-            else if Pine_kernel.equal [ newOffset, -2 ] then
+            else if Pine_builtin.equal [ newOffset, -2 ] then
                 Good True
                     ()
                     (PState
                         srcBytes
-                        (Pine_kernel.int_add [ sOffset, 4 ])
+                        (Pine_builtin.int_add [ sOffset, 4 ])
                         sIndent
                         sContext
-                        (Pine_kernel.int_add [ sRow, 1 ])
+                        (Pine_builtin.int_add [ sRow, 1 ])
                         1
                     )
                 -- found
@@ -1060,7 +1060,7 @@ chompIf isGood expecting =
                         sIndent
                         sContext
                         sRow
-                        (Pine_kernel.int_add [ sCol, 1 ])
+                        (Pine_builtin.int_add [ sCol, 1 ])
                     )
         )
 
@@ -1086,8 +1086,8 @@ chompWhile isGood =
                         srcBytes
             in
             Good
-                (Pine_kernel.negate
-                    (Pine_kernel.int_is_sorted_asc [ newOffset, sOffset ])
+                (Pine_builtin.negate
+                    (Pine_builtin.int_is_sorted_asc [ newOffset, sOffset ])
                 )
                 ()
                 (PState
@@ -1120,13 +1120,13 @@ chompUntil (Token str expecting) =
                 ( newOffset, newRow, newCol ) =
                     Elm.Kernel.Parser.findSubString str sOffset sRow sCol srcBytes
             in
-            if Pine_kernel.equal [ newOffset, -1 ] then
+            if Pine_builtin.equal [ newOffset, -1 ] then
                 Bad False (fromInfo newRow newCol expecting sContext)
 
             else
                 Good
-                    (Pine_kernel.negate
-                        (Pine_kernel.int_is_sorted_asc [ newOffset, sOffset ])
+                    (Pine_builtin.negate
+                        (Pine_builtin.int_is_sorted_asc [ newOffset, sOffset ])
                     )
                     ()
                     (PState
@@ -1155,13 +1155,13 @@ chompUntilEndOr str =
 
                 adjustedOffset : Int
                 adjustedOffset =
-                    if Pine_kernel.int_is_sorted_asc [ 0, newOffset ] then
+                    if Pine_builtin.int_is_sorted_asc [ 0, newOffset ] then
                         newOffset
 
                     else
-                        Pine_kernel.length srcBytes
+                        Pine_builtin.length srcBytes
             in
-            Good (Pine_kernel.negate (Pine_kernel.int_is_sorted_asc [ adjustedOffset, sOffset ]))
+            Good (Pine_builtin.negate (Pine_builtin.int_is_sorted_asc [ adjustedOffset, sOffset ]))
                 ()
                 (PState
                     srcBytes
@@ -1392,26 +1392,26 @@ variable i =
                     s
 
                 firstChar =
-                    Pine_kernel.take
+                    Pine_builtin.take
                         [ 4
-                        , Pine_kernel.skip [ sOffset, srcBytes ]
+                        , Pine_builtin.skip [ sOffset, srcBytes ]
                         ]
             in
             {-
                First check if we have reached the end of the source string, to account for the possibility of
                a predicate for i.start crashing when given an empty list.
             -}
-            if Pine_kernel.equal [ Pine_kernel.length firstChar, 0 ] then
+            if Pine_builtin.equal [ Pine_builtin.length firstChar, 0 ] then
                 Bad False (fromState s i.expecting)
 
             else if i.start firstChar then
                 let
                     s1 =
-                        if Pine_kernel.equal [ firstChar, '\n' ] then
+                        if Pine_builtin.equal [ firstChar, '\n' ] then
                             varHelp
                                 i.inner
-                                (Pine_kernel.int_add [ sOffset, 4 ])
-                                (Pine_kernel.int_add [ row, 1 ])
+                                (Pine_builtin.int_add [ sOffset, 4 ])
+                                (Pine_builtin.int_add [ row, 1 ])
                                 1
                                 srcBytes
                                 indent
@@ -1420,9 +1420,9 @@ variable i =
                         else
                             varHelp
                                 i.inner
-                                (Pine_kernel.int_add [ sOffset, 4 ])
+                                (Pine_builtin.int_add [ sOffset, 4 ])
                                 row
-                                (Pine_kernel.int_add [ col, 1 ])
+                                (Pine_builtin.int_add [ col, 1 ])
                                 srcBytes
                                 indent
                                 context
@@ -1432,16 +1432,16 @@ variable i =
 
                     sliceLength : Int
                     sliceLength =
-                        Pine_kernel.int_add
+                        Pine_builtin.int_add
                             [ s1Offset
-                            , Pine_kernel.negate sOffset
+                            , Pine_builtin.negate sOffset
                             ]
 
                     nameBytes : Int
                     nameBytes =
-                        Pine_kernel.take
+                        Pine_builtin.take
                             [ sliceLength
-                            , Pine_kernel.skip [ sOffset, srcBytes ]
+                            , Pine_builtin.skip [ sOffset, srcBytes ]
                             ]
 
                     name : String
@@ -1622,13 +1622,13 @@ spaces : Parser c x ()
 spaces =
     chompWhile
         (\c ->
-            if Pine_kernel.equal [ c, ' ' ] then
+            if Pine_builtin.equal [ c, ' ' ] then
                 True
 
-            else if Pine_kernel.equal [ c, '\n' ] then
+            else if Pine_builtin.equal [ c, '\n' ] then
                 True
 
-            else if Pine_kernel.equal [ c, '\u{000D}' ] then
+            else if Pine_builtin.equal [ c, '\u{000D}' ] then
                 True
 
             else
@@ -1670,15 +1670,15 @@ nestableComment : Token x -> Token x -> Parser c x ()
 nestableComment ((Token (String openChars) oX) as open) ((Token (String closeChars) cX) as close) =
     let
         openChar =
-            Pine_kernel.take [ 4, openChars ]
+            Pine_builtin.take [ 4, openChars ]
 
         closeChar =
-            Pine_kernel.take [ 4, closeChars ]
+            Pine_builtin.take [ 4, closeChars ]
     in
-    if Pine_kernel.equal [ Pine_kernel.length openChars, 0 ] then
+    if Pine_builtin.equal [ Pine_builtin.length openChars, 0 ] then
         problem oX
 
-    else if Pine_kernel.equal [ Pine_kernel.length closeChars, 0 ] then
+    else if Pine_builtin.equal [ Pine_builtin.length closeChars, 0 ] then
         problem cX
 
     else
@@ -1699,10 +1699,10 @@ nestableComment ((Token (String openChars) oX) as open) ((Token (String closeCha
 
 nestableCommentPredicateNotRelevant : Char -> Char -> Char -> Bool
 nestableCommentPredicateNotRelevant openChar closeChar char =
-    if Pine_kernel.equal [ char, openChar ] then
+    if Pine_builtin.equal [ char, openChar ] then
         False
 
-    else if Pine_kernel.equal [ char, closeChar ] then
+    else if Pine_builtin.equal [ char, closeChar ] then
         False
 
     else
@@ -1714,7 +1714,7 @@ nestableHelp isNotRelevant open close expectingClose nestLevel =
     skip
         (chompWhile isNotRelevant)
         (oneOf
-            [ if Pine_kernel.equal [ nestLevel, 1 ] then
+            [ if Pine_builtin.equal [ nestLevel, 1 ] then
                 close
 
               else
@@ -1726,7 +1726,7 @@ nestableHelp isNotRelevant open close expectingClose nestLevel =
                                 open
                                 close
                                 expectingClose
-                                (Pine_kernel.int_add [ nestLevel, -1 ])
+                                (Pine_builtin.int_add [ nestLevel, -1 ])
                         )
             , open
                 |> andThen
@@ -1736,7 +1736,7 @@ nestableHelp isNotRelevant open close expectingClose nestLevel =
                             open
                             close
                             expectingClose
-                            (Pine_kernel.int_add [ nestLevel, 1 ])
+                            (Pine_builtin.int_add [ nestLevel, 1 ])
                     )
             , chompIf isChar expectingClose
                 |> andThen

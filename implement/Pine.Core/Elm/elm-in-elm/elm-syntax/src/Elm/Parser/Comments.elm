@@ -32,7 +32,7 @@ multilineComment =
                     state
 
                 (ParserFast.Parser chosen) =
-                    case Pine_kernel.take [ 4, Pine_kernel.skip [ Pine_kernel.int_add [ offsetBytes, 8 ], sourceBytes ] ] of
+                    case Pine_builtin.take [ 4, Pine_builtin.skip [ Pine_builtin.int_add [ offsetBytes, 8 ], sourceBytes ] ] of
                         '|' ->
                             problemUnexpectedDocumentation
 

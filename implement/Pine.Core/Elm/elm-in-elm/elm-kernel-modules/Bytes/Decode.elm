@@ -37,9 +37,9 @@ decode (Decoder decoder) bites =
             decoder bites 0
 
         blobLength =
-            Pine_kernel.length blob
+            Pine_builtin.length blob
     in
-    if Pine_kernel.int_is_sorted_asc [ 0, offset, blobLength ] then
+    if Pine_builtin.int_is_sorted_asc [ 0, offset, blobLength ] then
         Just result
 
     else
@@ -50,8 +50,8 @@ bytes : Int -> Decoder Bytes
 bytes length =
     Decoder
         (\blob offset ->
-            ( Pine_kernel.int_add [ offset, length ]
-            , Bytes.Elm_Bytes (Pine_kernel.take [ length, Pine_kernel.skip [ offset, blob ] ])
+            ( Pine_builtin.int_add [ offset, length ]
+            , Bytes.Elm_Bytes (Pine_builtin.take [ length, Pine_builtin.skip [ offset, blob ] ])
             )
         )
 
@@ -64,10 +64,10 @@ unsignedInt8 =
         (\(Bytes.Elm_Bytes blob) offset ->
             let
                 byte =
-                    Pine_kernel.take [ 1, Pine_kernel.skip [ offset, blob ] ]
+                    Pine_builtin.take [ 1, Pine_builtin.skip [ offset, blob ] ]
             in
-            ( Pine_kernel.int_add [ offset, 1 ]
-            , Pine_kernel.concat [ Pine_kernel.take [ 1, 0 ], byte ]
+            ( Pine_builtin.int_add [ offset, 1 ]
+            , Pine_builtin.concat [ Pine_builtin.take [ 1, 0 ], byte ]
             )
         )
 
@@ -78,28 +78,28 @@ signedInt8 =
         (\(Bytes.Elm_Bytes blob) offset ->
             let
                 byte =
-                    Pine_kernel.take [ 1, Pine_kernel.skip [ offset, blob ] ]
+                    Pine_builtin.take [ 1, Pine_builtin.skip [ offset, blob ] ]
 
                 highBitMask =
-                    Pine_kernel.skip [ 1, 0x80 ]
+                    Pine_builtin.skip [ 1, 0x80 ]
 
                 zeroByte =
-                    Pine_kernel.skip [ 2, 0x0100 ]
+                    Pine_builtin.skip [ 2, 0x0100 ]
 
                 asInt =
-                    if Pine_kernel.equal [ Pine_kernel.bit_and [ byte, highBitMask ], zeroByte ] then
-                        Pine_kernel.concat [ Pine_kernel.take [ 1, 0 ], byte ]
+                    if Pine_builtin.equal [ Pine_builtin.bit_and [ byte, highBitMask ], zeroByte ] then
+                        Pine_builtin.concat [ Pine_builtin.take [ 1, 0 ], byte ]
 
                     else
-                        Pine_kernel.int_add
+                        Pine_builtin.int_add
                             [ -1
-                            , Pine_kernel.concat
-                                [ Pine_kernel.take [ 1, -1 ]
-                                , Pine_kernel.bit_not byte
+                            , Pine_builtin.concat
+                                [ Pine_builtin.take [ 1, -1 ]
+                                , Pine_builtin.bit_not byte
                                 ]
                             ]
             in
-            ( Pine_kernel.int_add [ offset, 1 ]
+            ( Pine_builtin.int_add [ offset, 1 ]
             , asInt
             )
         )
@@ -111,22 +111,22 @@ unsignedInt16 endianness =
         (\(Bytes.Elm_Bytes blob) offset ->
             let
                 rawBytes =
-                    Pine_kernel.take [ 2, Pine_kernel.skip [ offset, blob ] ]
+                    Pine_builtin.take [ 2, Pine_builtin.skip [ offset, blob ] ]
 
                 asInt =
-                    if Pine_kernel.equal [ endianness, Bytes.LE ] then
-                        Pine_kernel.concat
-                            [ Pine_kernel.take [ 1, 0 ]
-                            , Pine_kernel.reverse rawBytes
+                    if Pine_builtin.equal [ endianness, Bytes.LE ] then
+                        Pine_builtin.concat
+                            [ Pine_builtin.take [ 1, 0 ]
+                            , Pine_builtin.reverse rawBytes
                             ]
 
                     else
-                        Pine_kernel.concat
-                            [ Pine_kernel.take [ 1, 0 ]
+                        Pine_builtin.concat
+                            [ Pine_builtin.take [ 1, 0 ]
                             , rawBytes
                             ]
             in
-            ( Pine_kernel.int_add [ offset, 2 ]
+            ( Pine_builtin.int_add [ offset, 2 ]
             , asInt
             )
         )
@@ -138,34 +138,34 @@ signedInt16 endianness =
         (\(Bytes.Elm_Bytes blob) offset ->
             let
                 rawBytes =
-                    Pine_kernel.take [ 2, Pine_kernel.skip [ offset, blob ] ]
+                    Pine_builtin.take [ 2, Pine_builtin.skip [ offset, blob ] ]
 
                 bytesOrdered =
-                    if Pine_kernel.equal [ endianness, Bytes.LE ] then
-                        Pine_kernel.reverse rawBytes
+                    if Pine_builtin.equal [ endianness, Bytes.LE ] then
+                        Pine_builtin.reverse rawBytes
 
                     else
                         rawBytes
 
                 asInt =
                     if
-                        Pine_kernel.equal
-                            [ Pine_kernel.bit_and [ bytesOrdered, Pine_kernel.skip [ 1, 0x8000 ] ]
-                            , Pine_kernel.skip [ 2, 0x00010000 ]
+                        Pine_builtin.equal
+                            [ Pine_builtin.bit_and [ bytesOrdered, Pine_builtin.skip [ 1, 0x8000 ] ]
+                            , Pine_builtin.skip [ 2, 0x00010000 ]
                             ]
                     then
-                        Pine_kernel.concat [ Pine_kernel.take [ 1, 0 ], bytesOrdered ]
+                        Pine_builtin.concat [ Pine_builtin.take [ 1, 0 ], bytesOrdered ]
 
                     else
-                        Pine_kernel.int_add
+                        Pine_builtin.int_add
                             [ -1
-                            , Pine_kernel.concat
-                                [ Pine_kernel.take [ 1, -1 ]
-                                , Pine_kernel.bit_not bytesOrdered
+                            , Pine_builtin.concat
+                                [ Pine_builtin.take [ 1, -1 ]
+                                , Pine_builtin.bit_not bytesOrdered
                                 ]
                             ]
             in
-            ( Pine_kernel.int_add [ offset, 2 ]
+            ( Pine_builtin.int_add [ offset, 2 ]
             , asInt
             )
         )
@@ -177,19 +177,19 @@ unsignedInt32 endianness =
         (\(Bytes.Elm_Bytes blob) offset ->
             let
                 rawBytes =
-                    Pine_kernel.take [ 4, Pine_kernel.skip [ offset, blob ] ]
+                    Pine_builtin.take [ 4, Pine_builtin.skip [ offset, blob ] ]
 
                 asInt =
-                    if Pine_kernel.equal [ endianness, Bytes.LE ] then
-                        Pine_kernel.concat
-                            [ Pine_kernel.take [ 1, 0 ]
-                            , Pine_kernel.reverse rawBytes
+                    if Pine_builtin.equal [ endianness, Bytes.LE ] then
+                        Pine_builtin.concat
+                            [ Pine_builtin.take [ 1, 0 ]
+                            , Pine_builtin.reverse rawBytes
                             ]
 
                     else
-                        Pine_kernel.concat [ Pine_kernel.take [ 1, 0 ], rawBytes ]
+                        Pine_builtin.concat [ Pine_builtin.take [ 1, 0 ], rawBytes ]
             in
-            ( Pine_kernel.int_add [ offset, 4 ]
+            ( Pine_builtin.int_add [ offset, 4 ]
             , asInt
             )
         )
@@ -201,34 +201,34 @@ signedInt32 endianness =
         (\(Bytes.Elm_Bytes blob) offset ->
             let
                 rawBytes =
-                    Pine_kernel.take [ 4, Pine_kernel.skip [ offset, blob ] ]
+                    Pine_builtin.take [ 4, Pine_builtin.skip [ offset, blob ] ]
 
                 bytesOrdered =
-                    if Pine_kernel.equal [ endianness, Bytes.LE ] then
-                        Pine_kernel.reverse rawBytes
+                    if Pine_builtin.equal [ endianness, Bytes.LE ] then
+                        Pine_builtin.reverse rawBytes
 
                     else
                         rawBytes
 
                 asInt =
                     if
-                        Pine_kernel.equal
-                            [ Pine_kernel.bit_and [ bytesOrdered, Pine_kernel.skip [ 1, 0x80000000 ] ]
-                            , Pine_kernel.skip [ 2, 0x0000000100000000 ]
+                        Pine_builtin.equal
+                            [ Pine_builtin.bit_and [ bytesOrdered, Pine_builtin.skip [ 1, 0x80000000 ] ]
+                            , Pine_builtin.skip [ 2, 0x0000000100000000 ]
                             ]
                     then
-                        Pine_kernel.concat [ Pine_kernel.take [ 1, 0 ], bytesOrdered ]
+                        Pine_builtin.concat [ Pine_builtin.take [ 1, 0 ], bytesOrdered ]
 
                     else
-                        Pine_kernel.int_add
+                        Pine_builtin.int_add
                             [ -1
-                            , Pine_kernel.concat
-                                [ Pine_kernel.take [ 1, -1 ]
-                                , Pine_kernel.bit_not bytesOrdered
+                            , Pine_builtin.concat
+                                [ Pine_builtin.take [ 1, -1 ]
+                                , Pine_builtin.bit_not bytesOrdered
                                 ]
                             ]
             in
-            ( Pine_kernel.int_add [ offset, 4 ]
+            ( Pine_builtin.int_add [ offset, 4 ]
             , asInt
             )
         )
@@ -240,9 +240,9 @@ string length =
         (\(Bytes.Elm_Bytes blob) offset ->
             let
                 rawBytes =
-                    Pine_kernel.take [ length, Pine_kernel.skip [ offset, blob ] ]
+                    Pine_builtin.take [ length, Pine_builtin.skip [ offset, blob ] ]
             in
-            ( Pine_kernel.int_add [ offset, length ]
+            ( Pine_builtin.int_add [ offset, length ]
             , decodeBlobAsChars rawBytes
             )
         )
@@ -255,7 +255,7 @@ decodeBlobAsChars blob =
 
 decodeBlobAsCharsRec : Int -> Int -> List Char -> String
 decodeBlobAsCharsRec offset blob chars =
-    if Pine_kernel.int_is_sorted_asc [ Pine_kernel.length blob, offset ] then
+    if Pine_builtin.int_is_sorted_asc [ Pine_builtin.length blob, offset ] then
         String.fromList (List.reverse chars)
 
     else
@@ -264,7 +264,7 @@ decodeBlobAsCharsRec offset blob chars =
                 decodeUtf8Char blob offset
         in
         decodeBlobAsCharsRec
-            (Pine_kernel.int_add [ offset, bytesConsumed ])
+            (Pine_builtin.int_add [ offset, bytesConsumed ])
             blob
             (Char.fromCode charCode :: chars)
 
@@ -273,112 +273,112 @@ decodeUtf8Char : Int -> Int -> ( Int, Int )
 decodeUtf8Char blob offset =
     let
         firstByte =
-            Pine_kernel.take [ 1, Pine_kernel.skip [ offset, blob ] ]
+            Pine_builtin.take [ 1, Pine_builtin.skip [ offset, blob ] ]
 
         firstByteInt =
-            Pine_kernel.concat [ Pine_kernel.take [ 1, 0 ], firstByte ]
+            Pine_builtin.concat [ Pine_builtin.take [ 1, 0 ], firstByte ]
 
         charCodeSingleByte =
-            Pine_kernel.concat [ Pine_kernel.take [ 1, 0 ], firstByte ]
+            Pine_builtin.concat [ Pine_builtin.take [ 1, 0 ], firstByte ]
     in
-    if Pine_kernel.int_is_sorted_asc [ firstByteInt, 0x7F ] then
+    if Pine_builtin.int_is_sorted_asc [ firstByteInt, 0x7F ] then
         -- 1-byte character (ASCII)
         ( charCodeSingleByte, 1 )
 
-    else if Pine_kernel.equal [ Pine_kernel.bit_and [ firstByteInt, 0xE0 ], 0xC0 ] then
+    else if Pine_builtin.equal [ Pine_builtin.bit_and [ firstByteInt, 0xE0 ], 0xC0 ] then
         -- 2-byte character
         let
             byte2 =
-                Pine_kernel.take [ 1, Pine_kernel.skip [ Pine_kernel.int_add [ offset, 1 ], blob ] ]
+                Pine_builtin.take [ 1, Pine_builtin.skip [ Pine_builtin.int_add [ offset, 1 ], blob ] ]
 
             byte2Int =
-                Pine_kernel.concat [ Pine_kernel.take [ 1, 0 ], byte2 ]
+                Pine_builtin.concat [ Pine_builtin.take [ 1, 0 ], byte2 ]
 
             firstFiveBits =
-                Pine_kernel.bit_and [ firstByteInt, 0x1F ]
+                Pine_builtin.bit_and [ firstByteInt, 0x1F ]
 
             secondSixBits =
-                Pine_kernel.bit_and [ byte2Int, 0x3F ]
+                Pine_builtin.bit_and [ byte2Int, 0x3F ]
 
             charCode2 =
-                Pine_kernel.int_add
-                    [ Pine_kernel.int_mul [ firstFiveBits, 64 ] -- Multiply by 2^6
+                Pine_builtin.int_add
+                    [ Pine_builtin.int_mul [ firstFiveBits, 64 ] -- Multiply by 2^6
                     , secondSixBits
                     ]
         in
         ( charCode2, 2 )
 
-    else if Pine_kernel.equal [ Pine_kernel.bit_and [ firstByteInt, 0xF0 ], 0xE0 ] then
+    else if Pine_builtin.equal [ Pine_builtin.bit_and [ firstByteInt, 0xF0 ], 0xE0 ] then
         -- 3-byte character
         let
             byte2 =
-                Pine_kernel.take [ 1, Pine_kernel.skip [ Pine_kernel.int_add [ offset, 1 ], blob ] ]
+                Pine_builtin.take [ 1, Pine_builtin.skip [ Pine_builtin.int_add [ offset, 1 ], blob ] ]
 
             byte2Int =
-                Pine_kernel.concat [ Pine_kernel.take [ 1, 0 ], byte2 ]
+                Pine_builtin.concat [ Pine_builtin.take [ 1, 0 ], byte2 ]
 
             byte3 =
-                Pine_kernel.take [ 1, Pine_kernel.skip [ Pine_kernel.int_add [ offset, 2 ], blob ] ]
+                Pine_builtin.take [ 1, Pine_builtin.skip [ Pine_builtin.int_add [ offset, 2 ], blob ] ]
 
             byte3Int =
-                Pine_kernel.concat [ Pine_kernel.take [ 1, 0 ], byte3 ]
+                Pine_builtin.concat [ Pine_builtin.take [ 1, 0 ], byte3 ]
 
             firstFourBits =
-                Pine_kernel.bit_and [ firstByteInt, 0x0F ]
+                Pine_builtin.bit_and [ firstByteInt, 0x0F ]
 
             secondSixBits =
-                Pine_kernel.bit_and [ byte2Int, 0x3F ]
+                Pine_builtin.bit_and [ byte2Int, 0x3F ]
 
             thirdSixBits =
-                Pine_kernel.bit_and [ byte3Int, 0x3F ]
+                Pine_builtin.bit_and [ byte3Int, 0x3F ]
 
             charCode3 =
-                Pine_kernel.int_add
-                    [ Pine_kernel.int_mul [ firstFourBits, 4096 ] -- Multiply by 2^12
-                    , Pine_kernel.int_mul [ secondSixBits, 64 ] -- Multiply by 2^6
+                Pine_builtin.int_add
+                    [ Pine_builtin.int_mul [ firstFourBits, 4096 ] -- Multiply by 2^12
+                    , Pine_builtin.int_mul [ secondSixBits, 64 ] -- Multiply by 2^6
                     , thirdSixBits
                     ]
         in
         ( charCode3, 3 )
 
-    else if Pine_kernel.equal [ Pine_kernel.bit_and [ firstByteInt, 0xF8 ], 0xF0 ] then
+    else if Pine_builtin.equal [ Pine_builtin.bit_and [ firstByteInt, 0xF8 ], 0xF0 ] then
         -- 4-byte character
         let
             byte2 =
-                Pine_kernel.take [ 1, Pine_kernel.skip [ Pine_kernel.int_add [ offset, 1 ], blob ] ]
+                Pine_builtin.take [ 1, Pine_builtin.skip [ Pine_builtin.int_add [ offset, 1 ], blob ] ]
 
             byte2Int =
-                Pine_kernel.concat [ Pine_kernel.take [ 1, 0 ], byte2 ]
+                Pine_builtin.concat [ Pine_builtin.take [ 1, 0 ], byte2 ]
 
             byte3 =
-                Pine_kernel.take [ 1, Pine_kernel.skip [ Pine_kernel.int_add [ offset, 2 ], blob ] ]
+                Pine_builtin.take [ 1, Pine_builtin.skip [ Pine_builtin.int_add [ offset, 2 ], blob ] ]
 
             byte3Int =
-                Pine_kernel.concat [ Pine_kernel.take [ 1, 0 ], byte3 ]
+                Pine_builtin.concat [ Pine_builtin.take [ 1, 0 ], byte3 ]
 
             byte4 =
-                Pine_kernel.take [ 1, Pine_kernel.skip [ Pine_kernel.int_add [ offset, 3 ], blob ] ]
+                Pine_builtin.take [ 1, Pine_builtin.skip [ Pine_builtin.int_add [ offset, 3 ], blob ] ]
 
             byte4Int =
-                Pine_kernel.concat [ Pine_kernel.take [ 1, 0 ], byte4 ]
+                Pine_builtin.concat [ Pine_builtin.take [ 1, 0 ], byte4 ]
 
             firstThreeBits =
-                Pine_kernel.bit_and [ firstByteInt, 0x07 ]
+                Pine_builtin.bit_and [ firstByteInt, 0x07 ]
 
             secondSixBits =
-                Pine_kernel.bit_and [ byte2Int, 0x3F ]
+                Pine_builtin.bit_and [ byte2Int, 0x3F ]
 
             thirdSixBits =
-                Pine_kernel.bit_and [ byte3Int, 0x3F ]
+                Pine_builtin.bit_and [ byte3Int, 0x3F ]
 
             fourthSixBits =
-                Pine_kernel.bit_and [ byte4Int, 0x3F ]
+                Pine_builtin.bit_and [ byte4Int, 0x3F ]
 
             charCode4 =
-                Pine_kernel.int_add
-                    [ Pine_kernel.int_mul [ firstThreeBits, 262144 ] -- Multiply by 2^18
-                    , Pine_kernel.int_mul [ secondSixBits, 4096 ] -- Multiply by 2^12
-                    , Pine_kernel.int_mul [ thirdSixBits, 64 ] -- Multiply by 2^6
+                Pine_builtin.int_add
+                    [ Pine_builtin.int_mul [ firstThreeBits, 262144 ] -- Multiply by 2^18
+                    , Pine_builtin.int_mul [ secondSixBits, 4096 ] -- Multiply by 2^12
+                    , Pine_builtin.int_mul [ thirdSixBits, 64 ] -- Multiply by 2^6
                     , fourthSixBits
                     ]
         in

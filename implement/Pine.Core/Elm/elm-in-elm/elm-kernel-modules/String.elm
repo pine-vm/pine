@@ -69,24 +69,24 @@ toListRecursive : Int -> List Char -> Int -> List Char
 toListRecursive offset list blob =
     let
         nextChar =
-            Pine_kernel.take
+            Pine_builtin.take
                 [ 4
-                , Pine_kernel.skip [ offset, blob ]
+                , Pine_builtin.skip [ offset, blob ]
                 ]
     in
-    if Pine_kernel.equal [ Pine_kernel.length nextChar, 0 ] then
+    if Pine_builtin.equal [ Pine_builtin.length nextChar, 0 ] then
         list
 
     else
         toListRecursive
-            (Pine_kernel.int_add [ offset, 4 ])
-            (Pine_kernel.concat [ list, [ nextChar ] ])
+            (Pine_builtin.int_add [ offset, 4 ])
+            (Pine_builtin.concat [ list, [ nextChar ] ])
             blob
 
 
 fromList : List Char -> String
 fromList chars =
-    String (Pine_kernel.concat chars)
+    String (Pine_builtin.concat chars)
 
 
 fromChar : Char -> String
@@ -96,31 +96,31 @@ fromChar char =
 
 cons : Char -> String -> String
 cons char (String string) =
-    String (Pine_kernel.concat [ char, string ])
+    String (Pine_builtin.concat [ char, string ])
 
 
 uncons : String -> Maybe ( Char, String )
 uncons (String chars) =
-    if Pine_kernel.equal [ Pine_kernel.length chars, 0 ] then
+    if Pine_builtin.equal [ Pine_builtin.length chars, 0 ] then
         Nothing
 
     else
-        Just ( Pine_kernel.take [ 4, chars ], String (Pine_kernel.skip [ 4, chars ]) )
+        Just ( Pine_builtin.take [ 4, chars ], String (Pine_builtin.skip [ 4, chars ]) )
 
 
 isEmpty : String -> Bool
 isEmpty (String chars) =
-    Pine_kernel.equal
-        [ Pine_kernel.length chars, 0 ]
+    Pine_builtin.equal
+        [ Pine_builtin.length chars, 0 ]
 
 
 length : String -> Int
 length (String chars) =
-    Pine_kernel.concat
-        [ Pine_kernel.take [ 1, 0 ]
-        , Pine_kernel.bit_shift_right
+    Pine_builtin.concat
+        [ Pine_builtin.take [ 1, 0 ]
+        , Pine_builtin.bit_shift_right
             [ 2
-            , Pine_kernel.skip [ 1, Pine_kernel.length chars ]
+            , Pine_builtin.skip [ 1, Pine_builtin.length chars ]
             ]
         ]
 
@@ -142,13 +142,13 @@ foldlChars : (Char -> b -> b) -> b -> List Char -> b
 foldlChars func acc chars =
     let
         nextChar =
-            Pine_kernel.head chars
+            Pine_builtin.head chars
     in
-    if Pine_kernel.equal [ nextChar, [] ] then
+    if Pine_builtin.equal [ nextChar, [] ] then
         acc
 
     else
-        foldlChars func (func nextChar acc) (Pine_kernel.skip [ 1, chars ])
+        foldlChars func (func nextChar acc) (Pine_builtin.skip [ 1, chars ])
 
 
 foldr : (Char -> b -> b) -> b -> String -> b
@@ -164,7 +164,7 @@ map func (String charsBytes) =
     String
         (charsMap
             0
-            (Pine_kernel.take [ 0, charsBytes ])
+            (Pine_builtin.take [ 0, charsBytes ])
             func
             charsBytes
         )
@@ -174,12 +174,12 @@ charsMap : Int -> Int -> (Char -> Char) -> Int -> Int
 charsMap offset mappedBytes func charsBytes =
     let
         char =
-            Pine_kernel.take
+            Pine_builtin.take
                 [ 4
-                , Pine_kernel.skip [ offset, charsBytes ]
+                , Pine_builtin.skip [ offset, charsBytes ]
                 ]
     in
-    if Pine_kernel.equal [ Pine_kernel.length char, 0 ] then
+    if Pine_builtin.equal [ Pine_builtin.length char, 0 ] then
         mappedBytes
 
     else
@@ -188,8 +188,8 @@ charsMap offset mappedBytes func charsBytes =
                 func char
         in
         charsMap
-            (Pine_kernel.int_add [ offset, 4 ])
-            (Pine_kernel.concat [ mappedBytes, mappedChar ])
+            (Pine_builtin.int_add [ offset, 4 ])
+            (Pine_builtin.concat [ mappedBytes, mappedChar ])
             func
             charsBytes
 
@@ -198,7 +198,7 @@ filter : (Char -> Bool) -> String -> String
 filter predicate (String chars) =
     charsFilter
         0
-        (Pine_kernel.take [ 0, chars ])
+        (Pine_builtin.take [ 0, chars ])
         predicate
         chars
 
@@ -207,21 +207,21 @@ charsFilter : Int -> Int -> (Char -> Bool) -> Int -> String
 charsFilter offset charsBytesFiltered predicate charsBytes =
     let
         char =
-            Pine_kernel.take [ 4, Pine_kernel.skip [ offset, charsBytes ] ]
+            Pine_builtin.take [ 4, Pine_builtin.skip [ offset, charsBytes ] ]
     in
-    if Pine_kernel.equal [ Pine_kernel.length char, 0 ] then
+    if Pine_builtin.equal [ Pine_builtin.length char, 0 ] then
         String charsBytesFiltered
 
     else if predicate char then
         charsFilter
-            (Pine_kernel.int_add [ offset, 4 ])
-            (Pine_kernel.concat [ charsBytesFiltered, char ])
+            (Pine_builtin.int_add [ offset, 4 ])
+            (Pine_builtin.concat [ charsBytesFiltered, char ])
             predicate
             charsBytes
 
     else
         charsFilter
-            (Pine_kernel.int_add [ offset, 4 ])
+            (Pine_builtin.int_add [ offset, 4 ])
             charsBytesFiltered
             predicate
             charsBytes
@@ -229,7 +229,7 @@ charsFilter offset charsBytesFiltered predicate charsBytes =
 
 repeat : Int -> String -> String
 repeat n (String chars) =
-    String (Pine_kernel.concat (List.repeat n chars))
+    String (Pine_builtin.concat (List.repeat n chars))
 
 
 replace : String -> String -> String -> String
@@ -239,7 +239,7 @@ replace before after string =
 
 append : String -> String -> String
 append (String a) (String b) =
-    String (Pine_kernel.concat [ a, b ])
+    String (Pine_builtin.concat [ a, b ])
 
 
 concat : List String -> String
@@ -250,12 +250,12 @@ concat strings =
                 (\(String chars) -> chars)
                 strings
     in
-    String (Pine_kernel.concat charsBlobs)
+    String (Pine_builtin.concat charsBlobs)
 
 
 split : String -> String -> List String
 split (String sep) ((String stringBytes) as string) =
-    if Pine_kernel.equal [ Pine_kernel.length sep, 0 ] then
+    if Pine_builtin.equal [ Pine_builtin.length sep, 0 ] then
         List.map fromChar (toList string)
 
     else
@@ -267,45 +267,45 @@ splitHelperOnBlob offset collected lastStart sepBytes stringBytes =
     let
         sliceBytes : Int
         sliceBytes =
-            Pine_kernel.take
-                [ Pine_kernel.length sepBytes
-                , Pine_kernel.skip [ offset, stringBytes ]
+            Pine_builtin.take
+                [ Pine_builtin.length sepBytes
+                , Pine_builtin.skip [ offset, stringBytes ]
                 ]
     in
-    if Pine_kernel.equal [ sliceBytes, sepBytes ] then
+    if Pine_builtin.equal [ sliceBytes, sepBytes ] then
         let
             separatedSliceLength : Int
             separatedSliceLength =
-                Pine_kernel.int_add
+                Pine_builtin.int_add
                     [ offset
-                    , Pine_kernel.int_mul [ -1, lastStart ]
+                    , Pine_builtin.int_mul [ -1, lastStart ]
                     ]
 
             separatedSlice : Int
             separatedSlice =
-                Pine_kernel.take
+                Pine_builtin.take
                     [ separatedSliceLength
-                    , Pine_kernel.skip [ lastStart, stringBytes ]
+                    , Pine_builtin.skip [ lastStart, stringBytes ]
                     ]
         in
         splitHelperOnBlob
-            (Pine_kernel.int_add [ offset, Pine_kernel.length sepBytes ])
-            (Pine_kernel.concat [ collected, [ String separatedSlice ] ])
-            (Pine_kernel.int_add [ offset, Pine_kernel.length sepBytes ])
+            (Pine_builtin.int_add [ offset, Pine_builtin.length sepBytes ])
+            (Pine_builtin.concat [ collected, [ String separatedSlice ] ])
+            (Pine_builtin.int_add [ offset, Pine_builtin.length sepBytes ])
             sepBytes
             stringBytes
 
-    else if Pine_kernel.equal [ Pine_kernel.length sliceBytes, 0 ] then
+    else if Pine_builtin.equal [ Pine_builtin.length sliceBytes, 0 ] then
         let
             separatedSlice : Int
             separatedSlice =
-                Pine_kernel.skip [ lastStart, stringBytes ]
+                Pine_builtin.skip [ lastStart, stringBytes ]
         in
-        Pine_kernel.concat [ collected, [ String separatedSlice ] ]
+        Pine_builtin.concat [ collected, [ String separatedSlice ] ]
 
     else
         splitHelperOnBlob
-            (Pine_kernel.int_add [ offset, 4 ])
+            (Pine_builtin.int_add [ offset, 4 ])
             collected
             lastStart
             sepBytes
@@ -316,7 +316,7 @@ join : String -> List String -> String
 join (String sepCharsBytes) chunks =
     let
         charsBytesList =
-            Pine_kernel.skip
+            Pine_builtin.skip
                 [ 1
                 , List.concatMap
                     (\(String chars) -> [ sepCharsBytes, chars ])
@@ -324,22 +324,22 @@ join (String sepCharsBytes) chunks =
                 ]
     in
     String
-        (Pine_kernel.concat charsBytesList)
+        (Pine_builtin.concat charsBytesList)
 
 
 slice : Int -> Int -> String -> String
 slice start end (String charsBlob) =
-    if Pine_kernel.int_is_sorted_asc [ 0, start, end ] then
+    if Pine_builtin.int_is_sorted_asc [ 0, start, end ] then
         let
             sliceLength : Int
             sliceLength =
-                Pine_kernel.int_add [ end, Pine_kernel.int_mul [ -1, start ] ]
+                Pine_builtin.int_add [ end, Pine_builtin.int_mul [ -1, start ] ]
         in
         String
-            (Pine_kernel.take
-                [ Pine_kernel.int_mul [ sliceLength, 4 ]
-                , Pine_kernel.skip
-                    [ Pine_kernel.int_mul [ start, 4 ]
+            (Pine_builtin.take
+                [ Pine_builtin.int_mul [ sliceLength, 4 ]
+                , Pine_builtin.skip
+                    [ Pine_builtin.int_mul [ start, 4 ]
                     , charsBlob
                     ]
                 ]
@@ -353,12 +353,12 @@ slice start end (String charsBlob) =
                    check the first byte if the sign is negative.
                 -}
                 if
-                    Pine_kernel.equal
-                        [ Pine_kernel.take [ 1, relativeIndex ]
-                        , Pine_kernel.take [ 1, -1 ]
+                    Pine_builtin.equal
+                        [ Pine_builtin.take [ 1, relativeIndex ]
+                        , Pine_builtin.take [ 1, -1 ]
                         ]
                 then
-                    Pine_kernel.int_add [ relativeIndex, Pine_kernel.length charsBlob ]
+                    Pine_builtin.int_add [ relativeIndex, Pine_builtin.length charsBlob ]
 
                 else
                     relativeIndex
@@ -366,19 +366,19 @@ slice start end (String charsBlob) =
             absoluteStart : Int
             absoluteStart =
                 absoluteIndex
-                    (Pine_kernel.int_mul [ start, 4 ])
+                    (Pine_builtin.int_mul [ start, 4 ])
 
             sliceLength : Int
             sliceLength =
-                Pine_kernel.int_add
-                    [ absoluteIndex (Pine_kernel.int_mul [ end, 4 ])
-                    , Pine_kernel.int_mul [ -1, absoluteStart ]
+                Pine_builtin.int_add
+                    [ absoluteIndex (Pine_builtin.int_mul [ end, 4 ])
+                    , Pine_builtin.int_mul [ -1, absoluteStart ]
                     ]
         in
         String
-            (Pine_kernel.take
+            (Pine_builtin.take
                 [ sliceLength
-                , Pine_kernel.skip [ absoluteStart, charsBlob ]
+                , Pine_builtin.skip [ absoluteStart, charsBlob ]
                 ]
             )
 
@@ -386,8 +386,8 @@ slice start end (String charsBlob) =
 left : Int -> String -> String
 left n (String chars) =
     String
-        (Pine_kernel.take
-            [ Pine_kernel.int_mul [ n, 4 ]
+        (Pine_builtin.take
+            [ Pine_builtin.int_mul [ n, 4 ]
             , chars
             ]
         )
@@ -395,7 +395,7 @@ left n (String chars) =
 
 right : Int -> String -> String
 right n string =
-    if Pine_kernel.int_is_sorted_asc [ n, 0 ] then
+    if Pine_builtin.int_is_sorted_asc [ n, 0 ] then
         ""
 
     else
@@ -405,8 +405,8 @@ right n string =
 dropLeft : Int -> String -> String
 dropLeft n (String chars) =
     String
-        (Pine_kernel.skip
-            [ Pine_kernel.int_mul [ n, 4 ]
+        (Pine_builtin.skip
+            [ Pine_builtin.int_mul [ n, 4 ]
             , chars
             ]
         )
@@ -414,7 +414,7 @@ dropLeft n (String chars) =
 
 dropRight : Int -> String -> String
 dropRight n string =
-    if Pine_kernel.int_is_sorted_asc [ n, 0 ] then
+    if Pine_builtin.int_is_sorted_asc [ n, 0 ] then
         string
 
     else
@@ -423,7 +423,7 @@ dropRight n string =
 
 contains : String -> String -> Bool
 contains (String patternList) (String stringList) =
-    if Pine_kernel.equal [ patternList, [] ] then
+    if Pine_builtin.equal [ patternList, [] ] then
         True
 
     else
@@ -434,35 +434,35 @@ containsOnBlob : Int -> Int -> Int -> Bool
 containsOnBlob offset patternBytes stringBytes =
     let
         stringSlice =
-            Pine_kernel.take
-                [ Pine_kernel.length patternBytes
-                , Pine_kernel.skip [ offset, stringBytes ]
+            Pine_builtin.take
+                [ Pine_builtin.length patternBytes
+                , Pine_builtin.skip [ offset, stringBytes ]
                 ]
     in
-    if Pine_kernel.equal [ stringSlice, patternBytes ] then
+    if Pine_builtin.equal [ stringSlice, patternBytes ] then
         True
 
-    else if Pine_kernel.equal [ Pine_kernel.length stringSlice, 0 ] then
+    else if Pine_builtin.equal [ Pine_builtin.length stringSlice, 0 ] then
         False
 
     else
         containsOnBlob
-            (Pine_kernel.int_add [ offset, 4 ])
+            (Pine_builtin.int_add [ offset, 4 ])
             patternBytes
             stringBytes
 
 
 startsWith : String -> String -> Bool
 startsWith (String patternList) (String stringList) =
-    Pine_kernel.equal
-        [ Pine_kernel.take [ Pine_kernel.length patternList, stringList ]
+    Pine_builtin.equal
+        [ Pine_builtin.take [ Pine_builtin.length patternList, stringList ]
         , patternList
         ]
 
 
 endsWith : String -> String -> Bool
 endsWith pattern string =
-    Pine_kernel.equal
+    Pine_builtin.equal
         [ right (length pattern) string
         , pattern
         ]
@@ -475,14 +475,14 @@ toInt (String chars) =
 
 fromInt : Int -> String
 fromInt int =
-    String (Pine_kernel.concat (fromIntAsList int))
+    String (Pine_builtin.concat (fromIntAsList int))
 
 
 parseInt : Int -> Maybe Int
 parseInt src =
     let
         nextChar =
-            Pine_kernel.take
+            Pine_builtin.take
                 [ 4
                 , src
                 ]
@@ -491,7 +491,7 @@ parseInt src =
         '-' ->
             case parseUnsignedInt src 4 of
                 Just unsignedVal ->
-                    Just (Pine_kernel.int_mul [ -1, unsignedVal ])
+                    Just (Pine_builtin.int_mul [ -1, unsignedVal ])
 
                 Nothing ->
                     Nothing
@@ -506,36 +506,36 @@ parseInt src =
 
 parseUnsignedInt : Int -> Int -> Maybe Int
 parseUnsignedInt src offset0 =
-    case Pine_kernel.take [ 4, Pine_kernel.skip [ offset0, src ] ] of
+    case Pine_builtin.take [ 4, Pine_builtin.skip [ offset0, src ] ] of
         '0' ->
-            parseUnsignedIntRec 0 src (Pine_kernel.int_add [ offset0, 4 ])
+            parseUnsignedIntRec 0 src (Pine_builtin.int_add [ offset0, 4 ])
 
         '1' ->
-            parseUnsignedIntRec 1 src (Pine_kernel.int_add [ offset0, 4 ])
+            parseUnsignedIntRec 1 src (Pine_builtin.int_add [ offset0, 4 ])
 
         '2' ->
-            parseUnsignedIntRec 2 src (Pine_kernel.int_add [ offset0, 4 ])
+            parseUnsignedIntRec 2 src (Pine_builtin.int_add [ offset0, 4 ])
 
         '3' ->
-            parseUnsignedIntRec 3 src (Pine_kernel.int_add [ offset0, 4 ])
+            parseUnsignedIntRec 3 src (Pine_builtin.int_add [ offset0, 4 ])
 
         '4' ->
-            parseUnsignedIntRec 4 src (Pine_kernel.int_add [ offset0, 4 ])
+            parseUnsignedIntRec 4 src (Pine_builtin.int_add [ offset0, 4 ])
 
         '5' ->
-            parseUnsignedIntRec 5 src (Pine_kernel.int_add [ offset0, 4 ])
+            parseUnsignedIntRec 5 src (Pine_builtin.int_add [ offset0, 4 ])
 
         '6' ->
-            parseUnsignedIntRec 6 src (Pine_kernel.int_add [ offset0, 4 ])
+            parseUnsignedIntRec 6 src (Pine_builtin.int_add [ offset0, 4 ])
 
         '7' ->
-            parseUnsignedIntRec 7 src (Pine_kernel.int_add [ offset0, 4 ])
+            parseUnsignedIntRec 7 src (Pine_builtin.int_add [ offset0, 4 ])
 
         '8' ->
-            parseUnsignedIntRec 8 src (Pine_kernel.int_add [ offset0, 4 ])
+            parseUnsignedIntRec 8 src (Pine_builtin.int_add [ offset0, 4 ])
 
         '9' ->
-            parseUnsignedIntRec 9 src (Pine_kernel.int_add [ offset0, 4 ])
+            parseUnsignedIntRec 9 src (Pine_builtin.int_add [ offset0, 4 ])
 
         _ ->
             Nothing
@@ -545,40 +545,40 @@ parseUnsignedIntRec : Int -> Int -> Int -> Maybe Int
 parseUnsignedIntRec upper src offset0 =
     let
         nextChar =
-            Pine_kernel.take [ 4, Pine_kernel.skip [ offset0, src ] ]
+            Pine_builtin.take [ 4, Pine_builtin.skip [ offset0, src ] ]
     in
-    if Pine_kernel.equal [ Pine_kernel.length nextChar, 0 ] then
+    if Pine_builtin.equal [ Pine_builtin.length nextChar, 0 ] then
         Just upper
 
-    else if Pine_kernel.equal [ nextChar, '0' ] then
-        parseUnsignedIntRec (Pine_kernel.int_mul [ upper, 10 ]) src (Pine_kernel.int_add [ offset0, 4 ])
+    else if Pine_builtin.equal [ nextChar, '0' ] then
+        parseUnsignedIntRec (Pine_builtin.int_mul [ upper, 10 ]) src (Pine_builtin.int_add [ offset0, 4 ])
 
-    else if Pine_kernel.equal [ nextChar, '1' ] then
-        parseUnsignedIntRec (Pine_kernel.int_add [ Pine_kernel.int_mul [ upper, 10 ], 1 ]) src (Pine_kernel.int_add [ offset0, 4 ])
+    else if Pine_builtin.equal [ nextChar, '1' ] then
+        parseUnsignedIntRec (Pine_builtin.int_add [ Pine_builtin.int_mul [ upper, 10 ], 1 ]) src (Pine_builtin.int_add [ offset0, 4 ])
 
-    else if Pine_kernel.equal [ nextChar, '2' ] then
-        parseUnsignedIntRec (Pine_kernel.int_add [ Pine_kernel.int_mul [ upper, 10 ], 2 ]) src (Pine_kernel.int_add [ offset0, 4 ])
+    else if Pine_builtin.equal [ nextChar, '2' ] then
+        parseUnsignedIntRec (Pine_builtin.int_add [ Pine_builtin.int_mul [ upper, 10 ], 2 ]) src (Pine_builtin.int_add [ offset0, 4 ])
 
-    else if Pine_kernel.equal [ nextChar, '3' ] then
-        parseUnsignedIntRec (Pine_kernel.int_add [ Pine_kernel.int_mul [ upper, 10 ], 3 ]) src (Pine_kernel.int_add [ offset0, 4 ])
+    else if Pine_builtin.equal [ nextChar, '3' ] then
+        parseUnsignedIntRec (Pine_builtin.int_add [ Pine_builtin.int_mul [ upper, 10 ], 3 ]) src (Pine_builtin.int_add [ offset0, 4 ])
 
-    else if Pine_kernel.equal [ nextChar, '4' ] then
-        parseUnsignedIntRec (Pine_kernel.int_add [ Pine_kernel.int_mul [ upper, 10 ], 4 ]) src (Pine_kernel.int_add [ offset0, 4 ])
+    else if Pine_builtin.equal [ nextChar, '4' ] then
+        parseUnsignedIntRec (Pine_builtin.int_add [ Pine_builtin.int_mul [ upper, 10 ], 4 ]) src (Pine_builtin.int_add [ offset0, 4 ])
 
-    else if Pine_kernel.equal [ nextChar, '5' ] then
-        parseUnsignedIntRec (Pine_kernel.int_add [ Pine_kernel.int_mul [ upper, 10 ], 5 ]) src (Pine_kernel.int_add [ offset0, 4 ])
+    else if Pine_builtin.equal [ nextChar, '5' ] then
+        parseUnsignedIntRec (Pine_builtin.int_add [ Pine_builtin.int_mul [ upper, 10 ], 5 ]) src (Pine_builtin.int_add [ offset0, 4 ])
 
-    else if Pine_kernel.equal [ nextChar, '6' ] then
-        parseUnsignedIntRec (Pine_kernel.int_add [ Pine_kernel.int_mul [ upper, 10 ], 6 ]) src (Pine_kernel.int_add [ offset0, 4 ])
+    else if Pine_builtin.equal [ nextChar, '6' ] then
+        parseUnsignedIntRec (Pine_builtin.int_add [ Pine_builtin.int_mul [ upper, 10 ], 6 ]) src (Pine_builtin.int_add [ offset0, 4 ])
 
-    else if Pine_kernel.equal [ nextChar, '7' ] then
-        parseUnsignedIntRec (Pine_kernel.int_add [ Pine_kernel.int_mul [ upper, 10 ], 7 ]) src (Pine_kernel.int_add [ offset0, 4 ])
+    else if Pine_builtin.equal [ nextChar, '7' ] then
+        parseUnsignedIntRec (Pine_builtin.int_add [ Pine_builtin.int_mul [ upper, 10 ], 7 ]) src (Pine_builtin.int_add [ offset0, 4 ])
 
-    else if Pine_kernel.equal [ nextChar, '8' ] then
-        parseUnsignedIntRec (Pine_kernel.int_add [ Pine_kernel.int_mul [ upper, 10 ], 8 ]) src (Pine_kernel.int_add [ offset0, 4 ])
+    else if Pine_builtin.equal [ nextChar, '8' ] then
+        parseUnsignedIntRec (Pine_builtin.int_add [ Pine_builtin.int_mul [ upper, 10 ], 8 ]) src (Pine_builtin.int_add [ offset0, 4 ])
 
-    else if Pine_kernel.equal [ nextChar, '9' ] then
-        parseUnsignedIntRec (Pine_kernel.int_add [ Pine_kernel.int_mul [ upper, 10 ], 9 ]) src (Pine_kernel.int_add [ offset0, 4 ])
+    else if Pine_builtin.equal [ nextChar, '9' ] then
+        parseUnsignedIntRec (Pine_builtin.int_add [ Pine_builtin.int_mul [ upper, 10 ], 9 ]) src (Pine_builtin.int_add [ offset0, 4 ])
 
     else
         Nothing
@@ -586,11 +586,11 @@ parseUnsignedIntRec upper src offset0 =
 
 fromIntAsList : Int -> List Char
 fromIntAsList int =
-    if Pine_kernel.int_is_sorted_asc [ 0, int ] then
+    if Pine_builtin.int_is_sorted_asc [ 0, int ] then
         fromUnsignedIntAsList int
 
     else
-        Pine_kernel.concat [ [ '-' ], fromUnsignedIntAsList -int ]
+        Pine_builtin.concat [ [ '-' ], fromUnsignedIntAsList -int ]
 
 
 fromUnsignedIntAsList : Int -> List Char
@@ -600,7 +600,7 @@ fromUnsignedIntAsList int =
 
 fromUnsignedIntAsListHelper : Int -> List Char -> List Char
 fromUnsignedIntAsListHelper int lowerDigits =
-    if Pine_kernel.int_is_sorted_asc [ int, 0 ] then
+    if Pine_builtin.int_is_sorted_asc [ int, 0 ] then
         if lowerDigits == [] then
             [ '0' ]
 
@@ -615,9 +615,9 @@ fromUnsignedIntAsListHelper int lowerDigits =
 
             digitChar =
                 unsafeDigitCharacterFromValue
-                    (Pine_kernel.int_add
+                    (Pine_builtin.int_add
                         [ int
-                        , Pine_kernel.int_mul [ upperDigitsValue, -10 ]
+                        , Pine_builtin.int_mul [ upperDigitsValue, -10 ]
                         ]
                     )
         in
@@ -671,13 +671,13 @@ trim (String chars) =
         rightRemainingLength : Int
         rightRemainingLength =
             trimRightCountBytesRemaining
-                (Pine_kernel.length chars)
+                (Pine_builtin.length chars)
                 chars
     in
     String
-        (Pine_kernel.skip
+        (Pine_builtin.skip
             [ leftTrimmedCount
-            , Pine_kernel.take
+            , Pine_builtin.take
                 [ rightRemainingLength
                 , chars
                 ]
@@ -693,7 +693,7 @@ trimLeft (String chars) =
             trimLeftCountBytesTrimmed 0 chars
     in
     String
-        (Pine_kernel.skip
+        (Pine_builtin.skip
             [ trimmedCount
             , chars
             ]
@@ -706,11 +706,11 @@ trimRight (String chars) =
         remainingLength : Int
         remainingLength =
             trimRightCountBytesRemaining
-                (Pine_kernel.length chars)
+                (Pine_builtin.length chars)
                 chars
     in
     String
-        (Pine_kernel.take
+        (Pine_builtin.take
             [ remainingLength
             , chars
             ]
@@ -721,17 +721,17 @@ trimLeftCountBytesTrimmed : Int -> Int -> Int
 trimLeftCountBytesTrimmed offset charsBytes =
     let
         nextCharBytes =
-            Pine_kernel.take
+            Pine_builtin.take
                 [ 4
-                , Pine_kernel.skip [ offset, charsBytes ]
+                , Pine_builtin.skip [ offset, charsBytes ]
                 ]
     in
-    if Pine_kernel.equal [ Pine_kernel.length nextCharBytes, 0 ] then
+    if Pine_builtin.equal [ Pine_builtin.length nextCharBytes, 0 ] then
         offset
 
     else if isCharRemovedOnTrim nextCharBytes then
         trimLeftCountBytesTrimmed
-            (Pine_kernel.int_add [ offset, 4 ])
+            (Pine_builtin.int_add [ offset, 4 ])
             charsBytes
 
     else
@@ -740,23 +740,23 @@ trimLeftCountBytesTrimmed offset charsBytes =
 
 trimRightCountBytesRemaining : Int -> Int -> Int
 trimRightCountBytesRemaining remainingLength charsBytes =
-    if Pine_kernel.equal [ remainingLength, 0 ] then
+    if Pine_builtin.equal [ remainingLength, 0 ] then
         0
 
     else
         let
             char =
-                Pine_kernel.take
+                Pine_builtin.take
                     [ 4
-                    , Pine_kernel.skip
-                        [ Pine_kernel.int_add [ remainingLength, -4 ]
+                    , Pine_builtin.skip
+                        [ Pine_builtin.int_add [ remainingLength, -4 ]
                         , charsBytes
                         ]
                     ]
         in
         if isCharRemovedOnTrim char then
             trimRightCountBytesRemaining
-                (Pine_kernel.int_add [ remainingLength, -4 ])
+                (Pine_builtin.int_add [ remainingLength, -4 ])
                 charsBytes
 
         else
@@ -765,19 +765,19 @@ trimRightCountBytesRemaining remainingLength charsBytes =
 
 isCharRemovedOnTrim : Char -> Bool
 isCharRemovedOnTrim char =
-    if Pine_kernel.equal [ char, ' ' ] then
+    if Pine_builtin.equal [ char, ' ' ] then
         True
 
-    else if Pine_kernel.equal [ char, '\t' ] then
+    else if Pine_builtin.equal [ char, '\t' ] then
         True
 
-    else if Pine_kernel.equal [ char, '\n' ] then
+    else if Pine_builtin.equal [ char, '\n' ] then
         True
 
-    else if Pine_kernel.equal [ char, '\u{000D}' ] then
+    else if Pine_builtin.equal [ char, '\u{000D}' ] then
         True
 
-    else if Pine_kernel.equal [ char, '\u{00A0}' ] then
+    else if Pine_builtin.equal [ char, '\u{00A0}' ] then
         True
 
     else
@@ -803,29 +803,29 @@ padLeft n char ((String charsBytes) as string) =
     let
         stringBytesLength : Int
         stringBytesLength =
-            Pine_kernel.length charsBytes
+            Pine_builtin.length charsBytes
 
         stringLength : Int
         stringLength =
-            Pine_kernel.concat
-                [ Pine_kernel.take [ 1, 0 ]
-                , Pine_kernel.bit_shift_right [ 2, Pine_kernel.skip [ 1, stringBytesLength ] ]
+            Pine_builtin.concat
+                [ Pine_builtin.take [ 1, 0 ]
+                , Pine_builtin.bit_shift_right [ 2, Pine_builtin.skip [ 1, stringBytesLength ] ]
                 ]
 
         paddingLength : Int
         paddingLength =
-            Pine_kernel.int_add
+            Pine_builtin.int_add
                 [ n
-                , Pine_kernel.int_mul [ stringLength, -1 ]
+                , Pine_builtin.int_mul [ stringLength, -1 ]
                 ]
     in
-    if Pine_kernel.int_is_sorted_asc [ paddingLength, 0 ] then
+    if Pine_builtin.int_is_sorted_asc [ paddingLength, 0 ] then
         string
 
     else
         String
-            (Pine_kernel.concat
-                [ Pine_kernel.concat (List.repeat paddingLength char)
+            (Pine_builtin.concat
+                [ Pine_builtin.concat (List.repeat paddingLength char)
                 , charsBytes
                 ]
             )
@@ -836,30 +836,30 @@ padRight n char ((String charsBytes) as string) =
     let
         stringBytesLength : Int
         stringBytesLength =
-            Pine_kernel.length charsBytes
+            Pine_builtin.length charsBytes
 
         stringLength : Int
         stringLength =
-            Pine_kernel.concat
-                [ Pine_kernel.take [ 1, 0 ]
-                , Pine_kernel.bit_shift_right [ 2, Pine_kernel.skip [ 1, stringBytesLength ] ]
+            Pine_builtin.concat
+                [ Pine_builtin.take [ 1, 0 ]
+                , Pine_builtin.bit_shift_right [ 2, Pine_builtin.skip [ 1, stringBytesLength ] ]
                 ]
 
         paddingLength : Int
         paddingLength =
-            Pine_kernel.int_add
+            Pine_builtin.int_add
                 [ n
-                , Pine_kernel.int_mul [ stringLength, -1 ]
+                , Pine_builtin.int_mul [ stringLength, -1 ]
                 ]
     in
-    if Pine_kernel.int_is_sorted_asc [ paddingLength, 0 ] then
+    if Pine_builtin.int_is_sorted_asc [ paddingLength, 0 ] then
         string
 
     else
         String
-            (Pine_kernel.concat
+            (Pine_builtin.concat
                 [ charsBytes
-                , Pine_kernel.concat (List.repeat paddingLength char)
+                , Pine_builtin.concat (List.repeat paddingLength char)
                 ]
             )
 
@@ -869,20 +869,20 @@ pad n char ((String charsBytes) as string) =
     let
         stringBytesLength : Int
         stringBytesLength =
-            Pine_kernel.length charsBytes
+            Pine_builtin.length charsBytes
 
         stringLength : Int
         stringLength =
-            Pine_kernel.concat
-                [ Pine_kernel.take [ 1, 0 ]
-                , Pine_kernel.bit_shift_right [ 2, Pine_kernel.skip [ 1, stringBytesLength ] ]
+            Pine_builtin.concat
+                [ Pine_builtin.take [ 1, 0 ]
+                , Pine_builtin.bit_shift_right [ 2, Pine_builtin.skip [ 1, stringBytesLength ] ]
                 ]
 
         totalPadding : Int
         totalPadding =
-            Pine_kernel.int_add
+            Pine_builtin.int_add
                 [ n
-                , Pine_kernel.int_mul [ stringLength, -1 ]
+                , Pine_builtin.int_mul [ stringLength, -1 ]
                 ]
 
         rightPadding : Int
@@ -891,20 +891,20 @@ pad n char ((String charsBytes) as string) =
 
         leftPadding : Int
         leftPadding =
-            Pine_kernel.int_add
+            Pine_builtin.int_add
                 [ totalPadding
-                , Pine_kernel.int_mul [ rightPadding, -1 ]
+                , Pine_builtin.int_mul [ rightPadding, -1 ]
                 ]
     in
-    if Pine_kernel.int_is_sorted_asc [ totalPadding, 0 ] then
+    if Pine_builtin.int_is_sorted_asc [ totalPadding, 0 ] then
         string
 
     else
         String
-            (Pine_kernel.concat
-                [ Pine_kernel.concat (List.repeat leftPadding char)
+            (Pine_builtin.concat
+                [ Pine_builtin.concat (List.repeat leftPadding char)
                 , charsBytes
-                , Pine_kernel.concat (List.repeat rightPadding char)
+                , Pine_builtin.concat (List.repeat rightPadding char)
                 ]
             )
 
@@ -918,86 +918,86 @@ linesHelper : Int -> List String -> Int -> Int -> List String
 linesHelper currentLineStart currentLines offset charsBytes =
     let
         nextChar =
-            Pine_kernel.take
+            Pine_builtin.take
                 [ 4
-                , Pine_kernel.skip [ offset, charsBytes ]
+                , Pine_builtin.skip [ offset, charsBytes ]
                 ]
 
         nextTwoChars =
-            Pine_kernel.take
+            Pine_builtin.take
                 [ 8
-                , Pine_kernel.skip [ offset, charsBytes ]
+                , Pine_builtin.skip [ offset, charsBytes ]
                 ]
     in
-    if Pine_kernel.equal [ Pine_kernel.length nextChar, 0 ] then
+    if Pine_builtin.equal [ Pine_builtin.length nextChar, 0 ] then
         let
             currentLineLength =
-                Pine_kernel.int_add [ offset, -currentLineStart ]
+                Pine_builtin.int_add [ offset, -currentLineStart ]
         in
-        Pine_kernel.concat
+        Pine_builtin.concat
             [ currentLines
-            , [ String (Pine_kernel.skip [ currentLineStart, charsBytes ]) ]
+            , [ String (Pine_builtin.skip [ currentLineStart, charsBytes ]) ]
             ]
 
-    else if Pine_kernel.equal [ nextTwoChars, Pine_kernel.concat [ '\u{000D}', '\n' ] ] then
+    else if Pine_builtin.equal [ nextTwoChars, Pine_builtin.concat [ '\u{000D}', '\n' ] ] then
         let
             currentLineLength =
-                Pine_kernel.int_add [ offset, -currentLineStart ]
+                Pine_builtin.int_add [ offset, -currentLineStart ]
 
             currentLineChars : Int
             currentLineChars =
-                Pine_kernel.take
+                Pine_builtin.take
                     [ currentLineLength
-                    , Pine_kernel.skip [ currentLineStart, charsBytes ]
+                    , Pine_builtin.skip [ currentLineStart, charsBytes ]
                     ]
         in
         linesHelper
-            (Pine_kernel.int_add [ offset, 8 ])
-            (Pine_kernel.concat [ currentLines, [ String currentLineChars ] ])
-            (Pine_kernel.int_add [ offset, 8 ])
+            (Pine_builtin.int_add [ offset, 8 ])
+            (Pine_builtin.concat [ currentLines, [ String currentLineChars ] ])
+            (Pine_builtin.int_add [ offset, 8 ])
             charsBytes
 
-    else if Pine_kernel.equal [ nextChar, '\n' ] then
+    else if Pine_builtin.equal [ nextChar, '\n' ] then
         let
             currentLineLength =
-                Pine_kernel.int_add [ offset, -currentLineStart ]
+                Pine_builtin.int_add [ offset, -currentLineStart ]
 
             currentLineChars : Int
             currentLineChars =
-                Pine_kernel.take
+                Pine_builtin.take
                     [ currentLineLength
-                    , Pine_kernel.skip [ currentLineStart, charsBytes ]
+                    , Pine_builtin.skip [ currentLineStart, charsBytes ]
                     ]
         in
         linesHelper
-            (Pine_kernel.int_add [ offset, 4 ])
-            (Pine_kernel.concat [ currentLines, [ String currentLineChars ] ])
-            (Pine_kernel.int_add [ offset, 4 ])
+            (Pine_builtin.int_add [ offset, 4 ])
+            (Pine_builtin.concat [ currentLines, [ String currentLineChars ] ])
+            (Pine_builtin.int_add [ offset, 4 ])
             charsBytes
 
-    else if Pine_kernel.equal [ nextChar, '\u{000D}' ] then
+    else if Pine_builtin.equal [ nextChar, '\u{000D}' ] then
         let
             currentLineLength =
-                Pine_kernel.int_add [ offset, -currentLineStart ]
+                Pine_builtin.int_add [ offset, -currentLineStart ]
 
             currentLineChars : Int
             currentLineChars =
-                Pine_kernel.take
+                Pine_builtin.take
                     [ currentLineLength
-                    , Pine_kernel.skip [ currentLineStart, charsBytes ]
+                    , Pine_builtin.skip [ currentLineStart, charsBytes ]
                     ]
         in
         linesHelper
-            (Pine_kernel.int_add [ offset, 4 ])
-            (Pine_kernel.concat [ currentLines, [ String currentLineChars ] ])
-            (Pine_kernel.int_add [ offset, 4 ])
+            (Pine_builtin.int_add [ offset, 4 ])
+            (Pine_builtin.concat [ currentLines, [ String currentLineChars ] ])
+            (Pine_builtin.int_add [ offset, 4 ])
             charsBytes
 
     else
         linesHelper
             currentLineStart
             currentLines
-            (Pine_kernel.int_add [ offset, 4 ])
+            (Pine_builtin.int_add [ offset, 4 ])
             charsBytes
 
 
@@ -1010,29 +1010,29 @@ wordsHelper : Int -> List String -> Int -> List Char -> List String
 wordsHelper currentWordStart currentWords offset chars =
     let
         nextChar =
-            Pine_kernel.head (Pine_kernel.skip [ offset, chars ])
+            Pine_builtin.head (Pine_builtin.skip [ offset, chars ])
     in
-    if Pine_kernel.equal [ nextChar, [] ] then
+    if Pine_builtin.equal [ nextChar, [] ] then
         let
             currentWordLength : Int
             currentWordLength =
-                Pine_kernel.int_add
+                Pine_builtin.int_add
                     [ offset
-                    , Pine_kernel.int_mul [ currentWordStart, -1 ]
+                    , Pine_builtin.int_mul [ currentWordStart, -1 ]
                     ]
 
             currentWordChars : List Char
             currentWordChars =
-                Pine_kernel.take
+                Pine_builtin.take
                     [ currentWordLength
-                    , Pine_kernel.skip [ currentWordStart, chars ]
+                    , Pine_builtin.skip [ currentWordStart, chars ]
                     ]
         in
-        if Pine_kernel.equal [ currentWordChars, [] ] then
+        if Pine_builtin.equal [ currentWordChars, [] ] then
             currentWords
 
         else
-            Pine_kernel.concat
+            Pine_builtin.concat
                 [ currentWords
                 , [ String currentWordChars ]
                 ]
@@ -1047,37 +1047,37 @@ wordsHelper currentWordStart currentWords offset chars =
             let
                 currentWordLength : Int
                 currentWordLength =
-                    Pine_kernel.int_add
+                    Pine_builtin.int_add
                         [ offset
-                        , Pine_kernel.int_mul [ currentWordStart, -1 ]
+                        , Pine_builtin.int_mul [ currentWordStart, -1 ]
                         ]
 
                 currentWordChars : List Char
                 currentWordChars =
-                    Pine_kernel.take
+                    Pine_builtin.take
                         [ currentWordLength
-                        , Pine_kernel.skip [ currentWordStart, chars ]
+                        , Pine_builtin.skip [ currentWordStart, chars ]
                         ]
             in
-            if Pine_kernel.equal [ currentWordChars, [] ] then
+            if Pine_builtin.equal [ currentWordChars, [] ] then
                 wordsHelper
-                    (Pine_kernel.int_add [ offset, 1 ])
+                    (Pine_builtin.int_add [ offset, 1 ])
                     currentWords
-                    (Pine_kernel.int_add [ offset, 1 ])
+                    (Pine_builtin.int_add [ offset, 1 ])
                     chars
 
             else
                 wordsHelper
-                    (Pine_kernel.int_add [ offset, 1 ])
-                    (Pine_kernel.concat [ currentWords, [ String currentWordChars ] ])
-                    (Pine_kernel.int_add [ offset, 1 ])
+                    (Pine_builtin.int_add [ offset, 1 ])
+                    (Pine_builtin.concat [ currentWords, [ String currentWordChars ] ])
+                    (Pine_builtin.int_add [ offset, 1 ])
                     chars
 
         else
             wordsHelper
                 currentWordStart
                 currentWords
-                (Pine_kernel.int_add [ offset, 1 ])
+                (Pine_builtin.int_add [ offset, 1 ])
                 chars
 
 
@@ -1085,13 +1085,13 @@ toFloat : String -> Maybe Float
 toFloat (String charsBlob) =
     let
         firstChar =
-            Pine_kernel.take [ 4, charsBlob ]
+            Pine_builtin.take [ 4, charsBlob ]
     in
-    if Pine_kernel.equal [ Pine_kernel.length firstChar, 0 ] then
+    if Pine_builtin.equal [ Pine_builtin.length firstChar, 0 ] then
         Nothing
 
-    else if Pine_kernel.equal [ firstChar, '-' ] then
-        case toRationalComponentsLessSign (Pine_kernel.skip [ 4, charsBlob ]) of
+    else if Pine_builtin.equal [ firstChar, '-' ] then
+        case toRationalComponentsLessSign (Pine_builtin.skip [ 4, charsBlob ]) of
             Nothing ->
                 Nothing
 
@@ -1099,7 +1099,7 @@ toFloat (String charsBlob) =
                 let
                     numSigned : Int
                     numSigned =
-                        Pine_kernel.int_mul [ -1, numAbs ]
+                        Pine_builtin.int_mul [ -1, numAbs ]
                 in
                 Just (Elm_Float numSigned denom)
 
@@ -1130,9 +1130,9 @@ fromFloatDecimal decimalPlacesMax ( numerator, denom ) =
 
         0 ->
             if
-                Pine_kernel.equal
-                    [ Pine_kernel.take [ 1, numerator ]
-                    , Pine_kernel.take [ 1, -1 ]
+                Pine_builtin.equal
+                    [ Pine_builtin.take [ 1, numerator ]
+                    , Pine_builtin.take [ 1, -1 ]
                     ]
             then
                 "-Infinity"
@@ -1144,15 +1144,15 @@ fromFloatDecimal decimalPlacesMax ( numerator, denom ) =
             let
                 isNegative : Bool
                 isNegative =
-                    Pine_kernel.equal
-                        [ Pine_kernel.take [ 1, numerator ]
-                        , Pine_kernel.take [ 1, -1 ]
+                    Pine_builtin.equal
+                        [ Pine_builtin.take [ 1, numerator ]
+                        , Pine_builtin.take [ 1, -1 ]
                         ]
 
                 ( signStr, absNum ) =
                     if isNegative then
                         ( [ '-' ]
-                        , Pine_kernel.int_mul [ -1, numerator ]
+                        , Pine_builtin.int_mul [ -1, numerator ]
                         )
 
                     else
@@ -1168,10 +1168,10 @@ fromFloatDecimal decimalPlacesMax ( numerator, denom ) =
                 remainder =
                     modBy denom absNum
             in
-            if Pine_kernel.equal [ remainder, 0 ] || Pine_kernel.equal [ decimalPlacesMax, 0 ] then
+            if Pine_builtin.equal [ remainder, 0 ] || Pine_builtin.equal [ decimalPlacesMax, 0 ] then
                 -- No remainder OR no decimal places requested
                 String
-                    (Pine_kernel.concat
+                    (Pine_builtin.concat
                         [ signStr
                         , fromIntAsList intPart
                         ]
@@ -1186,7 +1186,7 @@ fromFloatDecimal decimalPlacesMax ( numerator, denom ) =
 
                     scaledVal : Int
                     scaledVal =
-                        Pine_kernel.int_mul [ remainder, scale ]
+                        Pine_builtin.int_mul [ remainder, scale ]
 
                     scaledInt : Int
                     scaledInt =
@@ -1199,8 +1199,8 @@ fromFloatDecimal decimalPlacesMax ( numerator, denom ) =
                     -- 4) ROUND HALF-UP:
                     scaledIntRounded : Int
                     scaledIntRounded =
-                        if Pine_kernel.int_is_sorted_asc [ denom, Pine_kernel.int_mul [ leftover, 2 ] ] then
-                            Pine_kernel.int_add [ 1, scaledInt ]
+                        if Pine_builtin.int_is_sorted_asc [ denom, Pine_builtin.int_mul [ leftover, 2 ] ] then
+                            Pine_builtin.int_add [ 1, scaledInt ]
 
                         else
                             scaledInt
@@ -1215,7 +1215,7 @@ fromFloatDecimal decimalPlacesMax ( numerator, denom ) =
                     -- might round from "9.99" to "10.00".
                     overflowed : Bool
                     overflowed =
-                        Pine_kernel.int_is_sorted_asc [ scale, scaledIntRounded ]
+                        Pine_builtin.int_is_sorted_asc [ scale, scaledIntRounded ]
 
                     ( newIntPart, fractionDigits ) =
                         if overflowed then
@@ -1223,13 +1223,13 @@ fromFloatDecimal decimalPlacesMax ( numerator, denom ) =
                             let
                                 incremented : Int
                                 incremented =
-                                    Pine_kernel.int_add [ intPart, 1 ]
+                                    Pine_builtin.int_add [ intPart, 1 ]
 
                                 -- e.g. scaledStr = "100" => dropLeft 1 => "00"
                                 -- If scaledStr was "1000" => dropLeft 1 => "000"
                                 fractionNoSign : List Char
                                 fractionNoSign =
-                                    Pine_kernel.skip [ 1, scaledStr ]
+                                    Pine_builtin.skip [ 1, scaledStr ]
                             in
                             ( incremented, fractionNoSign )
 
@@ -1238,14 +1238,14 @@ fromFloatDecimal decimalPlacesMax ( numerator, denom ) =
                             let
                                 neededZeros : Int
                                 neededZeros =
-                                    Pine_kernel.int_add
+                                    Pine_builtin.int_add
                                         [ decimalPlacesMax
-                                        , Pine_kernel.int_mul [ -1, Pine_kernel.length scaledStr ]
+                                        , Pine_builtin.int_mul [ -1, Pine_builtin.length scaledStr ]
                                         ]
 
                                 fractionNoSign : List Char
                                 fractionNoSign =
-                                    Pine_kernel.concat
+                                    Pine_builtin.concat
                                         [ List.repeat neededZeros '0'
                                         , scaledStr
                                         ]
@@ -1260,7 +1260,7 @@ fromFloatDecimal decimalPlacesMax ( numerator, denom ) =
                 if trimmedFraction == [] then
                     -- Entire fractional part was zeros, so just show an integer.
                     String
-                        (Pine_kernel.concat
+                        (Pine_builtin.concat
                             [ signStr
                             , fromIntAsList newIntPart
                             ]
@@ -1268,7 +1268,7 @@ fromFloatDecimal decimalPlacesMax ( numerator, denom ) =
 
                 else
                     String
-                        (Pine_kernel.concat
+                        (Pine_builtin.concat
                             [ signStr
                             , fromIntAsList newIntPart
                             , [ '.' ]
@@ -1279,43 +1279,43 @@ fromFloatDecimal decimalPlacesMax ( numerator, denom ) =
 
 removeTrailingZeros : List Char -> List Char
 removeTrailingZeros chars =
-    removeTrailingZerosHelper (Pine_kernel.length chars) chars
+    removeTrailingZerosHelper (Pine_builtin.length chars) chars
 
 
 removeTrailingZerosHelper : Int -> List Char -> List Char
 removeTrailingZerosHelper offset chars =
-    if Pine_kernel.equal [ offset, 0 ] then
+    if Pine_builtin.equal [ offset, 0 ] then
         chars
 
     else
         let
             nextOffset : Int
             nextOffset =
-                Pine_kernel.int_add [ offset, -1 ]
+                Pine_builtin.int_add [ offset, -1 ]
         in
         case
-            Pine_kernel.take
+            Pine_builtin.take
                 [ 1
-                , Pine_kernel.skip [ nextOffset, chars ]
+                , Pine_builtin.skip [ nextOffset, chars ]
                 ]
         of
             [ '0' ] ->
                 removeTrailingZerosHelper nextOffset chars
 
             _ ->
-                Pine_kernel.take [ offset, chars ]
+                Pine_builtin.take [ offset, chars ]
 
 
 intPow : Int -> Int -> Int -> Int
 intPow acc base exponent =
-    if Pine_kernel.int_is_sorted_asc [ exponent, 0 ] then
+    if Pine_builtin.int_is_sorted_asc [ exponent, 0 ] then
         acc
 
     else
         intPow
-            (Pine_kernel.int_mul [ acc, base ])
+            (Pine_builtin.int_mul [ acc, base ])
             base
-            (Pine_kernel.int_add [ exponent, -1 ])
+            (Pine_builtin.int_add [ exponent, -1 ])
 
 
 toRationalComponentsLessSign : Int -> Maybe ( Int, Int )
@@ -1324,10 +1324,10 @@ toRationalComponentsLessSign charsBlob =
         parseWithExponent exponentChar =
             case splitHelperOnBlob 0 [] 0 exponentChar charsBlob of
                 [ String mantissa, String exponent ] ->
-                    if Pine_kernel.equal [ Pine_kernel.length mantissa, 0 ] then
+                    if Pine_builtin.equal [ Pine_builtin.length mantissa, 0 ] then
                         Nothing
 
-                    else if Pine_kernel.equal [ Pine_kernel.length exponent, 0 ] then
+                    else if Pine_builtin.equal [ Pine_builtin.length exponent, 0 ] then
                         Nothing
 
                     else
@@ -1339,11 +1339,11 @@ toRationalComponentsLessSign charsBlob =
                             ( Just (Elm_Float numerator denom), Just exponentInt ) ->
                                 let
                                     exponentIsNonPositive =
-                                        Pine_kernel.int_is_sorted_asc [ exponentInt, 0 ]
+                                        Pine_builtin.int_is_sorted_asc [ exponentInt, 0 ]
 
                                     exponentMagnitude =
                                         if exponentIsNonPositive then
-                                            Pine_kernel.int_mul [ -1, exponentInt ]
+                                            Pine_builtin.int_mul [ -1, exponentInt ]
 
                                         else
                                             exponentInt
@@ -1355,13 +1355,13 @@ toRationalComponentsLessSign charsBlob =
                                     Just
                                         (Elm_Float
                                             numerator
-                                            (Pine_kernel.int_mul [ denom, powTen ])
+                                            (Pine_builtin.int_mul [ denom, powTen ])
                                         )
 
                                 else
                                     Just
                                         (Elm_Float
-                                            (Pine_kernel.int_mul [ numerator, powTen ])
+                                            (Pine_builtin.int_mul [ numerator, powTen ])
                                             denom
                                         )
 
@@ -1402,8 +1402,8 @@ toRationalComponentsWithoutExponent charsBlob =
                     Just (Elm_Float numerator 1)
 
         [ String beforeSep, String afterSep ] ->
-            if Pine_kernel.equal [ Pine_kernel.length afterSep, 0 ] then
-                if Pine_kernel.equal [ Pine_kernel.length beforeSep, 0 ] then
+            if Pine_builtin.equal [ Pine_builtin.length afterSep, 0 ] then
+                if Pine_builtin.equal [ Pine_builtin.length beforeSep, 0 ] then
                     Nothing
 
                 else
@@ -1428,7 +1428,7 @@ toRationalComponentsWithoutExponent charsBlob =
                                 let
                                     denom : Int
                                     denom =
-                                        case Pine_kernel.length afterSep of
+                                        case Pine_builtin.length afterSep of
                                             4 ->
                                                 10
 
@@ -1463,8 +1463,8 @@ toRationalComponentsWithoutExponent charsBlob =
                                                 1
 
                                     numerator =
-                                        Pine_kernel.int_add
-                                            [ Pine_kernel.int_mul [ beforeSepInt, denom ], afterSepInt ]
+                                        Pine_builtin.int_add
+                                            [ Pine_builtin.int_mul [ beforeSepInt, denom ], afterSepInt ]
                                 in
                                 Just (Elm_Float numerator denom)
 
@@ -1481,9 +1481,9 @@ charsAny : Int -> (Char -> Bool) -> Int -> Bool
 charsAny offset predicate charsBytes =
     let
         char =
-            Pine_kernel.take [ 4, Pine_kernel.skip [ offset, charsBytes ] ]
+            Pine_builtin.take [ 4, Pine_builtin.skip [ offset, charsBytes ] ]
     in
-    if Pine_kernel.equal [ Pine_kernel.length char, 0 ] then
+    if Pine_builtin.equal [ Pine_builtin.length char, 0 ] then
         False
 
     else if predicate char then
@@ -1491,7 +1491,7 @@ charsAny offset predicate charsBytes =
 
     else
         charsAny
-            (Pine_kernel.int_add [ offset, 4 ])
+            (Pine_builtin.int_add [ offset, 4 ])
             predicate
             charsBytes
 
@@ -1505,14 +1505,14 @@ charsAll : Int -> (Char -> Bool) -> Int -> Bool
 charsAll offset predicate charsBytes =
     let
         char =
-            Pine_kernel.take [ 4, Pine_kernel.skip [ offset, charsBytes ] ]
+            Pine_builtin.take [ 4, Pine_builtin.skip [ offset, charsBytes ] ]
     in
-    if Pine_kernel.equal [ Pine_kernel.length char, 0 ] then
+    if Pine_builtin.equal [ Pine_builtin.length char, 0 ] then
         True
 
     else if predicate char then
         charsAll
-            (Pine_kernel.int_add [ offset, 4 ])
+            (Pine_builtin.int_add [ offset, 4 ])
             predicate
             charsBytes
 
@@ -1529,32 +1529,32 @@ indexesHelper : Int -> List Int -> Int -> Int -> List Int
 indexesHelper offset currentIndexes pattern string =
     let
         stringSlice =
-            Pine_kernel.take
-                [ Pine_kernel.length pattern
-                , Pine_kernel.skip
-                    [ Pine_kernel.int_mul [ offset, 4 ]
+            Pine_builtin.take
+                [ Pine_builtin.length pattern
+                , Pine_builtin.skip
+                    [ Pine_builtin.int_mul [ offset, 4 ]
                     , string
                     ]
                 ]
     in
-    if Pine_kernel.equal [ Pine_kernel.length stringSlice, 0 ] then
+    if Pine_builtin.equal [ Pine_builtin.length stringSlice, 0 ] then
         currentIndexes
 
     else if
-        Pine_kernel.equal
+        Pine_builtin.equal
             [ stringSlice
             , pattern
             ]
     then
         indexesHelper
-            (Pine_kernel.int_add [ offset, 1 ])
-            (Pine_kernel.concat [ currentIndexes, [ offset ] ])
+            (Pine_builtin.int_add [ offset, 1 ])
+            (Pine_builtin.concat [ currentIndexes, [ offset ] ])
             pattern
             string
 
     else
         indexesHelper
-            (Pine_kernel.int_add [ offset, 1 ])
+            (Pine_builtin.int_add [ offset, 1 ])
             currentIndexes
             pattern
             string

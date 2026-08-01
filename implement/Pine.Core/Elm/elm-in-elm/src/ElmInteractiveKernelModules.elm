@@ -15,7 +15,7 @@ width : Bytes -> Int
 width bytes =
     case bytes of
       Elm_Bytes list ->
-        Pine_kernel.length list
+        Pine_builtin.length list
 
 
 type Endianness
@@ -50,127 +50,127 @@ encodeBlob : Encoder -> Int
 encodeBlob builder =
     case builder of
         I8 n ->
-            if Pine_kernel.int_is_sorted_asc [ 0, n ] then
-                Pine_kernel.take [ 1, Pine_kernel.reverse n ]
+            if Pine_builtin.int_is_sorted_asc [ 0, n ] then
+                Pine_builtin.take [ 1, Pine_builtin.reverse n ]
 
             else
-                Pine_kernel.take
+                Pine_builtin.take
                     [ 1
-                    , Pine_kernel.reverse
-                        (Pine_kernel.bit_not (Pine_kernel.int_add [ n, 1 ]))
+                    , Pine_builtin.reverse
+                        (Pine_builtin.bit_not (Pine_builtin.int_add [ n, 1 ]))
                     ]
 
         I16 e n ->
             let
                 littleEndian =
-                    if Pine_kernel.int_is_sorted_asc [ 0, n ] then
-                        Pine_kernel.take
+                    if Pine_builtin.int_is_sorted_asc [ 0, n ] then
+                        Pine_builtin.take
                             [ 2
-                            , Pine_kernel.concat
-                                [ Pine_kernel.reverse
-                                    (Pine_kernel.skip [ 1, n ])
-                                , Pine_kernel.skip [ 1, 0 ]
+                            , Pine_builtin.concat
+                                [ Pine_builtin.reverse
+                                    (Pine_builtin.skip [ 1, n ])
+                                , Pine_builtin.skip [ 1, 0 ]
                                 ]
                             ]
 
                     else
-                        Pine_kernel.take
+                        Pine_builtin.take
                             [ 2
-                            , Pine_kernel.concat
-                                [ Pine_kernel.reverse
-                                    (Pine_kernel.skip
+                            , Pine_builtin.concat
+                                [ Pine_builtin.reverse
+                                    (Pine_builtin.skip
                                         [ 1
-                                        , Pine_kernel.bit_not (Pine_kernel.int_add [ n, 1 ])
+                                        , Pine_builtin.bit_not (Pine_builtin.int_add [ n, 1 ])
                                         ]
                                     )
-                                , Pine_kernel.skip [ 1, 0xFF ]
+                                , Pine_builtin.skip [ 1, 0xFF ]
                                 ]
                             ]
             in
-            if Pine_kernel.equal [ e, Bytes.LE ] then
+            if Pine_builtin.equal [ e, Bytes.LE ] then
                 littleEndian
 
             else
-                Pine_kernel.reverse littleEndian
+                Pine_builtin.reverse littleEndian
 
         I32 e n ->
             let
                 littleEndian =
-                    if Pine_kernel.int_is_sorted_asc [ 0, n ] then
-                        Pine_kernel.take
+                    if Pine_builtin.int_is_sorted_asc [ 0, n ] then
+                        Pine_builtin.take
                             [ 4
-                            , Pine_kernel.concat
-                                [ Pine_kernel.reverse
-                                    (Pine_kernel.skip [ 1, n ])
-                                , Pine_kernel.skip [ 2, 0x01000000 ]
+                            , Pine_builtin.concat
+                                [ Pine_builtin.reverse
+                                    (Pine_builtin.skip [ 1, n ])
+                                , Pine_builtin.skip [ 2, 0x01000000 ]
                                 ]
                             ]
 
                     else
-                        Pine_kernel.take
+                        Pine_builtin.take
                             [ 4
-                            , Pine_kernel.concat
-                                [ Pine_kernel.reverse
-                                    (Pine_kernel.skip
+                            , Pine_builtin.concat
+                                [ Pine_builtin.reverse
+                                    (Pine_builtin.skip
                                         [ 1
-                                        , Pine_kernel.bit_not (Pine_kernel.int_add [ n, 1 ])
+                                        , Pine_builtin.bit_not (Pine_builtin.int_add [ n, 1 ])
                                         ]
                                     )
-                                , Pine_kernel.skip [ 1, 0x00FFFFFF ]
+                                , Pine_builtin.skip [ 1, 0x00FFFFFF ]
                                 ]
                             ]
             in
-            if Pine_kernel.equal [ e, Bytes.LE ] then
+            if Pine_builtin.equal [ e, Bytes.LE ] then
                 littleEndian
 
             else
-                Pine_kernel.reverse littleEndian
+                Pine_builtin.reverse littleEndian
 
         U8 n ->
-            Pine_kernel.take [ 1, Pine_kernel.reverse n ]
+            Pine_builtin.take [ 1, Pine_builtin.reverse n ]
 
         U16 e n ->
             let
                 littleEndian =
-                    Pine_kernel.take
+                    Pine_builtin.take
                         [ 2
-                        , Pine_kernel.concat
-                            [ Pine_kernel.reverse
-                                (Pine_kernel.skip [ 1, n ])
-                            , Pine_kernel.skip [ 1, 0 ]
+                        , Pine_builtin.concat
+                            [ Pine_builtin.reverse
+                                (Pine_builtin.skip [ 1, n ])
+                            , Pine_builtin.skip [ 1, 0 ]
                             ]
                         ]
             in
-            if Pine_kernel.equal [ e, Bytes.LE ] then
+            if Pine_builtin.equal [ e, Bytes.LE ] then
                 littleEndian
 
             else
-                Pine_kernel.reverse littleEndian
+                Pine_builtin.reverse littleEndian
 
         U32 e n ->
             let
                 littleEndian =
-                    Pine_kernel.take
+                    Pine_builtin.take
                         [ 4
-                        , Pine_kernel.concat
-                            [ Pine_kernel.reverse
-                                (Pine_kernel.skip [ 1, n ])
-                            , Pine_kernel.skip [ 2, 0x01000000 ]
+                        , Pine_builtin.concat
+                            [ Pine_builtin.reverse
+                                (Pine_builtin.skip [ 1, n ])
+                            , Pine_builtin.skip [ 2, 0x01000000 ]
                             ]
                         ]
             in
-            if Pine_kernel.equal [ e, Bytes.LE ] then
+            if Pine_builtin.equal [ e, Bytes.LE ] then
                 littleEndian
 
             else
-                Pine_kernel.reverse littleEndian
+                Pine_builtin.reverse littleEndian
 
         SequenceEncoder bs ->
-            if Pine_kernel.equal [ bs, [] ] then
-                Pine_kernel.take [ 0, 0 ]
+            if Pine_builtin.equal [ bs, [] ] then
+                Pine_builtin.take [ 0, 0 ]
 
             else
-                Pine_kernel.concat (List.map encodeBlob bs)
+                Pine_builtin.concat (List.map encodeBlob bs)
 
         BytesEncoder (Bytes.Elm_Bytes blob) ->
             blob
@@ -240,15 +240,15 @@ encodeCharsAsBlobHelp : Int -> Int -> Int -> Int
 encodeCharsAsBlobHelp acc offset charsBytes =
     let
         nextChar =
-            Pine_kernel.take [ 4, Pine_kernel.skip [ offset, charsBytes ] ]
+            Pine_builtin.take [ 4, Pine_builtin.skip [ offset, charsBytes ] ]
     in
-    if Pine_kernel.equal [ Pine_kernel.length nextChar, 0 ] then
+    if Pine_builtin.equal [ Pine_builtin.length nextChar, 0 ] then
         acc
 
     else
         encodeCharsAsBlobHelp
-            (Pine_kernel.concat [ acc, encodeCharAsBlob nextChar ])
-            (Pine_kernel.int_add [ offset, 4 ])
+            (Pine_builtin.concat [ acc, encodeCharAsBlob nextChar ])
+            (Pine_builtin.int_add [ offset, 4 ])
             charsBytes
 
 
@@ -258,168 +258,168 @@ encodeCharAsBlob char =
         code =
             Char.toCode char
     in
-    if Pine_kernel.int_is_sorted_asc [ code, 0x7F ] then
+    if Pine_builtin.int_is_sorted_asc [ code, 0x7F ] then
         -- 1-byte encoding
-        Pine_kernel.skip
+        Pine_builtin.skip
             [ 1
             , code
             ]
 
-    else if Pine_kernel.int_is_sorted_asc [ code, 0x07FF ] then
+    else if Pine_builtin.int_is_sorted_asc [ code, 0x07FF ] then
         -- 2-byte encoding
         let
             byte1 =
-                Pine_kernel.bit_or
+                Pine_builtin.bit_or
                     [ 0xC0
                     , code // 64
                     ]
 
             byte2 =
-                Pine_kernel.bit_or
+                Pine_builtin.bit_or
                     [ maskSingleByteMSB
-                    , Pine_kernel.bit_and [ 63, code ]
+                    , Pine_builtin.bit_and [ 63, code ]
                     ]
         in
-        Pine_kernel.concat
-            [ Pine_kernel.bit_and [ byte1, maskSingleByte ]
-            , Pine_kernel.bit_and [ byte2, maskSingleByte ]
+        Pine_builtin.concat
+            [ Pine_builtin.bit_and [ byte1, maskSingleByte ]
+            , Pine_builtin.bit_and [ byte2, maskSingleByte ]
             ]
 
-    else if Pine_kernel.int_is_sorted_asc [ code, 0xFFFF ] then
+    else if Pine_builtin.int_is_sorted_asc [ code, 0xFFFF ] then
         -- 3-byte encoding
         let
             byte1 =
-                Pine_kernel.bit_or
+                Pine_builtin.bit_or
                     [ 0xE0
                     , code // 4096
                     ]
 
             byte2 =
-                Pine_kernel.bit_or
+                Pine_builtin.bit_or
                     [ maskSingleByteMSB
-                    , Pine_kernel.bit_and [ 63, code // 64 ]
+                    , Pine_builtin.bit_and [ 63, code // 64 ]
                     ]
 
             byte3 =
-                Pine_kernel.bit_or
+                Pine_builtin.bit_or
                     [ maskSingleByteMSB
-                    , Pine_kernel.bit_and [ 63, code ]
+                    , Pine_builtin.bit_and [ 63, code ]
                     ]
         in
-        Pine_kernel.concat
-            [ Pine_kernel.bit_and [ byte1, maskSingleByte ]
-            , Pine_kernel.bit_and [ byte2, maskSingleByte ]
-            , Pine_kernel.bit_and [ byte3, maskSingleByte ]
+        Pine_builtin.concat
+            [ Pine_builtin.bit_and [ byte1, maskSingleByte ]
+            , Pine_builtin.bit_and [ byte2, maskSingleByte ]
+            , Pine_builtin.bit_and [ byte3, maskSingleByte ]
             ]
 
     else
         -- 4-byte encoding for code points >= 0x10000
         let
             byte1 =
-                Pine_kernel.bit_or
-                    [ Pine_kernel.bit_and [ 0xF0, maskSingleByte ]
+                Pine_builtin.bit_or
+                    [ Pine_builtin.bit_and [ 0xF0, maskSingleByte ]
                     , code // 262144
                     ]
 
             byte2 =
-                Pine_kernel.bit_or
+                Pine_builtin.bit_or
                     [ maskSingleByteMSB
-                    , Pine_kernel.bit_and [ 63, code // 4096 ]
+                    , Pine_builtin.bit_and [ 63, code // 4096 ]
                     ]
 
             byte3 =
-                Pine_kernel.bit_or
+                Pine_builtin.bit_or
                     [ maskSingleByteMSB
-                    , Pine_kernel.bit_and [ 63, code // 64 ]
+                    , Pine_builtin.bit_and [ 63, code // 64 ]
                     ]
 
             byte4 =
-                Pine_kernel.bit_or
+                Pine_builtin.bit_or
                     [ maskSingleByteMSB
-                    , Pine_kernel.bit_and [ 63, code ]
+                    , Pine_builtin.bit_and [ 63, code ]
                     ]
         in
-        Pine_kernel.concat
-            [ Pine_kernel.bit_and [ byte1, maskSingleByte ]
-            , Pine_kernel.bit_and [ byte2, maskSingleByte ]
-            , Pine_kernel.bit_and [ byte3, maskSingleByte ]
-            , Pine_kernel.bit_and [ byte4, maskSingleByte ]
+        Pine_builtin.concat
+            [ Pine_builtin.bit_and [ byte1, maskSingleByte ]
+            , Pine_builtin.bit_and [ byte2, maskSingleByte ]
+            , Pine_builtin.bit_and [ byte3, maskSingleByte ]
+            , Pine_builtin.bit_and [ byte4, maskSingleByte ]
             ]
 
 
 getStringWidth : String -> Int
 getStringWidth (String charsBytes) =
-    Pine_kernel.length
+    Pine_builtin.length
         (encodeCharsAsBlob charsBytes)
 
 
 maskSingleByte : Int
 maskSingleByte =
-    Pine_kernel.skip [ 1, 0xFF ]
+    Pine_builtin.skip [ 1, 0xFF ]
 
 
 maskSingleByteMSB : Int
 maskSingleByteMSB =
-    Pine_kernel.skip [ 1, 0x80 ]
+    Pine_builtin.skip [ 1, 0x80 ]
 
 
 emptyBlob : Int
 emptyBlob =
-    Pine_kernel.take [ 0, 0 ]
+    Pine_builtin.take [ 0, 0 ]
 
 
             in
-            if Pine_kernel.equal [ e, Bytes.LE ] then
+            if Pine_builtin.equal [ e, Bytes.LE ] then
                 littleEndian
 
             else
-                Pine_kernel.reverse littleEndian
+                Pine_builtin.reverse littleEndian
 
         U8 n ->
-            Pine_kernel.take [ 1, Pine_kernel.reverse n ]
+            Pine_builtin.take [ 1, Pine_builtin.reverse n ]
 
         U16 e n ->
             let
                 littleEndian =
-                    Pine_kernel.take
+                    Pine_builtin.take
                         [ 2
-                        , Pine_kernel.concat
-                            [ Pine_kernel.reverse
-                                (Pine_kernel.skip [ 1, n ])
-                            , Pine_kernel.skip [ 1, 0 ]
+                        , Pine_builtin.concat
+                            [ Pine_builtin.reverse
+                                (Pine_builtin.skip [ 1, n ])
+                            , Pine_builtin.skip [ 1, 0 ]
                             ]
                         ]
             in
-            if Pine_kernel.equal [ e, Bytes.LE ] then
+            if Pine_builtin.equal [ e, Bytes.LE ] then
                 littleEndian
 
             else
-                Pine_kernel.reverse littleEndian
+                Pine_builtin.reverse littleEndian
 
         U32 e n ->
             let
                 littleEndian =
-                    Pine_kernel.take
+                    Pine_builtin.take
                         [ 4
-                        , Pine_kernel.concat
-                            [ Pine_kernel.reverse
-                                (Pine_kernel.skip [ 1, n ])
-                            , Pine_kernel.skip [ 2, 0x01000000 ]
+                        , Pine_builtin.concat
+                            [ Pine_builtin.reverse
+                                (Pine_builtin.skip [ 1, n ])
+                            , Pine_builtin.skip [ 2, 0x01000000 ]
                             ]
                         ]
             in
-            if Pine_kernel.equal [ e, Bytes.LE ] then
+            if Pine_builtin.equal [ e, Bytes.LE ] then
                 littleEndian
 
             else
-                Pine_kernel.reverse littleEndian
+                Pine_builtin.reverse littleEndian
 
         SequenceEncoder bs ->
-            if Pine_kernel.equal [ bs, [] ] then
-                Pine_kernel.take [ 0, 0 ]
+            if Pine_builtin.equal [ bs, [] ] then
+                Pine_builtin.take [ 0, 0 ]
 
             else
-                Pine_kernel.concat (List.map encodeBlob bs)
+                Pine_builtin.concat (List.map encodeBlob bs)
 
         BytesEncoder (Bytes.Elm_Bytes blob) ->
             blob
@@ -489,15 +489,15 @@ encodeCharsAsBlobHelp : Int -> Int -> Int -> Int
 encodeCharsAsBlobHelp acc offset charsBytes =
     let
         nextChar =
-            Pine_kernel.take [ 4, Pine_kernel.skip [ offset, charsBytes ] ]
+            Pine_builtin.take [ 4, Pine_builtin.skip [ offset, charsBytes ] ]
     in
-    if Pine_kernel.equal [ Pine_kernel.length nextChar, 0 ] then
+    if Pine_builtin.equal [ Pine_builtin.length nextChar, 0 ] then
         acc
 
     else
         encodeCharsAsBlobHelp
-            (Pine_kernel.concat [ acc, encodeCharAsBlob nextChar ])
-            (Pine_kernel.int_add [ offset, 4 ])
+            (Pine_builtin.concat [ acc, encodeCharAsBlob nextChar ])
+            (Pine_builtin.int_add [ offset, 4 ])
             charsBytes
 
 
@@ -507,114 +507,114 @@ encodeCharAsBlob char =
         code =
             Char.toCode char
     in
-    if Pine_kernel.int_is_sorted_asc [ code, 0x7F ] then
+    if Pine_builtin.int_is_sorted_asc [ code, 0x7F ] then
         -- 1-byte encoding
-        Pine_kernel.skip
+        Pine_builtin.skip
             [ 1
             , code
             ]
 
-    else if Pine_kernel.int_is_sorted_asc [ code, 0x07FF ] then
+    else if Pine_builtin.int_is_sorted_asc [ code, 0x07FF ] then
         -- 2-byte encoding
         let
             byte1 =
-                Pine_kernel.bit_or
+                Pine_builtin.bit_or
                     [ 0xC0
                     , code // 64
                     ]
 
             byte2 =
-                Pine_kernel.bit_or
+                Pine_builtin.bit_or
                     [ maskSingleByteMSB
-                    , Pine_kernel.bit_and [ 63, code ]
+                    , Pine_builtin.bit_and [ 63, code ]
                     ]
         in
-        Pine_kernel.concat
-            [ Pine_kernel.bit_and [ byte1, maskSingleByte ]
-            , Pine_kernel.bit_and [ byte2, maskSingleByte ]
+        Pine_builtin.concat
+            [ Pine_builtin.bit_and [ byte1, maskSingleByte ]
+            , Pine_builtin.bit_and [ byte2, maskSingleByte ]
             ]
 
-    else if Pine_kernel.int_is_sorted_asc [ code, 0xFFFF ] then
+    else if Pine_builtin.int_is_sorted_asc [ code, 0xFFFF ] then
         -- 3-byte encoding
         let
             byte1 =
-                Pine_kernel.bit_or
+                Pine_builtin.bit_or
                     [ 0xE0
                     , code // 4096
                     ]
 
             byte2 =
-                Pine_kernel.bit_or
+                Pine_builtin.bit_or
                     [ maskSingleByteMSB
-                    , Pine_kernel.bit_and [ 63, code // 64 ]
+                    , Pine_builtin.bit_and [ 63, code // 64 ]
                     ]
 
             byte3 =
-                Pine_kernel.bit_or
+                Pine_builtin.bit_or
                     [ maskSingleByteMSB
-                    , Pine_kernel.bit_and [ 63, code ]
+                    , Pine_builtin.bit_and [ 63, code ]
                     ]
         in
-        Pine_kernel.concat
-            [ Pine_kernel.bit_and [ byte1, maskSingleByte ]
-            , Pine_kernel.bit_and [ byte2, maskSingleByte ]
-            , Pine_kernel.bit_and [ byte3, maskSingleByte ]
+        Pine_builtin.concat
+            [ Pine_builtin.bit_and [ byte1, maskSingleByte ]
+            , Pine_builtin.bit_and [ byte2, maskSingleByte ]
+            , Pine_builtin.bit_and [ byte3, maskSingleByte ]
             ]
 
     else
         -- 4-byte encoding for code points >= 0x10000
         let
             byte1 =
-                Pine_kernel.bit_or
-                    [ Pine_kernel.bit_and [ 0xF0, maskSingleByte ]
+                Pine_builtin.bit_or
+                    [ Pine_builtin.bit_and [ 0xF0, maskSingleByte ]
                     , code // 262144
                     ]
 
             byte2 =
-                Pine_kernel.bit_or
+                Pine_builtin.bit_or
                     [ maskSingleByteMSB
-                    , Pine_kernel.bit_and [ 63, code // 4096 ]
+                    , Pine_builtin.bit_and [ 63, code // 4096 ]
                     ]
 
             byte3 =
-                Pine_kernel.bit_or
+                Pine_builtin.bit_or
                     [ maskSingleByteMSB
-                    , Pine_kernel.bit_and [ 63, code // 64 ]
+                    , Pine_builtin.bit_and [ 63, code // 64 ]
                     ]
 
             byte4 =
-                Pine_kernel.bit_or
+                Pine_builtin.bit_or
                     [ maskSingleByteMSB
-                    , Pine_kernel.bit_and [ 63, code ]
+                    , Pine_builtin.bit_and [ 63, code ]
                     ]
         in
-        Pine_kernel.concat
-            [ Pine_kernel.bit_and [ byte1, maskSingleByte ]
-            , Pine_kernel.bit_and [ byte2, maskSingleByte ]
-            , Pine_kernel.bit_and [ byte3, maskSingleByte ]
-            , Pine_kernel.bit_and [ byte4, maskSingleByte ]
+        Pine_builtin.concat
+            [ Pine_builtin.bit_and [ byte1, maskSingleByte ]
+            , Pine_builtin.bit_and [ byte2, maskSingleByte ]
+            , Pine_builtin.bit_and [ byte3, maskSingleByte ]
+            , Pine_builtin.bit_and [ byte4, maskSingleByte ]
             ]
 
 
 getStringWidth : String -> Int
 getStringWidth (String charsBytes) =
-    Pine_kernel.length
+    Pine_builtin.length
         (encodeCharsAsBlob charsBytes)
 
 
 maskSingleByte : Int
 maskSingleByte =
-    Pine_kernel.skip [ 1, 0xff ]
+    Pine_builtin.skip [ 1, 0xff ]
 
 
 maskSingleByteMSB : Int
 maskSingleByteMSB =
-    Pine_kernel.skip [ 1, 0x80 ]
+    Pine_builtin.skip [ 1, 0x80 ]
 
 
 emptyBlob : Int
 emptyBlob =
-    Pine_kernel.take [ 0, 0 ]
+    Pine_builtin.take [ 0, 0 ]
 
 
 """
@@ -658,9 +658,9 @@ decode (Decoder decoder) bytes =
             decoder bytes 0
 
         blobLength =
-            Pine_kernel.length blob
+            Pine_builtin.length blob
     in
-    if Pine_kernel.int_is_sorted_asc [ 0, offset, blobLength ] then
+    if Pine_builtin.int_is_sorted_asc [ 0, offset, blobLength ] then
         Just result
 
     else
@@ -671,8 +671,8 @@ bytes : Int -> Decoder Bytes
 bytes length =
     Decoder
         (\\blob offset ->
-            ( Pine_kernel.int_add [ offset, length ]
-            , Bytes.Elm_Bytes (Pine_kernel.take [ length, Pine_kernel.skip [ offset, blob ] ])
+            ( Pine_builtin.int_add [ offset, length ]
+            , Bytes.Elm_Bytes (Pine_builtin.take [ length, Pine_builtin.skip [ offset, blob ] ])
             )
         )
 
@@ -685,10 +685,10 @@ unsignedInt8 =
         (\\(Bytes.Elm_Bytes blob) offset ->
             let
                 byte =
-                    Pine_kernel.take [ 1, Pine_kernel.skip [ offset, blob ] ]
+                    Pine_builtin.take [ 1, Pine_builtin.skip [ offset, blob ] ]
             in
-            ( Pine_kernel.int_add [ offset, 1 ]
-            , Pine_kernel.concat [ Pine_kernel.take [ 1, 0 ], byte ]
+            ( Pine_builtin.int_add [ offset, 1 ]
+            , Pine_builtin.concat [ Pine_builtin.take [ 1, 0 ], byte ]
             )
         )
 
@@ -699,22 +699,22 @@ signedInt8 =
         (\\(Bytes.Elm_Bytes blob) offset ->
             let
                 byte =
-                    Pine_kernel.take [ 1, Pine_kernel.skip [ offset, blob ] ]
+                    Pine_builtin.take [ 1, Pine_builtin.skip [ offset, blob ] ]
 
                 asInt =
-                    if Pine_kernel.equal [ Pine_kernel.bit_and [ byte, 0x80 ], 0 ] then
-                        Pine_kernel.concat [ Pine_kernel.take [ 1, 0 ], byte ]
+                    if Pine_builtin.equal [ Pine_builtin.bit_and [ byte, 0x80 ], 0 ] then
+                        Pine_builtin.concat [ Pine_builtin.take [ 1, 0 ], byte ]
 
                     else
-                        Pine_kernel.int_add
+                        Pine_builtin.int_add
                             [ -1
-                            , Pine_kernel.concat
-                                [ Pine_kernel.take [ 1, -1 ]
-                                , Pine_kernel.bit_not byte
+                            , Pine_builtin.concat
+                                [ Pine_builtin.take [ 1, -1 ]
+                                , Pine_builtin.bit_not byte
                                 ]
                             ]
             in
-            ( Pine_kernel.int_add [ offset, 1 ]
+            ( Pine_builtin.int_add [ offset, 1 ]
             , asInt
             )
         )
@@ -726,22 +726,22 @@ unsignedInt16 endianness =
         (\\(Bytes.Elm_Bytes blob) offset ->
             let
                 bytes =
-                    Pine_kernel.take [ 2, Pine_kernel.skip [ offset, blob ] ]
+                    Pine_builtin.take [ 2, Pine_builtin.skip [ offset, blob ] ]
 
                 asInt =
-                    if Pine_kernel.equal [ endianness, Bytes.LE ] then
-                        Pine_kernel.concat
-                            [ Pine_kernel.take [ 1, 0 ]
-                            , Pine_kernel.reverse bytes
+                    if Pine_builtin.equal [ endianness, Bytes.LE ] then
+                        Pine_builtin.concat
+                            [ Pine_builtin.take [ 1, 0 ]
+                            , Pine_builtin.reverse bytes
                             ]
 
                     else
-                        Pine_kernel.concat
-                            [ Pine_kernel.take [ 1, 0 ]
+                        Pine_builtin.concat
+                            [ Pine_builtin.take [ 1, 0 ]
                             , bytes
                             ]
             in
-            ( Pine_kernel.int_add [ offset, 2 ]
+            ( Pine_builtin.int_add [ offset, 2 ]
             , asInt
             )
         )
@@ -753,34 +753,34 @@ signedInt16 endianness =
         (\\(Bytes.Elm_Bytes blob) offset ->
             let
                 bytes =
-                    Pine_kernel.take [ 2, Pine_kernel.skip [ offset, blob ] ]
+                    Pine_builtin.take [ 2, Pine_builtin.skip [ offset, blob ] ]
 
                 bytesOrdered =
-                    if Pine_kernel.equal [ endianness, Bytes.LE ] then
-                        Pine_kernel.reverse bytes
+                    if Pine_builtin.equal [ endianness, Bytes.LE ] then
+                        Pine_builtin.reverse bytes
 
                     else
                         bytes
 
                 asInt =
                     if
-                        Pine_kernel.equal
-                            [ Pine_kernel.bit_and [ bytesOrdered, 0x8000 ]
-                            , Pine_kernel.skip [ 2, 0x00010000 ]
+                        Pine_builtin.equal
+                            [ Pine_builtin.bit_and [ bytesOrdered, 0x8000 ]
+                            , Pine_builtin.skip [ 2, 0x00010000 ]
                             ]
                     then
-                        Pine_kernel.concat [ Pine_kernel.take [ 1, 0 ], bytesOrdered ]
+                        Pine_builtin.concat [ Pine_builtin.take [ 1, 0 ], bytesOrdered ]
 
                     else
-                        Pine_kernel.int_add
+                        Pine_builtin.int_add
                             [ -1
-                            , Pine_kernel.concat
-                                [ Pine_kernel.take [ 1, -1 ]
-                                , Pine_kernel.bit_not bytesOrdered
+                            , Pine_builtin.concat
+                                [ Pine_builtin.take [ 1, -1 ]
+                                , Pine_builtin.bit_not bytesOrdered
                                 ]
                             ]
             in
-            ( Pine_kernel.int_add [ offset, 2 ]
+            ( Pine_builtin.int_add [ offset, 2 ]
             , asInt
             )
         )
@@ -792,19 +792,19 @@ unsignedInt32 endianness =
         (\\(Bytes.Elm_Bytes blob) offset ->
             let
                 bytes =
-                    Pine_kernel.take [ 4, Pine_kernel.skip [ offset, blob ] ]
+                    Pine_builtin.take [ 4, Pine_builtin.skip [ offset, blob ] ]
 
                 asInt =
-                    if Pine_kernel.equal [ endianness, Bytes.LE ] then
-                        Pine_kernel.concat
-                            [ Pine_kernel.take [ 1, 0 ]
-                            , Pine_kernel.reverse bytes
+                    if Pine_builtin.equal [ endianness, Bytes.LE ] then
+                        Pine_builtin.concat
+                            [ Pine_builtin.take [ 1, 0 ]
+                            , Pine_builtin.reverse bytes
                             ]
 
                     else
-                        Pine_kernel.concat [ Pine_kernel.take [ 1, 0 ], bytes ]
+                        Pine_builtin.concat [ Pine_builtin.take [ 1, 0 ], bytes ]
             in
-            ( Pine_kernel.int_add [ offset, 4 ]
+            ( Pine_builtin.int_add [ offset, 4 ]
             , asInt
             )
         )
@@ -816,34 +816,34 @@ signedInt32 endianness =
         (\\(Bytes.Elm_Bytes blob) offset ->
             let
                 bytes =
-                    Pine_kernel.take [ 4, Pine_kernel.skip [ offset, blob ] ]
+                    Pine_builtin.take [ 4, Pine_builtin.skip [ offset, blob ] ]
 
                 bytesOrdered =
-                    if Pine_kernel.equal [ endianness, Bytes.LE ] then
-                        Pine_kernel.reverse bytes
+                    if Pine_builtin.equal [ endianness, Bytes.LE ] then
+                        Pine_builtin.reverse bytes
 
                     else
                         bytes
 
                 asInt =
                     if
-                        Pine_kernel.equal
-                            [ Pine_kernel.bit_and [ bytesOrdered, 0x80000000 ]
-                            , Pine_kernel.skip [ 2, 0x0000000100000000 ]
+                        Pine_builtin.equal
+                            [ Pine_builtin.bit_and [ bytesOrdered, 0x80000000 ]
+                            , Pine_builtin.skip [ 2, 0x0000000100000000 ]
                             ]
                     then
-                        Pine_kernel.concat [ Pine_kernel.take [ 1, 0 ], bytesOrdered ]
+                        Pine_builtin.concat [ Pine_builtin.take [ 1, 0 ], bytesOrdered ]
 
                     else
-                        Pine_kernel.int_add
+                        Pine_builtin.int_add
                             [ -1
-                            , Pine_kernel.concat
-                                [ Pine_kernel.take [ 1, -1 ]
-                                , Pine_kernel.bit_not bytesOrdered
+                            , Pine_builtin.concat
+                                [ Pine_builtin.take [ 1, -1 ]
+                                , Pine_builtin.bit_not bytesOrdered
                                 ]
                             ]
             in
-            ( Pine_kernel.int_add [ offset, 4 ]
+            ( Pine_builtin.int_add [ offset, 4 ]
             , asInt
             )
         )
@@ -855,9 +855,9 @@ string length =
         (\\(Bytes.Elm_Bytes blob) offset ->
             let
                 bytes =
-                    Pine_kernel.take [ length, Pine_kernel.skip [ offset, blob ] ]
+                    Pine_builtin.take [ length, Pine_builtin.skip [ offset, blob ] ]
             in
-            ( Pine_kernel.int_add [ offset, length ]
+            ( Pine_builtin.int_add [ offset, length ]
             , decodeBlobAsChars bytes
             )
         )
@@ -870,7 +870,7 @@ decodeBlobAsChars blob =
 
 decodeBlobAsCharsRec : Int -> Int -> List Char -> String
 decodeBlobAsCharsRec offset blob chars =
-    if Pine_kernel.int_is_sorted_asc [ Pine_kernel.length blob, offset ] then
+    if Pine_builtin.int_is_sorted_asc [ Pine_builtin.length blob, offset ] then
         String.fromList (List.reverse chars)
 
     else
@@ -879,7 +879,7 @@ decodeBlobAsCharsRec offset blob chars =
                 decodeUtf8Char blob offset
         in
         decodeBlobAsCharsRec
-            (Pine_kernel.int_add [ offset, bytesConsumed ])
+            (Pine_builtin.int_add [ offset, bytesConsumed ])
             blob
             (Char.fromCode charCode :: chars)
 
@@ -888,112 +888,112 @@ decodeUtf8Char : Int -> Int -> ( Int, Int )
 decodeUtf8Char blob offset =
     let
         firstByte =
-            Pine_kernel.take [ 1, Pine_kernel.skip [ offset, blob ] ]
+            Pine_builtin.take [ 1, Pine_builtin.skip [ offset, blob ] ]
 
         firstByteInt =
-            Pine_kernel.concat [ Pine_kernel.take [ 1, 0 ], firstByte ]
+            Pine_builtin.concat [ Pine_builtin.take [ 1, 0 ], firstByte ]
 
         charCode =
-            Pine_kernel.concat [ Pine_kernel.take [ 1, 0 ], firstByte ]
+            Pine_builtin.concat [ Pine_builtin.take [ 1, 0 ], firstByte ]
     in
-    if Pine_kernel.int_is_sorted_asc [ firstByteInt, 0x7F ] then
+    if Pine_builtin.int_is_sorted_asc [ firstByteInt, 0x7F ] then
         -- 1-byte character (ASCII)
         ( charCode, 1 )
 
-    else if Pine_kernel.equal [ Pine_kernel.bit_and [ firstByteInt, 0xE0 ], 0xC0 ] then
+    else if Pine_builtin.equal [ Pine_builtin.bit_and [ firstByteInt, 0xE0 ], 0xC0 ] then
         -- 2-byte character
         let
             byte2 =
-                Pine_kernel.take [ 1, Pine_kernel.skip [ Pine_kernel.int_add [ offset, 1 ], blob ] ]
+                Pine_builtin.take [ 1, Pine_builtin.skip [ Pine_builtin.int_add [ offset, 1 ], blob ] ]
 
             byte2Int =
-                Pine_kernel.concat [ Pine_kernel.take [ 1, 0 ], byte2 ]
+                Pine_builtin.concat [ Pine_builtin.take [ 1, 0 ], byte2 ]
 
             firstFiveBits =
-                Pine_kernel.bit_and [ firstByteInt, 0x1F ]
+                Pine_builtin.bit_and [ firstByteInt, 0x1F ]
 
             secondSixBits =
-                Pine_kernel.bit_and [ byte2Int, 0x3F ]
+                Pine_builtin.bit_and [ byte2Int, 0x3F ]
 
             charCode =
-                Pine_kernel.int_add
-                    [ Pine_kernel.int_mul [ firstFiveBits, 64 ] -- Multiply by 2^6
+                Pine_builtin.int_add
+                    [ Pine_builtin.int_mul [ firstFiveBits, 64 ] -- Multiply by 2^6
                     , secondSixBits
                     ]
         in
         ( charCode, 2 )
 
-    else if Pine_kernel.equal [ Pine_kernel.bit_and [ firstByteInt, 0xF0 ], 0xE0 ] then
+    else if Pine_builtin.equal [ Pine_builtin.bit_and [ firstByteInt, 0xF0 ], 0xE0 ] then
         -- 3-byte character
         let
             byte2 =
-                Pine_kernel.take [ 1, Pine_kernel.skip [ Pine_kernel.int_add [ offset, 1 ], blob ] ]
+                Pine_builtin.take [ 1, Pine_builtin.skip [ Pine_builtin.int_add [ offset, 1 ], blob ] ]
 
             byte2Int =
-                Pine_kernel.concat [ Pine_kernel.take [ 1, 0 ], byte2 ]
+                Pine_builtin.concat [ Pine_builtin.take [ 1, 0 ], byte2 ]
 
             byte3 =
-                Pine_kernel.take [ 1, Pine_kernel.skip [ Pine_kernel.int_add [ offset, 2 ], blob ] ]
+                Pine_builtin.take [ 1, Pine_builtin.skip [ Pine_builtin.int_add [ offset, 2 ], blob ] ]
 
             byte3Int =
-                Pine_kernel.concat [ Pine_kernel.take [ 1, 0 ], byte3 ]
+                Pine_builtin.concat [ Pine_builtin.take [ 1, 0 ], byte3 ]
 
             firstFourBits =
-                Pine_kernel.bit_and [ firstByteInt, 0x0F ]
+                Pine_builtin.bit_and [ firstByteInt, 0x0F ]
 
             secondSixBits =
-                Pine_kernel.bit_and [ byte2Int, 0x3F ]
+                Pine_builtin.bit_and [ byte2Int, 0x3F ]
 
             thirdSixBits =
-                Pine_kernel.bit_and [ byte3Int, 0x3F ]
+                Pine_builtin.bit_and [ byte3Int, 0x3F ]
 
             charCode =
-                Pine_kernel.int_add
-                    [ Pine_kernel.int_mul [ firstFourBits, 4096 ] -- Multiply by 2^12
-                    , Pine_kernel.int_mul [ secondSixBits, 64 ] -- Multiply by 2^6
+                Pine_builtin.int_add
+                    [ Pine_builtin.int_mul [ firstFourBits, 4096 ] -- Multiply by 2^12
+                    , Pine_builtin.int_mul [ secondSixBits, 64 ] -- Multiply by 2^6
                     , thirdSixBits
                     ]
         in
         ( charCode, 3 )
 
-    else if Pine_kernel.equal [ Pine_kernel.bit_and [ firstByteInt, 0xF8 ], 0xF0 ] then
+    else if Pine_builtin.equal [ Pine_builtin.bit_and [ firstByteInt, 0xF8 ], 0xF0 ] then
         -- 4-byte character
         let
             byte2 =
-                Pine_kernel.take [ 1, Pine_kernel.skip [ Pine_kernel.int_add [ offset, 1 ], blob ] ]
+                Pine_builtin.take [ 1, Pine_builtin.skip [ Pine_builtin.int_add [ offset, 1 ], blob ] ]
 
             byte2Int =
-                Pine_kernel.concat [ Pine_kernel.take [ 1, 0 ], byte2 ]
+                Pine_builtin.concat [ Pine_builtin.take [ 1, 0 ], byte2 ]
 
             byte3 =
-                Pine_kernel.take [ 1, Pine_kernel.skip [ Pine_kernel.int_add [ offset, 2 ], blob ] ]
+                Pine_builtin.take [ 1, Pine_builtin.skip [ Pine_builtin.int_add [ offset, 2 ], blob ] ]
 
             byte3Int =
-                Pine_kernel.concat [ Pine_kernel.take [ 1, 0 ], byte3 ]
+                Pine_builtin.concat [ Pine_builtin.take [ 1, 0 ], byte3 ]
 
             byte4 =
-                Pine_kernel.take [ 1, Pine_kernel.skip [ Pine_kernel.int_add [ offset, 3 ], blob ] ]
+                Pine_builtin.take [ 1, Pine_builtin.skip [ Pine_builtin.int_add [ offset, 3 ], blob ] ]
 
             byte4Int =
-                Pine_kernel.concat [ Pine_kernel.take [ 1, 0 ], byte4 ]
+                Pine_builtin.concat [ Pine_builtin.take [ 1, 0 ], byte4 ]
 
             firstThreeBits =
-                Pine_kernel.bit_and [ firstByteInt, 0x07 ]
+                Pine_builtin.bit_and [ firstByteInt, 0x07 ]
 
             secondSixBits =
-                Pine_kernel.bit_and [ byte2Int, 0x3F ]
+                Pine_builtin.bit_and [ byte2Int, 0x3F ]
 
             thirdSixBits =
-                Pine_kernel.bit_and [ byte3Int, 0x3F ]
+                Pine_builtin.bit_and [ byte3Int, 0x3F ]
 
             fourthSixBits =
-                Pine_kernel.bit_and [ byte4Int, 0x3F ]
+                Pine_builtin.bit_and [ byte4Int, 0x3F ]
 
             charCode =
-                Pine_kernel.int_add
-                    [ Pine_kernel.int_mul [ firstThreeBits, 262144 ] -- Multiply by 2^18
-                    , Pine_kernel.int_mul [ secondSixBits, 4096 ] -- Multiply by 2^12
-                    , Pine_kernel.int_mul [ thirdSixBits, 64 ] -- Multiply by 2^6
+                Pine_builtin.int_add
+                    [ Pine_builtin.int_mul [ firstThreeBits, 262144 ] -- Multiply by 2^18
+                    , Pine_builtin.int_mul [ secondSixBits, 4096 ] -- Multiply by 2^12
+                    , Pine_builtin.int_mul [ thirdSixBits, 64 ] -- Multiply by 2^6
                     , fourthSixBits
                     ]
         in
@@ -1221,39 +1221,39 @@ object =
 
 encode : Int -> Value -> String
 encode indent value =
-    String (Pine_kernel.concat (encodeUtf32ChunksWithoutIndent value))
+    String (Pine_builtin.concat (encodeUtf32ChunksWithoutIndent value))
 
 
 encodeUtf32ChunksWithoutIndent : Value -> List Int
 encodeUtf32ChunksWithoutIndent value =
     case value of
         NullValue ->
-            [ Pine_kernel.concat [ 'n', 'u', 'l', 'l' ] ]
+            [ Pine_builtin.concat [ 'n', 'u', 'l', 'l' ] ]
 
         BoolValue True ->
-            [ Pine_kernel.concat [ 't', 'r', 'u', 'e' ] ]
+            [ Pine_builtin.concat [ 't', 'r', 'u', 'e' ] ]
 
         BoolValue False ->
-            [ Pine_kernel.concat [ 'f', 'a', 'l', 's', 'e' ] ]
+            [ Pine_builtin.concat [ 'f', 'a', 'l', 's', 'e' ] ]
 
         IntValue intVal ->
             String.toList (String.fromInt intVal)
 
         StringValue (String stringBytes) ->
             [ '"'
-            , Pine_kernel.concat (encodeStringUtf32ChunksFromBytes 0 [] stringBytes)
+            , Pine_builtin.concat (encodeStringUtf32ChunksFromBytes 0 [] stringBytes)
             , '"'
             ]
 
         ArrayValue values ->
             [ '['
-            , Pine_kernel.concat (encodeArrayItemsUtf32ChunksWithoutIndent 0 [] values)
+            , Pine_builtin.concat (encodeArrayItemsUtf32ChunksWithoutIndent 0 [] values)
             , ']'
             ]
 
         ObjectValue fields ->
             [ '{'
-            , Pine_kernel.concat (encodeFieldsUtf32ChunksWithoutIndent 0 [] fields)
+            , Pine_builtin.concat (encodeFieldsUtf32ChunksWithoutIndent 0 [] fields)
             , '}'
             ]
 
@@ -1263,21 +1263,21 @@ encodeUtf32ChunksWithoutIndent value =
 
 encodeArrayItemsUtf32ChunksWithoutIndent : Int -> List Value -> List Int -> List Int
 encodeArrayItemsUtf32ChunksWithoutIndent itemIndex encodedChunks items =
-    if Pine_kernel.equal [ Pine_kernel.length items, itemIndex ] then
+    if Pine_builtin.equal [ Pine_builtin.length items, itemIndex ] then
         encodedChunks
 
     else
         let
             nextItem =
-                Pine_kernel.head
-                    (Pine_kernel.take [ 1, Pine_kernel.skip [ itemIndex, items ] ])
+                Pine_builtin.head
+                    (Pine_builtin.take [ 1, Pine_builtin.skip [ itemIndex, items ] ])
         in
         encodeArrayItemsUtf32ChunksWithoutIndent
-            (Pine_kernel.int_add [ itemIndex, 1 ])
-            (Pine_kernel.concat
+            (Pine_builtin.int_add [ itemIndex, 1 ])
+            (Pine_builtin.concat
                 [ encodedChunks
                 , encodeUtf32ChunksWithoutIndent nextItem
-                , if Pine_kernel.equal [ Pine_kernel.length items, Pine_kernel.int_add [ itemIndex, 1 ] ] then
+                , if Pine_builtin.equal [ Pine_builtin.length items, Pine_builtin.int_add [ itemIndex, 1 ] ] then
                     []
 
                   else
@@ -1289,21 +1289,21 @@ encodeArrayItemsUtf32ChunksWithoutIndent itemIndex encodedChunks items =
 
 encodeFieldsUtf32ChunksWithoutIndent : Int -> List Int -> List ( String, Value ) -> List Int
 encodeFieldsUtf32ChunksWithoutIndent fieldIndex encodedChunks fields =
-    if Pine_kernel.equal [ Pine_kernel.length fields, fieldIndex ] then
+    if Pine_builtin.equal [ Pine_builtin.length fields, fieldIndex ] then
         encodedChunks
 
     else
         let
             nextField =
-                Pine_kernel.head
-                    (Pine_kernel.take [ 1, Pine_kernel.skip [ fieldIndex, fields ] ])
+                Pine_builtin.head
+                    (Pine_builtin.take [ 1, Pine_builtin.skip [ fieldIndex, fields ] ])
         in
         encodeFieldsUtf32ChunksWithoutIndent
-            (Pine_kernel.int_add [ fieldIndex, 1 ])
-            (Pine_kernel.concat
+            (Pine_builtin.int_add [ fieldIndex, 1 ])
+            (Pine_builtin.concat
                 [ encodedChunks
                 , encodeFieldUtf32ChunksWithoutIndent nextField
-                , if Pine_kernel.equal [ Pine_kernel.length fields, Pine_kernel.int_add [ fieldIndex, 1 ] ] then
+                , if Pine_builtin.equal [ Pine_builtin.length fields, Pine_builtin.int_add [ fieldIndex, 1 ] ] then
                     []
 
                   else
@@ -1316,9 +1316,9 @@ encodeFieldsUtf32ChunksWithoutIndent fieldIndex encodedChunks fields =
 encodeFieldUtf32ChunksWithoutIndent : ( String, Value ) -> List Int
 encodeFieldUtf32ChunksWithoutIndent ( String keyBytes, value ) =
     [ '"'
-    , Pine_kernel.concat (encodeStringUtf32ChunksFromBytes 0 [] keyBytes)
-    , Pine_kernel.concat [ '"', ':' ]
-    , Pine_kernel.concat (encodeUtf32ChunksWithoutIndent value)
+    , Pine_builtin.concat (encodeStringUtf32ChunksFromBytes 0 [] keyBytes)
+    , Pine_builtin.concat [ '"', ':' ]
+    , Pine_builtin.concat (encodeUtf32ChunksWithoutIndent value)
     ]
 
 
@@ -1331,67 +1331,67 @@ encodeStringUtf32ChunksFromBytes offset encodedChunks sourceBytes =
 
         simpleLen : Int
         simpleLen =
-            Pine_kernel.int_add [ simpleEnd, Pine_kernel.int_mul [ offset, -1 ] ]
+            Pine_builtin.int_add [ simpleEnd, Pine_builtin.int_mul [ offset, -1 ] ]
 
         simpleSlice =
-            Pine_kernel.take [ simpleLen, Pine_kernel.skip [ offset, sourceBytes ] ]
+            Pine_builtin.take [ simpleLen, Pine_builtin.skip [ offset, sourceBytes ] ]
 
         chunksWithSimple : List Int
         chunksWithSimple =
-            if Pine_kernel.equal [ simpleLen, 0 ] then
+            if Pine_builtin.equal [ simpleLen, 0 ] then
                 encodedChunks
 
             else
-                Pine_kernel.concat [ encodedChunks, [ simpleSlice ] ]
+                Pine_builtin.concat [ encodedChunks, [ simpleSlice ] ]
 
         nextChar =
-            Pine_kernel.take [ 4, Pine_kernel.skip [ simpleEnd, sourceBytes ] ]
+            Pine_builtin.take [ 4, Pine_builtin.skip [ simpleEnd, sourceBytes ] ]
     in
-    if Pine_kernel.equal [ Pine_kernel.length nextChar, 0 ] then
+    if Pine_builtin.equal [ Pine_builtin.length nextChar, 0 ] then
         chunksWithSimple
 
     else
         case nextChar of
             '\\u{0008}' ->
                 encodeStringUtf32ChunksFromBytes
-                    (Pine_kernel.int_add [ simpleEnd, 4 ])
-                    (Pine_kernel.concat [ chunksWithSimple, [ '\\\\', 'b' ] ])
+                    (Pine_builtin.int_add [ simpleEnd, 4 ])
+                    (Pine_builtin.concat [ chunksWithSimple, [ '\\\\', 'b' ] ])
                     sourceBytes
 
             '\\t' ->
                 encodeStringUtf32ChunksFromBytes
-                    (Pine_kernel.int_add [ simpleEnd, 4 ])
-                    (Pine_kernel.concat [ chunksWithSimple, [ '\\\\', '\\t' ] ])
+                    (Pine_builtin.int_add [ simpleEnd, 4 ])
+                    (Pine_builtin.concat [ chunksWithSimple, [ '\\\\', '\\t' ] ])
                     sourceBytes
 
             '\\n' ->
                 encodeStringUtf32ChunksFromBytes
-                    (Pine_kernel.int_add [ simpleEnd, 4 ])
-                    (Pine_kernel.concat [ chunksWithSimple, [ '\\\\', 'n' ] ])
+                    (Pine_builtin.int_add [ simpleEnd, 4 ])
+                    (Pine_builtin.concat [ chunksWithSimple, [ '\\\\', 'n' ] ])
                     sourceBytes
 
             '\\u{000C}' ->
                 encodeStringUtf32ChunksFromBytes
-                    (Pine_kernel.int_add [ simpleEnd, 4 ])
-                    (Pine_kernel.concat [ chunksWithSimple, [ '\\\\', 'f' ] ])
+                    (Pine_builtin.int_add [ simpleEnd, 4 ])
+                    (Pine_builtin.concat [ chunksWithSimple, [ '\\\\', 'f' ] ])
                     sourceBytes
 
             '\\u{000D}' ->
                 encodeStringUtf32ChunksFromBytes
-                    (Pine_kernel.int_add [ simpleEnd, 4 ])
-                    (Pine_kernel.concat [ chunksWithSimple, [ '\\\\', 'r' ] ])
+                    (Pine_builtin.int_add [ simpleEnd, 4 ])
+                    (Pine_builtin.concat [ chunksWithSimple, [ '\\\\', 'r' ] ])
                     sourceBytes
 
             '"' ->
                 encodeStringUtf32ChunksFromBytes
-                    (Pine_kernel.int_add [ simpleEnd, 4 ])
-                    (Pine_kernel.concat [ chunksWithSimple, [ '\\\\', '"' ] ])
+                    (Pine_builtin.int_add [ simpleEnd, 4 ])
+                    (Pine_builtin.concat [ chunksWithSimple, [ '\\\\', '"' ] ])
                     sourceBytes
 
             '\\\\' ->
                 encodeStringUtf32ChunksFromBytes
-                    (Pine_kernel.int_add [ simpleEnd, 4 ])
-                    (Pine_kernel.concat [ chunksWithSimple, [ '\\\\', '\\\\' ] ])
+                    (Pine_builtin.int_add [ simpleEnd, 4 ])
+                    (Pine_builtin.concat [ chunksWithSimple, [ '\\\\', '\\\\' ] ])
                     sourceBytes
 
             _ ->
@@ -1402,8 +1402,8 @@ encodeStringUtf32ChunksFromBytes offset encodedChunks sourceBytes =
 
                     unicodeEscape : List Int
                     unicodeEscape =
-                        if Pine_kernel.int_is_sorted_asc [ 0, code, 0xFFFF ] then
-                            Pine_kernel.concat
+                        if Pine_builtin.int_is_sorted_asc [ 0, code, 0xFFFF ] then
+                            Pine_builtin.concat
                                 [ [ '\\\\', 'u' ]
                                 , hex4 code
                                 ]
@@ -1411,21 +1411,21 @@ encodeStringUtf32ChunksFromBytes offset encodedChunks sourceBytes =
                         else
                             let
                                 codePrime =
-                                    Pine_kernel.int_add [ code, -0x00010000 ]
+                                    Pine_builtin.int_add [ code, -0x00010000 ]
 
                                 hi10 =
-                                    Pine_kernel.bit_shift_right [ 10, codePrime ]
+                                    Pine_builtin.bit_shift_right [ 10, codePrime ]
 
                                 lo10 =
-                                    Pine_kernel.bit_and [ 0x03FF, codePrime ]
+                                    Pine_builtin.bit_and [ 0x03FF, codePrime ]
 
                                 hiUnit =
-                                    Pine_kernel.int_add [ 0xD800, hi10 ]
+                                    Pine_builtin.int_add [ 0xD800, hi10 ]
 
                                 loUnit =
-                                    Pine_kernel.int_add [ 0xDC00, lo10 ]
+                                    Pine_builtin.int_add [ 0xDC00, lo10 ]
                             in
-                            Pine_kernel.concat
+                            Pine_builtin.concat
                                 [ [ '\\\\', 'u' ]
                                 , hex4 hiUnit
                                 , [ '\\\\', 'u' ]
@@ -1433,8 +1433,8 @@ encodeStringUtf32ChunksFromBytes offset encodedChunks sourceBytes =
                                 ]
                 in
                 encodeStringUtf32ChunksFromBytes
-                    (Pine_kernel.int_add [ simpleEnd, 4 ])
-                    (Pine_kernel.concat [ chunksWithSimple, unicodeEscape ])
+                    (Pine_builtin.int_add [ simpleEnd, 4 ])
+                    (Pine_builtin.concat [ chunksWithSimple, unicodeEscape ])
                     sourceBytes
 
 
@@ -1447,12 +1447,12 @@ advanceUtf32OffsetForSimpleChars : Int -> Int -> Int
 advanceUtf32OffsetForSimpleChars sourceBytes offset =
     let
         nextChar =
-            Pine_kernel.take
+            Pine_builtin.take
                 [ 4
-                , Pine_kernel.skip [ offset, sourceBytes ]
+                , Pine_builtin.skip [ offset, sourceBytes ]
                 ]
     in
-    if Pine_kernel.equal [ Pine_kernel.length nextChar, 0 ] then
+    if Pine_builtin.equal [ Pine_builtin.length nextChar, 0 ] then
         offset
 
     else
@@ -1465,17 +1465,17 @@ advanceUtf32OffsetForSimpleChars sourceBytes offset =
 
             _ ->
                 if
-                    Pine_kernel.int_is_sorted_asc
+                    Pine_builtin.int_is_sorted_asc
                         [ 0x20
 
                         -- Prepend sign byte to nextChar to compare as Int
-                        , Pine_kernel.concat [ Pine_kernel.take [ 1, 0 ], nextChar ]
+                        , Pine_builtin.concat [ Pine_builtin.take [ 1, 0 ], nextChar ]
                         , 0x0010FFFF
                         ]
                 then
                     advanceUtf32OffsetForSimpleChars
                         sourceBytes
-                        (Pine_kernel.int_add [ offset, 4 ])
+                        (Pine_builtin.int_add [ offset, 4 ])
 
                 else
                     offset
@@ -1490,29 +1490,29 @@ hex4 : Int -> List Int
 hex4 n =
     let
         uintBytes =
-            Pine_kernel.skip [ 1, n ]
+            Pine_builtin.skip [ 1, n ]
 
         n3 =
-            Pine_kernel.bit_and
-                [ Pine_kernel.skip [ 1, 15 ]
-                , Pine_kernel.bit_shift_right [ 12, uintBytes ]
+            Pine_builtin.bit_and
+                [ Pine_builtin.skip [ 1, 15 ]
+                , Pine_builtin.bit_shift_right [ 12, uintBytes ]
                 ]
 
         n2 =
-            Pine_kernel.bit_and
-                [ Pine_kernel.skip [ 1, 15 ]
-                , Pine_kernel.bit_shift_right [ 8, uintBytes ]
+            Pine_builtin.bit_and
+                [ Pine_builtin.skip [ 1, 15 ]
+                , Pine_builtin.bit_shift_right [ 8, uintBytes ]
                 ]
 
         n1 =
-            Pine_kernel.bit_and
-                [ Pine_kernel.skip [ 1, 15 ]
-                , Pine_kernel.bit_shift_right [ 4, uintBytes ]
+            Pine_builtin.bit_and
+                [ Pine_builtin.skip [ 1, 15 ]
+                , Pine_builtin.bit_shift_right [ 4, uintBytes ]
                 ]
 
         n0 =
-            Pine_kernel.bit_and
-                [ Pine_kernel.skip [ 1, 15 ]
+            Pine_builtin.bit_and
+                [ Pine_builtin.skip [ 1, 15 ]
                 , uintBytes
                 ]
     in
@@ -1526,129 +1526,129 @@ hex4 n =
 hexDigitCharFromNibble : Int -> Int
 hexDigitCharFromNibble nibble =
     if
-        Pine_kernel.equal
+        Pine_builtin.equal
             [ nibble
-            , Pine_kernel.skip [ 1, 0 ]
+            , Pine_builtin.skip [ 1, 0 ]
             ]
     then
         '0'
 
     else if
-        Pine_kernel.equal
+        Pine_builtin.equal
             [ nibble
-            , Pine_kernel.skip [ 1, 1 ]
+            , Pine_builtin.skip [ 1, 1 ]
             ]
     then
         '1'
 
     else if
-        Pine_kernel.equal
+        Pine_builtin.equal
             [ nibble
-            , Pine_kernel.skip [ 1, 2 ]
+            , Pine_builtin.skip [ 1, 2 ]
             ]
     then
         '2'
 
     else if
-        Pine_kernel.equal
+        Pine_builtin.equal
             [ nibble
-            , Pine_kernel.skip [ 1, 3 ]
+            , Pine_builtin.skip [ 1, 3 ]
             ]
     then
         '3'
 
     else if
-        Pine_kernel.equal
+        Pine_builtin.equal
             [ nibble
-            , Pine_kernel.skip [ 1, 4 ]
+            , Pine_builtin.skip [ 1, 4 ]
             ]
     then
         '4'
 
     else if
-        Pine_kernel.equal
+        Pine_builtin.equal
             [ nibble
-            , Pine_kernel.skip [ 1, 5 ]
+            , Pine_builtin.skip [ 1, 5 ]
             ]
     then
         '5'
 
     else if
-        Pine_kernel.equal
+        Pine_builtin.equal
             [ nibble
-            , Pine_kernel.skip [ 1, 6 ]
+            , Pine_builtin.skip [ 1, 6 ]
             ]
     then
         '6'
 
     else if
-        Pine_kernel.equal
+        Pine_builtin.equal
             [ nibble
-            , Pine_kernel.skip [ 1, 7 ]
+            , Pine_builtin.skip [ 1, 7 ]
             ]
     then
         '7'
 
     else if
-        Pine_kernel.equal
+        Pine_builtin.equal
             [ nibble
-            , Pine_kernel.skip [ 1, 8 ]
+            , Pine_builtin.skip [ 1, 8 ]
             ]
     then
         '8'
 
     else if
-        Pine_kernel.equal
+        Pine_builtin.equal
             [ nibble
-            , Pine_kernel.skip [ 1, 9 ]
+            , Pine_builtin.skip [ 1, 9 ]
             ]
     then
         '9'
 
     else if
-        Pine_kernel.equal
+        Pine_builtin.equal
             [ nibble
-            , Pine_kernel.skip [ 1, 10 ]
+            , Pine_builtin.skip [ 1, 10 ]
             ]
     then
         'A'
 
     else if
-        Pine_kernel.equal
+        Pine_builtin.equal
             [ nibble
-            , Pine_kernel.skip [ 1, 11 ]
+            , Pine_builtin.skip [ 1, 11 ]
             ]
     then
         'B'
 
     else if
-        Pine_kernel.equal
+        Pine_builtin.equal
             [ nibble
-            , Pine_kernel.skip [ 1, 12 ]
+            , Pine_builtin.skip [ 1, 12 ]
             ]
     then
         'C'
 
     else if
-        Pine_kernel.equal
+        Pine_builtin.equal
             [ nibble
-            , Pine_kernel.skip [ 1, 13 ]
+            , Pine_builtin.skip [ 1, 13 ]
             ]
     then
         'D'
 
     else if
-        Pine_kernel.equal
+        Pine_builtin.equal
             [ nibble
-            , Pine_kernel.skip [ 1, 14 ]
+            , Pine_builtin.skip [ 1, 14 ]
             ]
     then
         'E'
 
     else if
-        Pine_kernel.equal
+        Pine_builtin.equal
             [ nibble
-            , Pine_kernel.skip [ 1, 15 ]
+            , Pine_builtin.skip [ 1, 15 ]
             ]
     then
         'F'
@@ -1876,7 +1876,7 @@ index targetIndex decoder jsonValue =
                     Err
                         (Failure
                             ("Expecting an array with at least "
-                                ++ String.fromInt (Pine_kernel.int_add [ targetIndex, 1 ])
+                                ++ String.fromInt (Pine_builtin.int_add [ targetIndex, 1 ])
                                 ++ " entries"
                             )
                             jsonValue
@@ -2254,9 +2254,9 @@ parseJsonStringToValue (String jsonStringBytes) =
                         consumedBytes
             in
             if
-                Pine_kernel.equal
+                Pine_builtin.equal
                     [ afterTrimOffsetBytes
-                    , Pine_kernel.length jsonStringBytes
+                    , Pine_builtin.length jsonStringBytes
                     ]
             then
                 -- We successfully parsed the entire JSON string
@@ -2265,18 +2265,18 @@ parseJsonStringToValue (String jsonStringBytes) =
             else
                 let
                     followingChar =
-                        Pine_kernel.take
+                        Pine_builtin.take
                             [ 4
-                            , Pine_kernel.skip [ afterTrimOffsetBytes, jsonStringBytes ]
+                            , Pine_builtin.skip [ afterTrimOffsetBytes, jsonStringBytes ]
                             ]
                 in
                 -- There are still characters left after parsing, which is unexpected
                 let
                     afterTrimOffsetChars : Int
                     afterTrimOffsetChars =
-                        Pine_kernel.concat
-                            [ Pine_kernel.take [ 1, 0 ]
-                            , Pine_kernel.bit_shift_right [ 2, Pine_kernel.skip [ 1, afterTrimOffsetBytes ] ]
+                        Pine_builtin.concat
+                            [ Pine_builtin.take [ 1, 0 ]
+                            , Pine_builtin.bit_shift_right [ 2, Pine_builtin.skip [ 1, afterTrimOffsetBytes ] ]
                             ]
                 in
                 Err
@@ -2305,9 +2305,9 @@ parseValue srcBytes offset0 =
 
         -- Peek at the next character
         nextChar =
-            Pine_kernel.take [ 4, Pine_kernel.skip [ offset1, srcBytes ] ]
+            Pine_builtin.take [ 4, Pine_builtin.skip [ offset1, srcBytes ] ]
     in
-    if Pine_kernel.equal [ Pine_kernel.length nextChar, 0 ] then
+    if Pine_builtin.equal [ Pine_builtin.length nextChar, 0 ] then
         -- We ran out of input
         ( Err "Unexpected end of input while parsing value", offset1 )
 
@@ -2328,7 +2328,7 @@ parseValue srcBytes offset0 =
 
             '"' ->
                 -- Parse a JSON string (the leading quote is consumed here)
-                case parseJsonStringLiteral srcBytes (Pine_kernel.int_add [ offset1, 4 ]) of
+                case parseJsonStringLiteral srcBytes (Pine_builtin.int_add [ offset1, 4 ]) of
                     ( Ok str, offset2 ) ->
                         ( Ok (StringValue str), offset2 )
 
@@ -2337,7 +2337,7 @@ parseValue srcBytes offset0 =
 
             '[' ->
                 -- Parse an array (leading '[' is already consumed).
-                case parseArray srcBytes (Pine_kernel.int_add [ offset1, 4 ]) of
+                case parseArray srcBytes (Pine_builtin.int_add [ offset1, 4 ]) of
                     ( Ok values, offset2 ) ->
                         ( Ok (ArrayValue values), offset2 )
 
@@ -2346,7 +2346,7 @@ parseValue srcBytes offset0 =
 
             '{' ->
                 -- Parse an object (leading '{' is already consumed).
-                case parseObjectRec [] srcBytes (Pine_kernel.int_add [ offset1, 4 ]) of
+                case parseObjectRec [] srcBytes (Pine_builtin.int_add [ offset1, 4 ]) of
                     ( Ok fields, offset2 ) ->
                         ( Ok (ObjectValue fields), offset2 )
 
@@ -2373,10 +2373,10 @@ parseNull srcBytes offset0 =
     let
         -- We expect the next 4 characters to be "null"
         nextChars =
-            Pine_kernel.take [ 16, Pine_kernel.skip [ offset0, srcBytes ] ]
+            Pine_builtin.take [ 16, Pine_builtin.skip [ offset0, srcBytes ] ]
     in
-    if Pine_kernel.equal [ nextChars, Pine_kernel.concat [ 'n', 'u', 'l', 'l' ] ] then
-        ( Ok NullValue, Pine_kernel.int_add [ offset0, 16 ] )
+    if Pine_builtin.equal [ nextChars, Pine_builtin.concat [ 'n', 'u', 'l', 'l' ] ] then
+        ( Ok NullValue, Pine_builtin.int_add [ offset0, 16 ] )
 
     else
         ( Err "Expecting 'null'", offset0 )
@@ -2387,10 +2387,10 @@ parseTrue srcBytes offset0 =
     let
         -- We expect the next 4 characters to be "true"
         nextChars =
-            Pine_kernel.take [ 16, Pine_kernel.skip [ offset0, srcBytes ] ]
+            Pine_builtin.take [ 16, Pine_builtin.skip [ offset0, srcBytes ] ]
     in
-    if Pine_kernel.equal [ nextChars, Pine_kernel.concat [ 't', 'r', 'u', 'e' ] ] then
-        ( Ok (BoolValue True), Pine_kernel.int_add [ offset0, 16 ] )
+    if Pine_builtin.equal [ nextChars, Pine_builtin.concat [ 't', 'r', 'u', 'e' ] ] then
+        ( Ok (BoolValue True), Pine_builtin.int_add [ offset0, 16 ] )
 
     else
         ( Err "Expecting 'true'", offset0 )
@@ -2401,10 +2401,10 @@ parseFalse srcBytes offset0 =
     let
         -- We expect the next 5 characters to be "false"
         nextChars =
-            Pine_kernel.take [ 20, Pine_kernel.skip [ offset0, srcBytes ] ]
+            Pine_builtin.take [ 20, Pine_builtin.skip [ offset0, srcBytes ] ]
     in
-    if Pine_kernel.equal [ nextChars, Pine_kernel.concat [ 'f', 'a', 'l', 's', 'e' ] ] then
-        ( Ok (BoolValue False), Pine_kernel.int_add [ offset0, 20 ] )
+    if Pine_builtin.equal [ nextChars, Pine_builtin.concat [ 'f', 'a', 'l', 's', 'e' ] ] then
+        ( Ok (BoolValue False), Pine_builtin.int_add [ offset0, 20 ] )
 
     else
         ( Err "Expecting 'false'", offset0 )
@@ -2419,18 +2419,18 @@ parseNumber srcBytes offset0 =
             -- If we successfully parsed an integer, look for a decimal point
             let
                 nextChar =
-                    Pine_kernel.take
+                    Pine_builtin.take
                         [ 4
-                        , Pine_kernel.skip [ offset1, srcBytes ]
+                        , Pine_builtin.skip [ offset1, srcBytes ]
                         ]
             in
-            if Pine_kernel.equal [ nextChar, '.' ] then
+            if Pine_builtin.equal [ nextChar, '.' ] then
                 -- If we see a decimal point, parse the fractional part
                 let
                     ( denominatorResult, offset2 ) =
                         parseUnsignedInt
                             srcBytes
-                            (Pine_kernel.int_add [ offset1, 4 ])
+                            (Pine_builtin.int_add [ offset1, 4 ])
                 in
                 case denominatorResult of
                     Ok _ ->
@@ -2438,15 +2438,15 @@ parseNumber srcBytes offset0 =
                         let
                             sliceLength : Int
                             sliceLength =
-                                Pine_kernel.int_add
+                                Pine_builtin.int_add
                                     [ offset2
-                                    , Pine_kernel.int_mul [ offset0, -1 ]
+                                    , Pine_builtin.int_mul [ offset0, -1 ]
                                     ]
 
                             sliceBytes =
-                                Pine_kernel.take
+                                Pine_builtin.take
                                     [ sliceLength
-                                    , Pine_kernel.skip [ offset0, srcBytes ]
+                                    , Pine_builtin.skip [ offset0, srcBytes ]
                                     ]
                         in
                         ( Ok (FloatValue (String sliceBytes))
@@ -2484,15 +2484,15 @@ parseArray srcBytes offset0 =
 
         -- Look at the next character
         nextChar =
-            Pine_kernel.take [ 4, Pine_kernel.skip [ offset1, srcBytes ] ]
+            Pine_builtin.take [ 4, Pine_builtin.skip [ offset1, srcBytes ] ]
     in
-    if Pine_kernel.equal [ Pine_kernel.length nextChar, 0 ] then
+    if Pine_builtin.equal [ Pine_builtin.length nextChar, 0 ] then
         -- We ran out of characters entirely
         ( Err "Unexpected end of input while parsing array", offset1 )
 
-    else if Pine_kernel.equal [ nextChar, ']' ] then
+    else if Pine_builtin.equal [ nextChar, ']' ] then
         -- If it's a ']', that means an empty array: "[]"
-        ( Ok [], Pine_kernel.int_add [ offset1, 4 ] )
+        ( Ok [], Pine_builtin.int_add [ offset1, 4 ] )
 
     else
         -- Otherwise, parse one or more items
@@ -2517,13 +2517,13 @@ parseArrayItems itemsBefore srcBytes offset0 =
                     skipWhitespace srcBytes offsetAfterVal
 
                 nextChar =
-                    Pine_kernel.take [ 4, Pine_kernel.skip [ offset1, srcBytes ] ]
+                    Pine_builtin.take [ 4, Pine_builtin.skip [ offset1, srcBytes ] ]
 
                 items : List Value
                 items =
-                    Pine_kernel.concat [ itemsBefore, [ val ] ]
+                    Pine_builtin.concat [ itemsBefore, [ val ] ]
             in
-            if Pine_kernel.equal [ Pine_kernel.length nextChar, 0 ] then
+            if Pine_builtin.equal [ Pine_builtin.length nextChar, 0 ] then
                 -- We ran out unexpectedly, missing a ']' or another item
                 ( Err "Unclosed array, expected ',' or ']'", offset1 )
 
@@ -2531,11 +2531,11 @@ parseArrayItems itemsBefore srcBytes offset0 =
                 case nextChar of
                     ',' ->
                         -- If we see a comma, skip it and parse the next item
-                        parseArrayItems items srcBytes (Pine_kernel.int_add [ offset1, 4 ])
+                        parseArrayItems items srcBytes (Pine_builtin.int_add [ offset1, 4 ])
 
                     ']' ->
                         -- End of array
-                        ( Ok items, Pine_kernel.int_add [ offset1, 4 ] )
+                        ( Ok items, Pine_builtin.int_add [ offset1, 4 ] )
 
                     _ ->
                         ( Err ("Expecting ',' or ']', got '" ++ String.fromChar nextChar ++ "'"), offset1 )
@@ -2551,9 +2551,9 @@ parseObjectRec fieldsBefore srcBytes offset0 =
 
         -- Look at the next character
         nextChar =
-            Pine_kernel.take [ 4, Pine_kernel.skip [ offset1, srcBytes ] ]
+            Pine_builtin.take [ 4, Pine_builtin.skip [ offset1, srcBytes ] ]
     in
-    if Pine_kernel.equal [ Pine_kernel.length nextChar, 0 ] then
+    if Pine_builtin.equal [ Pine_builtin.length nextChar, 0 ] then
         -- We ran out of characters entirely
         ( Err "Unexpected end of input while parsing object", offset1 )
 
@@ -2561,13 +2561,13 @@ parseObjectRec fieldsBefore srcBytes offset0 =
         case nextChar of
             -- If it's a '}', that means an empty object: "{}"
             '}' ->
-                ( Ok fieldsBefore, Pine_kernel.int_add [ offset1, 4 ] )
+                ( Ok fieldsBefore, Pine_builtin.int_add [ offset1, 4 ] )
 
             -- Otherwise, parse one or more key-value pairs
             '"' ->
                 let
                     ( keyResult, offsetAfterKey ) =
-                        parseJsonStringLiteral srcBytes (Pine_kernel.int_add [ offset1, 4 ])
+                        parseJsonStringLiteral srcBytes (Pine_builtin.int_add [ offset1, 4 ])
                 in
                 case keyResult of
                     Err msg ->
@@ -2582,14 +2582,14 @@ parseObjectRec fieldsBefore srcBytes offset0 =
                                 skipWhitespace srcBytes offsetAfterKey
 
                             nextChar2 =
-                                Pine_kernel.take [ 4, Pine_kernel.skip [ offset2, srcBytes ] ]
+                                Pine_builtin.take [ 4, Pine_builtin.skip [ offset2, srcBytes ] ]
                         in
                         case nextChar2 of
                             ':' ->
                                 -- If we see a colon, skip it and parse the value
                                 let
                                     offset3 =
-                                        skipWhitespace srcBytes (Pine_kernel.int_add [ offset2, 4 ])
+                                        skipWhitespace srcBytes (Pine_builtin.int_add [ offset2, 4 ])
 
                                     ( valResult, offsetAfterVal ) =
                                         parseValue srcBytes offset3
@@ -2606,13 +2606,13 @@ parseObjectRec fieldsBefore srcBytes offset0 =
                                                 skipWhitespace srcBytes offsetAfterVal
 
                                             nextChar3 =
-                                                Pine_kernel.take [ 4, Pine_kernel.skip [ offset4, srcBytes ] ]
+                                                Pine_builtin.take [ 4, Pine_builtin.skip [ offset4, srcBytes ] ]
 
                                             fields : List ( String, Value )
                                             fields =
-                                                Pine_kernel.concat [ fieldsBefore, [ ( keyString, val ) ] ]
+                                                Pine_builtin.concat [ fieldsBefore, [ ( keyString, val ) ] ]
                                         in
-                                        if Pine_kernel.equal [ Pine_kernel.length nextChar3, 0 ] then
+                                        if Pine_builtin.equal [ Pine_builtin.length nextChar3, 0 ] then
                                             -- We ran out of characters before finding a comma or closing brace
                                             ( Err "Unexpected end of input while reading JSON object", offset4 )
 
@@ -2620,11 +2620,11 @@ parseObjectRec fieldsBefore srcBytes offset0 =
                                             case nextChar3 of
                                                 ',' ->
                                                     -- If we see a comma, skip it and parse the next item
-                                                    parseObjectRec fields srcBytes (Pine_kernel.int_add [ offset4, 4 ])
+                                                    parseObjectRec fields srcBytes (Pine_builtin.int_add [ offset4, 4 ])
 
                                                 '}' ->
                                                     -- End of object
-                                                    ( Ok fields, Pine_kernel.int_add [ offset4, 4 ] )
+                                                    ( Ok fields, Pine_builtin.int_add [ offset4, 4 ] )
 
                                                 _ ->
                                                     ( Err ("Expecting ',' or '}', got '" ++ String.fromChar nextChar3 ++ "'"), offset4 )
@@ -2663,7 +2663,7 @@ parseJsonStringLiteral sourceBytes offset =
         Ok segments ->
             let
                 allStringBytes =
-                    Pine_kernel.concat segments
+                    Pine_builtin.concat segments
             in
             ( Ok (String allStringBytes), newOffset )
 
@@ -2680,33 +2680,33 @@ parseJsonStringSegments sourceBytes offset slicesSoFar =
 
         simpleSegmentSliceLength : Int
         simpleSegmentSliceLength =
-            Pine_kernel.int_add [ simpleSegmentEndOffset, Pine_kernel.int_mul [ offset, -1 ] ]
+            Pine_builtin.int_add [ simpleSegmentEndOffset, Pine_builtin.int_mul [ offset, -1 ] ]
 
         simpleSegmentSlice =
-            Pine_kernel.take
+            Pine_builtin.take
                 [ simpleSegmentSliceLength
-                , Pine_kernel.skip [ offset, sourceBytes ]
+                , Pine_builtin.skip [ offset, sourceBytes ]
                 ]
 
         nextChar =
-            Pine_kernel.take
+            Pine_builtin.take
                 [ 4
-                , Pine_kernel.skip [ simpleSegmentEndOffset, sourceBytes ]
+                , Pine_builtin.skip [ simpleSegmentEndOffset, sourceBytes ]
                 ]
     in
-    if Pine_kernel.equal [ nextChar, '"' ] then
-        ( Ok (Pine_kernel.concat [ slicesSoFar, [ simpleSegmentSlice ] ])
-        , Pine_kernel.int_add [ simpleSegmentEndOffset, 4 ]
+    if Pine_builtin.equal [ nextChar, '"' ] then
+        ( Ok (Pine_builtin.concat [ slicesSoFar, [ simpleSegmentSlice ] ])
+        , Pine_builtin.int_add [ simpleSegmentEndOffset, 4 ]
         )
 
-    else if Pine_kernel.equal [ nextChar, '\\\\' ] then
+    else if Pine_builtin.equal [ nextChar, '\\\\' ] then
         -- We have a backslash escape sequence
         case parseEscape sourceBytes simpleSegmentEndOffset of
             ( Ok escapedChar, newOffset ) ->
                 parseJsonStringSegments
                     sourceBytes
                     newOffset
-                    (Pine_kernel.concat [ slicesSoFar, [ simpleSegmentSlice, escapedChar ] ])
+                    (Pine_builtin.concat [ slicesSoFar, [ simpleSegmentSlice, escapedChar ] ])
 
             ( Err message, newOffset ) ->
                 ( Err message
@@ -2723,20 +2723,20 @@ parseJsonStringSimpleChars : Int -> Int -> Int
 parseJsonStringSimpleChars sourceBytes offset =
     let
         nextChar =
-            Pine_kernel.take
+            Pine_builtin.take
                 [ 4
-                , Pine_kernel.skip [ offset, sourceBytes ]
+                , Pine_builtin.skip [ offset, sourceBytes ]
                 ]
     in
-    if Pine_kernel.equal [ Pine_kernel.length nextChar, 0 ] then
+    if Pine_builtin.equal [ Pine_builtin.length nextChar, 0 ] then
         -- We ran out of characters before finding a closing quote or escape
         offset
 
-    else if Pine_kernel.equal [ nextChar, '"' ] then
+    else if Pine_builtin.equal [ nextChar, '"' ] then
         -- Found a quote or backslash escape, stop here
         offset
 
-    else if Pine_kernel.equal [ nextChar, '\\\\' ] then
+    else if Pine_builtin.equal [ nextChar, '\\\\' ] then
         -- Found a backslash escape, stop here
         offset
 
@@ -2744,7 +2744,7 @@ parseJsonStringSimpleChars sourceBytes offset =
         -- Keep going to the next character
         parseJsonStringSimpleChars
             sourceBytes
-            (Pine_kernel.int_add [ offset, 4 ])
+            (Pine_builtin.int_add [ offset, 4 ])
 
 
 parseEscape : Int -> Int -> ( Result String Int, Int )
@@ -2752,51 +2752,51 @@ parseEscape sourceBytes offset =
     -- We already know source !! offset == '\\'
     let
         nextChar =
-            Pine_kernel.take
+            Pine_builtin.take
                 [ 4
-                , Pine_kernel.skip [ Pine_kernel.int_add [ offset, 4 ], sourceBytes ]
+                , Pine_builtin.skip [ Pine_builtin.int_add [ offset, 4 ], sourceBytes ]
                 ]
     in
     case nextChar of
         -- Standard JSON escapes
         'n' ->
             -- Append newline and continue
-            ( Ok '\\n', Pine_kernel.int_add [ offset, 8 ] )
+            ( Ok '\\n', Pine_builtin.int_add [ offset, 8 ] )
 
         'r' ->
-            ( Ok '\\u{000D}', Pine_kernel.int_add [ offset, 8 ] )
+            ( Ok '\\u{000D}', Pine_builtin.int_add [ offset, 8 ] )
 
         't' ->
-            ( Ok '\\t', Pine_kernel.int_add [ offset, 8 ] )
+            ( Ok '\\t', Pine_builtin.int_add [ offset, 8 ] )
 
         '"' ->
-            ( Ok '\\"', Pine_kernel.int_add [ offset, 8 ] )
+            ( Ok '\\"', Pine_builtin.int_add [ offset, 8 ] )
 
         '\\\\' ->
-            ( Ok '\\\\', Pine_kernel.int_add [ offset, 8 ] )
+            ( Ok '\\\\', Pine_builtin.int_add [ offset, 8 ] )
 
         '/' ->
-            ( Ok '/', Pine_kernel.int_add [ offset, 8 ] )
+            ( Ok '/', Pine_builtin.int_add [ offset, 8 ] )
 
         'b' ->
             -- Typically backspace is ASCII 8, but some folks map it differently.
             -- For now, let's do ASCII 8 (BS).
-            ( Ok (Char.fromCode 8), Pine_kernel.int_add [ offset, 8 ] )
+            ( Ok (Char.fromCode 8), Pine_builtin.int_add [ offset, 8 ] )
 
         'f' ->
             -- Typically form feed is ASCII 12.
-            ( Ok (Char.fromCode 12), Pine_kernel.int_add [ offset, 8 ] )
+            ( Ok (Char.fromCode 12), Pine_builtin.int_add [ offset, 8 ] )
 
         'u' ->
             -- JSON allows \\uXXXX (4 hex digits)
             parseUnicodeEscape
                 sourceBytes
-                (Pine_kernel.int_add [ offset, 8 ])
+                (Pine_builtin.int_add [ offset, 8 ])
 
         -- Unrecognized escape
         _ ->
             ( Err ("Unrecognized escape sequence: " ++ String.fromChar nextChar)
-            , Pine_kernel.int_add [ offset, 8 ]
+            , Pine_builtin.int_add [ offset, 8 ]
             )
 
 
@@ -2809,9 +2809,9 @@ parseUnicodeEscape : Int -> Int -> ( Result String Int, Int )
 parseUnicodeEscape sourceBytes offset =
     let
         fourHexChars =
-            Pine_kernel.take
+            Pine_builtin.take
                 [ 16
-                , Pine_kernel.skip [ offset, sourceBytes ]
+                , Pine_builtin.skip [ offset, sourceBytes ]
                 ]
 
         ( codeUnit, offsetAfterHex ) =
@@ -2822,22 +2822,22 @@ parseUnicodeEscape sourceBytes offset =
             codeUnit
 
         followingTwoChars =
-            Pine_kernel.take
+            Pine_builtin.take
                 [ 8
-                , Pine_kernel.skip [ Pine_kernel.int_add [ offset, 16 ], sourceBytes ]
+                , Pine_builtin.skip [ Pine_builtin.int_add [ offset, 16 ], sourceBytes ]
                 ]
     in
-    if Pine_kernel.equal [ offsetAfterHex, 16 ] then
+    if Pine_builtin.equal [ offsetAfterHex, 16 ] then
         -- We have a potential code unit, see if it's a high surrogate
-        if Pine_kernel.int_is_sorted_asc [ 0xD800, hi, 0xDBFF ] then
+        if Pine_builtin.int_is_sorted_asc [ 0xD800, hi, 0xDBFF ] then
             -- Possibly part of a surrogate pair; check the next 2 chars for "\\u"
-            if Pine_kernel.equal [ followingTwoChars, Pine_kernel.concat [ '\\\\', 'u' ] ] then
+            if Pine_builtin.equal [ followingTwoChars, Pine_builtin.concat [ '\\\\', 'u' ] ] then
                 -- Parse the next 4 hex digits (the low surrogate)
                 let
                     fourHexChars2 =
-                        Pine_kernel.take
+                        Pine_builtin.take
                             [ 16
-                            , Pine_kernel.skip [ Pine_kernel.int_add [ offset, 24 ], sourceBytes ]
+                            , Pine_builtin.skip [ Pine_builtin.int_add [ offset, 24 ], sourceBytes ]
                             ]
 
                     ( codeUnit2, offsetAfterHex2 ) =
@@ -2851,15 +2851,15 @@ parseUnicodeEscape sourceBytes offset =
                     offset2 =
                         offsetAfterHex2
                 in
-                if Pine_kernel.equal [ offset2, 16 ] then
-                    if Pine_kernel.int_is_sorted_asc [ 0xDC00, lo, 0xDFFF ] then
+                if Pine_builtin.equal [ offset2, 16 ] then
+                    if Pine_builtin.int_is_sorted_asc [ 0xDC00, lo, 0xDFFF ] then
                         -- Combine into a single code point
                         let
                             fullCodePoint =
-                                Pine_kernel.int_add
+                                Pine_builtin.int_add
                                     [ 0x00010000
-                                    , Pine_kernel.int_mul
-                                        [ Pine_kernel.int_add [ hi, -0xD800 ]
+                                    , Pine_builtin.int_mul
+                                        [ Pine_builtin.int_add [ hi, -0xD800 ]
                                         , 0x0400
                                         ]
                                     , lo
@@ -2867,7 +2867,7 @@ parseUnicodeEscape sourceBytes offset =
                                     ]
                         in
                         ( Ok (Char.fromCode fullCodePoint)
-                        , Pine_kernel.int_add
+                        , Pine_builtin.int_add
                             [ offset
                             , 16
                             , 8
@@ -2881,7 +2881,7 @@ parseUnicodeEscape sourceBytes offset =
                         -- Option B: throw an error.
                         -- This example will just treat the high code as a normal char:
                         ( Ok (Char.fromCode hi)
-                        , Pine_kernel.int_add
+                        , Pine_builtin.int_add
                             [ offset
                             , 16
                             ]
@@ -2890,7 +2890,7 @@ parseUnicodeEscape sourceBytes offset =
                 else
                     -- The next \\u did not have 4 valid hex digits
                     ( Err "Unexpected end of input in second \\\\u of a surrogate pair"
-                    , Pine_kernel.int_add
+                    , Pine_builtin.int_add
                         [ offset
                         , 16
                         , 8
@@ -2901,19 +2901,19 @@ parseUnicodeEscape sourceBytes offset =
             else
                 -- No second "\\u"—so decode `hi` as-is.
                 ( Ok (Char.fromCode hi)
-                , Pine_kernel.int_add [ offset, 16 ]
+                , Pine_builtin.int_add [ offset, 16 ]
                 )
 
         else
             -- Not a high surrogate, just parse `\\uXXXX` as a single character
             ( Ok (Char.fromCode hi)
-            , Pine_kernel.int_add [ offset, 16 ]
+            , Pine_builtin.int_add [ offset, 16 ]
             )
 
     else
         -- We did not get 4 valid hex digits
         ( Err "Unexpected end of input in \\\\u escape (need 4 hex digits)"
-        , Pine_kernel.int_add [ offset, 6 ]
+        , Pine_builtin.int_add [ offset, 6 ]
         )
 
 
@@ -2921,19 +2921,19 @@ parseInt : Int -> Int -> ( Result String Int, Int )
 parseInt srcBytes offset0 =
     let
         nextChar =
-            Pine_kernel.take [ 4, Pine_kernel.skip [ offset0, srcBytes ] ]
+            Pine_builtin.take [ 4, Pine_builtin.skip [ offset0, srcBytes ] ]
     in
-    if Pine_kernel.equal [ nextChar, '-' ] then
+    if Pine_builtin.equal [ nextChar, '-' ] then
         -- If we see a minus sign, parse the rest as an unsigned integer
         let
             ( unsignedResult, offset1 ) =
                 parseUnsignedInt
                     srcBytes
-                    (Pine_kernel.int_add [ offset0, 4 ])
+                    (Pine_builtin.int_add [ offset0, 4 ])
         in
         case unsignedResult of
             Ok unsignedVal ->
-                ( Ok (Pine_kernel.int_mul [ -1, unsignedVal ])
+                ( Ok (Pine_builtin.int_mul [ -1, unsignedVal ])
                 , offset1
                 )
 
@@ -2949,36 +2949,36 @@ parseInt srcBytes offset0 =
 
 parseUnsignedInt : Int -> Int -> ( Result String Int, Int )
 parseUnsignedInt srcBytes offset0 =
-    case Pine_kernel.take [ 4, Pine_kernel.skip [ offset0, srcBytes ] ] of
+    case Pine_builtin.take [ 4, Pine_builtin.skip [ offset0, srcBytes ] ] of
         '0' ->
-            ( Ok 0, Pine_kernel.int_add [ offset0, 4 ] )
+            ( Ok 0, Pine_builtin.int_add [ offset0, 4 ] )
 
         '1' ->
-            parseUnsignedIntRec 1 srcBytes (Pine_kernel.int_add [ offset0, 4 ])
+            parseUnsignedIntRec 1 srcBytes (Pine_builtin.int_add [ offset0, 4 ])
 
         '2' ->
-            parseUnsignedIntRec 2 srcBytes (Pine_kernel.int_add [ offset0, 4 ])
+            parseUnsignedIntRec 2 srcBytes (Pine_builtin.int_add [ offset0, 4 ])
 
         '3' ->
-            parseUnsignedIntRec 3 srcBytes (Pine_kernel.int_add [ offset0, 4 ])
+            parseUnsignedIntRec 3 srcBytes (Pine_builtin.int_add [ offset0, 4 ])
 
         '4' ->
-            parseUnsignedIntRec 4 srcBytes (Pine_kernel.int_add [ offset0, 4 ])
+            parseUnsignedIntRec 4 srcBytes (Pine_builtin.int_add [ offset0, 4 ])
 
         '5' ->
-            parseUnsignedIntRec 5 srcBytes (Pine_kernel.int_add [ offset0, 4 ])
+            parseUnsignedIntRec 5 srcBytes (Pine_builtin.int_add [ offset0, 4 ])
 
         '6' ->
-            parseUnsignedIntRec 6 srcBytes (Pine_kernel.int_add [ offset0, 4 ])
+            parseUnsignedIntRec 6 srcBytes (Pine_builtin.int_add [ offset0, 4 ])
 
         '7' ->
-            parseUnsignedIntRec 7 srcBytes (Pine_kernel.int_add [ offset0, 4 ])
+            parseUnsignedIntRec 7 srcBytes (Pine_builtin.int_add [ offset0, 4 ])
 
         '8' ->
-            parseUnsignedIntRec 8 srcBytes (Pine_kernel.int_add [ offset0, 4 ])
+            parseUnsignedIntRec 8 srcBytes (Pine_builtin.int_add [ offset0, 4 ])
 
         '9' ->
-            parseUnsignedIntRec 9 srcBytes (Pine_kernel.int_add [ offset0, 4 ])
+            parseUnsignedIntRec 9 srcBytes (Pine_builtin.int_add [ offset0, 4 ])
 
         _ ->
             ( Err "Expecting a digit", offset0 )
@@ -2986,66 +2986,66 @@ parseUnsignedInt srcBytes offset0 =
 
 parseUnsignedIntRec : Int -> Int -> Int -> ( Result String Int, Int )
 parseUnsignedIntRec upper srcBytes offset0 =
-    case Pine_kernel.take [ 4, Pine_kernel.skip [ offset0, srcBytes ] ] of
+    case Pine_builtin.take [ 4, Pine_builtin.skip [ offset0, srcBytes ] ] of
         '0' ->
             parseUnsignedIntRec
-                (Pine_kernel.int_mul [ upper, 10 ])
+                (Pine_builtin.int_mul [ upper, 10 ])
                 srcBytes
-                (Pine_kernel.int_add [ offset0, 4 ])
+                (Pine_builtin.int_add [ offset0, 4 ])
 
         '1' ->
             parseUnsignedIntRec
-                (Pine_kernel.int_add [ Pine_kernel.int_mul [ upper, 10 ], 1 ])
+                (Pine_builtin.int_add [ Pine_builtin.int_mul [ upper, 10 ], 1 ])
                 srcBytes
-                (Pine_kernel.int_add [ offset0, 4 ])
+                (Pine_builtin.int_add [ offset0, 4 ])
 
         '2' ->
             parseUnsignedIntRec
-                (Pine_kernel.int_add [ Pine_kernel.int_mul [ upper, 10 ], 2 ])
+                (Pine_builtin.int_add [ Pine_builtin.int_mul [ upper, 10 ], 2 ])
                 srcBytes
-                (Pine_kernel.int_add [ offset0, 4 ])
+                (Pine_builtin.int_add [ offset0, 4 ])
 
         '3' ->
             parseUnsignedIntRec
-                (Pine_kernel.int_add [ Pine_kernel.int_mul [ upper, 10 ], 3 ])
+                (Pine_builtin.int_add [ Pine_builtin.int_mul [ upper, 10 ], 3 ])
                 srcBytes
-                (Pine_kernel.int_add [ offset0, 4 ])
+                (Pine_builtin.int_add [ offset0, 4 ])
 
         '4' ->
             parseUnsignedIntRec
-                (Pine_kernel.int_add [ Pine_kernel.int_mul [ upper, 10 ], 4 ])
+                (Pine_builtin.int_add [ Pine_builtin.int_mul [ upper, 10 ], 4 ])
                 srcBytes
-                (Pine_kernel.int_add [ offset0, 4 ])
+                (Pine_builtin.int_add [ offset0, 4 ])
 
         '5' ->
             parseUnsignedIntRec
-                (Pine_kernel.int_add [ Pine_kernel.int_mul [ upper, 10 ], 5 ])
+                (Pine_builtin.int_add [ Pine_builtin.int_mul [ upper, 10 ], 5 ])
                 srcBytes
-                (Pine_kernel.int_add [ offset0, 4 ])
+                (Pine_builtin.int_add [ offset0, 4 ])
 
         '6' ->
             parseUnsignedIntRec
-                (Pine_kernel.int_add [ Pine_kernel.int_mul [ upper, 10 ], 6 ])
+                (Pine_builtin.int_add [ Pine_builtin.int_mul [ upper, 10 ], 6 ])
                 srcBytes
-                (Pine_kernel.int_add [ offset0, 4 ])
+                (Pine_builtin.int_add [ offset0, 4 ])
 
         '7' ->
             parseUnsignedIntRec
-                (Pine_kernel.int_add [ Pine_kernel.int_mul [ upper, 10 ], 7 ])
+                (Pine_builtin.int_add [ Pine_builtin.int_mul [ upper, 10 ], 7 ])
                 srcBytes
-                (Pine_kernel.int_add [ offset0, 4 ])
+                (Pine_builtin.int_add [ offset0, 4 ])
 
         '8' ->
             parseUnsignedIntRec
-                (Pine_kernel.int_add [ Pine_kernel.int_mul [ upper, 10 ], 8 ])
+                (Pine_builtin.int_add [ Pine_builtin.int_mul [ upper, 10 ], 8 ])
                 srcBytes
-                (Pine_kernel.int_add [ offset0, 4 ])
+                (Pine_builtin.int_add [ offset0, 4 ])
 
         '9' ->
             parseUnsignedIntRec
-                (Pine_kernel.int_add [ Pine_kernel.int_mul [ upper, 10 ], 9 ])
+                (Pine_builtin.int_add [ Pine_builtin.int_mul [ upper, 10 ], 9 ])
                 srcBytes
-                (Pine_kernel.int_add [ offset0, 4 ])
+                (Pine_builtin.int_add [ offset0, 4 ])
 
         _ ->
             ( Ok upper, offset0 )
@@ -3053,72 +3053,72 @@ parseUnsignedIntRec upper srcBytes offset0 =
 
 convert1OrMoreHexadecimal : Int -> Int -> ( Int, Int )
 convert1OrMoreHexadecimal offset srcBytes =
-    case Pine_kernel.take [ 4, Pine_kernel.skip [ offset, srcBytes ] ] of
+    case Pine_builtin.take [ 4, Pine_builtin.skip [ offset, srcBytes ] ] of
         '0' ->
-            convert0OrMoreHexadecimal 0 (Pine_kernel.int_add [ offset, 4 ]) srcBytes
+            convert0OrMoreHexadecimal 0 (Pine_builtin.int_add [ offset, 4 ]) srcBytes
 
         '1' ->
-            convert0OrMoreHexadecimal 1 (Pine_kernel.int_add [ offset, 4 ]) srcBytes
+            convert0OrMoreHexadecimal 1 (Pine_builtin.int_add [ offset, 4 ]) srcBytes
 
         '2' ->
-            convert0OrMoreHexadecimal 2 (Pine_kernel.int_add [ offset, 4 ]) srcBytes
+            convert0OrMoreHexadecimal 2 (Pine_builtin.int_add [ offset, 4 ]) srcBytes
 
         '3' ->
-            convert0OrMoreHexadecimal 3 (Pine_kernel.int_add [ offset, 4 ]) srcBytes
+            convert0OrMoreHexadecimal 3 (Pine_builtin.int_add [ offset, 4 ]) srcBytes
 
         '4' ->
-            convert0OrMoreHexadecimal 4 (Pine_kernel.int_add [ offset, 4 ]) srcBytes
+            convert0OrMoreHexadecimal 4 (Pine_builtin.int_add [ offset, 4 ]) srcBytes
 
         '5' ->
-            convert0OrMoreHexadecimal 5 (Pine_kernel.int_add [ offset, 4 ]) srcBytes
+            convert0OrMoreHexadecimal 5 (Pine_builtin.int_add [ offset, 4 ]) srcBytes
 
         '6' ->
-            convert0OrMoreHexadecimal 6 (Pine_kernel.int_add [ offset, 4 ]) srcBytes
+            convert0OrMoreHexadecimal 6 (Pine_builtin.int_add [ offset, 4 ]) srcBytes
 
         '7' ->
-            convert0OrMoreHexadecimal 7 (Pine_kernel.int_add [ offset, 4 ]) srcBytes
+            convert0OrMoreHexadecimal 7 (Pine_builtin.int_add [ offset, 4 ]) srcBytes
 
         '8' ->
-            convert0OrMoreHexadecimal 8 (Pine_kernel.int_add [ offset, 4 ]) srcBytes
+            convert0OrMoreHexadecimal 8 (Pine_builtin.int_add [ offset, 4 ]) srcBytes
 
         '9' ->
-            convert0OrMoreHexadecimal 9 (Pine_kernel.int_add [ offset, 4 ]) srcBytes
+            convert0OrMoreHexadecimal 9 (Pine_builtin.int_add [ offset, 4 ]) srcBytes
 
         'a' ->
-            convert0OrMoreHexadecimal 10 (Pine_kernel.int_add [ offset, 4 ]) srcBytes
+            convert0OrMoreHexadecimal 10 (Pine_builtin.int_add [ offset, 4 ]) srcBytes
 
         'A' ->
-            convert0OrMoreHexadecimal 10 (Pine_kernel.int_add [ offset, 4 ]) srcBytes
+            convert0OrMoreHexadecimal 10 (Pine_builtin.int_add [ offset, 4 ]) srcBytes
 
         'b' ->
-            convert0OrMoreHexadecimal 11 (Pine_kernel.int_add [ offset, 4 ]) srcBytes
+            convert0OrMoreHexadecimal 11 (Pine_builtin.int_add [ offset, 4 ]) srcBytes
 
         'B' ->
-            convert0OrMoreHexadecimal 11 (Pine_kernel.int_add [ offset, 4 ]) srcBytes
+            convert0OrMoreHexadecimal 11 (Pine_builtin.int_add [ offset, 4 ]) srcBytes
 
         'c' ->
-            convert0OrMoreHexadecimal 12 (Pine_kernel.int_add [ offset, 4 ]) srcBytes
+            convert0OrMoreHexadecimal 12 (Pine_builtin.int_add [ offset, 4 ]) srcBytes
 
         'C' ->
-            convert0OrMoreHexadecimal 12 (Pine_kernel.int_add [ offset, 4 ]) srcBytes
+            convert0OrMoreHexadecimal 12 (Pine_builtin.int_add [ offset, 4 ]) srcBytes
 
         'd' ->
-            convert0OrMoreHexadecimal 13 (Pine_kernel.int_add [ offset, 4 ]) srcBytes
+            convert0OrMoreHexadecimal 13 (Pine_builtin.int_add [ offset, 4 ]) srcBytes
 
         'D' ->
-            convert0OrMoreHexadecimal 13 (Pine_kernel.int_add [ offset, 4 ]) srcBytes
+            convert0OrMoreHexadecimal 13 (Pine_builtin.int_add [ offset, 4 ]) srcBytes
 
         'e' ->
-            convert0OrMoreHexadecimal 14 (Pine_kernel.int_add [ offset, 4 ]) srcBytes
+            convert0OrMoreHexadecimal 14 (Pine_builtin.int_add [ offset, 4 ]) srcBytes
 
         'E' ->
-            convert0OrMoreHexadecimal 14 (Pine_kernel.int_add [ offset, 4 ]) srcBytes
+            convert0OrMoreHexadecimal 14 (Pine_builtin.int_add [ offset, 4 ]) srcBytes
 
         'f' ->
-            convert0OrMoreHexadecimal 15 (Pine_kernel.int_add [ offset, 4 ]) srcBytes
+            convert0OrMoreHexadecimal 15 (Pine_builtin.int_add [ offset, 4 ]) srcBytes
 
         'F' ->
-            convert0OrMoreHexadecimal 15 (Pine_kernel.int_add [ offset, 4 ]) srcBytes
+            convert0OrMoreHexadecimal 15 (Pine_builtin.int_add [ offset, 4 ]) srcBytes
 
         _ ->
             ( 0, -1 )
@@ -3128,9 +3128,9 @@ convert0OrMoreHexadecimal : Int -> Int -> Int -> ( Int, Int )
 convert0OrMoreHexadecimal soFar offset srcBytes =
     let
         nextChar =
-            Pine_kernel.take [ 4, Pine_kernel.skip [ offset, srcBytes ] ]
+            Pine_builtin.take [ 4, Pine_builtin.skip [ offset, srcBytes ] ]
     in
-    if Pine_kernel.equal [ Pine_kernel.length nextChar, 0 ] then
+    if Pine_builtin.equal [ Pine_builtin.length nextChar, 0 ] then
         -- We ran out of characters, return what we have so far
         ( soFar, offset )
 
@@ -3138,134 +3138,134 @@ convert0OrMoreHexadecimal soFar offset srcBytes =
         case nextChar of
             '0' ->
                 convert0OrMoreHexadecimal
-                    (Pine_kernel.int_mul [ soFar, 16 ])
-                    (Pine_kernel.int_add [ offset, 4 ])
+                    (Pine_builtin.int_mul [ soFar, 16 ])
+                    (Pine_builtin.int_add [ offset, 4 ])
                     srcBytes
 
             '1' ->
                 convert0OrMoreHexadecimal
-                    (Pine_kernel.int_add [ Pine_kernel.int_mul [ soFar, 16 ], 1 ])
-                    (Pine_kernel.int_add [ offset, 4 ])
+                    (Pine_builtin.int_add [ Pine_builtin.int_mul [ soFar, 16 ], 1 ])
+                    (Pine_builtin.int_add [ offset, 4 ])
                     srcBytes
 
             '2' ->
                 convert0OrMoreHexadecimal
-                    (Pine_kernel.int_add [ Pine_kernel.int_mul [ soFar, 16 ], 2 ])
-                    (Pine_kernel.int_add [ offset, 4 ])
+                    (Pine_builtin.int_add [ Pine_builtin.int_mul [ soFar, 16 ], 2 ])
+                    (Pine_builtin.int_add [ offset, 4 ])
                     srcBytes
 
             '3' ->
                 convert0OrMoreHexadecimal
-                    (Pine_kernel.int_add [ Pine_kernel.int_mul [ soFar, 16 ], 3 ])
-                    (Pine_kernel.int_add [ offset, 4 ])
+                    (Pine_builtin.int_add [ Pine_builtin.int_mul [ soFar, 16 ], 3 ])
+                    (Pine_builtin.int_add [ offset, 4 ])
                     srcBytes
 
             '4' ->
                 convert0OrMoreHexadecimal
-                    (Pine_kernel.int_add [ Pine_kernel.int_mul [ soFar, 16 ], 4 ])
-                    (Pine_kernel.int_add [ offset, 4 ])
+                    (Pine_builtin.int_add [ Pine_builtin.int_mul [ soFar, 16 ], 4 ])
+                    (Pine_builtin.int_add [ offset, 4 ])
                     srcBytes
 
             '5' ->
                 convert0OrMoreHexadecimal
-                    (Pine_kernel.int_add [ Pine_kernel.int_mul [ soFar, 16 ], 5 ])
-                    (Pine_kernel.int_add [ offset, 4 ])
+                    (Pine_builtin.int_add [ Pine_builtin.int_mul [ soFar, 16 ], 5 ])
+                    (Pine_builtin.int_add [ offset, 4 ])
                     srcBytes
 
             '6' ->
                 convert0OrMoreHexadecimal
-                    (Pine_kernel.int_add [ Pine_kernel.int_mul [ soFar, 16 ], 6 ])
-                    (Pine_kernel.int_add [ offset, 4 ])
+                    (Pine_builtin.int_add [ Pine_builtin.int_mul [ soFar, 16 ], 6 ])
+                    (Pine_builtin.int_add [ offset, 4 ])
                     srcBytes
 
             '7' ->
                 convert0OrMoreHexadecimal
-                    (Pine_kernel.int_add [ Pine_kernel.int_mul [ soFar, 16 ], 7 ])
-                    (Pine_kernel.int_add [ offset, 4 ])
+                    (Pine_builtin.int_add [ Pine_builtin.int_mul [ soFar, 16 ], 7 ])
+                    (Pine_builtin.int_add [ offset, 4 ])
                     srcBytes
 
             '8' ->
                 convert0OrMoreHexadecimal
-                    (Pine_kernel.int_add [ Pine_kernel.int_mul [ soFar, 16 ], 8 ])
-                    (Pine_kernel.int_add [ offset, 4 ])
+                    (Pine_builtin.int_add [ Pine_builtin.int_mul [ soFar, 16 ], 8 ])
+                    (Pine_builtin.int_add [ offset, 4 ])
                     srcBytes
 
             '9' ->
                 convert0OrMoreHexadecimal
-                    (Pine_kernel.int_add [ Pine_kernel.int_mul [ soFar, 16 ], 9 ])
-                    (Pine_kernel.int_add [ offset, 4 ])
+                    (Pine_builtin.int_add [ Pine_builtin.int_mul [ soFar, 16 ], 9 ])
+                    (Pine_builtin.int_add [ offset, 4 ])
                     srcBytes
 
             'a' ->
                 convert0OrMoreHexadecimal
-                    (Pine_kernel.int_add [ Pine_kernel.int_mul [ soFar, 16 ], 10 ])
-                    (Pine_kernel.int_add [ offset, 4 ])
+                    (Pine_builtin.int_add [ Pine_builtin.int_mul [ soFar, 16 ], 10 ])
+                    (Pine_builtin.int_add [ offset, 4 ])
                     srcBytes
 
             'A' ->
                 convert0OrMoreHexadecimal
-                    (Pine_kernel.int_add [ Pine_kernel.int_mul [ soFar, 16 ], 10 ])
-                    (Pine_kernel.int_add [ offset, 4 ])
+                    (Pine_builtin.int_add [ Pine_builtin.int_mul [ soFar, 16 ], 10 ])
+                    (Pine_builtin.int_add [ offset, 4 ])
                     srcBytes
 
             'b' ->
                 convert0OrMoreHexadecimal
-                    (Pine_kernel.int_add [ Pine_kernel.int_mul [ soFar, 16 ], 11 ])
-                    (Pine_kernel.int_add [ offset, 4 ])
+                    (Pine_builtin.int_add [ Pine_builtin.int_mul [ soFar, 16 ], 11 ])
+                    (Pine_builtin.int_add [ offset, 4 ])
                     srcBytes
 
             'B' ->
                 convert0OrMoreHexadecimal
-                    (Pine_kernel.int_add [ Pine_kernel.int_mul [ soFar, 16 ], 11 ])
-                    (Pine_kernel.int_add [ offset, 4 ])
+                    (Pine_builtin.int_add [ Pine_builtin.int_mul [ soFar, 16 ], 11 ])
+                    (Pine_builtin.int_add [ offset, 4 ])
                     srcBytes
 
             'c' ->
                 convert0OrMoreHexadecimal
-                    (Pine_kernel.int_add [ Pine_kernel.int_mul [ soFar, 16 ], 12 ])
-                    (Pine_kernel.int_add [ offset, 4 ])
+                    (Pine_builtin.int_add [ Pine_builtin.int_mul [ soFar, 16 ], 12 ])
+                    (Pine_builtin.int_add [ offset, 4 ])
                     srcBytes
 
             'C' ->
                 convert0OrMoreHexadecimal
-                    (Pine_kernel.int_add [ Pine_kernel.int_mul [ soFar, 16 ], 12 ])
-                    (Pine_kernel.int_add [ offset, 4 ])
+                    (Pine_builtin.int_add [ Pine_builtin.int_mul [ soFar, 16 ], 12 ])
+                    (Pine_builtin.int_add [ offset, 4 ])
                     srcBytes
 
             'd' ->
                 convert0OrMoreHexadecimal
-                    (Pine_kernel.int_add [ Pine_kernel.int_mul [ soFar, 16 ], 13 ])
-                    (Pine_kernel.int_add [ offset, 4 ])
+                    (Pine_builtin.int_add [ Pine_builtin.int_mul [ soFar, 16 ], 13 ])
+                    (Pine_builtin.int_add [ offset, 4 ])
                     srcBytes
 
             'D' ->
                 convert0OrMoreHexadecimal
-                    (Pine_kernel.int_add [ Pine_kernel.int_mul [ soFar, 16 ], 13 ])
-                    (Pine_kernel.int_add [ offset, 4 ])
+                    (Pine_builtin.int_add [ Pine_builtin.int_mul [ soFar, 16 ], 13 ])
+                    (Pine_builtin.int_add [ offset, 4 ])
                     srcBytes
 
             'e' ->
                 convert0OrMoreHexadecimal
-                    (Pine_kernel.int_add [ Pine_kernel.int_mul [ soFar, 16 ], 14 ])
-                    (Pine_kernel.int_add [ offset, 4 ])
+                    (Pine_builtin.int_add [ Pine_builtin.int_mul [ soFar, 16 ], 14 ])
+                    (Pine_builtin.int_add [ offset, 4 ])
                     srcBytes
 
             'E' ->
                 convert0OrMoreHexadecimal
-                    (Pine_kernel.int_add [ Pine_kernel.int_mul [ soFar, 16 ], 14 ])
-                    (Pine_kernel.int_add [ offset, 4 ])
+                    (Pine_builtin.int_add [ Pine_builtin.int_mul [ soFar, 16 ], 14 ])
+                    (Pine_builtin.int_add [ offset, 4 ])
                     srcBytes
 
             'f' ->
                 convert0OrMoreHexadecimal
-                    (Pine_kernel.int_add [ Pine_kernel.int_mul [ soFar, 16 ], 15 ])
-                    (Pine_kernel.int_add [ offset, 4 ])
+                    (Pine_builtin.int_add [ Pine_builtin.int_mul [ soFar, 16 ], 15 ])
+                    (Pine_builtin.int_add [ offset, 4 ])
                     srcBytes
 
             'F' ->
                 convert0OrMoreHexadecimal
-                    (Pine_kernel.int_add [ Pine_kernel.int_mul [ soFar, 16 ], 15 ])
-                    (Pine_kernel.int_add [ offset, 4 ])
+                    (Pine_builtin.int_add [ Pine_builtin.int_mul [ soFar, 16 ], 15 ])
+                    (Pine_builtin.int_add [ offset, 4 ])
                     srcBytes
 
             _ ->
@@ -3276,23 +3276,23 @@ skipWhitespace : Int -> Int -> Int
 skipWhitespace strBytes offset =
     let
         nextChar =
-            Pine_kernel.take
+            Pine_builtin.take
                 [ 4
-                , Pine_kernel.skip [ offset, strBytes ]
+                , Pine_builtin.skip [ offset, strBytes ]
                 ]
     in
     case nextChar of
         ' ' ->
-            skipWhitespace strBytes (Pine_kernel.int_add [ offset, 4 ])
+            skipWhitespace strBytes (Pine_builtin.int_add [ offset, 4 ])
 
         '\\t' ->
-            skipWhitespace strBytes (Pine_kernel.int_add [ offset, 4 ])
+            skipWhitespace strBytes (Pine_builtin.int_add [ offset, 4 ])
 
         '\\n' ->
-            skipWhitespace strBytes (Pine_kernel.int_add [ offset, 4 ])
+            skipWhitespace strBytes (Pine_builtin.int_add [ offset, 4 ])
 
         '\\u{000D}' ->
-            skipWhitespace strBytes (Pine_kernel.int_add [ offset, 4 ])
+            skipWhitespace strBytes (Pine_builtin.int_add [ offset, 4 ])
 
         _ ->
             offset
@@ -3314,9 +3314,9 @@ consumeBaseHelper : Int -> Int -> Int -> Int -> ( Int, Int )
 consumeBaseHelper base offset charsBytes total =
     let
         nextChar =
-            Pine_kernel.take [ 4, Pine_kernel.skip [ offset, charsBytes ] ]
+            Pine_builtin.take [ 4, Pine_builtin.skip [ offset, charsBytes ] ]
     in
-    if Pine_kernel.equal [ Pine_kernel.length nextChar, 0 ] then
+    if Pine_builtin.equal [ Pine_builtin.length nextChar, 0 ] then
         ( offset, total )
 
     else
@@ -3326,18 +3326,18 @@ consumeBaseHelper base offset charsBytes total =
 
             digit : Int
             digit =
-                Pine_kernel.int_add [ code, -48 ]
+                Pine_builtin.int_add [ code, -48 ]
 
             lastDigit : Int
             lastDigit =
-                Pine_kernel.int_add [ base, -1 ]
+                Pine_builtin.int_add [ base, -1 ]
         in
-        if Pine_kernel.int_is_sorted_asc [ 0, digit, lastDigit ] then
+        if Pine_builtin.int_is_sorted_asc [ 0, digit, lastDigit ] then
             consumeBaseHelper
                 base
-                (Pine_kernel.int_add [ offset, 4 ])
+                (Pine_builtin.int_add [ offset, 4 ])
                 charsBytes
-                (Pine_kernel.int_add [ Pine_kernel.int_mul [ base, total ], digit ])
+                (Pine_builtin.int_add [ Pine_builtin.int_mul [ base, total ], digit ])
 
         else
             ( offset, total )
@@ -3352,9 +3352,9 @@ consumeBase16Helper : Int -> Int -> Int -> ( Int, Int )
 consumeBase16Helper offset charsBytes total =
     let
         char =
-            Pine_kernel.take [ 4, Pine_kernel.skip [ offset, charsBytes ] ]
+            Pine_builtin.take [ 4, Pine_builtin.skip [ offset, charsBytes ] ]
     in
-    if Pine_kernel.equal [ Pine_kernel.length char, 0 ] then
+    if Pine_builtin.equal [ Pine_builtin.length char, 0 ] then
         ( offset, total )
 
     else
@@ -3363,14 +3363,14 @@ consumeBase16Helper offset charsBytes total =
                 Char.toCode char
 
             digit =
-                if Pine_kernel.int_is_sorted_asc [ 48, code, 57 ] then
-                    Just (Pine_kernel.int_add [ code, -48 ])
+                if Pine_builtin.int_is_sorted_asc [ 48, code, 57 ] then
+                    Just (Pine_builtin.int_add [ code, -48 ])
 
-                else if Pine_kernel.int_is_sorted_asc [ 65, code, 70 ] then
-                    Just (Pine_kernel.int_add [ code, -55 ])
+                else if Pine_builtin.int_is_sorted_asc [ 65, code, 70 ] then
+                    Just (Pine_builtin.int_add [ code, -55 ])
 
-                else if Pine_kernel.int_is_sorted_asc [ 97, code, 102 ] then
-                    Just (Pine_kernel.int_add [ code, -87 ])
+                else if Pine_builtin.int_is_sorted_asc [ 97, code, 102 ] then
+                    Just (Pine_builtin.int_add [ code, -87 ])
 
                 else
                     Nothing
@@ -3378,9 +3378,9 @@ consumeBase16Helper offset charsBytes total =
         case digit of
             Just d ->
                 consumeBase16Helper
-                    (Pine_kernel.int_add [ offset, 4 ])
+                    (Pine_builtin.int_add [ offset, 4 ])
                     charsBytes
-                    (Pine_kernel.int_add [ Pine_kernel.int_mul [ 16, total ], d ])
+                    (Pine_builtin.int_add [ Pine_builtin.int_mul [ 16, total ], d ])
 
             Nothing ->
                 ( offset, total )
@@ -3395,9 +3395,9 @@ chompBase10Helper : Int -> Int -> Int
 chompBase10Helper offset charsBytes =
     let
         char =
-            Pine_kernel.take [ 4, Pine_kernel.skip [ offset, charsBytes ] ]
+            Pine_builtin.take [ 4, Pine_builtin.skip [ offset, charsBytes ] ]
     in
-    if Pine_kernel.equal [ Pine_kernel.length char, 0 ] then
+    if Pine_builtin.equal [ Pine_builtin.length char, 0 ] then
         offset
 
     else
@@ -3405,9 +3405,9 @@ chompBase10Helper offset charsBytes =
             code =
                 Char.toCode char
         in
-        if Pine_kernel.int_is_sorted_asc [ 48, code, 57 ] then
+        if Pine_builtin.int_is_sorted_asc [ 48, code, 57 ] then
             chompBase10Helper
-                (Pine_kernel.int_add [ offset, 4 ])
+                (Pine_builtin.int_add [ offset, 4 ])
                 charsBytes
 
         else
@@ -3419,31 +3419,31 @@ isSubString (String smallBytes) offset row col bigBytes =
     let
         sliceFromSource : Int
         sliceFromSource =
-            Pine_kernel.take
-                [ Pine_kernel.length smallBytes
-                , Pine_kernel.skip [ offset, bigBytes ]
+            Pine_builtin.take
+                [ Pine_builtin.length smallBytes
+                , Pine_builtin.skip [ offset, bigBytes ]
                 ]
     in
-    if Pine_kernel.equal [ sliceFromSource, smallBytes ] then
+    if Pine_builtin.equal [ sliceFromSource, smallBytes ] then
         let
             ( newlineCount, colShift ) =
-                countOffsetsInString ( 0, 0, 0 ) ( smallBytes, Pine_kernel.length smallBytes )
+                countOffsetsInString ( 0, 0, 0 ) ( smallBytes, Pine_builtin.length smallBytes )
 
             newOffset : Int
             newOffset =
-                Pine_kernel.int_add [ offset, Pine_kernel.length smallBytes ]
+                Pine_builtin.int_add [ offset, Pine_builtin.length smallBytes ]
 
             newRow : Int
             newRow =
-                Pine_kernel.int_add [ row, newlineCount ]
+                Pine_builtin.int_add [ row, newlineCount ]
 
             newCol : Int
             newCol =
-                if Pine_kernel.equal [ newlineCount, 0 ] then
-                    Pine_kernel.int_add [ col, colShift ]
+                if Pine_builtin.equal [ newlineCount, 0 ] then
+                    Pine_builtin.int_add [ col, colShift ]
 
                 else
-                    Pine_kernel.int_add [ 1, colShift ]
+                    Pine_builtin.int_add [ 1, colShift ]
         in
         ( newOffset, newRow, newCol )
 
@@ -3455,17 +3455,17 @@ isSubChar : (Char -> Bool) -> Int -> Int -> Int
 isSubChar predicate offset charsBytes =
     let
         nextChar =
-            Pine_kernel.take [ 4, Pine_kernel.skip [ offset, charsBytes ] ]
+            Pine_builtin.take [ 4, Pine_builtin.skip [ offset, charsBytes ] ]
     in
-    if Pine_kernel.equal [ Pine_kernel.length nextChar, 0 ] then
+    if Pine_builtin.equal [ Pine_builtin.length nextChar, 0 ] then
         -1
 
     else if predicate nextChar then
-        if Pine_kernel.equal [ nextChar, newlineChar ] then
+        if Pine_builtin.equal [ nextChar, newlineChar ] then
             -2
 
         else
-            Pine_kernel.int_add [ offset, 4 ]
+            Pine_builtin.int_add [ offset, 4 ]
 
     else
         -1
@@ -3483,15 +3483,15 @@ findSubString (String smallBytes) offset row col bigBytes =
 
         newRow : Int
         newRow =
-            Pine_kernel.int_add [ row, newlineCount ]
+            Pine_builtin.int_add [ row, newlineCount ]
 
         newCol : Int
         newCol =
-            if Pine_kernel.equal [ newlineCount, 0 ] then
-                Pine_kernel.int_add [ col, colShift ]
+            if Pine_builtin.equal [ newlineCount, 0 ] then
+                Pine_builtin.int_add [ col, colShift ]
 
             else
-                Pine_kernel.int_add [ 1, colShift ]
+                Pine_builtin.int_add [ 1, colShift ]
     in
     ( newOffset, newRow, newCol )
 
@@ -3501,21 +3501,21 @@ indexOf smallBytes bigBytes offset =
     let
         expectedLength : Int
         expectedLength =
-            Pine_kernel.length smallBytes
+            Pine_builtin.length smallBytes
 
         sliceFromSource : Int
         sliceFromSource =
-            Pine_kernel.take
+            Pine_builtin.take
                 [ expectedLength
-                , Pine_kernel.skip [ offset, bigBytes ]
+                , Pine_builtin.skip [ offset, bigBytes ]
                 ]
     in
-    if Pine_kernel.equal [ Pine_kernel.length sliceFromSource, expectedLength ] then
-        if Pine_kernel.equal [ sliceFromSource, smallBytes ] then
+    if Pine_builtin.equal [ Pine_builtin.length sliceFromSource, expectedLength ] then
+        if Pine_builtin.equal [ sliceFromSource, smallBytes ] then
             offset
 
         else
-            indexOf smallBytes bigBytes (Pine_kernel.int_add [ offset, 4 ])
+            indexOf smallBytes bigBytes (Pine_builtin.int_add [ offset, 4 ])
 
     else
         -1
@@ -3525,14 +3525,14 @@ chompWhileHelp : (Char -> Bool) -> ( Int, Int, Int ) -> Int -> ( Int, Int, Int )
 chompWhileHelp isGood ( offset, row, col ) srcBytes =
     let
         nextChar =
-            Pine_kernel.take [ 4, Pine_kernel.skip [ offset, srcBytes ] ]
+            Pine_builtin.take [ 4, Pine_builtin.skip [ offset, srcBytes ] ]
     in
     if isGood nextChar then
-        if Pine_kernel.equal [ nextChar, '\\n' ] then
+        if Pine_builtin.equal [ nextChar, '\\n' ] then
             chompWhileHelp
                 isGood
-                ( Pine_kernel.int_add [ offset, 4 ]
-                , Pine_kernel.int_add [ row, 1 ]
+                ( Pine_builtin.int_add [ offset, 4 ]
+                , Pine_builtin.int_add [ row, 1 ]
                 , 1
                 )
                 srcBytes
@@ -3540,9 +3540,9 @@ chompWhileHelp isGood ( offset, row, col ) srcBytes =
         else
             chompWhileHelp
                 isGood
-                ( Pine_kernel.int_add [ offset, 4 ]
+                ( Pine_builtin.int_add [ offset, 4 ]
                 , row
-                , Pine_kernel.int_add [ col, 1 ]
+                , Pine_builtin.int_add [ col, 1 ]
                 )
                 srcBytes
 
@@ -3557,29 +3557,29 @@ countOffsetsInString : ( Int, Int, Int ) -> ( Int, Int ) -> ( Int, Int )
 countOffsetsInString ( offset, newlines, col ) ( charsBytes, end ) =
     let
         currentChar =
-            Pine_kernel.take
+            Pine_builtin.take
                 [ 4
-                , Pine_kernel.skip [ offset, charsBytes ]
+                , Pine_builtin.skip [ offset, charsBytes ]
                 ]
 
         nextOffset =
-            Pine_kernel.int_add [ offset, 4 ]
+            Pine_builtin.int_add [ offset, 4 ]
     in
-    if Pine_kernel.equal [ Pine_kernel.length currentChar, 0 ] then
+    if Pine_builtin.equal [ Pine_builtin.length currentChar, 0 ] then
         ( newlines, col )
 
-    else if Pine_kernel.int_is_sorted_asc [ end, offset ] then
+    else if Pine_builtin.int_is_sorted_asc [ end, offset ] then
         ( newlines, col )
 
-    else if Pine_kernel.equal [ currentChar, '
+    else if Pine_builtin.equal [ currentChar, '
 ' ] then
         countOffsetsInString
-            ( nextOffset, Pine_kernel.int_add [ newlines, 1 ], 0 )
+            ( nextOffset, Pine_builtin.int_add [ newlines, 1 ], 0 )
             ( charsBytes, end )
 
     else
         countOffsetsInString
-            ( nextOffset, newlines, Pine_kernel.int_add [ col, 1 ] )
+            ( nextOffset, newlines, Pine_builtin.int_add [ col, 1 ] )
             ( charsBytes, end )
 
 
@@ -3593,12 +3593,12 @@ isAsciiCode : Int -> Int -> Int -> Bool
 isAsciiCode code offset charsBytes =
     let
         nextChar =
-            Pine_kernel.take
+            Pine_builtin.take
                 [ 4
-                , Pine_kernel.skip [ offset, charsBytes ]
+                , Pine_builtin.skip [ offset, charsBytes ]
                 ]
     in
-    Pine_kernel.equal [ nextChar, Char.fromCode code ]
+    Pine_builtin.equal [ nextChar, Char.fromCode code ]
 
 """
     , """
@@ -4130,15 +4130,15 @@ keyword (Token kwd expecting) =
                 ( newOffset, newRow, newCol ) =
                     Elm.Kernel.Parser.isSubString kwd sOffset sRow sCol srcBytes
             in
-            if Pine_kernel.equal [ newOffset, -1 ] then
+            if Pine_builtin.equal [ newOffset, -1 ] then
                 Bad False (fromState s expecting)
 
             else if
-                Pine_kernel.int_is_sorted_asc
+                Pine_builtin.int_is_sorted_asc
                     [ 0
                     , isSubChar
                         (\\c ->
-                            Char.isAlphaNum c || Pine_kernel.equal [ c, '_' ]
+                            Char.isAlphaNum c || Pine_builtin.equal [ c, '_' ]
                         )
                         newOffset
                         srcBytes
@@ -4209,7 +4209,7 @@ token (Token str expecting) =
                 ( newOffset, newRow, newCol ) =
                     Elm.Kernel.Parser.isSubString str sOffset sRow sCol srcBytes
             in
-            if Pine_kernel.equal [ newOffset, -1 ] then
+            if Pine_builtin.equal [ newOffset, -1 ] then
                 Bad False (fromState s expecting)
 
             else
@@ -4322,26 +4322,26 @@ number c =
                     s
 
                 firstChar =
-                    Pine_kernel.take [ 4, Pine_kernel.skip [ sOffset, srcBytes ] ]
+                    Pine_builtin.take [ 4, Pine_builtin.skip [ sOffset, srcBytes ] ]
             in
-            if Pine_kernel.equal [ firstChar, '0' ] then
+            if Pine_builtin.equal [ firstChar, '0' ] then
                 let
                     zeroOffset =
-                        Pine_kernel.int_add [ sOffset, 4 ]
+                        Pine_builtin.int_add [ sOffset, 4 ]
 
                     secondChar =
-                        Pine_kernel.take [ 4, Pine_kernel.skip [ zeroOffset, srcBytes ] ]
+                        Pine_builtin.take [ 4, Pine_builtin.skip [ zeroOffset, srcBytes ] ]
 
                     baseOffset =
-                        Pine_kernel.int_add [ zeroOffset, 4 ]
+                        Pine_builtin.int_add [ zeroOffset, 4 ]
                 in
-                if Pine_kernel.equal [ secondChar, 'x' ] then
+                if Pine_builtin.equal [ secondChar, 'x' ] then
                     finalizeInt c.invalid c.hex baseOffset (consumeBase16 baseOffset srcBytes) s
 
-                else if Pine_kernel.equal [ secondChar, 'o' ] then
+                else if Pine_builtin.equal [ secondChar, 'o' ] then
                     finalizeInt c.invalid c.octal baseOffset (consumeBase 8 baseOffset srcBytes) s
 
-                else if Pine_kernel.equal [ secondChar, 'b' ] then
+                else if Pine_builtin.equal [ secondChar, 'b' ] then
                     finalizeInt c.invalid c.binary baseOffset (consumeBase 2 baseOffset srcBytes) s
 
                 else
@@ -4373,10 +4373,10 @@ finalizeInt invalid handler startOffset ( endOffset, n ) s =
                 (PState srcBytes sOffset sIndent sContext sRow sCol) =
                     s
             in
-            if Pine_kernel.equal [ startOffset, endOffset ] then
+            if Pine_builtin.equal [ startOffset, endOffset ] then
                 Bad
-                    (Pine_kernel.negate
-                        (Pine_kernel.int_is_sorted_asc [ startOffset, sOffset ])
+                    (Pine_builtin.negate
+                        (Pine_builtin.int_is_sorted_asc [ startOffset, sOffset ])
                     )
                     (fromState s invalid)
 
@@ -4389,15 +4389,15 @@ bumpOffset newOffset (PState srcBytes offset indent context row col) =
     let
         bytesDelta : Int
         bytesDelta =
-            Pine_kernel.int_add [ newOffset, Pine_kernel.negate offset ]
+            Pine_builtin.int_add [ newOffset, Pine_builtin.negate offset ]
 
         charsDelta : Int
         charsDelta =
-            Pine_kernel.concat
-                [ Pine_kernel.take [ 1, 0 ]
-                , Pine_kernel.bit_shift_right
+            Pine_builtin.concat
+                [ Pine_builtin.take [ 1, 0 ]
+                , Pine_builtin.bit_shift_right
                     [ 2
-                    , Pine_kernel.skip [ 1, bytesDelta ]
+                    , Pine_builtin.skip [ 1, bytesDelta ]
                     ]
                 ]
     in
@@ -4407,7 +4407,7 @@ bumpOffset newOffset (PState srcBytes offset indent context row col) =
         indent
         context
         row
-        (Pine_kernel.int_add [ col, charsDelta ])
+        (Pine_builtin.int_add [ col, charsDelta ])
 
 
 finalizeFloat : x -> x -> Result x (Int -> a) -> Result x (Float -> a) -> ( Int, Int ) -> State c -> PStep c x a
@@ -4422,11 +4422,11 @@ finalizeFloat invalid expecting intSettings floatSettings intPair s =
         floatOffset =
             consumeDotAndExp intOffset srcBytes
     in
-    if Pine_kernel.int_is_sorted_asc [ 0, floatOffset ] then
-        if Pine_kernel.equal [ sOffset, floatOffset ] then
+    if Pine_builtin.int_is_sorted_asc [ 0, floatOffset ] then
+        if Pine_builtin.equal [ sOffset, floatOffset ] then
             Bad False (fromState s expecting)
 
-        else if Pine_kernel.equal [ intOffset, floatOffset ] then
+        else if Pine_builtin.equal [ intOffset, floatOffset ] then
             finalizeInt invalid intSettings sOffset intPair s
 
         else
@@ -4438,13 +4438,13 @@ finalizeFloat invalid expecting intSettings floatSettings intPair s =
                     let
                         sliceLength : Int
                         sliceLength =
-                            Pine_kernel.int_add [ floatOffset, Pine_kernel.negate sOffset ]
+                            Pine_builtin.int_add [ floatOffset, Pine_builtin.negate sOffset ]
 
                         sliceBytes : Int
                         sliceBytes =
-                            Pine_kernel.take
+                            Pine_builtin.take
                                 [ sliceLength
-                                , Pine_kernel.skip [ sOffset, srcBytes ]
+                                , Pine_builtin.skip [ sOffset, srcBytes ]
                                 ]
                     in
                     case String.toFloat (String.String sliceBytes) of
@@ -4460,15 +4460,15 @@ finalizeFloat invalid expecting intSettings floatSettings intPair s =
                 sRow
                 (let
                     tempBytes =
-                        Pine_kernel.int_add [ floatOffset, sOffset ]
+                        Pine_builtin.int_add [ floatOffset, sOffset ]
 
                     tempChars =
-                        Pine_kernel.concat
-                            [ Pine_kernel.take [ 1, 0 ]
-                            , Pine_kernel.bit_shift_right [ 2, Pine_kernel.skip [ 1, tempBytes ] ]
+                        Pine_builtin.concat
+                            [ Pine_builtin.take [ 1, 0 ]
+                            , Pine_builtin.bit_shift_right [ 2, Pine_builtin.skip [ 1, tempBytes ] ]
                             ]
                  in
-                 Pine_kernel.int_add [ sCol, Pine_kernel.negate tempChars ]
+                 Pine_builtin.int_add [ sCol, Pine_builtin.negate tempChars ]
                 )
                 invalid
                 sContext
@@ -4483,10 +4483,10 @@ finalizeFloat invalid expecting intSettings floatSettings intPair s =
 
 consumeDotAndExp : Int -> Int -> Int
 consumeDotAndExp offset charsBytes =
-    if Pine_kernel.equal [ Pine_kernel.take [ 4, Pine_kernel.skip [ offset, charsBytes ] ], '.' ] then
+    if Pine_builtin.equal [ Pine_builtin.take [ 4, Pine_builtin.skip [ offset, charsBytes ] ], '.' ] then
         consumeExp
             (Elm.Kernel.Parser.chompBase10
-                (Pine_kernel.int_add [ offset, 4 ])
+                (Pine_builtin.int_add [ offset, 4 ])
                 charsBytes
             )
             charsBytes
@@ -4505,21 +4505,21 @@ consumeExp : Int -> Int -> Int
 consumeExp offset charsBytes =
     let
         nextChar =
-            Pine_kernel.take [ 4, Pine_kernel.skip [ offset, charsBytes ] ]
+            Pine_builtin.take [ 4, Pine_builtin.skip [ offset, charsBytes ] ]
     in
-    if Pine_kernel.equal [ nextChar, 'e' ] || Pine_kernel.equal [ nextChar, 'E' ] then
+    if Pine_builtin.equal [ nextChar, 'e' ] || Pine_builtin.equal [ nextChar, 'E' ] then
         let
             eOffset : Int
             eOffset =
-                Pine_kernel.int_add [ offset, 4 ]
+                Pine_builtin.int_add [ offset, 4 ]
 
             charAfterE =
-                Pine_kernel.take [ 4, Pine_kernel.skip [ eOffset, charsBytes ] ]
+                Pine_builtin.take [ 4, Pine_builtin.skip [ eOffset, charsBytes ] ]
 
             expOffset : Int
             expOffset =
-                if Pine_kernel.equal [ charAfterE, '+' ] || Pine_kernel.equal [ charAfterE, '-' ] then
-                    Pine_kernel.int_add [ eOffset, 4 ]
+                if Pine_builtin.equal [ charAfterE, '+' ] || Pine_builtin.equal [ charAfterE, '-' ] then
+                    Pine_builtin.int_add [ eOffset, 4 ]
 
                 else
                     eOffset
@@ -4528,8 +4528,8 @@ consumeExp offset charsBytes =
             newOffset =
                 Elm.Kernel.Parser.chompBase10 expOffset charsBytes
         in
-        if Pine_kernel.equal [ expOffset, newOffset ] then
-            Pine_kernel.negate newOffset
+        if Pine_builtin.equal [ expOffset, newOffset ] then
+            Pine_builtin.negate newOffset
 
         else
             newOffset
@@ -4553,7 +4553,7 @@ end x =
                 (PState srcBytes sOffset sIndent sContext sRow sCol) =
                     s
             in
-            if Pine_kernel.equal [ Pine_kernel.length srcBytes, sOffset ] then
+            if Pine_builtin.equal [ Pine_builtin.length srcBytes, sOffset ] then
                 Good False () s
 
             else
@@ -4592,13 +4592,13 @@ mapChompedString func (Parser parse) =
 
                         sliceLength : Int
                         sliceLength =
-                            Pine_kernel.int_add [ s1Offset, Pine_kernel.negate sOffset ]
+                            Pine_builtin.int_add [ s1Offset, Pine_builtin.negate sOffset ]
 
                         sliceBytes : Int
                         sliceBytes =
-                            Pine_kernel.take
+                            Pine_builtin.take
                                 [ sliceLength
-                                , Pine_kernel.skip [ sOffset, srcBytes ]
+                                , Pine_builtin.skip [ sOffset, srcBytes ]
                                 ]
                     in
                     Good p (func (String sliceBytes) a) s1
@@ -4624,20 +4624,20 @@ chompIf isGood expecting =
                     isSubChar isGood sOffset srcBytes
             in
             -- not found
-            if Pine_kernel.equal [ newOffset, -1 ] then
+            if Pine_builtin.equal [ newOffset, -1 ] then
                 Bad False (fromState s expecting)
                 -- newline
 
-            else if Pine_kernel.equal [ newOffset, -2 ] then
+            else if Pine_builtin.equal [ newOffset, -2 ] then
                 Good True
                     ()
-                    (PState srcBytes (Pine_kernel.int_add [ sOffset, 4 ]) sIndent sContext (Pine_kernel.int_add [ sRow, 1 ]) 1)
+                    (PState srcBytes (Pine_builtin.int_add [ sOffset, 4 ]) sIndent sContext (Pine_builtin.int_add [ sRow, 1 ]) 1)
                 -- found
 
             else
                 Good True
                     ()
-                    (PState srcBytes newOffset sIndent sContext sRow (Pine_kernel.int_add [ sCol, 1 ]))
+                    (PState srcBytes newOffset sIndent sContext sRow (Pine_builtin.int_add [ sCol, 1 ]))
         )
 
 
@@ -4662,8 +4662,8 @@ chompWhile isGood =
                         srcBytes
             in
             Good
-                (Pine_kernel.negate
-                    (Pine_kernel.int_is_sorted_asc [ newOffset, sOffset ])
+                (Pine_builtin.negate
+                    (Pine_builtin.int_is_sorted_asc [ newOffset, sOffset ])
                 )
                 ()
                 (PState srcBytes newOffset sIndent sContext newRow newCol)
@@ -4688,13 +4688,13 @@ chompUntil (Token str expecting) =
                 ( newOffset, newRow, newCol ) =
                     Elm.Kernel.Parser.findSubString str sOffset sRow sCol srcBytes
             in
-            if Pine_kernel.equal [ newOffset, -1 ] then
+            if Pine_builtin.equal [ newOffset, -1 ] then
                 Bad False (fromInfo newRow newCol expecting sContext)
 
             else
                 Good
-                    (Pine_kernel.negate
-                        (Pine_kernel.int_is_sorted_asc [ newOffset, sOffset ])
+                    (Pine_builtin.negate
+                        (Pine_builtin.int_is_sorted_asc [ newOffset, sOffset ])
                     )
                     ()
                     (PState srcBytes newOffset sIndent sContext newRow newCol)
@@ -4716,13 +4716,13 @@ chompUntilEndOr str =
 
                 adjustedOffset : Int
                 adjustedOffset =
-                    if Pine_kernel.int_is_sorted_asc [ 0, newOffset ] then
+                    if Pine_builtin.int_is_sorted_asc [ 0, newOffset ] then
                         newOffset
 
                     else
-                        Pine_kernel.length srcBytes
+                        Pine_builtin.length srcBytes
             in
-            Good (Pine_kernel.negate (Pine_kernel.int_is_sorted_asc [ adjustedOffset, sOffset ]))
+            Good (Pine_builtin.negate (Pine_builtin.int_is_sorted_asc [ adjustedOffset, sOffset ]))
                 ()
                 (PState srcBytes adjustedOffset sIndent sContext newRow newCol)
         )
@@ -4953,26 +4953,26 @@ variable i =
                     s
 
                 firstChar =
-                    Pine_kernel.take
+                    Pine_builtin.take
                         [ 4
-                        , Pine_kernel.skip [ sOffset, srcBytes ]
+                        , Pine_builtin.skip [ sOffset, srcBytes ]
                         ]
             in
             {-
                First check if we have reached the end of the source string, to account for the possibility of
                a predicate for i.start crashing when given an empty list.
             -}
-            if Pine_kernel.equal [ Pine_kernel.length firstChar, 0 ] then
+            if Pine_builtin.equal [ Pine_builtin.length firstChar, 0 ] then
                 Bad False (fromState s i.expecting)
 
             else if i.start firstChar then
                 let
                     s1 =
-                        if Pine_kernel.equal [ firstChar, '\\n' ] then
+                        if Pine_builtin.equal [ firstChar, '\\n' ] then
                             varHelp
                                 i.inner
-                                (Pine_kernel.int_add [ sOffset, 4 ])
-                                (Pine_kernel.int_add [ row, 1 ])
+                                (Pine_builtin.int_add [ sOffset, 4 ])
+                                (Pine_builtin.int_add [ row, 1 ])
                                 1
                                 srcBytes
                                 indent
@@ -4981,9 +4981,9 @@ variable i =
                         else
                             varHelp
                                 i.inner
-                                (Pine_kernel.int_add [ sOffset, 4 ])
+                                (Pine_builtin.int_add [ sOffset, 4 ])
                                 row
-                                (Pine_kernel.int_add [ col, 1 ])
+                                (Pine_builtin.int_add [ col, 1 ])
                                 srcBytes
                                 indent
                                 context
@@ -4993,16 +4993,16 @@ variable i =
 
                     sliceLength : Int
                     sliceLength =
-                        Pine_kernel.int_add
+                        Pine_builtin.int_add
                             [ s1Offset
-                            , Pine_kernel.negate sOffset
+                            , Pine_builtin.negate sOffset
                             ]
 
                     nameBytes : Int
                     nameBytes =
-                        Pine_kernel.take
+                        Pine_builtin.take
                             [ sliceLength
-                            , Pine_kernel.skip [ sOffset, srcBytes ]
+                            , Pine_builtin.skip [ sOffset, srcBytes ]
                             ]
 
                     name : String
@@ -5177,13 +5177,13 @@ spaces : Parser c x ()
 spaces =
     chompWhile
         (\\c ->
-            if Pine_kernel.equal [ c, ' ' ] then
+            if Pine_builtin.equal [ c, ' ' ] then
                 True
 
-            else if Pine_kernel.equal [ c, '\\n' ] then
+            else if Pine_builtin.equal [ c, '\\n' ] then
                 True
 
-            else if Pine_kernel.equal [ c, '\\u{000D}' ] then
+            else if Pine_builtin.equal [ c, '\\u{000D}' ] then
                 True
 
             else
@@ -5225,15 +5225,15 @@ nestableComment : Token x -> Token x -> Parser c x ()
 nestableComment ((Token (String openChars) oX) as open) ((Token (String closeChars) cX) as close) =
     let
         openChar =
-            Pine_kernel.take [ 4, openChars ]
+            Pine_builtin.take [ 4, openChars ]
 
         closeChar =
-            Pine_kernel.take [ 4, closeChars ]
+            Pine_builtin.take [ 4, closeChars ]
     in
-    if Pine_kernel.equal [ Pine_kernel.length openChars, 0 ] then
+    if Pine_builtin.equal [ Pine_builtin.length openChars, 0 ] then
         problem oX
 
-    else if Pine_kernel.equal [ Pine_kernel.length closeChars, 0 ] then
+    else if Pine_builtin.equal [ Pine_builtin.length closeChars, 0 ] then
         problem cX
 
     else
@@ -5254,10 +5254,10 @@ nestableComment ((Token (String openChars) oX) as open) ((Token (String closeCha
 
 nestableCommentPredicateNotRelevant : Char -> Char -> Char -> Bool
 nestableCommentPredicateNotRelevant openChar closeChar char =
-    if Pine_kernel.equal [ char, openChar ] then
+    if Pine_builtin.equal [ char, openChar ] then
         False
 
-    else if Pine_kernel.equal [ char, closeChar ] then
+    else if Pine_builtin.equal [ char, closeChar ] then
         False
 
     else
@@ -5269,7 +5269,7 @@ nestableHelp isNotRelevant open close expectingClose nestLevel =
     skip
         (chompWhile isNotRelevant)
         (oneOf
-            [ if Pine_kernel.equal [ nestLevel, 1 ] then
+            [ if Pine_builtin.equal [ nestLevel, 1 ] then
                 close
 
               else
@@ -5281,7 +5281,7 @@ nestableHelp isNotRelevant open close expectingClose nestLevel =
                                 open
                                 close
                                 expectingClose
-                                (Pine_kernel.int_add [ nestLevel, -1 ])
+                                (Pine_builtin.int_add [ nestLevel, -1 ])
                         )
             , open
                 |> andThen
@@ -5291,7 +5291,7 @@ nestableHelp isNotRelevant open close expectingClose nestLevel =
                             open
                             close
                             expectingClose
-                            (Pine_kernel.int_add [ nestLevel, 1 ])
+                            (Pine_builtin.int_add [ nestLevel, 1 ])
                     )
             , chompIf isChar expectingClose
                 |> andThen

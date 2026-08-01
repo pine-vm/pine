@@ -23,127 +23,127 @@ encodeBlob : Encoder -> Int
 encodeBlob builder =
     case builder of
         I8 n ->
-            if Pine_kernel.int_is_sorted_asc [ 0, n ] then
-                Pine_kernel.take [ 1, Pine_kernel.reverse n ]
+            if Pine_builtin.int_is_sorted_asc [ 0, n ] then
+                Pine_builtin.take [ 1, Pine_builtin.reverse n ]
 
             else
-                Pine_kernel.take
+                Pine_builtin.take
                     [ 1
-                    , Pine_kernel.reverse
-                        (Pine_kernel.bit_not (Pine_kernel.int_add [ n, 1 ]))
+                    , Pine_builtin.reverse
+                        (Pine_builtin.bit_not (Pine_builtin.int_add [ n, 1 ]))
                     ]
 
         I16 e n ->
             let
                 littleEndian =
-                    if Pine_kernel.int_is_sorted_asc [ 0, n ] then
-                        Pine_kernel.take
+                    if Pine_builtin.int_is_sorted_asc [ 0, n ] then
+                        Pine_builtin.take
                             [ 2
-                            , Pine_kernel.concat
-                                [ Pine_kernel.reverse
-                                    (Pine_kernel.skip [ 1, n ])
-                                , Pine_kernel.skip [ 1, 0 ]
+                            , Pine_builtin.concat
+                                [ Pine_builtin.reverse
+                                    (Pine_builtin.skip [ 1, n ])
+                                , Pine_builtin.skip [ 1, 0 ]
                                 ]
                             ]
 
                     else
-                        Pine_kernel.take
+                        Pine_builtin.take
                             [ 2
-                            , Pine_kernel.concat
-                                [ Pine_kernel.reverse
-                                    (Pine_kernel.skip
+                            , Pine_builtin.concat
+                                [ Pine_builtin.reverse
+                                    (Pine_builtin.skip
                                         [ 1
-                                        , Pine_kernel.bit_not (Pine_kernel.int_add [ n, 1 ])
+                                        , Pine_builtin.bit_not (Pine_builtin.int_add [ n, 1 ])
                                         ]
                                     )
-                                , Pine_kernel.skip [ 1, 0xFF ]
+                                , Pine_builtin.skip [ 1, 0xFF ]
                                 ]
                             ]
             in
-            if Pine_kernel.equal [ e, Bytes.LE ] then
+            if Pine_builtin.equal [ e, Bytes.LE ] then
                 littleEndian
 
             else
-                Pine_kernel.reverse littleEndian
+                Pine_builtin.reverse littleEndian
 
         I32 e n ->
             let
                 littleEndian =
-                    if Pine_kernel.int_is_sorted_asc [ 0, n ] then
-                        Pine_kernel.take
+                    if Pine_builtin.int_is_sorted_asc [ 0, n ] then
+                        Pine_builtin.take
                             [ 4
-                            , Pine_kernel.concat
-                                [ Pine_kernel.reverse
-                                    (Pine_kernel.skip [ 1, n ])
-                                , Pine_kernel.skip [ 2, 0x01000000 ]
+                            , Pine_builtin.concat
+                                [ Pine_builtin.reverse
+                                    (Pine_builtin.skip [ 1, n ])
+                                , Pine_builtin.skip [ 2, 0x01000000 ]
                                 ]
                             ]
 
                     else
-                        Pine_kernel.take
+                        Pine_builtin.take
                             [ 4
-                            , Pine_kernel.concat
-                                [ Pine_kernel.reverse
-                                    (Pine_kernel.skip
+                            , Pine_builtin.concat
+                                [ Pine_builtin.reverse
+                                    (Pine_builtin.skip
                                         [ 1
-                                        , Pine_kernel.bit_not (Pine_kernel.int_add [ n, 1 ])
+                                        , Pine_builtin.bit_not (Pine_builtin.int_add [ n, 1 ])
                                         ]
                                     )
-                                , Pine_kernel.skip [ 1, 0x00FFFFFF ]
+                                , Pine_builtin.skip [ 1, 0x00FFFFFF ]
                                 ]
                             ]
             in
-            if Pine_kernel.equal [ e, Bytes.LE ] then
+            if Pine_builtin.equal [ e, Bytes.LE ] then
                 littleEndian
 
             else
-                Pine_kernel.reverse littleEndian
+                Pine_builtin.reverse littleEndian
 
         U8 n ->
-            Pine_kernel.take [ 1, Pine_kernel.reverse n ]
+            Pine_builtin.take [ 1, Pine_builtin.reverse n ]
 
         U16 e n ->
             let
                 littleEndian =
-                    Pine_kernel.take
+                    Pine_builtin.take
                         [ 2
-                        , Pine_kernel.concat
-                            [ Pine_kernel.reverse
-                                (Pine_kernel.skip [ 1, n ])
-                            , Pine_kernel.skip [ 1, 0 ]
+                        , Pine_builtin.concat
+                            [ Pine_builtin.reverse
+                                (Pine_builtin.skip [ 1, n ])
+                            , Pine_builtin.skip [ 1, 0 ]
                             ]
                         ]
             in
-            if Pine_kernel.equal [ e, Bytes.LE ] then
+            if Pine_builtin.equal [ e, Bytes.LE ] then
                 littleEndian
 
             else
-                Pine_kernel.reverse littleEndian
+                Pine_builtin.reverse littleEndian
 
         U32 e n ->
             let
                 littleEndian =
-                    Pine_kernel.take
+                    Pine_builtin.take
                         [ 4
-                        , Pine_kernel.concat
-                            [ Pine_kernel.reverse
-                                (Pine_kernel.skip [ 1, n ])
-                            , Pine_kernel.skip [ 2, 0x01000000 ]
+                        , Pine_builtin.concat
+                            [ Pine_builtin.reverse
+                                (Pine_builtin.skip [ 1, n ])
+                            , Pine_builtin.skip [ 2, 0x01000000 ]
                             ]
                         ]
             in
-            if Pine_kernel.equal [ e, Bytes.LE ] then
+            if Pine_builtin.equal [ e, Bytes.LE ] then
                 littleEndian
 
             else
-                Pine_kernel.reverse littleEndian
+                Pine_builtin.reverse littleEndian
 
         SequenceEncoder bs ->
-            if Pine_kernel.equal [ bs, [] ] then
-                Pine_kernel.take [ 0, 0 ]
+            if Pine_builtin.equal [ bs, [] ] then
+                Pine_builtin.take [ 0, 0 ]
 
             else
-                Pine_kernel.concat (List.map encodeBlob bs)
+                Pine_builtin.concat (List.map encodeBlob bs)
 
         BytesEncoder (Bytes.Elm_Bytes blob) ->
             blob
@@ -214,15 +214,15 @@ encodeCharsAsBlobHelp : Int -> Int -> Int -> Int
 encodeCharsAsBlobHelp acc offset charsBytes =
     let
         nextChar =
-            Pine_kernel.take [ 4, Pine_kernel.skip [ offset, charsBytes ] ]
+            Pine_builtin.take [ 4, Pine_builtin.skip [ offset, charsBytes ] ]
     in
-    if Pine_kernel.equal [ Pine_kernel.length nextChar, 0 ] then
+    if Pine_builtin.equal [ Pine_builtin.length nextChar, 0 ] then
         acc
 
     else
         encodeCharsAsBlobHelp
-            (Pine_kernel.concat [ acc, encodeCharAsBlob nextChar ])
-            (Pine_kernel.int_add [ offset, 4 ])
+            (Pine_builtin.concat [ acc, encodeCharAsBlob nextChar ])
+            (Pine_builtin.int_add [ offset, 4 ])
             charsBytes
 
 
@@ -232,111 +232,111 @@ encodeCharAsBlob char =
         code =
             Char.toCode char
     in
-    if Pine_kernel.int_is_sorted_asc [ code, 0x7F ] then
+    if Pine_builtin.int_is_sorted_asc [ code, 0x7F ] then
         -- 1-byte encoding
-        Pine_kernel.skip
+        Pine_builtin.skip
             [ 1
             , code
             ]
 
-    else if Pine_kernel.int_is_sorted_asc [ code, 0x07FF ] then
+    else if Pine_builtin.int_is_sorted_asc [ code, 0x07FF ] then
         -- 2-byte encoding
         let
             byte1 =
-                Pine_kernel.bit_or
+                Pine_builtin.bit_or
                     [ 0xC0
                     , code // 64
                     ]
 
             byte2 =
-                Pine_kernel.bit_or
+                Pine_builtin.bit_or
                     [ maskSingleByteMSB
-                    , Pine_kernel.bit_and [ 63, code ]
+                    , Pine_builtin.bit_and [ 63, code ]
                     ]
         in
-        Pine_kernel.concat
-            [ Pine_kernel.bit_and [ byte1, maskSingleByte ]
-            , Pine_kernel.bit_and [ byte2, maskSingleByte ]
+        Pine_builtin.concat
+            [ Pine_builtin.bit_and [ byte1, maskSingleByte ]
+            , Pine_builtin.bit_and [ byte2, maskSingleByte ]
             ]
 
-    else if Pine_kernel.int_is_sorted_asc [ code, 0xFFFF ] then
+    else if Pine_builtin.int_is_sorted_asc [ code, 0xFFFF ] then
         -- 3-byte encoding
         let
             byte1 =
-                Pine_kernel.bit_or
+                Pine_builtin.bit_or
                     [ 0xE0
                     , code // 4096
                     ]
 
             byte2 =
-                Pine_kernel.bit_or
+                Pine_builtin.bit_or
                     [ maskSingleByteMSB
-                    , Pine_kernel.bit_and [ 63, code // 64 ]
+                    , Pine_builtin.bit_and [ 63, code // 64 ]
                     ]
 
             byte3 =
-                Pine_kernel.bit_or
+                Pine_builtin.bit_or
                     [ maskSingleByteMSB
-                    , Pine_kernel.bit_and [ 63, code ]
+                    , Pine_builtin.bit_and [ 63, code ]
                     ]
         in
-        Pine_kernel.concat
-            [ Pine_kernel.bit_and [ byte1, maskSingleByte ]
-            , Pine_kernel.bit_and [ byte2, maskSingleByte ]
-            , Pine_kernel.bit_and [ byte3, maskSingleByte ]
+        Pine_builtin.concat
+            [ Pine_builtin.bit_and [ byte1, maskSingleByte ]
+            , Pine_builtin.bit_and [ byte2, maskSingleByte ]
+            , Pine_builtin.bit_and [ byte3, maskSingleByte ]
             ]
 
     else
         -- 4-byte encoding for code points >= 0x10000
         let
             byte1 =
-                Pine_kernel.bit_or
-                    [ Pine_kernel.bit_and [ 0xF0, maskSingleByte ]
+                Pine_builtin.bit_or
+                    [ Pine_builtin.bit_and [ 0xF0, maskSingleByte ]
                     , code // 262144
                     ]
 
             byte2 =
-                Pine_kernel.bit_or
+                Pine_builtin.bit_or
                     [ maskSingleByteMSB
-                    , Pine_kernel.bit_and [ 63, code // 4096 ]
+                    , Pine_builtin.bit_and [ 63, code // 4096 ]
                     ]
 
             byte3 =
-                Pine_kernel.bit_or
+                Pine_builtin.bit_or
                     [ maskSingleByteMSB
-                    , Pine_kernel.bit_and [ 63, code // 64 ]
+                    , Pine_builtin.bit_and [ 63, code // 64 ]
                     ]
 
             byte4 =
-                Pine_kernel.bit_or
+                Pine_builtin.bit_or
                     [ maskSingleByteMSB
-                    , Pine_kernel.bit_and [ 63, code ]
+                    , Pine_builtin.bit_and [ 63, code ]
                     ]
         in
-        Pine_kernel.concat
-            [ Pine_kernel.bit_and [ byte1, maskSingleByte ]
-            , Pine_kernel.bit_and [ byte2, maskSingleByte ]
-            , Pine_kernel.bit_and [ byte3, maskSingleByte ]
-            , Pine_kernel.bit_and [ byte4, maskSingleByte ]
+        Pine_builtin.concat
+            [ Pine_builtin.bit_and [ byte1, maskSingleByte ]
+            , Pine_builtin.bit_and [ byte2, maskSingleByte ]
+            , Pine_builtin.bit_and [ byte3, maskSingleByte ]
+            , Pine_builtin.bit_and [ byte4, maskSingleByte ]
             ]
 
 
 getStringWidth : String -> Int
 getStringWidth (String charsBytes) =
-    Pine_kernel.length
+    Pine_builtin.length
         (encodeCharsAsBlob charsBytes)
 
 
 maskSingleByte : Int
 maskSingleByte =
-    Pine_kernel.skip [ 1, 0xFF ]
+    Pine_builtin.skip [ 1, 0xFF ]
 
 
 maskSingleByteMSB : Int
 maskSingleByteMSB =
-    Pine_kernel.skip [ 1, 0x80 ]
+    Pine_builtin.skip [ 1, 0x80 ]
 
 
 emptyBlob : Int
 emptyBlob =
-    Pine_kernel.take [ 0, 0 ]
+    Pine_builtin.take [ 0, 0 ]

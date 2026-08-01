@@ -589,7 +589,7 @@ keys dict =
             []
 
         RBNode_elm_builtin _ key value left right ->
-            Pine_kernel.concat [ keys left, [ key ], keys right ]
+            Pine_builtin.concat [ keys left, [ key ], keys right ]
 
 
 {-| Get all of the values in a dictionary, in the order of their keys.
@@ -604,7 +604,7 @@ values dict =
             []
 
         RBNode_elm_builtin _ key value left right ->
-            Pine_kernel.concat [ values left, [ value ], values right ]
+            Pine_builtin.concat [ values left, [ value ], values right ]
 
 
 {-| Convert a dictionary into an association list of key-value pairs, sorted by keys.
@@ -616,7 +616,7 @@ toList dict =
             []
 
         RBNode_elm_builtin _ key value left right ->
-            Pine_kernel.concat [ toList left, [ ( key, value ) ], toList right ]
+            Pine_builtin.concat [ toList left, [ ( key, value ) ], toList right ]
 
 
 {-| Convert an association list into a dictionary.
