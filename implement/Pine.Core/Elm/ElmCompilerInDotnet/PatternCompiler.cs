@@ -14,6 +14,8 @@ namespace Pine.Core.Elm.ElmCompilerInDotnet;
 /// </summary>
 public class PatternCompiler
 {
+    private const long MaxInlinedScrutineeExpansion = 1_000;
+
     /// <summary>
     /// Represents a condition tree for pattern matching.
     /// </summary>
@@ -102,16 +104,7 @@ public class PatternCompiler
         IReadOnlyList<SyntaxTypes.Case> cases,
         ExpressionCompilationContext context)
     {
-        /*
-         * TODO: Review exponential growth of expression size resulting from unconditional duplication of the case scrutinee expression.
-         * Consider using an `eval` invocation to reuse representation of the scrutinee across all patterns and case arms without repeating the whole epxression.
-         * This could depend on a heuristic like in the `compileElmSyntaxCaseBlock` function of the classic Elm compiler:
-         * https://github.com/pine-vm/pine/blob/4a5eab9f139bedb519e47a77c0c2960df9e72b98/implement/Pine.Core/Elm/elm-in-elm/src/ElmCompiler.elm#L1923-L1976
-         * 
-         * A smarter heuristic would compare outcomes of both approaches after reduction.
-         * */
-
-        if (scrutineeExpr.SubexpressionCount > 400)
+        Result<CompilationError, Expression> CompileViaInvocation()
         {
             var invokedResult =
                 CompileCaseBlockViaInvocation(
@@ -139,6 +132,11 @@ public class PatternCompiler
             return invokedExpr;
         }
 
+        if (scrutineeExpr.SubexpressionCount > 400)
+        {
+            return CompileViaInvocation();
+        }
+
         var inlinedResult =
             CompileCaseBlockInliningScrutinee(
                 scrutineeExpr,
@@ -161,8 +159,30 @@ public class PatternCompiler
                 "CompileCaseBlock: unexpected result type from inlined compilation: " + inlinedResult.GetType().Name);
         }
 
+        var inlinedScrutineeOccurrences =
+            Expression.EnumerateSelfAndDescendants(inlinedExpr)
+            .Count(descendant => ReferenceEquals(descendant, scrutineeExpr));
+
+        /*
+         * The invocation wrapper only pays off when inlining actually duplicates runtime work.
+         * Many case blocks use their scrutinee once; wrapping those blocks merely adds an
+         * invocation boundary that prevents the VM inliner from seeing through parser helpers.
+         */
+        if (ShouldCompileCaseBlockViaInvocation(scrutineeExpr, inlinedScrutineeOccurrences))
+        {
+            return CompileViaInvocation();
+        }
+
         return inlinedExpr;
     }
+
+    internal static bool ShouldCompileCaseBlockViaInvocation(
+        Expression scrutineeExpr,
+        int inlinedScrutineeOccurrences) =>
+        scrutineeExpr.SubexpressionCount > 400 ||
+        (MaxInlinedScrutineeExpansion < scrutineeExpr.SubexpressionCount * inlinedScrutineeOccurrences &&
+        Expression.EnumerateSelfAndDescendants(scrutineeExpr)
+        .Any(descendant => descendant is Expression.Eval));
 
     /// <summary>
     /// Compiles a case block expression to a Pine expression via inlining the scrutinee expression into each pattern match condition.
