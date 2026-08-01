@@ -1571,13 +1571,15 @@ public class Canonicalization
                 {
                     var constructorIndex = 0;
 
-                    return new ChoiceTypeStruct(
-                        Documentation: typeStruct.Documentation,
-                        TypeTokenLocation: typeStruct.TypeTokenLocation,
-                        Name: typeStruct.Name,
-                        Generics: typeStruct.Generics,
-                        EqualsTokenLocation: typeStruct.EqualsTokenLocation,
-                        Constructors: typeStruct.Constructors.Map(_ => canonicalizedConstructors[constructorIndex++]));
+                    return
+                        new ChoiceTypeStruct(
+                            Documentation: typeStruct.Documentation,
+                            TypeTokenLocation: typeStruct.TypeTokenLocation,
+                            Name: typeStruct.Name,
+                            Generics: typeStruct.Generics,
+                            EqualsTokenLocation: typeStruct.EqualsTokenLocation,
+                            Constructors:
+                            typeStruct.Constructors.Map(_ => canonicalizedConstructors[constructorIndex++]));
                 });
     }
 

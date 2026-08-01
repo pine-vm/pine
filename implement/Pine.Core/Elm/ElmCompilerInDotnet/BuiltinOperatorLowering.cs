@@ -885,7 +885,9 @@ public static class BuiltinOperatorLowering
         expression switch
         {
             SyntaxTypes.Expression.IntegerLiteral integer => integer.Value,
-            SyntaxTypes.Expression.Negation { Expression: SyntaxTypes.Expression.IntegerLiteral negated } => -negated.Value,
+
+            SyntaxTypes.Expression.Negation { Expression: SyntaxTypes.Expression.IntegerLiteral negated } =>
+            -negated.Value,
 
             _ =>
             null,
