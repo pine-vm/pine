@@ -1180,8 +1180,8 @@ public record StackInstruction(
         /// <summary>
         /// Construct an instance without <see cref="DetailLines"/>
         /// </summary>
-        public static InstructionDisplay WithoutDetailLines(IReadOnlyList<string> Arguments) =>
-            new(Arguments: Arguments, DetailLines: []);
+        public static InstructionDisplay WithoutDetailLines(IReadOnlyList<string> arguments) =>
+            new(Arguments: arguments, DetailLines: []);
     }
 
     /// <summary>
