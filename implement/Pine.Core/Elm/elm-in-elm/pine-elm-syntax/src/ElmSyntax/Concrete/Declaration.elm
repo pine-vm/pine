@@ -356,11 +356,11 @@ public record Signature(
 
 
 type Declaration
-    = FunctionDeclaration (Node Expression.FunctionStruct)
-    | ChoiceTypeDeclaration (Node ChoiceStruct)
-    | AliasDeclaration (Node TypeAlias)
-    | PortDeclaration (Node Signature)
-    | InfixDeclaration (Node Infix)
+    = FunctionDeclaration Expression.FunctionStruct
+    | ChoiceTypeDeclaration ChoiceStruct
+    | AliasDeclaration TypeAlias
+    | PortDeclaration Location Signature
+    | InfixDeclaration Infix
 
 
 type alias ChoiceStruct =

@@ -241,18 +241,16 @@ simpleFunctionDeclaration :
 simpleFunctionDeclaration declarationRange_ nameRange equalsLocation expression name =
     Node declarationRange_
         (Declaration.FunctionDeclaration
-            (Node declarationRange_
-                { documentation = Nothing
-                , signature = Nothing
-                , declaration =
-                    Node declarationRange_
-                        { name = Node nameRange name
-                        , arguments = []
-                        , equalsTokenLocation = equalsLocation
-                        , expression = expression
-                        }
-                }
-            )
+            { documentation = Nothing
+            , signature = Nothing
+            , declaration =
+                Node declarationRange_
+                    { name = Node nameRange name
+                    , arguments = []
+                    , equalsTokenLocation = equalsLocation
+                    , expression = expression
+                    }
+            }
         )
 
 
@@ -414,71 +412,65 @@ declarationOrExpressionOkSuite =
       , expectedOk =
             DeclarationOrExpression.Declaration
                 (Declaration.FunctionDeclaration
-                    (Node (range 1 1 1 7)
-                        { documentation = Nothing
-                        , signature = Nothing
-                        , declaration =
-                            Node (range 1 1 1 7)
-                                { name = Node (range 1 1 1 2) "x"
-                                , arguments = []
-                                , equalsTokenLocation = location 1 3
-                                , expression = Node (range 1 5 1 7) (Expression.IntegerLiteral "71")
-                                }
-                        }
-                    )
+                    { documentation = Nothing
+                    , signature = Nothing
+                    , declaration =
+                        Node (range 1 1 1 7)
+                            { name = Node (range 1 1 1 2) "x"
+                            , arguments = []
+                            , equalsTokenLocation = location 1 3
+                            , expression = Node (range 1 5 1 7) (Expression.IntegerLiteral "71")
+                            }
+                    }
                 )
       }
     , { input = "f x = x"
       , expectedOk =
             DeclarationOrExpression.Declaration
                 (Declaration.FunctionDeclaration
-                    (Node (range 1 1 1 8)
-                        { documentation = Nothing
-                        , signature = Nothing
-                        , declaration =
-                            Node (range 1 1 1 8)
-                                { name = Node (range 1 1 1 2) "f"
-                                , arguments =
-                                    [ Node (range 1 3 1 4) (Pattern.VarPattern "x") ]
-                                , equalsTokenLocation = location 1 5
-                                , expression = Node (range 1 7 1 8) (Expression.Identifier [] "x")
-                                }
-                        }
-                    )
+                    { documentation = Nothing
+                    , signature = Nothing
+                    , declaration =
+                        Node (range 1 1 1 8)
+                            { name = Node (range 1 1 1 2) "f"
+                            , arguments =
+                                [ Node (range 1 3 1 4) (Pattern.VarPattern "x") ]
+                            , equalsTokenLocation = location 1 5
+                            , expression = Node (range 1 7 1 8) (Expression.Identifier [] "x")
+                            }
+                    }
                 )
       }
     , { input = "type alias Name = String"
       , expectedOk =
             DeclarationOrExpression.Declaration
                 (Declaration.AliasDeclaration
-                    (Node (range 1 1 1 25)
-                        { documentation = Nothing
-                        , typeTokenLocation = location 1 1
-                        , aliasTokenLocation = location 1 6
-                        , name = Node (range 1 12 1 16) "Name"
-                        , generics = []
-                        , equalsTokenLocation = location 1 17
-                        , typeAnnotation =
-                            Node (range 1 19 1 25)
-                                (TypeAnnotation.Typed
-                                    (Node (range 1 19 1 25) ( [], "String" ))
-                                    []
-                                )
-                        }
-                    )
+                    { documentation = Nothing
+                    , typeTokenLocation = location 1 1
+                    , aliasTokenLocation = location 1 6
+                    , name = Node (range 1 12 1 16) "Name"
+                    , generics = []
+                    , equalsTokenLocation = location 1 17
+                    , typeAnnotation =
+                        Node (range 1 19 1 25)
+                            (TypeAnnotation.Typed
+                                (Node (range 1 19 1 25) ( [], "String" ))
+                                []
+                            )
+                    }
                 )
       }
     , { input = "infix left 6 (+) = add"
       , expectedOk =
             DeclarationOrExpression.Declaration
                 (Declaration.InfixDeclaration
-                    (Node (range 1 1 1 23)
-                        { direction = Node (range 1 7 1 11) Infix.Left
-                        , precedence = Node (range 1 12 1 13) 6
-                        , operator = Node (range 1 14 1 17) "+"
-                        , function = Node (range 1 20 1 23) "add"
-                        }
-                    )
+                    { infixTokenLocation = location 1 1
+                    , direction = Node (range 1 7 1 11) Infix.Left
+                    , precedence = Node (range 1 12 1 13) 6
+                    , operator = Node (range 1 14 1 17) "+"
+                    , equalsTokenLocation = location 1 18
+                    , function = Node (range 1 20 1 23) "add"
+                    }
                 )
       }
     , { input = "42"
@@ -592,7 +584,7 @@ declarationKind declaration =
         Declaration.AliasDeclaration _ ->
             "AliasDeclaration"
 
-        Declaration.PortDeclaration _ ->
+        Declaration.PortDeclaration _ _ ->
             "PortDeclaration"
 
         Declaration.InfixDeclaration _ ->

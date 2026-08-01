@@ -15,14 +15,17 @@ module ElmSyntax.Concrete.Infix exposing (Infix, InfixDirection(..))
 -}
 
 import ElmSyntax.Concrete.Node exposing (Node)
+import ElmSyntax.Concrete.Range exposing (Location)
 
 
 {-| Type annotation for a infix definition
 -}
 type alias Infix =
-    { direction : Node InfixDirection
+    { infixTokenLocation : Location
+    , direction : Node InfixDirection
     , precedence : Node Int
     , operator : Node String
+    , equalsTokenLocation : Location
     , function : Node String
     }
 

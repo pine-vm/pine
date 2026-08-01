@@ -90,23 +90,23 @@ fromDeclaration concrete =
     case concrete of
         ConcreteDeclaration.FunctionDeclaration function ->
             AbstractDeclaration.FunctionDeclaration
-                (fromFunctionStruct (Node.value function))
+                (fromFunctionStruct function)
 
         ConcreteDeclaration.ChoiceTypeDeclaration choice ->
             AbstractDeclaration.ChoiceTypeDeclaration
-                (choiceTypeFromConcrete (Node.value choice))
+                (choiceTypeFromConcrete choice)
 
         ConcreteDeclaration.AliasDeclaration typeAlias ->
             AbstractDeclaration.AliasDeclaration
-                (typeAliasFromConcrete (Node.value typeAlias))
+                (typeAliasFromConcrete typeAlias)
 
-        ConcreteDeclaration.PortDeclaration signature ->
+        ConcreteDeclaration.PortDeclaration _ signature ->
             AbstractDeclaration.PortDeclaration
-                (signatureFromConcrete (Node.value signature))
+                (signatureFromConcrete signature)
 
         ConcreteDeclaration.InfixDeclaration infix ->
             AbstractDeclaration.InfixDeclaration
-                (fromInfix (Node.value infix))
+                (fromInfix infix)
 
 
 fromTypeAnnotation : ConcreteTypeAnnotation.TypeAnnotation -> AbstractTypeAnnotation.TypeAnnotation

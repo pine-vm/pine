@@ -348,43 +348,39 @@ declarationSuite =
                     }
 
                 declarations =
-                    [ ConcreteDeclaration.FunctionDeclaration (node function)
+                    [ ConcreteDeclaration.FunctionDeclaration function
                     , ConcreteDeclaration.ChoiceTypeDeclaration
-                        (node
-                            { documentation = Just (node "docs")
-                            , typeTokenLocation = location
-                            , name = node "Choice"
-                            , generics = [ node "a" ]
-                            , equalsTokenLocation = location
-                            , constructors =
-                                separated
-                                    [ node
-                                        { name = node "Choice"
-                                        , arguments = [ node (ConcreteTypeAnnotation.GenericType "a") ]
-                                        }
-                                    ]
-                            }
-                        )
+                        { documentation = Just (node "docs")
+                        , typeTokenLocation = location
+                        , name = node "Choice"
+                        , generics = [ node "a" ]
+                        , equalsTokenLocation = location
+                        , constructors =
+                            separated
+                                [ node
+                                    { name = node "Choice"
+                                    , arguments = [ node (ConcreteTypeAnnotation.GenericType "a") ]
+                                    }
+                                ]
+                        }
                     , ConcreteDeclaration.AliasDeclaration
-                        (node
-                            { documentation = Just (node "docs")
-                            , typeTokenLocation = location
-                            , aliasTokenLocation = location
-                            , name = node "Alias"
-                            , generics = []
-                            , equalsTokenLocation = location
-                            , typeAnnotation = node ConcreteTypeAnnotation.Unit
-                            }
-                        )
-                    , ConcreteDeclaration.PortDeclaration (node signature)
+                        { documentation = Just (node "docs")
+                        , typeTokenLocation = location
+                        , aliasTokenLocation = location
+                        , name = node "Alias"
+                        , generics = []
+                        , equalsTokenLocation = location
+                        , typeAnnotation = node ConcreteTypeAnnotation.Unit
+                        }
+                    , ConcreteDeclaration.PortDeclaration location signature
                     , ConcreteDeclaration.InfixDeclaration
-                        (node
-                            { direction = node ConcreteInfix.Left
-                            , precedence = node 5
-                            , operator = node "++"
-                            , function = node "append"
-                            }
-                        )
+                        { infixTokenLocation = location
+                        , direction = node ConcreteInfix.Left
+                        , precedence = node 5
+                        , operator = node "++"
+                        , equalsTokenLocation = location
+                        , function = node "append"
+                        }
                     ]
             in
             Expect.equal

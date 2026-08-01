@@ -230,19 +230,19 @@ takeLeadingTrivia tokens =
 setDeclarationDocumentation : Node String -> Declaration.Declaration -> Declaration.Declaration
 setDeclarationDocumentation documentation declaration =
     case declaration of
-        Declaration.FunctionDeclaration (Node range_ function) ->
+        Declaration.FunctionDeclaration function ->
             Declaration.FunctionDeclaration
-                (Node range_ { function | documentation = Just documentation })
+                { function | documentation = Just documentation }
 
-        Declaration.ChoiceTypeDeclaration (Node range_ choiceType) ->
+        Declaration.ChoiceTypeDeclaration choiceType ->
             Declaration.ChoiceTypeDeclaration
-                (Node range_ { choiceType | documentation = Just documentation })
+                { choiceType | documentation = Just documentation }
 
-        Declaration.AliasDeclaration (Node range_ typeAlias) ->
+        Declaration.AliasDeclaration typeAlias ->
             Declaration.AliasDeclaration
-                (Node range_ { typeAlias | documentation = Just documentation })
+                { typeAlias | documentation = Just documentation }
 
-        Declaration.PortDeclaration _ ->
+        Declaration.PortDeclaration _ _ ->
             declaration
 
         Declaration.InfixDeclaration _ ->
@@ -252,20 +252,44 @@ setDeclarationDocumentation documentation declaration =
 rangeOfDeclaration : Declaration.Declaration -> Range
 rangeOfDeclaration declaration =
     case declaration of
-        Declaration.FunctionDeclaration node ->
-            Node.range node
+        Declaration.FunctionDeclaration function ->
+            { start =
+                function.signature
+                    |> Maybe.map (Node.range >> .start)
+                    |> Maybe.withDefault (Node.range function.declaration).start
+            , end = (Node.range function.declaration).end
+            }
 
-        Declaration.ChoiceTypeDeclaration node ->
-            Node.range node
+        Declaration.ChoiceTypeDeclaration choiceType ->
+            { start = choiceType.typeTokenLocation
+            , end =
+                case choiceType.constructors of
+                    SeparatedSyntaxList.NonEmpty first rest ->
+                        case List.reverse rest of
+                            ( _, last ) :: _ ->
+                                (Node.range last).end
 
-        Declaration.AliasDeclaration node ->
-            Node.range node
+                            [] ->
+                                (Node.range first).end
 
-        Declaration.PortDeclaration node ->
-            Node.range node
+                    SeparatedSyntaxList.Empty ->
+                        (Node.range choiceType.name).end
+            }
 
-        Declaration.InfixDeclaration node ->
-            Node.range node
+        Declaration.AliasDeclaration typeAlias ->
+            { start = typeAlias.typeTokenLocation
+            , end = (Node.range typeAlias.typeAnnotation).end
+            }
+
+        Declaration.PortDeclaration portTokenLocation signature ->
+            { start = portTokenLocation
+            , end = (Node.range signature.typeAnnotation).end
+            }
+
+        Declaration.InfixDeclaration infix ->
+            { start = infix.infixTokenLocation
+            , end = (Node.range infix.function).end
+            }
 
 
 parseModuleTokens : List Token.Token -> Result String ( Node Module.Module, List Token.Token )
@@ -1001,7 +1025,7 @@ parseInfixDeclaration tokens =
                                                                                     Err e ->
                                                                                         Err e
 
-                                                                                    Ok ( _, afterEqual ) ->
+                                                                                    Ok ( equalToken, afterEqual ) ->
                                                                                         case dropTrivia afterEqual of
                                                                                             funcNameToken :: afterFuncName ->
                                                                                                 if funcNameToken.tokenType /= Token.Identifier then
@@ -1014,7 +1038,8 @@ parseInfixDeclaration tokens =
                                                                                                 else
                                                                                                     let
                                                                                                         infixValue =
-                                                                                                            { direction =
+                                                                                                            { infixTokenLocation = infixToken.start
+                                                                                                            , direction =
                                                                                                                 Node
                                                                                                                     (tokenRange directionToken)
                                                                                                                     direction
@@ -1028,20 +1053,15 @@ parseInfixDeclaration tokens =
                                                                                                                     , end = closeParen.end
                                                                                                                     }
                                                                                                                     operatorToken.lexeme
+                                                                                                            , equalsTokenLocation = equalToken.start
                                                                                                             , function =
                                                                                                                 Node
                                                                                                                     (tokenRange funcNameToken)
                                                                                                                     funcNameToken.lexeme
                                                                                                             }
-
-                                                                                                        declRange =
-                                                                                                            { start = infixToken.start
-                                                                                                            , end = funcNameToken.end
-                                                                                                            }
                                                                                                     in
                                                                                                     Ok
-                                                                                                        ( Declaration.InfixDeclaration
-                                                                                                            (Node declRange infixValue)
+                                                                                                        ( Declaration.InfixDeclaration infixValue
                                                                                                         , afterFuncName
                                                                                                         )
 
@@ -1138,14 +1158,9 @@ parseAliasDeclaration typeToken tokens =
                                                 , equalsTokenLocation = equalToken.start
                                                 , typeAnnotation = typeAnnotationNode
                                                 }
-
-                                            declRange =
-                                                { start = typeToken.start
-                                                , end = (Node.range typeAnnotationNode).end
-                                                }
                                         in
                                         Ok
-                                            ( Declaration.AliasDeclaration (Node declRange typeAlias)
+                                            ( Declaration.AliasDeclaration typeAlias
                                             , remaining
                                             )
 
@@ -1242,15 +1257,9 @@ parseChoiceTypeDeclaration typeToken tokens =
                                                             , equalsTokenLocation = equalToken.start
                                                             , constructors = constructors
                                                             }
-
-                                                        declRange =
-                                                            { start = typeToken.start
-                                                            , end = lastConstructorEnd
-                                                            }
                                                     in
                                                     Ok
-                                                        ( Declaration.ChoiceTypeDeclaration
-                                                            (Node declRange choiceStruct)
+                                                        ( Declaration.ChoiceTypeDeclaration choiceStruct
                                                         , remaining
                                                         )
 
@@ -1393,14 +1402,9 @@ parsePortDeclarationTokens tokens =
                                                 , colonLocation = colonToken.start
                                                 , typeAnnotation = typeAnnotationNode
                                                 }
-
-                                            signatureRange =
-                                                { start = portToken.start
-                                                , end = (Node.range typeAnnotationNode).end
-                                                }
                                         in
                                         Ok
-                                            ( Declaration.PortDeclaration (Node signatureRange signature)
+                                            ( Declaration.PortDeclaration portToken.start signature
                                             , remaining
                                             )
 
@@ -1533,14 +1537,9 @@ finishFunctionDeclaration firstNameToken implNameToken maybeSignature tokens =
                                     , signature = maybeSignature
                                     , declaration = Node implRange functionImpl
                                     }
-
-                                declRange =
-                                    { start = firstNameToken.start
-                                    , end = (Node.range bodyExpr).end
-                                    }
                             in
                             Ok
-                                ( Declaration.FunctionDeclaration (Node declRange functionStruct)
+                                ( Declaration.FunctionDeclaration functionStruct
                                 , remaining
                                 )
 
