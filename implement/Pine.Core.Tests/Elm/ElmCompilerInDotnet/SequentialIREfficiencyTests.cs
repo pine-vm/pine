@@ -52,7 +52,7 @@ public class SequentialIREfficiencyTests
 
         renderedFrames.Should().Be(
             """
-            8820d1226a86c80b7508be9ec39dc2e006b3660b534a74ae52662a38780b4cb4
+            8820d122 (8):
             0: Local_Get (0)
             1: Take_Const (2)
             2: Jump_If_Equal_Const (List [2] (2) , 3)
@@ -70,16 +70,30 @@ public class SequentialIREfficiencyTests
     {
         var frames = CompileFrameAndDependencies(rootExpression, parseCache);
 
+        string RenderFrame(PineValue encodedExpression)
+        {
+            var frameInstructions = frames.FramesByEncodedExpression[encodedExpression];
+
+            var idHash =
+                Convert.ToHexStringLower(PineValueHashTree.ComputeHash(encodedExpression).Span)
+                [..8];
+
+            var instructionsText =
+                StackInstructionTraceRenderer.RenderStackFrameInstructions(frameInstructions);
+
+            return
+                string.Concat(
+                    idHash,
+                    " (",
+                    frameInstructions.Instructions.Count.ToString(),
+                    "):\n",
+                    instructionsText);
+        }
+
         return
             string.Join(
                 "\n\n",
-                frames.RenderOrder.Select(
-                    encodedExpression =>
-                    Convert.ToHexStringLower(
-                        PineValueHashTree.ComputeHash(encodedExpression).Span) +
-                    "\n" +
-                    StackInstructionTraceRenderer.RenderStackFrameInstructions(
-                        frames.FramesByEncodedExpression[encodedExpression])));
+                frames.RenderOrder.Select(RenderFrame));
     }
 
     private static SequentialIRFrames CompileFrameAndDependencies(
