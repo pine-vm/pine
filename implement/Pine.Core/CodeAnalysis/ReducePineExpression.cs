@@ -460,6 +460,11 @@ public class ReducePineExpression
                         {
                             if (rootBuiltinExpr.Input is Expression.List inputList)
                             {
+                                if (TryReduceEqualityOfSingleFieldTags(inputList, parseCache) is { } reducedEquality)
+                                {
+                                    return reducedEquality;
+                                }
+
                                 if (envConstraintId is not null)
                                 {
                                     var reducedArgumentsList =
@@ -898,6 +903,130 @@ public class ReducePineExpression
 
             default:
                 return AttemptReduceViaEval();
+        }
+    }
+
+    private static Expression? TryReduceEqualityOfSingleFieldTags(
+        Expression.List input,
+        PineVMParseCache parseCache)
+    {
+        if (input.Items.Count is not 2)
+            return null;
+
+        var left = TryUnwrapSingleFieldTagFromAllBranches(input.Items[0], parseCache);
+        var right = TryUnwrapSingleFieldTagFromAllBranches(input.Items[1], parseCache);
+
+        if (left is null || right is null || left.Value.tag != right.Value.tag)
+            return null;
+
+        return
+            Expression.BuiltinInst(
+                nameof(BuiltinFunction.equal),
+                Expression.ListInst([left.Value.inner, right.Value.inner]));
+    }
+
+    private static (PineValue tag, Expression inner)? TryUnwrapSingleFieldTagFromAllBranches(
+        Expression expression,
+        PineVMParseCache parseCache)
+    {
+        switch (expression)
+        {
+            case Expression.List
+            {
+                Items.Count: 2,
+                Items:
+                [
+                    Expression.Litral tag,
+                    Expression.List { Items.Count: 1 } fields
+                ]
+            }:
+                return (tag.Value, fields.Items[0]);
+
+            case Expression.Litral
+            {
+                Value: PineValue.ListValue
+                {
+                    Items.Length: 2
+                } taggedValue
+            }:
+                {
+                    var items = taggedValue.Items.Span;
+
+                    if (items[1] is not PineValue.ListValue { Items.Length: 1 } fields)
+                        return null;
+
+                    return (items[0], Expression.LitralInst(fields.Items.Span[0]));
+                }
+
+            case Expression.Conditional conditional:
+                {
+                    var trueBranch =
+                        TryUnwrapSingleFieldTagFromAllBranches(
+                            conditional.TrueBranch,
+                            parseCache);
+
+                    var falseBranch =
+                        TryUnwrapSingleFieldTagFromAllBranches(
+                            conditional.FalseBranch,
+                            parseCache);
+
+                    if (trueBranch is null ||
+                        falseBranch is null ||
+                        trueBranch.Value.tag != falseBranch.Value.tag)
+                    {
+                        return null;
+                    }
+
+                    return
+                        (trueBranch.Value.tag,
+                        Expression.ConditionalInst(
+                            conditional.Condition,
+                            falseBranch: falseBranch.Value.inner,
+                            trueBranch: trueBranch.Value.inner));
+                }
+
+            case Expression.Eval
+            {
+                Encoded: Expression.Litral encoded
+            } eval:
+                {
+                    var parsed =
+                        parseCache.ParseExpressionWithoutResultAllocation(encoded.Value).Expression;
+
+                    if (parsed is null)
+                        return null;
+
+                    var unwrapped =
+                        TryUnwrapSingleFieldTagFromAllBranches(parsed, parseCache);
+
+                    if (unwrapped is null)
+                        return null;
+
+                    var specializedEncoded =
+                        ExpressionEncoding.EncodeExpressionAsValue(unwrapped.Value.inner);
+
+                    return
+                        (unwrapped.Value.tag,
+                        new Expression.Eval(
+                            Expression.LitralInst(specializedEncoded),
+                            eval.Environment));
+                }
+
+            case Expression.Label label:
+                {
+                    var unwrapped =
+                        TryUnwrapSingleFieldTagFromAllBranches(label.Tagged, parseCache);
+
+                    if (unwrapped is null)
+                        return null;
+
+                    return
+                        (unwrapped.Value.tag,
+                        new Expression.Label(label.Tag, unwrapped.Value.inner));
+                }
+
+            default:
+                return null;
         }
     }
 

@@ -98,6 +98,116 @@ public class ReducePineExpressionTests
     }
 
     [Fact]
+    public void Equal_single_field_tags_specializes_literal_eval_and_unwraps_literal()
+    {
+        var tag = PineValue.Blob([1]);
+        var falseInner = Expression.LitralInst(PineValue.Blob([2]));
+        var trueInner = Expression.LitralInst(PineValue.Blob([3]));
+
+        var wrappedBody =
+            Expression.ConditionalInst(
+                Expression.EnvironmentInstance,
+                falseBranch: Tagged(tag, falseInner),
+                trueBranch: Tagged(tag, trueInner));
+
+        var eval =
+            new Expression.Eval(
+                Expression.LitralInst(ExpressionEncoding.EncodeExpressionAsValue(wrappedBody)),
+                Expression.EnvironmentInstance);
+
+        var equality =
+            Expression.BuiltinInst(
+                nameof(BuiltinFunction.equal),
+                Expression.ListInst(
+                    [
+                    eval,
+                    Expression.LitralInst(
+                        PineValue.List(
+                            [
+                            tag,
+                            PineValue.List([PineValue.Blob([4])])
+                            ]))
+                    ]));
+
+        var reduced =
+            ReducePineExpression.SearchForExpressionReduction(
+                equality,
+                envConstraintId: null,
+                s_parseCache);
+
+        var reducedEqual = reduced.Should().BeOfType<Expression.Builtin>().Subject;
+        var reducedArguments = reducedEqual.Input.Should().BeOfType<Expression.List>().Subject;
+        var specializedEval = reducedArguments.Items[0].Should().BeOfType<Expression.Eval>().Subject;
+        var specializedEncoding = specializedEval.Encoded.Should().BeOfType<Expression.Litral>().Subject;
+
+        var specializedBody =
+            s_parseCache.ParseExpression(specializedEncoding.Value)
+            .Extract(error => throw new Exception(error));
+
+        specializedBody.Should().Be(
+            Expression.ConditionalInst(
+                Expression.EnvironmentInstance,
+                falseBranch: falseInner,
+                trueBranch: trueInner));
+
+        reducedArguments.Items[1].Should().Be(
+            Expression.LitralInst(PineValue.Blob([4])));
+    }
+
+    [Fact]
+    public void Equal_single_field_tags_does_not_rewrite_different_tags()
+    {
+        var equality =
+            Expression.BuiltinInst(
+                nameof(BuiltinFunction.equal),
+                Expression.ListInst(
+                    [
+                    Tagged(PineValue.Blob([1]), Expression.EnvironmentInstance),
+                    Tagged(PineValue.Blob([2]), Expression.EnvironmentInstance)
+                    ]));
+
+        ReducePineExpression.SearchForExpressionReduction(
+            equality,
+            envConstraintId: null,
+            s_parseCache)
+            .Should().BeNull();
+    }
+
+    [Fact]
+    public void Equal_single_field_tags_does_not_rewrite_nonuniform_conditional()
+    {
+        var tag = PineValue.Blob([1]);
+
+        var conditional =
+            Expression.ConditionalInst(
+                Expression.EnvironmentInstance,
+                falseBranch: Tagged(tag, Expression.EnvironmentInstance),
+                trueBranch: Expression.EnvironmentInstance);
+
+        var equality =
+            Expression.BuiltinInst(
+                nameof(BuiltinFunction.equal),
+                Expression.ListInst(
+                    [
+                    conditional,
+                    Tagged(tag, Expression.EnvironmentInstance)
+                    ]));
+
+        ReducePineExpression.SearchForExpressionReduction(
+            equality,
+            envConstraintId: null,
+            s_parseCache)
+            .Should().BeNull();
+    }
+
+    private static Expression Tagged(PineValue tag, Expression inner) =>
+        Expression.ListInst(
+            [
+            Expression.LitralInst(tag),
+            Expression.ListInst([inner])
+            ]);
+
+    [Fact]
     public void Independent_evaluation_internal_result_is_a_value_type()
     {
         typeof(ReducePineExpression.ValueEvalResult).IsValueType.Should().BeTrue();
