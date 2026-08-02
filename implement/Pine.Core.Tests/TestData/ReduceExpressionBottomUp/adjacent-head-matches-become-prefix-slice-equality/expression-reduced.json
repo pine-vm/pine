@@ -1,0 +1,38 @@
+{
+  "Builtin": [
+    "equal",
+    {
+      "List": [
+        [
+          {
+            "Builtin": [
+              "take",
+              {
+                "List": [
+                  [
+                    {
+                      "Litral": [
+                        2
+                      ]
+                    },
+                    {
+                      "Environment": []
+                    }
+                  ]
+                ]
+              }
+            ]
+          },
+          {
+            "Litral": [
+              [
+                71,
+                73
+              ]
+            ]
+          }
+        ]
+      ]
+    }
+  ]
+}

@@ -808,6 +808,16 @@ public class ReducePineExpression
 
             case Expression.Conditional conditional:
                 {
+                    if (TryReduceHeadMatchWithNonemptyCheck(conditional) is { } reducedHeadMatch)
+                    {
+                        return reducedHeadMatch;
+                    }
+
+                    if (TryMergeAdjacentSliceMatches(conditional) is { } mergedSliceMatch)
+                    {
+                        return mergedSliceMatch;
+                    }
+
                     if (!conditional.Condition.ReferencesEnvironment)
                     {
                         if (TryEvalIndependent(
@@ -889,6 +899,257 @@ public class ReducePineExpression
             default:
                 return AttemptReduceViaEval();
         }
+    }
+
+    private static Expression? TryReduceHeadMatchWithNonemptyCheck(
+        Expression.Conditional conditional)
+    {
+        if (!IsFalseLiteral(conditional.FalseBranch))
+            return null;
+
+        if (TryParseHeadEqualsLiteral(conditional.Condition) is { } headMatch &&
+            TryParseNotEmpty(conditional.TrueBranch) is { } notEmptySource &&
+            headMatch.source == notEmptySource)
+        {
+            return BuildSliceMatch(headMatch.source, offset: 0, [headMatch.expectedValue]);
+        }
+
+        if (TryParseNotEmpty(conditional.Condition) is { } conditionNotEmptySource &&
+            TryParseHeadEqualsLiteral(conditional.TrueBranch) is { } trueHeadMatch &&
+            conditionNotEmptySource == trueHeadMatch.source)
+        {
+            return BuildSliceMatch(trueHeadMatch.source, offset: 0, [trueHeadMatch.expectedValue]);
+        }
+
+        return null;
+    }
+
+    private static Expression? TryMergeAdjacentSliceMatches(
+        Expression.Conditional conditional)
+    {
+        if (!IsFalseLiteral(conditional.FalseBranch) ||
+            TryParseSliceMatch(conditional.Condition) is not { } conditionMatch ||
+            TryParseSliceMatch(conditional.TrueBranch) is not { } trueMatch ||
+            conditionMatch.source != trueMatch.source)
+        {
+            return null;
+        }
+
+        if (conditionMatch.offset > int.MaxValue - conditionMatch.expectedValues.Items.Length ||
+            trueMatch.offset > int.MaxValue - trueMatch.expectedValues.Items.Length)
+        {
+            return null;
+        }
+
+        var conditionEnd = conditionMatch.offset + conditionMatch.expectedValues.Items.Length;
+        var trueEnd = trueMatch.offset + trueMatch.expectedValues.Items.Length;
+
+        if (Math.Min(conditionMatch.offset, trueMatch.offset) is not 0 ||
+            (conditionEnd != trueMatch.offset && trueEnd != conditionMatch.offset))
+        {
+            return null;
+        }
+
+        var combinedValues = new PineValue[Math.Max(conditionEnd, trueEnd)];
+
+        conditionMatch.expectedValues.Items.Span.CopyTo(combinedValues.AsSpan(conditionMatch.offset));
+        trueMatch.expectedValues.Items.Span.CopyTo(combinedValues.AsSpan(trueMatch.offset));
+
+        return BuildSliceMatch(conditionMatch.source, offset: 0, combinedValues);
+    }
+
+    private static (Expression source, PineValue expectedValue)? TryParseHeadEqualsLiteral(
+        Expression expression)
+    {
+        if (TryParseBinaryEqual(expression) is not { } equalArgs)
+            return null;
+
+        if (equalArgs.left is Expression.Builtin
+            {
+                Function: nameof(BuiltinFunction.head),
+                Input: var leftSource
+            } &&
+            equalArgs.right is Expression.Litral rightLiteral &&
+            CanRepresentHeadMatchAsListSlice(rightLiteral.Value))
+        {
+            return (leftSource, rightLiteral.Value);
+        }
+
+        if (equalArgs.right is Expression.Builtin
+            {
+                Function: nameof(BuiltinFunction.head),
+                Input: var rightSource
+            } &&
+            equalArgs.left is Expression.Litral leftLiteral &&
+            CanRepresentHeadMatchAsListSlice(leftLiteral.Value))
+        {
+            return (rightSource, leftLiteral.Value);
+        }
+
+        return null;
+    }
+
+    private static bool CanRepresentHeadMatchAsListSlice(PineValue expectedValue) =>
+        expectedValue is not PineValue.BlobValue { Bytes.Length: 1 };
+
+    private static Expression? TryParseNotEmpty(Expression expression)
+    {
+        if (TryParseBinaryEqual(expression) is not { } outerEqual)
+            return null;
+
+        Expression? emptyCheck = null;
+
+        if (IsFalseLiteral(outerEqual.left))
+            emptyCheck = outerEqual.right;
+
+        if (IsFalseLiteral(outerEqual.right))
+            emptyCheck = outerEqual.left;
+
+        if (emptyCheck is null ||
+            TryParseBinaryEqual(emptyCheck) is not { } emptyEqual)
+        {
+            return null;
+        }
+
+        if (TryParseLengthComparedWithZero(emptyEqual.left, emptyEqual.right) is { } leftSource)
+            return leftSource;
+
+        return TryParseLengthComparedWithZero(emptyEqual.right, emptyEqual.left);
+    }
+
+    private static Expression? TryParseLengthComparedWithZero(
+        Expression lengthExpression,
+        Expression zeroExpression)
+    {
+        if (lengthExpression is not Expression.Builtin
+            {
+                Function: nameof(BuiltinFunction.length),
+                Input: var source
+            } ||
+            zeroExpression is not Expression.Litral zeroLiteral ||
+            BuiltinFunction.SignedIntegerFromValueRelaxed(zeroLiteral.Value) is not { } zero ||
+            zero != 0)
+        {
+            return null;
+        }
+
+        return source;
+    }
+
+    private static (
+        Expression source,
+        int offset,
+        PineValue.ListValue expectedValues)? TryParseSliceMatch(
+        Expression expression)
+    {
+        if (TryParseBinaryEqual(expression) is not { } equalArgs)
+            return null;
+
+        if (TryParseSliceComparedWithLiteral(equalArgs.left, equalArgs.right) is { } leftMatch)
+            return leftMatch;
+
+        return TryParseSliceComparedWithLiteral(equalArgs.right, equalArgs.left);
+    }
+
+    private static (
+        Expression source,
+        int offset,
+        PineValue.ListValue expectedValues)? TryParseSliceComparedWithLiteral(
+        Expression sliceExpression,
+        Expression literalExpression)
+    {
+        if (sliceExpression is not Expression.Builtin
+            {
+                Function: nameof(BuiltinFunction.take),
+                Input: Expression.List { Items.Count: 2 } takeArguments
+            } ||
+            takeArguments.Items[0] is not Expression.Litral takeCountLiteral ||
+            BuiltinFunction.SignedIntegerFromValueRelaxed(takeCountLiteral.Value) is not { } takeCount ||
+            takeCount < 0 ||
+            literalExpression is not Expression.Litral
+            {
+                Value: PineValue.ListValue expectedValues
+            } ||
+            takeCount != expectedValues.Items.Length)
+        {
+            return null;
+        }
+
+        var source = takeArguments.Items[1];
+        var offset = 0;
+
+        if (source is Expression.Builtin
+            {
+                Function: nameof(BuiltinFunction.skip),
+                Input: Expression.List { Items.Count: 2 } skipArguments
+            } &&
+            skipArguments.Items[0] is Expression.Litral skipCountLiteral &&
+            BuiltinFunction.SignedIntegerFromValueRelaxed(skipCountLiteral.Value) is { } skipCount &&
+            skipCount >= 0 &&
+            skipCount <= int.MaxValue)
+        {
+            offset = (int)skipCount;
+            source = skipArguments.Items[1];
+        }
+
+        return (source, offset, expectedValues);
+    }
+
+    private static (Expression left, Expression right)? TryParseBinaryEqual(
+        Expression expression)
+    {
+        if (expression is Expression.Builtin
+            {
+                Function: nameof(BuiltinFunction.equal),
+                Input: Expression.List { Items.Count: 2 } arguments
+            })
+        {
+            return (arguments.Items[0], arguments.Items[1]);
+        }
+
+        return null;
+    }
+
+    private static bool IsFalseLiteral(Expression expression) =>
+        expression is Expression.Litral { Value: var value } &&
+        value == PineKernelValues.FalseValue;
+
+    private static Expression BuildSliceMatch(
+        Expression source,
+        int offset,
+        ReadOnlySpan<PineValue> expectedValues)
+    {
+        var sliceSource = source;
+
+        if (offset is not 0)
+        {
+            sliceSource =
+                Expression.BuiltinInst(
+                    nameof(BuiltinFunction.skip),
+                    Expression.ListInst(
+                        [
+                        Expression.LitralInst(IntegerEncoding.EncodeSignedInteger(offset)),
+                        source
+                        ]));
+        }
+
+        var slice =
+            Expression.BuiltinInst(
+                nameof(BuiltinFunction.take),
+                Expression.ListInst(
+                    [
+                    Expression.LitralInst(IntegerEncoding.EncodeSignedInteger(expectedValues.Length)),
+                    sliceSource
+                    ]));
+
+        return
+            Expression.BuiltinInst(
+                nameof(BuiltinFunction.equal),
+                Expression.ListInst(
+                    [
+                    slice,
+                    Expression.LitralInst(PineValue.List(expectedValues.ToArray()))
+                    ]));
     }
 
 
@@ -2391,11 +2652,27 @@ public class ReducePineExpression
                         args.Items[0] is Expression.Litral litCount &&
                         BuiltinFunction.SignedIntegerFromValueRelaxed(litCount.Value) is { } innerCount)
                     {
+                        if (innerCount > int.MaxValue)
+                            return null;
+
                         var innerCountClamped =
                             innerCount < 0 ? 0 : (int)innerCount;
 
+                        if (innerCountClamped > int.MaxValue - countClamped)
+                            return null;
+
+                        var combinedCount = countClamped + innerCountClamped;
+
                         return
-                            ApplyBuiltinFunctionSkipToAllBranches(countClamped + innerCountClamped, args.Items[1]);
+                            ApplyBuiltinFunctionSkipToAllBranches(combinedCount, args.Items[1])
+                            ??
+                            Expression.BuiltinInst(
+                                nameof(BuiltinFunction.skip),
+                                Expression.ListInst(
+                                    [
+                                    Expression.LitralInst(IntegerEncoding.EncodeSignedInteger(combinedCount)),
+                                    args.Items[1]
+                                    ]));
                     }
 
                     return null;

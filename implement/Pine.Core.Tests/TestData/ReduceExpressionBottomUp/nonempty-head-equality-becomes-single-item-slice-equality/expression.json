@@ -1,0 +1,77 @@
+{
+  "Conditional": [
+    {
+      "Builtin": [
+        "equal",
+        {
+          "List": [
+            [
+              {
+                "Builtin": [
+                  "head",
+                  {
+                    "Environment": []
+                  }
+                ]
+              },
+              {
+                "Litral": [
+                  71
+                ]
+              }
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "Litral": [
+        {
+          "AsBase64": "Ag=="
+        }
+      ]
+    },
+    {
+      "Builtin": [
+        "equal",
+        {
+          "List": [
+            [
+              {
+                "Builtin": [
+                  "equal",
+                  {
+                    "List": [
+                      [
+                        {
+                          "Builtin": [
+                            "length",
+                            {
+                              "Environment": []
+                            }
+                          ]
+                        },
+                        {
+                          "Litral": [
+                            0
+                          ]
+                        }
+                      ]
+                    ]
+                  }
+                ]
+              },
+              {
+                "Litral": [
+                  {
+                    "AsBase64": "Ag=="
+                  }
+                ]
+              }
+            ]
+          ]
+        }
+      ]
+    }
+  ]
+}

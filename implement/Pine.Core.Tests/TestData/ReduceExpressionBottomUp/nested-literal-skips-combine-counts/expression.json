@@ -1,0 +1,35 @@
+{
+  "Builtin": [
+    "skip",
+    {
+      "List": [
+        [
+          {
+            "Litral": [
+              1
+            ]
+          },
+          {
+            "Builtin": [
+              "skip",
+              {
+                "List": [
+                  [
+                    {
+                      "Litral": [
+                        1
+                      ]
+                    },
+                    {
+                      "Environment": []
+                    }
+                  ]
+                ]
+              }
+            ]
+          }
+        ]
+      ]
+    }
+  ]
+}

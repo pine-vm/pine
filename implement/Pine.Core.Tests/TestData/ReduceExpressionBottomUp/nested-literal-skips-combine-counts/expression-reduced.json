@@ -1,0 +1,19 @@
+{
+  "Builtin": [
+    "skip",
+    {
+      "List": [
+        [
+          {
+            "Litral": [
+              2
+            ]
+          },
+          {
+            "Environment": []
+          }
+        ]
+      ]
+    }
+  ]
+}

@@ -52,36 +52,15 @@ public class SequentialIREfficiencyTests
 
         renderedFrames.Should().Be(
             """
-            ff5a3d917543c32dd0923a70c3d7848c88817f68973641f1326e62eb62d732ca
-             0: Local_Get (0)
-             1: Skip_Head_Const (1)
-             2: Jump_If_Equal_Const (Blob [2] (0x0449 | int 73) , 3)
-             3: Push_Literal (Blob [1] (0x02))
-             4: Jump_Const (6)
-             5: Local_Get (0)
-             6: Skip_Const (1)
-             7: Local_Set (1)
-             8: Length_Equal_Const (0)
-             9: Equal_Binary_Const (Blob [1] (0x02))
-            10: Jump_If_Equal_Const (Blob [1] (0x04) , 3)
-            11: Push_Literal (Blob [1] (0x02))
-            12: Jump_Const (9)
-            13: Local_Get (0)
-            14: Head_Generic
-            15: Jump_If_Equal_Const (Blob [2] (0x0447 | int 71) , 3)
-            16: Push_Literal (Blob [1] (0x02))
-            17: Jump_Const (4)
-            18: Local_Get (0)
-            19: Length_Equal_Const (0)
-            20: Equal_Binary_Const (Blob [1] (0x02))
-            21: Jump_If_Equal_Const (Blob [1] (0x04) , 3)
-            22: Local_Get (0)
-            23: Return
-            24: Local_Get (0)
-            25: Skip_Const (1)
-            26: Local_Set (1)
-            27: Skip_Const (1)
-            28: Return
+            8820d1226a86c80b7508be9ec39dc2e006b3660b534a74ae52662a38780b4cb4
+            0: Local_Get (0)
+            1: Take_Const (2)
+            2: Jump_If_Equal_Const (List [2] (2) , 3)
+            3: Local_Get (0)
+            4: Return
+            5: Local_Get (0)
+            6: Skip_Const (2)
+            7: Return
             """);
     }
 
