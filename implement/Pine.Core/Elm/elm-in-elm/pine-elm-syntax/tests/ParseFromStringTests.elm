@@ -43,13 +43,77 @@ suite =
             declarationOrExpressionErrSuite
         , Test.describe "mixed line breaks"
             mixedLineBreakSuite
+        , Test.describe "parser-specific tokenization"
+            parserSpecificTokenizationSuite
         , Test.describe "literal and comment tokens"
             literalAndCommentTokenSuite
         , Test.describe "parseFile concrete model"
             concreteFileSuite
+        , Test.describe "documentation comment attachment"
+            documentationCommentSuite
         , Test.describe "parseFile abstract model"
             abstractFileSuite
         ]
+
+
+documentationCommentSuite : List Test
+documentationCommentSuite =
+    [ { title = "attaches documentation and excludes it from file comments"
+      , source = "module Main exposing (..)\n\n{-| docs -}\nvalue = 1"
+      , expectedDocumentation = Just "{-| docs -}"
+      , expectedComments = []
+      }
+    , { title = "ordinary comment after documentation prevents attachment"
+      , source = "module Main exposing (..)\n\nfirst = 1\n\n{-| docs -}\n-- note\nsecond = 2"
+      , expectedDocumentation = Nothing
+      , expectedComments = [ "{-| docs -}", "-- note" ]
+      }
+    , { title = "attaches latest documentation and retains earlier candidate"
+      , source = "module Main exposing (..)\n\nfirst = 1\n\n{-| earlier -}\n{-| latest -}\nsecond = 2"
+      , expectedDocumentation = Just "{-| latest -}"
+      , expectedComments = [ "{-| earlier -}" ]
+      }
+    ]
+        |> List.map
+            (\testCase ->
+                Test.test testCase.title <|
+                    \_ ->
+                        case ElmSyntax.Concrete.Parser.FromString.parseFile testCase.source of
+                            Ok file ->
+                                Expect.equal
+                                    ( testCase.expectedDocumentation, testCase.expectedComments )
+                                    ( lastDeclarationDocumentation file.declarations
+                                    , nodeStrings file.comments
+                                    )
+
+                            Err error ->
+                                Expect.fail ("Expected Ok, but got Err: " ++ error)
+            )
+
+
+lastDeclarationDocumentation : List (Node Declaration.Declaration) -> Maybe String
+lastDeclarationDocumentation declarations =
+    case List.reverse declarations of
+        Node _ (Declaration.FunctionDeclaration function) :: _ ->
+            case function.documentation of
+                Just (Node _ documentation) ->
+                    Just documentation
+
+                Nothing ->
+                    Nothing
+
+        _ ->
+            Nothing
+
+
+nodeStrings : List (Node String) -> List String
+nodeStrings nodes =
+    case nodes of
+        Node _ value :: rest ->
+            value :: nodeStrings rest
+
+        [] ->
+            []
 
 
 concreteFileSuite : List Test
@@ -437,6 +501,22 @@ expressionOkSuite =
                     ]
                 }
       }
+    , { input = "alfa ++ beta"
+      , expectedOk =
+            Expression.OperatorApplication
+                (Node (range 1 6 1 8) "++")
+                Infix.Right
+                (Node (range 1 1 1 5) (Expression.Identifier [] "alfa"))
+                (Node (range 1 9 1 13) (Expression.Identifier [] "beta"))
+      }
+    , { input = "alfa |> beta"
+      , expectedOk =
+            Expression.OperatorApplication
+                (Node (range 1 6 1 8) "|>")
+                Infix.Left
+                (Node (range 1 1 1 5) (Expression.Identifier [] "alfa"))
+                (Node (range 1 9 1 13) (Expression.Identifier [] "beta"))
+      }
     ]
         |> List.map
             (\testCase ->
@@ -607,6 +687,10 @@ declarationOrExpressionKindSuite =
     , ( "infix left 6 (+) = add", "Declaration/InfixDeclaration" )
     , ( "1 + 2", "Expression/OperatorApplication" )
     , ( "x", "Expression/Identifier" )
+    , ( "render { value = 1 }", "Expression/Application" )
+    , ( "Alpha.Beta.Gamma.Delta.value", "Expression/Identifier" )
+    , ( "value : Alpha.Beta.Gamma.Type\nvalue = Alpha.Beta.Gamma.value", "Declaration/FunctionDeclaration" )
+    , ( "case value of\n    Alpha.Beta.Gamma.Just x -> x", "Expression/CaseExpression" )
     ]
         |> List.map
             (\( input, expectedKind ) ->
@@ -690,11 +774,8 @@ mixedLineBreakSuite =
       , input = "a\nb\u{000D}\nc\u{000D}d"
       , expectedTokens =
             [ token Token.Identifier "a" 1 1 1 2
-            , token Token.Newline "\n" 1 2 2 1
             , token Token.Identifier "b" 2 1 2 2
-            , token Token.Newline "\n" 2 2 3 1
             , token Token.Identifier "c" 3 1 3 2
-            , token Token.Newline "\n" 3 2 4 1
             , token Token.Identifier "d" 4 1 4 2
             ]
       }
@@ -710,15 +791,80 @@ mixedLineBreakSuite =
                             Err err ->
                                 Expect.fail ("Expected Ok, but got Err: " ++ err)
             )
+        |> (\successfulTests ->
+                successfulTests
+                    ++ ([ ( "empty Unicode escape", "\"\\u{}\"" )
+                        , ( "surrogate Unicode escape", "\"\\u{D800}\"" )
+                        , ( "out-of-range Unicode escape", "\"\\u{110000}\"" )
+                        ]
+                            |> List.map
+                                (\( description, input ) ->
+                                    Test.test description <|
+                                        \_ ->
+                                            case TokensFromString.parseExpression input of
+                                                Ok actual ->
+                                                    Expect.fail ("Expected Err, but got Ok: " ++ Debug.toString actual)
+
+                                                Err _ ->
+                                                    Expect.pass
+                                )
+                       )
+           )
 
 
 threeLineIdentifierTokens : List Token.Token
 threeLineIdentifierTokens =
     [ token Token.Identifier "alpha" 1 1 1 6
-    , token Token.Newline "\n" 1 6 2 1
     , token Token.Identifier "beta" 2 1 2 5
-    , token Token.Newline "\n" 2 5 3 1
     , token Token.Identifier "gamma" 3 1 3 6
+    ]
+
+
+parserSpecificTokenizationSuite : List Test
+parserSpecificTokenizationSuite =
+    [ Test.test "tokenization omits whitespace and newlines while retaining positions" <|
+        \_ ->
+            case TokensFromString.parseExpression "a \nb" of
+                Ok actual ->
+                    Expect.equal
+                        [ token Token.Identifier "a" 1 1 1 2
+                        , token Token.Identifier "b" 2 1 2 2
+                        ]
+                        actual
+
+                Err err ->
+                    Expect.fail ("Expected Ok, but got Err: " ++ err)
+    , Test.test "omits whitespace and newlines while retaining comments" <|
+        \_ ->
+            case TokensFromString.parseExpression "alpha \n-- note\nbeta" of
+                Ok actual ->
+                    Expect.equal
+                        [ token Token.Identifier "alpha" 1 1 1 6
+                        , token Token.Comment "-- note" 2 1 2 8
+                        , token Token.Identifier "beta" 3 1 3 5
+                        ]
+                        actual
+
+                Err err ->
+                    Expect.fail ("Expected Ok, but got Err: " ++ err)
+    , Test.test "whitespace before minus preserves negation" <|
+        \_ ->
+            case ElmSyntax.Concrete.Parser.FromString.parseExpression "x -y" of
+                Ok actual ->
+                    Expect.equal
+                        [ "Application", "Identifier", "Negation", "Identifier" ]
+                        (expressionKinds actual)
+
+                Err err ->
+                    Expect.fail ("Expected Ok, but got Err: " ++ err)
+    , Test.test "adjacent minus remains an operator" <|
+        \_ ->
+            case ElmSyntax.Concrete.Parser.FromString.parseExpression "x-y" of
+                Ok actual ->
+                    Expect.equal "OperatorApplication" (expressionKind actual)
+
+                Err err ->
+                    Expect.fail ("Expected Ok, but got Err: " ++ err)
     ]
 
 
@@ -728,6 +874,22 @@ single-token expectations exercising the offset/String-based scanners directly.
 -}
 literalAndCommentTokenSuite : List Test
 literalAndCommentTokenSuite =
+    let
+        repeatedEscapeCount =
+            1000
+
+        repeatedEscapeRaw =
+            String.repeat repeatedEscapeCount "a\\nb\\t"
+
+        repeatedEscapeInput =
+            "\"" ++ repeatedEscapeRaw ++ "\""
+
+        repeatedCommentContent =
+            String.repeat 1000 "{-left-}right"
+
+        repeatedCommentInput =
+            "{-" ++ repeatedCommentContent ++ "-}"
+    in
     [ { description = "string literal with backslash escapes"
       , input = "\"a\\nb\\tc\""
       , expectedTokens =
@@ -765,6 +927,31 @@ literalAndCommentTokenSuite =
       , input = "{- outer\u{000D}\n {- inner -} end -}"
       , expectedTokens =
             [ token Token.Comment "{- outer\n {- inner -} end -}" 1 1 2 20 ]
+      }
+    , { description = "long string literal preserves decoded and raw chunk order"
+      , input = repeatedEscapeInput
+      , expectedTokens =
+            [ tokenWithRaw
+                Token.StringLiteral
+                (String.repeat repeatedEscapeCount "a\nb\t")
+                repeatedEscapeRaw
+                1
+                1
+                1
+                (String.length repeatedEscapeInput + 1)
+            ]
+      }
+    , { description = "long nested comment preserves chunk order"
+      , input = repeatedCommentInput
+      , expectedTokens =
+            [ token
+                Token.Comment
+                repeatedCommentInput
+                1
+                1
+                1
+                (String.length repeatedCommentInput + 1)
+            ]
       }
     ]
         |> List.map

@@ -44,8 +44,6 @@ import ElmSyntax.Concrete.Range exposing (Location, Range)
         Colon,
         Pipe,
         Comment,
-        Whitespace,
-        Newline,
         Lambda,
         Operator,
         Negation,
@@ -92,8 +90,6 @@ type TokenType
     | Colon
     | Pipe
     | Comment
-    | Whitespace
-    | Newline
     | Lambda
     | Operator
     | Negation

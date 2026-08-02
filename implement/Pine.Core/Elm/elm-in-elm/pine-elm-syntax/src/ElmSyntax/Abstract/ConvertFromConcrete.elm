@@ -36,8 +36,8 @@ import ElmSyntax.Concrete.TypeAnnotation as ConcreteTypeAnnotation
 fromFile : ConcreteFile.File -> AbstractFile.File
 fromFile concrete =
     { moduleDefinition = fromModule (Node.value concrete.moduleDefinition)
-    , imports = List.map (Node.value >> fromImport) concrete.imports
-    , declarations = List.map (Node.value >> fromDeclaration) concrete.declarations
+    , imports = importsFromConcrete concrete.imports
+    , declarations = declarationsFromConcrete concrete.declarations
     }
 
 
@@ -45,11 +45,19 @@ fromImport : ConcreteImport.Import -> AbstractImport.Import
 fromImport concrete =
     { moduleName = Node.value concrete.moduleName
     , moduleAlias =
-        concrete.moduleAlias
-            |> Maybe.map (Tuple.second >> Node.value)
+        case concrete.moduleAlias of
+            Just ( _, moduleAlias ) ->
+                Just (Node.value moduleAlias)
+
+            Nothing ->
+                Nothing
     , exposingList =
-        concrete.exposingList
-            |> Maybe.map (Tuple.second >> Node.value >> fromExposing)
+        case concrete.exposingList of
+            Just ( _, exposingList ) ->
+                Just (fromExposing (Node.value exposingList))
+
+            Nothing ->
+                Nothing
     }
 
 
@@ -66,8 +74,8 @@ fromModule concrete =
             AbstractModule.EffectModule
                 { moduleName = Node.value data.moduleName
                 , exposingList = fromExposing (Node.value data.exposingList)
-                , command = Maybe.map Node.value data.command
-                , subscription = Maybe.map Node.value data.subscription
+                , command = maybeNodeValue data.command
+                , subscription = maybeNodeValue data.subscription
                 }
 
 
@@ -79,10 +87,7 @@ fromExposing exposing_ =
 
         ConcreteExposing.Explicit _ nodes _ ->
             AbstractExposing.Explicit
-                (nodes
-                    |> separatedToList
-                    |> List.map (Node.value >> topLevelExposeFromConcrete)
-                )
+                (topLevelExposesFromConcrete nodes)
 
 
 fromDeclaration : ConcreteDeclaration.Declaration -> AbstractDeclaration.Declaration
@@ -123,14 +128,14 @@ fromTypeAnnotation concrete =
             AbstractTypeAnnotation.Typed
                 moduleName
                 name
-                (List.map (Node.value >> fromTypeAnnotation) arguments)
+                (typeAnnotationsFromConcrete arguments)
 
         ConcreteTypeAnnotation.Unit ->
             AbstractTypeAnnotation.Unit
 
         ConcreteTypeAnnotation.Tupled annotations ->
             AbstractTypeAnnotation.Tupled
-                (mapSeparatedNode fromTypeAnnotation annotations)
+                (typeAnnotationsFromSeparated annotations)
 
         ConcreteTypeAnnotation.Record definition ->
             AbstractTypeAnnotation.Record
@@ -149,11 +154,14 @@ fromTypeAnnotation concrete =
 
 fromFunctionStruct : ConcreteExpression.FunctionStruct -> AbstractExpression.FunctionStruct
 fromFunctionStruct concrete =
-    { signature = Maybe.map (Node.value >> signatureFromConcrete) concrete.signature
-    , declaration =
-        concrete.declaration
-            |> Node.value
-            |> functionImplementationFromConcrete
+    { signature =
+        case concrete.signature of
+            Just signature ->
+                Just (signatureFromConcrete (Node.value signature))
+
+            Nothing ->
+                Nothing
+    , declaration = functionImplementationFromConcrete (Node.value concrete.declaration)
     }
 
 
@@ -186,11 +194,11 @@ fromPattern concrete =
 
         ConcretePattern.TuplePattern elements ->
             AbstractPattern.TuplePattern
-                (mapSeparatedNode fromPattern elements)
+                (patternsFromSeparated elements)
 
         ConcretePattern.RecordPattern fields ->
             AbstractPattern.RecordPattern
-                (mapSeparatedNode identity fields)
+                (nodeStringValuesFromSeparated fields)
 
         ConcretePattern.UnConsPattern head _ tail ->
             AbstractPattern.UnConsPattern
@@ -199,12 +207,12 @@ fromPattern concrete =
 
         ConcretePattern.ListPattern elements ->
             AbstractPattern.ListPattern
-                (mapSeparatedNode fromPattern elements)
+                (patternsFromSeparated elements)
 
         ConcretePattern.NamedPattern name arguments ->
             AbstractPattern.NamedPattern
                 name
-                (List.map (Node.value >> fromPattern) arguments)
+                (patternsFromConcrete arguments)
 
         ConcretePattern.AsPattern pattern _ name ->
             AbstractPattern.AsPattern
@@ -242,7 +250,7 @@ fromExpression concrete =
 
         ConcreteExpression.ListExpr elements ->
             AbstractExpression.ListExpr
-                (mapSeparatedNode fromExpression elements)
+                (expressionsFromSeparated elements)
 
         ConcreteExpression.Identifier moduleName name ->
             AbstractExpression.Identifier moduleName name
@@ -262,7 +270,7 @@ fromExpression concrete =
         ConcreteExpression.Application function arguments ->
             AbstractExpression.Application
                 (fromExpression (Node.value function))
-                (List.map (Node.value >> fromExpression) arguments)
+                (expressionsFromConcrete arguments)
 
         ConcreteExpression.OperatorApplication operator direction left right ->
             AbstractExpression.OperatorApplication
@@ -273,24 +281,21 @@ fromExpression concrete =
 
         ConcreteExpression.TupledExpression elements ->
             AbstractExpression.TupledExpression
-                (mapSeparatedNode fromExpression elements)
+                (expressionsFromSeparated elements)
 
         ConcreteExpression.LambdaExpression lambda ->
             AbstractExpression.LambdaExpression
-                (List.map (Node.value >> fromPattern) lambda.arguments)
+                (patternsFromConcrete lambda.arguments)
                 (fromExpression (Node.value lambda.expression))
 
         ConcreteExpression.CaseExpression caseBlock ->
             AbstractExpression.CaseExpression
                 (fromExpression (Node.value caseBlock.expression))
-                (List.map caseFromConcrete caseBlock.cases)
+                (casesFromConcrete caseBlock.cases)
 
         ConcreteExpression.LetExpression letBlock ->
             AbstractExpression.LetExpression
-                (List.map
-                    (Node.value >> letDeclarationFromConcrete)
-                    letBlock.declarations
-                )
+                (letDeclarationsFromConcrete letBlock.declarations)
                 (fromExpression (Node.value letBlock.expression))
 
         ConcreteExpression.RecordExpr fields ->
@@ -353,7 +358,7 @@ topLevelExposeFromConcrete expose =
 typeAliasFromConcrete : ConcreteDeclaration.TypeAlias -> AbstractDeclaration.TypeAlias
 typeAliasFromConcrete concrete =
     { name = Node.value concrete.name
-    , generics = List.map Node.value concrete.generics
+    , generics = nodeStringValues concrete.generics
     , typeAnnotation =
         fromTypeAnnotation (Node.value concrete.typeAnnotation)
     }
@@ -362,21 +367,15 @@ typeAliasFromConcrete concrete =
 choiceTypeFromConcrete : ConcreteDeclaration.ChoiceStruct -> AbstractDeclaration.ChoiceTypeStruct
 choiceTypeFromConcrete concrete =
     { name = Node.value concrete.name
-    , generics = List.map Node.value concrete.generics
-    , constructors =
-        concrete.constructors
-            |> separatedToList
-            |> List.map (Node.value >> valueConstructorFromConcrete)
+    , generics = nodeStringValues concrete.generics
+    , constructors = valueConstructorsFromConcrete concrete.constructors
     }
 
 
 valueConstructorFromConcrete : ConcreteDeclaration.ValueConstructor -> AbstractDeclaration.ValueConstructor
 valueConstructorFromConcrete concrete =
     { name = Node.value concrete.name
-    , arguments =
-        List.map
-            (Node.value >> fromTypeAnnotation)
-            concrete.arguments
+    , arguments = typeAnnotationsFromConcrete concrete.arguments
     }
 
 
@@ -390,19 +389,13 @@ signatureFromConcrete concrete =
 
 recordDefinitionFromConcrete : ConcreteTypeAnnotation.RecordDefinition -> AbstractTypeAnnotation.RecordDefinition
 recordDefinitionFromConcrete definition =
-    mapSeparatedNode
-        (\field ->
-            { fieldName = Node.value field.fieldName
-            , fieldType = fromTypeAnnotation (Node.value field.fieldType)
-            }
-        )
-        definition
+    recordFieldsFromConcrete definition
 
 
 functionImplementationFromConcrete : ConcreteExpression.FunctionImplementation -> AbstractExpression.FunctionImplementation
 functionImplementationFromConcrete concrete =
     { name = Node.value concrete.name
-    , arguments = List.map (Node.value >> fromPattern) concrete.arguments
+    , arguments = patternsFromConcrete concrete.arguments
     , expression = fromExpression (Node.value concrete.expression)
     }
 
@@ -428,15 +421,7 @@ letDeclarationFromConcrete concrete =
 
 recordSettersFromConcrete : SeparatedSyntaxList.SeparatedSyntaxList ConcreteExpression.RecordExprField -> List AbstractExpression.RecordSetter
 recordSettersFromConcrete fields =
-    fields
-        |> separatedToList
-        |> List.map
-            (\field ->
-                { fieldName = Node.value field.fieldName
-                , value = fromExpression (Node.value field.valueExpr)
-                }
-            )
-        |> List.sortBy .fieldName
+    sortRecordSetters (unsortedRecordSettersFromConcrete fields)
 
 
 infixDirectionFromConcrete : ConcreteInfix.InfixDirection -> AbstractInfix.InfixDirection
@@ -464,21 +449,30 @@ parseIntegerLiteral literalText =
 
             else
                 ( 1, trimmed )
-    in
-    (if String.startsWith "0x" absolute || String.startsWith "0X" absolute then
-        hexStringToInt (String.dropLeft 2 absolute)
 
-     else
-        String.toInt absolute
-    )
-        |> Maybe.map ((*) sign)
-        |> Maybe.withDefault 0
+        parsedAbsolute =
+            if String.startsWith "0x" absolute || String.startsWith "0X" absolute then
+                hexStringToInt (String.dropLeft 2 absolute)
+
+            else
+                String.toInt absolute
+    in
+    case parsedAbsolute of
+        Just value ->
+            sign * value
+
+        Nothing ->
+            0
 
 
 parseFloatLiteral : String -> Float
 parseFloatLiteral literalText =
-    String.toFloat (String.trim literalText)
-        |> Maybe.withDefault 0
+    case String.toFloat (String.trim literalText) of
+        Just value ->
+            value
+
+        Nothing ->
+            0
 
 
 stripLeadingDot : String -> String
@@ -493,15 +487,22 @@ stripLeadingDot functionName =
 
 hexStringToInt : String -> Maybe Int
 hexStringToInt string =
-    List.foldl
-        (\char accumulated ->
-            Maybe.map2
-                (\value digit -> value * 16 + digit)
-                accumulated
-                (hexDigit char)
-        )
-        (Just 0)
-        (String.toList string)
+    hexStringToIntHelp 0 string
+
+
+hexStringToIntHelp : Int -> String -> Maybe Int
+hexStringToIntHelp value remaining =
+    case String.uncons remaining of
+        Just ( char, rest ) ->
+            case hexDigit char of
+                Just digit ->
+                    hexStringToIntHelp (value * 16 + digit) rest
+
+                Nothing ->
+                    Nothing
+
+        Nothing ->
+            Just value
 
 
 hexDigit : Char -> Maybe Int
@@ -523,18 +524,320 @@ hexDigit char =
         Nothing
 
 
-mapSeparatedNode : (a -> b) -> SeparatedSyntaxList.SeparatedSyntaxList (Node.Node a) -> List b
-mapSeparatedNode mapNode separated =
-    separated
-        |> separatedToList
-        |> List.map (Node.value >> mapNode)
+importsFromConcrete : List (Node.Node ConcreteImport.Import) -> List AbstractImport.Import
+importsFromConcrete imports =
+    case imports of
+        importNode :: rest ->
+            fromImport (Node.value importNode) :: importsFromConcrete rest
+
+        [] ->
+            []
 
 
-separatedToList : SeparatedSyntaxList.SeparatedSyntaxList a -> List a
-separatedToList separated =
-    case separated of
+declarationsFromConcrete : List (Node.Node ConcreteDeclaration.Declaration) -> List AbstractDeclaration.Declaration
+declarationsFromConcrete declarations =
+    case declarations of
+        declaration :: rest ->
+            fromDeclaration (Node.value declaration) :: declarationsFromConcrete rest
+
+        [] ->
+            []
+
+
+maybeNodeValue : Maybe (Node.Node a) -> Maybe a
+maybeNodeValue maybeNode =
+    case maybeNode of
+        Just node ->
+            Just (Node.value node)
+
+        Nothing ->
+            Nothing
+
+
+topLevelExposesFromConcrete : SeparatedSyntaxList.SeparatedSyntaxList (Node.Node ConcreteExposing.TopLevelExpose) -> List AbstractExposing.TopLevelExpose
+topLevelExposesFromConcrete exposes =
+    case exposes of
         SeparatedSyntaxList.Empty ->
             []
 
         SeparatedSyntaxList.NonEmpty first rest ->
-            first :: List.map Tuple.second rest
+            topLevelExposeFromConcrete (Node.value first)
+                :: topLevelExposesFromConcreteRest rest
+
+
+topLevelExposesFromConcreteRest : List ( a, Node.Node ConcreteExposing.TopLevelExpose ) -> List AbstractExposing.TopLevelExpose
+topLevelExposesFromConcreteRest exposes =
+    case exposes of
+        ( _, expose ) :: rest ->
+            topLevelExposeFromConcrete (Node.value expose)
+                :: topLevelExposesFromConcreteRest rest
+
+        [] ->
+            []
+
+
+typeAnnotationsFromConcrete : List (Node.Node ConcreteTypeAnnotation.TypeAnnotation) -> List AbstractTypeAnnotation.TypeAnnotation
+typeAnnotationsFromConcrete annotations =
+    case annotations of
+        annotation :: rest ->
+            fromTypeAnnotation (Node.value annotation) :: typeAnnotationsFromConcrete rest
+
+        [] ->
+            []
+
+
+typeAnnotationsFromSeparated : SeparatedSyntaxList.SeparatedSyntaxList (Node.Node ConcreteTypeAnnotation.TypeAnnotation) -> List AbstractTypeAnnotation.TypeAnnotation
+typeAnnotationsFromSeparated annotations =
+    case annotations of
+        SeparatedSyntaxList.Empty ->
+            []
+
+        SeparatedSyntaxList.NonEmpty first rest ->
+            fromTypeAnnotation (Node.value first)
+                :: typeAnnotationsFromSeparatedRest rest
+
+
+typeAnnotationsFromSeparatedRest : List ( a, Node.Node ConcreteTypeAnnotation.TypeAnnotation ) -> List AbstractTypeAnnotation.TypeAnnotation
+typeAnnotationsFromSeparatedRest annotations =
+    case annotations of
+        ( _, annotation ) :: rest ->
+            fromTypeAnnotation (Node.value annotation)
+                :: typeAnnotationsFromSeparatedRest rest
+
+        [] ->
+            []
+
+
+patternsFromConcrete : List (Node.Node ConcretePattern.Pattern) -> List AbstractPattern.Pattern
+patternsFromConcrete patterns =
+    case patterns of
+        pattern :: rest ->
+            fromPattern (Node.value pattern) :: patternsFromConcrete rest
+
+        [] ->
+            []
+
+
+patternsFromSeparated : SeparatedSyntaxList.SeparatedSyntaxList (Node.Node ConcretePattern.Pattern) -> List AbstractPattern.Pattern
+patternsFromSeparated patterns =
+    case patterns of
+        SeparatedSyntaxList.Empty ->
+            []
+
+        SeparatedSyntaxList.NonEmpty first rest ->
+            fromPattern (Node.value first) :: patternsFromSeparatedRest rest
+
+
+patternsFromSeparatedRest : List ( a, Node.Node ConcretePattern.Pattern ) -> List AbstractPattern.Pattern
+patternsFromSeparatedRest patterns =
+    case patterns of
+        ( _, pattern ) :: rest ->
+            fromPattern (Node.value pattern) :: patternsFromSeparatedRest rest
+
+        [] ->
+            []
+
+
+nodeStringValues : List (Node.Node String) -> List String
+nodeStringValues nodes =
+    case nodes of
+        node :: rest ->
+            Node.value node :: nodeStringValues rest
+
+        [] ->
+            []
+
+
+nodeStringValuesFromSeparated : SeparatedSyntaxList.SeparatedSyntaxList (Node.Node String) -> List String
+nodeStringValuesFromSeparated nodes =
+    case nodes of
+        SeparatedSyntaxList.Empty ->
+            []
+
+        SeparatedSyntaxList.NonEmpty first rest ->
+            Node.value first :: nodeStringValuesFromSeparatedRest rest
+
+
+nodeStringValuesFromSeparatedRest : List ( a, Node.Node String ) -> List String
+nodeStringValuesFromSeparatedRest nodes =
+    case nodes of
+        ( _, node ) :: rest ->
+            Node.value node :: nodeStringValuesFromSeparatedRest rest
+
+        [] ->
+            []
+
+
+expressionsFromConcrete : List (Node.Node ConcreteExpression.Expression) -> List AbstractExpression.Expression
+expressionsFromConcrete expressions =
+    case expressions of
+        expression :: rest ->
+            fromExpression (Node.value expression) :: expressionsFromConcrete rest
+
+        [] ->
+            []
+
+
+expressionsFromSeparated : SeparatedSyntaxList.SeparatedSyntaxList (Node.Node ConcreteExpression.Expression) -> List AbstractExpression.Expression
+expressionsFromSeparated expressions =
+    case expressions of
+        SeparatedSyntaxList.Empty ->
+            []
+
+        SeparatedSyntaxList.NonEmpty first rest ->
+            fromExpression (Node.value first) :: expressionsFromSeparatedRest rest
+
+
+expressionsFromSeparatedRest : List ( a, Node.Node ConcreteExpression.Expression ) -> List AbstractExpression.Expression
+expressionsFromSeparatedRest expressions =
+    case expressions of
+        ( _, expression ) :: rest ->
+            fromExpression (Node.value expression) :: expressionsFromSeparatedRest rest
+
+        [] ->
+            []
+
+
+casesFromConcrete : List ConcreteExpression.Case -> List AbstractExpression.Case
+casesFromConcrete cases =
+    case cases of
+        case_ :: rest ->
+            caseFromConcrete case_ :: casesFromConcrete rest
+
+        [] ->
+            []
+
+
+letDeclarationsFromConcrete : List (Node.Node ConcreteExpression.LetDeclaration) -> List AbstractExpression.LetDeclaration
+letDeclarationsFromConcrete declarations =
+    case declarations of
+        declaration :: rest ->
+            letDeclarationFromConcrete (Node.value declaration)
+                :: letDeclarationsFromConcrete rest
+
+        [] ->
+            []
+
+
+valueConstructorsFromConcrete : SeparatedSyntaxList.SeparatedSyntaxList (Node.Node ConcreteDeclaration.ValueConstructor) -> List AbstractDeclaration.ValueConstructor
+valueConstructorsFromConcrete constructors =
+    case constructors of
+        SeparatedSyntaxList.Empty ->
+            []
+
+        SeparatedSyntaxList.NonEmpty first rest ->
+            valueConstructorFromConcrete (Node.value first)
+                :: valueConstructorsFromConcreteRest rest
+
+
+valueConstructorsFromConcreteRest : List ( a, Node.Node ConcreteDeclaration.ValueConstructor ) -> List AbstractDeclaration.ValueConstructor
+valueConstructorsFromConcreteRest constructors =
+    case constructors of
+        ( _, constructor ) :: rest ->
+            valueConstructorFromConcrete (Node.value constructor)
+                :: valueConstructorsFromConcreteRest rest
+
+        [] ->
+            []
+
+
+recordFieldsFromConcrete : ConcreteTypeAnnotation.RecordDefinition -> AbstractTypeAnnotation.RecordDefinition
+recordFieldsFromConcrete fields =
+    case fields of
+        SeparatedSyntaxList.Empty ->
+            []
+
+        SeparatedSyntaxList.NonEmpty first rest ->
+            recordFieldFromConcrete (Node.value first) :: recordFieldsFromConcreteRest rest
+
+
+recordFieldsFromConcreteRest : List ( a, Node.Node ConcreteTypeAnnotation.RecordField ) -> AbstractTypeAnnotation.RecordDefinition
+recordFieldsFromConcreteRest fields =
+    case fields of
+        ( _, field ) :: rest ->
+            recordFieldFromConcrete (Node.value field) :: recordFieldsFromConcreteRest rest
+
+        [] ->
+            []
+
+
+recordFieldFromConcrete : ConcreteTypeAnnotation.RecordField -> AbstractTypeAnnotation.RecordField
+recordFieldFromConcrete field =
+    { fieldName = Node.value field.fieldName
+    , fieldType = fromTypeAnnotation (Node.value field.fieldType)
+    }
+
+
+unsortedRecordSettersFromConcrete : SeparatedSyntaxList.SeparatedSyntaxList ConcreteExpression.RecordExprField -> List AbstractExpression.RecordSetter
+unsortedRecordSettersFromConcrete fields =
+    case fields of
+        SeparatedSyntaxList.Empty ->
+            []
+
+        SeparatedSyntaxList.NonEmpty first rest ->
+            recordSetterFromConcrete first :: recordSettersFromConcreteRest rest
+
+
+recordSettersFromConcreteRest : List ( a, ConcreteExpression.RecordExprField ) -> List AbstractExpression.RecordSetter
+recordSettersFromConcreteRest fields =
+    case fields of
+        ( _, field ) :: rest ->
+            recordSetterFromConcrete field :: recordSettersFromConcreteRest rest
+
+        [] ->
+            []
+
+
+recordSetterFromConcrete : ConcreteExpression.RecordExprField -> AbstractExpression.RecordSetter
+recordSetterFromConcrete field =
+    { fieldName = Node.value field.fieldName
+    , value = fromExpression (Node.value field.valueExpr)
+    }
+
+
+sortRecordSetters : List AbstractExpression.RecordSetter -> List AbstractExpression.RecordSetter
+sortRecordSetters setters =
+    case setters of
+        [] ->
+            []
+
+        [ _ ] ->
+            setters
+
+        _ ->
+            let
+                ( left, right ) =
+                    splitRecordSetters (List.length setters // 2) setters []
+            in
+            mergeRecordSetters (sortRecordSetters left) (sortRecordSetters right)
+
+
+splitRecordSetters : Int -> List AbstractExpression.RecordSetter -> List AbstractExpression.RecordSetter -> ( List AbstractExpression.RecordSetter, List AbstractExpression.RecordSetter )
+splitRecordSetters remainingCount remaining leftRev =
+    if remainingCount <= 0 then
+        ( List.reverse leftRev, remaining )
+
+    else
+        case remaining of
+            setter :: rest ->
+                splitRecordSetters (remainingCount - 1) rest (setter :: leftRev)
+
+            [] ->
+                ( List.reverse leftRev, [] )
+
+
+mergeRecordSetters : List AbstractExpression.RecordSetter -> List AbstractExpression.RecordSetter -> List AbstractExpression.RecordSetter
+mergeRecordSetters left right =
+    case ( left, right ) of
+        ( [], _ ) ->
+            right
+
+        ( _, [] ) ->
+            left
+
+        ( leftFirst :: leftRest, rightFirst :: rightRest ) ->
+            if leftFirst.fieldName <= rightFirst.fieldName then
+                leftFirst :: mergeRecordSetters leftRest right
+
+            else
+                rightFirst :: mergeRecordSetters left rightRest

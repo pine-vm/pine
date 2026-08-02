@@ -69,28 +69,8 @@ parseFileTokens tokens =
 
                         Ok ( declarations, documentationComments ) ->
                             let
-                                isDocumentationComment token =
-                                    List.any
-                                        (\documentation ->
-                                            let
-                                                (Node documentationRange _) =
-                                                    documentation
-                                            in
-                                            tokenRange token == documentationRange
-                                        )
-                                        documentationComments
-
                                 comments =
-                                    tokens
-                                        |> List.filter
-                                            (\token ->
-                                                token.tokenType == Token.Comment
-                                                    && not (isDocumentationComment token)
-                                            )
-                                        |> List.map
-                                            (\token ->
-                                                Node (tokenRange token) token.lexeme
-                                            )
+                                    commentsExcludingDocumentation documentationComments tokens
                             in
                             Ok
                                 { moduleDefinition = moduleDefinition
@@ -99,6 +79,52 @@ parseFileTokens tokens =
                                 , comments = comments
                                 , incompleteDeclarations = []
                                 }
+
+
+commentsExcludingDocumentation : List (Node String) -> List Token.Token -> List (Node String)
+commentsExcludingDocumentation documentationComments tokens =
+    case tokens of
+        token :: rest ->
+            if token.tokenType == Token.Comment then
+                commentsExcludingDocumentationAtComment documentationComments token rest
+
+            else
+                commentsExcludingDocumentation documentationComments rest
+
+        [] ->
+            []
+
+
+commentsExcludingDocumentationAtComment :
+    List (Node String)
+    -> Token.Token
+    -> List Token.Token
+    -> List (Node String)
+commentsExcludingDocumentationAtComment documentationComments token remainingTokens =
+    case documentationComments of
+        (Node documentationRange _) :: remainingDocumentationComments ->
+            if
+                token.start == documentationRange.start
+                    && token.end == documentationRange.end
+            then
+                commentsExcludingDocumentation remainingDocumentationComments remainingTokens
+
+            else if locationBefore documentationRange.start token.start then
+                commentsExcludingDocumentationAtComment remainingDocumentationComments token remainingTokens
+
+            else
+                Node (tokenRange token) token.lexeme
+                    :: commentsExcludingDocumentation documentationComments remainingTokens
+
+        [] ->
+            Node (tokenRange token) token.lexeme
+                :: commentsExcludingDocumentation [] remainingTokens
+
+
+locationBefore : Location -> Location -> Bool
+locationBefore left right =
+    left.row < right.row
+        || (left.row == right.row && left.column < right.column)
 
 
 parseImports :
@@ -188,43 +214,71 @@ parseFileDeclarations declarationsRev documentationCommentsRev previousRangeEndR
 
 documentationCommentBefore : Maybe Int -> Int -> List Token.Token -> Maybe (Node String)
 documentationCommentBefore previousRangeEndRow declarationRow tokens =
-    let
-        leadingComments =
-            tokens
-                |> takeLeadingTrivia
-                |> List.filter (\token -> token.tokenType == Token.Comment)
+    case findAttachableDocumentationCommentToken previousRangeEndRow declarationRow tokens Nothing of
+        Just comment ->
+            Just (Node (tokenRange comment) comment.lexeme)
 
-        canAttach token =
-            let
-                hasInterveningComment =
-                    List.any
-                        (\other ->
-                            not (String.startsWith "{-|" other.lexeme)
-                                && other.start.row
-                                > token.end.row
-                        )
-                        leadingComments
+        Nothing ->
+            Nothing
 
-                isAfterPreviousRange =
-                    case previousRangeEndRow of
-                        Nothing ->
-                            token.end.row + 1 == declarationRow
 
-                        Just previousEndRow ->
-                            previousEndRow < token.end.row
-            in
-            String.startsWith "{-|" token.lexeme
-                && token.end.row
-                < declarationRow
-                && isAfterPreviousRange
-                && not hasInterveningComment
-    in
-    case List.reverse (List.filter canAttach leadingComments) of
-        token :: _ ->
-            Just (Node (tokenRange token) token.lexeme)
+findAttachableDocumentationCommentToken :
+    Maybe Int
+    -> Int
+    -> List Token.Token
+    -> Maybe Token.Token
+    -> Maybe Token.Token
+findAttachableDocumentationCommentToken previousRangeEndRow declarationRow tokens latestMatch =
+    case tokens of
+        comment :: rest ->
+            if comment.tokenType /= Token.Comment then
+                latestMatch
+
+            else if String.startsWith "{-|" comment.lexeme then
+                let
+                    isAfterPreviousRange =
+                        case previousRangeEndRow of
+                            Nothing ->
+                                comment.end.row + 1 == declarationRow
+
+                            Just previousEndRow ->
+                                previousEndRow < comment.end.row
+
+                    nextLatestMatch =
+                        if comment.end.row < declarationRow && isAfterPreviousRange then
+                            Just comment
+
+                        else
+                            latestMatch
+                in
+                findAttachableDocumentationCommentToken
+                    previousRangeEndRow
+                    declarationRow
+                    rest
+                    nextLatestMatch
+
+            else
+                let
+                    nextLatestMatch =
+                        case latestMatch of
+                            Just documentationComment ->
+                                if comment.start.row > documentationComment.end.row then
+                                    Nothing
+
+                                else
+                                    latestMatch
+
+                            Nothing ->
+                                Nothing
+                in
+                findAttachableDocumentationCommentToken
+                    previousRangeEndRow
+                    declarationRow
+                    rest
+                    nextLatestMatch
 
         [] ->
-            Nothing
+            latestMatch
 
 
 takeLeadingTrivia : List Token.Token -> List Token.Token
@@ -345,21 +399,26 @@ parseModuleTokens tokens =
                 parseEffectModule tokens
 
             else if firstToken.tokenType == Token.Identifier && firstToken.lexeme == "port" then
-                parseDefaultModule Module.PortModule "port" tokens
+                parseDefaultModule PortDefaultModule "port" tokens
 
             else
-                parseDefaultModule Module.NormalModule "module" tokens
+                parseDefaultModule NormalDefaultModule "module" tokens
 
         [] ->
             Err "Expected a module declaration."
 
 
+type DefaultModuleKind
+    = NormalDefaultModule
+    | PortDefaultModule
+
+
 parseDefaultModule :
-    (Module.DefaultModuleData -> Module.Module)
+    DefaultModuleKind
     -> String
     -> List Token.Token
     -> Result String ( Node Module.Module, List Token.Token )
-parseDefaultModule moduleConstructor firstKeyword tokens =
+parseDefaultModule moduleKind firstKeyword tokens =
     case consumeKeyword firstKeyword tokens of
         Err error ->
             Err error
@@ -396,17 +455,26 @@ parseDefaultModule moduleConstructor firstKeyword tokens =
                                     let
                                         (Node exposingRange _) =
                                             exposingList
+
+                                        moduleData =
+                                            { moduleName = moduleName
+                                            , exposingList = exposingList
+                                            }
+
+                                        parsedModule =
+                                            case moduleKind of
+                                                NormalDefaultModule ->
+                                                    Module.NormalModule moduleData
+
+                                                PortDefaultModule ->
+                                                    Module.PortModule moduleData
                                     in
                                     Ok
                                         ( Node
                                             { start = firstToken.start
                                             , end = exposingRange.end
                                             }
-                                            (moduleConstructor
-                                                { moduleName = moduleName
-                                                , exposingList = exposingList
-                                                }
-                                            )
+                                            parsedModule
                                         , remaining
                                         )
 
@@ -934,7 +1002,7 @@ parseUpperExpose nameToken tokens =
 
 parseDeclarationOrExpression : String -> Result String DeclarationOrExpression
 parseDeclarationOrExpression input =
-    case TokensFromString.parseExpression input of
+    case TokensFromString.parseExpressionOrDeclaration input of
         Ok tokens ->
             parseDeclarationOrExpressionTokens tokens
 
@@ -978,7 +1046,7 @@ parseDeclarationOrExpressionTokens tokens =
                     Err error ->
                         Err ("Failed to parse declaration or expression: " ++ error)
 
-            else
+            else if tokensStartFunctionDeclaration tokens then
                 case parseDeclarationTokens tokens of
                     Ok ( declaration, remaining ) ->
                         case dropTrivia remaining of
@@ -990,6 +1058,71 @@ parseDeclarationOrExpressionTokens tokens =
 
                     Err _ ->
                         parseAsExpressionFallback tokens
+
+            else
+                parseAsExpressionFallback tokens
+
+
+tokensStartFunctionDeclaration : List Token.Token -> Bool
+tokensStartFunctionDeclaration tokens =
+    case dropTrivia tokens of
+        firstToken :: rest ->
+            if
+                firstToken.tokenType
+                    /= Token.Identifier
+                    || firstToken.lexeme
+                    == "let"
+                    || firstToken.lexeme
+                    == "case"
+                    || firstToken.lexeme
+                    == "if"
+            then
+                False
+
+            else
+                case dropTrivia rest of
+                    secondToken :: _ ->
+                        secondToken.tokenType == Token.Colon
+                            || containsTopLevelEqual 0 rest
+
+                    [] ->
+                        False
+
+        [] ->
+            False
+
+
+containsTopLevelEqual : Int -> List Token.Token -> Bool
+containsTopLevelEqual delimiterDepth tokens =
+    case tokens of
+        token :: rest ->
+            case token.tokenType of
+                Token.OpenParen ->
+                    containsTopLevelEqual (delimiterDepth + 1) rest
+
+                Token.OpenBrace ->
+                    containsTopLevelEqual (delimiterDepth + 1) rest
+
+                Token.OpenBracket ->
+                    containsTopLevelEqual (delimiterDepth + 1) rest
+
+                Token.CloseParen ->
+                    containsTopLevelEqual (max 0 (delimiterDepth - 1)) rest
+
+                Token.CloseBrace ->
+                    containsTopLevelEqual (max 0 (delimiterDepth - 1)) rest
+
+                Token.CloseBracket ->
+                    containsTopLevelEqual (max 0 (delimiterDepth - 1)) rest
+
+                Token.Equal ->
+                    delimiterDepth == 0
+
+                _ ->
+                    containsTopLevelEqual delimiterDepth rest
+
+        [] ->
+            False
 
 
 parseAsExpressionFallback : List Token.Token -> Result String DeclarationOrExpression
@@ -1795,7 +1928,7 @@ buildTypedResult ((Node lessAppRange _) as lessApp) typedName argsRev remaining 
             List.reverse argsRev
 
         range =
-            case List.reverse argsRev of
+            case argsRev of
                 Node lastArgRange _ :: _ ->
                     { start = lessAppRange.start
                     , end = lastArgRange.end
@@ -1827,32 +1960,25 @@ parseTypeAnnotationTypedArg indentMin tokens =
                 Token.Identifier ->
                     if startsWithUpper firstToken.lexeme then
                         let
-                            ( nameTokens, remaining ) =
-                                parseQualifiedName [ firstToken ] rest
+                            ( typeNameToken, moduleNamesRev, remaining ) =
+                                parseQualifiedName [] firstToken rest
+
+                            moduleNames =
+                                List.reverse moduleNamesRev
+
+                            typeRange =
+                                { start = firstToken.start
+                                , end = typeNameToken.end
+                                }
                         in
-                        case List.reverse nameTokens of
-                            typeNameToken :: reversedModuleTokens ->
-                                let
-                                    moduleNames =
-                                        List.reverse reversedModuleTokens
-                                            |> List.map .lexeme
-
-                                    typeRange =
-                                        { start = firstToken.start
-                                        , end = typeNameToken.end
-                                        }
-                                in
-                                Ok
-                                    ( Node typeRange
-                                        (TypeAnnotation.Typed
-                                            (Node typeRange ( moduleNames, typeNameToken.lexeme ))
-                                            []
-                                        )
-                                    , remaining
-                                    )
-
-                            [] ->
-                                Err "Expected a type name."
+                        Ok
+                            ( Node typeRange
+                                (TypeAnnotation.Typed
+                                    (Node typeRange ( moduleNames, typeNameToken.lexeme ))
+                                    []
+                                )
+                            , remaining
+                            )
 
                     else
                         Ok
@@ -2353,31 +2479,23 @@ finishApplication :
     -> List Token.Token
     -> Result String ( Node Expression.Expression, List Token.Token )
 finishApplication function argumentsRev remaining =
-    case List.reverse argumentsRev of
+    case argumentsRev of
         [] ->
             Ok ( function, remaining )
 
-        arguments ->
-            case List.reverse arguments of
-                lastArgument :: _ ->
-                    let
-                        (Node functionRange _) =
-                            function
-
-                        (Node lastArgumentRange _) =
-                            lastArgument
-                    in
-                    Ok
-                        ( Node
-                            { start = functionRange.start
-                            , end = lastArgumentRange.end
-                            }
-                            (Expression.Application function arguments)
-                        , remaining
-                        )
-
-                [] ->
-                    Ok ( function, remaining )
+        Node lastArgumentRange _ :: _ ->
+            let
+                (Node functionRange _) =
+                    function
+            in
+            Ok
+                ( Node
+                    { start = functionRange.start
+                    , end = lastArgumentRange.end
+                    }
+                    (Expression.Application function (List.reverse argumentsRev))
+                , remaining
+                )
 
 
 parseBasicExpression :
@@ -2543,40 +2661,37 @@ parseIdentifier :
     -> List Token.Token
     -> Result String ( Node Expression.Expression, List Token.Token )
 parseIdentifier firstToken tokens =
-    parseQualifiedName [ firstToken ] tokens
-        |> (\( nameTokens, remaining ) ->
-                case List.reverse nameTokens of
-                    nameToken :: reversedModuleTokens ->
-                        Ok
-                            ( Node
-                                { start = firstToken.start, end = nameToken.end }
-                                (Expression.Identifier
-                                    (List.reverse reversedModuleTokens |> List.map .lexeme)
-                                    nameToken.lexeme
-                                )
-                            , remaining
-                            )
-
-                    [] ->
-                        Err "Expected an identifier."
-           )
+    let
+        ( nameToken, moduleNamesRev, remaining ) =
+            parseQualifiedName [] firstToken tokens
+    in
+    Ok
+        ( Node
+            { start = firstToken.start, end = nameToken.end }
+            (Expression.Identifier
+                (List.reverse moduleNamesRev)
+                nameToken.lexeme
+            )
+        , remaining
+        )
 
 
 parseQualifiedName :
-    List Token.Token
+    List String
+    -> Token.Token
     -> List Token.Token
-    -> ( List Token.Token, List Token.Token )
-parseQualifiedName nameTokens tokens =
-    case ( List.reverse nameTokens, dropTrivia tokens ) of
-        ( lastName :: _, dotToken :: nextName :: rest ) ->
-            if startsWithUpper lastName.lexeme && dotToken.tokenType == Token.Dot && nextName.tokenType == Token.Identifier then
-                parseQualifiedName (nameTokens ++ [ nextName ]) rest
+    -> ( Token.Token, List String, List Token.Token )
+parseQualifiedName moduleNamesRev currentName tokens =
+    case dropTrivia tokens of
+        dotToken :: nextName :: rest ->
+            if startsWithUpper currentName.lexeme && dotToken.tokenType == Token.Dot && nextName.tokenType == Token.Identifier then
+                parseQualifiedName (currentName.lexeme :: moduleNamesRev) nextName rest
 
             else
-                ( nameTokens, tokens )
+                ( currentName, moduleNamesRev, tokens )
 
         _ ->
-            ( nameTokens, tokens )
+            ( currentName, moduleNamesRev, tokens )
 
 
 parseList :
@@ -3081,8 +3196,8 @@ parseCaseBlock indentMin caseToken tokens =
                                     afterOf
                                     []
                             of
-                                Ok ( branches, remaining ) ->
-                                    case List.reverse branches of
+                                Ok ( branchesRev, remaining ) ->
+                                    case branchesRev of
                                         [] ->
                                             Err "Expected at least one case branch after 'of'."
 
@@ -3100,7 +3215,7 @@ parseCaseBlock indentMin caseToken tokens =
                                                         { caseTokenLocation = caseToken.start
                                                         , expression = subject
                                                         , ofTokenLocation = ofToken.start
-                                                        , cases = branches
+                                                        , cases = List.reverse branchesRev
                                                         }
                                                     )
                                                 , remaining
@@ -3128,11 +3243,11 @@ parseCaseBranches :
 parseCaseBranches lowerBound branchIndent tokens branchesRev =
     case dropTrivia tokens of
         [] ->
-            Ok ( List.reverse branchesRev, [] )
+            Ok ( branchesRev, [] )
 
         token :: _ ->
             if token.start.column < lowerBound || isClosingToken token then
-                Ok ( List.reverse branchesRev, tokens )
+                Ok ( branchesRev, tokens )
 
             else
                 case parseCaseBranch branchIndent tokens of
@@ -3417,31 +3532,23 @@ finishNamedPattern :
     -> List Token.Token
     -> Result String ( Node Pattern.Pattern, List Token.Token )
 finishNamedPattern name original argumentsRev tokens =
-    case List.reverse argumentsRev of
+    case argumentsRev of
         [] ->
             Ok ( original, tokens )
 
-        arguments ->
-            case List.reverse arguments of
-                lastArgument :: _ ->
-                    let
-                        (Node originalRange _) =
-                            original
-
-                        (Node lastArgumentRange _) =
-                            lastArgument
-                    in
-                    Ok
-                        ( Node
-                            { start = originalRange.start
-                            , end = lastArgumentRange.end
-                            }
-                            (Pattern.NamedPattern name arguments)
-                        , tokens
-                        )
-
-                [] ->
-                    Ok ( original, tokens )
+        Node lastArgumentRange _ :: _ ->
+            let
+                (Node originalRange _) =
+                    original
+            in
+            Ok
+                ( Node
+                    { start = originalRange.start
+                    , end = lastArgumentRange.end
+                    }
+                    (Pattern.NamedPattern name (List.reverse argumentsRev))
+                , tokens
+                )
 
 
 parsePatternSuffix :
@@ -3522,25 +3629,20 @@ parsePatternAtomic indentMin tokens =
 
                     else if startsWithUpper token.lexeme then
                         let
-                            ( nameTokens, remaining ) =
-                                parseQualifiedName [ token ] rest
+                            ( nameToken, moduleNamesRev, remaining ) =
+                                parseQualifiedName [] token rest
                         in
-                        case List.reverse nameTokens of
-                            nameToken :: reversedModuleTokens ->
-                                Ok
-                                    ( Node
-                                        { start = token.start, end = nameToken.end }
-                                        (Pattern.NamedPattern
-                                            { moduleName = List.reverse reversedModuleTokens |> List.map .lexeme
-                                            , name = nameToken.lexeme
-                                            }
-                                            []
-                                        )
-                                    , remaining
-                                    )
-
-                            [] ->
-                                Err "Expected a named pattern."
+                        Ok
+                            ( Node
+                                { start = token.start, end = nameToken.end }
+                                (Pattern.NamedPattern
+                                    { moduleName = List.reverse moduleNamesRev
+                                    , name = nameToken.lexeme
+                                    }
+                                    []
+                                )
+                            , remaining
+                            )
 
                     else
                         Ok ( Node (tokenRange token) (Pattern.VarPattern token.lexeme), rest )
@@ -4068,12 +4170,6 @@ isClosingToken token =
 isTrivia : Token.Token -> Bool
 isTrivia token =
     case token.tokenType of
-        Token.Whitespace ->
-            True
-
-        Token.Newline ->
-            True
-
         Token.Comment ->
             True
 
@@ -4090,6 +4186,16 @@ dropTrivia tokens =
 
             else
                 tokens
+
+        [] ->
+            []
+
+
+tokenLexemes : List Token.Token -> List String
+tokenLexemes tokens =
+    case tokens of
+        token :: rest ->
+            token.lexeme :: tokenLexemes rest
 
         [] ->
             []

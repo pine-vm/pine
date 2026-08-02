@@ -149,19 +149,19 @@ public class TokensFromStringConcreteTests
     [InlineData(
         "LF only",
         "alpha\nbeta",
-        """Ok [ { end = { column = 6, row = 1 }, lexeme = "alpha", rawText = Nothing, start = { column = 1, row = 1 }, tokenType = Identifier }, { end = { column = 1, row = 2 }, lexeme = "\n", rawText = Nothing, start = { column = 6, row = 1 }, tokenType = Newline }, { end = { column = 5, row = 2 }, lexeme = "beta", rawText = Nothing, start = { column = 1, row = 2 }, tokenType = Identifier } ]""")]
+        """Ok [ { end = { column = 6, row = 1 }, lexeme = "alpha", rawText = Nothing, start = { column = 1, row = 1 }, tokenType = Identifier }, { end = { column = 5, row = 2 }, lexeme = "beta", rawText = Nothing, start = { column = 1, row = 2 }, tokenType = Identifier } ]""")]
     [InlineData(
         "CRLF only",
         "alpha\u000D\nbeta",
-        """Ok [ { end = { column = 6, row = 1 }, lexeme = "alpha", rawText = Nothing, start = { column = 1, row = 1 }, tokenType = Identifier }, { end = { column = 1, row = 2 }, lexeme = "\n", rawText = Nothing, start = { column = 6, row = 1 }, tokenType = Newline }, { end = { column = 5, row = 2 }, lexeme = "beta", rawText = Nothing, start = { column = 1, row = 2 }, tokenType = Identifier } ]""")]
+        """Ok [ { end = { column = 6, row = 1 }, lexeme = "alpha", rawText = Nothing, start = { column = 1, row = 1 }, tokenType = Identifier }, { end = { column = 5, row = 2 }, lexeme = "beta", rawText = Nothing, start = { column = 1, row = 2 }, tokenType = Identifier } ]""")]
     [InlineData(
         "lone CR only",
         "alpha\u000Dbeta",
-        """Ok [ { end = { column = 6, row = 1 }, lexeme = "alpha", rawText = Nothing, start = { column = 1, row = 1 }, tokenType = Identifier }, { end = { column = 1, row = 2 }, lexeme = "\n", rawText = Nothing, start = { column = 6, row = 1 }, tokenType = Newline }, { end = { column = 5, row = 2 }, lexeme = "beta", rawText = Nothing, start = { column = 1, row = 2 }, tokenType = Identifier } ]""")]
+        """Ok [ { end = { column = 6, row = 1 }, lexeme = "alpha", rawText = Nothing, start = { column = 1, row = 1 }, tokenType = Identifier }, { end = { column = 5, row = 2 }, lexeme = "beta", rawText = Nothing, start = { column = 1, row = 2 }, tokenType = Identifier } ]""")]
     [InlineData(
         "LF followed by CRLF followed by lone CR",
         "a\nb\u000D\nc\u000Dd",
-        """Ok [ { end = { column = 2, row = 1 }, lexeme = "a", rawText = Nothing, start = { column = 1, row = 1 }, tokenType = Identifier }, { end = { column = 1, row = 2 }, lexeme = "\n", rawText = Nothing, start = { column = 2, row = 1 }, tokenType = Newline }, { end = { column = 2, row = 2 }, lexeme = "b", rawText = Nothing, start = { column = 1, row = 2 }, tokenType = Identifier }, { end = { column = 1, row = 3 }, lexeme = "\n", rawText = Nothing, start = { column = 2, row = 2 }, tokenType = Newline }, { end = { column = 2, row = 3 }, lexeme = "c", rawText = Nothing, start = { column = 1, row = 3 }, tokenType = Identifier }, { end = { column = 1, row = 4 }, lexeme = "\n", rawText = Nothing, start = { column = 2, row = 3 }, tokenType = Newline }, { end = { column = 2, row = 4 }, lexeme = "d", rawText = Nothing, start = { column = 1, row = 4 }, tokenType = Identifier } ]""")]
+        """Ok [ { end = { column = 2, row = 1 }, lexeme = "a", rawText = Nothing, start = { column = 1, row = 1 }, tokenType = Identifier }, { end = { column = 2, row = 2 }, lexeme = "b", rawText = Nothing, start = { column = 1, row = 2 }, tokenType = Identifier }, { end = { column = 2, row = 3 }, lexeme = "c", rawText = Nothing, start = { column = 1, row = 3 }, tokenType = Identifier }, { end = { column = 2, row = 4 }, lexeme = "d", rawText = Nothing, start = { column = 1, row = 4 }, tokenType = Identifier } ]""")]
     public void Mixed_line_break_tokenization(string description, string input, string expected)
     {
         _ = description;
@@ -173,7 +173,7 @@ public class TokensFromStringConcreteTests
     [InlineData(
         "simple operator expression",
         "1 + 2",
-        """Ok [ { end = { column = 2, row = 1 }, lexeme = "1", rawText = Nothing, start = { column = 1, row = 1 }, tokenType = NumberLiteral }, { end = { column = 3, row = 1 }, lexeme = " ", rawText = Nothing, start = { column = 2, row = 1 }, tokenType = Whitespace }, { end = { column = 4, row = 1 }, lexeme = "+", rawText = Nothing, start = { column = 3, row = 1 }, tokenType = Operator }, { end = { column = 5, row = 1 }, lexeme = " ", rawText = Nothing, start = { column = 4, row = 1 }, tokenType = Whitespace }, { end = { column = 6, row = 1 }, lexeme = "2", rawText = Nothing, start = { column = 5, row = 1 }, tokenType = NumberLiteral } ]""")]
+        """Ok [ { end = { column = 2, row = 1 }, lexeme = "1", rawText = Nothing, start = { column = 1, row = 1 }, tokenType = NumberLiteral }, { end = { column = 4, row = 1 }, lexeme = "+", rawText = Nothing, start = { column = 3, row = 1 }, tokenType = Operator }, { end = { column = 6, row = 1 }, lexeme = "2", rawText = Nothing, start = { column = 5, row = 1 }, tokenType = NumberLiteral } ]""")]
     [InlineData(
         "hexadecimal integer literal",
         "0xFF",
@@ -247,7 +247,7 @@ public class TokensFromStringConcreteTests
         var input = "-- comment\u000Dx";
 
         var expected =
-            """Ok [ { end = { column = 11, row = 1 }, lexeme = "-- comment", rawText = Nothing, start = { column = 1, row = 1 }, tokenType = Comment }, { end = { column = 1, row = 2 }, lexeme = "\n", rawText = Nothing, start = { column = 11, row = 1 }, tokenType = Newline }, { end = { column = 2, row = 2 }, lexeme = "x", rawText = Nothing, start = { column = 1, row = 2 }, tokenType = Identifier } ]""";
+            """Ok [ { end = { column = 11, row = 1 }, lexeme = "-- comment", rawText = Nothing, start = { column = 1, row = 1 }, tokenType = Comment }, { end = { column = 2, row = 2 }, lexeme = "x", rawText = Nothing, start = { column = 1, row = 2 }, tokenType = Identifier } ]""";
 
         TokenizeAndRender(input).Should().Be(expected);
     }

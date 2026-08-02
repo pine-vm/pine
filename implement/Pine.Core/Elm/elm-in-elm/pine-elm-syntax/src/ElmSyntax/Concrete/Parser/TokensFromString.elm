@@ -25,101 +25,72 @@ parseExpressionOrDeclaration input =
     tokenize input
 
 
-{-| Tracks the current position while scanning the source text: `offset` is the index (in
-`String.slice` terms) of the next character to inspect, while `row` and `column` are the
-1-based source location corresponding to that offset. Keeping all three together lets every
-scan branch advance offset and row/column in one step, instead of computing the source
-location in a separate pass afterward.
--}
-type alias Position =
-    { offset : Int
-    , row : Int
-    , column : Int
-    }
-
-
-positionLocation : Position -> Range.Location
-positionLocation position =
-    { row = position.row, column = position.column }
+makeLocation : Int -> Int -> Range.Location
+makeLocation row column =
+    { row = row, column = column }
 
 
 tokenize : String -> Result String (List Token.Token)
 tokenize input =
-    tokenizeHelp input { offset = 0, row = 1, column = 1 } []
+    tokenizeHelp input 0 1 1 []
 
 
-tokenizeHelp : String -> Position -> List Token.Token -> Result String (List Token.Token)
-tokenizeHelp source position tokensRev =
+tokenizeHelp : String -> Int -> Int -> Int -> List Token.Token -> Result String (List Token.Token)
+tokenizeHelp source offset row column tokensRev =
     if
-        position.offset >= 0
+        offset >= 0
         {-
-        Add an explicit branch to make it trivial to prove that `position.offset` is >= 0 for all usages below.
+        Add an explicit branch to make it trivial to prove that `offset` is >= 0 for all usages below.
         Based on that proof, compiler have an easier way to prove that `String.slice` is always called non-negative offsets,
         which in turn allows the compile-time removal of the branches in those instances of `String.slice`
         -}
     then
-        case classifyAt source position.offset of
-            AtEnd ->
+        case String.slice offset (offset + 1) source of
+            "" ->
                 Ok (List.reverse tokensRev)
 
-            AtNewlineLF ->
-                emitNewline source position 1 tokensRev
+            "\n" ->
+                skipNewline source offset row 1 tokensRev
 
-            AtNewlineCRLF ->
-                emitNewline source position 2 tokensRev
+            "\u{000D}" ->
+                if String.slice (offset + 1) (offset + 2) source == "\n" then
+                    skipNewline source offset row 2 tokensRev
 
-            AtNewlineCR ->
-                emitNewline source position 1 tokensRev
+                else
+                    skipNewline source offset row 1 tokensRev
 
-            AtChar first ->
+            first ->
                 if isWhitespace first then
                     let
                         endOffset =
-                            skipAllWhitespace source position.offset
+                            skipInlineWhitespace source (offset + 1)
 
-                        lexeme =
-                            String.slice position.offset endOffset source
-
-                        nextPosition =
-                            { offset = endOffset
-                            , row = position.row
-                            , column = position.column + (endOffset - position.offset)
-                            }
+                        endColumn =
+                            column + (endOffset - offset)
                     in
-                    tokenizeHelp
-                        source
-                        nextPosition
-                        (makeToken
-                            Token.Whitespace
-                            lexeme
-                            (positionLocation position)
-                            (positionLocation nextPosition)
-                            Nothing
-                            :: tokensRev
-                        )
+                    tokenizeHelp source endOffset row endColumn tokensRev
 
                 else if isDigit first then
                     let
                         endOffset =
-                            numberEnd source position.offset
+                            numberEnd source first offset
 
                         lexeme =
-                            String.slice position.offset endOffset source
+                            String.slice offset endOffset source
 
-                        nextPosition =
-                            { offset = endOffset
-                            , row = position.row
-                            , column = position.column + (endOffset - position.offset)
-                            }
+                        endColumn =
+                            column + (endOffset - offset)
                     in
                     tokenizeHelp
                         source
-                        nextPosition
+                        endOffset
+                        row
+                        endColumn
                         (makeToken
                             Token.NumberLiteral
                             lexeme
-                            (positionLocation position)
-                            (positionLocation nextPosition)
+                            (makeLocation row column)
+                            (makeLocation row endColumn)
                             Nothing
                             :: tokensRev
                         )
@@ -127,152 +98,100 @@ tokenizeHelp source position tokensRev =
                 else if isIdentifierStart first then
                     let
                         endOffset =
-                            skipToIdentifierEnd source position.offset
+                            skipToIdentifierEnd source (offset + 1)
 
                         lexeme =
-                            String.slice position.offset endOffset source
+                            String.slice offset endOffset source
 
-                        nextPosition =
-                            { offset = endOffset
-                            , row = position.row
-                            , column = position.column + (endOffset - position.offset)
-                            }
+                        endColumn =
+                            column + (endOffset - offset)
                     in
                     tokenizeHelp
                         source
-                        nextPosition
+                        endOffset
+                        row
+                        endColumn
                         (makeToken
                             Token.Identifier
                             lexeme
-                            (positionLocation position)
-                            (positionLocation nextPosition)
+                            (makeLocation row column)
+                            (makeLocation row endColumn)
                             Nothing
                             :: tokensRev
                         )
 
                 else
-                    tokenizeSymbol source position tokensRev
+                    tokenizeSymbol first source offset row column tokensRev
 
     else
         Err
             ("Internal error: negative offset "
-                ++ String.fromInt position.offset ++ " at " ++ locationString (positionLocation position) ++ "."
+                ++ String.fromInt offset ++ " at " ++ locationString (makeLocation row column) ++ "."
             )
 
 
-{-| Emits a single `Newline` token whose lexeme is always `"\n"`, regardless of whether the
-source used LF, CRLF, or a lone CR at this position. `consumedLength` is how many source
-characters the line break itself occupies (1 for LF or CR, 2 for CRLF); the row always
+{-| Advances past an LF, CRLF, or lone CR without emitting a token. `consumedLength` is how
+many source characters the line break occupies (1 for LF or CR, 2 for CRLF); the row always
 advances by exactly one and the column resets to 1.
 -}
-emitNewline : String -> Position -> Int -> List Token.Token -> Result String (List Token.Token)
-emitNewline source position consumedLength tokensRev =
-    let
-        nextPosition =
-            { offset = position.offset + consumedLength, row = position.row + 1, column = 1 }
-    in
-    tokenizeHelp
-        source
-        nextPosition
-        (makeToken
-            Token.Newline
-            "\n"
-            (positionLocation position)
-            (positionLocation nextPosition)
-            Nothing
-            :: tokensRev
-        )
+skipNewline : String -> Int -> Int -> Int -> List Token.Token -> Result String (List Token.Token)
+skipNewline source offset row consumedLength tokensRev =
+    tokenizeHelp source (offset + consumedLength) (row + 1) 1 tokensRev
 
 
-{-| Classifies the source at a given offset as either the end of input, one of the three
-supported line-break forms (LF, CRLF, or a lone CR), or an ordinary character. Every place in
-this module that needs to recognize line breaks (the main tokenizer loop, multi-line comments,
-and string/char literal content) shares this classification so that LF, CRLF, and CR are all
-handled consistently and in a single pass over the source.
--}
-type Classified
-    = AtEnd
-    | AtNewlineLF
-    | AtNewlineCRLF
-    | AtNewlineCR
-    | AtChar String
-
-
-classifyAt : String -> Int -> Classified
-classifyAt source offset =
-    case String.slice offset (offset + 2) source of
-        "\u{000D}\n" ->
-            AtNewlineCRLF
-
-        _ ->
-            case String.slice offset (offset + 1) source of
-                "" ->
-                    AtEnd
-
-                "\n" ->
-                    AtNewlineLF
-
-                "\u{000D}" ->
-                    AtNewlineCR
-
-                other ->
-                    AtChar other
-
-
-tokenizeSymbol : String -> Position -> List Token.Token -> Result String (List Token.Token)
-tokenizeSymbol source position tokensRev =
+tokenizeSymbol : String -> String -> Int -> Int -> Int -> List Token.Token -> Result String (List Token.Token)
+tokenizeSymbol first source offset row column tokensRev =
     let
         addToken : Token.TokenType -> String -> Int -> Result String (List Token.Token)
         addToken tokenType lexeme consumedLength =
             let
-                nextPosition =
-                    { offset = position.offset + consumedLength
-                    , row = position.row
-                    , column = position.column + consumedLength
-                    }
+                nextOffset =
+                    offset + consumedLength
+
+                nextColumn =
+                    column + consumedLength
             in
             tokenizeHelp
                 source
-                nextPosition
+                nextOffset
+                row
+                nextColumn
                 (makeToken
                     tokenType
                     lexeme
-                    (positionLocation position)
-                    (positionLocation nextPosition)
+                    (makeLocation row column)
+                    (makeLocation row nextColumn)
                     Nothing
                     :: tokensRev
                 )
 
         addSingle : Token.TokenType -> Result String (List Token.Token)
         addSingle tokenType =
-            addToken tokenType (String.slice position.offset (position.offset + 1) source) 1
+            addToken tokenType first 1
     in
-    case String.slice position.offset (position.offset + 1) source of
-        "" ->
-            Ok (List.reverse tokensRev)
-
+    case first of
         "-" ->
-            case String.slice (position.offset + 1) (position.offset + 2) source of
+            case String.slice (offset + 1) (offset + 2) source of
                 "-" ->
                     let
                         contentEnd =
-                            lineCommentEnd source (position.offset + 2)
+                            lineCommentEnd source (offset + 2)
 
                         lexeme =
-                            String.slice position.offset contentEnd source
+                            String.slice offset contentEnd source
 
-                        nextPosition =
-                            { offset = contentEnd
-                            , row = position.row
-                            , column = position.column + (contentEnd - position.offset)
-                            }
+                        endColumn =
+                            column + (contentEnd - offset)
                     in
-                    tokenizeHelp source
-                        nextPosition
+                    tokenizeHelp
+                        source
+                        contentEnd
+                        row
+                        endColumn
                         (makeToken Token.Comment
                             lexeme
-                            (positionLocation position)
-                            (positionLocation nextPosition)
+                            (makeLocation row column)
+                            (makeLocation row endColumn)
                             Nothing
                             :: tokensRev
                         )
@@ -281,36 +200,50 @@ tokenizeSymbol source position tokensRev =
                     addToken Token.Arrow "->" 2
 
                 _ ->
-                    if minusIsOperator source position tokensRev then
+                    if minusIsOperator source offset row column tokensRev then
                         addSingle Token.Operator
 
                     else
                         addSingle Token.Negation
 
         "{" ->
-            case String.slice (position.offset + 1) (position.offset + 2) source of
+            case String.slice (offset + 1) (offset + 2) source of
                 "-" ->
-                    let
-                        contentStart =
-                            { offset = position.offset + 2
-                            , row = position.row
-                            , column = position.column + 2
-                            }
-                    in
-                    tokenizeMultilineComment source contentStart position tokensRev 1 "{-"
+                    tokenizeMultilineComment source (offset + 2) row (column + 2) row column tokensRev 1 [ "{-" ]
 
                 _ ->
                     addSingle Token.OpenBrace
 
         "\"" ->
-            if String.slice position.offset (position.offset + 3) source == "\"\"\"" then
-                tokenizeLiteral Token.TripleQuotedStringLiteral "\"\"\"" source position tokensRev
+            if String.slice offset (offset + 3) source == "\"\"\"" then
+                tokenizeLiteral
+                    Token.TripleQuotedStringLiteral
+                    TripleQuoteTermination
+                    source
+                    offset
+                    row
+                    column
+                    tokensRev
 
             else
-                tokenizeLiteral Token.StringLiteral "\"" source position tokensRev
+                tokenizeLiteral
+                    Token.StringLiteral
+                    DoubleQuoteTermination
+                    source
+                    offset
+                    row
+                    column
+                    tokensRev
 
         "'" ->
-            tokenizeLiteral Token.CharLiteral "'" source position tokensRev
+            tokenizeLiteral
+                Token.CharLiteral
+                SingleQuoteTermination
+                source
+                offset
+                row
+                column
+                tokensRev
 
         "\\" ->
             addSingle Token.Lambda
@@ -334,48 +267,48 @@ tokenizeSymbol source position tokensRev =
             addSingle Token.Comma
 
         "." ->
-            case String.slice (position.offset + 1) (position.offset + 2) source of
+            case String.slice (offset + 1) (offset + 2) source of
                 "." ->
                     addToken Token.DotDot ".." 2
 
                 next ->
                     if isOperatorChar next then
-                        addToken Token.Operator (String.slice position.offset (position.offset + 2) source) 2
+                        addToken Token.Operator (String.slice offset (offset + 2) source) 2
 
                     else
                         addSingle Token.Dot
 
         "=" ->
-            if isOperatorChar (String.slice (position.offset + 1) (position.offset + 2) source) then
-                addToken Token.Operator (String.slice position.offset (position.offset + 2) source) 2
+            if isOperatorChar (String.slice (offset + 1) (offset + 2) source) then
+                addToken Token.Operator (String.slice offset (offset + 2) source) 2
 
             else
                 addSingle Token.Equal
 
         "|" ->
-            if isOperatorChar (String.slice (position.offset + 1) (position.offset + 2) source) then
-                addToken Token.Operator (String.slice position.offset (position.offset + 2) source) 2
+            if isOperatorChar (String.slice (offset + 1) (offset + 2) source) then
+                addToken Token.Operator (String.slice offset (offset + 2) source) 2
 
             else
                 addSingle Token.Pipe
 
         ":" ->
-            if isOperatorChar (String.slice (position.offset + 1) (position.offset + 2) source) then
-                addToken Token.Operator (String.slice position.offset (position.offset + 2) source) 2
+            if isOperatorChar (String.slice (offset + 1) (offset + 2) source) then
+                addToken Token.Operator (String.slice offset (offset + 2) source) 2
 
             else
                 addSingle Token.Colon
 
-        first ->
-            if isOperatorChar first then
+        symbol ->
+            if isOperatorChar symbol then
                 let
                     endOffset =
-                        takeAtMostEnd 2 isOperatorChar source (position.offset + 1)
+                        skipOperatorChars source (offset + 1) (offset + 3)
 
                     lexeme =
-                        String.slice position.offset endOffset source
+                        String.slice offset endOffset source
                 in
-                addToken Token.Operator lexeme (endOffset - position.offset)
+                addToken Token.Operator lexeme (endOffset - offset)
 
             else
                 addSingle Token.Unknown
@@ -383,7 +316,7 @@ tokenizeSymbol source position tokensRev =
 
 {-| Finds the offset where a line comment's content ends: right before the first LF, CR, or
 CRLF line break, or at the end of input. The line break itself is left unconsumed so that the
-next call into `tokenizeHelp` emits the corresponding `Newline` token.
+next call into `tokenizeHelp` advances the source position.
 -}
 lineCommentEnd : String -> Int -> Int
 lineCommentEnd source offset =
@@ -401,32 +334,64 @@ lineCommentEnd source offset =
             lineCommentEnd source (offset + 1)
 
 
+type LiteralTermination
+    = SingleQuoteTermination
+    | DoubleQuoteTermination
+    | TripleQuoteTermination
+
+
+literalTerminationLength : LiteralTermination -> Int
+literalTerminationLength termination =
+    case termination of
+        SingleQuoteTermination ->
+            1
+
+        DoubleQuoteTermination ->
+            1
+
+        TripleQuoteTermination ->
+            3
+
+
 tokenizeLiteral :
     Token.TokenType
+    -> LiteralTermination
     -> String
-    -> String
-    -> Position
+    -> Int
+    -> Int
+    -> Int
     -> List Token.Token
     -> Result String (List Token.Token)
-tokenizeLiteral tokenType termination source start tokensRev =
+tokenizeLiteral tokenType termination source startOffset startRow startColumn tokensRev =
     let
         terminationLength =
-            String.length termination
+            literalTerminationLength termination
 
-        afterOpening =
-            { offset = start.offset + terminationLength
-            , row = start.row
-            , column = start.column + terminationLength
-            }
+        afterOpeningOffset =
+            startOffset + terminationLength
     in
-    case consumeLiteral termination source start afterOpening "" "" of
+    case
+        consumeLiteral
+            termination
+            source
+            startRow
+            startColumn
+            afterOpeningOffset
+            startRow
+            (startColumn + terminationLength)
+            []
+            []
+    of
         Ok consumed ->
-            tokenizeHelp source
-                consumed.end
+            tokenizeHelp
+                source
+                consumed.endOffset
+                consumed.endRow
+                consumed.endColumn
                 (makeToken tokenType
                     consumed.decoded
-                    (positionLocation start)
-                    (positionLocation consumed.end)
+                    (makeLocation startRow startColumn)
+                    (makeLocation consumed.endRow consumed.endColumn)
                     (Just consumed.raw) :: tokensRev
                 )
 
@@ -437,7 +402,9 @@ tokenizeLiteral tokenType termination source start tokensRev =
 type alias ConsumedLiteral =
     { decoded : String
     , raw : String
-    , end : Position
+    , endOffset : Int
+    , endRow : Int
+    , endColumn : Int
     }
 
 
@@ -457,13 +424,74 @@ contains a backslash escape or a line break, returning the offset where that run
 content ends together with the reason it stopped. Callers use this offset to take a single
 `String.slice` for the whole run instead of accumulating characters one at a time.
 -}
-findLiteralRunEnd : String -> String -> Int -> ( Int, LiteralRunBoundary )
+findLiteralRunEnd : LiteralTermination -> String -> Int -> ( Int, LiteralRunBoundary )
 findLiteralRunEnd termination source offset =
-    let
-        terminationLength =
-            String.length termination
-    in
-    if String.slice offset (offset + terminationLength) source == termination then
+    case termination of
+        SingleQuoteTermination ->
+            findSingleQuotedLiteralRunEnd source offset
+
+        DoubleQuoteTermination ->
+            findDoubleQuotedLiteralRunEnd source offset
+
+        TripleQuoteTermination ->
+            findTripleQuotedLiteralRunEnd source offset
+
+
+findSingleQuotedLiteralRunEnd : String -> Int -> ( Int, LiteralRunBoundary )
+findSingleQuotedLiteralRunEnd source offset =
+    case String.slice offset (offset + 1) source of
+        "'" ->
+            ( offset, LiteralRunTermination )
+
+        "" ->
+            ( offset, LiteralRunUnterminated )
+
+        "\\" ->
+            ( offset, LiteralRunBackslash )
+
+        "\n" ->
+            ( offset, LiteralRunNewlineLF )
+
+        "\u{000D}" ->
+            if String.slice (offset + 1) (offset + 2) source == "\n" then
+                ( offset, LiteralRunNewlineCRLF )
+
+            else
+                ( offset, LiteralRunNewlineCR )
+
+        _ ->
+            findSingleQuotedLiteralRunEnd source (offset + 1)
+
+
+findDoubleQuotedLiteralRunEnd : String -> Int -> ( Int, LiteralRunBoundary )
+findDoubleQuotedLiteralRunEnd source offset =
+    case String.slice offset (offset + 1) source of
+        "\"" ->
+            ( offset, LiteralRunTermination )
+
+        "" ->
+            ( offset, LiteralRunUnterminated )
+
+        "\\" ->
+            ( offset, LiteralRunBackslash )
+
+        "\n" ->
+            ( offset, LiteralRunNewlineLF )
+
+        "\u{000D}" ->
+            if String.slice (offset + 1) (offset + 2) source == "\n" then
+                ( offset, LiteralRunNewlineCRLF )
+
+            else
+                ( offset, LiteralRunNewlineCR )
+
+        _ ->
+            findDoubleQuotedLiteralRunEnd source (offset + 1)
+
+
+findTripleQuotedLiteralRunEnd : String -> Int -> ( Int, LiteralRunBoundary )
+findTripleQuotedLiteralRunEnd source offset =
+    if String.slice offset (offset + 3) source == "\"\"\"" then
         ( offset, LiteralRunTermination )
 
     else
@@ -485,82 +513,109 @@ findLiteralRunEnd termination source offset =
                     ( offset, LiteralRunNewlineCR )
 
             _ ->
-                findLiteralRunEnd termination source (offset + 1)
+                findTripleQuotedLiteralRunEnd source (offset + 1)
 
 
 consumeLiteral :
-    String
+    LiteralTermination
     -> String
-    -> Position
-    -> Position
-    -> String
-    -> String
+    -> Int
+    -> Int
+    -> Int
+    -> Int
+    -> Int
+    -> List String
+    -> List String
     -> Result String ConsumedLiteral
-consumeLiteral termination source start position decodedAcc rawAcc =
+consumeLiteral termination source startRow startColumn offset row column decodedChunksRev rawChunksRev =
     let
         ( runEndOffset, boundary ) =
-            findLiteralRunEnd termination source position.offset
+            findLiteralRunEnd termination source offset
 
         run =
-            String.slice position.offset runEndOffset source
+            String.slice offset runEndOffset source
 
-        positionAfterRun =
-            { offset = runEndOffset
-            , row = position.row
-            , column = position.column + (runEndOffset - position.offset)
-            }
+        columnAfterRun =
+            column + (runEndOffset - offset)
 
-        decodedAfterRun =
-            decodedAcc ++ run
+        decodedChunksAfterRun =
+            prependNonEmptyChunk run decodedChunksRev
 
-        rawAfterRun =
-            rawAcc ++ run
+        rawChunksAfterRun =
+            prependNonEmptyChunk run rawChunksRev
     in
     case boundary of
         LiteralRunTermination ->
             let
                 terminationLength =
-                    String.length termination
+                    literalTerminationLength termination
 
-                endPosition =
-                    { offset = positionAfterRun.offset + terminationLength
-                    , row = positionAfterRun.row
-                    , column = positionAfterRun.column + terminationLength
-                    }
+                endOffset =
+                    runEndOffset + terminationLength
             in
-            Ok { decoded = decodedAfterRun, raw = rawAfterRun, end = endPosition }
+            Ok
+                { decoded = concatenateChunksRev decodedChunksAfterRun
+                , raw = concatenateChunksRev rawChunksAfterRun
+                , endOffset = endOffset
+                , endRow = row
+                , endColumn = columnAfterRun + terminationLength
+                }
 
         LiteralRunUnterminated ->
-            Err ("Unterminated literal at " ++ locationString (positionLocation start) ++ ".")
+            Err ("Unterminated literal at " ++ locationString (makeLocation startRow startColumn) ++ ".")
 
         LiteralRunNewlineLF ->
-            let
-                nextPosition =
-                    { offset = positionAfterRun.offset + 1, row = positionAfterRun.row + 1, column = 1 }
-            in
-            consumeLiteral termination source start nextPosition (decodedAfterRun ++ "\n") (rawAfterRun ++ "\n")
+            consumeLiteral
+                termination
+                source
+                startRow
+                startColumn
+                (runEndOffset + 1)
+                (row + 1)
+                1
+                ("\n" :: decodedChunksAfterRun)
+                ("\n" :: rawChunksAfterRun)
 
         LiteralRunNewlineCRLF ->
-            let
-                nextPosition =
-                    { offset = positionAfterRun.offset + 2, row = positionAfterRun.row + 1, column = 1 }
-            in
-            consumeLiteral termination source start nextPosition (decodedAfterRun ++ "\n") (rawAfterRun ++ "\n")
+            consumeLiteral
+                termination
+                source
+                startRow
+                startColumn
+                (runEndOffset + 2)
+                (row + 1)
+                1
+                ("\n" :: decodedChunksAfterRun)
+                ("\n" :: rawChunksAfterRun)
 
         LiteralRunNewlineCR ->
-            let
-                nextPosition =
-                    { offset = positionAfterRun.offset + 1, row = positionAfterRun.row + 1, column = 1 }
-            in
-            consumeLiteral termination source start nextPosition (decodedAfterRun ++ "\n") (rawAfterRun ++ "\n")
+            consumeLiteral
+                termination
+                source
+                startRow
+                startColumn
+                (runEndOffset + 1)
+                (row + 1)
+                1
+                ("\n" :: decodedChunksAfterRun)
+                ("\n" :: rawChunksAfterRun)
 
         LiteralRunBackslash ->
-            case String.slice (positionAfterRun.offset + 1) (positionAfterRun.offset + 2) source of
+            case String.slice (runEndOffset + 1) (runEndOffset + 2) source of
                 "u" ->
-                    consumeUnicodeEscape termination source start positionAfterRun decodedAfterRun rawAfterRun
+                    consumeUnicodeEscape
+                        termination
+                        source
+                        startRow
+                        startColumn
+                        runEndOffset
+                        row
+                        columnAfterRun
+                        decodedChunksAfterRun
+                        rawChunksAfterRun
 
                 "" ->
-                    Err ("Unterminated literal at " ++ locationString (positionLocation start) ++ ".")
+                    Err ("Unterminated literal at " ++ locationString (makeLocation startRow startColumn) ++ ".")
 
                 escaped ->
                     let
@@ -577,256 +632,372 @@ consumeLiteral termination source start position decodedAcc rawAcc =
 
                                 _ ->
                                     escaped
-
-                        nextPosition =
-                            { offset = positionAfterRun.offset + 2
-                            , row = positionAfterRun.row
-                            , column = positionAfterRun.column + 2
-                            }
                     in
-                    consumeLiteral termination
+                    consumeLiteral
+                        termination
                         source
-                        start
-                        nextPosition
-                        (decodedAfterRun ++ decodedCharacter)
-                        (rawAfterRun ++ "\\" ++ escaped)
+                        startRow
+                        startColumn
+                        (runEndOffset + 2)
+                        row
+                        (columnAfterRun + 2)
+                        (decodedCharacter :: decodedChunksAfterRun)
+                        (("\\" ++ escaped) :: rawChunksAfterRun)
 
 
-{-| Handles a `\u...` escape found immediately at `escapeStart.offset` (that is, `escapeStart`
-points at the backslash). Only the `\u{XXXX}` form is a valid unicode escape; any other
+{-| Handles a `\u...` escape beginning at `escapeOffset` (the backslash). Only the
+`\u{XXXX}` form is a valid unicode escape; any other
 character (or no `{`) following `\u` falls back to treating it the same way an unrecognized
 single-character escape like `\z` would be treated elsewhere, i.e. decoding to a literal `u`.
 -}
 consumeUnicodeEscape :
-    String
+    LiteralTermination
     -> String
-    -> Position
-    -> Position
-    -> String
-    -> String
+    -> Int
+    -> Int
+    -> Int
+    -> Int
+    -> Int
+    -> List String
+    -> List String
     -> Result String ConsumedLiteral
-consumeUnicodeEscape termination source start escapeStart decodedAcc rawAcc =
+consumeUnicodeEscape termination source startRow startColumn escapeOffset escapeRow escapeColumn decodedChunksRev rawChunksRev =
     let
         afterPrefixOffset =
-            escapeStart.offset + 2
+            escapeOffset + 2
     in
     if String.slice afterPrefixOffset (afterPrefixOffset + 1) source == "{" then
-        let
-            digitsEndOffset =
-                skipToAsciiHexDigitEnd source (afterPrefixOffset + 1)
-        in
-        if String.slice digitsEndOffset (digitsEndOffset + 1) source == "}" then
-            let
-                digitsText =
-                    String.slice (afterPrefixOffset + 1) digitsEndOffset source
-            in
-            case hexStringToInt digitsText of
-                Just codePoint ->
-                    if codePoint <= 0x10FFFF && not (codePoint >= 0xD800 && codePoint <= 0xDFFF) then
-                        let
-                            consumedLength =
-                                (digitsEndOffset + 1) - escapeStart.offset
+        case scanUnicodeEscapeDigits source (afterPrefixOffset + 1) of
+            Just ( digitsEndOffset, codePoint ) ->
+                if
+                    String.slice digitsEndOffset (digitsEndOffset + 1) source == "}"
+                        && codePoint <= 0x10FFFF
+                        && not (codePoint >= 0xD800 && codePoint <= 0xDFFF)
+                then
+                    let
+                        consumedLength =
+                            (digitsEndOffset + 1) - escapeOffset
 
-                            nextPosition =
-                                { offset = digitsEndOffset + 1
-                                , row = escapeStart.row
-                                , column = escapeStart.column + consumedLength
-                                }
+                        rawEscape =
+                            String.slice escapeOffset (digitsEndOffset + 1) source
+                    in
+                    consumeLiteral termination
+                        source
+                        startRow
+                        startColumn
+                        (digitsEndOffset + 1)
+                        escapeRow
+                        (escapeColumn + consumedLength)
+                        (String.fromChar (Char.fromCode codePoint) :: decodedChunksRev)
+                        (rawEscape :: rawChunksRev)
 
-                            rawEscape =
-                                String.slice escapeStart.offset (digitsEndOffset + 1) source
-                        in
-                        consumeLiteral termination
-                            source
-                            start
-                            nextPosition
-                            (decodedAcc ++ String.fromChar (Char.fromCode codePoint))
-                            (rawAcc ++ rawEscape)
+                else
+                    Err ("Invalid unicode escape at " ++ locationString (makeLocation escapeRow escapeColumn) ++ ".")
 
-                    else
-                        Err ("Invalid unicode escape at " ++ locationString (positionLocation escapeStart) ++ ".")
-
-                Nothing ->
-                    Err ("Invalid unicode escape at " ++ locationString (positionLocation escapeStart) ++ ".")
-
-        else
-            Err ("Invalid unicode escape at " ++ locationString (positionLocation escapeStart) ++ ".")
+            Nothing ->
+                Err ("Invalid unicode escape at " ++ locationString (makeLocation escapeRow escapeColumn) ++ ".")
 
     else
-        let
-            nextPosition =
-                { offset = afterPrefixOffset
-                , row = escapeStart.row
-                , column = escapeStart.column + 2
-                }
-        in
-        consumeLiteral termination
+        consumeLiteral
+            termination
             source
-            start
-            nextPosition
-            (decodedAcc ++ "u")
-            (rawAcc ++ "\\u")
+            startRow
+            startColumn
+            afterPrefixOffset
+            escapeRow
+            (escapeColumn + 2)
+            ("u" :: decodedChunksRev)
+            ("\\u" :: rawChunksRev)
+
+
+scanUnicodeEscapeDigits : String -> Int -> Maybe ( Int, Int )
+scanUnicodeEscapeDigits source offset =
+    case String.slice offset (offset + 1) source of
+        "0" ->
+            Just (scanUnicodeEscapeDigitsHelp source (offset + 1) 0)
+
+        "1" ->
+            Just (scanUnicodeEscapeDigitsHelp source (offset + 1) 1)
+
+        "2" ->
+            Just (scanUnicodeEscapeDigitsHelp source (offset + 1) 2)
+
+        "3" ->
+            Just (scanUnicodeEscapeDigitsHelp source (offset + 1) 3)
+
+        "4" ->
+            Just (scanUnicodeEscapeDigitsHelp source (offset + 1) 4)
+
+        "5" ->
+            Just (scanUnicodeEscapeDigitsHelp source (offset + 1) 5)
+
+        "6" ->
+            Just (scanUnicodeEscapeDigitsHelp source (offset + 1) 6)
+
+        "7" ->
+            Just (scanUnicodeEscapeDigitsHelp source (offset + 1) 7)
+
+        "8" ->
+            Just (scanUnicodeEscapeDigitsHelp source (offset + 1) 8)
+
+        "9" ->
+            Just (scanUnicodeEscapeDigitsHelp source (offset + 1) 9)
+
+        "a" ->
+            Just (scanUnicodeEscapeDigitsHelp source (offset + 1) 10)
+
+        "A" ->
+            Just (scanUnicodeEscapeDigitsHelp source (offset + 1) 10)
+
+        "b" ->
+            Just (scanUnicodeEscapeDigitsHelp source (offset + 1) 11)
+
+        "B" ->
+            Just (scanUnicodeEscapeDigitsHelp source (offset + 1) 11)
+
+        "c" ->
+            Just (scanUnicodeEscapeDigitsHelp source (offset + 1) 12)
+
+        "C" ->
+            Just (scanUnicodeEscapeDigitsHelp source (offset + 1) 12)
+
+        "d" ->
+            Just (scanUnicodeEscapeDigitsHelp source (offset + 1) 13)
+
+        "D" ->
+            Just (scanUnicodeEscapeDigitsHelp source (offset + 1) 13)
+
+        "e" ->
+            Just (scanUnicodeEscapeDigitsHelp source (offset + 1) 14)
+
+        "E" ->
+            Just (scanUnicodeEscapeDigitsHelp source (offset + 1) 14)
+
+        "f" ->
+            Just (scanUnicodeEscapeDigitsHelp source (offset + 1) 15)
+
+        "F" ->
+            Just (scanUnicodeEscapeDigitsHelp source (offset + 1) 15)
+
+        _ ->
+            Nothing
+
+
+scanUnicodeEscapeDigitsHelp : String -> Int -> Int -> ( Int, Int )
+scanUnicodeEscapeDigitsHelp source offset value =
+    case String.slice offset (offset + 1) source of
+        "0" ->
+            scanUnicodeEscapeDigitsHelp source (offset + 1) (value * 16)
+
+        "1" ->
+            scanUnicodeEscapeDigitsHelp source (offset + 1) (value * 16 + 1)
+
+        "2" ->
+            scanUnicodeEscapeDigitsHelp source (offset + 1) (value * 16 + 2)
+
+        "3" ->
+            scanUnicodeEscapeDigitsHelp source (offset + 1) (value * 16 + 3)
+
+        "4" ->
+            scanUnicodeEscapeDigitsHelp source (offset + 1) (value * 16 + 4)
+
+        "5" ->
+            scanUnicodeEscapeDigitsHelp source (offset + 1) (value * 16 + 5)
+
+        "6" ->
+            scanUnicodeEscapeDigitsHelp source (offset + 1) (value * 16 + 6)
+
+        "7" ->
+            scanUnicodeEscapeDigitsHelp source (offset + 1) (value * 16 + 7)
+
+        "8" ->
+            scanUnicodeEscapeDigitsHelp source (offset + 1) (value * 16 + 8)
+
+        "9" ->
+            scanUnicodeEscapeDigitsHelp source (offset + 1) (value * 16 + 9)
+
+        "a" ->
+            scanUnicodeEscapeDigitsHelp source (offset + 1) (value * 16 + 10)
+
+        "A" ->
+            scanUnicodeEscapeDigitsHelp source (offset + 1) (value * 16 + 10)
+
+        "b" ->
+            scanUnicodeEscapeDigitsHelp source (offset + 1) (value * 16 + 11)
+
+        "B" ->
+            scanUnicodeEscapeDigitsHelp source (offset + 1) (value * 16 + 11)
+
+        "c" ->
+            scanUnicodeEscapeDigitsHelp source (offset + 1) (value * 16 + 12)
+
+        "C" ->
+            scanUnicodeEscapeDigitsHelp source (offset + 1) (value * 16 + 12)
+
+        "d" ->
+            scanUnicodeEscapeDigitsHelp source (offset + 1) (value * 16 + 13)
+
+        "D" ->
+            scanUnicodeEscapeDigitsHelp source (offset + 1) (value * 16 + 13)
+
+        "e" ->
+            scanUnicodeEscapeDigitsHelp source (offset + 1) (value * 16 + 14)
+
+        "E" ->
+            scanUnicodeEscapeDigitsHelp source (offset + 1) (value * 16 + 14)
+
+        "f" ->
+            scanUnicodeEscapeDigitsHelp source (offset + 1) (value * 16 + 15)
+
+        "F" ->
+            scanUnicodeEscapeDigitsHelp source (offset + 1) (value * 16 + 15)
+
+        _ ->
+            ( offset, value )
+
+
+prependNonEmptyChunk : String -> List String -> List String
+prependNonEmptyChunk chunk chunksRev =
+    if String.isEmpty chunk then
+        chunksRev
+
+    else
+        chunk :: chunksRev
+
+
+concatenateChunksRev : List String -> String
+concatenateChunksRev chunksRev =
+    String.concat (List.reverse chunksRev)
 
 
 tokenizeMultilineComment :
     String
-    -> Position
-    -> Position
+    -> Int
+    -> Int
+    -> Int
+    -> Int
+    -> Int
     -> List Token.Token
     -> Int
-    -> String
+    -> List String
     -> Result String (List Token.Token)
-tokenizeMultilineComment source position start tokensRev depth accumulated =
+tokenizeMultilineComment source offset row column startRow startColumn tokensRev depth chunksRev =
     if
-        position.offset >= 0
+        offset >= 0
         {-
-        Add an explicit branch to make it trivial to prove that `position.offset` is >= 0 for all usages below.
+        Add an explicit branch to make it trivial to prove that `offset` is >= 0 for all usages below.
         Based on that proof, compiler have an easier way to prove that `String.slice` is always called non-negative offsets,
         which in turn allows the compile-time removal of the branches in those instances of `String.slice`
         -}
     then
         let
             ( runEndOffset, runEndType ) =
-                multilineCommentRunEnd source position.offset
+                multilineCommentRunEnd source offset
 
             run =
-                String.slice position.offset runEndOffset source
+                String.slice offset runEndOffset source
 
-            positionAfterRun =
-                { offset = runEndOffset
-                , row = position.row
-                , column = position.column + (runEndOffset - position.offset)
-                }
+            columnAfterRun =
+                column + (runEndOffset - offset)
 
-            accumulatedAfterRun =
-                accumulated ++ run
+            chunksAfterRun =
+                prependNonEmptyChunk run chunksRev
         in
-        case classifyAt source positionAfterRun.offset of
-            AtEnd ->
-                Err ("Unterminated comment at " ++ locationString (positionLocation start) ++ ".")
+        case runEndType of
+            MultilineCommentRunEnd_EndOfInput ->
+                Err ("Unterminated comment at " ++ locationString (makeLocation startRow startColumn) ++ ".")
 
-            AtNewlineLF ->
-                let
-                    nextPosition =
-                        { offset = positionAfterRun.offset + 1
-                        , row = positionAfterRun.row + 1
-                        , column = 1
-                        }
-                in
+            MultilineCommentRunEnd_NewlineLF ->
                 tokenizeMultilineComment
                     source
-                    nextPosition
-                    start
+                    (runEndOffset + 1)
+                    (row + 1)
+                    1
+                    startRow
+                    startColumn
                     tokensRev
                     depth
-                    (accumulatedAfterRun ++ "\n")
+                    ("\n" :: chunksAfterRun)
 
-            AtNewlineCRLF ->
-                let
-                    nextPosition =
-                        { offset = positionAfterRun.offset + 2
-                        , row = positionAfterRun.row + 1
-                        , column = 1
-                        }
-                in
+            MultilineCommentRunEnd_NewlineCRLF ->
                 tokenizeMultilineComment
                     source
-                    nextPosition
-                    start
+                    (runEndOffset + 2)
+                    (row + 1)
+                    1
+                    startRow
+                    startColumn
                     tokensRev
                     depth
-                    (accumulatedAfterRun ++ "\n")
+                    ("\n" :: chunksAfterRun)
 
-            AtNewlineCR ->
-                let
-                    nextPosition =
-                        { offset = positionAfterRun.offset + 1
-                        , row = positionAfterRun.row + 1
-                        , column = 1
-                        }
-                in
+            MultilineCommentRunEnd_NewlineCR ->
                 tokenizeMultilineComment
                     source
-                    nextPosition
-                    start
+                    (runEndOffset + 1)
+                    (row + 1)
+                    1
+                    startRow
+                    startColumn
                     tokensRev
                     depth
-                    (accumulatedAfterRun ++ "\n")
+                    ("\n" :: chunksAfterRun)
 
-            AtChar other ->
-                case runEndType of
-                    MultilineCommentRunEnd_StartComment ->
-                        let
-                            nextPosition =
-                                { offset = positionAfterRun.offset + 2
-                                , row = positionAfterRun.row
-                                , column = positionAfterRun.column + 2
-                                }
-                        in
-                        tokenizeMultilineComment
-                            source
-                            nextPosition
-                            start
-                            tokensRev
-                            (depth + 1)
-                            (accumulatedAfterRun ++ "{-")
+            MultilineCommentRunEnd_StartComment ->
+                tokenizeMultilineComment
+                    source
+                    (runEndOffset + 2)
+                    row
+                    (columnAfterRun + 2)
+                    startRow
+                    startColumn
+                    tokensRev
+                    (depth + 1)
+                    ("{-" :: chunksAfterRun)
 
-                    MultilineCommentRunEnd_EndComment ->
-                        let
-                            finalLexeme =
-                                accumulatedAfterRun ++ "-}"
+            MultilineCommentRunEnd_EndComment ->
+                let
+                    finalChunksRev =
+                        "-}" :: chunksAfterRun
 
-                            endPosition =
-                                { offset = positionAfterRun.offset + 2
-                                , row = positionAfterRun.row
-                                , column = positionAfterRun.column + 2
-                                }
-                        in
-                        if depth == 1 then
-                            tokenizeHelp
-                                source
-                                endPosition
-                                (makeToken
-                                    Token.Comment
-                                    finalLexeme
-                                    (positionLocation start)
-                                    (positionLocation endPosition)
-                                    Nothing
-                                    :: tokensRev
-                                )
+                    endOffset =
+                        runEndOffset + 2
 
-                        else
-                            tokenizeMultilineComment source endPosition start tokensRev (depth - 1) finalLexeme
+                    endColumn =
+                        columnAfterRun + 2
+                in
+                if depth == 1 then
+                    tokenizeHelp
+                        source
+                        endOffset
+                        row
+                        endColumn
+                        (makeToken
+                            Token.Comment
+                            (concatenateChunksRev finalChunksRev)
+                            (makeLocation startRow startColumn)
+                            (makeLocation row endColumn)
+                            Nothing
+                            :: tokensRev
+                        )
 
-                    MultilineCommentRunEnd_Other ->
-                        -- Unreachable: `multilineCommentRunEnd` only stops at '{', '-', a line break, or
-                        -- the end of input, all of which are handled above. Kept for totality.
-                        let
-                            nextPosition =
-                                { offset = positionAfterRun.offset + 1
-                                , row = positionAfterRun.row
-                                , column = positionAfterRun.column + 1
-                                }
-                        in
-                        tokenizeMultilineComment
-                            source
-                            nextPosition
-                            start
-                            tokensRev
-                            depth
-                            (accumulatedAfterRun ++ other)
+                else
+                    tokenizeMultilineComment source endOffset row endColumn startRow startColumn tokensRev (depth - 1) finalChunksRev
 
     else
         Err
             ("Internal error: negative offset "
-                ++ String.fromInt position.offset ++ " at " ++ locationString (positionLocation position) ++ "."
+                ++ String.fromInt offset ++ " at " ++ locationString (makeLocation row column) ++ "."
             )
 
 
 type MultilineCommentRunEnd
-    = MultilineCommentRunEnd_StartComment
+    = MultilineCommentRunEnd_EndOfInput
+    | MultilineCommentRunEnd_NewlineLF
+    | MultilineCommentRunEnd_NewlineCRLF
+    | MultilineCommentRunEnd_NewlineCR
+    | MultilineCommentRunEnd_StartComment
     | MultilineCommentRunEnd_EndComment
-    | MultilineCommentRunEnd_Other
 
 
 {-| Finds the offset where a run of plain multi-line-comment content ends: at the next `{`, `-`,
@@ -842,24 +1013,27 @@ multilineCommentRunEnd source offset =
         "-}" ->
             ( offset, MultilineCommentRunEnd_EndComment )
 
+        "\u{000D}\n" ->
+            ( offset, MultilineCommentRunEnd_NewlineCRLF )
+
         _ ->
             case String.slice offset (offset + 1) source of
                 "" ->
-                    ( offset, MultilineCommentRunEnd_Other )
+                    ( offset, MultilineCommentRunEnd_EndOfInput )
 
                 "\n" ->
-                    ( offset, MultilineCommentRunEnd_Other )
+                    ( offset, MultilineCommentRunEnd_NewlineLF )
 
                 "\u{000D}" ->
-                    ( offset, MultilineCommentRunEnd_Other )
+                    ( offset, MultilineCommentRunEnd_NewlineCR )
 
                 _ ->
                     multilineCommentRunEnd source (offset + 1)
 
 
-minusIsOperator : String -> Position -> List Token.Token -> Bool
-minusIsOperator source position tokensRev =
-    case String.slice (position.offset + 1) (position.offset + 2) source of
+minusIsOperator : String -> Int -> Int -> Int -> List Token.Token -> Bool
+minusIsOperator source offset row column tokensRev =
+    case String.slice (offset + 1) (offset + 2) source of
         "" ->
             True
 
@@ -878,40 +1052,44 @@ minusIsOperator source position tokensRev =
                         _ ->
                             False
                    )
-                || previousAdjacentTokenCanEndExpression tokensRev
+                || previousAdjacentTokenCanEndExpression row column tokensRev
 
 
-previousAdjacentTokenCanEndExpression : List Token.Token -> Bool
-previousAdjacentTokenCanEndExpression tokensRev =
+previousAdjacentTokenCanEndExpression : Int -> Int -> List Token.Token -> Bool
+previousAdjacentTokenCanEndExpression row column tokensRev =
     case tokensRev of
         token :: _ ->
-            case token.tokenType of
-                Token.Identifier ->
-                    True
+            if token.end.row == row && token.end.column == column then
+                case token.tokenType of
+                    Token.Identifier ->
+                        True
 
-                Token.NumberLiteral ->
-                    True
+                    Token.NumberLiteral ->
+                        True
 
-                Token.StringLiteral ->
-                    True
+                    Token.StringLiteral ->
+                        True
 
-                Token.TripleQuotedStringLiteral ->
-                    True
+                    Token.TripleQuotedStringLiteral ->
+                        True
 
-                Token.CharLiteral ->
-                    True
+                    Token.CharLiteral ->
+                        True
 
-                Token.CloseParen ->
-                    True
+                    Token.CloseParen ->
+                        True
 
-                Token.CloseBracket ->
-                    True
+                    Token.CloseBracket ->
+                        True
 
-                Token.CloseBrace ->
-                    True
+                    Token.CloseBrace ->
+                        True
 
-                _ ->
-                    False
+                    _ ->
+                        False
+
+            else
+                False
 
         [] ->
             False
@@ -933,21 +1111,21 @@ makeToken tokenType lexeme start end rawText =
     }
 
 
-numberEnd : String -> Int -> Int
-numberEnd source startOffset =
-    if String.slice startOffset (startOffset + 2) source == "0x" then
+numberEnd : String -> String -> Int -> Int
+numberEnd source first startOffset =
+    if first == "0" && String.slice (startOffset + 1) (startOffset + 2) source == "x" then
         skipToAsciiHexDigitEnd source (startOffset + 2)
 
     else
         let
             afterInteger =
-                skipToAsciiDecimalDigitEnd source startOffset
+                skipToAsciiDecimalDigitEnd source (startOffset + 1)
 
             afterFraction =
                 case String.slice afterInteger (afterInteger + 1) source of
                     "." ->
                         if isDigit (String.slice (afterInteger + 1) (afterInteger + 2) source) then
-                            skipToAsciiDecimalDigitEnd source (afterInteger + 1)
+                            skipToAsciiDecimalDigitEnd source (afterInteger + 2)
 
                         else
                             afterInteger
@@ -983,13 +1161,17 @@ exponentEnd source offset =
     skipToAsciiDecimalDigitEnd source afterSign
 
 
-skipAllWhitespace : String -> Int -> Int
-skipAllWhitespace source offset =
-    if isWhitespace (String.slice offset (offset + 1) source) then
-        skipAllWhitespace source (offset + 1)
+skipInlineWhitespace : String -> Int -> Int
+skipInlineWhitespace source offset =
+    case String.slice offset (offset + 1) source of
+        " " ->
+            skipInlineWhitespace source (offset + 1)
 
-    else
-        offset
+        "\t" ->
+            skipInlineWhitespace source (offset + 1)
+
+        _ ->
+            offset
 
 
 skipToIdentifierEnd : String -> Int -> Int
@@ -1019,16 +1201,13 @@ skipToAsciiHexDigitEnd source offset =
         offset
 
 
-{-| Like `takeWhileEnd`, but stops after at most `remainingCount` further characters even if the
-predicate keeps holding.
--}
-takeAtMostEnd : Int -> (String -> Bool) -> String -> Int -> Int
-takeAtMostEnd remainingCount predicate source offset =
-    if remainingCount <= 0 then
+skipOperatorChars : String -> Int -> Int -> Int
+skipOperatorChars source offset offsetMax =
+    if offset >= offsetMax then
         offset
 
-    else if predicate (String.slice offset (offset + 1) source) then
-        takeAtMostEnd (remainingCount - 1) predicate source (offset + 1)
+    else if isOperatorChar (String.slice offset (offset + 1) source) then
+        skipOperatorChars source (offset + 1) offsetMax
 
     else
         offset
