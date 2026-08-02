@@ -514,7 +514,9 @@ public record ReusedInstances(
 
                             ElmValue.ElmRecord elmRecord =>
                             new ElmValue.ElmRecord(
-                                [.. elmRecord.Fields.Select(kvp => (kvp.FieldName, elmValueReusedInstances[kvp.Value]))]),
+                                [
+                                .. elmRecord.Fields.Select(kvp => (kvp.FieldName, elmValueReusedInstances[kvp.Value]))
+                                ]),
 
                             ElmValue.ElmTag elmTag =>
                             ElmValue.TagInstance(
@@ -916,6 +918,7 @@ public record ReusedInstances(
                         additionalReusableEncodings: encodedForCompilerDict,
                         reportNewEncoding:
                         (pineValue, encoding) => encodedForCompilerDict.TryAdd(pineValue, encoding));
+
                 encodedForCompilerDict[pineValue] = pineValueEncoded;
             }
         }

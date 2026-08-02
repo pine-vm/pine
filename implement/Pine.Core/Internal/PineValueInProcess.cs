@@ -49,29 +49,38 @@ public class PineValueInProcess
     private (PineValueInProcess tag, IReadOnlyList<PineValueInProcess> tagArgs)? _tagged;
 
     private readonly static IReadOnlyList<PineValueInProcess> s_blobSingle =
-        [.. Enumerable.Range(0, 256).Select(i =>
-        {
-            var v = Create(PineValue.BlobSingleByte((byte)i ));
-            v.Evaluate();
-            return v;
-        })];
+        [
+        .. Enumerable.Range(0, 256).Select(
+            i =>
+            {
+                var v = Create(PineValue.BlobSingleByte((byte)i ));
+                v.Evaluate();
+                return v;
+            })
+        ];
 
     private readonly static IReadOnlyList<PineValueInProcess> s_integersPositive =
-        [.. Enumerable.Range(0, 10_000).Select(i =>
-        {
-            var v = CreateInteger(i);
-            v.Evaluate();
+        [
+        .. Enumerable.Range(0, 10_000).Select(
+            i =>
+            {
+                var v = CreateInteger(i);
+                v.Evaluate();
 
-            return v;
-        })];
+                return v;
+            })
+        ];
 
     private readonly static IReadOnlyList<PineValueInProcess> s_integersNegative =
-        [.. Enumerable.Range(1, 5_000).Select(i =>
-        {
-            var v = CreateInteger(-i);
-            v.Evaluate();
-            return v;
-        })];
+        [
+        .. Enumerable.Range(1, 5_000).Select(
+            i =>
+            {
+                var v = CreateInteger(-i);
+                v.Evaluate();
+                return v;
+            })
+        ];
 
     /// <summary>
     /// The value of the empty list, <see cref="PineValue.EmptyList"/>.
@@ -716,10 +725,11 @@ public class PineValueInProcess
 
             var startIndex = Math.Max(0, blobValue.Bytes.Length - resultLength);
 
-            return CreateFromBlob(
-                blobValue,
-                startIndex,
-                resultLength);
+            return
+                CreateFromBlob(
+                    blobValue,
+                    startIndex,
+                    resultLength);
         }
 
         return

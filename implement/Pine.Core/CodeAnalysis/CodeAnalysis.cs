@@ -199,7 +199,8 @@ public class CodeAnalysis
             return
                 DeclQualifiedName.Create(
                     namespaces: [],
-                    declName: AnonymousFunctionName(functionIdentifier.EncodedExpr, functionIdentifier.EnvClass, hashCache));
+                    declName:
+                    AnonymousFunctionName(functionIdentifier.EncodedExpr, functionIdentifier.EnvClass, hashCache));
         }
 
         var namedFunctions =
