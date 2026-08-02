@@ -81,6 +81,60 @@ public class ReducePineExpressionTests
     }
 
     [Fact]
+    public void Conditional_assumption_does_not_prove_unknown_singleton_integer()
+    {
+        var condition =
+            Expression.BuiltinInst(
+                nameof(BuiltinFunction.int_is_sorted_asc),
+                Expression.ListInst(
+                    [
+                    Expression.LitralInst(IntegerEncoding.EncodeSignedInteger(0)),
+                    Expression.EnvironmentInstance
+                    ]));
+
+        var unknownInteger =
+            Expression.BuiltinInst(
+                nameof(BuiltinFunction.head),
+                Expression.EnvironmentInstance);
+
+        var singletonCheck =
+            Expression.BuiltinInst(
+                nameof(BuiltinFunction.int_is_sorted_asc),
+                Expression.ListInst([unknownInteger]));
+
+        var expression =
+            Expression.ConditionalInst(
+                condition,
+                falseBranch: Expression.LitralInst(PineValue.EmptyList),
+                trueBranch: singletonCheck);
+
+        ReducePineExpression.ReduceExpressionBottomUp(expression, s_parseCache)
+            .Should().Be(expression);
+    }
+
+    [Fact]
+    public void False_branch_preserves_condition_value_that_may_not_be_boolean()
+    {
+        var condition =
+            Expression.BuiltinInst(
+                nameof(BuiltinFunction.int_is_sorted_asc),
+                Expression.ListInst(
+                    [
+                    Expression.LitralInst(IntegerEncoding.EncodeSignedInteger(0)),
+                    Expression.EnvironmentInstance
+                    ]));
+
+        var expression =
+            Expression.ConditionalInst(
+                condition,
+                falseBranch: condition,
+                trueBranch: Expression.LitralInst(PineKernelValues.TrueValue));
+
+        ReducePineExpression.ReduceExpressionBottomUp(expression, s_parseCache)
+            .Should().Be(expression);
+    }
+
+    [Fact]
     public void TryEvaluateExpressionIndependent_ParseAndEval_WithLiteralArgs_EvaluatesInnerExpression()
     {
         // Build encoded expression value representing a simple literal

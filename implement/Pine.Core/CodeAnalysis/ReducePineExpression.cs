@@ -2622,9 +2622,27 @@ public class ReducePineExpression
                 parseCache,
                 reducedExpressionCache);
 
+        reducedTrue =
+            ReduceBranchUnderAssumption(
+                reducedTrue,
+                reducedCondition,
+                assumedValue: true,
+                config,
+                parseCache,
+                reducedExpressionCache);
+
         var reducedFalse =
             ReduceExpressionBottomUp(
                 conditional.FalseBranch,
+                config,
+                parseCache,
+                reducedExpressionCache);
+
+        reducedFalse =
+            ReduceBranchUnderAssumption(
+                reducedFalse,
+                reducedCondition,
+                assumedValue: false,
                 config,
                 parseCache,
                 reducedExpressionCache);
@@ -2642,6 +2660,143 @@ public class ReducePineExpression
                 falseBranch: reducedFalse,
                 trueBranch: reducedTrue);
     }
+
+    private static Expression ReduceBranchUnderAssumption(
+        Expression branch,
+        Expression condition,
+        bool assumedValue,
+        ReductionConfig config,
+        PineVMParseCache parseCache,
+        IDictionary<(Expression, ReductionConfig), Expression>? reducedExpressionCache)
+    {
+        var specialized =
+            TransformPineExpressionWithOptionalReplacement(
+                expression =>
+                TryProveBooleanExpression(
+                    expression,
+                    condition,
+                    assumedValue) is { } provenValue
+                ?
+                Expression.LitralInst(
+                    provenValue
+                    ?
+                    PineKernelValues.TrueValue
+                    :
+                    PineKernelValues.FalseValue)
+                :
+                null,
+                branch).expr;
+
+        if (specialized == branch)
+            return branch;
+
+        return
+            ReduceExpressionBottomUp(
+                specialized,
+                config,
+                parseCache,
+                reducedExpressionCache);
+    }
+
+    private static bool? TryProveBooleanExpression(
+        Expression expression,
+        Expression condition,
+        bool assumedValue)
+    {
+        if (assumedValue && expression == condition)
+            return true;
+
+        if (!assumedValue ||
+            expression is not Expression.Builtin
+            {
+                Function: nameof(BuiltinFunction.int_is_sorted_asc),
+                Input: Expression.List expressionOperands
+            } ||
+            condition is not Expression.Builtin
+            {
+                Function: nameof(BuiltinFunction.int_is_sorted_asc),
+                Input: Expression.List conditionOperands
+            })
+        {
+            return null;
+        }
+
+        if (expressionOperands.Items.Count is 1 &&
+            !IsKnownIntegerExpression(
+                expressionOperands.Items[0],
+                conditionOperands.Items))
+        {
+            return null;
+        }
+
+        for (var operandIndex = 1; operandIndex < expressionOperands.Items.Count; operandIndex++)
+        {
+            if (!TryProveIntegerLessThanOrEqual(
+                expressionOperands.Items[operandIndex - 1],
+                expressionOperands.Items[operandIndex],
+                conditionOperands.Items))
+            {
+                return null;
+            }
+        }
+
+        return true;
+    }
+
+    private static bool TryProveIntegerLessThanOrEqual(
+        Expression left,
+        Expression right,
+        IReadOnlyList<Expression> sortedExpressions)
+    {
+        if (left == right)
+            return IsKnownIntegerExpression(left, sortedExpressions);
+
+        for (var expressionIndex = 1; expressionIndex < sortedExpressions.Count; expressionIndex++)
+        {
+            if (sortedExpressions[expressionIndex - 1] == left &&
+                sortedExpressions[expressionIndex] == right)
+            {
+                return true;
+            }
+        }
+
+        if (right is not Expression.Builtin
+            {
+                Function: nameof(BuiltinFunction.int_add),
+                Input: Expression.List addends
+            } ||
+            !IsKnownIntegerExpression(left, sortedExpressions))
+        {
+            return false;
+        }
+
+        var matchedLeft = false;
+
+        foreach (var addend in addends.Items)
+        {
+            if (!matchedLeft && addend == left)
+            {
+                matchedLeft = true;
+                continue;
+            }
+
+            if (addend is not Expression.Litral literal ||
+                BuiltinFunction.SignedIntegerFromValueRelaxed(literal.Value) is not { } integer ||
+                integer < 0)
+            {
+                return false;
+            }
+        }
+
+        return matchedLeft;
+    }
+
+    private static bool IsKnownIntegerExpression(
+        Expression expression,
+        IReadOnlyList<Expression> sortedExpressions) =>
+        expression is Expression.Litral literal &&
+        BuiltinFunction.SignedIntegerFromValueRelaxed(literal.Value) is not null ||
+        sortedExpressions.Contains(expression);
 
     /// <summary>
     /// Reduces a labelled expression bottom-up by reducing the tagged subexpression.

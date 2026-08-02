@@ -2098,13 +2098,31 @@ public class PineIRCompiler
         }
 
         {
-            return
+            var compiledInput =
                 CompileExpressionTransitive(
                     input,
                     context,
                     prior,
-                    parseCache)
-                .AppendInstruction(StackInstruction.Int_Add_Generic);
+                    parseCache);
+
+            if (compiledInput.Instructions.Count is not 0 &&
+                compiledInput.Instructions[^1] is
+                {
+                    Kind: StackInstructionKind.Build_List,
+                    TakeCount: 2
+                })
+            {
+                return
+                    compiledInput with
+                    {
+                        Instructions =
+                        compiledInput.Instructions
+                        .RemoveAt(compiledInput.Instructions.Count - 1)
+                        .Add(StackInstruction.Int_Add_Binary)
+                    };
+            }
+
+            return compiledInput.AppendInstruction(StackInstruction.Int_Add_Generic);
         }
     }
 

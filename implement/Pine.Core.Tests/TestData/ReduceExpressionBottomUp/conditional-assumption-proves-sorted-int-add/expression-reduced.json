@@ -1,0 +1,33 @@
+{
+  "Conditional": [
+    {
+      "Builtin": [
+        "int_is_sorted_asc",
+        {
+          "List": [
+            [
+              {
+                "Litral": [
+                  0
+                ]
+              },
+              {
+                "Environment": []
+              }
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "Litral": [
+        5
+      ]
+    },
+    {
+      "Litral": [
+        9
+      ]
+    }
+  ]
+}

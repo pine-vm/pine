@@ -1,0 +1,80 @@
+{
+  "Conditional": [
+    {
+      "Builtin": [
+        "int_is_sorted_asc",
+        {
+          "List": [
+            [
+              {
+                "Litral": [
+                  0
+                ]
+              },
+              {
+                "Environment": []
+              }
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "Litral": [
+        5
+      ]
+    },
+    {
+      "Conditional": [
+        {
+          "Builtin": [
+            "int_is_sorted_asc",
+            {
+              "List": [
+                [
+                  {
+                    "Litral": [
+                      0
+                    ]
+                  },
+                  {
+                    "Environment": []
+                  },
+                  {
+                    "Builtin": [
+                      "int_add",
+                      {
+                        "List": [
+                          [
+                            {
+                              "Environment": []
+                            },
+                            {
+                              "Litral": [
+                                1
+                              ]
+                            }
+                          ]
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              ]
+            }
+          ]
+        },
+        {
+          "Litral": [
+            7
+          ]
+        },
+        {
+          "Litral": [
+            9
+          ]
+        }
+      ]
+    }
+  ]
+}
