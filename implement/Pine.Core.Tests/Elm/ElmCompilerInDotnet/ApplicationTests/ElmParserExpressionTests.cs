@@ -81,37 +81,6 @@ public class ElmParserExpressionTests
                 _ ->
                     ""
         
-        
-        expressionTag : String -> String
-        expressionTag input =
-            case parseExpression input of
-                Ok expr ->
-                    expressionVariantTag expr
-
-                Err e ->
-                    "Err:" ++ e
-
-
-        expressionVariantTag : Expression -> String
-        expressionVariantTag expr =
-            case expr of
-                Integer _ ->
-                    "Integer"
-
-                Literal _ ->
-                    "Literal"
-
-                ListExpr _ ->
-                    "ListExpr"
-
-                UnitExpr ->
-                    "UnitExpr"
-
-                FunctionOrValue _ _ ->
-                    "FunctionOrValue"
-
-                _ ->
-                    "Other"
         """"
         ;
 
