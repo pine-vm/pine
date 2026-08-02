@@ -258,6 +258,8 @@ public class TokensFromStringConcreteTests
     [InlineData("float", "3.14", "FloatLiteral")]
     [InlineData("string", "\"hello\"", "StringLiteral")]
     [InlineData("operator application", "1 + 2 * 3", "OperatorApplication")]
+    [InlineData("multiline comment containing dashes and braces", "{-\n -- dashes --- and braces { }\n-}\n71", "IntegerLiteral")]
+    [InlineData("multiline comment containing a nested comment", "{- outer\n    {- inner -}\n-}\n71", "IntegerLiteral")]
     public void FromString_still_parses_expressions_after_refactor(
         string description,
         string input,

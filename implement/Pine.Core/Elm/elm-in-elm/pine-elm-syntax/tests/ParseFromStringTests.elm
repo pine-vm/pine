@@ -54,11 +54,9 @@ suite =
 
 concreteFileSuite : List Test
 concreteFileSuite =
-    [ Test.test "parses module, import, comments, and multiple declarations with ranges" <|
-        \_ ->
-            let
-                source =
-                    """
+    [ { title = "parses module, import, comments, and multiple declarations with ranges"
+      , source =
+            """
 module Main exposing (..)
 
 -- file comment
@@ -68,69 +66,122 @@ first = 1
 
 second = first
 """
-
-                expected =
-                    { moduleDefinition =
-                        Node (range 1 1 1 26)
-                            (Module.NormalModule
-                                { moduleName = Node (range 1 8 1 12) [ "Main" ]
-                                , exposingList =
-                                    Node (range 1 13 1 26)
-                                        (Exposing.All (range 1 23 1 25))
-                                }
+      , expected =
+            { moduleDefinition =
+                Node (range 1 1 1 26)
+                    (Module.NormalModule
+                        { moduleName = Node (range 1 8 1 12) [ "Main" ]
+                        , exposingList =
+                            Node (range 1 13 1 26)
+                                (Exposing.All (range 1 23 1 25))
+                        }
+                    )
+            , imports =
+                [ Node (range 4 1 4 33)
+                    { importTokenLocation = location 4 1
+                    , moduleName = Node (range 4 8 4 12) [ "Html" ]
+                    , moduleAlias =
+                        Just
+                            ( location 4 13
+                            , Node (range 4 16 4 17) [ "H" ]
                             )
-                    , imports =
-                        [ Node (range 4 1 4 33)
-                            { importTokenLocation = location 4 1
-                            , moduleName = Node (range 4 8 4 12) [ "Html" ]
-                            , moduleAlias =
-                                Just
-                                    ( location 4 13
-                                    , Node (range 4 16 4 17) [ "H" ]
-                                    )
-                            , exposingList =
-                                Just
-                                    ( location 4 18
-                                    , Node (range 4 18 4 33)
-                                        (Exposing.Explicit
-                                            (location 4 27)
-                                            (SeparatedSyntaxList.NonEmpty
-                                                (Node (range 4 28 4 32)
-                                                    (Exposing.TypeOrAliasExpose "Html")
-                                                )
-                                                []
-                                            )
-                                            (location 4 32)
+                    , exposingList =
+                        Just
+                            ( location 4 18
+                            , Node (range 4 18 4 33)
+                                (Exposing.Explicit
+                                    (location 4 27)
+                                    (SeparatedSyntaxList.NonEmpty
+                                        (Node (range 4 28 4 32)
+                                            (Exposing.TypeOrAliasExpose "Html")
                                         )
+                                        []
                                     )
-                            }
-                        ]
-                    , declarations =
-                        [ simpleFunctionDeclaration
-                            (range 6 1 6 10)
-                            (range 6 1 6 6)
-                            (location 6 7)
-                            (Node (range 6 9 6 10) (Expression.IntegerLiteral "1"))
-                            "first"
-                        , simpleFunctionDeclaration
-                            (range 8 1 8 15)
-                            (range 8 1 8 7)
-                            (location 8 8)
-                            (Node (range 8 10 8 15) (Expression.Identifier [] "first"))
-                            "second"
-                        ]
-                    , comments =
-                        [ Node (range 3 1 3 16) "-- file comment" ]
-                    , incompleteDeclarations = []
+                                    (location 4 32)
+                                )
+                            )
                     }
-            in
-            case ElmSyntax.Concrete.Parser.FromString.parseFile (String.trim source) of
-                Ok actual ->
-                    Expect.equal expected actual
+                ]
+            , comments =
+                [ Node (range 3 1 3 16) "-- file comment" ]
+            , declarations =
+                [ simpleFunctionDeclaration
+                    (range 6 1 6 10)
+                    (range 6 1 6 6)
+                    (location 6 7)
+                    (Node (range 6 9 6 10) (Expression.IntegerLiteral "1"))
+                    "first"
+                , simpleFunctionDeclaration
+                    (range 8 1 8 15)
+                    (range 8 1 8 7)
+                    (location 8 8)
+                    (Node (range 8 10 8 15) (Expression.Identifier [] "first"))
+                    "second"
+                ]
+            , incompleteDeclarations = []
+            }
+      }
+    , { title = "various multi-line comments and a multi-line string literal"
+      , source =
+            """
+module Main exposing (..)
 
-                Err error ->
-                    Expect.fail error
+{- multi-line - } comment -}
+
+{- multi-line comment
+with a line break -}
+
+{- multi-line comment
+{- inner -}
+with multiple line breaks
+-}
+
+
+decl = \"\"\"multiline
+string\"\"\"
+
+        """
+      , expected =
+            { moduleDefinition =
+                Node (range 1 1 1 26)
+                    (Module.NormalModule
+                        { moduleName = Node (range 1 8 1 12) [ "Main" ]
+                        , exposingList =
+                            Node (range 1 13 1 26)
+                                (Exposing.All (range 1 23 1 25))
+                        }
+                    )
+            , imports = []
+            , comments =
+                [ Node (range 3 1 3 29) "{- multi-line - } comment -}"
+                , Node (range 5 1 6 21) "{- multi-line comment\nwith a line break -}"
+                , Node (range 8 1 11 3) "{- multi-line comment\n{- inner -}\nwith multiple line breaks\n-}"
+                ]
+            , declarations =
+                [ simpleFunctionDeclaration
+                    (range 14 1 15 10)
+                    (range 14 1 14 5)
+                    (location 14 6)
+                    (Node (range 14 8 15 10)
+                        (Expression.MultilineStringLiteral "multiline\nstring" (Just [ "multiline", "string" ]))
+                    )
+                    "decl"
+                ]
+            , incompleteDeclarations = []
+            }
+      }
     ]
+        |> List.map
+            (\testCase ->
+                Test.test testCase.title <|
+                    \_ ->
+                        case ElmSyntax.Concrete.Parser.FromString.parseFile (String.trim testCase.source) of
+                            Ok actual ->
+                                Expect.equal testCase.expected actual
+
+                            Err error ->
+                                Expect.fail error
+            )
 
 
 abstractFileSuite : List Test
