@@ -156,7 +156,7 @@ tokenizeHelp source position tokensRev =
     else
         Err
             ("Internal error: negative offset "
-            ++ String.fromInt position.offset ++ " at " ++ locationString (positionLocation position) ++ "."
+                ++ String.fromInt position.offset ++ " at " ++ locationString (positionLocation position) ++ "."
             )
 
 
@@ -677,97 +677,40 @@ tokenizeMultilineComment :
     -> String
     -> Result String (List Token.Token)
 tokenizeMultilineComment source position start tokensRev depth accumulated =
-    let
-        runEnd =
-            multilineCommentRunEnd source position.offset
+    if
+        position.offset >= 0
+        {-
+        Add an explicit branch to make it trivial to prove that `position.offset` is >= 0 for all usages below.
+        Based on that proof, compiler have an easier way to prove that `String.slice` is always called non-negative offsets,
+        which in turn allows the compile-time removal of the branches in those instances of `String.slice`
+        -}
+    then
+        let
+            ( runEndOffset, runEndType ) =
+                multilineCommentRunEnd source position.offset
 
-        run =
-            String.slice position.offset runEnd source
+            run =
+                String.slice position.offset runEndOffset source
 
-        positionAfterRun =
-            { offset = runEnd
-            , row = position.row
-            , column = position.column + (runEnd - position.offset)
-            }
+            positionAfterRun =
+                { offset = runEndOffset
+                , row = position.row
+                , column = position.column + (runEndOffset - position.offset)
+                }
 
-        accumulatedAfterRun =
-            accumulated ++ run
-    in
-    case classifyAt source positionAfterRun.offset of
-        AtEnd ->
-            Err ("Unterminated comment at " ++ locationString (positionLocation start) ++ ".")
+            accumulatedAfterRun =
+                accumulated ++ run
+        in
+        case classifyAt source positionAfterRun.offset of
+            AtEnd ->
+                Err ("Unterminated comment at " ++ locationString (positionLocation start) ++ ".")
 
-        AtNewlineLF ->
-            let
-                nextPosition =
-                    { offset = positionAfterRun.offset + 1
-                    , row = positionAfterRun.row + 1
-                    , column = 1
-                    }
-            in
-            tokenizeMultilineComment
-                source
-                nextPosition
-                start
-                tokensRev
-                depth
-                (accumulatedAfterRun ++ "\n")
-
-        AtNewlineCRLF ->
-            let
-                nextPosition =
-                    { offset = positionAfterRun.offset + 2
-                    , row = positionAfterRun.row + 1
-                    , column = 1
-                    }
-            in
-            tokenizeMultilineComment
-                source
-                nextPosition
-                start
-                tokensRev
-                depth
-                (accumulatedAfterRun ++ "\n")
-
-        AtNewlineCR ->
-            let
-                nextPosition =
-                    { offset = positionAfterRun.offset + 1
-                    , row = positionAfterRun.row + 1
-                    , column = 1
-                    }
-            in
-            tokenizeMultilineComment
-                source
-                nextPosition
-                start
-                tokensRev
-                depth
-                (accumulatedAfterRun ++ "\n")
-
-        AtChar "{" ->
-            if String.slice (positionAfterRun.offset + 1) (positionAfterRun.offset + 2) source == "-" then
-                let
-                    nextPosition =
-                        { offset = positionAfterRun.offset + 2
-                        , row = positionAfterRun.row
-                        , column = positionAfterRun.column + 2
-                        }
-                in
-                tokenizeMultilineComment
-                    source
-                    nextPosition
-                    start
-                    tokensRev
-                    (depth + 1)
-                    (accumulatedAfterRun ++ "{-")
-
-            else
+            AtNewlineLF ->
                 let
                     nextPosition =
                         { offset = positionAfterRun.offset + 1
-                        , row = positionAfterRun.row
-                        , column = positionAfterRun.column + 1
+                        , row = positionAfterRun.row + 1
+                        , column = 1
                         }
                 in
                 tokenizeMultilineComment
@@ -776,46 +719,14 @@ tokenizeMultilineComment source position start tokensRev depth accumulated =
                     start
                     tokensRev
                     depth
-                    (accumulatedAfterRun ++ "{")
+                    (accumulatedAfterRun ++ "\n")
 
-        AtChar "-" ->
-            if String.slice (positionAfterRun.offset + 1) (positionAfterRun.offset + 2) source == "}" then
-                let
-                    finalLexeme =
-                        accumulatedAfterRun ++ "-}"
-
-                    endPosition =
-                        { offset = positionAfterRun.offset + 2
-                        , row = positionAfterRun.row
-                        , column = positionAfterRun.column + 2
-                        }
-                in
-                if depth == 1 then
-                    tokenizeHelp source
-                        endPosition
-                        (makeToken
-                            Token.Comment
-                            finalLexeme
-                            (positionLocation start)
-                            (positionLocation endPosition)
-                            Nothing :: tokensRev
-                        )
-
-                else
-                    tokenizeMultilineComment
-                        source
-                        endPosition
-                        start
-                        tokensRev
-                        (depth - 1)
-                        finalLexeme
-
-            else
+            AtNewlineCRLF ->
                 let
                     nextPosition =
-                        { offset = positionAfterRun.offset + 1
-                        , row = positionAfterRun.row
-                        , column = positionAfterRun.column + 1
+                        { offset = positionAfterRun.offset + 2
+                        , row = positionAfterRun.row + 1
+                        , column = 1
                         }
                 in
                 tokenizeMultilineComment
@@ -824,51 +735,126 @@ tokenizeMultilineComment source position start tokensRev depth accumulated =
                     start
                     tokensRev
                     depth
-                    (accumulatedAfterRun ++ "-")
+                    (accumulatedAfterRun ++ "\n")
 
-        AtChar other ->
-            -- Unreachable: `multilineCommentRunEnd` only stops at '{', '-', a line break, or
-            -- the end of input, all of which are handled above. Kept for totality.
-            let
-                nextPosition =
-                    { offset = positionAfterRun.offset + 1
-                    , row = positionAfterRun.row
-                    , column = positionAfterRun.column + 1
-                    }
-            in
-            tokenizeMultilineComment
-                source
-                nextPosition
-                start
-                tokensRev
-                depth
-                (accumulatedAfterRun ++ other)
+            AtNewlineCR ->
+                let
+                    nextPosition =
+                        { offset = positionAfterRun.offset + 1
+                        , row = positionAfterRun.row + 1
+                        , column = 1
+                        }
+                in
+                tokenizeMultilineComment
+                    source
+                    nextPosition
+                    start
+                    tokensRev
+                    depth
+                    (accumulatedAfterRun ++ "\n")
+
+            AtChar other ->
+                case runEndType of
+                    MultilineCommentRunEnd_StartComment ->
+                        let
+                            nextPosition =
+                                { offset = positionAfterRun.offset + 2
+                                , row = positionAfterRun.row
+                                , column = positionAfterRun.column + 2
+                                }
+                        in
+                        tokenizeMultilineComment
+                            source
+                            nextPosition
+                            start
+                            tokensRev
+                            (depth + 1)
+                            (accumulatedAfterRun ++ "{-")
+
+                    MultilineCommentRunEnd_EndComment ->
+                        let
+                            finalLexeme =
+                                accumulatedAfterRun ++ "-}"
+
+                            endPosition =
+                                { offset = positionAfterRun.offset + 2
+                                , row = positionAfterRun.row
+                                , column = positionAfterRun.column + 2
+                                }
+                        in
+                        if depth == 1 then
+                            tokenizeHelp
+                                source
+                                endPosition
+                                (makeToken
+                                    Token.Comment
+                                    finalLexeme
+                                    (positionLocation start)
+                                    (positionLocation endPosition)
+                                    Nothing
+                                    :: tokensRev
+                                )
+
+                        else
+                            tokenizeMultilineComment source endPosition start tokensRev (depth - 1) finalLexeme
+
+                    MultilineCommentRunEnd_Other ->
+                        -- Unreachable: `multilineCommentRunEnd` only stops at '{', '-', a line break, or
+                        -- the end of input, all of which are handled above. Kept for totality.
+                        let
+                            nextPosition =
+                                { offset = positionAfterRun.offset + 1
+                                , row = positionAfterRun.row
+                                , column = positionAfterRun.column + 1
+                                }
+                        in
+                        tokenizeMultilineComment
+                            source
+                            nextPosition
+                            start
+                            tokensRev
+                            depth
+                            (accumulatedAfterRun ++ other)
+
+    else
+        Err
+            ("Internal error: negative offset "
+                ++ String.fromInt position.offset ++ " at " ++ locationString (positionLocation position) ++ "."
+            )
+
+
+type MultilineCommentRunEnd
+    = MultilineCommentRunEnd_StartComment
+    | MultilineCommentRunEnd_EndComment
+    | MultilineCommentRunEnd_Other
 
 
 {-| Finds the offset where a run of plain multi-line-comment content ends: at the next `{`, `-`,
 line break, or the end of input. As with `findLiteralRunEnd`, this lets the caller take a single
 `String.slice` for the whole run.
 -}
-multilineCommentRunEnd : String -> Int -> Int
+multilineCommentRunEnd : String -> Int -> ( Int, MultilineCommentRunEnd )
 multilineCommentRunEnd source offset =
-    case String.slice offset (offset + 1) source of
-        "" ->
-            offset
+    case String.slice offset (offset + 2) source of
+        "{-" ->
+            ( offset, MultilineCommentRunEnd_StartComment )
 
-        "{" ->
-            offset
-
-        "-" ->
-            offset
-
-        "\n" ->
-            offset
-
-        "\u{000D}" ->
-            offset
+        "-}" ->
+            ( offset, MultilineCommentRunEnd_EndComment )
 
         _ ->
-            multilineCommentRunEnd source (offset + 1)
+            case String.slice offset (offset + 1) source of
+                "" ->
+                    ( offset, MultilineCommentRunEnd_Other )
+
+                "\n" ->
+                    ( offset, MultilineCommentRunEnd_Other )
+
+                "\u{000D}" ->
+                    ( offset, MultilineCommentRunEnd_Other )
+
+                _ ->
+                    multilineCommentRunEnd source (offset + 1)
 
 
 minusIsOperator : String -> Position -> List Token.Token -> Bool
@@ -1498,17 +1484,209 @@ isIdentifierStart character =
 
 isIdentifierChar : String -> Bool
 isIdentifierChar character =
-    character == "_"
-        || character
-        == "'"
-        || (not (String.isEmpty character) && String.all Char.isAlphaNum character)
+    {-
+    TODO: Expand code analysis to optimize form using `List.member` to get the same level of efficiency:
+    List.member char [ "_", "0", "1", ..., "9", "a", "b", ..., "z", "A", "B", ..., "Z" ]
+    -}
+    case character of
+        "_" ->
+            True
+
+        "0" ->
+            True
+
+        "1" ->
+            True
+
+        "2" ->
+            True
+
+        "3" ->
+            True
+
+        "4" ->
+            True
+
+        "5" ->
+            True
+
+        "6" ->
+            True
+
+        "7" ->
+            True
+
+        "8" ->
+            True
+
+        "9" ->
+            True
+
+        "a" ->
+            True
+
+        "b" ->
+            True
+
+        "c" ->
+            True
+
+        "d" ->
+            True
+
+        "e" ->
+            True
+
+        "f" ->
+            True
+
+        "g" ->
+            True
+
+        "h" ->
+            True
+
+        "i" ->
+            True
+
+        "j" ->
+            True
+
+        "k" ->
+            True
+
+        "l" ->
+            True
+
+        "m" ->
+            True
+
+        "n" ->
+            True
+
+        "o" ->
+            True
+
+        "p" ->
+            True
+
+        "q" ->
+            True
+
+        "r" ->
+            True
+
+        "s" ->
+            True
+
+        "t" ->
+            True
+
+        "u" ->
+            True
+
+        "v" ->
+            True
+
+        "w" ->
+            True
+
+        "x" ->
+            True
+
+        "y" ->
+            True
+
+        "z" ->
+            True
+
+        "A" ->
+            True
+
+        "B" ->
+            True
+
+        "C" ->
+            True
+
+        "D" ->
+            True
+
+        "E" ->
+            True
+
+        "F" ->
+            True
+
+        "G" ->
+            True
+
+        "H" ->
+            True
+
+        "I" ->
+            True
+
+        "J" ->
+            True
+
+        "K" ->
+            True
+
+        "L" ->
+            True
+
+        "M" ->
+            True
+
+        "N" ->
+            True
+
+        "O" ->
+            True
+
+        "P" ->
+            True
+
+        "Q" ->
+            True
+
+        "R" ->
+            True
+
+        "S" ->
+            True
+
+        "T" ->
+            True
+
+        "U" ->
+            True
+
+        "V" ->
+            True
+
+        "W" ->
+            True
+
+        "X" ->
+            True
+
+        "Y" ->
+            True
+
+        "Z" ->
+            True
+
+        _ ->
+            False
 
 
 isOperatorChar : String -> Bool
 isOperatorChar character =
     {-
     TODO: Expand code analysis to optimize form using `List.member` to get the same level of efficiency:
-    List.member char [ '+', '-', '/', '*', '=', '.', '$', '<', '>', ':', '&', '|', '^', '?', '%', '#', '!' ]
+    List.member char [ "+", "-", "/", "*", "=", ".", "$", "<", ">", ":", "&", "|", "^", "?", "%", "#", "!" ]
     -}
     case character of
         "+" ->
