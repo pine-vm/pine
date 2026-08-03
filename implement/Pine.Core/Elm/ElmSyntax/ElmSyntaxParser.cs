@@ -314,8 +314,6 @@ public class ElmSyntaxParser
         Colon,
         Pipe,
         Comment,
-        Whitespace,
-        Newline,
         Lambda,
         Operator,
         Negation,
@@ -640,6 +638,13 @@ public class ElmSyntaxParser
 
             while (!IsAtEnd())
             {
+                SkipWhitespace();
+
+                if (IsAtEnd())
+                {
+                    break;
+                }
+
                 if (!TryUnwrap(NextToken(), out var token, out var err))
                 {
                     return err;
@@ -649,6 +654,30 @@ public class ElmSyntaxParser
             }
 
             return tokens.ToArray();
+        }
+
+        private void SkipWhitespace()
+        {
+            while (!IsAtEnd() && char.IsWhiteSpace(Peek()))
+            {
+                if (Peek() is not '\r')
+                {
+                    Advance();
+                    continue;
+                }
+
+                Advance();
+
+                if (Peek() is '\n')
+                {
+                    Advance();
+                }
+                else
+                {
+                    _line++;
+                    _column = 1;
+                }
+            }
         }
 
         private bool IsAtEnd() =>
@@ -734,51 +763,6 @@ public class ElmSyntaxParser
             // Capture the start location for this token.
             Location start = new(_line, _column);
             var current = Peek();
-
-            // Handle whitespace and newlines
-            // We treat \n, \r\n, and lone \r all as line breaks
-            if (char.IsWhiteSpace(current))
-            {
-                if (current is '\n')
-                {
-                    Advance();
-                    Location end = new(_line, _column);
-                    return new Token(TokenType.Newline, "\n", start, end);
-                }
-                else if (current is '\r')
-                {
-                    // Handle \r\n (CRLF) or lone \r as a single newline
-                    Advance(); // Consume \r (doesn't affect line count, column stays same)
-
-                    if (Peek() is '\n')
-                    {
-                        Advance(); // Consume \n following \r (this increments line)
-                    }
-                    else
-                    {
-                        // Lone \r - manually increment line since Advance() on \r doesn't
-                        _line++;
-                        _column = 1;
-                    }
-
-                    Location end = new(_line, _column);
-                    return new Token(TokenType.Newline, "\n", start, end);
-                }
-                else
-                {
-                    var whitespace = new StringBuilder(capacity: 16);
-
-                    // Stop at \r or \n since both can be line endings
-                    while (!IsAtEnd() && char.IsWhiteSpace(Peek()) && Peek() is not '\n' && Peek() is not '\r')
-                    {
-                        whitespace.Append(Advance());
-                    }
-
-                    Location end = new(_line, _column);
-
-                    return new Token(TokenType.Whitespace, whitespace.ToString(), start, end);
-                }
-            }
 
             // Handle single-line comments
             if (current is '-' && PeekNext() is '-')
@@ -1704,12 +1688,13 @@ public class ElmSyntaxParser
 
                 moduleNameParts.Add(firstModuleNamePart);
 
-                while (Peek.Type is TokenType.Dot)
+                while (Peek.Type is TokenType.Dot &&
+                    moduleNameParts[^1].End == Peek.Start)
                 {
-                    if (!TryUnwrap(Consume(TokenType.Dot), out _, out var dotErr))
+                    if (!TryUnwrap(Consume(TokenType.Dot), out var dotToken, out var dotErr))
                         return dotErr;
 
-                    if (!TryUnwrap(ConsumeAnyIdentifier("module name part"), out var moduleNamePart, out var namePartErr))
+                    if (!TryUnwrap(ConsumeAdjacentIdentifier(dotToken, "module name part"), out var moduleNamePart, out var namePartErr))
                         return namePartErr;
 
                     moduleNameParts.Add(moduleNamePart);
@@ -1830,12 +1815,13 @@ public class ElmSyntaxParser
 
                 moduleNameParts.Add(firstModuleNamePart);
 
-                while (Peek.Type is TokenType.Dot)
+                while (Peek.Type is TokenType.Dot &&
+                    moduleNameParts[^1].End == Peek.Start)
                 {
-                    if (!TryUnwrap(Consume(TokenType.Dot), out _, out var dotErr))
+                    if (!TryUnwrap(Consume(TokenType.Dot), out var dotToken, out var dotErr))
                         return dotErr;
 
-                    if (!TryUnwrap(ConsumeAnyIdentifier("module name part"), out var moduleNamePart, out var namePartErr))
+                    if (!TryUnwrap(ConsumeAdjacentIdentifier(dotToken, "module name part"), out var moduleNamePart, out var namePartErr))
                         return namePartErr;
 
                     moduleNameParts.Add(moduleNamePart);
@@ -1895,12 +1881,13 @@ public class ElmSyntaxParser
 
                 moduleNameParts.Add(firstModuleNamePart);
 
-                while (Peek.Type is TokenType.Dot)
+                while (Peek.Type is TokenType.Dot &&
+                    moduleNameParts[^1].End == Peek.Start)
                 {
-                    if (!TryUnwrap(Consume(TokenType.Dot), out _, out var dotErr))
+                    if (!TryUnwrap(Consume(TokenType.Dot), out var dotToken, out var dotErr))
                         return dotErr;
 
-                    if (!TryUnwrap(ConsumeAnyIdentifier("module name part"), out var moduleNamePart, out var namePartErr))
+                    if (!TryUnwrap(ConsumeAdjacentIdentifier(dotToken, "module name part"), out var moduleNamePart, out var namePartErr))
                         return namePartErr;
 
                     moduleNameParts.Add(moduleNamePart);
@@ -1973,12 +1960,13 @@ public class ElmSyntaxParser
 
             var moduleNameParts = new List<Token>([firstModuleNamePart]);
 
-            while (Peek.Type is TokenType.Dot)
+            while (Peek.Type is TokenType.Dot &&
+                moduleNameParts[^1].End == Peek.Start)
             {
-                if (!TryUnwrap(Consume(TokenType.Dot), out _, out var dotErr))
+                if (!TryUnwrap(Consume(TokenType.Dot), out var dotToken, out var dotErr))
                     return dotErr;
 
-                if (!TryUnwrap(ConsumeAnyIdentifier("module name part"), out var moduleNamePart, out var namePartErr))
+                if (!TryUnwrap(ConsumeAdjacentIdentifier(dotToken, "module name part"), out var moduleNamePart, out var namePartErr))
                     return namePartErr;
 
                 moduleNameParts.Add(moduleNamePart);
@@ -2933,8 +2921,6 @@ public class ElmSyntaxParser
                 }
 
                 if (0 < listDepth &&
-                    token.Type is not TokenType.Whitespace &&
-                    token.Type is not TokenType.Newline &&
                     token.Type is not TokenType.Comment)
                 {
                     unclosedListEndLocation = token.End;
@@ -3380,15 +3366,20 @@ public class ElmSyntaxParser
 
                 var namespaces = new List<Token>();
 
-                while (!IsAtEnd() && Peek.Type is TokenType.Dot)
+                var lastNameToken = firstIdentifierToken;
+
+                while (!IsAtEnd() &&
+                    Peek.Type is TokenType.Dot &&
+                    lastNameToken.End == Peek.Start)
                 {
-                    if (!TryUnwrap(Consume(TokenType.Dot), out _, out var dotErr))
+                    if (!TryUnwrap(Consume(TokenType.Dot), out var dotToken, out var dotErr))
                         return dotErr;
 
-                    if (!TryUnwrap(ConsumeAnyIdentifier("namespace item"), out var namespaceToken, out var namespaceErr))
+                    if (!TryUnwrap(ConsumeAdjacentIdentifier(dotToken, "namespace item"), out var namespaceToken, out var namespaceErr))
                         return namespaceErr;
 
                     namespaces.Add(namespaceToken);
+                    lastNameToken = namespaceToken;
                 }
 
                 ConsumeAllTrivia();
@@ -3594,18 +3585,24 @@ public class ElmSyntaxParser
                 out var lessRecordAccessErr))
                 return lessRecordAccessErr;
 
-            if (NextTokenMatches(peek => peek.Type is TokenType.Dot))
+            if (NextTokenMatches(
+                peek =>
+                peek.Type is TokenType.Dot &&
+                lessRecordAccess.Range.End == peek.Start))
             {
                 // | RecordAccess (Node Expression) (Node String)
 
                 var lastRecordAccess = lessRecordAccess;
 
-                while (NextTokenMatches(peek => peek.Type is TokenType.Dot))
+                while (NextTokenMatches(
+                    peek =>
+                    peek.Type is TokenType.Dot &&
+                    lastRecordAccess.Range.End == peek.Start))
                 {
-                    if (!TryUnwrap(Consume(TokenType.Dot), out _, out var dotErr))
+                    if (!TryUnwrap(Consume(TokenType.Dot), out var dotToken, out var dotErr))
                         return dotErr;
 
-                    if (!TryUnwrap(ConsumeAnyIdentifier("record field name"), out var recordFieldToken, out var recordFieldErr))
+                    if (!TryUnwrap(ConsumeAdjacentIdentifier(dotToken, "record field name"), out var recordFieldToken, out var recordFieldErr))
                         return recordFieldErr;
 
                     var recordAccessRange =
@@ -3923,12 +3920,15 @@ public class ElmSyntaxParser
                  * Alfa.Beta.gamma.delta
                  * */
                 while (char.IsUpper(identifiers.Last().Lexeme[0]) &&
-                    NextTokenMatches(peek => peek.Type is TokenType.Dot))
+                    NextTokenMatches(
+                        peek =>
+                        peek.Type is TokenType.Dot &&
+                        identifiers[^1].End == peek.Start))
                 {
-                    if (!TryUnwrap(Consume(TokenType.Dot), out _, out var dotErr))
+                    if (!TryUnwrap(Consume(TokenType.Dot), out var dotToken, out var dotErr))
                         return dotErr;
 
-                    if (!TryUnwrap(ConsumeAnyIdentifier("function or value name part"), out var furtherNamePart, out var furtherNamePartErr))
+                    if (!TryUnwrap(ConsumeAdjacentIdentifier(dotToken, "function or value name part"), out var furtherNamePart, out var furtherNamePartErr))
                         return furtherNamePartErr;
 
                     identifiers.Add(furtherNamePart);
@@ -4158,7 +4158,7 @@ public class ElmSyntaxParser
                 if (!TryUnwrap(Consume(TokenType.Dot), out var dotToken, out var dotErr))
                     return dotErr;
 
-                if (!TryUnwrap(ConsumeAnyIdentifier("record field name"), out var recordFieldToken, out var recordFieldErr))
+                if (!TryUnwrap(ConsumeAdjacentIdentifier(dotToken, "record field name"), out var recordFieldToken, out var recordFieldErr))
                     return recordFieldErr;
 
                 var recordAccessRange =
@@ -4523,12 +4523,13 @@ public class ElmSyntaxParser
 
                 var namespaces = new List<Token>([identifierToken]);
 
-                while (Peek.Type is TokenType.Dot)
+                while (Peek.Type is TokenType.Dot &&
+                    namespaces[^1].End == Peek.Start)
                 {
-                    if (!TryUnwrap(Consume(TokenType.Dot), out _, out var dotErr))
+                    if (!TryUnwrap(Consume(TokenType.Dot), out var dotToken, out var dotErr))
                         return dotErr;
 
-                    if (!TryUnwrap(ConsumeAnyIdentifier("namespace item"), out var namespaceToken, out var namespaceErr))
+                    if (!TryUnwrap(ConsumeAdjacentIdentifier(dotToken, "namespace item"), out var namespaceToken, out var namespaceErr))
                         return namespaceErr;
 
                     namespaces.Add(namespaceToken);
@@ -5206,6 +5207,24 @@ public class ElmSyntaxParser
                     tokenDescription: description);
         }
 
+        private ParseResult<Token> ConsumeAdjacentIdentifier(
+            Token previousToken,
+            string description)
+        {
+            if (!TryUnwrap(ConsumeAnyIdentifier(description), out var identifier, out var identifierErr))
+                return identifierErr;
+
+            if (previousToken.End != identifier.Start)
+            {
+                return
+                    new ElmSyntaxParseError(
+                        identifier.Start,
+                        "Expected " + description + " immediately after '" + previousToken.Lexeme + "'");
+            }
+
+            return identifier;
+        }
+
         // Consume a token of a given type, reporting a parse error (rather than throwing) if the
         // next token does not match.
         private ParseResult<Token> Consume(
@@ -5258,10 +5277,7 @@ public class ElmSyntaxParser
             return
                 [
                 .. ConsumeWhileLazy(
-                    token =>
-                    token.Type is TokenType.Comment ||
-                    token.Type is TokenType.Whitespace ||
-                    token.Type is TokenType.Newline)
+                    token => token.Type is TokenType.Comment)
                 ];
         }
 

@@ -187,7 +187,7 @@ public class FormatIncompleteTests
                 {-
                 A multi-line comment
                 -}
-                , age = 
+                , age =
                 }
 
             """";

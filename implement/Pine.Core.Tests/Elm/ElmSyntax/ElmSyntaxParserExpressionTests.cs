@@ -199,6 +199,20 @@ public class ElmSyntaxParserExpressionTests
                 StringEncoding.ValueFromString("name")));
     }
 
+    [Fact]
+    public void Parses_record_access_function_as_application_argument()
+    {
+        ParseAndConvert("Ok .extensionRight")
+            .Should().Be(
+            new Abstract.Expression.Application(
+                Abstract.Expression.Identifier.Create([], "Ok"),
+                [
+                new Abstract.Expression.RecordAccessFunction(
+                    "extensionRight",
+                    StringEncoding.ValueFromString("extensionRight"))
+                ]));
+    }
+
     [Theory]
     // Literals
     [InlineData("0")]
