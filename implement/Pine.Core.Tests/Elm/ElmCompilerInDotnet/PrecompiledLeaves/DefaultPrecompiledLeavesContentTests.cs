@@ -32,15 +32,15 @@ public class DefaultPrecompiledLeavesContentTests
             IntermediateVM.SetupVM.DefaultPrecompiledLeaves;
 
         aggregate.Count.Should().Be(
-            26,
+            36,
             because:
             "the Pine.Core aggregate contributes the Basics.compare, Basics.eq, Basics.idiv " +
             "and Basics.gcd leaves, six Dict kernel leaves, the Json.Decode.parseValue leaf, " +
             "eight String kernel leaves, the LanguageService comment-unwrapping leaf, " +
             "two Bytes kernel leaves, the two record runtime leaves " +
             "(record access and record update), " +
-            "plus the two Base64 conversion leaves (Base64.Encode.toBytes and " +
-            "Base64.Decode.fromBytes)");
+            "the two Base64 conversion leaves (Base64.Encode.toBytes and " +
+            "Base64.Decode.fromBytes), plus ten ElmSyntax.Concrete.Parser leaves");
 
         aggregate.Keys.Should().Contain(
             CoreBasicsPrecompiledLeaves.CompareLeafKey,
@@ -107,6 +107,10 @@ public class DefaultPrecompiledLeavesContentTests
         aggregate.Keys.Should().Contain(
             IntermediateVM.SetupVM.Base64ConversionPrecompiledLeaves.Keys,
             because: "the aggregate must expose the Base64 conversion leaves");
+
+        aggregate.Keys.Should().Contain(
+            IntermediateVM.SetupVM.ConcreteParserPrecompiledLeaves.Keys,
+            because: "the aggregate must expose the concrete-parser leaves");
     }
 
     [Fact]
@@ -124,7 +128,8 @@ public class DefaultPrecompiledLeavesContentTests
                 .Concat(IntermediateVM.SetupVM.LanguageServicePrecompiledLeaves.Keys)
                 .Concat(IntermediateVM.SetupVM.BytesPrecompiledLeaves.Keys)
                 .Concat(IntermediateVM.SetupVM.RecordAccessAndUpdatePrecompiledLeaves.Keys)
-                .Concat(IntermediateVM.SetupVM.Base64ConversionPrecompiledLeaves.Keys));
+                .Concat(IntermediateVM.SetupVM.Base64ConversionPrecompiledLeaves.Keys)
+                .Concat(IntermediateVM.SetupVM.ConcreteParserPrecompiledLeaves.Keys));
 
         aggregate.Keys.Should().BeEquivalentTo(
             perAreaKeys,
@@ -177,5 +182,10 @@ public class DefaultPrecompiledLeavesContentTests
             because:
             "the Base64 conversion area exposes the Base64.Encode.toBytes and " +
             "Base64.Decode.fromBytes leaves");
+
+        IntermediateVM.SetupVM.ConcreteParserPrecompiledLeaves.Count
+            .Should().Be(
+            10,
+            because: "the concrete-parser area exposes all requested recursive helpers");
     }
 }

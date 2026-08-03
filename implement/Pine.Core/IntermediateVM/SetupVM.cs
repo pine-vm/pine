@@ -44,6 +44,27 @@ public static class SetupVM
     private const string RecordUpdateName = PrecompiledLeafValueNamePrefix + "Record/update";
     private const string Base64EncodeToBytesName = PrecompiledLeafValueNamePrefix + "Base64.Encode/toBytes";
     private const string Base64DecodeFromBytesName = PrecompiledLeafValueNamePrefix + "Base64.Decode/fromBytes";
+    private const string ConcreteParserTokensFromStringPrefix =
+        PrecompiledLeafValueNamePrefix + "ElmSyntax.Concrete.Parser.TokensFromString/";
+    private const string ConcreteParserFromStringPrefix =
+        PrecompiledLeafValueNamePrefix + "ElmSyntax.Concrete.Parser.FromString/";
+    private const string ConcreteParserSkipInlineWhitespaceName =
+        ConcreteParserTokensFromStringPrefix + "skipInlineWhitespace";
+    private const string ConcreteParserSkipToIdentifierEndName =
+        ConcreteParserTokensFromStringPrefix + "skipToIdentifierEnd";
+    private const string ConcreteParserSkipToAsciiDecimalDigitEndName =
+        ConcreteParserTokensFromStringPrefix + "skipToAsciiDecimalDigitEnd";
+    private const string ConcreteParserSkipToAsciiHexDigitEndName =
+        ConcreteParserTokensFromStringPrefix + "skipToAsciiHexDigitEnd";
+    private const string ConcreteParserScanUnicodeEscapeDigitsName =
+        ConcreteParserTokensFromStringPrefix + "scanUnicodeEscapeDigits";
+    private const string ConcreteParserFindLiteralRunEndName =
+        ConcreteParserTokensFromStringPrefix + "findLiteralRunEnd";
+    private const string ConcreteParserSkipOperatorCharsName =
+        ConcreteParserTokensFromStringPrefix + "skipOperatorChars";
+    private const string ConcreteParserDropTriviaName = ConcreteParserFromStringPrefix + "dropTrivia";
+    private const string ConcreteParserTokenLexemesName = ConcreteParserFromStringPrefix + "tokenLexemes";
+    private const string ConcreteParserHexStringToIntName = ConcreteParserFromStringPrefix + "hexStringToInt";
 
     /// <summary>
     /// Stable names mapped to the C# implementations of all default precompiled leaves.
@@ -81,6 +102,23 @@ public static class SetupVM
             [RecordUpdateName] = CoreRecordPrecompiledLeaves.RecordUpdateLeafDelegate,
             [Base64EncodeToBytesName] = Base64PrecompiledLeaves.EncodeToBytesLeafDelegate,
             [Base64DecodeFromBytesName] = Base64PrecompiledLeaves.DecodeFromBytesLeafDelegate,
+            [ConcreteParserSkipInlineWhitespaceName] =
+                ElmSyntaxConcreteParserPrecompiledLeaves.SkipInlineWhitespaceLeafDelegate,
+            [ConcreteParserSkipToIdentifierEndName] =
+                ElmSyntaxConcreteParserPrecompiledLeaves.SkipToIdentifierEndLeafDelegate,
+            [ConcreteParserSkipToAsciiDecimalDigitEndName] =
+                ElmSyntaxConcreteParserPrecompiledLeaves.SkipToAsciiDecimalDigitEndLeafDelegate,
+            [ConcreteParserSkipToAsciiHexDigitEndName] =
+                ElmSyntaxConcreteParserPrecompiledLeaves.SkipToAsciiHexDigitEndLeafDelegate,
+            [ConcreteParserScanUnicodeEscapeDigitsName] =
+                ElmSyntaxConcreteParserPrecompiledLeaves.ScanUnicodeEscapeDigitsLeafDelegate,
+            [ConcreteParserFindLiteralRunEndName] =
+                ElmSyntaxConcreteParserPrecompiledLeaves.FindLiteralRunEndLeafDelegate,
+            [ConcreteParserSkipOperatorCharsName] =
+                ElmSyntaxConcreteParserPrecompiledLeaves.SkipOperatorCharsLeafDelegate,
+            [ConcreteParserDropTriviaName] = ElmSyntaxConcreteParserPrecompiledLeaves.DropTriviaLeafDelegate,
+            [ConcreteParserTokenLexemesName] = ElmSyntaxConcreteParserPrecompiledLeaves.TokenLexemesLeafDelegate,
+            [ConcreteParserHexStringToIntName] = ElmSyntaxConcreteParserPrecompiledLeaves.HexStringToIntLeafDelegate,
         };
 
     /// <summary>
@@ -120,6 +158,23 @@ public static class SetupVM
             [RecordUpdateName] = CoreRecordPrecompiledLeaves.RecordUpdateLeafKey,
             [Base64EncodeToBytesName] = Base64PrecompiledLeaves.EncodeToBytesLeafKey,
             [Base64DecodeFromBytesName] = Base64PrecompiledLeaves.DecodeFromBytesLeafKey,
+            [ConcreteParserSkipInlineWhitespaceName] =
+                ElmSyntaxConcreteParserPrecompiledLeaves.SkipInlineWhitespaceLeafKey,
+            [ConcreteParserSkipToIdentifierEndName] =
+                ElmSyntaxConcreteParserPrecompiledLeaves.SkipToIdentifierEndLeafKey,
+            [ConcreteParserSkipToAsciiDecimalDigitEndName] =
+                ElmSyntaxConcreteParserPrecompiledLeaves.SkipToAsciiDecimalDigitEndLeafKey,
+            [ConcreteParserSkipToAsciiHexDigitEndName] =
+                ElmSyntaxConcreteParserPrecompiledLeaves.SkipToAsciiHexDigitEndLeafKey,
+            [ConcreteParserScanUnicodeEscapeDigitsName] =
+                ElmSyntaxConcreteParserPrecompiledLeaves.ScanUnicodeEscapeDigitsLeafKey,
+            [ConcreteParserFindLiteralRunEndName] =
+                ElmSyntaxConcreteParserPrecompiledLeaves.FindLiteralRunEndLeafKey,
+            [ConcreteParserSkipOperatorCharsName] =
+                ElmSyntaxConcreteParserPrecompiledLeaves.SkipOperatorCharsLeafKey,
+            [ConcreteParserDropTriviaName] = ElmSyntaxConcreteParserPrecompiledLeaves.DropTriviaLeafKey,
+            [ConcreteParserTokenLexemesName] = ElmSyntaxConcreteParserPrecompiledLeaves.TokenLexemesLeafKey,
+            [ConcreteParserHexStringToIntName] = ElmSyntaxConcreteParserPrecompiledLeaves.HexStringToIntLeafKey,
         };
 
     /// <summary>
@@ -196,6 +251,9 @@ public static class SetupVM
     public static IReadOnlyDictionary<PineValue, Func<PineValue, PineValue?>> Base64ConversionPrecompiledLeaves =>
         s_base64PrecompiledLeaves.Value;
 
+    public static IReadOnlyDictionary<PineValue, Func<PineValue, PineValue?>> ConcreteParserPrecompiledLeaves =>
+        s_concreteParserPrecompiledLeaves.Value;
+
     public static IReadOnlyDictionary<PineValue, Func<PineValue, PineValue?>> DefaultPrecompiledLeaves =>
         s_defaultPrecompiledLeaves.Value;
 
@@ -269,6 +327,22 @@ public static class SetupVM
 
     private static readonly Lazy<IReadOnlyDictionary<PineValue, Func<PineValue, PineValue?>>> s_base64PrecompiledLeaves =
         new(() => BuildPrecompiledLeavesForNames(Base64EncodeToBytesName, Base64DecodeFromBytesName));
+
+    private static readonly Lazy<IReadOnlyDictionary<PineValue, Func<PineValue, PineValue?>>>
+        s_concreteParserPrecompiledLeaves =
+        new(
+            () =>
+            BuildPrecompiledLeavesForNames(
+                ConcreteParserSkipInlineWhitespaceName,
+                ConcreteParserSkipToIdentifierEndName,
+                ConcreteParserSkipToAsciiDecimalDigitEndName,
+                ConcreteParserSkipToAsciiHexDigitEndName,
+                ConcreteParserScanUnicodeEscapeDigitsName,
+                ConcreteParserFindLiteralRunEndName,
+                ConcreteParserSkipOperatorCharsName,
+                ConcreteParserDropTriviaName,
+                ConcreteParserTokenLexemesName,
+                ConcreteParserHexStringToIntName));
 
     private static IReadOnlyDictionary<PineValue, Func<PineValue, PineValue?>> BuildPrecompiledLeavesForNames(
         params string[] names)
