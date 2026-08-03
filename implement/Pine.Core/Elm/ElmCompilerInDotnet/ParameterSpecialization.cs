@@ -157,7 +157,7 @@ public abstract record ParameterSpecialization
     /// <para>
     /// Construction of this variant is the responsibility of the discovery
     /// walker (<c>TryBuildFunctionSpecializationForHigherOrder</c>);
-    /// <see cref="ClassifyArgument"/> never produces it directly because
+    /// <see cref="ClassifyArgument(SyntaxTypes.Expression)"/> never produces it directly because
     /// a tuple argument may legitimately be passed to a parameter modelled
     /// as <see cref="ConcreteLambdaValue"/> when the callee's parameter
     /// pattern is a plain <see cref="SyntaxTypes.Pattern.VarPattern"/>.

@@ -406,7 +406,7 @@ public static class LambdaLifting
     /// Future work (§11.7): replace this string-parsing approach by
     /// threading the per-containing-function counter through the
     /// pipeline's iteration state so the producer no longer needs to
-    /// re-derive it on every <see cref="LiftLambdas"/> invocation.
+    /// re-derive it on every <see cref="LiftLambdas(SyntaxTypes.File)"/> invocation.
     /// </para>
     /// </summary>
     private static (string containingFunctionName, int identifier)? TryParseExistingLiftedIdentifier(

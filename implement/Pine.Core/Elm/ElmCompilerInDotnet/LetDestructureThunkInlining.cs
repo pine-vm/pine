@@ -64,13 +64,6 @@ namespace Pine.Core.Elm.ElmCompilerInDotnet;
 ///     invocation against an already-rewritten dictionary returns it
 ///     unchanged.
 ///   </description></item>
-///   <item><description>
-///     Off by default. Wired conditionally through the
-///     <c>inlineLetDestructureThunks</c> knob on
-///     <see cref="ElmCompiler.CompileInteractiveEnvironment{LoweredT}(Files.FileTree, IReadOnlyList{ModuleName}, System.Func{ImmutableDictionary{DeclQualifiedName, SyntaxTypes.Declaration}, ImmutableHashSet{DeclQualifiedName}, Result{string, LoweredT}}, System.Func{LoweredT, ImmutableDictionary{DeclQualifiedName, SyntaxTypes.Declaration}}, bool, IReadOnlyList{DeclQualifiedName}?, bool)"/>
-///     to limit blast radius until validated against the full
-///     <c>Pine.Core.Tests</c> suite. See §H of the same analysis doc.
-///   </description></item>
 /// </list>
 /// </summary>
 internal static class LetDestructureThunkInlining
@@ -118,18 +111,6 @@ internal static class LetDestructureThunkInlining
 
         return builder.ToImmutable();
     }
-
-    /// <summary>
-    /// <see cref="OptimizedElmSyntaxDeclarations"/>-flavoured overload of
-    /// <see cref="RewriteDeclarationDictionary(ImmutableDictionary{DeclQualifiedName, SyntaxTypes.Declaration})"/>.
-    /// </summary>
-    public static OptimizedElmSyntaxDeclarations
-        RewriteDeclarationDictionary(OptimizedElmSyntaxDeclarations declarations) =>
-        OptimizedElmSyntaxDeclarations.FromFlatDictionary(
-            ElmSyntaxAbstractConversion.FromDeclarationDictionary(
-                RewriteDeclarationDictionary(
-                    ElmSyntaxAbstractConversion.ToDeclarationDictionary(
-                        declarations.RenderAsFlatDictionary()))));
 
     private static SyntaxTypes.Declaration RewriteDeclaration(
         SyntaxTypes.Declaration decl,

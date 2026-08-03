@@ -14,10 +14,7 @@ namespace Pine.Core.Elm.ElmCompilerInDotnet;
 /// constructor (e.g. <c>type Parser a = Parser (State -&gt; PStep a)</c>).
 /// <para>
 /// This module intentionally contains <em>only</em> pure analysis
-/// helpers — no rewriting, no pipeline integration. The actual rewriter
-/// (Step B) and the integration with
-/// <see cref="ElmSyntaxOptimization.SpecializeAndInlineDeclarations"/> (Step C) build on these
-/// primitives in subsequent commits.
+/// helpers — no rewriting, no pipeline integration.
 /// </para>
 /// <para>
 /// See <c>explore/internal-analysis/2026-05-10-compiled-expressions-diff-for-parse-file-scenarios.md</c>

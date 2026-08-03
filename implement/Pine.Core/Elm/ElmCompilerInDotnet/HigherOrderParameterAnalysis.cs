@@ -4,7 +4,7 @@ using Pine.Core.Elm.ElmSyntax.SyntaxModel;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 
-using SyntaxTypes = Pine.Core.Elm.ElmSyntax.Stil4mElmSyntax7;
+using Stil4mElmSyntax7 = Pine.Core.Elm.ElmSyntax.Stil4mElmSyntax7;
 
 namespace Pine.Core.Elm.ElmCompilerInDotnet;
 
@@ -19,7 +19,7 @@ namespace Pine.Core.Elm.ElmCompilerInDotnet;
 /// names it introduces (via its pattern) flows — possibly through enclosing
 /// <c>let</c>-bindings, lambdas, case branches, etc. — into an expression
 /// that is used as the function part of an
-/// <see cref="SyntaxTypes.Expression.Application"/> somewhere in the body.
+/// <see cref="Stil4mElmSyntax7.Expression.Application"/> somewhere in the body.
 /// </para>
 ///
 /// <para>
@@ -54,8 +54,8 @@ internal static class HigherOrderParameterAnalysis
     /// Application in <paramref name="body"/>.
     /// </summary>
     public static IReadOnlyList<int> FindHigherOrderParameterIndices(
-        IReadOnlyList<Node<SyntaxTypes.Pattern>> parameters,
-        SyntaxTypes.Expression body)
+        IReadOnlyList<Node<Stil4mElmSyntax7.Pattern>> parameters,
+        Stil4mElmSyntax7.Expression body)
     {
         var flowingIntoAppFunctions =
             SyntaxAnalysis.ComputeNamesFlowingIntoApplicationFunctions(body);
@@ -84,10 +84,10 @@ internal static class HigherOrderParameterAnalysis
     }
 
     /// <summary>
-    /// Convenience overload accepting a <see cref="SyntaxTypes.FunctionImplementation"/>.
+    /// Convenience overload accepting a <see cref="Stil4mElmSyntax7.FunctionImplementation"/>.
     /// </summary>
     public static IReadOnlyList<int> FindHigherOrderParameterIndices(
-        SyntaxTypes.FunctionImplementation funcImpl)
+        Stil4mElmSyntax7.FunctionImplementation funcImpl)
     {
         return FindHigherOrderParameterIndices(funcImpl.Arguments, funcImpl.Expression.Value);
     }
@@ -98,8 +98,8 @@ internal static class HigherOrderParameterAnalysis
     /// Useful for diagnostic / explanatory output.
     /// </summary>
     public static ImmutableHashSet<string> FindHigherOrderNamesIntroducedByParameter(
-        SyntaxTypes.Pattern parameter,
-        SyntaxTypes.Expression body)
+        Stil4mElmSyntax7.Pattern parameter,
+        Stil4mElmSyntax7.Expression body)
     {
         var flowing = SyntaxAnalysis.ComputeNamesFlowingIntoApplicationFunctions(body);
         var bound = SyntaxAnalysis.CollectNamesBoundByPattern(parameter);
@@ -141,13 +141,13 @@ internal static class HigherOrderParameterAnalysis
     /// </summary>
     public static ImmutableDictionary<DeclQualifiedName, ImmutableSortedSet<int>>
         BuildIntraDeclarationHigherOrderParameterDictionary(
-        IReadOnlyDictionary<DeclQualifiedName, SyntaxTypes.Declaration> declarations)
+        IReadOnlyDictionary<DeclQualifiedName, Stil4mElmSyntax7.Declaration> declarations)
     {
         var builder = ImmutableDictionary.CreateBuilder<DeclQualifiedName, ImmutableSortedSet<int>>();
 
         foreach (var (qname, decl) in declarations)
         {
-            if (decl is not SyntaxTypes.Declaration.FunctionDeclaration funcDecl)
+            if (decl is not Stil4mElmSyntax7.Declaration.FunctionDeclaration funcDecl)
                 continue;
 
             var funcImpl = funcDecl.Function.Declaration.Value;
@@ -172,7 +172,7 @@ internal static class HigherOrderParameterAnalysis
     /// </summary>
     public static ImmutableDictionary<DeclQualifiedName, ImmutableSortedSet<int>>
         PropagateHigherOrderParametersAcrossDeclarations(
-        IReadOnlyDictionary<DeclQualifiedName, SyntaxTypes.Declaration> declarations,
+        IReadOnlyDictionary<DeclQualifiedName, Stil4mElmSyntax7.Declaration> declarations,
         ImmutableDictionary<DeclQualifiedName, ImmutableSortedSet<int>> seed)
     {
         var current = seed;
@@ -190,7 +190,7 @@ internal static class HigherOrderParameterAnalysis
 
             foreach (var (qname, decl) in declarations)
             {
-                if (decl is not SyntaxTypes.Declaration.FunctionDeclaration funcDecl)
+                if (decl is not Stil4mElmSyntax7.Declaration.FunctionDeclaration funcDecl)
                     continue;
 
                 var funcImpl = funcDecl.Function.Declaration.Value;
@@ -227,7 +227,7 @@ internal static class HigherOrderParameterAnalysis
 
                         var head = SyntaxAnalysis.UnwrapParenthesized(app.Arguments[0].Value);
 
-                        if (head is not SyntaxTypes.Expression.FunctionOrValue fov)
+                        if (head is not Stil4mElmSyntax7.Expression.FunctionOrValue fov)
                             return;
 
                         var calleeQName = ElmSyntaxTransformations.ResolveReference(fov, qname.Namespaces);
@@ -288,7 +288,7 @@ internal static class HigherOrderParameterAnalysis
     /// </summary>
     public static ImmutableDictionary<DeclQualifiedName, ImmutableSortedSet<int>>
         BuildHigherOrderParameterDictionary(
-        IReadOnlyDictionary<DeclQualifiedName, SyntaxTypes.Declaration> declarations)
+        IReadOnlyDictionary<DeclQualifiedName, Stil4mElmSyntax7.Declaration> declarations)
     {
         var seed = BuildIntraDeclarationHigherOrderParameterDictionary(declarations);
         return PropagateHigherOrderParametersAcrossDeclarations(declarations, seed);
@@ -323,7 +323,7 @@ internal static class HigherOrderParameterAnalysis
     /// </list>
     /// <para>
     /// A forwarding edge <c>(caller, p) → (g, g.params[k])</c> is
-    /// recorded for every <see cref="SyntaxTypes.Expression.Application"/>
+    /// recorded for every <see cref="Stil4mElmSyntax7.Expression.Application"/>
     /// inside the body of <c>caller</c> whose head resolves to a known
     /// top-level function <c>g</c> in <paramref name="declarations"/>
     /// and whose argument at position <c>k</c> (parens peeled) is a
@@ -342,7 +342,7 @@ internal static class HigherOrderParameterAnalysis
     /// </summary>
     public static ImmutableDictionary<HigherOrderParameterKey, int>
         BuildHigherOrderParameterDistanceDictionary(
-        IReadOnlyDictionary<DeclQualifiedName, SyntaxTypes.Declaration> declarations,
+        IReadOnlyDictionary<DeclQualifiedName, Stil4mElmSyntax7.Declaration> declarations,
         IEnumerable<HigherOrderParameterKey> directSeeds)
     {
         // Per-decl: list of top-level parameter names in declaration order.
@@ -354,7 +354,7 @@ internal static class HigherOrderParameterAnalysis
 
         foreach (var (qualifiedName, declaration) in declarations)
         {
-            if (declaration is not SyntaxTypes.Declaration.FunctionDeclaration fd)
+            if (declaration is not Stil4mElmSyntax7.Declaration.FunctionDeclaration fd)
                 continue;
 
             var paramList = new List<string>(fd.Function.Declaration.Value.Arguments.Count);
@@ -378,7 +378,7 @@ internal static class HigherOrderParameterAnalysis
 
         foreach (var (qualifiedName, declaration) in declarations)
         {
-            if (declaration is not SyntaxTypes.Declaration.FunctionDeclaration fd)
+            if (declaration is not Stil4mElmSyntax7.Declaration.FunctionDeclaration fd)
                 continue;
 
             var callerParams = declParamNames[qualifiedName];
@@ -465,7 +465,7 @@ internal static class HigherOrderParameterAnalysis
     /// (tuple destructuring, named patterns, etc.).
     /// </summary>
     private static ImmutableHashSet<string> CollectVarPatternNamesFromParams(
-        IReadOnlyList<Node<SyntaxTypes.Pattern>> patterns)
+        IReadOnlyList<Node<Stil4mElmSyntax7.Pattern>> patterns)
     {
         var builder = ImmutableHashSet.CreateBuilder<string>();
 
@@ -481,7 +481,7 @@ internal static class HigherOrderParameterAnalysis
     }
 
     private static void CollectForwardingEdgesFromExpression(
-        SyntaxTypes.Expression expression,
+        Stil4mElmSyntax7.Expression expression,
         DeclQualifiedName caller,
         ImmutableHashSet<string> callerParamSet,
         string ownModuleKey,
@@ -494,12 +494,12 @@ internal static class HigherOrderParameterAnalysis
             [],
             (node, scope) =>
             {
-                if (node is not SyntaxTypes.Expression.Application app || app.Arguments.Count < 2)
+                if (node is not Stil4mElmSyntax7.Expression.Application app || app.Arguments.Count < 2)
                     return;
 
                 var head = SyntaxAnalysis.UnwrapParenthesized(app.Arguments[0].Value);
 
-                if (head is not SyntaxTypes.Expression.FunctionOrValue fov)
+                if (head is not Stil4mElmSyntax7.Expression.FunctionOrValue fov)
                     return;
 
                 if (!TryResolveTopLevelFunction(
@@ -517,7 +517,7 @@ internal static class HigherOrderParameterAnalysis
                 {
                     var argExpr = SyntaxAnalysis.UnwrapParenthesized(app.Arguments[k + 1].Value);
 
-                    if (argExpr is not SyntaxTypes.Expression.FunctionOrValue argRef ||
+                    if (argExpr is not Stil4mElmSyntax7.Expression.FunctionOrValue argRef ||
                         argRef.ModuleName.Count is not 0 ||
                         !callerParamSet.Contains(argRef.Name) ||
                         scope.Contains(argRef.Name))
@@ -545,7 +545,7 @@ internal static class HigherOrderParameterAnalysis
     }
 
     private static bool TryResolveTopLevelFunction(
-        SyntaxTypes.Expression.FunctionOrValue fov,
+        Stil4mElmSyntax7.Expression.FunctionOrValue fov,
         string ownModuleKey,
         IReadOnlyDictionary<(string moduleKey, string declName), DeclQualifiedName> byModuleAndName,
         IReadOnlyDictionary<DeclQualifiedName, IReadOnlyList<string>> declParamNames,
@@ -648,19 +648,19 @@ internal static class HigherOrderParameterAnalysis
     /// </summary>
     public static ImmutableDictionary<LetBindingHigherOrderKey, int>
         BuildLetBindingHigherOrderDistanceDictionary(
-        IReadOnlyDictionary<DeclQualifiedName, SyntaxTypes.Declaration> declarations)
+        IReadOnlyDictionary<DeclQualifiedName, Stil4mElmSyntax7.Declaration> declarations)
     {
         // Step 1: collect per-decl parameter patterns.
         var declParamPatterns =
-            new Dictionary<DeclQualifiedName, IReadOnlyList<SyntaxTypes.Pattern>>();
+            new Dictionary<DeclQualifiedName, IReadOnlyList<Stil4mElmSyntax7.Pattern>>();
 
         foreach (var (q, d) in declarations)
         {
-            if (d is not SyntaxTypes.Declaration.FunctionDeclaration fd)
+            if (d is not Stil4mElmSyntax7.Declaration.FunctionDeclaration fd)
                 continue;
 
             var list =
-                new List<SyntaxTypes.Pattern>(
+                new List<Stil4mElmSyntax7.Pattern>(
                     fd.Function.Declaration.Value.Arguments.Count);
 
             foreach (var argNode in fd.Function.Declaration.Value.Arguments)
@@ -685,7 +685,7 @@ internal static class HigherOrderParameterAnalysis
 
         foreach (var (q, d) in declarations)
         {
-            if (d is not SyntaxTypes.Declaration.FunctionDeclaration fd)
+            if (d is not Stil4mElmSyntax7.Declaration.FunctionDeclaration fd)
                 continue;
 
             var fi = fd.Function.Declaration.Value;
@@ -716,7 +716,7 @@ internal static class HigherOrderParameterAnalysis
 
         foreach (var (q, d) in declarations)
         {
-            if (d is not SyntaxTypes.Declaration.FunctionDeclaration fd)
+            if (d is not Stil4mElmSyntax7.Declaration.FunctionDeclaration fd)
                 continue;
 
             var owned = ownedNamesByDecl[q];
@@ -745,7 +745,7 @@ internal static class HigherOrderParameterAnalysis
 
         foreach (var (q, d) in declarations)
         {
-            if (d is not SyntaxTypes.Declaration.FunctionDeclaration fd)
+            if (d is not Stil4mElmSyntax7.Declaration.FunctionDeclaration fd)
                 continue;
 
             var fi = fd.Function.Declaration.Value;
@@ -763,7 +763,7 @@ internal static class HigherOrderParameterAnalysis
 
                     var head = SyntaxAnalysis.UnwrapParenthesized(app.Arguments[0].Value);
 
-                    if (head is not SyntaxTypes.Expression.FunctionOrValue fov)
+                    if (head is not Stil4mElmSyntax7.Expression.FunctionOrValue fov)
                         return;
 
                     var moduleKey =
@@ -874,14 +874,14 @@ internal static class HigherOrderParameterAnalysis
 
     /// <summary>
     /// Walks <paramref name="expression"/> collecting every name
-    /// introduced by a <see cref="SyntaxTypes.Expression.LetDeclaration"/>
+    /// introduced by a <see cref="Stil4mElmSyntax7.Expression.LetDeclaration"/>
     /// (both <c>LetFunction</c> names and every name destructured by a
     /// <c>LetDestructuring</c> pattern). Lambda / case / let-function
     /// parameter names are NOT collected — those are separate scopes,
     /// not let-bound names of the enclosing top-level decl.
     /// </summary>
     private static void CollectLetIntroducedNames(
-        SyntaxTypes.Expression expression,
+        Stil4mElmSyntax7.Expression expression,
         ImmutableHashSet<string>.Builder result)
     {
         ElmSyntaxTransformations.WalkExpressionsWithScope(
@@ -889,18 +889,18 @@ internal static class HigherOrderParameterAnalysis
             [],
             (node, _) =>
             {
-                if (node is not SyntaxTypes.Expression.LetExpression letExpr)
+                if (node is not Stil4mElmSyntax7.Expression.LetExpression letExpr)
                     return;
 
                 foreach (var declNode in letExpr.Value.Declarations)
                 {
                     switch (declNode.Value)
                     {
-                        case SyntaxTypes.Expression.LetDeclaration.LetFunction lf:
+                        case Stil4mElmSyntax7.Expression.LetDeclaration.LetFunction lf:
                             result.Add(lf.Function.Declaration.Value.Name.Value);
                             break;
 
-                        case SyntaxTypes.Expression.LetDeclaration.LetDestructuring ld:
+                        case Stil4mElmSyntax7.Expression.LetDeclaration.LetDestructuring ld:
                             foreach (var n in SyntaxAnalysis.CollectNamesBoundByPattern(ld.Pattern.Value))
                                 result.Add(n);
 
@@ -918,8 +918,8 @@ internal static class HigherOrderParameterAnalysis
     /// for the decomposition rules.
     /// </summary>
     private static void DecomposePatternAndArgForEdges(
-        SyntaxTypes.Pattern calleePattern,
-        SyntaxTypes.Expression argExpr,
+        Stil4mElmSyntax7.Pattern calleePattern,
+        Stil4mElmSyntax7.Expression argExpr,
         ImmutableHashSet<string> callerOwnedNames,
         ImmutableHashSet<string> shadowingBoundInArgScope,
         System.Action<string, string> emit)
@@ -929,7 +929,7 @@ internal static class HigherOrderParameterAnalysis
             argExpr,
             (bindingName, leafArg) =>
             {
-                if (leafArg is SyntaxTypes.Expression.FunctionOrValue fov &&
+                if (leafArg is Stil4mElmSyntax7.Expression.FunctionOrValue fov &&
                     fov.ModuleName.Count is 0 &&
                     callerOwnedNames.Contains(fov.Name) &&
                     !shadowingBoundInArgScope.Contains(fov.Name))
@@ -956,23 +956,23 @@ internal static class HigherOrderParameterAnalysis
     /// </para>
     /// </summary>
     private static void DecomposePatternAndArg(
-        SyntaxTypes.Pattern calleePattern,
-        SyntaxTypes.Expression argExpr,
-        System.Action<string, SyntaxTypes.Expression> onLeafBinding)
+        Stil4mElmSyntax7.Pattern calleePattern,
+        Stil4mElmSyntax7.Expression argExpr,
+        System.Action<string, Stil4mElmSyntax7.Expression> onLeafBinding)
     {
         // Peel parentheses on both sides.
-        while (calleePattern is SyntaxTypes.Pattern.ParenthesizedPattern paren)
+        while (calleePattern is Stil4mElmSyntax7.Pattern.ParenthesizedPattern paren)
             calleePattern = paren.Pattern.Value;
 
         argExpr = SyntaxAnalysis.UnwrapParenthesized(argExpr);
 
         switch (calleePattern)
         {
-            case SyntaxTypes.Pattern.VarPattern v:
+            case Stil4mElmSyntax7.Pattern.VarPattern v:
                 onLeafBinding(v.Name, argExpr);
                 break;
 
-            case SyntaxTypes.Pattern.AsPattern asPattern:
+            case Stil4mElmSyntax7.Pattern.AsPattern asPattern:
                 onLeafBinding(asPattern.Name.Value, argExpr);
 
                 DecomposePatternAndArg(
@@ -982,9 +982,9 @@ internal static class HigherOrderParameterAnalysis
 
                 break;
 
-            case SyntaxTypes.Pattern.TuplePattern tuplePattern:
+            case Stil4mElmSyntax7.Pattern.TuplePattern tuplePattern:
                 {
-                    if (argExpr is not SyntaxTypes.Expression.TupledExpression tupled)
+                    if (argExpr is not Stil4mElmSyntax7.Expression.TupledExpression tupled)
                         break;
 
                     if (tupled.Elements.Count != tuplePattern.Elements.Count)
@@ -1001,16 +1001,16 @@ internal static class HigherOrderParameterAnalysis
                     break;
                 }
 
-            case SyntaxTypes.Pattern.RecordPattern recordPattern:
+            case Stil4mElmSyntax7.Pattern.RecordPattern recordPattern:
                 {
-                    if (argExpr is not SyntaxTypes.Expression.RecordExpr recordExpr)
+                    if (argExpr is not Stil4mElmSyntax7.Expression.RecordExpr recordExpr)
                         break;
 
                     foreach (var fieldNameNode in recordPattern.Fields)
                     {
                         var fieldName = fieldNameNode.Value;
 
-                        SyntaxTypes.Expression? fieldValueExpr = null;
+                        Stil4mElmSyntax7.Expression? fieldValueExpr = null;
 
                         foreach (var rf in recordExpr.Fields)
                         {
@@ -1029,7 +1029,7 @@ internal static class HigherOrderParameterAnalysis
                         // matched against the record-expression's value
                         // expression for that field.
                         DecomposePatternAndArg(
-                            new SyntaxTypes.Pattern.VarPattern(fieldName),
+                            new Stil4mElmSyntax7.Pattern.VarPattern(fieldName),
                             fieldValueExpr,
                             onLeafBinding);
                     }
@@ -1037,10 +1037,10 @@ internal static class HigherOrderParameterAnalysis
                     break;
                 }
 
-            case SyntaxTypes.Pattern.NamedPattern namedPattern:
+            case Stil4mElmSyntax7.Pattern.NamedPattern namedPattern:
                 {
                     // The argument must be Application[FunctionOrValue(C), e1, ..., eN].
-                    if (argExpr is not SyntaxTypes.Expression.Application app)
+                    if (argExpr is not Stil4mElmSyntax7.Expression.Application app)
                         break;
 
                     if (app.Arguments.Count < 1)
@@ -1048,7 +1048,7 @@ internal static class HigherOrderParameterAnalysis
 
                     var ctorHead = SyntaxAnalysis.UnwrapParenthesized(app.Arguments[0].Value);
 
-                    if (ctorHead is not SyntaxTypes.Expression.FunctionOrValue ctorRef)
+                    if (ctorHead is not Stil4mElmSyntax7.Expression.FunctionOrValue ctorRef)
                         break;
 
                     if (ctorRef.Name != namedPattern.Name.Name)
@@ -1120,7 +1120,7 @@ internal static class HigherOrderParameterAnalysis
     /// </summary>
     public static ImmutableDictionary<DeclQualifiedName, ImmutableArray<HigherOrderFinding>>
         FindAllHigherOrderFindings(
-        IReadOnlyDictionary<DeclQualifiedName, SyntaxTypes.Declaration> declarations)
+        IReadOnlyDictionary<DeclQualifiedName, Stil4mElmSyntax7.Declaration> declarations)
     {
         var perName = ComputeAllOwnedNameHigherOrderDistances(declarations);
 
@@ -1143,7 +1143,7 @@ internal static class HigherOrderParameterAnalysis
 
         foreach (var (qname, decl) in declarations)
         {
-            if (decl is not SyntaxTypes.Declaration.FunctionDeclaration)
+            if (decl is not Stil4mElmSyntax7.Declaration.FunctionDeclaration)
                 continue;
 
             if (grouped.TryGetValue(qname, out var list))
@@ -1176,7 +1176,7 @@ internal static class HigherOrderParameterAnalysis
     /// </summary>
     public static ImmutableArray<HigherOrderFinding>
         FindHigherOrderFindingsForDeclaration(
-        IReadOnlyDictionary<DeclQualifiedName, SyntaxTypes.Declaration> declarations,
+        IReadOnlyDictionary<DeclQualifiedName, Stil4mElmSyntax7.Declaration> declarations,
         DeclQualifiedName declaration)
     {
         var all = FindAllHigherOrderFindings(declarations);
@@ -1194,19 +1194,19 @@ internal static class HigherOrderParameterAnalysis
     /// </summary>
     private static Dictionary<HigherOrderParameterKey, int>
         ComputeAllOwnedNameHigherOrderDistances(
-        IReadOnlyDictionary<DeclQualifiedName, SyntaxTypes.Declaration> declarations)
+        IReadOnlyDictionary<DeclQualifiedName, Stil4mElmSyntax7.Declaration> declarations)
     {
         // Step 1: collect per-decl parameter patterns.
         var declParamPatterns =
-            new Dictionary<DeclQualifiedName, IReadOnlyList<SyntaxTypes.Pattern>>();
+            new Dictionary<DeclQualifiedName, IReadOnlyList<Stil4mElmSyntax7.Pattern>>();
 
         foreach (var (q, d) in declarations)
         {
-            if (d is not SyntaxTypes.Declaration.FunctionDeclaration fd)
+            if (d is not Stil4mElmSyntax7.Declaration.FunctionDeclaration fd)
                 continue;
 
             var list =
-                new List<SyntaxTypes.Pattern>(
+                new List<Stil4mElmSyntax7.Pattern>(
                     fd.Function.Declaration.Value.Arguments.Count);
 
             foreach (var argNode in fd.Function.Declaration.Value.Arguments)
@@ -1226,7 +1226,7 @@ internal static class HigherOrderParameterAnalysis
 
         foreach (var (q, d) in declarations)
         {
-            if (d is not SyntaxTypes.Declaration.FunctionDeclaration fd)
+            if (d is not Stil4mElmSyntax7.Declaration.FunctionDeclaration fd)
                 continue;
 
             var fi = fd.Function.Declaration.Value;
@@ -1255,7 +1255,7 @@ internal static class HigherOrderParameterAnalysis
 
         foreach (var (q, d) in declarations)
         {
-            if (d is not SyntaxTypes.Declaration.FunctionDeclaration fd)
+            if (d is not Stil4mElmSyntax7.Declaration.FunctionDeclaration fd)
                 continue;
 
             var owned = ownedNamesByDecl[q];
@@ -1288,7 +1288,7 @@ internal static class HigherOrderParameterAnalysis
 
         foreach (var (q, d) in declarations)
         {
-            if (d is not SyntaxTypes.Declaration.FunctionDeclaration fd)
+            if (d is not Stil4mElmSyntax7.Declaration.FunctionDeclaration fd)
                 continue;
 
             var fi = fd.Function.Declaration.Value;
@@ -1306,7 +1306,7 @@ internal static class HigherOrderParameterAnalysis
 
                     var head = SyntaxAnalysis.UnwrapParenthesized(app.Arguments[0].Value);
 
-                    if (head is not SyntaxTypes.Expression.FunctionOrValue fov)
+                    if (head is not Stil4mElmSyntax7.Expression.FunctionOrValue fov)
                         return;
 
                     var moduleKey =
@@ -1421,7 +1421,7 @@ internal static class HigherOrderParameterAnalysis
     /// Like <see cref="DecomposePatternAndArgForEdges"/>, but for the
     /// terminal <c>VarPattern</c> / <c>AsPattern</c> cases it does not
     /// require the argument to be a bare reference. Instead, it uses
-    /// <see cref="SyntaxAnalysis.CollectRemainingFreeVariables(SyntaxTypes.Expression)"/> together with
+    /// <see cref="SyntaxAnalysis.CollectRemainingFreeVariables(Stil4mElmSyntax7.Expression)"/> together with
     /// <see cref="SyntaxAnalysis.AddFlowingNamesOf"/> to find every
     /// caller-owned name whose value can flow into the argument
     /// expression — directly (free variable in the argument) or via
@@ -1429,11 +1429,11 @@ internal static class HigherOrderParameterAnalysis
     /// <paramref name="letRhsByName"/>.
     /// </summary>
     private static void DecomposeWithFlowEdges(
-        SyntaxTypes.Pattern calleePattern,
-        SyntaxTypes.Expression argExpr,
+        Stil4mElmSyntax7.Pattern calleePattern,
+        Stil4mElmSyntax7.Expression argExpr,
         ImmutableHashSet<string> callerOwnedNames,
         ImmutableHashSet<string> innerShadowing,
-        ImmutableDictionary<string, SyntaxTypes.Expression> letRhsByName,
+        ImmutableDictionary<string, Stil4mElmSyntax7.Expression> letRhsByName,
         System.Action<string, string> emit)
     {
         DecomposePatternAndArg(
@@ -1458,10 +1458,10 @@ internal static class HigherOrderParameterAnalysis
     /// </summary>
     private static void EmitFlowEdgesForBinding(
         string calleeBindingName,
-        SyntaxTypes.Expression argExpr,
+        Stil4mElmSyntax7.Expression argExpr,
         ImmutableHashSet<string> callerOwnedNames,
         ImmutableHashSet<string> innerShadowing,
-        ImmutableDictionary<string, SyntaxTypes.Expression> letRhsByName,
+        ImmutableDictionary<string, Stil4mElmSyntax7.Expression> letRhsByName,
         System.Action<string, string> emit)
     {
         // Direct free variables of argExpr — captures bare references,

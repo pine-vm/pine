@@ -126,50 +126,6 @@ public record OptimizedElmSyntaxDeclarations(
         return builder.ToImmutable();
     }
 
-    /// <summary>
-    /// Enumerates every declaration in the structured model as a
-    /// <see cref="KeyValuePair{TKey,TValue}"/> keyed by fully-qualified
-    /// declaration name, in the same flattened form that
-    /// <see cref="RenderAsFlatDictionary"/> would materialise.
-    /// <para>
-    /// Yields one entry per <see cref="OptimizedElmSyntaxFunctionDeclaration.Original"/>
-    /// (under the entry's qualified name), one entry per specialization
-    /// (under a name derived from the original's namespace and the
-    /// specialization's own declaration name), and one entry per
-    /// <see cref="OtherDeclarations"/> entry — without materialising the
-    /// intermediate dictionary.
-    /// </para>
-    /// </summary>
-    public System.Collections.Generic.IEnumerable<System.Collections.Generic.KeyValuePair<DeclQualifiedName, SyntaxTypes.Declaration>>
-        EnumerateAllDeclarations()
-    {
-        foreach (var (originalName, optimized) in FunctionDeclarations)
-        {
-            yield return new System.Collections.Generic.KeyValuePair<DeclQualifiedName, SyntaxTypes.Declaration>(
-                originalName, optimized.Original);
-
-            foreach (var (_, specialization) in optimized.Specializations)
-            {
-                var specializationDeclName =
-                    specialization.Function.Declaration.Name;
-
-                var specializationQualifiedName =
-                    DeclQualifiedName.Create(
-                        originalName.Namespaces,
-                        specializationDeclName);
-
-                yield return new System.Collections.Generic.KeyValuePair<DeclQualifiedName, SyntaxTypes.Declaration>(
-                    specializationQualifiedName, specialization);
-            }
-        }
-
-        foreach (var (otherName, otherDeclaration) in OtherDeclarations)
-        {
-            yield return new System.Collections.Generic.KeyValuePair<DeclQualifiedName, SyntaxTypes.Declaration>(
-                otherName, otherDeclaration);
-        }
-    }
-
     /// <inheritdoc/>
     public virtual bool Equals(OptimizedElmSyntaxDeclarations? other)
     {

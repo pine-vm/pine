@@ -1,7 +1,5 @@
 using Pine.Core.CodeAnalysis;
-using System;
 using System.Collections.Generic;
-using System.Collections.Immutable;
 
 using SyntaxTypes = Pine.Core.Elm.ElmSyntax.ElmSyntaxAbstract;
 
@@ -70,68 +68,6 @@ namespace Pine.Core.Elm.ElmCompilerInDotnet;
 /// </summary>
 internal static class LetDestructuringCancellation
 {
-    /// <summary>
-    /// <see cref="OptimizedElmSyntaxDeclarations"/>-flavoured overload of
-    /// <see cref="RewriteDeclarationDictionary(ImmutableDictionary{DeclQualifiedName, SyntaxTypes.Declaration})"/>.
-    /// </summary>
-    public static OptimizedElmSyntaxDeclarations RewriteDeclarationDictionary(
-        OptimizedElmSyntaxDeclarations declarations) =>
-        OptimizedElmSyntaxDeclarations.FromFlatDictionary(
-            RewriteDeclarationDictionary(declarations.RenderAsFlatDictionary()));
-
-    /// <summary>
-    /// Walks every function declaration's body bottom-up and applies the
-    /// <see cref="TryCancelLocal"/> peephole at every
-    /// <see cref="SyntaxTypes.Expression.LetExpression"/> site.
-    /// Non-function declarations pass through unchanged.
-    /// </summary>
-    public static ImmutableDictionary<DeclQualifiedName, SyntaxTypes.Declaration> RewriteDeclarationDictionary(
-        ImmutableDictionary<DeclQualifiedName, SyntaxTypes.Declaration> declarations)
-    {
-        var builder = ImmutableDictionary.CreateBuilder<DeclQualifiedName, SyntaxTypes.Declaration>();
-
-        foreach (var (declName, decl) in declarations)
-        {
-            builder[declName] = RewriteDeclaration(decl);
-        }
-
-        return builder.ToImmutable();
-    }
-
-    private static SyntaxTypes.Declaration RewriteDeclaration(
-        SyntaxTypes.Declaration decl)
-    {
-        switch (decl)
-        {
-            case SyntaxTypes.Declaration.FunctionDeclaration funcDecl:
-                {
-                    var impl = funcDecl.Function.Declaration;
-
-                    var newBody = RewriteExpression(impl.Expression);
-
-                    if (ReferenceEquals(newBody, impl.Expression))
-                        return decl;
-
-                    var newImpl = impl with { Expression = newBody };
-
-                    var newFunc = funcDecl.Function with { Declaration = newImpl };
-
-                    return new SyntaxTypes.Declaration.FunctionDeclaration(newFunc);
-                }
-
-            case SyntaxTypes.Declaration.ChoiceTypeDeclaration:
-            case SyntaxTypes.Declaration.AliasDeclaration:
-            case SyntaxTypes.Declaration.PortDeclaration:
-            case SyntaxTypes.Declaration.InfixDeclaration:
-                return decl;
-
-            default:
-                throw new NotImplementedException(
-                    "LetDestructuringCancellation.RewriteDeclaration does not handle declaration variant: " +
-                    decl.GetType().Name);
-        }
-    }
-
     /// <summary>
     /// Bottom-up rewrite over an expression tree. Recurses into all
     /// children first via
