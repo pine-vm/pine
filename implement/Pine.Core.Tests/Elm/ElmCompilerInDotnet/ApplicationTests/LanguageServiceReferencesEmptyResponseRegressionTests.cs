@@ -29,7 +29,7 @@ namespace Pine.Core.Tests.Elm.ElmCompilerInDotnet.ApplicationTests;
 /// <para>
 /// <b>Where the divergence is.</b> The probe
 /// <see cref="Probe_hoverItemsFromParsedModule_fromDeclarations"/> calls
-/// <c>LanguageService.hoverItemsFromParsedModule</c> directly and prints
+/// <c>LanguageService.hoverItemsAtLocation</c> directly and prints
 /// the first triple of <c>.fromDeclarations</c>. On the compiled-VM path
 /// the triple comes back as
 /// <code>
@@ -164,22 +164,11 @@ public class LanguageServiceReferencesEmptyResponseRegressionTests
                 Nothing ->
                     []
 
-                Just cacheItem ->
-                    case cacheItem.parsedFileLastSuccess of
-                        Nothing ->
-                            []
-
-                        Just parsed ->
-                            let
-                                items =
-                                    LanguageService.hoverItemsFromParsedModule
-                                        ( parsed.syntax
-                                        , parsed.completionItems
-                                        , LanguageServiceInterface.WorkspaceFileLocation fileUri
-                                        )
-                                        state
-                            in
-                            items.fromDeclarations
+                Just _ ->
+                    LanguageService.hoverItemsAtLocation
+                        (LanguageServiceInterface.WorkspaceFileLocation fileUri)
+                        ( 5, 5 )
+                        state
 
 
         probe_synthetic_triple_identity :
@@ -756,8 +745,8 @@ public class LanguageServiceReferencesEmptyResponseRegressionTests
             BundledFiles.ElmKernelModulesDefault.Value;
 
         var elmSyntaxSrcTree =
-            bundledTree.GetNodeAtPath(["elm-syntax", "src"])
-            ?? throw new Exception("Did not find elm-syntax/src");
+            bundledTree.GetNodeAtPath(["pine-elm-syntax", "src"])
+            ?? throw new Exception("Did not find pine-elm-syntax/src");
 
         var elmInElmSrcTree =
             bundledTree.GetNodeAtPath(["src"])

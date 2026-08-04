@@ -115,8 +115,8 @@ public class LanguageServiceCompileToPineVMRegressionTests
 
         var elmSyntaxSrcTree =
             bundledTree
-            .GetNodeAtPath(["elm-syntax", "src"])
-            ?? throw new Exception("Did not find elm-syntax/src");
+            .GetNodeAtPath(["pine-elm-syntax", "src"])
+            ?? throw new Exception("Did not find pine-elm-syntax/src");
 
         var elmInElmSrcTree =
             bundledTree

@@ -2,28 +2,32 @@ module LanguageService exposing (..)
 
 {-| Language services for Elm programs.
 These functions enable features like completion suggestions and hover tips in the code editor.
+
+Syntax analysis builds on `pine-elm-syntax`:
+
+  - The concrete syntax tree retains source ranges, comments and literal
+    spellings. It is only consulted by the presentation layer here, and only
+    for the occurrences actually returned to the client.
+  - The abstract syntax tree feeds `LanguageServiceAnalysis`, which describes
+    declarations and references without any source range. Every occurrence is
+    addressed by a structural `ElmSyntax.Path.Path` instead.
+
 -}
 
 import Common
 import Dict
-import Elm.Parser
-import Elm.Syntax.Comments
-import Elm.Syntax.Declaration
-import Elm.Syntax.Exposing
-import Elm.Syntax.Expression
-import Elm.Syntax.File
-import Elm.Syntax.Module
-import Elm.Syntax.ModuleName
-import Elm.Syntax.Node
-import Elm.Syntax.Pattern
-import Elm.Syntax.Range
-import Elm.Syntax.Type
-import Elm.Syntax.TypeAlias
-import Elm.Syntax.TypeAnnotation
+import ElmSyntax.Abstract.ConvertFromConcrete
+import ElmSyntax.Abstract.Exposing
+import ElmSyntax.Concrete.File
+import ElmSyntax.Concrete.Node
+import ElmSyntax.Concrete.Parser.FromString
+import ElmSyntax.Concrete.Range
+import ElmSyntax.Concrete.SourceLookup
+import ElmSyntax.Path exposing (Path, Selection(..), Step(..))
 import FileTree
 import Frontend.MonacoEditor
+import LanguageServiceAnalysis
 import LanguageServiceInterface
-import List.Extra
 
 
 type alias LanguageServiceState =
@@ -32,7 +36,7 @@ type alias LanguageServiceState =
     , elmPackages :
         List
             ( LanguageServiceInterface.ElmPackageVersionIdentifer
-            , List ( List String, ( List String, Elm.Syntax.File.File, ModuleCompletionItems ) )
+            , List ( List String, ( List String, ParsedModuleCache ) )
             )
     }
 
@@ -43,77 +47,40 @@ type alias LanguageServiceStateFileTreeNodeBlob =
       -}
       sourceBase64 : String
     , textContent : Maybe FileTextContent
-    , parsedFileLastSuccess : Maybe ParsedCookedModuleCache
+    , parsedFileLastSuccess : Maybe ParsedModuleCache
     }
 
 
 type alias FileTextContent =
     { text : String
-    , parsedFile : Maybe ParsedCookedModuleCache
+    , parsedFile : Maybe ParsedModuleCache
     }
 
 
+{-| A parsed module as retained in the language service state.
+
+The concrete syntax and the source text are only used to derive source ranges
+and documentation strings on demand. All semantic questions are answered from
+`analysis`, which is free of source ranges.
+
+-}
 type alias ParsedModuleCache =
     { fileUri : String
     , text : String
-    , syntax : Elm.Syntax.File.File
-    }
-
-
-type alias ParsedCookedModuleCache =
-    { fileUri : String
-    , text : String
-    , syntax : Elm.Syntax.File.File
-    , completionItems : ModuleCompletionItems
+    , concrete : ElmSyntax.Concrete.File.File
+    , analysis : LanguageServiceAnalysis.ModuleAnalysis
+    , references : List LanguageServiceAnalysis.ReferenceOccurrence
     }
 
 
 type alias ElmCoreModule =
-    { parseResult : ParsedCookedModuleCache
+    { parseResult : ParsedModuleCache
     , implicitImport : Bool
     }
 
 
-type DeclarationScope
-    = TopLevelScope
-    | LocalScope Range
-
-
-type Declaration documentation
-    = FunctionOrValueDeclaration documentation
-    | TypeAliasDeclaration documentation
-    | ChoiceTypeDeclaration documentation (List ( String, documentation ))
-
-
-type SourceContentForCooking
-    = SourceContentForCooking
-        -- Text lines of the source document
-        (List String)
-
-
-type alias ParsedDeclaration =
-    Declaration ( DeclarationRange, CookedDocumentation )
-
-
-{-| Documentation prepared as markdown string
--}
-type CookedDocumentation
-    = CookedDocumentation String
-
-
 type LocationInFile range
     = LocationInFile LanguageServiceInterface.FileLocation range
-
-
-type alias ModuleCompletionItems =
-    { fromTopLevel :
-        List
-            { completionItem : CompletionItem
-            , isExposed : Bool
-            , range : DeclarationRange
-            }
-    , fromLocals : List ( CompletionItem, DeclarationRange, Range )
-    }
 
 
 type DeclarationRange
@@ -122,10 +89,6 @@ type DeclarationRange
         Range
         -- Instances of the own name, used for renaming
         (List Range)
-
-
-type SyntaxNode value
-    = SyntaxNode Range value
 
 
 type Range
@@ -144,6 +107,38 @@ type CompletionItem
         String
 
 
+{-| A declaration a reference resolved to, together with the module it was
+declared in.
+-}
+type alias ResolvedDeclaration =
+    { fileLocation : LanguageServiceInterface.FileLocation
+    , parsedModule : ParsedModuleCache
+    , occurrence : LanguageServiceAnalysis.DeclarationOccurrence
+    }
+
+
+{-| The subject a source location points at.
+
+Identity of a target is `( fileLocation, path )`: A module is identified by the
+path of its module definition, a declaration by the path of the complete
+declaration.
+
+-}
+type ResolvedTarget
+    = ResolvedDeclarationTarget ResolvedDeclaration
+    | ResolvedModuleTarget LanguageServiceInterface.FileLocation ParsedModuleCache
+
+
+type alias ImportedModule =
+    { fileLocation : LanguageServiceInterface.FileLocation
+    , canonicalName : List String
+    , importedName : List String
+    , exposingList : Maybe ElmSyntax.Abstract.Exposing.Exposing
+    , parsedModule : ParsedModuleCache
+    , moduleNamePaths : List Path
+    }
+
+
 initLanguageServiceState : List { moduleText : String, implicitImport : Bool } -> LanguageServiceState
 initLanguageServiceState elmCoreModules =
     let
@@ -152,31 +147,41 @@ initLanguageServiceState elmCoreModules =
             elmCoreModules
                 |> List.filterMap
                     (\coreModule ->
-                        coreModule.moduleText
-                            |> Elm.Parser.parseToFile
-                            |> Result.toMaybe
-                            |> Maybe.map
-                                (\syntax ->
-                                    { parseResult =
-                                        { fileUri = "elm-core"
-                                        , text = coreModule.moduleText
-                                        , syntax = syntax
-                                        , completionItems =
-                                            completionItemsFromModule
-                                                { fileUri = "elm-core"
-                                                , text = coreModule.moduleText
-                                                , syntax = syntax
-                                                }
-                                        }
+                        case parseModuleText "elm-core" coreModule.moduleText of
+                            Nothing ->
+                                Nothing
+
+                            Just parsedModule ->
+                                Just
+                                    { parseResult = parsedModule
                                     , implicitImport = coreModule.implicitImport
                                     }
-                                )
                     )
     in
     { documentCache = Dict.empty
     , coreModulesCache = elmCoreModulesParseResults
     , elmPackages = []
     }
+
+
+parseModuleText : String -> String -> Maybe ParsedModuleCache
+parseModuleText fileUri text =
+    case ElmSyntax.Concrete.Parser.FromString.parseFile text of
+        Err _ ->
+            Nothing
+
+        Ok concrete ->
+            let
+                abstract =
+                    ElmSyntax.Abstract.ConvertFromConcrete.fromFile concrete
+            in
+            Just
+                { fileUri = fileUri
+                , text = text
+                , concrete = concrete
+                , analysis = LanguageServiceAnalysis.analyzeFile abstract
+                , references = LanguageServiceAnalysis.listReferencesInFile abstract
+                }
 
 
 handleRequest :
@@ -300,31 +305,12 @@ addFile ( fileUri, fileContent ) stateBefore =
                     Nothing
 
                 Just asString ->
-                    let
-                        parsedFile =
-                            case Elm.Parser.parseToFile asString of
-                                Err _ ->
-                                    Nothing
-
-                                Ok syntax ->
-                                    Just
-                                        { fileUri = fileUri
-                                        , text = asString
-                                        , syntax = syntax
-                                        , completionItems =
-                                            completionItemsFromModule
-                                                { fileUri = fileUri
-                                                , text = asString
-                                                , syntax = syntax
-                                                }
-                                        }
-                    in
                     Just
                         { text = asString
-                        , parsedFile = parsedFile
+                        , parsedFile = parseModuleText fileUri asString
                         }
 
-        parsedFileFromPreviouslyCached : Maybe ParsedCookedModuleCache
+        parsedFileFromPreviouslyCached : Maybe ParsedModuleCache
         parsedFileFromPreviouslyCached =
             case maybePreviousCached of
                 Nothing ->
@@ -333,7 +319,7 @@ addFile ( fileUri, fileContent ) stateBefore =
                 Just previousCached ->
                     previousCached.parsedFileLastSuccess
 
-        parsedFileLastSuccess : Maybe ParsedCookedModuleCache
+        parsedFileLastSuccess : Maybe ParsedModuleCache
         parsedFileLastSuccess =
             case maybeTextContent of
                 Nothing ->
@@ -371,7 +357,7 @@ handleRequestAddPackage :
     -> ( LanguageServiceInterface.Response, LanguageServiceState )
 handleRequestAddPackage packageVersionIdentifer packageModules stateBefore =
     let
-        parsedModules : List ( List String, ( List String, Elm.Syntax.File.File, ModuleCompletionItems ) )
+        parsedModules : List ( List String, ( List String, ParsedModuleCache ) )
         parsedModules =
             packageModules
                 |> List.filterMap
@@ -381,29 +367,14 @@ handleRequestAddPackage packageVersionIdentifer packageModules stateBefore =
                                 Nothing
 
                             Just asString ->
-                                case Elm.Parser.parseToFile asString of
-                                    Err _ ->
+                                case parseModuleText (String.join "/" modulePath) asString of
+                                    Nothing ->
                                         Nothing
 
-                                    Ok syntax ->
-                                        let
-                                            (Elm.Syntax.Node.Node _ moduleDefinition) =
-                                                syntax.moduleDefinition
-
-                                            moduleName : Elm.Syntax.ModuleName.ModuleName
-                                            moduleName =
-                                                Elm.Syntax.Module.moduleName moduleDefinition
-                                        in
+                                    Just parsedModule ->
                                         Just
-                                            ( moduleName
-                                            , ( modulePath
-                                              , syntax
-                                              , completionItemsFromModule
-                                                    { fileUri = String.join "/" modulePath
-                                                    , text = asString
-                                                    , syntax = syntax
-                                                    }
-                                              )
+                                            ( parsedModule.analysis.moduleName
+                                            , ( modulePath, parsedModule )
                                             )
                     )
 
@@ -420,6 +391,247 @@ handleRequestAddPackage packageVersionIdentifer packageModules stateBefore =
     )
 
 
+
+-- Deriving source ranges from structural paths
+
+
+rangeFromConcreteRange : ElmSyntax.Concrete.Range.Range -> Range
+rangeFromConcreteRange concreteRange =
+    Range
+        ( concreteRange.start.row, concreteRange.start.column )
+        ( concreteRange.end.row, concreteRange.end.column )
+
+
+rangeAtPathInModule : ParsedModuleCache -> Path -> Selection -> Maybe Range
+rangeAtPathInModule parsedModule path selection =
+    case ElmSyntax.Concrete.SourceLookup.rangeAtPath path selection parsedModule.concrete of
+        Nothing ->
+            Nothing
+
+        Just concreteRange ->
+            Just (rangeFromConcreteRange concreteRange)
+
+
+declarationRangeOfOccurrence :
+    ParsedModuleCache
+    -> LanguageServiceAnalysis.DeclarationOccurrence
+    -> Maybe DeclarationRange
+declarationRangeOfOccurrence parsedModule occurrence =
+    case rangeAtPathInModule parsedModule occurrence.declarationPath occurrence.declarationSelection of
+        Nothing ->
+            Nothing
+
+        Just wholeRange ->
+            Just
+                (DeclarationRange
+                    wholeRange
+                    (List.filterMap
+                        (\namePath -> rangeAtPathInModule parsedModule namePath SelectName)
+                        occurrence.namePaths
+                    )
+                )
+
+
+moduleDeclarationRange : ParsedModuleCache -> Maybe DeclarationRange
+moduleDeclarationRange parsedModule =
+    case rangeAtPathInModule parsedModule [ StepModuleDefinition ] SelectWhole of
+        Nothing ->
+            Nothing
+
+        Just wholeRange ->
+            Just (DeclarationRange wholeRange [])
+
+
+
+-- Documentation, rendered on demand
+
+
+documentationMarkdownForDeclaration :
+    List String
+    -> ParsedModuleCache
+    -> LanguageServiceAnalysis.DeclarationOccurrence
+    -> String
+documentationMarkdownForDeclaration textLines parsedModule occurrence =
+    let
+        documentationFromComment : Maybe String
+        documentationFromComment =
+            case rangeAtPathInModule parsedModule occurrence.declarationPath SelectDocumentation of
+                Nothing ->
+                    Nothing
+
+                Just documentationRange ->
+                    Just
+                        (removeWrappingFromMultilineComment
+                            (String.join "\n" (sliceRangeFromTextLines textLines documentationRange))
+                        )
+    in
+    case occurrence.documentation of
+        LanguageServiceAnalysis.ValueDocumentation maybeAnnotationPath ->
+            documentationMarkdownFromCodeLinesAndDocumentation
+                (valueCodeLines textLines parsedModule occurrence.name maybeAnnotationPath)
+                documentationFromComment
+
+        LanguageServiceAnalysis.DeclarationCodeDocumentation ->
+            documentationMarkdownFromCodeLinesAndDocumentation
+                (declarationCodeLines textLines parsedModule occurrence)
+                documentationFromComment
+
+        LanguageServiceAnalysis.ChoiceTypeTagDocumentation choiceTypeName choiceTypePath ->
+            String.join "\n\n"
+                [ markdownElmCodeBlockFromCodeLines [ occurrence.name ]
+                , String.concat [ "A variant of the choice type `", choiceTypeName, "`" ]
+                , markdownElmCodeBlockFromCodeLines
+                    (choiceTypeCodeLines textLines parsedModule choiceTypePath)
+                ]
+
+
+valueCodeLines : List String -> ParsedModuleCache -> String -> Maybe Path -> List String
+valueCodeLines textLines parsedModule name maybeAnnotationPath =
+    case maybeAnnotationPath of
+        Nothing ->
+            [ name ]
+
+        Just annotationPath ->
+            case rangeAtPathInModule parsedModule annotationPath SelectWhole of
+                Nothing ->
+                    [ name ]
+
+                Just annotationRange ->
+                    [ String.concat
+                        [ name
+                        , " : "
+                        , String.join " " (sliceRangeFromTextLines textLines annotationRange)
+                        ]
+                    ]
+
+
+declarationCodeLines :
+    List String
+    -> ParsedModuleCache
+    -> LanguageServiceAnalysis.DeclarationOccurrence
+    -> List String
+declarationCodeLines textLines parsedModule occurrence =
+    case rangeAtPathInModule parsedModule occurrence.declarationPath occurrence.declarationSelection of
+        Nothing ->
+            [ occurrence.name ]
+
+        Just codeRange ->
+            let
+                lines : List String
+                lines =
+                    sliceRangeFromTextLines textLines codeRange
+            in
+            case occurrence.kind of
+                LanguageServiceAnalysis.ChoiceTypeDeclarationKind ->
+                    dropWhileEmpty lines
+
+                _ ->
+                    lines
+
+
+dropWhileEmpty : List String -> List String
+dropWhileEmpty lines =
+    case lines of
+        [] ->
+            []
+
+        first :: rest ->
+            if String.isEmpty first then
+                dropWhileEmpty rest
+
+            else
+                lines
+
+
+choiceTypeCodeLines : List String -> ParsedModuleCache -> Path -> List String
+choiceTypeCodeLines textLines parsedModule choiceTypePath =
+    case rangeAtPathInModule parsedModule choiceTypePath SelectDeclarationWithoutDocumentation of
+        Nothing ->
+            []
+
+        Just codeRange ->
+            dropWhileEmpty
+                (sliceRangeFromTextLines textLines codeRange)
+
+
+completionItemKindFromDeclarationKind :
+    LanguageServiceAnalysis.DeclarationKind
+    -> Frontend.MonacoEditor.CompletionItemKind
+completionItemKindFromDeclarationKind kind =
+    case kind of
+        LanguageServiceAnalysis.FunctionOrValueDeclarationKind ->
+            Frontend.MonacoEditor.FunctionCompletionItemKind
+
+        LanguageServiceAnalysis.TypeAliasDeclarationKind ->
+            Frontend.MonacoEditor.StructCompletionItemKind
+
+        LanguageServiceAnalysis.ChoiceTypeDeclarationKind ->
+            Frontend.MonacoEditor.EnumCompletionItemKind
+
+        LanguageServiceAnalysis.ChoiceTypeTagDeclarationKind ->
+            Frontend.MonacoEditor.EnumMemberCompletionItemKind
+
+
+completionItemForDeclaration :
+    List String
+    -> ParsedModuleCache
+    -> LanguageServiceAnalysis.DeclarationOccurrence
+    -> CompletionItem
+completionItemForDeclaration textLines parsedModule occurrence =
+    CompletionItem
+        occurrence.name
+        occurrence.name
+        (completionItemKindFromDeclarationKind occurrence.kind)
+        (documentationMarkdownForDeclaration textLines parsedModule occurrence)
+
+
+{-| Build completion items for declarations of a single module, slicing the
+source text into lines only once.
+-}
+completionItemsForDeclarations :
+    ParsedModuleCache
+    -> List LanguageServiceAnalysis.DeclarationOccurrence
+    -> List CompletionItem
+completionItemsForDeclarations parsedModule occurrences =
+    case occurrences of
+        [] ->
+            []
+
+        _ ->
+            let
+                textLines : List String
+                textLines =
+                    String.lines parsedModule.text
+            in
+            List.map (completionItemForDeclaration textLines parsedModule) occurrences
+
+
+topLevelDeclarations : ParsedModuleCache -> List LanguageServiceAnalysis.DeclarationOccurrence
+topLevelDeclarations parsedModule =
+    List.filter declarationIsTopLevel parsedModule.analysis.declarations
+
+
+declarationIsTopLevel : LanguageServiceAnalysis.DeclarationOccurrence -> Bool
+declarationIsTopLevel occurrence =
+    case occurrence.scope of
+        LanguageServiceAnalysis.TopLevelScope ->
+            True
+
+        LanguageServiceAnalysis.LocalScope _ ->
+            False
+
+
+exposedTopLevelDeclarations : ParsedModuleCache -> List LanguageServiceAnalysis.DeclarationOccurrence
+exposedTopLevelDeclarations parsedModule =
+    List.filter
+        (\occurrence -> occurrence.isExposed && declarationIsTopLevel occurrence)
+        parsedModule.analysis.declarations
+
+
+
+-- Resolving a source location to its target
+
+
 {-| <https://microsoft.github.io/monaco-editor/typedoc/interfaces/languages.HoverProvider.html#provideHover>
 -}
 provideHover :
@@ -427,396 +639,481 @@ provideHover :
     -> LanguageServiceState
     -> List String
 provideHover request languageServiceState =
-    case request.fileLocation of
-        LanguageServiceInterface.WorkspaceFileLocation filePath ->
-            case Dict.get filePath languageServiceState.documentCache of
+    hoverItemsAtLocation
+        request.fileLocation
+        ( request.positionLineNumber, request.positionColumn )
+        languageServiceState
+        |> List.map (\( _, _, documentation ) -> documentation)
+
+
+{-| Resolve the subject at the given source location and render it as hover
+item: the range of the resolved occurrence in the queried file, the location of
+the declaration it resolves to and the documentation to display.
+-}
+hoverItemsAtLocation :
+    LanguageServiceInterface.FileLocation
+    -> ( Int, Int )
+    -> LanguageServiceState
+    -> List ( Range, LocationInFile DeclarationRange, String )
+hoverItemsAtLocation fileLocation location languageServiceState =
+    case parsedModuleAtFileLocation fileLocation languageServiceState of
+        Nothing ->
+            []
+
+        Just parsedModule ->
+            let
+                resolvedAtLocation : Maybe ( Range, ResolvedTarget )
+                resolvedAtLocation =
+                    case
+                        resolveAtLocation
+                            parsedModule
+                            fileLocation
+                            location
+                            languageServiceState
+                    of
+                        Just resolved ->
+                            Just resolved
+
+                        Nothing ->
+                            declarationTargetAtLocation parsedModule fileLocation location
+                                |> Maybe.andThen
+                                    (\target ->
+                                        targetDeclarationRange target
+                                            |> Maybe.andThen
+                                                (\(DeclarationRange _ nameRanges) ->
+                                                    nameRanges
+                                                        |> Common.listFind
+                                                            (rangeContainsLocation location)
+                                                        |> Maybe.map
+                                                            (\nameRange -> ( nameRange, target ))
+                                                )
+                                    )
+            in
+            case resolvedAtLocation of
                 Nothing ->
                     []
 
-                Just currentFileCacheItem ->
-                    case currentFileCacheItem.parsedFileLastSuccess of
+                Just ( occurrenceRange, target ) ->
+                    case targetDeclarationRange target of
                         Nothing ->
                             []
 
-                        Just parsedFileLastSuccess ->
-                            let
-                                { hoverItems } =
-                                    hoverItemsFromParsedModule
-                                        ( parsedFileLastSuccess.syntax
-                                        , parsedFileLastSuccess.completionItems
-                                        , request.fileLocation
-                                        )
-                                        languageServiceState
-                            in
-                            hoverItems
-                                |> List.filterMap
-                                    (\( hoverRange, hoverText ) ->
-                                        if
-                                            rangeContainsLocation
-                                                ( request.positionLineNumber, request.positionColumn )
-                                                hoverRange
-                                        then
-                                            Just hoverText
+                        Just declarationRange ->
+                            [ ( occurrenceRange
+                              , LocationInFile
+                                    (targetFileLocation target)
+                                    declarationRange
+                              , targetDocumentation target
+                              )
+                            ]
+
+
+parsedModuleAtFileLocation :
+    LanguageServiceInterface.FileLocation
+    -> LanguageServiceState
+    -> Maybe ParsedModuleCache
+parsedModuleAtFileLocation fileLocation languageServiceState =
+    case fileLocation of
+        LanguageServiceInterface.WorkspaceFileLocation filePath ->
+            Dict.get filePath languageServiceState.documentCache
+                |> Maybe.andThen .parsedFileLastSuccess
+
+        LanguageServiceInterface.ElmPackageFileLocation packageVersionIdentifer modulePath ->
+            languageServiceState.elmPackages
+                |> Common.listMapFind
+                    (\( candidateVersionIdentifer, packageModules ) ->
+                        if candidateVersionIdentifer == packageVersionIdentifer then
+                            packageModules
+                                |> Common.listMapFind
+                                    (\( _, ( candidateModulePath, parsedModule ) ) ->
+                                        if candidateModulePath == modulePath then
+                                            Just parsedModule
 
                                         else
                                             Nothing
                                     )
 
-        LanguageServiceInterface.ElmPackageFileLocation packageVersionIdentifer modulePath ->
-            -- TODO
-            []
+                        else
+                            Nothing
+                    )
 
 
-type alias ImportedModule =
-    { fileLocation : LanguageServiceInterface.FileLocation
-    , canonicalName : List String
-    , importedName : Elm.Syntax.ModuleName.ModuleName
-    , parsedModule : Maybe ( Elm.Syntax.File.File, ModuleCompletionItems )
-    , referencesRanges : List Elm.Syntax.Range.Range
+targetFileLocation : ResolvedTarget -> LanguageServiceInterface.FileLocation
+targetFileLocation target =
+    case target of
+        ResolvedDeclarationTarget resolved ->
+            resolved.fileLocation
+
+        ResolvedModuleTarget fileLocation _ ->
+            fileLocation
+
+
+targetDeclarationRange : ResolvedTarget -> Maybe DeclarationRange
+targetDeclarationRange target =
+    case target of
+        ResolvedDeclarationTarget resolved ->
+            declarationRangeOfOccurrence resolved.parsedModule resolved.occurrence
+
+        ResolvedModuleTarget _ parsedModule ->
+            moduleDeclarationRange parsedModule
+
+
+targetDocumentation : ResolvedTarget -> String
+targetDocumentation target =
+    case target of
+        ResolvedDeclarationTarget resolved ->
+            documentationMarkdownForDeclaration
+                (String.lines resolved.parsedModule.text)
+                resolved.parsedModule
+                resolved.occurrence
+
+        ResolvedModuleTarget _ parsedModule ->
+            case documentationStringFromModule parsedModule of
+                Nothing ->
+                    ""
+
+                Just documentationString ->
+                    documentationString
+
+
+{-| Identity of a target, used to decide whether a reference resolves to the
+subject of a references or rename request.
+-}
+targetIdentity : ResolvedTarget -> ( LanguageServiceInterface.FileLocation, Path )
+targetIdentity target =
+    case target of
+        ResolvedDeclarationTarget resolved ->
+            ( resolved.fileLocation, resolved.occurrence.declarationPath )
+
+        ResolvedModuleTarget fileLocation _ ->
+            ( fileLocation, [ StepModuleDefinition ] )
+
+
+{-| Name of the declaration the target refers to, if any.
+
+Resolving a reference can only yield a match for the target when the reference
+uses this exact name, so it is used to skip the (otherwise dominant) cost of
+resolving every reference in large modules. For module targets this is
+'Nothing' and every reference is resolved.
+
+-}
+targetName : ResolvedTarget -> Maybe String
+targetName target =
+    case target of
+        ResolvedDeclarationTarget resolved ->
+            Just resolved.occurrence.name
+
+        ResolvedModuleTarget _ _ ->
+            Nothing
+
+
+{-| Resolve the syntax at the given source location.
+
+The structural path of the innermost node covering the location decides which
+occurrence is queried, so no reference outside that path needs to be resolved.
+
+-}
+resolveAtLocation :
+    ParsedModuleCache
+    -> LanguageServiceInterface.FileLocation
+    -> ( Int, Int )
+    -> LanguageServiceState
+    -> Maybe ( Range, ResolvedTarget )
+resolveAtLocation parsedModule fileLocation ( row, column ) languageServiceState =
+    let
+        cursorPath : Path
+        cursorPath =
+            ElmSyntax.Concrete.SourceLookup.pathAtLocation
+                { row = row, column = column }
+                parsedModule.concrete
+
+        importedModules : List ImportedModule
+        importedModules =
+            importedModulesFromModule parsedModule languageServiceState
+    in
+    case moduleTargetAtImportPath parsedModule cursorPath importedModules of
+        Just fromImport ->
+            Just fromImport
+
+        Nothing ->
+            case
+                Common.listFind
+                    (\reference -> reference.path == cursorPath)
+                    parsedModule.references
+            of
+                Nothing ->
+                    Nothing
+
+                Just reference ->
+                    resolveReferenceAtLocation
+                        parsedModule
+                        fileLocation
+                        importedModules
+                        reference
+                        ( row, column )
+                        languageServiceState
+
+
+moduleTargetAtImportPath :
+    ParsedModuleCache
+    -> Path
+    -> List ImportedModule
+    -> Maybe ( Range, ResolvedTarget )
+moduleTargetAtImportPath parsedModule cursorPath importedModules =
+    Common.listMapFind
+        (\importedModule ->
+            if List.member cursorPath importedModule.moduleNamePaths then
+                case rangeAtPathInModule parsedModule cursorPath SelectWhole of
+                    Nothing ->
+                        Nothing
+
+                    Just range ->
+                        Just
+                            ( range
+                            , ResolvedModuleTarget
+                                importedModule.fileLocation
+                                importedModule.parsedModule
+                            )
+
+            else
+                Nothing
+        )
+        importedModules
+
+
+resolveReferenceAtLocation :
+    ParsedModuleCache
+    -> LanguageServiceInterface.FileLocation
+    -> List ImportedModule
+    -> LanguageServiceAnalysis.ReferenceOccurrence
+    -> ( Int, Int )
+    -> LanguageServiceState
+    -> Maybe ( Range, ResolvedTarget )
+resolveReferenceAtLocation parsedModule fileLocation importedModules reference location languageServiceState =
+    let
+        qualifierMatches : Bool
+        qualifierMatches =
+            case rangeAtPathInModule parsedModule reference.path SelectQualifier of
+                Nothing ->
+                    False
+
+                Just qualifierRange ->
+                    rangeContainsLocation location qualifierRange
+    in
+    if qualifierMatches then
+        case
+            Common.listFind
+                (\importedModule -> importedModule.importedName == reference.moduleName)
+                importedModules
+        of
+            Nothing ->
+                Nothing
+
+            Just referencedModule ->
+                case rangeAtPathInModule parsedModule reference.path SelectQualifier of
+                    Nothing ->
+                        Nothing
+
+                    Just qualifierRange ->
+                        Just
+                            ( qualifierRange
+                            , ResolvedModuleTarget
+                                referencedModule.fileLocation
+                                referencedModule.parsedModule
+                            )
+
+    else
+        case rangeAtPathInModule parsedModule reference.path SelectName of
+            Nothing ->
+                Nothing
+
+            Just nameRange ->
+                if rangeContainsLocation location nameRange then
+                    let
+                        context : ModuleResolutionContext
+                        context =
+                            resolutionContextForModule
+                                parsedModule
+                                fileLocation
+                                (commonImplicitTopLevelImports languageServiceState)
+                                importedModules
+                    in
+                    case resolveReferenceInContext context reference of
+                        Nothing ->
+                            Nothing
+
+                        Just resolved ->
+                            Just ( nameRange, ResolvedDeclarationTarget resolved )
+
+                else
+                    Nothing
+
+
+
+-- Name resolution within a module
+
+
+type alias ModuleResolutionContext =
+    { -- Declarations visible without qualification, first match wins
+      localItems : List ( String, ( LanguageServiceAnalysis.DeclarationScope, ResolvedDeclaration ) )
+    , importedModules : List ( List String, ImportedModule )
     }
 
 
-hoverItemsFromParsedModule :
-    ( Elm.Syntax.File.File, ModuleCompletionItems, LanguageServiceInterface.FileLocation )
-    -> LanguageServiceState
-    ->
-        { fromDeclarations : List ( Range, LocationInFile DeclarationRange, String )
-        , hoverItems : List ( Range, String )
-        }
-hoverItemsFromParsedModule ( parsedModuleSyntax, currentModuleDeclarations, currentModuleFileLocation ) languageServiceState =
+resolutionContextForModule :
+    ParsedModuleCache
+    -> LanguageServiceInterface.FileLocation
+    -> List ResolvedDeclaration
+    -> List ImportedModule
+    -> ModuleResolutionContext
+resolutionContextForModule parsedModule fileLocation implicitTopLevelImports importedModules =
     let
-        importedModules : List ImportedModule
-        importedModules =
-            importedModulesFromFile
-                parsedModuleSyntax
-                languageServiceState
+        ownDeclarations :
+            Bool
+            -> List ( String, ( LanguageServiceAnalysis.DeclarationScope, ResolvedDeclaration ) )
+        ownDeclarations topLevel =
+            parsedModule.analysis.declarations
+                |> List.filterMap
+                    (\occurrence ->
+                        if declarationIsTopLevel occurrence == topLevel then
+                            Just
+                                ( occurrence.name
+                                , ( occurrence.scope
+                                  , { fileLocation = fileLocation
+                                    , parsedModule = parsedModule
+                                    , occurrence = occurrence
+                                    }
+                                  )
+                                )
 
-        parsedReferences : List (SyntaxNode ( List String, String ))
-        parsedReferences =
-            listReferencesInFile
-                parsedModuleSyntax
-
-        localDeclarationsAndImportExposings :
-            List
-                ( ( LanguageServiceInterface.FileLocation, DeclarationRange )
-                , DeclarationScope
-                , CompletionItem
-                )
-        localDeclarationsAndImportExposings =
-            List.concat
-                [ List.concat
-                    [ List.map
-                        (\fromTopLevel ->
-                            ( ( currentModuleFileLocation, fromTopLevel.range )
-                            , TopLevelScope
-                            , fromTopLevel.completionItem
-                            )
-                        )
-                        currentModuleDeclarations.fromTopLevel
-                    , commonImplicitTopLevelImports languageServiceState
-                        |> List.map
-                            (\( declRange, completionItem ) ->
-                                ( declRange, TopLevelScope, completionItem )
-                            )
-
-                    {-
-                       , importExposingsFromFile parsedModule languageServiceState
-                           |> List.map (Tuple.pair (TopLevelScope { start = { row = 1, column = 1 }, end = { row = 11, column = 13 } }))
-                    -}
-                    ]
-                , List.map
-                    (\( completionItem, declRange, scopeRange ) ->
-                        ( ( currentModuleFileLocation, declRange )
-                        , LocalScope scopeRange
-                        , completionItem
-                        )
-                    )
-                    currentModuleDeclarations.fromLocals
-                ]
-
-        importedModulesCompletionItems :
-            List
-                ( List String
-                , ( ImportedModule
-                  , ModuleCompletionItems
-                  )
-                )
-        importedModulesCompletionItems =
-            importedModules
-                |> List.map
-                    (\importedModule ->
-                        ( importedModule.importedName
-                        , ( importedModule
-                          , case importedModule.parsedModule of
-                                Nothing ->
-                                    { fromTopLevel = [], fromLocals = [] }
-
-                                Just ( _, importedCompletionItems ) ->
-                                    importedCompletionItems
-                          )
-                        )
+                        else
+                            Nothing
                     )
 
-        fromImportSyntax : List ( Range, LocationInFile DeclarationRange, String )
-        fromImportSyntax =
+        exposedImportedDeclarations : List ( String, ( LanguageServiceAnalysis.DeclarationScope, ResolvedDeclaration ) )
+        exposedImportedDeclarations =
             importedModules
                 |> List.concatMap
                     (\importedModule ->
-                        case importedModule.parsedModule of
+                        case importedModule.exposingList of
                             Nothing ->
                                 []
 
-                            Just ( importedModuleParsedSyntax, _ ) ->
-                                let
-                                    (Elm.Syntax.Node.Node moduleDeclSyntaxRange _) =
-                                        importedModuleParsedSyntax.moduleDefinition
-                                in
-                                importedModule.referencesRanges
+                            Just exposingList ->
+                                declarationsExposedByImport exposingList importedModule.parsedModule
                                     |> List.map
-                                        (\range ->
-                                            let
-                                                (CompletionItem _ _ _ documentation) =
-                                                    moduleCompletionItemFromModuleSyntax
-                                                        { importedModuleNameRestAfterPrefix = Nothing
-                                                        , importedName = Just importedModule.importedName
-                                                        }
-                                                        importedModuleParsedSyntax
-                                            in
-                                            ( rangeFromRecordRange range
-                                            , LocationInFile
-                                                importedModule.fileLocation
-                                                (DeclarationRange
-                                                    (rangeFromRecordRange moduleDeclSyntaxRange)
-                                                    []
-                                                )
-                                            , documentation
+                                        (\occurrence ->
+                                            ( occurrence.name
+                                            , ( LanguageServiceAnalysis.TopLevelScope
+                                              , { fileLocation = importedModule.fileLocation
+                                                , parsedModule = importedModule.parsedModule
+                                                , occurrence = occurrence
+                                                }
+                                              )
                                             )
                                         )
                     )
-
-        localModuleItemsBeforeFiltering :
-            List
-                ( String
-                , ( Maybe Range
-                  , LocationInFile DeclarationRange
-                  , CompletionItem
-                  )
-                )
-        localModuleItemsBeforeFiltering =
-            localDeclarationsAndImportExposings
-                |> List.map
-                    (\( ( declFileLocation, declRange ), scope, (CompletionItem completionItemLabel _ _ _) as completionItem ) ->
-                        let
-                            ( maybeFilterRange, completionItemRange ) =
-                                case scope of
-                                    TopLevelScope ->
-                                        ( Nothing, declRange )
-
-                                    LocalScope scopeRange ->
-                                        ( Just scopeRange, declRange )
-                        in
-                        ( completionItemLabel
-                        , ( maybeFilterRange
-                          , LocationInFile declFileLocation completionItemRange
-                          , completionItem
-                          )
-                        )
-                    )
-
-        getHoverForFunctionOrName :
-            SyntaxNode ( Elm.Syntax.ModuleName.ModuleName, String )
-            -> Maybe ( LocationInFile DeclarationRange, String )
-        getHoverForFunctionOrName (SyntaxNode (Range ( startRow, startColumn ) _) ( moduleName, nameInModule )) =
-            if moduleName == [] then
-                case Common.assocListGet nameInModule localModuleItemsBeforeFiltering of
-                    Nothing ->
-                        Nothing
-
-                    Just ( maybeFilterRange, locationUnderFilePath, CompletionItem _ _ _ completionItemDocumentation ) ->
-                        case maybeFilterRange of
-                            Nothing ->
-                                Just ( locationUnderFilePath, completionItemDocumentation )
-
-                            Just filterRange ->
-                                if
-                                    rangeContainsLocation
-                                        ( startRow, startColumn )
-                                        filterRange
-                                then
-                                    Just ( locationUnderFilePath, completionItemDocumentation )
-
-                                else
-                                    Nothing
-
-            else
-                case Common.assocListGet moduleName importedModulesCompletionItems of
-                    Nothing ->
-                        Nothing
-
-                    Just ( referencedModule, moduleCompletionItems ) ->
-                        moduleCompletionItems.fromTopLevel
-                            |> Common.listMapFind
-                                (\item ->
-                                    let
-                                        (CompletionItem _ itemInsertText _ itemDocumentation) =
-                                            item.completionItem
-                                    in
-                                    if itemInsertText == nameInModule && item.isExposed then
-                                        Just
-                                            ( LocationInFile
-                                                referencedModule.fileLocation
-                                                item.range
-                                            , itemDocumentation
-                                            )
-
-                                    else
-                                        Nothing
-                                )
-
-        getForHoversForReferenceNode :
-            SyntaxNode ( List String, String )
-            -> List ( Range, LocationInFile DeclarationRange, String )
-        getForHoversForReferenceNode functionOrNameNode =
-            let
-                (SyntaxNode wholeRange ( moduleName, nameInModule )) =
-                    functionOrNameNode
-
-                (Range ( wholeRangeStartLine, wholeRangeStartColumn ) ( wholeRangeEndLine, wholeRangeEndColumn )) =
-                    wholeRange
-
-                rangeModulePart : Range
-                rangeModulePart =
-                    Range
-                        ( wholeRangeStartLine, wholeRangeStartColumn )
-                        ( wholeRangeEndLine, wholeRangeEndColumn - String.length nameInModule - 1 )
-
-                forNameInModuleRange : Range
-                forNameInModuleRange =
-                    Range
-                        ( wholeRangeStartLine, wholeRangeEndColumn - String.length nameInModule )
-                        ( wholeRangeEndLine, wholeRangeEndColumn )
-
-                forModule : List ( Range, LocationInFile DeclarationRange, String )
-                forModule =
-                    if moduleName == [] then
-                        []
-
-                    else
-                        case
-                            importedModules
-                                |> Common.listFind
-                                    (\importedModule ->
-                                        importedModule.importedName == moduleName
-                                    )
-                        of
-                            Nothing ->
-                                []
-
-                            Just referencedModule ->
-                                case referencedModule.parsedModule of
-                                    Nothing ->
-                                        []
-
-                                    Just ( referencedModuleParsedSyntax, _ ) ->
-                                        let
-                                            (CompletionItem _ _ _ documentation) =
-                                                moduleCompletionItemFromModuleSyntax
-                                                    { importedModuleNameRestAfterPrefix = Nothing
-                                                    , importedName = Just moduleName
-                                                    }
-                                                    referencedModuleParsedSyntax
-                                        in
-                                        [ ( rangeModulePart
-                                          , LocationInFile
-                                                referencedModule.fileLocation
-                                                (DeclarationRange rangeModulePart [])
-                                          , documentation
-                                          )
-                                        ]
-
-                forNameInModule : List ( Range, LocationInFile DeclarationRange, String )
-                forNameInModule =
-                    case getHoverForFunctionOrName functionOrNameNode of
-                        Nothing ->
-                            []
-
-                        Just ( sourceLocation, hover ) ->
-                            [ ( forNameInModuleRange
-                              , sourceLocation
-                              , hover
-                              )
-                            ]
-            in
-            List.concat
-                [ forModule
-                , forNameInModule
-                ]
-
-        fromDeclarationsRefs : List ( Range, LocationInFile DeclarationRange, String )
-        fromDeclarationsRefs =
-            List.concatMap getForHoversForReferenceNode parsedReferences
-
-        fromDeclarations : List ( Range, LocationInFile DeclarationRange, String )
-        fromDeclarations =
-            List.concat
-                [ fromImportSyntax
-                , fromDeclarationsRefs
-                ]
-
-        fromDeclarationsLessSourceLocation : List ( Range, String )
-        fromDeclarationsLessSourceLocation =
-            fromDeclarations
-                |> List.map (\( range, _, documentation ) -> ( range, documentation ))
-
-        hoverItems : List ( Range, String )
-        hoverItems =
-            List.concat
-                [ fromDeclarationsLessSourceLocation
-                ]
     in
-    { fromDeclarations = fromDeclarations
-    , hoverItems = hoverItems
+    { localItems =
+        List.concat
+            [ ownDeclarations True
+            , exposedImportedDeclarations
+            , List.map
+                (\resolved ->
+                    ( resolved.occurrence.name
+                    , ( LanguageServiceAnalysis.TopLevelScope, resolved )
+                    )
+                )
+                implicitTopLevelImports
+            , ownDeclarations False
+            ]
+    , importedModules =
+        List.map
+            (\importedModule -> ( importedModule.importedName, importedModule ))
+            importedModules
     }
 
 
-listTypeReferencesFromTypeAnnotation :
-    Elm.Syntax.Node.Node Elm.Syntax.TypeAnnotation.TypeAnnotation
-    -> List (SyntaxNode ( Elm.Syntax.ModuleName.ModuleName, String ))
-listTypeReferencesFromTypeAnnotation (Elm.Syntax.Node.Node _ typeAnnotation) =
-    case typeAnnotation of
-        Elm.Syntax.TypeAnnotation.GenericType _ ->
-            []
+declarationsExposedByImport :
+    ElmSyntax.Abstract.Exposing.Exposing
+    -> ParsedModuleCache
+    -> List LanguageServiceAnalysis.DeclarationOccurrence
+declarationsExposedByImport exposingList parsedModule =
+    let
+        exposedDeclarations : List LanguageServiceAnalysis.DeclarationOccurrence
+        exposedDeclarations =
+            exposedTopLevelDeclarations parsedModule
+    in
+    case exposingList of
+        ElmSyntax.Abstract.Exposing.All ->
+            exposedDeclarations
 
-        Elm.Syntax.TypeAnnotation.Typed (Elm.Syntax.Node.Node instantiatedRangeRecord instantiatedVal) arguments ->
-            let
-                instantiatedRange : Range
-                instantiatedRange =
-                    rangeFromRecordRange instantiatedRangeRecord
-            in
-            SyntaxNode instantiatedRange instantiatedVal
-                :: List.concatMap listTypeReferencesFromTypeAnnotation arguments
-
-        Elm.Syntax.TypeAnnotation.Unit ->
-            []
-
-        Elm.Syntax.TypeAnnotation.Tupled tupled ->
-            List.concatMap listTypeReferencesFromTypeAnnotation tupled
-
-        Elm.Syntax.TypeAnnotation.Record record ->
-            List.concatMap (\(Elm.Syntax.Node.Node _ ( _, value )) -> listTypeReferencesFromTypeAnnotation value)
-                record
-
-        Elm.Syntax.TypeAnnotation.GenericRecord _ (Elm.Syntax.Node.Node _ record) ->
-            List.concatMap
-                (\(Elm.Syntax.Node.Node _ ( _, value )) -> listTypeReferencesFromTypeAnnotation value)
-                record
-
-        Elm.Syntax.TypeAnnotation.FunctionTypeAnnotation input return ->
-            List.concatMap listTypeReferencesFromTypeAnnotation [ input, return ]
+        ElmSyntax.Abstract.Exposing.Explicit topLevelExposings ->
+            topLevelExposings
+                |> List.concatMap
+                    (\topLevelExpose ->
+                        let
+                            exposedName : String
+                            exposedName =
+                                LanguageServiceAnalysis.nameOfTopLevelExpose topLevelExpose
+                        in
+                        List.filter
+                            (\occurrence -> occurrence.name == exposedName)
+                            exposedDeclarations
+                    )
 
 
-{-| <https://microsoft.github.io/monaco-editor/typedoc/interfaces/languages.CompletionItemProvider.html#provideCompletionItems>
--}
+resolveReferenceInContext :
+    ModuleResolutionContext
+    -> LanguageServiceAnalysis.ReferenceOccurrence
+    -> Maybe ResolvedDeclaration
+resolveReferenceInContext context reference =
+    if reference.moduleName == [] then
+        case Common.assocListGet reference.name context.localItems of
+            Nothing ->
+                Nothing
+
+            Just ( scope, resolved ) ->
+                case scope of
+                    LanguageServiceAnalysis.TopLevelScope ->
+                        Just resolved
+
+                    LanguageServiceAnalysis.LocalScope scopePath ->
+                        if ElmSyntax.Path.isPrefixOf scopePath reference.path then
+                            Just resolved
+
+                        else
+                            Nothing
+
+    else
+        case Common.assocListGet reference.moduleName context.importedModules of
+            Nothing ->
+                Nothing
+
+            Just importedModule ->
+                importedModule.parsedModule.analysis.declarations
+                    |> Common.listMapFind
+                        (\occurrence ->
+                            if
+                                (occurrence.name == reference.name)
+                                    && occurrence.isExposed
+                                    && declarationIsTopLevel occurrence
+                            then
+                                Just
+                                    { fileLocation = importedModule.fileLocation
+                                    , parsedModule = importedModule.parsedModule
+                                    , occurrence = occurrence
+                                    }
+
+                            else
+                                Nothing
+                        )
+
+
+
+-- Completion
+
+
 provideCompletionItems :
     LanguageServiceInterface.ProvideCompletionItemsRequestStruct
     -> LanguageServiceState
@@ -843,7 +1140,7 @@ provideCompletionItems request languageServiceState =
                                         { row = request.cursorLineNumber
                                         , column = request.cursorColumn
                                         }
-                                        parsedFile.syntax
+                                        parsedFile.concrete
             in
             if cursorIsInCommentInCompleteSyntax then
                 []
@@ -911,44 +1208,11 @@ provideDefinitionInternal :
     -> LanguageServiceState
     -> List (LocationInFile DeclarationRange)
 provideDefinitionInternal request languageServiceState =
-    case request.fileLocation of
-        LanguageServiceInterface.WorkspaceFileLocation filePath ->
-            case Dict.get filePath languageServiceState.documentCache of
-                Nothing ->
-                    []
-
-                Just currentFileCacheItem ->
-                    case currentFileCacheItem.parsedFileLastSuccess of
-                        Nothing ->
-                            []
-
-                        Just parsedFileLastSuccess ->
-                            let
-                                { fromDeclarations } =
-                                    hoverItemsFromParsedModule
-                                        ( parsedFileLastSuccess.syntax
-                                        , parsedFileLastSuccess.completionItems
-                                        , request.fileLocation
-                                        )
-                                        languageServiceState
-                            in
-                            fromDeclarations
-                                |> List.filterMap
-                                    (\( refRange, locationUnderFile, _ ) ->
-                                        if
-                                            rangeContainsLocation
-                                                ( request.positionLineNumber, request.positionColumn )
-                                                refRange
-                                        then
-                                            Just locationUnderFile
-
-                                        else
-                                            Nothing
-                                    )
-
-        LanguageServiceInterface.ElmPackageFileLocation packageVersionIdentifer modulePath ->
-            -- TODO
-            []
+    hoverItemsAtLocation
+        request.fileLocation
+        ( request.positionLineNumber, request.positionColumn )
+        languageServiceState
+        |> List.map (\( _, locationInFile, _ ) -> locationInFile)
 
 
 textDocumentSymbol :
@@ -966,59 +1230,95 @@ textDocumentSymbol fileUri languageServiceState =
                     []
 
                 Just parsedFileLastSuccess ->
-                    textDocumentSymbolFromCompletionItems
-                        parsedFileLastSuccess.completionItems
+                    let
+                        topLevelOccurrences : List LanguageServiceAnalysis.DeclarationOccurrence
+                        topLevelOccurrences =
+                            topLevelDeclarations parsedFileLastSuccess
+                    in
+                    topLevelOccurrences
+                        |> List.filter
+                            (\occurrence ->
+                                occurrence.kind /= LanguageServiceAnalysis.ChoiceTypeTagDeclarationKind
+                            )
+                        |> List.filterMap
+                            (documentSymbolFromOccurrence
+                                parsedFileLastSuccess
+                                topLevelOccurrences
+                            )
 
 
-textDocumentSymbolFromCompletionItems :
-    ModuleCompletionItems
-    -> List LanguageServiceInterface.DocumentSymbol
-textDocumentSymbolFromCompletionItems completionItems =
-    completionItems.fromTopLevel
-        |> List.map
-            (\completionItem ->
-                let
-                    (CompletionItem label _ completionItemKind _) =
-                        completionItem.completionItem
+documentSymbolFromOccurrence :
+    ParsedModuleCache
+    -> List LanguageServiceAnalysis.DeclarationOccurrence
+    -> LanguageServiceAnalysis.DeclarationOccurrence
+    -> Maybe LanguageServiceInterface.DocumentSymbol
+documentSymbolFromOccurrence parsedModule allOccurrences occurrence =
+    case declarationRangeOfOccurrence parsedModule occurrence of
+        Nothing ->
+            Nothing
 
-                    (DeclarationRange itemRangeWhole _) =
-                        completionItem.range
+        Just (DeclarationRange wholeRange _) ->
+            let
+                selectionRange : Range
+                selectionRange =
+                    rangeAtPathInModule parsedModule occurrence.declarationPath SelectName
+                        |> Maybe.withDefault wholeRange
 
-                    monacoRange : Frontend.MonacoEditor.MonacoRange
-                    monacoRange =
-                        monacoRangeFromRange itemRangeWhole
+                children : List LanguageServiceInterface.DocumentSymbol
+                children =
+                    case occurrence.kind of
+                        LanguageServiceAnalysis.ChoiceTypeDeclarationKind ->
+                            allOccurrences
+                                |> List.filter
+                                    (\candidate ->
+                                        candidate.kind == LanguageServiceAnalysis.ChoiceTypeTagDeclarationKind
+                                            && ElmSyntax.Path.isPrefixOf
+                                                occurrence.declarationPath
+                                                candidate.declarationPath
+                                    )
+                                |> List.filterMap
+                                    (documentSymbolFromOccurrence parsedModule allOccurrences)
 
-                    symbolKind : LanguageServiceInterface.SymbolKind
-                    symbolKind =
-                        case completionItemKind of
-                            Frontend.MonacoEditor.ConstructorCompletionItemKind ->
-                                LanguageServiceInterface.SymbolKind_EnumMember
+                        LanguageServiceAnalysis.FunctionOrValueDeclarationKind ->
+                            []
 
-                            Frontend.MonacoEditor.EnumCompletionItemKind ->
-                                LanguageServiceInterface.SymbolKind_Enum
+                        LanguageServiceAnalysis.TypeAliasDeclarationKind ->
+                            []
 
-                            Frontend.MonacoEditor.EnumMemberCompletionItemKind ->
-                                LanguageServiceInterface.SymbolKind_EnumMember
-
-                            Frontend.MonacoEditor.FunctionCompletionItemKind ->
-                                LanguageServiceInterface.SymbolKind_Function
-
-                            Frontend.MonacoEditor.ModuleCompletionItemKind ->
-                                LanguageServiceInterface.SymbolKind_Module
-
-                            Frontend.MonacoEditor.StructCompletionItemKind ->
-                                LanguageServiceInterface.SymbolKind_Struct
-                in
-                LanguageServiceInterface.DocumentSymbol
-                    { name = label
-                    , range = monacoRange
-                    , selectionRange = monacoRange
-                    , kind = symbolKind
-
-                    -- TODO: Move choice type tags to children
-                    , children = []
+                        LanguageServiceAnalysis.ChoiceTypeTagDeclarationKind ->
+                            []
+            in
+            Just
+                (LanguageServiceInterface.DocumentSymbol
+                    { name = occurrence.name
+                    , range = monacoRangeFromRange wholeRange
+                    , selectionRange = monacoRangeFromRange selectionRange
+                    , kind = symbolKindFromDeclarationKind occurrence.kind
+                    , children = children
                     }
-            )
+                )
+
+
+symbolKindFromDeclarationKind :
+    LanguageServiceAnalysis.DeclarationKind
+    -> LanguageServiceInterface.SymbolKind
+symbolKindFromDeclarationKind kind =
+    case kind of
+        LanguageServiceAnalysis.FunctionOrValueDeclarationKind ->
+            LanguageServiceInterface.SymbolKind_Function
+
+        LanguageServiceAnalysis.TypeAliasDeclarationKind ->
+            LanguageServiceInterface.SymbolKind_Struct
+
+        LanguageServiceAnalysis.ChoiceTypeDeclarationKind ->
+            LanguageServiceInterface.SymbolKind_Enum
+
+        LanguageServiceAnalysis.ChoiceTypeTagDeclarationKind ->
+            LanguageServiceInterface.SymbolKind_EnumMember
+
+
+
+-- References and rename
 
 
 textDocumentReferences :
@@ -1062,451 +1362,256 @@ textDocumentReferencesGroupedByFilePath :
             , List ( LanguageServiceInterface.FileLocation, List Range )
             )
 textDocumentReferencesGroupedByFilePath referenceRequest languageServiceState =
-    let
-        maybeDefinition : Maybe (LocationInFile DeclarationRange)
-        maybeDefinition =
-            provideDefinitionInternal
-                referenceRequest
-                languageServiceState
-                |> List.head
-    in
-    case maybeDefinition of
-        Just (LocationInFile definitionFileLocation definitionLocationRange) ->
-            let
-                (DeclarationRange definitionLocationRangeWhole _) =
-                    definitionLocationRange
-
-                references : List ( LanguageServiceInterface.FileLocation, List Range )
-                references =
-                    findReferences ( definitionFileLocation, definitionLocationRangeWhole ) languageServiceState
-            in
-            Just
-                ( ( definitionFileLocation
-                  , definitionLocationRange
-                  )
-                , references
-                )
-
+    case parsedModuleAtFileLocation referenceRequest.fileLocation languageServiceState of
         Nothing ->
-            -- Fallback: try to find a top-level declaration covering this position
-            case referenceRequest.fileLocation of
-                LanguageServiceInterface.ElmPackageFileLocation _ _ ->
-                    -- TODO
+            Nothing
+
+        Just parsedFile ->
+            let
+                position : ( Int, Int )
+                position =
+                    ( referenceRequest.positionLineNumber
+                    , referenceRequest.positionColumn
+                    )
+
+                maybeTarget : Maybe ResolvedTarget
+                maybeTarget =
+                    case
+                        resolveAtLocation
+                            parsedFile
+                            referenceRequest.fileLocation
+                            position
+                            languageServiceState
+                    of
+                        Just ( _, target ) ->
+                            Just target
+
+                        Nothing ->
+                            -- Fallback: the name of a declaration under the cursor
+                            declarationTargetAtLocation
+                                parsedFile
+                                referenceRequest.fileLocation
+                                position
+            in
+            case maybeTarget of
+                Nothing ->
                     Nothing
 
-                LanguageServiceInterface.WorkspaceFileLocation filePathOpenedInEditor ->
-                    case Dict.get filePathOpenedInEditor languageServiceState.documentCache of
+                Just target ->
+                    case targetDeclarationRange target of
                         Nothing ->
                             Nothing
 
-                        Just currentFileCacheItem ->
-                            case currentFileCacheItem.parsedFileLastSuccess of
-                                Nothing ->
-                                    Nothing
+                        Just declarationRange ->
+                            Just
+                                ( ( targetFileLocation target
+                                  , declarationRange
+                                  )
+                                , findReferences target languageServiceState
+                                )
 
-                                Just parsedFile ->
-                                    let
-                                        pos : ( Int, Int )
-                                        pos =
-                                            ( referenceRequest.positionLineNumber, referenceRequest.positionColumn )
 
-                                        maybeTopLevelDefinitionLocation : Maybe ( LanguageServiceInterface.FileLocation, DeclarationRange )
-                                        maybeTopLevelDefinitionLocation =
-                                            parsedFile.completionItems.fromTopLevel
-                                                |> Common.listMapFind
-                                                    (\decl ->
-                                                        let
-                                                            (DeclarationRange _ declRangesName) =
-                                                                decl.range
-                                                        in
-                                                        if
-                                                            List.any
-                                                                (\range ->
-                                                                    rangeContainsLocation pos range
-                                                                )
-                                                                declRangesName
-                                                        then
-                                                            Just
-                                                                ( LanguageServiceInterface.WorkspaceFileLocation parsedFile.fileUri
-                                                                , decl.range
-                                                                )
+{-| Find the declaration whose own name covers the given location. Used when the
+cursor is on a declaration instead of on a reference.
+-}
+declarationTargetAtLocation :
+    ParsedModuleCache
+    -> LanguageServiceInterface.FileLocation
+    -> ( Int, Int )
+    -> Maybe ResolvedTarget
+declarationTargetAtLocation parsedModule fileLocation location =
+    let
+        cursorPath : Path
+        cursorPath =
+            ElmSyntax.Concrete.SourceLookup.pathAtLocation
+                { row = Tuple.first location, column = Tuple.second location }
+                parsedModule.concrete
+    in
+    topLevelDeclarations parsedModule
+        |> Common.listMapFind
+            (\occurrence ->
+                if List.member cursorPath occurrence.namePaths then
+                    case rangeAtPathInModule parsedModule cursorPath SelectName of
+                        Nothing ->
+                            Nothing
 
-                                                        else
-                                                            Nothing
-                                                    )
-                                    in
-                                    case maybeTopLevelDefinitionLocation of
-                                        Nothing ->
-                                            Nothing
+                        Just nameRange ->
+                            if rangeContainsLocation location nameRange then
+                                Just
+                                    (ResolvedDeclarationTarget
+                                        { fileLocation = fileLocation
+                                        , parsedModule = parsedModule
+                                        , occurrence = occurrence
+                                        }
+                                    )
 
-                                        Just syntheticDefinitionLocation ->
-                                            let
-                                                ( definitionFileLocation, DeclarationRange definitionRange _ ) =
-                                                    syntheticDefinitionLocation
+                            else
+                                Nothing
 
-                                                references : List ( LanguageServiceInterface.FileLocation, List Range )
-                                                references =
-                                                    findReferences
-                                                        ( definitionFileLocation
-                                                        , definitionRange
-                                                        )
-                                                        languageServiceState
-                                            in
-                                            Just
-                                                ( syntheticDefinitionLocation
-                                                , references
-                                                )
+                else
+                    Nothing
+            )
 
 
 findReferences :
-    ( LanguageServiceInterface.FileLocation, Range )
+    ResolvedTarget
     -> LanguageServiceState
     -> List ( LanguageServiceInterface.FileLocation, List Range )
-findReferences ( targetDefinitionFilePath, targetDefinitionRange ) languageServiceState =
+findReferences target languageServiceState =
     let
-        allParsedModules : List ParsedCookedModuleCache
+        allParsedModules :
+            List
+                ( LanguageServiceInterface.FileLocation
+                , ParsedModuleCache
+                )
         allParsedModules =
             List.concat
                 [ languageServiceState.documentCache
                     |> Dict.toList
-                    |> List.filterMap (\( _, blob ) -> blob.parsedFileLastSuccess)
-                , List.map .parseResult languageServiceState.coreModulesCache
+                    |> List.filterMap
+                        (\( filePath, blob ) ->
+                            Maybe.map
+                                (\parsedModule ->
+                                    ( LanguageServiceInterface.WorkspaceFileLocation filePath
+                                    , parsedModule
+                                    )
+                                )
+                                blob.parsedFileLastSuccess
+                        )
+                , languageServiceState.coreModulesCache
+                    |> List.map
+                        (\coreModule ->
+                            ( LanguageServiceInterface.WorkspaceFileLocation coreModule.parseResult.fileUri
+                            , coreModule.parseResult
+                            )
+                        )
+                , languageServiceState.elmPackages
+                    |> List.concatMap
+                        (\( packageVersionIdentifer, packageModules ) ->
+                            packageModules
+                                |> List.map
+                                    (\( _, ( modulePath, parsedModule ) ) ->
+                                        ( LanguageServiceInterface.ElmPackageFileLocation
+                                            packageVersionIdentifer
+                                            modulePath
+                                        , parsedModule
+                                        )
+                                    )
+                        )
                 ]
-
-        -- Name of the declaration at the target location, if it is a
-        -- value/type/local declaration. Resolving a reference can only yield a
-        -- match for the target when the reference uses this exact name, so we
-        -- use it to skip the (otherwise dominant) cost of resolving every
-        -- reference in modules with thousands of lines but only a few uses of
-        -- the queried declaration. When the target is a module (or otherwise
-        -- not found here) this is 'Nothing' and every reference is resolved,
-        -- matching the previous behaviour exactly.
-        maybeTargetName : Maybe String
-        maybeTargetName =
-            allParsedModules
-                |> Common.listMapFind
-                    (\parsedModule ->
-                        if LanguageServiceInterface.WorkspaceFileLocation parsedModule.fileUri == targetDefinitionFilePath then
-                            declarationNameAtRange targetDefinitionRange parsedModule.completionItems
-
-                        else
-                            Nothing
-                    )
 
         -- Implicit top-level imports do not depend on the module being scanned,
         -- so compute them once instead of once per module.
-        implicitTopLevelImports :
-            List
-                ( ( LanguageServiceInterface.FileLocation, DeclarationRange )
-                , CompletionItem
-                )
+        implicitTopLevelImports : List ResolvedDeclaration
         implicitTopLevelImports =
             commonImplicitTopLevelImports languageServiceState
 
         findReferencesInModule :
-            ParsedCookedModuleCache
+            ( LanguageServiceInterface.FileLocation, ParsedModuleCache )
             -> Maybe ( LanguageServiceInterface.FileLocation, List Range )
-        findReferencesInModule parsedModule =
+        findReferencesInModule ( fileLocation, parsedModule ) =
             let
                 ranges : List Range
                 ranges =
                     referenceRangesInModuleResolvingTo
-                        ( targetDefinitionFilePath, targetDefinitionRange )
-                        maybeTargetName
+                        target
                         implicitTopLevelImports
-                        ( parsedModule.syntax
-                        , parsedModule.completionItems
-                        , LanguageServiceInterface.WorkspaceFileLocation parsedModule.fileUri
-                        )
+                        fileLocation
+                        parsedModule
                         languageServiceState
             in
             if ranges == [] then
                 Nothing
 
             else
-                Just
-                    ( LanguageServiceInterface.WorkspaceFileLocation parsedModule.fileUri
-                    , ranges
-                    )
+                Just ( fileLocation, ranges )
     in
     allParsedModules
         |> List.filterMap findReferencesInModule
 
 
-{-| Look up the label (declaration name) of the completion item whose whole
-declaration range equals the given range. Used by 'findReferences' to recover
-the name of the queried declaration so reference resolution can be limited to
-references that use that name.
--}
-declarationNameAtRange : Range -> ModuleCompletionItems -> Maybe String
-declarationNameAtRange targetRange completionItems =
-    case
-        completionItems.fromTopLevel
-            |> Common.listMapFind
-                (\item ->
-                    let
-                        (DeclarationRange wholeRange _) =
-                            item.range
-
-                        (CompletionItem label _ _ _) =
-                            item.completionItem
-                    in
-                    if wholeRange == targetRange then
-                        Just label
-
-                    else
-                        Nothing
-                )
-    of
-        Just label ->
-            Just label
-
-        Nothing ->
-            completionItems.fromLocals
-                |> Common.listMapFind
-                    (\( CompletionItem label _ _ _, DeclarationRange wholeRange _, _ ) ->
-                        if wholeRange == targetRange then
-                            Just label
-
-                        else
-                            Nothing
-                    )
-
-
-{-| Collect the ranges of all references in a single module that resolve to the
-given target definition. This mirrors the reference resolution performed by
-'hoverItemsFromParsedModule', but avoids constructing the (here unused) hover
-documentation strings and, when the target's name is known, only resolves
-references that share that name.
+{-| Ranges of all references in a single module that resolve to the given
+target. When the target's name is known, only references that share that name
+are resolved.
 -}
 referenceRangesInModuleResolvingTo :
-    ( LanguageServiceInterface.FileLocation, Range )
-    -> Maybe String
-    ->
-        List
-            ( ( LanguageServiceInterface.FileLocation, DeclarationRange )
-            , CompletionItem
-            )
-    -> ( Elm.Syntax.File.File, ModuleCompletionItems, LanguageServiceInterface.FileLocation )
+    ResolvedTarget
+    -> List ResolvedDeclaration
+    -> LanguageServiceInterface.FileLocation
+    -> ParsedModuleCache
     -> LanguageServiceState
     -> List Range
-referenceRangesInModuleResolvingTo ( targetDefinitionFilePath, targetDefinitionRange ) maybeTargetName implicitTopLevelImports ( parsedModuleSyntax, currentModuleDeclarations, currentModuleFileLocation ) languageServiceState =
+referenceRangesInModuleResolvingTo target implicitTopLevelImports currentModuleFileLocation parsedModule languageServiceState =
     let
         importedModules : List ImportedModule
         importedModules =
-            importedModulesFromFile
-                parsedModuleSyntax
-                languageServiceState
+            importedModulesFromModule parsedModule languageServiceState
 
-        localDeclarationsAndImportExposings :
-            List
-                ( ( LanguageServiceInterface.FileLocation, DeclarationRange )
-                , DeclarationScope
-                , CompletionItem
-                )
-        localDeclarationsAndImportExposings =
-            List.concat
-                [ List.concat
-                    [ List.map
-                        (\fromTopLevel ->
-                            ( ( currentModuleFileLocation, fromTopLevel.range )
-                            , TopLevelScope
-                            , fromTopLevel.completionItem
-                            )
-                        )
-                        currentModuleDeclarations.fromTopLevel
-                    , implicitTopLevelImports
-                        |> List.map
-                            (\( declRange, completionItem ) ->
-                                ( declRange, TopLevelScope, completionItem )
-                            )
-                    ]
-                , List.map
-                    (\( completionItem, declRange, scopeRange ) ->
-                        ( ( currentModuleFileLocation, declRange )
-                        , LocalScope scopeRange
-                        , completionItem
-                        )
-                    )
-                    currentModuleDeclarations.fromLocals
-                ]
+        context : ModuleResolutionContext
+        context =
+            resolutionContextForModule
+                parsedModule
+                currentModuleFileLocation
+                implicitTopLevelImports
+                importedModules
 
-        importedModulesCompletionItems :
-            List
-                ( List String
-                , ( ImportedModule
-                  , ModuleCompletionItems
-                  )
-                )
-        importedModulesCompletionItems =
-            importedModules
-                |> List.map
-                    (\importedModule ->
-                        ( importedModule.importedName
-                        , ( importedModule
-                          , case importedModule.parsedModule of
-                                Nothing ->
-                                    { fromTopLevel = [], fromLocals = [] }
+        identity : ( LanguageServiceInterface.FileLocation, Path )
+        identity =
+            targetIdentity target
 
-                                Just ( _, importedCompletionItems ) ->
-                                    importedCompletionItems
-                          )
-                        )
-                    )
+        maybeTargetName : Maybe String
+        maybeTargetName =
+            targetName target
 
-        localModuleItemsBeforeFiltering :
-            List
-                ( String
-                , ( Maybe Range
-                  , LocationInFile DeclarationRange
-                  )
-                )
-        localModuleItemsBeforeFiltering =
-            localDeclarationsAndImportExposings
-                |> List.map
-                    (\( ( declFileLocation, declRange ), scope, CompletionItem completionItemLabel _ _ _ ) ->
-                        let
-                            ( maybeFilterRange, completionItemRange ) =
-                                case scope of
-                                    TopLevelScope ->
-                                        ( Nothing, declRange )
+        resolveReference : LanguageServiceAnalysis.ReferenceOccurrence -> Maybe Range
+        resolveReference reference =
+            case resolveReferenceInContext context reference of
+                Nothing ->
+                    Nothing
 
-                                    LocalScope scopeRange ->
-                                        ( Just scopeRange, declRange )
-                        in
-                        ( completionItemLabel
-                        , ( maybeFilterRange
-                          , LocationInFile declFileLocation completionItemRange
-                          )
-                        )
-                    )
-
-        -- Resolve the name part of a reference node to its definition location,
-        -- without building hover documentation (see 'getHoverForFunctionOrName').
-        resolveNameLocation :
-            Elm.Syntax.ModuleName.ModuleName
-            -> String
-            -> ( Int, Int )
-            -> Maybe (LocationInFile DeclarationRange)
-        resolveNameLocation moduleName nameInModule ( startRow, startColumn ) =
-            if moduleName == [] then
-                case Common.assocListGet nameInModule localModuleItemsBeforeFiltering of
-                    Nothing ->
-                        Nothing
-
-                    Just ( maybeFilterRange, locationUnderFilePath ) ->
-                        case maybeFilterRange of
-                            Nothing ->
-                                Just locationUnderFilePath
-
-                            Just filterRange ->
-                                if
-                                    rangeContainsLocation
-                                        ( startRow, startColumn )
-                                        filterRange
-                                then
-                                    Just locationUnderFilePath
-
-                                else
-                                    Nothing
-
-            else
-                case Common.assocListGet moduleName importedModulesCompletionItems of
-                    Nothing ->
-                        Nothing
-
-                    Just ( referencedModule, moduleCompletionItems ) ->
-                        moduleCompletionItems.fromTopLevel
-                            |> Common.listMapFind
-                                (\item ->
-                                    let
-                                        (CompletionItem _ itemInsertText _ _) =
-                                            item.completionItem
-                                    in
-                                    if itemInsertText == nameInModule && item.isExposed then
-                                        Just
-                                            (LocationInFile
-                                                referencedModule.fileLocation
-                                                item.range
-                                            )
-
-                                    else
-                                        Nothing
-                                )
-
-        nameMatchesTarget : LocationInFile DeclarationRange -> Bool
-        nameMatchesTarget (LocationInFile defFilePath (DeclarationRange defRange _)) =
-            defFilePath == targetDefinitionFilePath && defRange == targetDefinitionRange
-
-        resolveReferenceNode : SyntaxNode ( List String, String ) -> Maybe Range
-        resolveReferenceNode (SyntaxNode wholeRange ( moduleName, nameInModule )) =
-            let
-                (Range ( wholeRangeStartLine, wholeRangeStartColumn ) ( wholeRangeEndLine, wholeRangeEndColumn )) =
-                    wholeRange
-
-                forNameInModuleRange : Range
-                forNameInModuleRange =
-                    Range
-                        ( wholeRangeStartLine, wholeRangeEndColumn - String.length nameInModule )
-                        ( wholeRangeEndLine, wholeRangeEndColumn )
-            in
-            case resolveNameLocation moduleName nameInModule ( wholeRangeStartLine, wholeRangeStartColumn ) of
-                Just location ->
-                    if nameMatchesTarget location then
-                        Just forNameInModuleRange
+                Just resolved ->
+                    if
+                        ( resolved.fileLocation, resolved.occurrence.declarationPath )
+                            == identity
+                    then
+                        rangeAtPathInModule parsedModule reference.path SelectName
 
                     else
                         Nothing
 
-                Nothing ->
-                    Nothing
-
-        -- References at the name part of declarations and usages. When the
-        -- target's name is known, only nodes that use that name can match, so
-        -- skip resolving the rest entirely.
         nameReferenceRanges : List Range
         nameReferenceRanges =
-            listReferencesInFile parsedModuleSyntax
+            parsedModule.references
                 |> List.filterMap
-                    (\((SyntaxNode _ ( _, nameInModule )) as referenceNode) ->
+                    (\reference ->
                         case maybeTargetName of
-                            Just targetName ->
-                                if nameInModule == targetName then
-                                    resolveReferenceNode referenceNode
+                            Just name ->
+                                if reference.name == name then
+                                    resolveReference reference
 
                                 else
                                     Nothing
 
                             Nothing ->
-                                resolveReferenceNode referenceNode
+                                resolveReference reference
                     )
 
-        -- References to imported module names (relevant when the target is a
-        -- module declaration). Mirrors 'fromImportSyntax' in
-        -- 'hoverItemsFromParsedModule' minus the documentation.
+        -- References to imported module names, relevant when the target is a
+        -- module declaration.
         importNameReferenceRanges : List Range
         importNameReferenceRanges =
             importedModules
                 |> List.concatMap
                     (\importedModule ->
-                        case importedModule.parsedModule of
-                            Nothing ->
-                                []
+                        if ( importedModule.fileLocation, [ StepModuleDefinition ] ) == identity then
+                            List.filterMap
+                                (\moduleNamePath ->
+                                    rangeAtPathInModule parsedModule moduleNamePath SelectWhole
+                                )
+                                importedModule.moduleNamePaths
 
-                            Just ( importedModuleParsedSyntax, _ ) ->
-                                let
-                                    (Elm.Syntax.Node.Node moduleDeclSyntaxRange _) =
-                                        importedModuleParsedSyntax.moduleDefinition
-                                in
-                                if
-                                    (importedModule.fileLocation == targetDefinitionFilePath)
-                                        && (rangeFromRecordRange moduleDeclSyntaxRange == targetDefinitionRange)
-                                then
-                                    importedModule.referencesRanges
-                                        |> List.map rangeFromRecordRange
-
-                                else
-                                    []
+                        else
+                            []
                     )
     in
     List.concat
@@ -1610,15 +1715,6 @@ textDocumentRename renameParams languageServiceState =
             workspaceEdits
 
 
-monacoRangeFromSyntaxRange : Elm.Syntax.Range.Range -> Frontend.MonacoEditor.MonacoRange
-monacoRangeFromSyntaxRange syntaxRange =
-    { startLineNumber = syntaxRange.start.row
-    , startColumn = syntaxRange.start.column
-    , endLineNumber = syntaxRange.end.row
-    , endColumn = syntaxRange.end.column
-    }
-
-
 monacoRangeFromRange : Range -> Frontend.MonacoEditor.MonacoRange
 monacoRangeFromRange (Range ( startRow, startColumn ) ( endRow, endColumn )) =
     { startLineNumber = startRow
@@ -1629,17 +1725,18 @@ monacoRangeFromRange (Range ( startRow, startColumn ) ( endRow, endColumn )) =
 
 
 provideCompletionItemsInModule :
-    { fileOpenedInEditor : ParsedCookedModuleCache, newText : String, cursorLineNumber : Int, cursorColumn : Int }
+    { fileOpenedInEditor : ParsedModuleCache, newText : String, cursorLineNumber : Int, cursorColumn : Int }
     -> LanguageServiceState
     -> List CompletionItem
 provideCompletionItemsInModule request languageServiceState =
     let
-        (Elm.Syntax.Node.Node _ moduleDefinition) =
-            request.fileOpenedInEditor.syntax.moduleDefinition
+        fileOpenedInEditor : ParsedModuleCache
+        fileOpenedInEditor =
+            request.fileOpenedInEditor
 
-        fileOpenedInEditorModuleName : Elm.Syntax.ModuleName.ModuleName
+        fileOpenedInEditorModuleName : List String
         fileOpenedInEditorModuleName =
-            Elm.Syntax.Module.moduleName moduleDefinition
+            fileOpenedInEditor.analysis.moduleName
 
         lineText : String
         lineText =
@@ -1681,76 +1778,71 @@ provideCompletionItemsInModule request languageServiceState =
                         Just ( firstChar, _ ) ->
                             Char.isUpper firstChar
 
-        modulesAvailableForImport : List ParsedCookedModuleCache
+        modulesAvailableForImport : List ParsedModuleCache
         modulesAvailableForImport =
             modulesAvailableForImportFromState languageServiceState
 
-        moduleNamesToNotSuggestForImport : List Elm.Syntax.ModuleName.ModuleName
+        moduleNamesToNotSuggestForImport : List (List String)
         moduleNamesToNotSuggestForImport =
             [ fileOpenedInEditorModuleName ]
 
+        modulesToSuggestForImport : List ParsedModuleCache
         modulesToSuggestForImport =
             modulesAvailableForImport
                 |> List.filterMap
                     (\availableModule ->
-                        let
-                            availableModuleSyntax =
-                                availableModule.syntax
-
-                            (Elm.Syntax.Node.Node _ availableModuleDefinition) =
-                                availableModuleSyntax.moduleDefinition
-
-                            availableModuleName : Elm.Syntax.ModuleName.ModuleName
-                            availableModuleName =
-                                Elm.Syntax.Module.moduleName availableModuleDefinition
-                        in
-                        if List.member availableModuleName moduleNamesToNotSuggestForImport then
+                        if List.member availableModule.analysis.moduleName moduleNamesToNotSuggestForImport then
                             Nothing
 
                         else
-                            Just ( availableModule, availableModuleName )
+                            Just availableModule
                     )
                 |> List.sortBy
-                    (\( _, availableModuleName ) ->
-                        String.join "." availableModuleName
+                    (\availableModule ->
+                        String.join "." availableModule.analysis.moduleName
                     )
 
+        importedModules : List ImportedModule
         importedModules =
-            importedModulesFromFile
-                request.fileOpenedInEditor.syntax
-                languageServiceState
-
-        currentModuleDeclarations : ModuleCompletionItems
-        currentModuleDeclarations =
-            request.fileOpenedInEditor.completionItems
+            importedModulesFromModule fileOpenedInEditor languageServiceState
 
         fromLocals : List CompletionItem
         fromLocals =
-            currentModuleDeclarations.fromLocals
-                |> List.filterMap
-                    (\( completionItem, _, scopeRange ) ->
-                        if
-                            rangeContainsLocation
-                                ( request.cursorLineNumber, String.length lineUntilPosition )
-                                scopeRange
-                        then
-                            Just completionItem
+            completionItemsForDeclarations
+                fileOpenedInEditor
+                (fileOpenedInEditor.analysis.declarations
+                    |> List.filter
+                        (\occurrence ->
+                            case occurrence.scope of
+                                LanguageServiceAnalysis.TopLevelScope ->
+                                    False
 
-                        else
-                            Nothing
-                    )
+                                LanguageServiceAnalysis.LocalScope scopePath ->
+                                    case rangeAtPathInModule fileOpenedInEditor scopePath SelectWhole of
+                                        Nothing ->
+                                            False
+
+                                        Just scopeRange ->
+                                            rangeContainsLocation
+                                                ( request.cursorLineNumber, String.length lineUntilPosition )
+                                                scopeRange
+                        )
+                )
 
         importExposings : List CompletionItem
         importExposings =
             List.concat
-                [ importExposingsFromFile request.fileOpenedInEditor languageServiceState
-                , List.map Tuple.second (commonImplicitTopLevelImports languageServiceState)
+                [ importExposingsFromModule fileOpenedInEditor languageServiceState
+                , completionItemsForResolvedDeclarations
+                    (commonImplicitTopLevelImports languageServiceState)
                 ]
 
         localDeclarationsAndImportExposings : List CompletionItem
         localDeclarationsAndImportExposings =
             List.concat
-                [ List.map .completionItem currentModuleDeclarations.fromTopLevel
+                [ completionItemsForDeclarations
+                    fileOpenedInEditor
+                    (topLevelDeclarations fileOpenedInEditor)
                 , importExposings
                 , fromLocals
                 ]
@@ -1767,22 +1859,16 @@ provideCompletionItemsInModule request languageServiceState =
                             (\importedModule ->
                                 importedModule.importedName == completionPrefix
                             )
-                        |> Maybe.andThen .parsedModule
                 of
                     Nothing ->
                         []
 
-                    Just ( _, referencedModuleCompletionItems ) ->
-                        referencedModuleCompletionItems.fromTopLevel
-                            |> List.filterMap
-                                (\item ->
-                                    if item.isExposed then
-                                        Just item.completionItem
+                    Just referencedModule ->
+                        completionItemsForDeclarations
+                            referencedModule.parsedModule
+                            (exposedTopLevelDeclarations referencedModule.parsedModule)
 
-                                    else
-                                        Nothing
-                                )
-
+        importedModulesAfterPrefix : List ( List String, ImportedModule )
         importedModulesAfterPrefix =
             importedModules
                 |> List.filterMap
@@ -1802,30 +1888,21 @@ provideCompletionItemsInModule request languageServiceState =
         fromImports : List CompletionItem
         fromImports =
             importedModulesAfterPrefix
-                |> List.filterMap
+                |> List.map
                     (\( importedModuleNameRestAfterPrefix, importedModule ) ->
-                        case importedModule.parsedModule of
-                            Nothing ->
-                                Nothing
-
-                            Just ( importedModuleParsedSyntax, _ ) ->
-                                Just
-                                    (moduleCompletionItemFromModuleSyntax
-                                        { importedName = Just importedModule.importedName
-                                        , importedModuleNameRestAfterPrefix = Just importedModuleNameRestAfterPrefix
-                                        }
-                                        importedModuleParsedSyntax
-                                    )
+                        moduleCompletionItemFromModule
+                            { importedName = Just importedModule.importedName
+                            , importedModuleNameRestAfterPrefix = Just importedModuleNameRestAfterPrefix
+                            }
+                            importedModule.parsedModule
                     )
     in
     case lineUntilPositionWords of
         "import" :: _ ->
             modulesToSuggestForImport
                 |> List.map
-                    (\( availableModule, _ ) ->
-                        moduleCompletionItemFromModuleSyntax
-                            { importedModuleNameRestAfterPrefix = Nothing, importedName = Nothing }
-                            availableModule.syntax
+                    (moduleCompletionItemFromModule
+                        { importedModuleNameRestAfterPrefix = Nothing, importedName = Nothing }
                     )
 
         _ ->
@@ -1841,11 +1918,23 @@ provideCompletionItemsInModule request languageServiceState =
                 []
 
 
-importedModulesFromFile :
-    Elm.Syntax.File.File
+completionItemsForResolvedDeclarations : List ResolvedDeclaration -> List CompletionItem
+completionItemsForResolvedDeclarations resolvedDeclarations =
+    List.map
+        (\resolved ->
+            completionItemForDeclaration
+                (String.lines resolved.parsedModule.text)
+                resolved.parsedModule
+                resolved.occurrence
+        )
+        resolvedDeclarations
+
+
+importedModulesFromModule :
+    ParsedModuleCache
     -> LanguageServiceState
     -> List ImportedModule
-importedModulesFromFile fileSyntax languageServiceState =
+importedModulesFromModule parsedModule languageServiceState =
     let
         implicitlyImportedModulesOld : List ImportedModule
         implicitlyImportedModulesOld =
@@ -1854,20 +1943,18 @@ importedModulesFromFile fileSyntax languageServiceState =
                     (\coreModule ->
                         if coreModule.implicitImport then
                             let
-                                (Elm.Syntax.Node.Node _ moduleDefinition) =
-                                    coreModule.parseResult.syntax.moduleDefinition
-
-                                canonicalName : Elm.Syntax.ModuleName.ModuleName
+                                canonicalName : List String
                                 canonicalName =
-                                    Elm.Syntax.Module.moduleName moduleDefinition
+                                    coreModule.parseResult.analysis.moduleName
                             in
                             Just
                                 { fileLocation =
                                     LanguageServiceInterface.WorkspaceFileLocation coreModule.parseResult.fileUri
                                 , canonicalName = canonicalName
                                 , importedName = canonicalName
-                                , parsedModule = Just ( coreModule.parseResult.syntax, coreModule.parseResult.completionItems )
-                                , referencesRanges = []
+                                , exposingList = Nothing
+                                , parsedModule = coreModule.parseResult
+                                , moduleNamePaths = []
                                 }
 
                         else
@@ -1881,96 +1968,46 @@ importedModulesFromFile fileSyntax languageServiceState =
                     (\( packageVersionIdentifer, packageModules ) ->
                         case packageVersionIdentifer of
                             LanguageServiceInterface.ElmPackageVersion019Identifer "elm/core" _ ->
-                                let
-                                    implicitlyImported : List ImportedModule
-                                    implicitlyImported =
-                                        packageModules
-                                            |> List.filterMap
-                                                (\( moduleModuleName, ( modulePath, moduleSyntax, moduleCompletionItems ) ) ->
-                                                    if elmCoreModuleIsImplicitlyImported moduleModuleName then
-                                                        Just
-                                                            { fileLocation =
-                                                                LanguageServiceInterface.ElmPackageFileLocation packageVersionIdentifer modulePath
-                                                            , canonicalName = moduleModuleName
-                                                            , importedName = moduleModuleName
-                                                            , parsedModule = Just ( moduleSyntax, moduleCompletionItems )
-                                                            , referencesRanges = []
-                                                            }
+                                packageModules
+                                    |> List.filterMap
+                                        (\( moduleModuleName, ( modulePath, packageModule ) ) ->
+                                            if elmCoreModuleIsImplicitlyImported moduleModuleName then
+                                                Just
+                                                    { fileLocation =
+                                                        LanguageServiceInterface.ElmPackageFileLocation packageVersionIdentifer modulePath
+                                                    , canonicalName = moduleModuleName
+                                                    , importedName = moduleModuleName
+                                                    , exposingList = Nothing
+                                                    , parsedModule = packageModule
+                                                    , moduleNamePaths = []
+                                                    }
 
-                                                    else
-                                                        Nothing
-                                                )
-                                in
-                                implicitlyImported
+                                            else
+                                                Nothing
+                                        )
 
                             _ ->
                                 []
                     )
 
-        parsedModuleFromModuleName :
-            Elm.Syntax.ModuleName.ModuleName
-            -> Maybe ( LanguageServiceInterface.FileLocation, Elm.Syntax.File.File, ModuleCompletionItems )
-        parsedModuleFromModuleName canonicalModuleName =
-            case
-                modulesAvailableForImportFromState languageServiceState
-                    |> Common.listMapFind
-                        (\moduleAvailable ->
-                            let
-                                (Elm.Syntax.Node.Node _ moduleDefinition) =
-                                    moduleAvailable.syntax.moduleDefinition
-                            in
-                            if Elm.Syntax.Module.moduleName moduleDefinition == canonicalModuleName then
-                                Just
-                                    ( LanguageServiceInterface.WorkspaceFileLocation moduleAvailable.fileUri
-                                    , moduleAvailable.syntax
-                                    , moduleAvailable.completionItems
-                                    )
-
-                            else
-                                Nothing
-                        )
-            of
-                Just fromWorkspace ->
-                    Just fromWorkspace
-
-                Nothing ->
-                    case findModuleInPackagesByModuleName canonicalModuleName languageServiceState of
-                        Just fromPackage ->
-                            Just fromPackage
-
-                        Nothing ->
-                            Nothing
-
         explicitlyImportedModules : List ImportedModule
         explicitlyImportedModules =
-            fileSyntax.imports
+            parsedModule.analysis.imports
                 |> List.filterMap
-                    (\(Elm.Syntax.Node.Node _ importSyntax) ->
-                        let
-                            (Elm.Syntax.Node.Node moduleNameRange canonicalName) =
-                                importSyntax.moduleName
-
-                            importedName : List String
-                            importedName =
-                                case importSyntax.moduleAlias of
-                                    Nothing ->
-                                        canonicalName
-
-                                    Just (Elm.Syntax.Node.Node _ moduleAlias) ->
-                                        moduleAlias
-                        in
-                        case parsedModuleFromModuleName canonicalName of
-                            Just ( moduleFileLocation, moduleSyntax, moduleCompletionItems ) ->
-                                Just
-                                    { fileLocation = moduleFileLocation
-                                    , canonicalName = canonicalName
-                                    , importedName = importedName
-                                    , parsedModule = Just ( moduleSyntax, moduleCompletionItems )
-                                    , referencesRanges = [ moduleNameRange ]
-                                    }
-
+                    (\importOccurrence ->
+                        case moduleByCanonicalName importOccurrence.canonicalName languageServiceState of
                             Nothing ->
                                 Nothing
+
+                            Just ( moduleFileLocation, importedParsedModule ) ->
+                                Just
+                                    { fileLocation = moduleFileLocation
+                                    , canonicalName = importOccurrence.canonicalName
+                                    , importedName = importOccurrence.importedName
+                                    , exposingList = importOccurrence.exposingList
+                                    , parsedModule = importedParsedModule
+                                    , moduleNamePaths = [ importOccurrence.moduleNamePath ]
+                                    }
                     )
     in
     List.concat
@@ -1980,39 +2017,56 @@ importedModulesFromFile fileSyntax languageServiceState =
         ]
 
 
-findModuleInPackagesByModuleName :
-    Elm.Syntax.ModuleName.ModuleName
+moduleByCanonicalName :
+    List String
     -> LanguageServiceState
-    -> Maybe ( LanguageServiceInterface.FileLocation, Elm.Syntax.File.File, ModuleCompletionItems )
+    -> Maybe ( LanguageServiceInterface.FileLocation, ParsedModuleCache )
+moduleByCanonicalName canonicalModuleName languageServiceState =
+    case
+        modulesAvailableForImportFromState languageServiceState
+            |> Common.listMapFind
+                (\moduleAvailable ->
+                    if moduleAvailable.analysis.moduleName == canonicalModuleName then
+                        Just
+                            ( LanguageServiceInterface.WorkspaceFileLocation moduleAvailable.fileUri
+                            , moduleAvailable
+                            )
+
+                    else
+                        Nothing
+                )
+    of
+        Just fromWorkspace ->
+            Just fromWorkspace
+
+        Nothing ->
+            findModuleInPackagesByModuleName canonicalModuleName languageServiceState
+
+
+findModuleInPackagesByModuleName :
+    List String
+    -> LanguageServiceState
+    -> Maybe ( LanguageServiceInterface.FileLocation, ParsedModuleCache )
 findModuleInPackagesByModuleName moduleName languageServiceState =
     languageServiceState.elmPackages
         |> Common.listMapFind
             (\( packageVersionIdentifer, packageModules ) ->
-                case
-                    packageModules
-                        |> List.filterMap
-                            (\( moduleModuleName, ( modulePath, moduleSyntax, moduleCompletionItems ) ) ->
-                                if moduleModuleName == moduleName then
-                                    Just
-                                        ( LanguageServiceInterface.ElmPackageFileLocation packageVersionIdentifer modulePath
-                                        , moduleSyntax
-                                        , moduleCompletionItems
-                                        )
+                packageModules
+                    |> Common.listMapFind
+                        (\( moduleModuleName, ( modulePath, packageModule ) ) ->
+                            if moduleModuleName == moduleName then
+                                Just
+                                    ( LanguageServiceInterface.ElmPackageFileLocation packageVersionIdentifer modulePath
+                                    , packageModule
+                                    )
 
-                                else
-                                    Nothing
-                            )
-                        |> List.head
-                of
-                    Nothing ->
-                        Nothing
-
-                    Just moduleCompletionItems ->
-                        Just moduleCompletionItems
+                            else
+                                Nothing
+                        )
             )
 
 
-modulesAvailableForImportFromState : LanguageServiceState -> List ParsedCookedModuleCache
+modulesAvailableForImportFromState : LanguageServiceState -> List ParsedModuleCache
 modulesAvailableForImportFromState languageServiceState =
     List.concat
         [ languageServiceState.documentCache
@@ -2025,108 +2079,58 @@ modulesAvailableForImportFromState languageServiceState =
         ]
 
 
-importExposingsFromFile :
-    ParsedCookedModuleCache
+importExposingsFromModule :
+    ParsedModuleCache
     -> LanguageServiceState
     -> List CompletionItem
-importExposingsFromFile fileOpenedInEditor languageServiceState =
-    fileOpenedInEditor.syntax.imports
+importExposingsFromModule fileOpenedInEditor languageServiceState =
+    fileOpenedInEditor.analysis.imports
         |> List.concatMap
-            (\(Elm.Syntax.Node.Node _ importSyntax) ->
-                case importSyntax.exposingList of
+            (\importOccurrence ->
+                case importOccurrence.exposingList of
                     Nothing ->
                         []
 
-                    Just (Elm.Syntax.Node.Node _ exposingList) ->
-                        let
-                            (Elm.Syntax.Node.Node _ canonicalName) =
-                                importSyntax.moduleName
-                        in
-                        case
-                            languageServiceState.documentCache
-                                |> Dict.toList
-                                |> Common.listMapFind
-                                    (\( _, fileCache ) ->
-                                        case fileCache.parsedFileLastSuccess of
-                                            Nothing ->
-                                                Nothing
-
-                                            Just moduleCandidate ->
-                                                let
-                                                    (Elm.Syntax.Node.Node _ candidateModuleDefinition) =
-                                                        moduleCandidate.syntax.moduleDefinition
-                                                in
-                                                if Elm.Syntax.Module.moduleName candidateModuleDefinition == canonicalName then
-                                                    Just moduleCandidate
-
-                                                else
-                                                    Nothing
-                                    )
-                        of
+                    Just exposingList ->
+                        case moduleByCanonicalName importOccurrence.canonicalName languageServiceState of
                             Nothing ->
                                 []
 
-                            Just importedParsedModule ->
+                            Just ( _, importedParsedModule ) ->
                                 let
-                                    importedModuleItems =
-                                        importedParsedModule.completionItems.fromTopLevel
-                                            |> List.filterMap
-                                                (\item ->
-                                                    if item.isExposed then
-                                                        Just item.completionItem
-
-                                                    else
-                                                        Nothing
-                                                )
+                                    exposedDeclarations : List LanguageServiceAnalysis.DeclarationOccurrence
+                                    exposedDeclarations =
+                                        exposedTopLevelDeclarations importedParsedModule
                                 in
-                                case exposingList of
-                                    Elm.Syntax.Exposing.All _ ->
-                                        importedModuleItems
+                                completionItemsForDeclarations
+                                    importedParsedModule
+                                    (case exposingList of
+                                        ElmSyntax.Abstract.Exposing.All ->
+                                            exposedDeclarations
 
-                                    Elm.Syntax.Exposing.Explicit topLevelExposings ->
-                                        topLevelExposings
-                                            |> List.concatMap
-                                                (\(Elm.Syntax.Node.Node _ topLevelExpose) ->
-                                                    let
-                                                        exposedName : String
-                                                        exposedName =
-                                                            case topLevelExpose of
-                                                                Elm.Syntax.Exposing.InfixExpose name ->
-                                                                    name
-
-                                                                Elm.Syntax.Exposing.FunctionExpose name ->
-                                                                    name
-
-                                                                Elm.Syntax.Exposing.TypeOrAliasExpose name ->
-                                                                    name
-
-                                                                Elm.Syntax.Exposing.TypeExpose typeExpose ->
-                                                                    typeExpose.name
-                                                    in
-                                                    importedModuleItems
-                                                        |> List.filter
-                                                            (\(CompletionItem _ insertText _ _) ->
-                                                                insertText == exposedName
-                                                            )
-                                                )
+                                        ElmSyntax.Abstract.Exposing.Explicit topLevelExposings ->
+                                            topLevelExposings
+                                                |> List.concatMap
+                                                    (\topLevelExpose ->
+                                                        let
+                                                            exposedName : String
+                                                            exposedName =
+                                                                LanguageServiceAnalysis.nameOfTopLevelExpose topLevelExpose
+                                                        in
+                                                        List.filter
+                                                            (\occurrence -> occurrence.name == exposedName)
+                                                            exposedDeclarations
+                                                    )
+                                    )
             )
 
 
 commonImplicitTopLevelImports :
     LanguageServiceState
-    -> List ( ( LanguageServiceInterface.FileLocation, DeclarationRange ), CompletionItem )
+    -> List ResolvedDeclaration
 commonImplicitTopLevelImports languageServiceState =
     if languageServiceState.elmPackages == [] then
         commonImplicitTopLevelImportsOld languageServiceState
-            |> List.map
-                (\( range, completionItem ) ->
-                    ( ( LanguageServiceInterface.WorkspaceFileLocation "elm/core"
-                        -- TODO: Use constant
-                      , range
-                      )
-                    , completionItem
-                    )
-                )
 
     else
         commonImplicitTopLevelImportsNew languageServiceState
@@ -2134,34 +2138,31 @@ commonImplicitTopLevelImports languageServiceState =
 
 commonImplicitTopLevelImportsOld :
     LanguageServiceState
-    -> List ( DeclarationRange, CompletionItem )
+    -> List ResolvedDeclaration
 commonImplicitTopLevelImportsOld languageServiceState =
     languageServiceState.coreModulesCache
         |> List.concatMap
             (\coreModule ->
                 let
-                    (Elm.Syntax.Node.Node _ moduleDefinition) =
-                        coreModule.parseResult.syntax.moduleDefinition
-
-                    moduleName : Elm.Syntax.ModuleName.ModuleName
+                    moduleName : List String
                     moduleName =
-                        Elm.Syntax.Module.moduleName moduleDefinition
-
-                    moduleCompletionItems =
-                        coreModule.parseResult.completionItems
+                        coreModule.parseResult.analysis.moduleName
                 in
-                moduleCompletionItems.fromTopLevel
+                coreModule.parseResult.analysis.declarations
                     |> List.filterMap
-                        (\item ->
-                            if item.isExposed then
-                                if isItemImplicitlyExposed moduleName item.completionItem then
-                                    Just
-                                        ( item.range
-                                        , item.completionItem
-                                        )
-
-                                else
-                                    Nothing
+                        (\occurrence ->
+                            if
+                                occurrence.isExposed
+                                    && declarationIsTopLevel occurrence
+                                    && isItemImplicitlyExposed moduleName occurrence.name
+                            then
+                                Just
+                                    { -- TODO: Use constant
+                                      fileLocation =
+                                        LanguageServiceInterface.WorkspaceFileLocation "elm/core"
+                                    , parsedModule = coreModule.parseResult
+                                    , occurrence = occurrence
+                                    }
 
                             else
                                 Nothing
@@ -2171,7 +2172,7 @@ commonImplicitTopLevelImportsOld languageServiceState =
 
 commonImplicitTopLevelImportsNew :
     LanguageServiceState
-    -> List ( ( LanguageServiceInterface.FileLocation, DeclarationRange ), CompletionItem )
+    -> List ResolvedDeclaration
 commonImplicitTopLevelImportsNew languageServiceState =
     languageServiceState.elmPackages
         |> List.concatMap
@@ -2180,21 +2181,23 @@ commonImplicitTopLevelImportsNew languageServiceState =
                     LanguageServiceInterface.ElmPackageVersion019Identifer "elm/core" _ ->
                         packageModules
                             |> List.concatMap
-                                (\( moduleName, ( moduleFilePath, _, moduleCompletionItems ) ) ->
-                                    moduleCompletionItems.fromTopLevel
+                                (\( moduleName, ( moduleFilePath, packageModule ) ) ->
+                                    packageModule.analysis.declarations
                                         |> List.filterMap
-                                            (\item ->
-                                                if item.isExposed then
-                                                    if isItemImplicitlyExposed moduleName item.completionItem then
-                                                        Just
-                                                            ( ( LanguageServiceInterface.ElmPackageFileLocation packageVersionIdentifer moduleFilePath
-                                                              , item.range
-                                                              )
-                                                            , item.completionItem
-                                                            )
-
-                                                    else
-                                                        Nothing
+                                            (\occurrence ->
+                                                if
+                                                    occurrence.isExposed
+                                                        && declarationIsTopLevel occurrence
+                                                        && isItemImplicitlyExposed moduleName occurrence.name
+                                                then
+                                                    Just
+                                                        { fileLocation =
+                                                            LanguageServiceInterface.ElmPackageFileLocation
+                                                                packageVersionIdentifer
+                                                                moduleFilePath
+                                                        , parsedModule = packageModule
+                                                        , occurrence = occurrence
+                                                        }
 
                                                 else
                                                     Nothing
@@ -2231,8 +2234,8 @@ elmCoreModuleIsImplicitlyImported moduleName =
             False
 
 
-isItemImplicitlyExposed : Elm.Syntax.ModuleName.ModuleName -> CompletionItem -> Bool
-isItemImplicitlyExposed moduleName (CompletionItem _ itemInsertText _ _) =
+isItemImplicitlyExposed : List String -> String -> Bool
+isItemImplicitlyExposed moduleName itemInsertText =
     case moduleName of
         [ "Basics" ] ->
             True
@@ -2288,18 +2291,15 @@ isItemImplicitlyExposed moduleName (CompletionItem _ itemInsertText _ _) =
             False
 
 
-moduleCompletionItemFromModuleSyntax :
+moduleCompletionItemFromModule :
     { importedModuleNameRestAfterPrefix : Maybe (List String), importedName : Maybe (List String) }
-    -> Elm.Syntax.File.File
+    -> ParsedModuleCache
     -> CompletionItem
-moduleCompletionItemFromModuleSyntax { importedModuleNameRestAfterPrefix, importedName } moduleSyntax =
+moduleCompletionItemFromModule { importedModuleNameRestAfterPrefix, importedName } parsedModule =
     let
-        (Elm.Syntax.Node.Node _ moduleDefinition) =
-            moduleSyntax.moduleDefinition
-
-        canonicalName : Elm.Syntax.ModuleName.ModuleName
+        canonicalName : List String
         canonicalName =
-            Elm.Syntax.Module.moduleName moduleDefinition
+            parsedModule.analysis.moduleName
 
         insertText : String
         insertText =
@@ -2325,7 +2325,7 @@ moduleCompletionItemFromModuleSyntax { importedModuleNameRestAfterPrefix, import
 
         documentation : String
         documentation =
-            case documentationStringFromModuleSyntax moduleSyntax of
+            case documentationStringFromModule parsedModule of
                 Nothing ->
                     ""
 
@@ -2339,36 +2339,49 @@ moduleCompletionItemFromModuleSyntax { importedModuleNameRestAfterPrefix, import
         documentation
 
 
-documentationStringFromModuleSyntax : Elm.Syntax.File.File -> Maybe String
-documentationStringFromModuleSyntax parsedModule =
+documentationStringFromModule : ParsedModuleCache -> Maybe String
+documentationStringFromModule parsedModule =
     let
-        (Elm.Syntax.Node.Node moduleDefinitionRange _) =
-            parsedModule.moduleDefinition
+        concrete : ElmSyntax.Concrete.File.File
+        concrete =
+            parsedModule.concrete
 
-        importsAndDeclarationsRanges : List Elm.Syntax.Range.Range
-        importsAndDeclarationsRanges =
+        (ElmSyntax.Concrete.Node.Node moduleDefinitionRange _) =
+            concrete.moduleDefinition
+
+        importsAndDeclarationsStartRows : List Int
+        importsAndDeclarationsStartRows =
             List.concat
-                [ List.map (\(Elm.Syntax.Node.Node range _) -> range) parsedModule.imports
-                , List.map (\(Elm.Syntax.Node.Node range _) -> range) parsedModule.declarations
+                [ List.map
+                    (\(ElmSyntax.Concrete.Node.Node range _) -> range.start.row)
+                    concrete.imports
+                , List.map
+                    (\(ElmSyntax.Concrete.Node.Node range _) -> range.start.row)
+                    concrete.declarations
                 ]
 
-        importsAndDeclarationsRange : Elm.Syntax.Range.Range
-        importsAndDeclarationsRange =
-            Elm.Syntax.Range.combine importsAndDeclarationsRanges
+        importsAndDeclarationsStartRow : Int
+        importsAndDeclarationsStartRow =
+            case importsAndDeclarationsStartRows of
+                [] ->
+                    0
 
-        maybeModuleComment : Maybe (Elm.Syntax.Node.Node Elm.Syntax.Comments.Comment)
+                first :: rest ->
+                    List.foldl min first rest
+
+        maybeModuleComment : Maybe (ElmSyntax.Concrete.Node.Node String)
         maybeModuleComment =
             List.foldl
                 (\comment maybeComment ->
                     let
-                        (Elm.Syntax.Node.Node commentRange _) =
+                        (ElmSyntax.Concrete.Node.Node commentRange _) =
                             comment
                     in
                     case maybeComment of
                         Nothing ->
                             if
                                 (commentRange.start.row > moduleDefinitionRange.start.row)
-                                    && (commentRange.start.row < importsAndDeclarationsRange.start.row)
+                                    && (commentRange.start.row < importsAndDeclarationsStartRow)
                             then
                                 Just comment
 
@@ -2377,12 +2390,12 @@ documentationStringFromModuleSyntax parsedModule =
 
                         Just prevComment ->
                             let
-                                (Elm.Syntax.Node.Node prevCommentRange _) =
+                                (ElmSyntax.Concrete.Node.Node prevCommentRange _) =
                                     prevComment
                             in
                             if
                                 (commentRange.start.row > prevCommentRange.end.row)
-                                    && (commentRange.start.row < importsAndDeclarationsRange.start.row)
+                                    && (commentRange.start.row < importsAndDeclarationsStartRow)
                             then
                                 Just comment
 
@@ -2390,179 +2403,14 @@ documentationStringFromModuleSyntax parsedModule =
                                 Just prevComment
                 )
                 Nothing
-                parsedModule.comments
+                concrete.comments
     in
     case maybeModuleComment of
         Nothing ->
             Nothing
 
-        Just (Elm.Syntax.Node.Node _ commentNode) ->
-            Just (removeWrappingFromMultilineComment commentNode)
-
-
-completionItemsFromModule : ParsedModuleCache -> ModuleCompletionItems
-completionItemsFromModule moduleCache =
-    let
-        textLines : List String
-        textLines =
-            String.lines moduleCache.text
-
-        (Elm.Syntax.Node.Node _ moduleDefinition) =
-            moduleCache.syntax.moduleDefinition
-
-        exposingListNode : Elm.Syntax.Node.Node Elm.Syntax.Exposing.Exposing
-        exposingListNode =
-            case moduleDefinition of
-                Elm.Syntax.Module.EffectModule effectModule ->
-                    effectModule.exposingList
-
-                Elm.Syntax.Module.NormalModule normalModule ->
-                    normalModule.exposingList
-
-                Elm.Syntax.Module.PortModule portModule ->
-                    portModule.exposingList
-
-        (Elm.Syntax.Node.Node _ exposingList) =
-            exposingListNode
-
-        cookedDeclarations : List ( String, ( ParsedDeclaration, DeclarationScope ) )
-        cookedDeclarations =
-            listDeclarationsInFile moduleCache.syntax (SourceContentForCooking textLines)
-
-        fromTopLevel :
-            List
-                { completionItem : CompletionItem
-                , isExposed : Bool
-                , range : DeclarationRange
-                }
-        fromTopLevel =
-            cookedDeclarations
-                |> List.concatMap
-                    (\( declName, ( declOrRef, scope ) ) ->
-                        case scope of
-                            TopLevelScope ->
-                                let
-                                    isExposed : Bool
-                                    isExposed =
-                                        case declOrRef of
-                                            FunctionOrValueDeclaration _ ->
-                                                Elm.Syntax.Exposing.exposesFunction declName exposingList
-
-                                            TypeAliasDeclaration _ ->
-                                                exposingListExposesTypeOrAlias declName exposingList
-
-                                            ChoiceTypeDeclaration _ _ ->
-                                                exposingListExposesTypeOrAlias declName exposingList
-                                in
-                                completionItemsFromParsedDeclaration
-                                    declName
-                                    declOrRef
-                                    |> List.map
-                                        (\( completionItem, declRangeInner ) ->
-                                            { completionItem = completionItem
-                                            , isExposed = isExposed
-                                            , range = declRangeInner
-                                            }
-                                        )
-
-                            LocalScope _ ->
-                                []
-                    )
-
-        fromLocals : List ( CompletionItem, DeclarationRange, Range )
-        fromLocals =
-            cookedDeclarations
-                |> List.concatMap
-                    (\( declName, ( declOrRef, scope ) ) ->
-                        case scope of
-                            TopLevelScope ->
-                                []
-
-                            LocalScope scopeRange ->
-                                completionItemsFromParsedDeclaration
-                                    declName
-                                    declOrRef
-                                    |> List.map
-                                        (\( completionItem, declRangeInner ) ->
-                                            ( completionItem, declRangeInner, scopeRange )
-                                        )
-                    )
-    in
-    { fromTopLevel = fromTopLevel
-    , fromLocals = fromLocals
-    }
-
-
-exposingListExposesTypeOrAlias : String -> Elm.Syntax.Exposing.Exposing -> Bool
-exposingListExposesTypeOrAlias name exposingList =
-    case exposingList of
-        Elm.Syntax.Exposing.All _ ->
-            True
-
-        Elm.Syntax.Exposing.Explicit topLevelExposings ->
-            topLevelExposings
-                |> List.any
-                    (\(Elm.Syntax.Node.Node _ topLevelExpose) ->
-                        case topLevelExpose of
-                            Elm.Syntax.Exposing.TypeOrAliasExpose exposedName ->
-                                exposedName == name
-
-                            Elm.Syntax.Exposing.TypeExpose typeExpose ->
-                                typeExpose.name == name
-
-                            Elm.Syntax.Exposing.InfixExpose _ ->
-                                False
-
-                            Elm.Syntax.Exposing.FunctionExpose functionName ->
-                                name == functionName
-                    )
-
-
-completionItemsFromParsedDeclaration :
-    String
-    -> ParsedDeclaration
-    -> List ( CompletionItem, DeclarationRange )
-completionItemsFromParsedDeclaration declName declarationOrReference =
-    case declarationOrReference of
-        FunctionOrValueDeclaration ( topLevelRange, CookedDocumentation markdown ) ->
-            [ ( CompletionItem
-                    declName
-                    declName
-                    Frontend.MonacoEditor.FunctionCompletionItemKind
-                    markdown
-              , topLevelRange
-              )
-            ]
-
-        TypeAliasDeclaration ( topLevelRange, CookedDocumentation markdown ) ->
-            [ ( CompletionItem
-                    declName
-                    declName
-                    Frontend.MonacoEditor.StructCompletionItemKind
-                    markdown
-              , topLevelRange
-              )
-            ]
-
-        ChoiceTypeDeclaration ( topLevelRange, CookedDocumentation choiceTypeMarkdown ) tags ->
-            ( CompletionItem
-                declName
-                declName
-                Frontend.MonacoEditor.EnumCompletionItemKind
-                choiceTypeMarkdown
-            , topLevelRange
-            )
-                :: List.map
-                    (\( tagName, ( tagRange, CookedDocumentation tagMarkdown ) ) ->
-                        ( CompletionItem
-                            tagName
-                            tagName
-                            Frontend.MonacoEditor.EnumMemberCompletionItemKind
-                            tagMarkdown
-                        , tagRange
-                        )
-                    )
-                    tags
+        Just (ElmSyntax.Concrete.Node.Node _ commentText) ->
+            Just (removeWrappingFromMultilineComment commentText)
 
 
 documentationMarkdownFromCodeLinesAndDocumentation : List String -> Maybe String -> String
@@ -2610,28 +2458,9 @@ updateLanguageServiceState fileTree state =
                                     Nothing
 
                                 Just asString ->
-                                    let
-                                        parsedFile =
-                                            case Elm.Parser.parseToFile asString of
-                                                Err _ ->
-                                                    Nothing
-
-                                                Ok syntax ->
-                                                    Just
-                                                        { fileUri = blobPath
-                                                        , text = asString
-                                                        , syntax = syntax
-                                                        , completionItems =
-                                                            completionItemsFromModule
-                                                                { fileUri = blobPath
-                                                                , text = asString
-                                                                , syntax = syntax
-                                                                }
-                                                        }
-                                    in
                                     Just
                                         { text = asString
-                                        , parsedFile = parsedFile
+                                        , parsedFile = parseModuleText blobPath asString
                                         }
 
                         parsedFileFromPreviouslyCached =
@@ -2691,961 +2520,6 @@ updateLanguageServiceState fileTree state =
     }
 
 
-listReferencesInFile : Elm.Syntax.File.File -> List (SyntaxNode ( Elm.Syntax.ModuleName.ModuleName, String ))
-listReferencesInFile fileSyntax =
-    let
-        fromExposing : List (SyntaxNode ( Elm.Syntax.ModuleName.ModuleName, String ))
-        fromExposing =
-            case fileSyntax.moduleDefinition of
-                Elm.Syntax.Node.Node _ (Elm.Syntax.Module.NormalModule normalModule) ->
-                    case normalModule.exposingList of
-                        Elm.Syntax.Node.Node _ exposingList ->
-                            listReferencesInExposingList exposingList
-
-                Elm.Syntax.Node.Node _ (Elm.Syntax.Module.EffectModule effectModule) ->
-                    case effectModule.exposingList of
-                        Elm.Syntax.Node.Node _ exposingList ->
-                            listReferencesInExposingList exposingList
-
-                Elm.Syntax.Node.Node _ (Elm.Syntax.Module.PortModule portModule) ->
-                    case portModule.exposingList of
-                        Elm.Syntax.Node.Node _ exposingList ->
-                            listReferencesInExposingList exposingList
-
-        fromDeclarations : List (SyntaxNode ( Elm.Syntax.ModuleName.ModuleName, String ))
-        fromDeclarations =
-            List.concatMap
-                listReferencesInDeclaration
-                fileSyntax.declarations
-    in
-    List.concat
-        [ fromExposing
-        , fromDeclarations
-        ]
-
-
-listDeclarationsInFile :
-    Elm.Syntax.File.File
-    -> SourceContentForCooking
-    -> List ( String, ( ParsedDeclaration, DeclarationScope ) )
-listDeclarationsInFile fileSyntax sourceContent =
-    fileSyntax.declarations
-        |> List.concatMap (listDeclarationsInDeclaration sourceContent)
-
-
-listReferencesInExposingList : Elm.Syntax.Exposing.Exposing -> List (SyntaxNode ( List String, String ))
-listReferencesInExposingList exposingList =
-    case exposingList of
-        Elm.Syntax.Exposing.All _ ->
-            []
-
-        Elm.Syntax.Exposing.Explicit topLevelExposings ->
-            topLevelExposings
-                |> List.concatMap
-                    (\(Elm.Syntax.Node.Node topLevelExposeRangeRecord topLevelExpose) ->
-                        let
-                            topLevelExposeRange : Range
-                            topLevelExposeRange =
-                                rangeFromRecordRange topLevelExposeRangeRecord
-                        in
-                        case topLevelExpose of
-                            Elm.Syntax.Exposing.InfixExpose _ ->
-                                []
-
-                            Elm.Syntax.Exposing.FunctionExpose functionName ->
-                                [ SyntaxNode topLevelExposeRange ( [], functionName ) ]
-
-                            Elm.Syntax.Exposing.TypeOrAliasExpose typeOrAliasName ->
-                                [ SyntaxNode topLevelExposeRange ( [], typeOrAliasName ) ]
-
-                            Elm.Syntax.Exposing.TypeExpose typeExpose ->
-                                let
-                                    topLevelExposeRangeStartRecord : Elm.Syntax.Range.Location
-                                    topLevelExposeRangeStartRecord =
-                                        topLevelExposeRangeRecord.start
-
-                                    rangeStartRow : Int
-                                    rangeStartRow =
-                                        topLevelExposeRangeStartRecord.row
-
-                                    rangeStartColumn : Int
-                                    rangeStartColumn =
-                                        topLevelExposeRangeStartRecord.column
-
-                                    rangeEndColumn : Int
-                                    rangeEndColumn =
-                                        rangeStartColumn + String.length typeExpose.name
-
-                                    range : Range
-                                    range =
-                                        Range
-                                            ( rangeStartRow, rangeStartColumn )
-                                            ( rangeStartRow, rangeEndColumn )
-                                in
-                                [ SyntaxNode range ( [], typeExpose.name ) ]
-                    )
-
-
-listReferencesInDeclaration :
-    Elm.Syntax.Node.Node Elm.Syntax.Declaration.Declaration
-    -> List (SyntaxNode ( Elm.Syntax.ModuleName.ModuleName, String ))
-listReferencesInDeclaration declarationNode =
-    let
-        (Elm.Syntax.Node.Node _ declaration) =
-            declarationNode
-    in
-    case declaration of
-        Elm.Syntax.Declaration.FunctionDeclaration function ->
-            listReferencesForFunction function
-
-        Elm.Syntax.Declaration.AliasDeclaration aliasDeclaration ->
-            referencesForAliasDeclaration aliasDeclaration
-
-        Elm.Syntax.Declaration.CustomTypeDeclaration choiceTypeDeclaration ->
-            listReferencesFromTypeDeclaration choiceTypeDeclaration
-
-        Elm.Syntax.Declaration.PortDeclaration _ ->
-            []
-
-        Elm.Syntax.Declaration.InfixDeclaration _ ->
-            []
-
-        Elm.Syntax.Declaration.Destructuring _ _ ->
-            []
-
-
-listDeclarationsInDeclaration :
-    SourceContentForCooking
-    -> Elm.Syntax.Node.Node Elm.Syntax.Declaration.Declaration
-    -> List ( String, ( ParsedDeclaration, DeclarationScope ) )
-listDeclarationsInDeclaration sourceContent (Elm.Syntax.Node.Node declarationRange declaration) =
-    case declaration of
-        Elm.Syntax.Declaration.FunctionDeclaration function ->
-            listDeclarationsForFunction
-                sourceContent
-                declarationRange
-                function
-
-        Elm.Syntax.Declaration.AliasDeclaration aliasDeclaration ->
-            declarationsForAliasDeclaration
-                sourceContent
-                declarationRange
-                aliasDeclaration
-
-        Elm.Syntax.Declaration.CustomTypeDeclaration choiceTypeDeclaration ->
-            listDeclarationsFromTypeDeclaration
-                sourceContent
-                declarationRange
-                choiceTypeDeclaration
-
-        Elm.Syntax.Declaration.PortDeclaration _ ->
-            []
-
-        Elm.Syntax.Declaration.InfixDeclaration _ ->
-            []
-
-        Elm.Syntax.Declaration.Destructuring _ _ ->
-            []
-
-
-referencesForAliasDeclaration :
-    Elm.Syntax.TypeAlias.TypeAlias
-    -> List (SyntaxNode ( Elm.Syntax.ModuleName.ModuleName, String ))
-referencesForAliasDeclaration aliasDeclaration =
-    listTypeReferencesFromTypeAnnotation aliasDeclaration.typeAnnotation
-
-
-declarationsForAliasDeclaration :
-    SourceContentForCooking
-    -> Elm.Syntax.Range.Range
-    -> Elm.Syntax.TypeAlias.TypeAlias
-    -> List ( String, ( ParsedDeclaration, DeclarationScope ) )
-declarationsForAliasDeclaration (SourceContentForCooking textLines) declarationRangeRecord aliasDeclaration =
-    let
-        declarationRange : Range
-        declarationRange =
-            rangeFromRecordRange declarationRangeRecord
-
-        (Range _ declarationRangeEnd) =
-            declarationRange
-
-        (Elm.Syntax.Node.Node aliasNameRangeRecord aliasName) =
-            aliasDeclaration.name
-
-        ( documentationStringFromSyntax, rangeLessDocumentation ) =
-            case aliasDeclaration.documentation of
-                Nothing ->
-                    ( Nothing
-                    , declarationRange
-                    )
-
-                Just (Elm.Syntax.Node.Node commentRangeRecord comment) ->
-                    ( Just (removeWrappingFromMultilineComment comment)
-                    , Range
-                        ( commentRangeRecord.end.row + 1, 1 )
-                        declarationRangeEnd
-                    )
-
-        codeRange : Range
-        codeRange =
-            rangeLessDocumentation
-                |> expandRangeToLineStart
-
-        codeLines : List String
-        codeLines =
-            sliceRangeFromTextLines
-                textLines
-                codeRange
-
-        aliasNameRange : Range
-        aliasNameRange =
-            rangeFromRecordRange aliasNameRangeRecord
-
-        aliasDecl : Declaration ( DeclarationRange, CookedDocumentation )
-        aliasDecl =
-            TypeAliasDeclaration
-                ( DeclarationRange
-                    codeRange
-                    [ aliasNameRange ]
-                , CookedDocumentation
-                    (documentationMarkdownFromCodeLinesAndDocumentation
-                        codeLines
-                        documentationStringFromSyntax
-                    )
-                )
-    in
-    [ ( aliasName
-      , ( aliasDecl
-        , TopLevelScope
-        )
-      )
-    ]
-
-
-listReferencesFromTypeDeclaration :
-    Elm.Syntax.Type.Type
-    -> List (SyntaxNode ( List String, String ))
-listReferencesFromTypeDeclaration choiceTypeDeclaration =
-    choiceTypeDeclaration.constructors
-        |> List.concatMap
-            (\(Elm.Syntax.Node.Node _ constructor) ->
-                List.concatMap listTypeReferencesFromTypeAnnotation constructor.arguments
-            )
-
-
-listDeclarationsFromTypeDeclaration :
-    SourceContentForCooking
-    -> Elm.Syntax.Range.Range
-    -> Elm.Syntax.Type.Type
-    -> List ( String, ( ParsedDeclaration, DeclarationScope ) )
-listDeclarationsFromTypeDeclaration (SourceContentForCooking textLines) declarationRangeRecord choiceTypeDeclaration =
-    let
-        declarationRange : Range
-        declarationRange =
-            rangeFromRecordRange declarationRangeRecord
-
-        (Range _ declarationRangeEnd) =
-            declarationRange
-
-        ( documentationStringFromSyntax, rangeLessDocumentation ) =
-            case choiceTypeDeclaration.documentation of
-                Nothing ->
-                    ( Nothing
-                    , declarationRange
-                    )
-
-                Just (Elm.Syntax.Node.Node commentRangeRecord comment) ->
-                    ( Just (removeWrappingFromMultilineComment comment)
-                    , Range
-                        ( commentRangeRecord.end.row + 1, 1 )
-                        declarationRangeEnd
-                    )
-
-        (Elm.Syntax.Node.Node nameRangeRecord choiceTypeName) =
-            choiceTypeDeclaration.name
-
-        nameRange : Range
-        nameRange =
-            rangeFromRecordRange nameRangeRecord
-
-        codeRange : Range
-        codeRange =
-            rangeLessDocumentation
-                |> expandRangeToLineStart
-
-        choiceTypeCodeLines : List String
-        choiceTypeCodeLines =
-            sliceRangeFromTextLines
-                textLines
-                codeRange
-                |> List.Extra.dropWhile String.isEmpty
-
-        tagsDeclarations : List ( String, ( DeclarationRange, CookedDocumentation ) )
-        tagsDeclarations =
-            choiceTypeDeclaration.constructors
-                |> List.map
-                    (\(Elm.Syntax.Node.Node constructorRangeRecord constructor) ->
-                        let
-                            (Elm.Syntax.Node.Node tagNameRecordRange tagName) =
-                                constructor.name
-
-                            wholeConstructorRange : Range
-                            wholeConstructorRange =
-                                rangeFromRecordRange constructorRangeRecord
-
-                            tagNameRange : Range
-                            tagNameRange =
-                                rangeFromRecordRange tagNameRecordRange
-                        in
-                        ( tagName
-                        , ( DeclarationRange
-                                wholeConstructorRange
-                                [ tagNameRange ]
-                          , CookedDocumentation
-                                ([ markdownElmCodeBlockFromCodeLines [ tagName ]
-                                 , "A variant of the choice type `" ++ choiceTypeName ++ "`"
-                                 , markdownElmCodeBlockFromCodeLines choiceTypeCodeLines
-                                 ]
-                                    |> String.join "\n\n"
-                                )
-                          )
-                        )
-                    )
-    in
-    [ ( choiceTypeName
-      , ( ChoiceTypeDeclaration
-            ( DeclarationRange
-                codeRange
-                [ nameRange ]
-            , CookedDocumentation
-                (documentationMarkdownFromCodeLinesAndDocumentation
-                    choiceTypeCodeLines
-                    documentationStringFromSyntax
-                )
-            )
-            tagsDeclarations
-        , TopLevelScope
-        )
-      )
-    ]
-
-
-listReferencesInExpression :
-    Elm.Syntax.Node.Node Elm.Syntax.Expression.Expression
-    -> List (SyntaxNode ( List String, String ))
-listReferencesInExpression (Elm.Syntax.Node.Node expressionRange expression) =
-    case expression of
-        Elm.Syntax.Expression.UnitExpr ->
-            []
-
-        Elm.Syntax.Expression.Application application ->
-            application
-                |> List.concatMap listReferencesInExpression
-
-        Elm.Syntax.Expression.OperatorApplication _ _ leftExpr rightExpr ->
-            [ leftExpr, rightExpr ]
-                |> List.concatMap listReferencesInExpression
-
-        Elm.Syntax.Expression.FunctionOrValue moduleName localName ->
-            [ SyntaxNode
-                (rangeFromRecordRange expressionRange)
-                ( moduleName, localName )
-            ]
-
-        Elm.Syntax.Expression.IfBlock ifExpr thenExpr elseExpr ->
-            [ ifExpr, thenExpr, elseExpr ]
-                |> List.concatMap listReferencesInExpression
-
-        Elm.Syntax.Expression.PrefixOperator _ ->
-            []
-
-        Elm.Syntax.Expression.Operator _ ->
-            []
-
-        Elm.Syntax.Expression.Integer _ ->
-            []
-
-        Elm.Syntax.Expression.Hex _ ->
-            []
-
-        Elm.Syntax.Expression.Floatable _ ->
-            []
-
-        Elm.Syntax.Expression.Negation negation ->
-            listReferencesInExpression negation
-
-        Elm.Syntax.Expression.Literal _ ->
-            []
-
-        Elm.Syntax.Expression.CharLiteral _ ->
-            []
-
-        Elm.Syntax.Expression.TupledExpression tupled ->
-            tupled
-                |> List.concatMap listReferencesInExpression
-
-        Elm.Syntax.Expression.ParenthesizedExpression parenthesized ->
-            listReferencesInExpression parenthesized
-
-        Elm.Syntax.Expression.LetExpression letBlock ->
-            listReferencesInLetBlock letBlock
-
-        Elm.Syntax.Expression.CaseExpression caseBlock ->
-            [ listReferencesInExpression caseBlock.expression
-            , caseBlock.cases
-                |> List.concatMap
-                    (\( casePattern, caseBranch ) ->
-                        List.concat
-                            [ listReferencesFromPattern casePattern
-                            , listReferencesInExpression caseBranch
-                            ]
-                    )
-            ]
-                |> List.concat
-
-        Elm.Syntax.Expression.LambdaExpression lambda ->
-            listReferencesInExpression lambda.expression
-
-        Elm.Syntax.Expression.RecordExpr recordExpr ->
-            recordExpr
-                |> List.concatMap
-                    (\(Elm.Syntax.Node.Node _ ( _, recordField )) ->
-                        listReferencesInExpression recordField
-                    )
-
-        Elm.Syntax.Expression.ListExpr listExpr ->
-            listExpr
-                |> List.concatMap listReferencesInExpression
-
-        Elm.Syntax.Expression.RecordAccess recordAccess _ ->
-            listReferencesInExpression recordAccess
-
-        Elm.Syntax.Expression.RecordAccessFunction _ ->
-            []
-
-        Elm.Syntax.Expression.RecordUpdateExpression (Elm.Syntax.Node.Node recordNameRange recordName) recordUpdateExpression ->
-            [ [ SyntaxNode
-                    (rangeFromRecordRange recordNameRange)
-                    ( [], recordName )
-              ]
-            , recordUpdateExpression
-                |> List.concatMap
-                    (\(Elm.Syntax.Node.Node _ ( _, recordField )) ->
-                        listReferencesInExpression recordField
-                    )
-            ]
-                |> List.concat
-
-        Elm.Syntax.Expression.GLSLExpression _ ->
-            []
-
-
-listDeclarationsInExpression :
-    SourceContentForCooking
-    -> Elm.Syntax.Node.Node Elm.Syntax.Expression.Expression
-    -> List ( String, ( ParsedDeclaration, DeclarationScope ) )
-listDeclarationsInExpression sourceContent (Elm.Syntax.Node.Node rangeRecord expression) =
-    case expression of
-        Elm.Syntax.Expression.UnitExpr ->
-            []
-
-        Elm.Syntax.Expression.Application application ->
-            application
-                |> List.concatMap (listDeclarationsInExpression sourceContent)
-
-        Elm.Syntax.Expression.OperatorApplication _ _ leftExpr rightExpr ->
-            [ leftExpr, rightExpr ]
-                |> List.concatMap (listDeclarationsInExpression sourceContent)
-
-        Elm.Syntax.Expression.FunctionOrValue _ _ ->
-            []
-
-        Elm.Syntax.Expression.IfBlock ifExpr thenExpr elseExpr ->
-            [ ifExpr, thenExpr, elseExpr ]
-                |> List.concatMap (listDeclarationsInExpression sourceContent)
-
-        Elm.Syntax.Expression.PrefixOperator _ ->
-            []
-
-        Elm.Syntax.Expression.Operator _ ->
-            []
-
-        Elm.Syntax.Expression.Integer _ ->
-            []
-
-        Elm.Syntax.Expression.Hex _ ->
-            []
-
-        Elm.Syntax.Expression.Floatable _ ->
-            []
-
-        Elm.Syntax.Expression.Negation negation ->
-            listDeclarationsInExpression sourceContent negation
-
-        Elm.Syntax.Expression.Literal _ ->
-            []
-
-        Elm.Syntax.Expression.CharLiteral _ ->
-            []
-
-        Elm.Syntax.Expression.TupledExpression tupled ->
-            List.concatMap
-                (listDeclarationsInExpression sourceContent)
-                tupled
-
-        Elm.Syntax.Expression.ParenthesizedExpression parenthesized ->
-            listDeclarationsInExpression
-                sourceContent
-                parenthesized
-
-        Elm.Syntax.Expression.LetExpression letBlock ->
-            let
-                blockRange : Range
-                blockRange =
-                    rangeFromRecordRange rangeRecord
-            in
-            listDeclarationsInLetBlock
-                sourceContent
-                letBlock
-                |> List.map
-                    (\( name, ( declaration, _ ) ) ->
-                        ( name, ( declaration, LocalScope blockRange ) )
-                    )
-
-        Elm.Syntax.Expression.CaseExpression caseBlock ->
-            [ listDeclarationsInExpression
-                sourceContent
-                caseBlock.expression
-            , caseBlock.cases
-                |> List.concatMap
-                    (\( _, caseBranch ) ->
-                        listDeclarationsInExpression sourceContent caseBranch
-                    )
-            ]
-                |> List.concat
-
-        Elm.Syntax.Expression.LambdaExpression lambda ->
-            listDeclarationsInExpression sourceContent lambda.expression
-
-        Elm.Syntax.Expression.RecordExpr recordExpr ->
-            recordExpr
-                |> List.concatMap
-                    (\(Elm.Syntax.Node.Node _ ( _, recordField )) ->
-                        listDeclarationsInExpression
-                            sourceContent
-                            recordField
-                    )
-
-        Elm.Syntax.Expression.ListExpr listExpr ->
-            listExpr
-                |> List.concatMap (listDeclarationsInExpression sourceContent)
-
-        Elm.Syntax.Expression.RecordAccess recordAccess _ ->
-            listDeclarationsInExpression
-                sourceContent
-                recordAccess
-
-        Elm.Syntax.Expression.RecordAccessFunction _ ->
-            []
-
-        Elm.Syntax.Expression.RecordUpdateExpression (Elm.Syntax.Node.Node _ _) recordUpdateExpression ->
-            recordUpdateExpression
-                |> List.concatMap
-                    (\(Elm.Syntax.Node.Node _ ( _, recordField )) ->
-                        listDeclarationsInExpression
-                            sourceContent
-                            recordField
-                    )
-
-        Elm.Syntax.Expression.GLSLExpression _ ->
-            []
-
-
-listReferencesForFunction :
-    Elm.Syntax.Expression.Function
-    -> List (SyntaxNode ( Elm.Syntax.ModuleName.ModuleName, String ))
-listReferencesForFunction function =
-    let
-        (Elm.Syntax.Node.Node _ functionDeclaration) =
-            function.declaration
-
-        signatureReferences : List (SyntaxNode ( Elm.Syntax.ModuleName.ModuleName, String ))
-        signatureReferences =
-            case function.signature of
-                Nothing ->
-                    []
-
-                Just (Elm.Syntax.Node.Node _ signature) ->
-                    listTypeReferencesFromTypeAnnotation signature.typeAnnotation
-
-        expressionNodes : List (SyntaxNode ( Elm.Syntax.ModuleName.ModuleName, String ))
-        expressionNodes =
-            listReferencesInExpression functionDeclaration.expression
-
-        arguments : List (SyntaxNode ( Elm.Syntax.ModuleName.ModuleName, String ))
-        arguments =
-            functionDeclaration.arguments
-                |> List.concatMap listReferencesFromPattern
-    in
-    [ signatureReferences
-    , arguments
-    , expressionNodes
-    ]
-        |> List.concat
-
-
-listDeclarationsForFunction :
-    SourceContentForCooking
-    -> Elm.Syntax.Range.Range
-    -> Elm.Syntax.Expression.Function
-    -> List ( String, ( ParsedDeclaration, DeclarationScope ) )
-listDeclarationsForFunction ((SourceContentForCooking textLines) as sourceContent) declRange function =
-    let
-        (Elm.Syntax.Node.Node _ functionDeclaration) =
-            function.declaration
-
-        (Elm.Syntax.Node.Node functionNameRangeRecord functionName) =
-            functionDeclaration.name
-
-        functionNameRange : Range
-        functionNameRange =
-            rangeFromRecordRange functionNameRangeRecord
-
-        documentationStringFromSyntax : Maybe String
-        documentationStringFromSyntax =
-            case function.documentation of
-                Nothing ->
-                    Nothing
-
-                Just (Elm.Syntax.Node.Node _ comment) ->
-                    Just (removeWrappingFromMultilineComment comment)
-
-        ( maybeTypeAnnotationText, signatureNameRanges ) =
-            case function.signature of
-                Nothing ->
-                    ( Nothing, [] )
-
-                Just (Elm.Syntax.Node.Node _ signature) ->
-                    let
-                        (Elm.Syntax.Node.Node typeAnnotationRange _) =
-                            signature.typeAnnotation
-
-                        (Elm.Syntax.Node.Node nameRangeRecord _) =
-                            signature.name
-
-                        nameRange : Range
-                        nameRange =
-                            rangeFromRecordRange nameRangeRecord
-                    in
-                    ( Just
-                        (Range
-                            ( typeAnnotationRange.start.row, typeAnnotationRange.start.column )
-                            ( typeAnnotationRange.end.row, typeAnnotationRange.end.column )
-                            |> sliceRangeFromTextLines textLines
-                            |> String.join " "
-                        )
-                    , [ nameRange ]
-                    )
-
-        codeLines : List String
-        codeLines =
-            case maybeTypeAnnotationText of
-                Nothing ->
-                    [ functionName
-                    ]
-
-                Just typeAnnotationText ->
-                    [ String.concat [ functionName, " : ", typeAnnotationText ]
-                    ]
-
-        functionItem : Declaration ( DeclarationRange, CookedDocumentation )
-        functionItem =
-            FunctionOrValueDeclaration
-                ( DeclarationRange
-                    (rangeFromRecordRange declRange)
-                    (List.concat [ signatureNameRanges, [ functionNameRange ] ])
-                , CookedDocumentation
-                    (documentationMarkdownFromCodeLinesAndDocumentation
-                        codeLines
-                        documentationStringFromSyntax
-                    )
-                )
-
-        expressionNode : Elm.Syntax.Node.Node Elm.Syntax.Expression.Expression
-        expressionNode =
-            functionDeclaration.expression
-
-        getTypeAnnotationFromArgumentIndex : Int -> Maybe (Elm.Syntax.Node.Node Elm.Syntax.TypeAnnotation.TypeAnnotation)
-        getTypeAnnotationFromArgumentIndex argumentIndex =
-            case function.signature of
-                Nothing ->
-                    Nothing
-
-                Just (Elm.Syntax.Node.Node _ signature) ->
-                    signature.typeAnnotation
-                        |> getTypeAnnotationFromFunctionArgumentIndex argumentIndex
-
-        arguments : List ( String, ( ParsedDeclaration, DeclarationScope ) )
-        arguments =
-            functionDeclaration.arguments
-                |> List.indexedMap
-                    (\argumentIndex argument ->
-                        listDeclarationsFromPattern
-                            sourceContent
-                            { typeAnnotation = getTypeAnnotationFromArgumentIndex argumentIndex }
-                            argument
-                    )
-                |> List.concat
-    in
-    List.concat
-        [ [ ( functionName
-            , ( functionItem, TopLevelScope )
-            )
-          ]
-        , arguments
-        , listDeclarationsInExpression
-            sourceContent
-            expressionNode
-        ]
-
-
-getTypeAnnotationFromFunctionArgumentIndex :
-    Int
-    -> Elm.Syntax.Node.Node Elm.Syntax.TypeAnnotation.TypeAnnotation
-    -> Maybe (Elm.Syntax.Node.Node Elm.Syntax.TypeAnnotation.TypeAnnotation)
-getTypeAnnotationFromFunctionArgumentIndex argumentIndex ((Elm.Syntax.Node.Node _ typeAnnotation) as typeAnnotationNode) =
-    case typeAnnotation of
-        Elm.Syntax.TypeAnnotation.FunctionTypeAnnotation argumentType returnType ->
-            if argumentIndex < 1 then
-                Just argumentType
-
-            else
-                getTypeAnnotationFromFunctionArgumentIndex (argumentIndex - 1) returnType
-
-        _ ->
-            if argumentIndex < 1 then
-                Just typeAnnotationNode
-
-            else
-                Nothing
-
-
-listReferencesFromPattern :
-    Elm.Syntax.Node.Node Elm.Syntax.Pattern.Pattern
-    -> List (SyntaxNode ( List String, String ))
-listReferencesFromPattern (Elm.Syntax.Node.Node patternRange pattern) =
-    case pattern of
-        Elm.Syntax.Pattern.TuplePattern tuplePattern ->
-            List.concatMap
-                listReferencesFromPattern
-                tuplePattern
-
-        Elm.Syntax.Pattern.UnConsPattern head tail ->
-            List.concatMap
-                listReferencesFromPattern
-                [ head, tail ]
-
-        Elm.Syntax.Pattern.ListPattern listPattern ->
-            List.concatMap
-                listReferencesFromPattern
-                listPattern
-
-        Elm.Syntax.Pattern.VarPattern _ ->
-            []
-
-        Elm.Syntax.Pattern.NamedPattern named arguments ->
-            let
-                rangeStartOffset : Int
-                rangeStartOffset =
-                    (List.map String.length named.moduleName
-                        |> List.sum
-                    )
-                        + List.length named.moduleName
-
-                nameStartColumn : Int
-                nameStartColumn =
-                    patternRange.start.column + rangeStartOffset
-
-                nameEndColumn : Int
-                nameEndColumn =
-                    nameStartColumn + String.length named.name
-
-                rangeStartRow : Int
-                rangeStartRow =
-                    patternRange.start.row
-
-                nameRange : Range
-                nameRange =
-                    Range
-                        ( rangeStartRow, nameStartColumn )
-                        ( rangeStartRow, nameEndColumn )
-            in
-            [ [ SyntaxNode nameRange ( named.moduleName, named.name ) ]
-            , List.concatMap
-                listReferencesFromPattern
-                arguments
-            ]
-                |> List.concat
-
-        Elm.Syntax.Pattern.ParenthesizedPattern parenthesized ->
-            listReferencesFromPattern parenthesized
-
-        _ ->
-            []
-
-
-listDeclarationsFromPattern :
-    SourceContentForCooking
-    -> { typeAnnotation : Maybe (Elm.Syntax.Node.Node Elm.Syntax.TypeAnnotation.TypeAnnotation) }
-    -> Elm.Syntax.Node.Node Elm.Syntax.Pattern.Pattern
-    -> List ( String, ( ParsedDeclaration, DeclarationScope ) )
-listDeclarationsFromPattern ((SourceContentForCooking textLines) as sourceContent) config (Elm.Syntax.Node.Node patternRangeRecord pattern) =
-    case pattern of
-        Elm.Syntax.Pattern.TuplePattern tuplePattern ->
-            List.concatMap
-                (listDeclarationsFromPattern sourceContent { typeAnnotation = Nothing })
-                tuplePattern
-
-        Elm.Syntax.Pattern.UnConsPattern head tail ->
-            List.concatMap
-                (listDeclarationsFromPattern sourceContent { typeAnnotation = Nothing })
-                [ head, tail ]
-
-        Elm.Syntax.Pattern.ListPattern listPattern ->
-            List.concatMap
-                (listDeclarationsFromPattern sourceContent { typeAnnotation = Nothing })
-                listPattern
-
-        Elm.Syntax.Pattern.VarPattern name ->
-            let
-                maybeTypeAnnotationText : Maybe String
-                maybeTypeAnnotationText =
-                    case config.typeAnnotation of
-                        Nothing ->
-                            Nothing
-
-                        Just (Elm.Syntax.Node.Node typeAnnotationRange _) ->
-                            Just
-                                (Range
-                                    ( typeAnnotationRange.start.row, typeAnnotationRange.start.column )
-                                    ( typeAnnotationRange.end.row, typeAnnotationRange.end.column )
-                                    |> sliceRangeFromTextLines textLines
-                                    |> String.join " "
-                                )
-
-                codeLines : List String
-                codeLines =
-                    case maybeTypeAnnotationText of
-                        Nothing ->
-                            [ name
-                            ]
-
-                        Just typeAnnotationText ->
-                            [ String.concat [ name, " : ", typeAnnotationText ]
-                            ]
-
-                patternRange : Range
-                patternRange =
-                    rangeFromRecordRange patternRangeRecord
-            in
-            [ ( name
-              , ( FunctionOrValueDeclaration
-                    ( DeclarationRange
-                        patternRange
-                        [ patternRange ]
-                    , CookedDocumentation
-                        (documentationMarkdownFromCodeLinesAndDocumentation codeLines Nothing)
-                    )
-                , TopLevelScope
-                )
-              )
-            ]
-
-        Elm.Syntax.Pattern.NamedPattern _ arguments ->
-            List.concatMap
-                (listDeclarationsFromPattern sourceContent { typeAnnotation = Nothing })
-                arguments
-
-        Elm.Syntax.Pattern.ParenthesizedPattern parenthesized ->
-            listDeclarationsFromPattern sourceContent
-                { typeAnnotation = Nothing }
-                parenthesized
-
-        _ ->
-            []
-
-
-listReferencesInLetBlock :
-    Elm.Syntax.Expression.LetBlock
-    -> List (SyntaxNode ( List String, String ))
-listReferencesInLetBlock letBlock =
-    [ List.concatMap listReferencesInLetDeclaration letBlock.declarations
-    , listReferencesInExpression letBlock.expression
-    ]
-        |> List.concat
-
-
-listDeclarationsInLetBlock :
-    SourceContentForCooking
-    -> Elm.Syntax.Expression.LetBlock
-    -> List ( String, ( ParsedDeclaration, DeclarationScope ) )
-listDeclarationsInLetBlock sourceContent letBlock =
-    [ List.concatMap
-        (listDeclarationsInLetDeclaration sourceContent)
-        letBlock.declarations
-    , listDeclarationsInExpression sourceContent letBlock.expression
-    ]
-        |> List.concat
-
-
-listReferencesInLetDeclaration :
-    Elm.Syntax.Node.Node Elm.Syntax.Expression.LetDeclaration
-    -> List (SyntaxNode ( List String, String ))
-listReferencesInLetDeclaration declarationNode =
-    let
-        (Elm.Syntax.Node.Node _ declaration) =
-            declarationNode
-    in
-    case declaration of
-        Elm.Syntax.Expression.LetFunction function ->
-            listReferencesForFunction function
-
-        Elm.Syntax.Expression.LetDestructuring _ letDestructuring ->
-            listReferencesInExpression letDestructuring
-
-
-listDeclarationsInLetDeclaration :
-    SourceContentForCooking
-    -> Elm.Syntax.Node.Node Elm.Syntax.Expression.LetDeclaration
-    -> List ( String, ( ParsedDeclaration, DeclarationScope ) )
-listDeclarationsInLetDeclaration sourceContent declarationNode =
-    let
-        (Elm.Syntax.Node.Node declarationRange declaration) =
-            declarationNode
-    in
-    case declaration of
-        Elm.Syntax.Expression.LetFunction function ->
-            listDeclarationsForFunction sourceContent declarationRange function
-
-        Elm.Syntax.Expression.LetDestructuring _ letDestructuring ->
-            listDeclarationsInExpression sourceContent letDestructuring
-
-
-constrainScopeToRange : Range -> DeclarationScope -> DeclarationScope
-constrainScopeToRange range scope =
-    case scope of
-        LocalScope _ ->
-            scope
-
-        TopLevelScope ->
-            LocalScope range
-
-
-expandRangeToLineStart : Range -> Range
-expandRangeToLineStart (Range ( startRow, _ ) end) =
-    Range ( startRow, 1 ) end
-
-
 removeWrappingFromMultilineComment : String -> String
 removeWrappingFromMultilineComment withWrapping =
     let
@@ -3682,83 +2556,43 @@ removeWrappingFromMultilineComment withWrapping =
     String.trim lessCommentTokens
 
 
-locationIsInComment : Elm.Syntax.Range.Location -> Elm.Syntax.File.File -> Bool
-locationIsInComment location parsedModule =
-    parsedModule
-        |> listCommentsInFile
-        |> List.any
-            (\(Elm.Syntax.Node.Node commentRange comment) ->
-                -- Map ranges of single-line comments to cover more of line in `rangeIntersectsLocation`
-                let
-                    range =
-                        if String.startsWith "--" comment then
-                            { commentRange
-                                | end = { row = commentRange.end.row, column = commentRange.end.column + 9999 }
-                            }
+locationIsInComment : ElmSyntax.Concrete.Range.Location -> ElmSyntax.Concrete.File.File -> Bool
+locationIsInComment location concrete =
+    List.any
+        (\(ElmSyntax.Concrete.Node.Node commentRange comment) ->
+            -- Map ranges of single-line comments to cover more of line in `rangeIntersectsLocation`
+            let
+                range =
+                    if String.startsWith "--" comment then
+                        { commentRange
+                            | end = { row = commentRange.end.row, column = commentRange.end.column + 9999 }
+                        }
 
-                        else
-                            commentRange
-                in
-                rangeIntersectsLocation location range
+                    else
+                        commentRange
+            in
+            rangeIntersectsLocation location range
+        )
+        concrete.comments
+        || List.any
+            (\documentationRange -> rangeIntersectsLocation location documentationRange)
+            (documentationRangesInFile concrete)
+
+
+documentationRangesInFile : ElmSyntax.Concrete.File.File -> List ElmSyntax.Concrete.Range.Range
+documentationRangesInFile concrete =
+    concrete.declarations
+        |> List.indexedMap
+            (\index _ ->
+                ElmSyntax.Concrete.SourceLookup.rangeAtPath
+                    [ StepDeclaration index ]
+                    SelectDocumentation
+                    concrete
             )
+        |> List.filterMap identity
 
 
-listCommentsInFile : Elm.Syntax.File.File -> List (Elm.Syntax.Node.Node Elm.Syntax.Comments.Comment)
-listCommentsInFile parsedModule =
-    let
-        fromDeclarations =
-            parsedModule.declarations
-                |> List.concatMap
-                    (\(Elm.Syntax.Node.Node _ declaration) ->
-                        listCommentsFromDeclaration declaration
-                    )
-    in
-    List.concat
-        [ parsedModule.comments
-        , fromDeclarations
-        ]
-
-
-listCommentsFromDeclaration :
-    Elm.Syntax.Declaration.Declaration
-    -> List (Elm.Syntax.Node.Node Elm.Syntax.Comments.Comment)
-listCommentsFromDeclaration declaration =
-    case declaration of
-        Elm.Syntax.Declaration.FunctionDeclaration function ->
-            case function.documentation of
-                Nothing ->
-                    []
-
-                Just documentation ->
-                    [ documentation ]
-
-        Elm.Syntax.Declaration.AliasDeclaration typeAlias ->
-            case typeAlias.documentation of
-                Nothing ->
-                    []
-
-                Just documentation ->
-                    [ documentation ]
-
-        Elm.Syntax.Declaration.CustomTypeDeclaration typeDeclaration ->
-            case typeDeclaration.documentation of
-                Nothing ->
-                    []
-
-                Just documentation ->
-                    [ documentation ]
-
-        Elm.Syntax.Declaration.PortDeclaration _ ->
-            []
-
-        Elm.Syntax.Declaration.InfixDeclaration _ ->
-            []
-
-        Elm.Syntax.Declaration.Destructuring _ _ ->
-            []
-
-
-rangeIntersectsLocation : Elm.Syntax.Range.Location -> Elm.Syntax.Range.Range -> Bool
+rangeIntersectsLocation : ElmSyntax.Concrete.Range.Location -> ElmSyntax.Concrete.Range.Range -> Bool
 rangeIntersectsLocation location range =
     let
         start =
@@ -3946,54 +2780,9 @@ sliceRangeFromTextLines textLines (Range ( startRow, startColumn ) ( endRow, end
             ]
 
 
-recordRangeFromRange : Range -> Elm.Syntax.Range.Range
-recordRangeFromRange (Range ( startRow, startColumn ) ( endRow, endColumn )) =
-    { start = { row = startRow, column = startColumn }
-    , end = { row = endRow, column = endColumn }
-    }
-
-
-rangeFromRecordRange : Elm.Syntax.Range.Range -> Range
-rangeFromRecordRange { start, end } =
-    Range
-        ( start.row, start.column )
-        ( end.row, end.column )
-
-
-syntaxRangeCoveringCompleteString : String -> Elm.Syntax.Range.Range
-syntaxRangeCoveringCompleteString string =
-    let
-        lines =
-            String.lines string
-    in
-    { start = { row = 1, column = 1 }
-    , end =
-        { row = List.length lines + 1
-        , column =
-            case lines |> List.reverse |> List.head of
-                Nothing ->
-                    1
-
-                Just lastLine ->
-                    String.length lastLine + 1
-        }
-    }
-
-
 charIsAllowedInDeclarationName : Char -> Bool
 charIsAllowedInDeclarationName char =
-    -- https://github.com/stil4m/elm-syntax/blob/8728aa02778780b1a9bba33a27ecf0a37300a4a0/src/Elm/Parser/Tokens.elm#L245
     Char.isAlphaNum char || char == '_'
-
-
-listMapFirstElement : (a -> a) -> List a -> List a
-listMapFirstElement mapElement list =
-    case list of
-        firstElement :: followingElements ->
-            mapElement firstElement :: followingElements
-
-        _ ->
-            list
 
 
 stringSplitByChar : (Char -> Bool) -> String -> List String

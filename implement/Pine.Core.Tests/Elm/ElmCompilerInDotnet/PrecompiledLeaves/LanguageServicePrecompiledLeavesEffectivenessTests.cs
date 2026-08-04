@@ -82,7 +82,7 @@ public class LanguageServicePrecompiledLeavesEffectivenessTests
 
         foreach (var sourcePath in new[]
         {
-            new[] { "elm-syntax", "src" },
+            new[] { "pine-elm-syntax", "src" },
             ["src"],
             ["other-library-modules"],
         })

@@ -101,6 +101,130 @@ public class ElmLanguageServiceTests
                     }
                 )
                 state
+
+
+        addPackageModule :
+            String
+            -> LanguageService.LanguageServiceState
+            -> ( LanguageServiceInterface.Response, LanguageService.LanguageServiceState )
+        addPackageModule moduleText state =
+            handleRequest
+                (LanguageServiceInterface.AddElmPackageVersionRequest
+                    (LanguageServiceInterface.ElmPackageVersion019Identifer
+                        "author/package"
+                        "1.0.0"
+                    )
+                    [ ( [ "src", "PackageModule.elm" ]
+                      , { asBase64 = "", asText = Just moduleText }
+                      )
+                    ]
+                )
+                state
+
+
+        provideHoverWorkspace :
+            String
+            -> Int
+            -> Int
+            -> LanguageService.LanguageServiceState
+            -> ( LanguageServiceInterface.Response, LanguageService.LanguageServiceState )
+        provideHoverWorkspace filePath lineNumber column state =
+            handleRequest
+                (LanguageServiceInterface.ProvideHoverRequest
+                    { fileLocation = LanguageServiceInterface.WorkspaceFileLocation filePath
+                    , positionLineNumber = lineNumber
+                    , positionColumn = column
+                    }
+                )
+                state
+
+
+        provideHoverPackage :
+            Int
+            -> Int
+            -> LanguageService.LanguageServiceState
+            -> ( LanguageServiceInterface.Response, LanguageService.LanguageServiceState )
+        provideHoverPackage lineNumber column state =
+            handleRequest
+                (LanguageServiceInterface.ProvideHoverRequest
+                    { fileLocation =
+                        LanguageServiceInterface.ElmPackageFileLocation
+                            (LanguageServiceInterface.ElmPackageVersion019Identifer
+                                "author/package"
+                                "1.0.0"
+                            )
+                            [ "src", "PackageModule.elm" ]
+                    , positionLineNumber = lineNumber
+                    , positionColumn = column
+                    }
+                )
+                state
+
+
+        provideDefinitionWorkspace :
+            String
+            -> Int
+            -> Int
+            -> LanguageService.LanguageServiceState
+            -> ( LanguageServiceInterface.Response, LanguageService.LanguageServiceState )
+        provideDefinitionWorkspace filePath lineNumber column state =
+            handleRequest
+                (LanguageServiceInterface.ProvideDefinitionRequest
+                    { fileLocation = LanguageServiceInterface.WorkspaceFileLocation filePath
+                    , positionLineNumber = lineNumber
+                    , positionColumn = column
+                    }
+                )
+                state
+
+
+        provideCompletionItems :
+            String
+            -> Int
+            -> Int
+            -> LanguageService.LanguageServiceState
+            -> ( LanguageServiceInterface.Response, LanguageService.LanguageServiceState )
+        provideCompletionItems filePath lineNumber column state =
+            handleRequest
+                (LanguageServiceInterface.ProvideCompletionItemsRequest
+                    { filePathOpenedInEditor = filePath
+                    , cursorLineNumber = lineNumber
+                    , cursorColumn = column
+                    }
+                )
+                state
+
+
+        textDocumentReferencesPackage :
+            Int
+            -> Int
+            -> LanguageService.LanguageServiceState
+            -> ( LanguageServiceInterface.Response, LanguageService.LanguageServiceState )
+        textDocumentReferencesPackage lineNumber column state =
+            handleRequest
+                (LanguageServiceInterface.TextDocumentReferencesRequest
+                    { fileLocation =
+                        LanguageServiceInterface.ElmPackageFileLocation
+                            (LanguageServiceInterface.ElmPackageVersion019Identifer
+                                "author/package"
+                                "1.0.0"
+                            )
+                            [ "src", "PackageModule.elm" ]
+                    , positionLineNumber = lineNumber
+                    , positionColumn = column
+                    }
+                )
+                state
+
+
+        textDocumentSymbol :
+            String
+            -> LanguageService.LanguageServiceState
+            -> ( LanguageServiceInterface.Response, LanguageService.LanguageServiceState )
+        textDocumentSymbol filePath state =
+            handleRequest
+                (LanguageServiceInterface.TextDocumentSymbolRequest filePath)
+                state
         """"
         ;
 
@@ -122,8 +246,8 @@ public class ElmLanguageServiceTests
 
         var elmSyntaxSrcTree =
             bundledTree
-            .GetNodeAtPath(["elm-syntax", "src"])
-            ?? throw new Exception("Did not find elm-syntax/src");
+            .GetNodeAtPath(["pine-elm-syntax", "src"])
+            ?? throw new Exception("Did not find pine-elm-syntax/src");
 
         var elmInElmSrcTree =
             bundledTree
@@ -134,7 +258,7 @@ public class ElmLanguageServiceTests
             bundledTree
             .GetNodeAtPath(["other-library-modules"]);
 
-        // Start from kernel modules and merge elm-syntax, elm-in-elm sources.
+        // Start from kernel modules and merge pine-elm-syntax, elm-in-elm sources.
         var mergedTree = kernelModulesTree;
 
         foreach (var (path, file) in elmSyntaxSrcTree.EnumerateFilesTransitive())
@@ -301,6 +425,18 @@ public class ElmLanguageServiceTests
         return (report.ReturnValue.Evaluate(), report);
     }
 
+    private static string RenderResponseFromResult(PineValue result)
+    {
+        var responsePine =
+            ((PineValue.ListValue)result).Items.Span[0];
+
+        var responseElmValue =
+            ElmValueEncoding.PineValueAsElmValue(responsePine, null, null)
+            .Extract(err => throw new Exception("Failed to decode response: " + err));
+
+        return ElmValue.RenderAsElmExpression(responseElmValue).expressionString;
+    }
+
     /// <summary>
     /// Same as <see cref="ApplyWithProfiling(string, PineValue[])"/> but additionally
     /// builds a per-evaluation <see cref="InvocationCountReport"/> by observing the
@@ -401,6 +537,132 @@ public class ElmLanguageServiceTests
     private const string ReferencesScenario_ExpectedResponse =
         """TextDocumentReferencesResponse [ { fileLocation = WorkspaceFileLocation "src/ModuleA.elm", range = { endColumn = 32, endLineNumber = 1, startColumn = 26, startLineNumber = 1 } }, { fileLocation = WorkspaceFileLocation "src/ModuleB.elm", range = { endColumn = 19, endLineNumber = 7, startColumn = 13, startLineNumber = 7 } }, { fileLocation = WorkspaceFileLocation "src/ModuleB.elm", range = { endColumn = 38, endLineNumber = 7, startColumn = 32, startLineNumber = 7 } } ]""";
 
+    [Fact]
+    public void Hover_completion_definition_and_document_symbols_use_migrated_syntax()
+    {
+        const string packageModuleText =
+            """
+            module PackageModule exposing (Choice(..), packageValue)
+
+            {-| Package value docs -}
+            packageValue : Int
+            packageValue =
+                41
+
+            type Choice
+                = First
+                | Second Int
+
+            """;
+
+        const string workspaceModuleText =
+            """
+            module Main exposing (mainValue, LocalChoice(..))
+
+            import PackageModule exposing (packageValue)
+
+            mainValue =
+                packageValue + 1
+
+            type LocalChoice
+                = LocalA
+                | LocalB Int
+
+            """;
+
+        var initialState = EvaluateZeroArgTestDeclaration("initState");
+
+        var (addPackageResult, _) =
+            ApplyWithProfiling(
+                "addPackageModule",
+                [
+                ElmValueEncoding.ElmValueAsPineValue(ElmString(packageModuleText)),
+                initialState,
+                ]);
+
+        var stateAfterPackage =
+            ((PineValue.ListValue)addPackageResult).Items.Span[1];
+
+        var (addWorkspaceResult, _) =
+            ApplyWithProfiling(
+                "addWorkspaceFile",
+                [
+                ElmValueEncoding.ElmValueAsPineValue(ElmString("src/Main.elm")),
+                ElmValueEncoding.ElmValueAsPineValue(ElmString(workspaceModuleText)),
+                stateAfterPackage,
+                ]);
+
+        var state =
+            ((PineValue.ListValue)addWorkspaceResult).Items.Span[1];
+
+        string Request(string functionName, params ElmValue[] arguments)
+        {
+            var pineArguments =
+                arguments
+                .Select(ElmValueEncoding.ElmValueAsPineValue)
+                .Append(state)
+                .ToArray();
+
+            return RenderResponseFromResult(ApplyWithProfiling(functionName, pineArguments).result);
+        }
+
+        var hoverWorkspace =
+            Request(
+                "provideHoverWorkspace",
+                ElmString("src/Main.elm"),
+                Integer(6),
+                Integer(5));
+
+        var hoverPackage =
+            Request(
+                "provideHoverPackage",
+                Integer(4),
+                Integer(2));
+
+        var definition =
+            Request(
+                "provideDefinitionWorkspace",
+                ElmString("src/Main.elm"),
+                Integer(6),
+                Integer(5));
+
+        var completion =
+            Request(
+                "provideCompletionItems",
+                ElmString("src/Main.elm"),
+                Integer(7),
+                Integer(1));
+
+        var symbols =
+            Request(
+                "textDocumentSymbol",
+                ElmString("src/Main.elm"));
+
+        var references =
+            Request(
+                "textDocumentReferencesPackage",
+                Integer(4),
+                Integer(2));
+
+        hoverWorkspace.Should().Be(
+            """ProvideHoverResponse [ "    packageValue : Int\n\nPackage value docs" ]""");
+
+        hoverPackage.Should().Be(
+            """ProvideHoverResponse [ "    packageValue : Int\n\nPackage value docs" ]""");
+
+        definition.Should().Be(
+            """ProvideDefinitionResponse [ { fileLocation = ElmPackageFileLocation (ElmPackageVersion019Identifer "author/package" "1.0.0") [ "src", "PackageModule.elm" ], range = { endColumn = 7, endLineNumber = 6, startColumn = 1, startLineNumber = 4 } } ]""");
+
+        completion.Should().Be(
+            """ProvideCompletionItemsResponse [ { documentation = "", insertText = "PackageModule", kind = ModuleCompletionItemKind, label = "PackageModule" }, { documentation = "    LocalA\n\nA variant of the choice type `LocalChoice`\n\n    type LocalChoice\n        = LocalA\n        | LocalB Int", insertText = "LocalA", kind = EnumMemberCompletionItemKind, label = "LocalA" }, { documentation = "    LocalB\n\nA variant of the choice type `LocalChoice`\n\n    type LocalChoice\n        = LocalA\n        | LocalB Int", insertText = "LocalB", kind = EnumMemberCompletionItemKind, label = "LocalB" }, { documentation = "    type LocalChoice\n        = LocalA\n        | LocalB Int", insertText = "LocalChoice", kind = EnumCompletionItemKind, label = "LocalChoice" }, { documentation = "    mainValue", insertText = "mainValue", kind = FunctionCompletionItemKind, label = "mainValue" }, { documentation = "    packageValue : Int\n\nPackage value docs", insertText = "packageValue", kind = FunctionCompletionItemKind, label = "packageValue" } ]""");
+
+        symbols.Should().Be(
+            """TextDocumentSymbolResponse [ DocumentSymbol { children = [], kind = SymbolKind_Function, name = "mainValue", range = { endColumn = 21, endLineNumber = 6, startColumn = 1, startLineNumber = 5 }, selectionRange = { endColumn = 10, endLineNumber = 5, startColumn = 1, startLineNumber = 5 } }, DocumentSymbol { children = [ DocumentSymbol { children = [], kind = SymbolKind_EnumMember, name = "LocalA", range = { endColumn = 13, endLineNumber = 9, startColumn = 7, startLineNumber = 9 }, selectionRange = { endColumn = 13, endLineNumber = 9, startColumn = 7, startLineNumber = 9 } }, DocumentSymbol { children = [], kind = SymbolKind_EnumMember, name = "LocalB", range = { endColumn = 17, endLineNumber = 10, startColumn = 7, startLineNumber = 10 }, selectionRange = { endColumn = 13, endLineNumber = 10, startColumn = 7, startLineNumber = 10 } } ], kind = SymbolKind_Enum, name = "LocalChoice", range = { endColumn = 17, endLineNumber = 10, startColumn = 1, startLineNumber = 8 }, selectionRange = { endColumn = 17, endLineNumber = 8, startColumn = 6, startLineNumber = 8 } } ]""");
+
+        references.Should().Be(
+            """TextDocumentReferencesResponse [ { fileLocation = WorkspaceFileLocation "src/Main.elm", range = { endColumn = 17, endLineNumber = 6, startColumn = 5, startLineNumber = 6 } }, { fileLocation = ElmPackageFileLocation (ElmPackageVersion019Identifer "author/package" "1.0.0") [ "src", "PackageModule.elm" ], range = { endColumn = 56, endLineNumber = 1, startColumn = 44, startLineNumber = 1 } } ]""");
+    }
+
     /// <summary>
     /// Simulates a language client workflow:
     /// 1. Initialize language service state
@@ -500,20 +762,20 @@ public class ElmLanguageServiceTests
 
         PerformanceCountersFormatting.FormatCounts(aggregateCounters).Should().Be(
             """
-            InvocationCount: 3_458
-            BuildListCount: 17_615
-            LoopIterationCount: 443
-            InstructionCount: 107_321
+            InvocationCount: 6_430
+            BuildListCount: 14_455
+            LoopIterationCount: 4_418
+            InstructionCount: 280_313
             """);
 
         InvocationCountReportFormatting.FormatCounts(aggregateInvocationCounts).Should().Be(
             """
-            CompiledExpressionCount: 194
-            InvocationCountTotal: 1_715
-            InvocationCountAverage: 9
+            CompiledExpressionCount: 168
+            InvocationCountTotal: 4_643
+            InvocationCountAverage: 28
             InvocationCountPercentile10: 2
-            InvocationCountMedian: 3
-            InvocationCountPercentile90: 21
+            InvocationCountMedian: 5
+            InvocationCountPercentile90: 30
             """);
     }
 
@@ -838,20 +1100,20 @@ public class ElmLanguageServiceTests
 
         PerformanceCountersFormatting.FormatCounts(aggregateCounters).Should().Be(
             """
-            InvocationCount: 10_239
-            BuildListCount: 57_185
-            LoopIterationCount: 1_367
-            InstructionCount: 336_838
+            InvocationCount: 17_675
+            BuildListCount: 40_491
+            LoopIterationCount: 13_252
+            InstructionCount: 770_120
             """);
 
         InvocationCountReportFormatting.FormatCounts(aggregateInvocationCounts).Should().Be(
             """
-            CompiledExpressionCount: 224
-            InvocationCountTotal: 4_960
-            InvocationCountAverage: 22
+            CompiledExpressionCount: 209
+            InvocationCountTotal: 12_605
+            InvocationCountAverage: 60
             InvocationCountPercentile10: 2
-            InvocationCountMedian: 6
-            InvocationCountPercentile90: 58
+            InvocationCountMedian: 8
+            InvocationCountPercentile90: 64
             """);
     }
 
@@ -969,20 +1231,20 @@ public class ElmLanguageServiceTests
 
         PerformanceCountersFormatting.FormatCounts(aggregateCounters).Should().Be(
             """
-            InvocationCount: 12_386
-            BuildListCount: 64_467
-            LoopIterationCount: 1_733
-            InstructionCount: 404_057
+            InvocationCount: 18_969
+            BuildListCount: 43_827
+            LoopIterationCount: 13_802
+            InstructionCount: 807_876
             """);
 
         InvocationCountReportFormatting.FormatCounts(aggregateInvocationCounts).Should().Be(
             """
-            CompiledExpressionCount: 227
-            InvocationCountTotal: 6_145
-            InvocationCountAverage: 27
+            CompiledExpressionCount: 210
+            InvocationCountTotal: 13_297
+            InvocationCountAverage: 63
             InvocationCountPercentile10: 2
-            InvocationCountMedian: 7
-            InvocationCountPercentile90: 62
+            InvocationCountMedian: 8
+            InvocationCountPercentile90: 64
             """);
     }
 
@@ -1104,7 +1366,7 @@ public class ElmLanguageServiceTests
     }
 
     /// <summary>
-    /// Bundled compiler source modules (kernel, elm-syntax, elm-in-elm src,
+    /// Bundled compiler source modules (kernel, pine-elm-syntax, elm-in-elm src,
     /// other-library-modules) loaded as a flat list of source texts ready to
     /// be passed to
     /// <see cref="ElmSyntaxInterpreter.ParseAndInterpret(string, IReadOnlyList{string})"/>.
@@ -1119,7 +1381,7 @@ public class ElmLanguageServiceTests
                 var modules = new List<string>();
 
                 AppendModuleTextsAtPath(BundledFiles.ElmKernelModulesDefault.Value, [], modules);
-                AppendModuleTextsAtPath(bundledTree, ["elm-syntax", "src"], modules);
+                AppendModuleTextsAtPath(bundledTree, ["pine-elm-syntax", "src"], modules);
                 AppendModuleTextsAtPath(bundledTree, ["src"], modules);
                 AppendModuleTextsAtPath(bundledTree, ["other-library-modules"], modules, optional: true);
 

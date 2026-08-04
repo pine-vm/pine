@@ -3,7 +3,8 @@
     "source-directories": [
         "src",
         "elm-syntax/src",
-        "elm-syntax-encode-json/src"
+        "elm-syntax-encode-json/src",
+        "pine-elm-syntax/src"
     ],
     "elm-version": "0.19.1",
     "dependencies": {

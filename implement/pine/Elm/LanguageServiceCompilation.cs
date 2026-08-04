@@ -29,7 +29,7 @@ internal static class LanguageServiceCompilation
 {
     /// <summary>
     /// Builds the merged Elm source tree containing the bundled elm-in-elm
-    /// language service implementation, its <c>elm-syntax</c> dependency,
+    /// language service implementation, its <c>pine-elm-syntax</c> dependency,
     /// the bundled kernel modules, and the bundled "other library" modules.
     /// This is the exact tree that is fed to
     /// <see cref="Pine.Core.Elm.ElmCompilerInDotnet.ElmCompiler.CompileInteractiveEnvironment"/>.
@@ -43,8 +43,8 @@ internal static class LanguageServiceCompilation
             BundledFiles.ElmKernelModulesDefault.Value;
 
         var elmSyntaxSrcTree =
-            bundledTree.GetNodeAtPath(["elm-syntax", "src"])
-            ?? throw new Exception("Did not find elm-syntax/src in bundled compiler tree");
+            bundledTree.GetNodeAtPath(["pine-elm-syntax", "src"])
+            ?? throw new Exception("Did not find pine-elm-syntax/src in bundled compiler tree");
 
         var elmInElmSrcTree =
             bundledTree.GetNodeAtPath(["src"])
@@ -79,8 +79,8 @@ internal static class LanguageServiceCompilation
     /// <summary>
     /// Root file path used for the compilation closure.
     /// <c>LanguageService.elm</c> transitively imports
-    /// <c>LanguageServiceInterface</c>, <c>Elm.Parser</c>, the
-    /// <c>Elm.Syntax.*</c> modules, <c>Frontend.MonacoEditor</c>, etc.
+    /// <c>LanguageServiceInterface</c>, <c>ElmSyntax.Abstract.*</c>, the
+    /// <c>ElmSyntax.Concrete.*</c> modules, <c>Frontend.MonacoEditor</c>, etc.
     /// </summary>
     public static System.Collections.Generic.IReadOnlyList<string> LanguageServiceRootFilePath { get; } =
         ["LanguageService.elm"];
