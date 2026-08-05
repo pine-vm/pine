@@ -1,65 +1,147 @@
+using Spectre.Console;
+using Spectre.Console.Rendering;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
-using System.Collections.Immutable;
+using System.CommandLine;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 
 namespace Pine.CLI;
 
-/// <summary>
-/// Represents the result of formatting a single source file.
-/// </summary>
+public sealed record FormatFileDiagnostic(
+    string Message,
+    int? Line = null,
+    int? Column = null)
+{
+    public string RenderText() =>
+        Line is { } line && Column is { } column
+        ?
+        $"{line}:{column}: {Message}"
+        :
+        Message;
+}
+
+
 public abstract record FormatFileResult
 {
     private FormatFileResult() { }
 
 
-    /// <summary>File had an error and could not be processed.</summary>
     public sealed record Error(string ErrorText) : FormatFileResult;
 
 
-    /// <summary>File was already properly formatted (no changes needed).</summary>
-    public sealed record Stable : FormatFileResult;
+    public sealed record Stable(
+        IReadOnlyList<FormatFileDiagnostic> Diagnostics) : FormatFileResult
+    {
+        public Stable()
+            : this([])
+        {
+        }
+    }
 
 
-    /// <summary>File needs formatting (content differs from formatted version).</summary>
-    public sealed record Changed(string FormattedText) : FormatFileResult;
+    public sealed record Changed(
+        string FormattedText,
+        IReadOnlyList<FormatFileDiagnostic> Diagnostics) : FormatFileResult
+    {
+        public Changed(string formattedText)
+            : this(formattedText, [])
+        {
+        }
+    }
 }
 
 
-/// <summary>
-/// Shared logic for format commands (e.g., elm-format, csharp-format).
-/// </summary>
+public static class FormatCommandTheme
+{
+    public static Style Default { get; } =
+        new(foreground: Color.Default);
+
+    public static Style Heading { get; } =
+        new(foreground: Color.Default, decoration: Decoration.Bold);
+
+    // ANSI base colors are resolved through the user's terminal palette,
+    // keeping status output legible with both light and dark terminal themes.
+    public static Style Success { get; } =
+        new(foreground: Color.Green);
+
+    public static Style Warning { get; } =
+        new(foreground: Color.Yellow);
+
+    public static Style Error { get; } =
+        new(foreground: Color.Red);
+}
+
+
+public enum FormatCommandColorMode
+{
+    Auto,
+    Always,
+    Never,
+}
+
+
 public static class FormatCommandShared
 {
-    /// <summary>
-    /// Minimum number of files before showing detailed overview with grouping.
-    /// </summary>
     public const int MinFilesForDetailedOverview = 5;
 
+    public const string ColorEnvironmentVariable = "PINE_TERM_COLOR";
 
-    /// <summary>
-    /// Executes a format command for the given file extension and formatter.
-    /// </summary>
-    /// <param name="paths">Paths to files or directories to format.</param>
-    /// <param name="fileExtension">File extension to filter (e.g., ".elm", ".cs").</param>
-    /// <param name="formatFile">Function that takes file content and returns a FormatFileResult.</param>
-    /// <param name="skipPrompt">Whether to skip confirmation prompt.</param>
-    /// <param name="verifyNoChanges">Whether to only verify files are formatted.</param>
-    /// <param name="commandLabel">Label for the command (e.g., "elm-format", "csharp-format").</param>
-    /// <returns>Exit code: 0 for success, 100 for files needing formatting, 200 for errors.</returns>
+
+    public static Option<FormatCommandColorMode?> CreateColorOption() =>
+        new("--color")
+        {
+            Description =
+                "Color output: auto, always, or never. Overrides PINE_TERM_COLOR.",
+            Arity = ArgumentArity.ExactlyOne,
+        };
+
+
     public static int Execute(
         string[] paths,
         string fileExtension,
         Func<string, FormatFileResult> formatFile,
         bool skipPrompt,
         bool verifyNoChanges,
-        string commandLabel)
+        string commandLabel,
+        FormatCommandColorMode? colorMode = null,
+        IAnsiConsole? console = null,
+        IAnsiConsole? errorConsole = null,
+        Func<string?>? readLine = null)
     {
+        FormatCommandColorMode resolvedColorMode;
+
+        try
+        {
+            resolvedColorMode =
+                ResolveColorMode(
+                    colorMode,
+                    Environment.GetEnvironmentVariable(ColorEnvironmentVariable));
+        }
+        catch (ArgumentException exception)
+        {
+            errorConsole ??=
+                CreateSystemConsole(
+                    Console.Error,
+                    FormatCommandColorMode.Auto);
+
+            WriteLabelledLine(
+                errorConsole,
+                "Error:",
+                FormatCommandTheme.Error,
+                exception.Message);
+
+            return 1;
+        }
+
+        console ??= CreateSystemConsole(Console.Out, resolvedColorMode);
+        errorConsole ??= CreateSystemConsole(Console.Error, resolvedColorMode);
+        readLine ??= Console.ReadLine;
+
         var files = new List<string>();
-        var shouldShowCount = paths.Length > 1;
 
         foreach (var path in paths)
         {
@@ -75,40 +157,47 @@ public static class FormatCommandShared
                     }
                     else
                     {
-                        Console.WriteLine($"Warning: Skipping non-{fileExtension} file: {fullPath}");
+                        WriteLabelledLine(
+                            console,
+                            "Warning:",
+                            FormatCommandTheme.Warning,
+                            $"Skipping non-{fileExtension} file: {fullPath}");
                     }
+                }
+                else if (Directory.Exists(fullPath))
+                {
+                    files.AddRange(
+                        Directory.GetFiles(
+                            fullPath,
+                            "*" + fileExtension,
+                            SearchOption.AllDirectories));
                 }
                 else
                 {
-                    shouldShowCount = true;
+                    WriteLabelledLine(
+                        errorConsole,
+                        "Error:",
+                        FormatCommandTheme.Error,
+                        $"Path not found: {fullPath}");
 
-                    if (Directory.Exists(fullPath))
-                    {
-                        var filesInDir =
-                            Directory.GetFiles(
-                                fullPath,
-                                "*" + fileExtension,
-                                SearchOption.AllDirectories);
-
-                        files.AddRange(filesInDir);
-                    }
-                    else
-                    {
-                        Console.Error.WriteLine($"Error: Path not found: {fullPath}");
-                        return 1;
-                    }
+                    return 1;
                 }
             }
             catch (Exception ex)
             {
-                Console.Error.WriteLine($"Error processing path '{path}': {ex.Message}");
+                WriteLabelledLine(
+                    errorConsole,
+                    "Error:",
+                    FormatCommandTheme.Error,
+                    $"Error processing path '{path}': {ex.Message}");
+
                 return 1;
             }
         }
 
         if (files.Count is 0)
         {
-            Console.WriteLine($"No {fileExtension} files found.");
+            console.WriteLine($"No {fileExtension} files found.");
             return 0;
         }
 
@@ -116,11 +205,12 @@ public static class FormatCommandShared
 
         var alreadyFormatted = new ConcurrentBag<string>();
         var needsFormatting = new ConcurrentBag<(string path, string formattedContent)>();
-        var parseErrors = new ConcurrentBag<(string path, string error)>();
+        var formatErrors = new ConcurrentBag<(string path, string error)>();
+        var diagnostics = new ConcurrentBag<(string path, IReadOnlyList<FormatFileDiagnostic> diagnostics)>();
 
         Parallel.ForEach(
             files,
-            (filePath) =>
+            filePath =>
             {
                 try
                 {
@@ -130,339 +220,672 @@ public static class FormatCommandShared
                     switch (result)
                     {
                         case FormatFileResult.Error errorResult:
-                            parseErrors.Add((filePath, errorResult.ErrorText));
+                            formatErrors.Add((filePath, errorResult.ErrorText));
                             break;
 
-                        case FormatFileResult.Stable:
+                        case FormatFileResult.Stable stableResult:
                             alreadyFormatted.Add(filePath);
+                            AddDiagnostics(filePath, stableResult.Diagnostics);
                             break;
 
                         case FormatFileResult.Changed changedResult:
                             needsFormatting.Add((filePath, changedResult.FormattedText));
+                            AddDiagnostics(filePath, changedResult.Diagnostics);
                             break;
                     }
                 }
                 catch (Exception ex)
                 {
-                    parseErrors.Add((filePath, ex.Message));
+                    formatErrors.Add((filePath, ex.Message));
                 }
             });
 
         var sortedAlreadyFormatted =
             alreadyFormatted
-            .OrderBy(p => p, StringComparer.Ordinal)
-            .ToImmutableList();
+            .OrderBy(path => path, StringComparer.Ordinal)
+            .ToList();
 
-        var sortedParseErrors =
-            parseErrors
-            .OrderBy(e => e.path, StringComparer.Ordinal)
-            .ToImmutableList();
+        var sortedFormatErrors =
+            formatErrors
+            .OrderBy(error => error.path, StringComparer.Ordinal)
+            .ToList();
 
         var sortedNeedsFormatting =
             needsFormatting
-            .OrderBy(f => f.path, StringComparer.Ordinal)
-            .ToImmutableList();
+            .OrderBy(file => file.path, StringComparer.Ordinal)
+            .ToList();
+
+        var sortedDiagnostics =
+            diagnostics
+            .OrderBy(file => file.path, StringComparer.Ordinal)
+            .ToList();
 
         var showDetailedOverview = files.Count >= MinFilesForDetailedOverview;
 
         if (showDetailedOverview)
         {
-            PrintOverviewHeader(
+            WriteOverview(
+                console,
                 commandLabel,
                 files.Count,
                 sortedAlreadyFormatted.Count,
                 sortedNeedsFormatting.Count,
-                sortedParseErrors.Count,
-                verifyNoChanges);
+                sortedFormatErrors.Count + sortedDiagnostics.Count);
         }
 
         if (verifyNoChanges)
         {
-            if (sortedParseErrors.Count is not 0)
+            if (sortedFormatErrors.Count is not 0)
             {
-                PrintFilesWithErrors(sortedParseErrors, showDetailedOverview);
+                WriteFilesWithErrors(console, sortedFormatErrors, showDetailedOverview);
+                return 200;
+            }
+
+            if (sortedDiagnostics.Count is not 0)
+            {
+                WriteFileDiagnostics(console, sortedDiagnostics);
                 return 200;
             }
 
             if (sortedNeedsFormatting.Count is not 0)
             {
-                PrintFilesNeedingFormatting(
-                    [.. sortedNeedsFormatting.Select(f => f.path)],
+                WriteFilesNeedingFormatting(
+                    console,
+                    [.. sortedNeedsFormatting.Select(file => file.path)],
                     showDetailedOverview);
 
                 return 100;
             }
 
-            PrintSuccessMessage(sortedAlreadyFormatted.Count, verifyNoChanges);
+            WriteSuccessMessage(console, sortedAlreadyFormatted.Count, verifyNoChanges);
             return 0;
         }
 
-        if (sortedParseErrors.Count is not 0)
+        if (sortedFormatErrors.Count is not 0)
         {
-            PrintFilesWithErrors(sortedParseErrors, showDetailedOverview);
+            WriteFilesWithErrors(console, sortedFormatErrors, showDetailedOverview);
             return 200;
         }
 
-        if (!showDetailedOverview && sortedAlreadyFormatted.Count is not 0)
+        if (sortedDiagnostics.Count is not 0)
+        {
+            WriteFileDiagnostics(console, sortedDiagnostics);
+        }
+
+        if (!showDetailedOverview)
         {
             foreach (var path in sortedAlreadyFormatted)
             {
-                Console.WriteLine(path);
+                console.Profile.Out.Writer.WriteLine(path);
             }
         }
 
         if (sortedNeedsFormatting.Count is 0)
         {
-            PrintSuccessMessage(files.Count, verifyNoChanges);
+            if (sortedDiagnostics.Count is not 0)
+            {
+                console.WriteLine();
+
+                WriteStatusLine(
+                    console,
+                    "⚠",
+                    FormatCommandTheme.Warning,
+                    $"{sortedDiagnostics.Count} file(s) contain syntax errors (see above).");
+
+                return 200;
+            }
+
+            WriteSuccessMessage(console, files.Count, verifyNoChanges);
             return 0;
         }
-        else
+
+        WriteFilesNeedingFormatting(
+            console,
+            [.. sortedNeedsFormatting.Select(file => file.path)],
+            showDetailedOverview);
+
+        if (!skipPrompt)
         {
-            PrintFilesNeedingFormatting(
-                [.. sortedNeedsFormatting.Select(f => f.path)],
-                showDetailedOverview);
+            console.WriteLine();
 
-            if (!skipPrompt)
+            var overwrite = ConfirmOverwrite(console, readLine);
+
+            if (!overwrite)
             {
-                Console.WriteLine(
-                    "\nAre you sure you want to overwrite these files with formatted versions? (y/n)");
-
-                var response =
-                    Console.ReadLine()
-                    ?.Trim()
-                    .ToLowerInvariant();
-
-                if (response is not "y" and not "yes")
-                {
-                    Console.WriteLine("Formatting cancelled.");
-                    return 0;
-                }
+                console.WriteLine("Formatting cancelled.");
+                return 0;
             }
+        }
 
-            foreach (var (path, formattedContent) in sortedNeedsFormatting)
-            {
-                File.WriteAllText(path, formattedContent);
-            }
+        foreach (var (path, formattedContent) in sortedNeedsFormatting)
+        {
+            File.WriteAllText(path, formattedContent);
+        }
 
-            Console.WriteLine(
-                $"\n✓ Formatted {sortedNeedsFormatting.Count} file{(sortedNeedsFormatting.Count is 1 ? "" : "s")}.");
+        console.WriteLine();
+
+        WriteStatusLine(
+            console,
+            "✓",
+            FormatCommandTheme.Success,
+            $"Formatted {sortedNeedsFormatting.Count} file{(sortedNeedsFormatting.Count is 1 ? "" : "s")}.");
+
+        if (sortedDiagnostics.Count is not 0)
+        {
+            WriteStatusLine(
+                console,
+                "⚠",
+                FormatCommandTheme.Warning,
+                $"{sortedDiagnostics.Count} file(s) still contain syntax errors (see above).");
         }
 
         return 0;
+
+        void AddDiagnostics(
+            string filePath,
+            IReadOnlyList<FormatFileDiagnostic> fileDiagnostics)
+        {
+            if (fileDiagnostics.Count is not 0)
+            {
+                diagnostics.Add((filePath, fileDiagnostics));
+            }
+        }
     }
 
 
-    private static void PrintOverviewHeader(
+    public static FormatCommandColorMode ResolveColorMode(
+        FormatCommandColorMode? commandLineValue,
+        string? environmentValue)
+    {
+        if (commandLineValue is { } colorMode)
+        {
+            return colorMode;
+        }
+
+        if (string.IsNullOrWhiteSpace(environmentValue))
+        {
+            return FormatCommandColorMode.Auto;
+        }
+
+        if (Enum.TryParse<FormatCommandColorMode>(
+            environmentValue,
+            ignoreCase: true,
+            out var environmentColorMode) &&
+            Enum.IsDefined(environmentColorMode))
+        {
+            return environmentColorMode;
+        }
+
+        throw new ArgumentException(
+            $"Unsupported value '{environmentValue}' for {ColorEnvironmentVariable}. " +
+            "Expected auto, always, or never.");
+    }
+
+
+    public static AnsiSupport AnsiSupportForColorMode(
+        FormatCommandColorMode colorMode) =>
+        colorMode switch
+        {
+            FormatCommandColorMode.Auto => AnsiSupport.Detect,
+            FormatCommandColorMode.Always => AnsiSupport.Yes,
+            FormatCommandColorMode.Never => AnsiSupport.No,
+            _ => throw new ArgumentOutOfRangeException(nameof(colorMode)),
+        };
+
+
+    public static ColorSystemSupport ColorSystemSupportForColorMode(
+        FormatCommandColorMode colorMode) =>
+        colorMode switch
+        {
+            FormatCommandColorMode.Auto => ColorSystemSupport.Detect,
+            FormatCommandColorMode.Always => ColorSystemSupport.Standard,
+            FormatCommandColorMode.Never => ColorSystemSupport.NoColors,
+            _ => throw new ArgumentOutOfRangeException(nameof(colorMode)),
+        };
+
+
+    public static ConfirmationPrompt CreateOverwritePrompt() =>
+        new(
+            "Are you sure you want to overwrite these files with formatted versions?")
+        {
+            ChoicesStyle = FormatCommandTheme.Heading,
+            DefaultValue = false,
+            DefaultValueStyle = FormatCommandTheme.Heading,
+        };
+
+
+    public static void WriteOverview(
+        IAnsiConsole console,
         string commandLabel,
         int totalFiles,
         int alreadyFormattedCount,
         int needsFormattingCount,
-        int parseErrorCount,
-        bool verifyMode)
+        int errorCount)
     {
-        var width = GetConsoleWidth() ?? 80;
-        var innerWidth = width - 2;
+        var table =
+            new Table
+            {
+                Border = TableBorder.Rounded,
+                BorderStyle = FormatCommandTheme.Default,
+            }
+            .Title(
+                new TableTitle(
+                    Markup.Escape(commandLabel + " Summary"),
+                    FormatCommandTheme.Heading))
+            .HideHeaders()
+            .AddColumn(new TableColumn(new Text("Status")))
+            .AddColumn(new TableColumn(new Text("Count")).RightAligned())
+            .AddColumn(new TableColumn(new Text("Result")));
 
-        const int NumberEndColumn = 33;
+        table.AddRow(
+            new Text("Total files scanned:"),
+            CountText(totalFiles),
+            new Text(""));
 
-        static string FormatLine(string label, int number, string? suffix, int numberEndCol)
+        table.AddRow(
+            new Text("Already formatted:", FormatCommandTheme.Success),
+            CountText(alreadyFormattedCount, FormatCommandTheme.Success),
+            new Text("✓", FormatCommandTheme.Success));
+
+        var needsFormattingStyle =
+            needsFormattingCount is 0
+            ?
+            FormatCommandTheme.Success
+            :
+            FormatCommandTheme.Warning;
+
+        table.AddRow(
+            new Text("Need formatting:", needsFormattingStyle),
+            CountText(needsFormattingCount, needsFormattingStyle),
+            new Text(
+                needsFormattingCount is 0 ? "✓" : "○",
+                needsFormattingStyle));
+
+        if (errorCount is not 0)
         {
-            var numStr = number.ToString();
-            var spacesNeeded = numberEndCol - label.Length - numStr.Length;
-
-            if (spacesNeeded < 1)
-                spacesNeeded = 1;
-
-            return label + new string(' ', spacesNeeded) + numStr + (suffix ?? "");
+            table.AddRow(
+                new Text("Syntax errors:", FormatCommandTheme.Error),
+                CountText(errorCount, FormatCommandTheme.Error),
+                new Text("✗", FormatCommandTheme.Error));
         }
 
-        Console.WriteLine("╔" + new string('═', innerWidth) + "╗");
-        Console.WriteLine("║" + PadCenter(commandLabel + " Summary", innerWidth) + "║");
-        Console.WriteLine("╠" + new string('═', innerWidth) + "╣");
-
-        Console.WriteLine(
-            "║" + PadRight(FormatLine("  Total files scanned:", totalFiles, null, NumberEndColumn), innerWidth) + "║");
-
-        Console.WriteLine(
-            "║" +
-            PadRight(FormatLine("  Already formatted:", alreadyFormattedCount, "  ✓", NumberEndColumn), innerWidth) +
-            "║");
-
-        Console.WriteLine(
-            "║" +
-            PadRight(
-                FormatLine(
-                    "  Need formatting:",
-                    needsFormattingCount,
-                    "  " + (needsFormattingCount > 0 ? "○" : "✓"),
-                    NumberEndColumn),
-                innerWidth) + "║");
-
-        if (parseErrorCount > 0)
-        {
-            Console.WriteLine(
-                "║" + PadRight(FormatLine("  Syntax errors:", parseErrorCount, "  ✗", NumberEndColumn), innerWidth) +
-                "║");
-        }
-
-        Console.WriteLine("╚" + new string('═', innerWidth) + "╝");
-        Console.WriteLine("");
+        console.Write(table);
+        console.WriteLine();
     }
 
 
-    private static void PrintFilesWithErrors(
+    public static void WriteFilesWithErrors(
+        IAnsiConsole console,
         IReadOnlyList<(string path, string error)> errors,
         bool showGrouped)
     {
-        var width = GetConsoleWidth() ?? 80;
+        WriteRule(console, "FILES WITH ERRORS", FormatCommandTheme.Error);
+        console.WriteLine();
 
-        Console.WriteLine(new string('═', width));
-        Console.WriteLine(" ✗ FILES WITH ERRORS");
-        Console.WriteLine(new string('═', width));
-        Console.WriteLine("");
-
-        if (showGrouped && errors.Count >= MinFilesForDetailedOverview)
+        if (showGrouped &&
+            errors.Count >= MinFilesForDetailedOverview &&
+            console.Profile.Out.IsTerminal)
         {
-            var groupedByDir =
+            var groupedByDirectory =
                 errors
-                .GroupBy(e => Path.GetDirectoryName(e.path) ?? "")
-                .OrderBy(g => g.Key, StringComparer.Ordinal);
+                .GroupBy(error => Path.GetDirectoryName(error.path) ?? "")
+                .OrderBy(group => group.Key, StringComparer.Ordinal);
 
-            foreach (var group in groupedByDir)
+            foreach (var group in groupedByDirectory)
             {
-                var displayDir =
-                    string.IsNullOrEmpty(group.Key)
-                    ?
-                    "."
-                    :
-                    group.Key.Replace('\\', '/');
+                var tree =
+                    new Tree(
+                        new Text(
+                            DisplayDirectory(group.Key) + "/",
+                            FormatCommandTheme.Heading))
+                    {
+                        Guide = TreeGuide.Line,
+                        Style = FormatCommandTheme.Default,
+                    };
 
-                Console.WriteLine($"┌─ {displayDir}/");
-
-                foreach (var (filePath, error) in group.OrderBy(e => Path.GetFileName(e.path), StringComparer.Ordinal))
+                foreach (var (filePath, error) in
+                    group.OrderBy(
+                        item => Path.GetFileName(item.path),
+                        StringComparer.Ordinal))
                 {
-                    Console.WriteLine($"│  ✗ {Path.GetFileName(filePath)}");
-                    Console.WriteLine($"│      Error: {error}");
+                    var fileNode =
+                        tree.AddNode(
+                            StatusText(
+                                "✗",
+                                FormatCommandTheme.Error,
+                                Path.GetFileName(filePath)));
+
+                    fileNode.AddNode(new Text("Error: " + error));
                 }
 
-                Console.WriteLine("└─");
-                Console.WriteLine("");
+                console.Write(tree);
+                console.WriteLine();
+            }
+        }
+        else if (showGrouped && errors.Count >= MinFilesForDetailedOverview)
+        {
+            var groupedByDirectory =
+                errors
+                .GroupBy(error => Path.GetDirectoryName(error.path) ?? "")
+                .OrderBy(group => group.Key, StringComparer.Ordinal);
+
+            foreach (var group in groupedByDirectory)
+            {
+                console.Profile.Out.Writer.WriteLine(
+                    DisplayDirectory(group.Key) + "/");
+
+                foreach (var (filePath, error) in
+                    group.OrderBy(
+                        item => Path.GetFileName(item.path),
+                        StringComparer.Ordinal))
+                {
+                    WriteStatusLine(
+                        console,
+                        "✗",
+                        FormatCommandTheme.Error,
+                        Path.GetFileName(filePath));
+
+                    console.Profile.Out.Writer.WriteLine("  Error: " + error);
+                }
+
+                console.WriteLine();
             }
         }
         else
         {
-            foreach (var (filePath, error) in errors.OrderBy(e => e.path, StringComparer.Ordinal))
+            foreach (var (filePath, error) in
+                errors.OrderBy(item => item.path, StringComparer.Ordinal))
             {
-                Console.WriteLine($"✗ {filePath}");
-                Console.WriteLine($"  Error: {error}");
+                WriteStatusLine(
+                    console,
+                    "✗",
+                    FormatCommandTheme.Error,
+                    filePath);
+
+                console.Profile.Out.Writer.WriteLine("  Error: " + error);
             }
 
-            Console.WriteLine("");
+            console.WriteLine();
         }
     }
 
 
-    private static void PrintFilesNeedingFormatting(
+    public static void WriteFileDiagnostics(
+        IAnsiConsole console,
+        IReadOnlyList<(string path, IReadOnlyList<FormatFileDiagnostic> diagnostics)> filesWithDiagnostics)
+    {
+        var totalDiagnostics =
+            filesWithDiagnostics.Sum(file => file.diagnostics.Count);
+
+        WriteRule(
+            console,
+            $"SYNTAX ERRORS ({totalDiagnostics.ToString(CultureInfo.InvariantCulture)})",
+            FormatCommandTheme.Error);
+
+        console.WriteLine();
+
+        foreach (var (filePath, fileDiagnostics) in
+            filesWithDiagnostics.OrderBy(file => file.path, StringComparer.Ordinal))
+        {
+            if (!console.Profile.Out.IsTerminal)
+            {
+                WriteStatusLine(
+                    console,
+                    "✗",
+                    FormatCommandTheme.Error,
+                    filePath);
+
+                foreach (var diagnostic in
+                    fileDiagnostics
+                    .OrderBy(item => item.Line)
+                    .ThenBy(item => item.Column))
+                {
+                    console.Profile.Out.Writer.WriteLine(
+                        "  " + diagnostic.RenderText());
+                }
+
+                console.WriteLine();
+                continue;
+            }
+
+            var tree =
+                new Tree(
+                    StatusText(
+                        "✗",
+                        FormatCommandTheme.Error,
+                        filePath))
+                {
+                    Guide = TreeGuide.Line,
+                    Style = FormatCommandTheme.Default,
+                };
+
+            foreach (var diagnostic in
+                fileDiagnostics
+                .OrderBy(item => item.Line)
+                .ThenBy(item => item.Column))
+            {
+                tree.AddNode(new Text(diagnostic.RenderText()));
+            }
+
+            console.Write(tree);
+            console.WriteLine();
+        }
+    }
+
+
+    public static void WriteFilesNeedingFormatting(
+        IAnsiConsole console,
         IReadOnlyList<string> files,
         bool showGrouped)
     {
-        var width = GetConsoleWidth() ?? 80;
+        WriteRule(
+            console,
+            $"FILES NEEDING FORMATTING ({files.Count.ToString(CultureInfo.InvariantCulture)})",
+            FormatCommandTheme.Warning);
 
-        Console.WriteLine(new string('═', width));
-        Console.WriteLine($" ○ FILES NEEDING FORMATTING ({files.Count})");
-        Console.WriteLine(new string('═', width));
-        Console.WriteLine("");
+        console.WriteLine();
 
-        if (showGrouped && files.Count >= MinFilesForDetailedOverview)
+        if (showGrouped &&
+            files.Count >= MinFilesForDetailedOverview &&
+            console.Profile.Out.IsTerminal)
         {
-            var groupedByDir =
+            var groupedByDirectory =
                 files
-                .GroupBy(f => Path.GetDirectoryName(f) ?? "")
-                .OrderBy(g => g.Key, StringComparer.Ordinal);
+                .GroupBy(path => Path.GetDirectoryName(path) ?? "")
+                .OrderBy(group => group.Key, StringComparer.Ordinal);
 
-            foreach (var group in groupedByDir)
+            foreach (var group in groupedByDirectory)
             {
-                var displayDir =
-                    string.IsNullOrEmpty(group.Key)
-                    ?
-                    "."
-                    :
-                    group.Key.Replace('\\', '/');
-
                 var fileCount = group.Count();
+                var fileLabel = fileCount is 1 ? "file" : "files";
 
-                Console.WriteLine($"┌─ {displayDir}/ ({fileCount} file{(fileCount is 1 ? "" : "s")})");
+                var tree =
+                    new Tree(
+                        new Text(
+                            $"{DisplayDirectory(group.Key)}/ ({fileCount.ToString(CultureInfo.InvariantCulture)} {fileLabel})",
+                            FormatCommandTheme.Heading))
+                    {
+                        Guide = TreeGuide.Line,
+                        Style = FormatCommandTheme.Default,
+                    };
 
-                foreach (var filePath in group.OrderBy(f => Path.GetFileName(f), StringComparer.Ordinal))
+                foreach (var filePath in
+                    group.OrderBy(Path.GetFileName, StringComparer.Ordinal))
                 {
-                    Console.WriteLine($"│  ○ {Path.GetFileName(filePath)}");
+                    tree.AddNode(
+                        StatusText(
+                            "○",
+                            FormatCommandTheme.Warning,
+                            Path.GetFileName(filePath)));
                 }
 
-                Console.WriteLine("└─");
-                Console.WriteLine("");
+                console.Write(tree);
+                console.WriteLine();
+            }
+        }
+        else if (showGrouped && files.Count >= MinFilesForDetailedOverview)
+        {
+            var groupedByDirectory =
+                files
+                .GroupBy(path => Path.GetDirectoryName(path) ?? "")
+                .OrderBy(group => group.Key, StringComparer.Ordinal);
+
+            foreach (var group in groupedByDirectory)
+            {
+                var fileCount = group.Count();
+                var fileLabel = fileCount is 1 ? "file" : "files";
+
+                console.Profile.Out.Writer.WriteLine(
+                    $"{DisplayDirectory(group.Key)}/ " +
+                    $"({fileCount.ToString(CultureInfo.InvariantCulture)} {fileLabel})");
+
+                foreach (var filePath in
+                    group.OrderBy(Path.GetFileName, StringComparer.Ordinal))
+                {
+                    WriteStatusLine(
+                        console,
+                        "○",
+                        FormatCommandTheme.Warning,
+                        Path.GetFileName(filePath));
+                }
+
+                console.WriteLine();
             }
         }
         else
         {
-            foreach (var filePath in files.OrderBy(f => f, StringComparer.Ordinal))
+            foreach (var filePath in files.OrderBy(path => path, StringComparer.Ordinal))
             {
-                Console.WriteLine($"○ {filePath}");
+                WriteStatusLine(
+                    console,
+                    "○",
+                    FormatCommandTheme.Warning,
+                    filePath);
             }
         }
     }
 
 
-    private static void PrintSuccessMessage(int fileCount, bool verifyMode)
+    public static void WriteSuccessMessage(
+        IAnsiConsole console,
+        int fileCount,
+        bool verifyMode)
     {
-        Console.WriteLine("");
+        console.WriteLine();
 
-        if (fileCount is 1)
-        {
-            Console.WriteLine("✓ File is already properly formatted.");
-        }
-        else
-        {
-            Console.WriteLine($"✓ All {fileCount} file(s) are already properly formatted.");
-        }
+        WriteStatusLine(
+            console,
+            "✓",
+            FormatCommandTheme.Success,
+            fileCount is 1
+            ?
+            "File is already properly formatted."
+            :
+            $"All {fileCount.ToString(CultureInfo.InvariantCulture)} file(s) are already properly formatted.");
 
         if (verifyMode)
         {
-            Console.WriteLine("  Verification passed.");
+            console.WriteLine("  Verification passed.");
         }
     }
 
 
-    private static int? GetConsoleWidth()
+    private static IAnsiConsole CreateSystemConsole(
+        TextWriter writer,
+        FormatCommandColorMode colorMode) =>
+        AnsiConsole.Create(
+            new AnsiConsoleSettings
+            {
+                Ansi = AnsiSupportForColorMode(colorMode),
+                ColorSystem = ColorSystemSupportForColorMode(colorMode),
+                Out = new AnsiConsoleOutput(writer),
+            });
+
+
+    private static Text CountText(int count) =>
+        new(count.ToString(CultureInfo.InvariantCulture));
+
+
+    private static Text CountText(int count, Style style) =>
+        new(count.ToString(CultureInfo.InvariantCulture), style);
+
+
+    private static string DisplayDirectory(string directory) =>
+        string.IsNullOrEmpty(directory)
+        ?
+        "."
+        :
+        directory.Replace('\\', '/');
+
+
+    private static IRenderable StatusText(
+        string symbol,
+        Style symbolStyle,
+        string message) =>
+        new Markup(
+            $"[{symbolStyle.ToMarkup()}]{Markup.Escape(symbol + " " + message)}[/]");
+
+
+    private static void WriteStatusLine(
+        IAnsiConsole console,
+        string symbol,
+        Style symbolStyle,
+        string message)
     {
-        try
+        if (console.Profile.Out.IsTerminal)
         {
-            return Console.WindowWidth;
+            console.Write(new Text(symbol + " " + message, symbolStyle));
+            console.WriteLine();
+            return;
         }
-        catch
+
+        console.Write(new Text(symbol, symbolStyle));
+        console.Profile.Out.Writer.WriteLine(" " + message);
+    }
+
+
+    private static void WriteLabelledLine(
+        IAnsiConsole console,
+        string label,
+        Style labelStyle,
+        string message)
+    {
+        console.Write(new Text(label, labelStyle));
+        console.Profile.Out.Writer.WriteLine(" " + message);
+    }
+
+
+    private static bool ConfirmOverwrite(
+        IAnsiConsole console,
+        Func<string?> readLine)
+    {
+        if (console.Profile.Capabilities.Interactive)
         {
-            return null;
+            return console.Prompt(CreateOverwritePrompt());
         }
+
+        console.Profile.Out.Writer.WriteLine(
+            "Are you sure you want to overwrite these files with formatted versions? (y/n)");
+
+        var response =
+            readLine()
+            ?.Trim();
+
+        return
+            string.Equals(response, "y", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(response, "yes", StringComparison.OrdinalIgnoreCase);
     }
 
 
-    private static string PadCenter(string text, int width)
-    {
-        if (text.Length >= width)
-            return text[..width];
-
-        var totalPadding = width - text.Length;
-        var leftPadding = totalPadding / 2;
-        var rightPadding = totalPadding - leftPadding;
-
-        return new string(' ', leftPadding) + text + new string(' ', rightPadding);
-    }
-
-
-    private static string PadRight(string text, int width)
-    {
-        if (text.Length >= width)
-            return text[..width];
-
-        return text + new string(' ', width - text.Length);
-    }
+    private static void WriteRule(
+        IAnsiConsole console,
+        string title,
+        Style style) =>
+        console.Write(
+            new Rule(Markup.Escape(title))
+            {
+                Border = BoxBorder.Double,
+                Justification = Justify.Left,
+                Style = style,
+            });
 }

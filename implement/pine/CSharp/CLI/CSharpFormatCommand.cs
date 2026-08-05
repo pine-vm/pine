@@ -36,9 +36,12 @@ public class CSharpFormatCommand
                 "Check if all C# files are already formatted (for CI/automated reviews)"
             };
 
+        var colorOption = FormatCommandShared.CreateColorOption();
+
         formatCommand.Add(pathsArgument);
         formatCommand.Add(yesOption);
         formatCommand.Add(verifyNoChangesOption);
+        formatCommand.Add(colorOption);
 
         formatCommand.SetAction(
             (parseResult) =>
@@ -46,6 +49,7 @@ public class CSharpFormatCommand
                 var paths = parseResult.GetValue(pathsArgument);
                 var yes = parseResult.GetValue(yesOption);
                 var verifyNoChanges = parseResult.GetValue(verifyNoChangesOption);
+                var colorMode = parseResult.GetValue(colorOption);
 
                 return
                     FormatCommandShared.Execute(
@@ -54,7 +58,8 @@ public class CSharpFormatCommand
                         formatFile: FormatCSharpFile,
                         skipPrompt: yes,
                         verifyNoChanges: verifyNoChanges,
-                        commandLabel: "csharp-format");
+                        commandLabel: "csharp-format",
+                        colorMode: colorMode);
             });
 
         csharpCommand.Add(formatCommand);
@@ -70,14 +75,11 @@ public class CSharpFormatCommand
 
             if (formatResult.IsErrOrNull() is { } errResult)
             {
-                Console.Error.WriteLine(
-                    "Warning: Formatting cycle detected. " +
-                    "Cycle first string length: " + errResult.CycleFirstString.Length +
-                    ", cycle last string length: " + errResult.CycleLastString.Length);
-
                 return
                     new FormatFileResult.Error(
-                        "Formatting cycle detected");
+                        "Formatting cycle detected. " +
+                        "Cycle first string length: " + errResult.CycleFirstString.Length +
+                        ", cycle last string length: " + errResult.CycleLastString.Length);
             }
 
             var formatted =
