@@ -58,15 +58,24 @@ public class Program
 
         var rootCommand = new RootCommand("Pine: Elm DevTools and runtime\nTo get help or report an issue, see https://github.com/pine-vm/pine/discussions");
 
-        // Custom -v version option that shows "pine X.X.X" format
+        // Custom version option that shows "pine X.X.X" format
         var versionOption =
-            new Option<bool>("-v")
+            new Option<bool>("--version", ["-V"])
             {
                 Description =
                 "Show version information"
             };
 
+        var verboseOption =
+            new Option<bool>("--verbose", ["-v"])
+            {
+                Description =
+                    "Use verbose output",
+                Recursive = true
+            };
+
         rootCommand.Add(versionOption);
+        rootCommand.Add(verboseOption);
 
         // Install command
         var installCommand = CreateInstallCommand();
