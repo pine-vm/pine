@@ -229,7 +229,7 @@ public class Program
                 ["elm-test-rs"] = "Compile and run tests.",
                 ["make"] = "Compile Elm code.",
                 ["elm-format"] = "Format Elm module files.",
-                ["csharp"] = "C# development tools.",
+                ["dotnet"] = ".NET and C# development tools.",
                 ["describe"] = "Describe a composition.",
                 ["run"] = null,
                 ["run-server"] = "Run a server with a web-based admin interface.",
@@ -273,7 +273,7 @@ public class Program
             "elm-test-rs",
             "make",
             "elm-format",
-            "csharp",
+            "dotnet",
             "describe",
         };
 

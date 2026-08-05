@@ -10,7 +10,7 @@ public class CSharpFormatCommand
 {
     public static Command CreateCSharpFormatCommand()
     {
-        var csharpCommand = new Command("csharp", "C# development tools.");
+        var dotnetCommand = new Command("dotnet", ".NET and C# development tools.");
 
         var formatCommand = new Command("format", "Format C# source files.");
 
@@ -58,13 +58,13 @@ public class CSharpFormatCommand
                         formatFile: FormatCSharpFile,
                         skipPrompt: yes,
                         verifyNoChanges: verifyNoChanges,
-                        commandLabel: "csharp-format",
+                        commandLabel: "dotnet-format",
                         colorMode: colorMode);
             });
 
-        csharpCommand.Add(formatCommand);
+        dotnetCommand.Add(formatCommand);
 
-        return csharpCommand;
+        return dotnetCommand;
     }
 
     private static FormatFileResult FormatCSharpFile(string fileContent)
