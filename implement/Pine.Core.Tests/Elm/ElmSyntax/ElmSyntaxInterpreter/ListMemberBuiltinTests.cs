@@ -17,11 +17,12 @@ namespace Pine.Core.Tests.Elm.ElmSyntax.ElmSyntaxInterpreter;
 public class ListMemberBuiltinTests
 {
     private static readonly Lazy<ElmInterpreter.Prepared> s_prepared =
-        new(() => InterpreterTestHelper.PrepareKernelModules(
-            "List.elm",
-            "Basics.elm",
-            "Maybe.elm",
-            "Char.elm"));
+        new(
+            () => InterpreterTestHelper.PrepareKernelModules(
+                "List.elm",
+                "Basics.elm",
+                "Maybe.elm",
+                "Char.elm"));
 
     private static PineValue Evaluate(string expression) =>
         InterpreterTestHelper.EvaluateInModulesToPineValue(expression, s_prepared.Value);

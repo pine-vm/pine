@@ -216,7 +216,7 @@ public class ElmCompilerTestHelper
                 appCodeTree,
                 rootFilePaths: rootFilePaths,
                 syntaxOptimization:
-                    SyntaxOptimizationFromDisableInlining(disableInlining))
+                SyntaxOptimizationFromDisableInlining(disableInlining))
             .Extract(err => throw new Exception(err));
 
         var parsedEnv =
@@ -296,7 +296,8 @@ public class ElmCompilerTestHelper
 
         var lambdaLiftedModules =
             canonicalizedModules
-            .Select(module =>
+            .Select(
+                module =>
                 ElmSyntaxAbstractConversion.ToFile(
                     LambdaLifting.LiftLambdas(
                         ElmSyntaxAbstractConversion.FromFile(module))))
@@ -337,7 +338,8 @@ public class ElmCompilerTestHelper
             allFunctions
             .ToImmutableDictionary(
                 kvp => kvp.Key,
-                kvp => (kvp.Value.moduleName, kvp.Value.functionName, (Core.Elm.ElmSyntax.ElmSyntaxAbstract.Declaration.FunctionDeclaration)ElmSyntaxAbstractConversion.FromDeclaration(kvp.Value.declaration)));
+                kvp =>
+                (kvp.Value.moduleName, kvp.Value.functionName, (Core.Elm.ElmSyntax.ElmSyntaxAbstract.Declaration.FunctionDeclaration)ElmSyntaxAbstractConversion.FromDeclaration(kvp.Value.declaration)));
 
         // Compute and return dependency layouts
         var (layouts, _, _) =
@@ -636,7 +638,8 @@ public class ElmCompilerTestHelper
         // Build a map of function signatures from the file using TypeInference
         var functionSignatures =
             TypeInference.BuildFunctionSignaturesMap(
-                AbstractSyntaxTestConversion.AbsFile(abstractFile), moduleNameStr);
+                AbstractSyntaxTestConversion.AbsFile(abstractFile),
+                moduleNameStr);
 
         // Find the declaration
         foreach (var declaration in parsedFile.Declarations)

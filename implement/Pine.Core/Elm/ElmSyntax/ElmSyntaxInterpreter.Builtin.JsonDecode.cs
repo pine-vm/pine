@@ -561,10 +561,10 @@ public partial class ElmSyntaxInterpreter
 
         if (JsonCharIs(nextChar, ']'))
         {
-            return (ImmutableList<PineValueInProcess>.Empty, null, offset1 + 4);
+            return ([], null, offset1 + 4);
         }
 
-        return JsonParseArrayItems(ImmutableList<PineValueInProcess>.Empty, src, offset1);
+        return JsonParseArrayItems([], src, offset1);
     }
 
     private static (ImmutableList<PineValueInProcess>? Items, string? Error, int Offset)

@@ -167,6 +167,7 @@ public class ValuesEqualInProcessTests
     public void Lazy_and_evaluated_list_representations_are_equal()
     {
         var lazy = ListOf(Int(1), Int(2));
+
         var evaluated =
             ElmInterpreter.ToProcess(
                 new ElmValue.ElmList([ElmValue.Integer(1), ElmValue.Integer(2)]));

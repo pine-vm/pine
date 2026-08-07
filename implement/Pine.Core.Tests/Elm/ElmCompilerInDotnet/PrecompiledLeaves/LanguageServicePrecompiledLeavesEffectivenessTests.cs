@@ -163,8 +163,10 @@ public class LanguageServicePrecompiledLeavesEffectivenessTests
         string expectedComplex)
     {
         var function = GetTestFunction(functionName);
+
         var vmWithoutLeaves =
             CreateVM(ImmutableDictionary<PineValue, Func<PineValue, PineValue?>>.Empty);
+
         var vmWithLeaves = CreateVM(IntermediateVM.SetupVM.DefaultPrecompiledLeaves);
 
         var simpleNoLeaves = ApplyUnary(function, simple, vmWithoutLeaves);
@@ -186,8 +188,10 @@ public class LanguageServicePrecompiledLeavesEffectivenessTests
 
         complexWithLeaves.counters.InvocationCount
             .Should().Be(simpleWithLeaves.counters.InvocationCount);
+
         complexWithLeaves.counters.LoopIterationCount
             .Should().Be(simpleWithLeaves.counters.LoopIterationCount);
+
         complexWithLeaves.counters.InstructionCount
             .Should().Be(simpleWithLeaves.counters.InstructionCount);
     }

@@ -22,12 +22,13 @@ namespace Pine.Core.Tests.Elm.ElmSyntax.ElmSyntaxInterpreter;
 public class StringBuiltinTests
 {
     private static readonly Lazy<ElmInterpreter.Prepared> s_prepared =
-        new(() => InterpreterTestHelper.PrepareKernelModules(
-            "String.elm",
-            "List.elm",
-            "Basics.elm",
-            "Maybe.elm",
-            "Char.elm"));
+        new(
+            () => InterpreterTestHelper.PrepareKernelModules(
+                "String.elm",
+                "List.elm",
+                "Basics.elm",
+                "Maybe.elm",
+                "Char.elm"));
 
     private static PineValue Evaluate(string expression) =>
         InterpreterTestHelper.EvaluateInModulesToPineValue(expression, s_prepared.Value);
@@ -42,8 +43,8 @@ public class StringBuiltinTests
     /// </summary>
     private static void AssertBuiltinMatchesElm(string expression) =>
         InterpreterTestHelper.EvaluateInModulesToPineValue(expression, s_prepared.Value)
-            .Should()
-            .Be(InterpreterTestHelper.EvaluateInModulesWithoutBuiltinsToPineValue(expression, s_prepared.Value));
+        .Should()
+        .Be(InterpreterTestHelper.EvaluateInModulesWithoutBuiltinsToPineValue(expression, s_prepared.Value));
 
     // ============================================================
     // split

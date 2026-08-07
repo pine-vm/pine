@@ -16,6 +16,7 @@ public class DebugToStringTests
         yield return [IntegerEncoding.EncodeSignedInteger(11), "11"];
         yield return [ElmValueEncoding.StringAsPineValue("hello"), "\"hello\""];
         yield return [PineValue.EmptyList, "[]"];
+
         yield return
             [
             PineValue.List(
@@ -26,6 +27,7 @@ public class DebugToStringTests
                 ]),
             "[11,13,17]"
             ];
+
         yield return
             [
             PineValue.List(

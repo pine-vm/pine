@@ -88,8 +88,8 @@ public class ParseIncompleteTests
 
         // The ErrorLocation should point to where the actual parsing error occurred
         // For "decl_b =", the error occurs after the equals sign when expecting an expression
-        RenderParseError(incompleteDecl.Value.ParseError).Should().Be(
-            "Error at 8:1: Unfinished definition");
+        RenderParseError(incompleteDecl.Value.ParseError).Should()
+            .Be("Error at 8:1: Unfinished definition");
     }
 
     [Fact]
@@ -114,8 +114,8 @@ public class ParseIncompleteTests
         var incompleteDeclaration =
             parseFileOk.IncompleteDeclarations.Single();
 
-        RenderParseError(incompleteDeclaration.Value.ParseError).Should().Be(
-            "Error at 4:7: Unfinished definition");
+        RenderParseError(incompleteDeclaration.Value.ParseError).Should()
+            .Be("Error at 4:7: Unfinished definition");
     }
 
     [Fact]
@@ -140,8 +140,8 @@ public class ParseIncompleteTests
         var incompleteDeclaration =
             parseFileOk.IncompleteDeclarations.Single();
 
-        RenderParseError(incompleteDeclaration.Value.ParseError).Should().Be(
-            "Error at 4:16: Unfinished list");
+        RenderParseError(incompleteDeclaration.Value.ParseError).Should()
+            .Be("Error at 4:16: Unfinished list");
     }
 
     [Fact]

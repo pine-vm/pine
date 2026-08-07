@@ -141,7 +141,6 @@ public class ExpressionTests
                 Expression.BuiltinInst(
                     nameof(BuiltinFunction.int_add),
                     Expression.LitralInst(PineValue.EmptyList))),
-
             ];
 
         foreach (var testCase in testCases)
@@ -227,39 +226,42 @@ public class ExpressionTests
     {
         var testCases =
             new List<(Expression expression, int expectedMaxDepth)>
-        {
-            (Expression.EnvironmentInstance, 0),
+            {
+                (Expression.EnvironmentInstance, 0),
 
-            (Expression.LitralInst(PineValue.EmptyList), 0),
+                (Expression.LitralInst(PineValue.EmptyList), 0),
 
-            (Expression.ListInst([]), 0),
+                (Expression.ListInst([]), 0),
 
-            (Expression.ListInst([Expression.EnvironmentInstance]), 1),
+                (Expression.ListInst([Expression.EnvironmentInstance]), 1),
 
-            (Expression.ListInst(
-                [
-                Expression.EnvironmentInstance,
-                Expression.LitralInst(PineValue.EmptyList)
-                ]),
-                1),
-
-            (Expression.ConditionalInst(
-                Expression.ListInst([]),
-                Expression.ListInst(
+                (Expression.ListInst(
                     [
                     Expression.EnvironmentInstance,
-                    Expression.LitralInst(PineValue.EmptyList),
+                    Expression.LitralInst(PineValue.EmptyList)
                     ]),
-                Expression.ListInst([])), 2),
+                1),
 
-            (new Expression.Eval(
-                Expression.EnvironmentInstance,
-                Expression.EnvironmentInstance), 1),
+                (Expression.ConditionalInst(
+                    Expression.ListInst([]),
+                    Expression.ListInst(
+                        [
+                        Expression.EnvironmentInstance,
+                        Expression.LitralInst(PineValue.EmptyList),
+                        ]),
+                    Expression.ListInst([])),
+                2),
 
-            (Expression.BuiltinInst(
-                "function",
-                Expression.EnvironmentInstance), 1),
-        };
+                (new Expression.Eval(
+                    Expression.EnvironmentInstance,
+                    Expression.EnvironmentInstance),
+                1),
+
+                (Expression.BuiltinInst(
+                    "function",
+                    Expression.EnvironmentInstance),
+                1),
+            };
 
         for (var i = 0; i < testCases.Count; i++)
         {

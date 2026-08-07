@@ -37,8 +37,8 @@ public class MarkRecursiveFunctionsTests
             new(
                 Name: name,
                 Arguments:
-                [..
-                argumentNames.Select(
+                [
+                ..argumentNames.Select(
                     argumentName =>
                     new SyntaxTypes.Pattern.VarPattern(argumentName))
                 ],

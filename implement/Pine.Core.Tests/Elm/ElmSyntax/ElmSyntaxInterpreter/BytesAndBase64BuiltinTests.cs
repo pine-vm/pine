@@ -36,19 +36,19 @@ public class BytesAndBase64BuiltinTests
         // Kernel modules transitively referenced by the Bytes/Base64 functions under test,
         // addressed by their tree paths (the Bytes modules live in a sub-directory).
         string[][] kernelModulePaths =
-        [
-            ["Basics.elm"],
-            ["Char.elm"],
-            ["String.elm"],
-            ["List.elm"],
-            ["Maybe.elm"],
-            ["Result.elm"],
-            ["Tuple.elm"],
-            ["Bitwise.elm"],
-            ["Bytes.elm"],
-            ["Bytes", "Encode.elm"],
-            ["Bytes", "Decode.elm"],
-        ];
+            [
+                ["Basics.elm"],
+                ["Char.elm"],
+                ["String.elm"],
+                ["List.elm"],
+                ["Maybe.elm"],
+                ["Result.elm"],
+                ["Tuple.elm"],
+                ["Bitwise.elm"],
+                ["Bytes.elm"],
+                ["Bytes", "Encode.elm"],
+                ["Bytes", "Decode.elm"],
+            ];
 
         var moduleTexts = new List<string>();
 
@@ -74,7 +74,8 @@ public class BytesAndBase64BuiltinTests
         if (node is not Files.FileTree.FileNode fileNode)
         {
             throw new Exception(
-                "Expected elm-kernel-modules/" + string.Join("/", path) + " to be a file node, but got: " + node.GetType());
+                "Expected elm-kernel-modules/" + string.Join("/", path) + " to be a file node, but got: " +
+                node.GetType());
         }
 
         return Encoding.UTF8.GetString(fileNode.Bytes.Span);
@@ -93,8 +94,8 @@ public class BytesAndBase64BuiltinTests
     /// </summary>
     private static void AssertBuiltinMatchesElm(string expression) =>
         InterpreterTestHelper.EvaluateInModulesToPineValue(expression, s_prepared.Value)
-            .Should()
-            .Be(InterpreterTestHelper.EvaluateInModulesWithoutBuiltinsToPineValue(expression, s_prepared.Value));
+        .Should()
+        .Be(InterpreterTestHelper.EvaluateInModulesWithoutBuiltinsToPineValue(expression, s_prepared.Value));
 
     /// <summary>
     /// Builds an Elm expression evaluating to a <c>Bytes</c> value made of the given raw bytes,
@@ -222,7 +223,8 @@ public class BytesAndBase64BuiltinTests
     [InlineData(0x1F600)]
     public void EncodeCharsAsBlob_direct_single_code_point_matches_Elm(int codePoint) =>
         AssertBuiltinMatchesElm(
-            "(case " + BytesOf(
+            "(case " +
+            BytesOf(
                 (codePoint >> 24) & 0xFF,
                 (codePoint >> 16) & 0xFF,
                 (codePoint >> 8) & 0xFF,
@@ -232,11 +234,24 @@ public class BytesAndBase64BuiltinTests
     [Fact]
     public void EncodeCharsAsBlob_direct_multiple_code_points_matches_Elm() =>
         AssertBuiltinMatchesElm(
-            "(case " + BytesOf(
-                0, 0, 0, 0x41,
-                0, 0, 0, 0xE9,
-                0, 0, 0x67, 0x2C,
-                0, 0x01, 0xF6, 0x00) +
+            "(case " +
+            BytesOf(
+                0,
+                0,
+                0,
+                0x41,
+                0,
+                0,
+                0,
+                0xE9,
+                0,
+                0,
+                0x67,
+                0x2C,
+                0,
+                0x01,
+                0xF6,
+                0x00) +
             " of Bytes.Elm_Bytes blob -> Bytes.Encode.encodeCharsAsBlob blob)");
 
     // ============================================================
@@ -394,18 +409,23 @@ public class BytesAndBase64BuiltinTests
                 case '\\':
                     builder.Append("\\\\");
                     break;
+
                 case '"':
                     builder.Append("\\\"");
                     break;
+
                 case '\n':
                     builder.Append("\\n");
                     break;
+
                 case '\r':
                     builder.Append("\\r");
                     break;
+
                 case '\t':
                     builder.Append("\\t");
                     break;
+
                 default:
                     builder.Append(c);
                     break;

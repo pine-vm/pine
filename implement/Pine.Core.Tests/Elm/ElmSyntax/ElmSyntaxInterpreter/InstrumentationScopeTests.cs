@@ -22,11 +22,12 @@ namespace Pine.Core.Tests.Elm.ElmSyntax.ElmSyntaxInterpreter;
 public class InstrumentationScopeTests
 {
     private static readonly Lazy<ElmInterpreter.Prepared> s_prepared =
-        new(() => InterpreterTestHelper.PrepareKernelModules(
-            "List.elm",
-            "Basics.elm",
-            "Maybe.elm",
-            "Char.elm"));
+        new(
+            () => InterpreterTestHelper.PrepareKernelModules(
+                "List.elm",
+                "Basics.elm",
+                "Maybe.elm",
+                "Char.elm"));
 
     [Fact]
     public void Ambient_logger_attributes_direct_applications_per_function()

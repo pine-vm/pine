@@ -139,7 +139,8 @@ public class UnqualifiedReferenceModuleResolutionTests
         var callerContext =
             new ElmInterpreter.ApplicationContext(
                 CurrentTopLevel: DeclQualifiedName.Create(["P"], "entry"),
-                LocalBindings: System.Collections.Immutable.ImmutableDictionary<string, Core.Internal.PineValueInProcess>.Empty);
+                LocalBindings:
+                System.Collections.Immutable.ImmutableDictionary<string, Core.Internal.PineValueInProcess>.Empty);
 
         var application =
             new ElmInterpreter.Application(
@@ -156,9 +157,12 @@ public class UnqualifiedReferenceModuleResolutionTests
         // its body. Assert we got P.helper by checking its body builds a 2-argument Good.
         var body = continueWith.Function.Expression;
 
-        var application2 = body.Should().BeOfType<Core.Elm.ElmSyntax.ElmSyntaxAbstract.Expression.Application>().Subject;
+        var application2 =
+            body.Should().BeOfType<Core.Elm.ElmSyntax.ElmSyntaxAbstract.Expression.Application>().Subject;
 
-        var head = application2.Function.Should().BeOfType<Core.Elm.ElmSyntax.ElmSyntaxAbstract.Expression.Identifier>().Subject;
+        var head =
+            application2.Function.Should().BeOfType<Core.Elm.ElmSyntax.ElmSyntaxAbstract.Expression.Identifier>()
+            .Subject;
 
         head.QualifiedName.DeclName.Should().Be("Good");
 

@@ -2721,7 +2721,7 @@ public class ElmSyntaxParser
                             :
                             remainingConstructors[^1].Node).Range.End),
                         new SyntaxTypes.Declaration.ChoiceTypeDeclaration(
-                            new SyntaxTypes.ChoiceTypeStruct(
+                            new ChoiceTypeStruct(
                                 Documentation:
                                 docComment is null
                                 ?

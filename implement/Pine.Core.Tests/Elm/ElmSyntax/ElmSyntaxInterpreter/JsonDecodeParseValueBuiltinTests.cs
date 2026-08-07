@@ -42,21 +42,21 @@ public class JsonDecodeParseValueBuiltinTests
         // parseJsonStringToValue wrapper, addressed by their tree paths (Json modules live in a
         // sub-directory).
         string[][] modulePaths =
-        [
-            ["Basics.elm"],
-            ["Char.elm"],
-            ["String.elm"],
-            ["List.elm"],
-            ["Maybe.elm"],
-            ["Result.elm"],
-            ["Tuple.elm"],
-            ["Bitwise.elm"],
-            ["Array.elm"],
-            ["Set.elm"],
-            ["Dict.elm"],
-            ["Json", "Encode.elm"],
-            ["Json", "Decode.elm"],
-        ];
+            [
+                ["Basics.elm"],
+                ["Char.elm"],
+                ["String.elm"],
+                ["List.elm"],
+                ["Maybe.elm"],
+                ["Result.elm"],
+                ["Tuple.elm"],
+                ["Bitwise.elm"],
+                ["Array.elm"],
+                ["Set.elm"],
+                ["Dict.elm"],
+                ["Json", "Encode.elm"],
+                ["Json", "Decode.elm"],
+            ];
 
         var moduleTexts =
             modulePaths.Select(LoadKernelModuleSourceAtPath).ToList();
@@ -76,7 +76,8 @@ public class JsonDecodeParseValueBuiltinTests
         if (node is not Files.FileTree.FileNode fileNode)
         {
             throw new Exception(
-                "Expected elm-kernel-modules/" + string.Join("/", path) + " to be a file node, but got: " + node.GetType());
+                "Expected elm-kernel-modules/" + string.Join("/", path) + " to be a file node, but got: " +
+                node.GetType());
         }
 
         return Encoding.UTF8.GetString(fileNode.Bytes.Span);
@@ -100,18 +101,23 @@ public class JsonDecodeParseValueBuiltinTests
                 case '\\':
                     builder.Append("\\\\");
                     break;
+
                 case '"':
                     builder.Append("\\\"");
                     break;
+
                 case '\n':
                     builder.Append("\\n");
                     break;
+
                 case '\r':
                     builder.Append("\\r");
                     break;
+
                 case '\t':
                     builder.Append("\\t");
                     break;
+
                 default:
                     builder.Append(c);
                     break;
@@ -138,7 +144,8 @@ public class JsonDecodeParseValueBuiltinTests
 
         withBuiltin.Should().Be(
             withoutBuiltin,
-            "the parseValue builtin must produce the same value as the user-defined Elm implementation for input: " + jsonText);
+            "the parseValue builtin must produce the same value as the user-defined Elm implementation for input: " +
+            jsonText);
 
         return withBuiltin;
     }

@@ -48,7 +48,7 @@ public static class NamingErrorDetection
 
             var (moduleErrors, moduleShadowings) =
                 DetectNamingErrorsInModule(
-                    moduleGroup.Select(g => g.Declaration).ToList(),
+                    [.. moduleGroup.Select(g => g.Declaration)],
                     moduleLevelNames);
 
             allErrors.AddRange(moduleErrors);
@@ -138,10 +138,10 @@ public static class NamingErrorDetection
                             declarationPath);
                 }
 
-            case SyntaxTypes.Declaration.ChoiceTypeDeclaration:
-            case SyntaxTypes.Declaration.AliasDeclaration:
-            case SyntaxTypes.Declaration.PortDeclaration:
-            case SyntaxTypes.Declaration.InfixDeclaration:
+            case Declaration.ChoiceTypeDeclaration:
+            case Declaration.AliasDeclaration:
+            case Declaration.PortDeclaration:
+            case Declaration.InfixDeclaration:
 
                 // These declaration types don't contain expressions with local scopes
                 return ([], []);

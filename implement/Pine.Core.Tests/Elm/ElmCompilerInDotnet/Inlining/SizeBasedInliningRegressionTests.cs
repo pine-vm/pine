@@ -157,7 +157,7 @@ public class SizeBasedInliningRegressionTests
                 treeWithTest,
                 rootFilePaths: rootFilePaths,
                 syntaxOptimization:
-                    ElmCompilerTestHelper.SyntaxOptimizationFromDisableInlining(disableInlining))
+                ElmCompilerTestHelper.SyntaxOptimizationFromDisableInlining(disableInlining))
             .Extract(err => throw new Exception("Failed compiling: " + err)).compiledEnvValue;
     }
 

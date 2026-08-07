@@ -1352,7 +1352,8 @@ public class ElmLanguageServiceTests
             "[ "
             + string.Join(
                 ", ",
-                workspaceFiles.Select(file =>
+                workspaceFiles.Select(
+                    file =>
                     "( " + EncodeAsElmStringLiteral(file.path)
                     + ", " + EncodeAsElmStringLiteral(file.text) + " )"))
             + " ]";

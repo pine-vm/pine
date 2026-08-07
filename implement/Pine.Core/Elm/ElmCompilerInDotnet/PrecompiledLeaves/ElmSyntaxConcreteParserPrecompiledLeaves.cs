@@ -17,25 +17,26 @@ namespace Pine.Core.Elm.ElmCompilerInDotnet.PrecompiledLeaves;
 public static class ElmSyntaxConcreteParserPrecompiledLeaves
 {
     private const string FromStringModuleName = "ElmSyntax.Concrete.Parser.FromString";
+
     private const string TokensFromStringModuleName = "ElmSyntax.Concrete.Parser.TokensFromString";
 
     private static readonly string[] s_tokensFromStringFunctionNames =
-    [
-        "skipInlineWhitespace",
-        "skipToIdentifierEnd",
-        "skipToAsciiDecimalDigitEnd",
-        "skipToAsciiHexDigitEnd",
-        "scanUnicodeEscapeDigits",
-        "findLiteralRunEnd",
-        "skipOperatorChars",
-    ];
+        [
+            "skipInlineWhitespace",
+            "skipToIdentifierEnd",
+            "skipToAsciiDecimalDigitEnd",
+            "skipToAsciiHexDigitEnd",
+            "scanUnicodeEscapeDigits",
+            "findLiteralRunEnd",
+            "skipOperatorChars",
+        ];
 
     private static readonly string[] s_fromStringFunctionNames =
-    [
-        "dropTrivia",
-        "tokenLexemes",
-        "hexStringToInt",
-    ];
+        [
+            "dropTrivia",
+            "tokenLexemes",
+            "hexStringToInt",
+        ];
 
     /// <summary>Gets the leaf key for skipping inline whitespace.</summary>
     public static PineValue SkipInlineWhitespaceLeafKey => LeafKey(TokensFromStringModuleName, "skipInlineWhitespace");
@@ -79,6 +80,7 @@ public static class ElmSyntaxConcreteParserPrecompiledLeaves
     {
         var mergedTree = BundledFiles.ElmKernelModulesDefault.Value;
         var compilerSourceTree = BundledFiles.CompilerSourceContainerFilesDefault.Value;
+
         var parserSourceTree =
             compilerSourceTree.GetNodeAtPath(["pine-elm-syntax", "src"])
             ?? throw new Exception("Did not find pine-elm-syntax/src");
@@ -154,10 +156,10 @@ public static class ElmSyntaxConcreteParserPrecompiledLeaves
             environment,
             "skipToIdentifierEnd",
             codePoint =>
-                codePoint is '_' ||
-                codePoint is >= '0' and <= '9' ||
-                codePoint is >= 'a' and <= 'z' ||
-                codePoint is >= 'A' and <= 'Z');
+            codePoint is '_' ||
+            codePoint is >= '0' and <= '9' ||
+            codePoint is >= 'a' and <= 'z' ||
+            codePoint is >= 'A' and <= 'Z');
 
     /// <summary>Scans from the current offset to an ASCII decimal number's end.</summary>
     public static PineValue? SkipToAsciiDecimalDigitEndLeafDelegate(PineValue environment) =>
@@ -237,10 +239,10 @@ public static class ElmSyntaxConcreteParserPrecompiledLeaves
             if ((termination is LiteralTermination.SingleQuote && codePoint is '\'') ||
                 (termination is LiteralTermination.DoubleQuote && codePoint is '"') ||
                 (termination is LiteralTermination.TripleQuote &&
-                 codePoint is '"' &&
-                 index + 2 < source.Length &&
-                 source[index + 1] is '"' &&
-                 source[index + 2] is '"'))
+                codePoint is '"' &&
+                index + 2 < source.Length &&
+                source[index + 1] is '"' &&
+                source[index + 2] is '"'))
             {
                 return LiteralRunResult(offset, "LiteralRunTermination");
             }
@@ -257,11 +259,14 @@ public static class ElmSyntaxConcreteParserPrecompiledLeaves
 
             if (codePoint is '\r')
             {
-                return LiteralRunResult(
-                    offset,
-                    index + 1 < source.Length && source[index + 1] is '\n'
-                    ? "LiteralRunNewlineCRLF"
-                    : "LiteralRunNewlineCR");
+                return
+                    LiteralRunResult(
+                        offset,
+                        index + 1 < source.Length && source[index + 1] is '\n'
+                        ?
+                        "LiteralRunNewlineCRLF"
+                        :
+                        "LiteralRunNewlineCR");
             }
 
             offset++;
@@ -515,11 +520,17 @@ public static class ElmSyntaxConcreteParserPrecompiledLeaves
         s_leafInfos.Value[(moduleName, functionName)].EnvFunctionsValue;
 
     private static readonly PineValue s_nothing = Tag("Nothing");
+
     private static readonly PineValue s_singleQuoteTermination = Tag("SingleQuoteTermination");
+
     private static readonly PineValue s_doubleQuoteTermination = Tag("DoubleQuoteTermination");
+
     private static readonly PineValue s_tripleQuoteTermination = Tag("TripleQuoteTermination");
+
     private static readonly PineValue s_commentTokenType = Tag("Comment");
+
     private static readonly PineValue s_tokenTypeFieldName = StringEncoding.ValueFromString("tokenType");
+
     private static readonly PineValue s_lexemeFieldName = StringEncoding.ValueFromString("lexeme");
 
     /// <summary>Gets the default precompiled parser leaves by leaf key.</summary>

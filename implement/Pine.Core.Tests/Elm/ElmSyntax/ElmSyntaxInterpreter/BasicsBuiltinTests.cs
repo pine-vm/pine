@@ -111,7 +111,8 @@ public class BasicsBuiltinTests
     }
 
     private static int CountBasicsCompareApplications(IReadOnlyList<ApplicationLogEntry> log) =>
-        log.Count(entry =>
+        log.Count(
+            entry =>
             entry is ApplicationLogEntry.Direct direct &&
             direct.Application.FunctionName.FullName is "Basics.compare");
 

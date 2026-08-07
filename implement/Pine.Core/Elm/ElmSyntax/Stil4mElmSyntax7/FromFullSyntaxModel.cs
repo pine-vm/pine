@@ -210,7 +210,7 @@ public static class FromFullSyntaxModel
     /// Converts a <see cref="TypeStruct"/>
     /// </summary>
     public static TypeStruct Convert(
-        FullTypes.ChoiceTypeStruct typeStruct) =>
+        ChoiceTypeStruct typeStruct) =>
         new(
             Documentation: typeStruct.Documentation,
             Name: typeStruct.Name,

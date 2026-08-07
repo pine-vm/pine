@@ -150,10 +150,11 @@ public class SnapshotTestFormatApplicationParenthesesTests
         SyntaxTypes.Expression function,
         params SyntaxTypes.Expression[] arguments)
     {
-        var nodes = new System.Collections.Generic.List<Node<SyntaxTypes.Expression>>
-        {
-            WrapNode(function),
-        };
+        var nodes =
+            new System.Collections.Generic.List<Node<SyntaxTypes.Expression>>
+            {
+                WrapNode(function),
+            };
 
         foreach (var argument in arguments)
         {

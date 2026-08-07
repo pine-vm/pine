@@ -1,6 +1,6 @@
+using Pine.Core.CodeAnalysis;
 using Pine.Core.Elm.ElmSyntax;
 using Pine.Core.Elm.ElmSyntax.SyntaxModel;
-using Pine.Core.CodeAnalysis;
 using System.Collections.Immutable;
 using System.Linq;
 

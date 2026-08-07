@@ -140,7 +140,7 @@ public class ConvertToConcreteTests
         var abstractFile = Abstract.ConvertFromConcrete.FromFile(file);
         var concreteFile = Abstract.ConvertToConcrete.FromFile(abstractFile);
 
-        var rendered = Pine.Core.Elm.ElmSyntax.Avh4Format.FormatToString(concreteFile);
+        var rendered = Core.Elm.ElmSyntax.Avh4Format.FormatToString(concreteFile);
 
         var reparsed =
             ElmSyntaxParser.ParseModuleText(rendered)

@@ -25,9 +25,10 @@ namespace Pine.Core.Tests.Elm.ElmSyntax.ElmSyntaxInterpreter;
 public class CharBuiltinTests
 {
     private static readonly Lazy<ElmInterpreter.Prepared> s_prepared =
-        new(() => InterpreterTestHelper.PrepareKernelModules(
-            "Char.elm",
-            "Basics.elm"));
+        new(
+            () => InterpreterTestHelper.PrepareKernelModules(
+                "Char.elm",
+                "Basics.elm"));
 
     private static PineValue EvaluateWithBuiltins(string expression) =>
         InterpreterTestHelper.EvaluateInModulesToPineValue(expression, s_prepared.Value);
@@ -69,8 +70,8 @@ public class CharBuiltinTests
 
                 EvaluateWithBuiltins(expression)
                     .Should().Be(
-                        EvaluateWithoutBuiltins(expression),
-                        because: "builtin " + expression + " must match the Elm implementation");
+                    EvaluateWithoutBuiltins(expression),
+                    because: "builtin " + expression + " must match the Elm implementation");
             }
         }
     }
@@ -132,8 +133,10 @@ public class CharBuiltinTests
         result.Extract(err => throw new Exception(err.ToString()));
 
         return
-            [.. log
+            [
+            .. log
             .OfType<ApplicationLogEntry.Direct>()
-            .Select(direct => direct.Application.FunctionName.FullName)];
+            .Select(direct => direct.Application.FunctionName.FullName)
+            ];
     }
 }

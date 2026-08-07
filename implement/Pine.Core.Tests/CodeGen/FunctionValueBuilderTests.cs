@@ -716,9 +716,7 @@ public class FunctionValueBuilderTests
     {
         var innerExpression =
             Expression.ListInst(
-                Enumerable.Range(1, parameterCount)
-                .Select(index => BuildExpressionForPathInEnvironment([index]))
-                .ToArray());
+                [.. Enumerable.Range(1, parameterCount).Select(index => BuildExpressionForPathInEnvironment([index]))]);
 
         var envFunction = PineValue.Blob([100]);
 
@@ -1853,21 +1851,23 @@ public class FunctionValueBuilderTests
 
         var innerExpr = BuildLinearInnerExpr(parameterCount, withEnvFunctions: false);
 
-        var leadingValues = new[]
-        {
-            IntegerEncoding.EncodeSignedInteger(40),
-            IntegerEncoding.EncodeSignedInteger(41),
-        };
+        var leadingValues =
+            new[]
+            {
+                IntegerEncoding.EncodeSignedInteger(40),
+                IntegerEncoding.EncodeSignedInteger(41),
+            };
 
         // The partial application site environment is the list [leadingArg0, leadingArg1]; the embedded
         // argument expressions read items 0 and 1 from it.
         var siteEnvironment = PineValue.List([.. leadingValues]);
 
-        var leadingArgExpressions = new Expression[]
-        {
-            ListItemFromIndex(0, Expression.EnvironmentInstance),
-            ListItemFromIndex(1, Expression.EnvironmentInstance),
-        };
+        var leadingArgExpressions =
+            new Expression[]
+            {
+                ListItemFromIndex(0, Expression.EnvironmentInstance),
+                ListItemFromIndex(1, Expression.EnvironmentInstance),
+            };
 
         var emittedExpr =
             FunctionValueBuilder.EmitCurriedFunctionTemplateWithLeadingArgs(
@@ -1915,8 +1915,10 @@ public class FunctionValueBuilderTests
 
         var envFunctions =
             withEnvFunctions
-            ? new[] { IntegerEncoding.EncodeSignedInteger(1000) }
-            : null;
+            ?
+            new[] { IntegerEncoding.EncodeSignedInteger(1000) }
+            :
+            null;
 
         var innerExpr = BuildLinearInnerExpr(parameterCount, withEnvFunctions);
 
@@ -2087,7 +2089,9 @@ public class FunctionValueBuilderTests
         int leadingCount)
     {
         AssertPartialApplicationFromExpressionConsistency(
-            parameterCount, leadingCount, withEnvFunctions: false);
+            parameterCount,
+            leadingCount,
+            withEnvFunctions: false);
     }
 
     [Theory]
@@ -2111,7 +2115,9 @@ public class FunctionValueBuilderTests
         int leadingCount)
     {
         AssertPartialApplicationFromExpressionConsistency(
-            parameterCount, leadingCount, withEnvFunctions: true);
+            parameterCount,
+            leadingCount,
+            withEnvFunctions: true);
     }
 
     [Fact]
@@ -2192,8 +2198,10 @@ public class FunctionValueBuilderTests
 
         var envFunctions =
             withEnvFunctions
-            ? new[] { IntegerEncoding.EncodeSignedInteger(1000) }
-            : null;
+            ?
+            new[] { IntegerEncoding.EncodeSignedInteger(1000) }
+            :
+            null;
 
         var innerExpr = BuildLinearInnerExpr(parameterCount, withEnvFunctions);
 

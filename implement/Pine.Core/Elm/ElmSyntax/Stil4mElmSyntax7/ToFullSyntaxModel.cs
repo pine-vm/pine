@@ -232,7 +232,7 @@ public static class ToFullSyntaxModel
     /// <summary>
     /// Converts a TypeStruct.
     /// </summary>
-    public static FullTypes.ChoiceTypeStruct Convert(
+    public static ChoiceTypeStruct Convert(
         TypeStruct typeStruct) =>
         new(
             Documentation: typeStruct.Documentation is { } doc ? ConvertNodePreserveValue(doc) : null,

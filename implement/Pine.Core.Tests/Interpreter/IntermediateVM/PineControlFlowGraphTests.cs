@@ -11,12 +11,12 @@ public class PineControlFlowGraphTests
     public void Round_trip_preserves_instructions_and_explicit_invoke_continuation()
     {
         StackInstruction[] instructions =
-        [
-            StackInstruction.Local_Get(0),
-            StackInstruction.Local_Get(1),
-            StackInstruction.Eval_Binary,
-            StackInstruction.Return,
-        ];
+            [
+                StackInstruction.Local_Get(0),
+                StackInstruction.Local_Get(1),
+                StackInstruction.Eval_Binary,
+                StackInstruction.Return,
+            ];
 
         var graph = PineControlFlowGraph.FromInstructions(instructions);
 
@@ -30,22 +30,22 @@ public class PineControlFlowGraphTests
     public void Backedge_with_empty_stack_round_trips()
     {
         StackInstruction[] instructions =
-        [
-            StackInstruction.Local_Get(0),
-            StackInstruction.Pop,
-            StackInstruction.Jump_Unconditional(-2),
-            StackInstruction.Push_Literal(PineValue.EmptyList),
-            StackInstruction.Return,
-        ];
+            [
+                StackInstruction.Local_Get(0),
+                StackInstruction.Pop,
+                StackInstruction.Jump_Unconditional(-2),
+                StackInstruction.Push_Literal(PineValue.EmptyList),
+                StackInstruction.Return,
+            ];
 
         var graph = PineControlFlowGraph.FromInstructions(instructions);
 
         graph.Blocks[0].Terminator
             .Should().BeEquivalentTo(
-                new PineControlFlowTerminator.Jump(
-                    Target: new PineBlockId(0),
-                    Arguments: [],
-                    Instruction: instructions[2]));
+            new PineControlFlowTerminator.Jump(
+                Target: new PineBlockId(0),
+                Arguments: [],
+                Instruction: instructions[2]));
 
         graph.LowerToStackInstructions().Should().Equal(instructions);
     }
@@ -54,10 +54,10 @@ public class PineControlFlowGraphTests
     public void Backedge_with_live_stack_value_is_rejected()
     {
         StackInstruction[] instructions =
-        [
-            StackInstruction.Push_Literal(PineValue.EmptyList),
-            StackInstruction.Jump_Unconditional(-1),
-        ];
+            [
+                StackInstruction.Push_Literal(PineValue.EmptyList),
+                StackInstruction.Jump_Unconditional(-1),
+            ];
 
         var act = () => PineControlFlowGraph.FromInstructions(instructions);
 

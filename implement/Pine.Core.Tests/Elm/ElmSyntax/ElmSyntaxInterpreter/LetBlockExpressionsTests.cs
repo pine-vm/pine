@@ -33,7 +33,8 @@ public class LetBlockExpressionsTests
         var mainBody = InterpreterTestHelper.GetFunctionBody(declarations, "main");
 
         var result =
-            ElmInterpreter.InterpretAsElmValue(mainBody, declarations).Extract(err => throw new System.Exception(err.ToString()));
+            ElmInterpreter.InterpretAsElmValue(mainBody, declarations).Extract(
+                err => throw new System.Exception(err.ToString()));
 
         result.Should().Be(ElmValue.Integer(42));
     }
@@ -62,7 +63,8 @@ public class LetBlockExpressionsTests
         var mainBody = InterpreterTestHelper.GetFunctionBody(declarations, "main");
 
         var result =
-            ElmInterpreter.InterpretAsElmValue(mainBody, declarations).Extract(err => throw new System.Exception(err.ToString()));
+            ElmInterpreter.InterpretAsElmValue(mainBody, declarations).Extract(
+                err => throw new System.Exception(err.ToString()));
 
         result.Should().Be(ElmValue.Integer(7));
     }
@@ -91,7 +93,8 @@ public class LetBlockExpressionsTests
         var mainBody = InterpreterTestHelper.GetFunctionBody(declarations, "main");
 
         var result =
-            ElmInterpreter.InterpretAsElmValue(mainBody, declarations).Extract(err => throw new System.Exception(err.ToString()));
+            ElmInterpreter.InterpretAsElmValue(mainBody, declarations).Extract(
+                err => throw new System.Exception(err.ToString()));
 
         result.Should().Be(ElmValue.Integer(30));
     }
@@ -128,7 +131,8 @@ public class LetBlockExpressionsTests
         var mainBody = InterpreterTestHelper.GetFunctionBody(declarations, "main");
 
         var result =
-            ElmInterpreter.InterpretAsElmValue(mainBody, declarations).Extract(err => throw new System.Exception(err.ToString()));
+            ElmInterpreter.InterpretAsElmValue(mainBody, declarations).Extract(
+                err => throw new System.Exception(err.ToString()));
 
         result.Should().Be(ElmValue.Integer(30));
     }
@@ -162,7 +166,8 @@ public class LetBlockExpressionsTests
         var mainBody = InterpreterTestHelper.GetFunctionBody(declarations, "main");
 
         var result =
-            ElmInterpreter.InterpretAsElmValue(mainBody, declarations).Extract(err => throw new System.Exception(err.ToString()));
+            ElmInterpreter.InterpretAsElmValue(mainBody, declarations).Extract(
+                err => throw new System.Exception(err.ToString()));
 
         result.Should().Be(ElmValue.Integer(42));
     }
@@ -193,7 +198,8 @@ public class LetBlockExpressionsTests
         var mainBody = InterpreterTestHelper.GetFunctionBody(declarations, "main");
 
         var result =
-            ElmInterpreter.InterpretAsElmValue(mainBody, declarations).Extract(err => throw new System.Exception(err.ToString()));
+            ElmInterpreter.InterpretAsElmValue(mainBody, declarations).Extract(
+                err => throw new System.Exception(err.ToString()));
 
         result.Should().Be(ElmValue.Integer(42));
     }
@@ -225,7 +231,8 @@ public class LetBlockExpressionsTests
         var mainBody = InterpreterTestHelper.GetFunctionBody(declarations, "main");
 
         var result =
-            ElmInterpreter.InterpretAsElmValue(mainBody, declarations).Extract(err => throw new System.Exception(err.ToString()));
+            ElmInterpreter.InterpretAsElmValue(mainBody, declarations).Extract(
+                err => throw new System.Exception(err.ToString()));
 
         result.Should().Be(ElmValue.Integer(15));
     }
@@ -263,7 +270,8 @@ public class LetBlockExpressionsTests
         var mainBody = InterpreterTestHelper.GetFunctionBody(declarations, "main");
 
         var result =
-            ElmInterpreter.InterpretAsElmValue(mainBody, declarations).Extract(err => throw new System.Exception(err.ToString()));
+            ElmInterpreter.InterpretAsElmValue(mainBody, declarations).Extract(
+                err => throw new System.Exception(err.ToString()));
 
         result.Should().Be(ElmValue.Integer(2));
     }
@@ -297,7 +305,8 @@ public class LetBlockExpressionsTests
         var mainBody = InterpreterTestHelper.GetFunctionBody(declarations, "main");
 
         var result =
-            ElmInterpreter.InterpretAsElmValue(mainBody, declarations).Extract(err => throw new System.Exception(err.ToString()));
+            ElmInterpreter.InterpretAsElmValue(mainBody, declarations).Extract(
+                err => throw new System.Exception(err.ToString()));
 
         result.Should().Be(ElmValue.Integer(107));
     }
@@ -377,7 +386,8 @@ public class LetBlockExpressionsTests
         var mainBody = InterpreterTestHelper.GetFunctionBody(declarations, "main");
 
         var result =
-            ElmInterpreter.InterpretAsElmValue(mainBody, declarations).Extract(err => throw new System.Exception(err.ToString()));
+            ElmInterpreter.InterpretAsElmValue(mainBody, declarations).Extract(
+                err => throw new System.Exception(err.ToString()));
 
         // 5 + 4 + 3 + 2 + 1 + 0 = 15
         result.Should().Be(ElmValue.Integer(15));
@@ -425,7 +435,8 @@ public class LetBlockExpressionsTests
         var mainBody = InterpreterTestHelper.GetFunctionBody(declarations, "main");
 
         var result =
-            ElmInterpreter.InterpretAsElmValue(mainBody, declarations).Extract(err => throw new System.Exception(err.ToString()));
+            ElmInterpreter.InterpretAsElmValue(mainBody, declarations).Extract(
+                err => throw new System.Exception(err.ToString()));
 
         // result(n) = 10 + 2 * n; summed over n = 3, 2, 1, 0 -> 16 + 14 + 12 + 10 = 52
         result.Should().Be(ElmValue.Integer(52));

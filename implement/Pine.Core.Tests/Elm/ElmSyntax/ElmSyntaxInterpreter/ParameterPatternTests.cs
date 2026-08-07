@@ -20,7 +20,8 @@ public class ParameterPatternTests
         var mainBody = InterpreterTestHelper.GetFunctionBody(declarations, "main");
 
         var result =
-            ElmInterpreter.InterpretAsElmValue(mainBody, declarations).Extract(err => throw new System.Exception(err.ToString()));
+            ElmInterpreter.InterpretAsElmValue(mainBody, declarations).Extract(
+                err => throw new System.Exception(err.ToString()));
 
         return ElmValue.RenderAsElmExpression(result).expressionString;
     }

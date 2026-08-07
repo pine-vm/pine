@@ -51,12 +51,13 @@ public class DictBuiltinTests
     // ============================================================
 
     private static readonly Lazy<ElmInterpreter.Prepared> s_prepared =
-        new(() => InterpreterTestHelper.PrepareKernelModules(
-            "Basics.elm",
-            "List.elm",
-            "Maybe.elm",
-            "Char.elm",
-            "Dict.elm"));
+        new(
+            () => InterpreterTestHelper.PrepareKernelModules(
+                "Basics.elm",
+                "List.elm",
+                "Maybe.elm",
+                "Char.elm",
+                "Dict.elm"));
 
     private static PineValue Evaluate(string expression) =>
         InterpreterTestHelper.EvaluateInModulesToPineValue(expression, s_prepared.Value);
@@ -308,6 +309,7 @@ public class DictBuiltinTests
         var result = Get(Str("c"), dict);
 
         IsJust(result).Should().BeTrue();
+
         ElmInterpreter.RenderAsElmExpression(JustValue(result)).expressionString
             .Should().Be("\"target\"");
     }
@@ -342,6 +344,7 @@ public class DictBuiltinTests
         var result = Get(Str("a"), dict);
 
         IsJust(result).Should().BeTrue();
+
         ElmInterpreter.RenderAsElmExpression(JustValue(result)).expressionString
             .Should().Be("1");
     }

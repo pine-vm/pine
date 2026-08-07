@@ -984,7 +984,9 @@ public class BuiltinOperatorLoweringTests
 
         var moduleAbstract =
             loweredModules
-            .Single(m => Core.Elm.ElmSyntax.ElmSyntaxAbstract.Module.GetModuleName(m.ModuleDefinition).SequenceEqual(["Test"]));
+            .Single(
+                m =>
+                Core.Elm.ElmSyntax.ElmSyntaxAbstract.Module.GetModuleName(m.ModuleDefinition).SequenceEqual(["Test"]));
 
         return ElmSyntaxAbstractConversion.ToFile(moduleAbstract);
     }
