@@ -686,6 +686,57 @@ public class AddInferredTypeAnnotationsTests
     }
 
     [Fact]
+    public void Infers_type_through_foreign_generic_function_return_alias()
+    {
+        var typesModuleText =
+            """"
+            module Types exposing (base)
+
+
+            type alias Callback value =
+                Int -> value
+
+
+            base : Bool -> Callback String
+            base _ _ =
+                "done"
+
+            """";
+
+        var mainModuleText =
+            """"
+            module Test exposing (..)
+
+            import Types exposing (base)
+
+
+            result =
+                base True 1
+
+            """";
+
+        var expectedModuleText =
+            """"
+            module Test exposing (..)
+
+            import Types exposing (base)
+
+
+            result : String
+            result =
+                base True 1
+
+            """";
+
+        var result =
+            AddAllTypeAnnotationsAndFormatToString(
+                TestCase.DefaultAppWithoutPackages([typesModuleText, mainModuleText]),
+                ["Test"]);
+
+        result.Trim().Should().Be(expectedModuleText.Trim());
+    }
+
+    [Fact]
     public void Infers_type_from_top_level_record_expression()
     {
         var scenario =

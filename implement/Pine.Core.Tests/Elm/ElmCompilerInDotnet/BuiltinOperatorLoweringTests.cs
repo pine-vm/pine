@@ -564,6 +564,81 @@ public class BuiltinOperatorLoweringTests
             """.Trim());
     }
 
+    [Fact]
+    public void Lowers_eq_for_number_inferred_from_literal()
+    {
+        var loweredModule =
+            LowerOperators(
+                """
+                module Test exposing (..)
+
+
+                isZero value =
+                    value == 0
+                """);
+
+        RenderCanonicalized(loweredModule).Should().Be(
+            """
+            Test.isZero value =
+                Pine_builtin.equal
+                    [ value, 0 ]
+            """.Trim());
+    }
+
+    [Fact]
+    public void Lowers_eq_for_closed_record_without_Dict_or_Set()
+    {
+        var loweredModule =
+            LowerOperators(
+                """
+                module Test exposing (..)
+
+
+                eqRecord : { name : String } -> { name : String } -> Bool
+                eqRecord left right =
+                    left == right
+                """);
+
+        RenderCanonicalized(loweredModule).Should().Be(
+            """
+            Test.eqRecord : { name : String } -> { name : String } -> Bool
+            Test.eqRecord left right =
+                Pine_builtin.equal
+                    [ left, right ]
+            """.Trim());
+    }
+
+    [Fact]
+    public void Lowers_eq_for_inferred_choice_type_constructor()
+    {
+        var loweredModule =
+            LowerOperators(
+                """
+                module Test exposing (..)
+
+
+                type Direction
+                    = Left
+                    | Right
+
+
+                isLeft direction =
+                    direction == Left
+                """);
+
+        RenderCanonicalized(loweredModule).Should().Be(
+            """
+            type Test.Direction
+                = Left
+                | Right
+
+
+            Test.isLeft direction =
+                Pine_builtin.equal
+                    [ direction, Test.Left ]
+            """.Trim());
+    }
+
     // ============================================================
     // Lowering of `/=` / `Basics.neq` to a negated `Pine_builtin.equal`
     // expressed as `if Pine_builtin.equal [ a, b ] then Basics.False else Basics.True`.

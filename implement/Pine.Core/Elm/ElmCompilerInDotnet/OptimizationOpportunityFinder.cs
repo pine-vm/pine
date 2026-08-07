@@ -128,12 +128,30 @@ public enum OpportunityCategory
 /// name, an operator symbol, a partial-application <c>"name(added/arity)"</c>
 /// shape, or a parameter name).
 /// </summary>
-public record Opportunity(
+public sealed record Opportunity(
     DeclQualifiedName ContainingDecl,
     OpportunityCategory Category,
     string Description)
     : System.IComparable<Opportunity>
 {
+    /// <summary>
+    /// Type information available at the finding site. This is optional because some
+    /// opportunities describe declarations or escaped function values rather than typed operands.
+    /// It is excluded from opportunity identity so adding diagnostics does not change counts.
+    /// </summary>
+    public OpportunityTypeEvidence? TypeEvidence { get; init; }
+
+    /// <inheritdoc/>
+    public bool Equals(Opportunity? other) =>
+        other is not null &&
+        ContainingDecl.Equals(other.ContainingDecl) &&
+        Category == other.Category &&
+        Description == other.Description;
+
+    /// <inheritdoc/>
+    public override int GetHashCode() =>
+        System.HashCode.Combine(ContainingDecl, Category, Description);
+
     /// <inheritdoc/>
     public int CompareTo(Opportunity? other)
     {
@@ -156,6 +174,19 @@ public record Opportunity(
         return string.Compare(Description, other.Description, System.StringComparison.Ordinal);
     }
 }
+
+/// <summary>
+/// Optional inferred types associated with an <see cref="Opportunity"/>.
+/// </summary>
+/// <param name="SubjectType">
+/// Type of the subject being operated on, such as the record in a record access or update.
+/// </param>
+/// <param name="ArgumentTypes">
+/// Types of arguments or operands in source order for a generic function or operator application.
+/// </param>
+public sealed record OpportunityTypeEvidence(
+    TypeInference.InferredType? SubjectType = null,
+    IReadOnlyList<TypeInference.InferredType>? ArgumentTypes = null);
 
 /// <summary>
 /// Static analysis used in tests to verify that the Elm compiler has lowered
@@ -632,7 +663,10 @@ public static class OptimizationOpportunityFinder
                         OpportunityCategory.RecordAccess,
                         recordAccess.FieldName,
                         containing,
-                        resultBuilder);
+                        resultBuilder,
+                        new OpportunityTypeEvidence(
+                            SubjectType:
+                            InferExpressionType(recordAccess.Record, expressionTypeContext)));
                 }
 
                 CollectFromExpression(
@@ -671,7 +705,10 @@ public static class OptimizationOpportunityFinder
                             OpportunityCategory.RecordUpdate,
                             field.FieldName,
                             containing,
-                            resultBuilder);
+                            resultBuilder,
+                            new OpportunityTypeEvidence(
+                                SubjectType:
+                                InferExpressionType(recordUpdateExpression, expressionTypeContext)));
                     }
 
                     CollectFromExpression(
@@ -707,7 +744,13 @@ public static class OptimizationOpportunityFinder
                         opCategory,
                         "(" + opApp.Operator + ")",
                         containing,
-                        resultBuilder);
+                        resultBuilder,
+                        new OpportunityTypeEvidence(
+                            ArgumentTypes:
+                            [
+                            InferExpressionType(opApp.Left, expressionTypeContext),
+                            InferExpressionType(opApp.Right, expressionTypeContext)
+                            ]));
                 }
 
                 CollectFromExpression(
@@ -743,6 +786,25 @@ public static class OptimizationOpportunityFinder
                 break;
 
             case SyntaxTypes.Expression.Application app:
+                if (app.Function is SyntaxTypes.Expression.Identifier appliedIdentifier &&
+                    appliedIdentifier.QualifiedName.Namespaces is ["Basics"] &&
+                    s_basicsFunctionToCategory.TryGetValue(
+                        appliedIdentifier.QualifiedName.DeclName,
+                        out var appliedCategory))
+                {
+                    MaybeAdd(
+                        appliedCategory,
+                        appliedIdentifier.QualifiedName.DeclName,
+                        containing,
+                        resultBuilder,
+                        new OpportunityTypeEvidence(
+                            ArgumentTypes:
+                            [
+                            .. app.Arguments.Select(
+                                argument => InferExpressionType(argument, expressionTypeContext))
+                            ]));
+                }
+
                 MaybeReportPartialApplication(
                     app,
                     containing,
@@ -1018,13 +1080,18 @@ public static class OptimizationOpportunityFinder
     private static bool IsOpenRecordExpression(
         SyntaxTypes.Expression expression,
         ExpressionTypeContext context) =>
+        InferExpressionType(expression, context) is TypeInference.InferredType.OpenRecordType;
+
+    private static TypeInference.InferredType InferExpressionType(
+        SyntaxTypes.Expression expression,
+        ExpressionTypeContext context) =>
         TypeInference.InferExpressionType(
             expression,
             context.ParameterNames,
             context.ParameterTypes,
             context.LocalBindingTypes,
             context.CurrentModuleName,
-            context.FunctionTypes) is TypeInference.InferredType.OpenRecordType;
+            context.FunctionTypes);
 
     /// <summary>
     /// Inspects an <see cref="SyntaxTypes.Expression.Application"/> node
@@ -1443,9 +1510,14 @@ public static class OptimizationOpportunityFinder
         OpportunityCategory category,
         string description,
         DeclQualifiedName containing,
-        ImmutableHashSet<Opportunity>.Builder resultBuilder)
+        ImmutableHashSet<Opportunity>.Builder resultBuilder,
+        OpportunityTypeEvidence? typeEvidence = null)
     {
-        resultBuilder.Add(new Opportunity(containing, category, description));
+        resultBuilder.Add(
+            new Opportunity(containing, category, description)
+            {
+                TypeEvidence = typeEvidence
+            });
     }
 
     private static IReadOnlyDictionary<DeclQualifiedName, SyntaxTypes.Declaration>

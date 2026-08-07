@@ -176,6 +176,32 @@ public class OptimizationOpportunityFinderTests
     }
 
     [Fact]
+    public void Includes_inferred_argument_types_for_generic_operations()
+    {
+        var opportunities =
+            OptimizationOpportunityFinder.FindOptimizationOpportunities(
+                [
+                """
+                module Test exposing (..)
+
+
+                equal : a -> a -> Bool
+                equal left right =
+                    left == right
+                """
+                ]);
+
+        var equality =
+            opportunities.Should().ContainSingle(
+                opportunity => opportunity.Category == OpportunityCategory.BasicsEq)
+            .Subject;
+
+        equality.TypeEvidence.Should().NotBeNull();
+        equality.TypeEvidence!.ArgumentTypes.Should().HaveCount(2);
+        equality.TypeEvidence.ArgumentTypes.Should().AllBeOfType<TypeInference.InferredType.TypeVariable>();
+    }
+
+    [Fact]
     public void Reports_generic_append()
     {
         var rendered =
@@ -1865,17 +1891,14 @@ public class OptimizationOpportunityFinderTests
 
         renderedCounts.Should().Be(
             """
-            ElmSyntax.Concrete.Parser: BasicsArithmetic: 15
-            ElmSyntax.Concrete.Parser: BasicsCompare: 16
-            ElmSyntax.Concrete.Parser: BasicsEq: 68
+            ElmSyntax.Concrete.Parser: BasicsArithmetic: 5
+            ElmSyntax.Concrete.Parser: BasicsCompare: 4
             ElmSyntax.Concrete.Parser: BasicsAppend: 39
             ElmSyntax.Concrete.Parser: HigherOrderParameter_Direct: 1
             ElmSyntax.Concrete.Parser: HigherOrderParameter_Indirect: 56
             ElmSyntax.Concrete.Parser: RootLevelChoiceTagWrapper: 67
             LanguageService: RecordAccess: 53
-            LanguageService: BasicsArithmetic: 1
-            LanguageService: BasicsCompare: 5
-            LanguageService: BasicsEq: 20
+            LanguageService: BasicsCompare: 2
             LanguageService: BasicsAppend: 1
             LanguageService: PartialApplication: 63
             LanguageService: HigherOrderParameter_Direct: 3
@@ -1883,7 +1906,6 @@ public class OptimizationOpportunityFinderTests
             LanguageService: RootLevelChoiceTagWrapper: 28
             LanguageServiceAnalysis: RecordAccess: 10
             LanguageServiceAnalysis: RecordUpdate: 2
-            LanguageServiceAnalysis: BasicsEq: 3
             LanguageServiceAnalysis: BasicsAppend: 5
             LanguageServiceAnalysis: HigherOrderParameter_Indirect: 93
             LanguageServiceAnalysis: RootLevelChoiceTagWrapper: 3
@@ -1892,36 +1914,12 @@ public class OptimizationOpportunityFinderTests
         opportunities.Should().Contain(
             new Opportunity(
                 DeclQualifiedName.FromString(
-                    "ElmSyntax.Concrete.Parser.FromString.findAttachableDocumentationCommentToken"),
-                OpportunityCategory.BasicsArithmetic,
-                "add"));
-
-        opportunities.Should().Contain(
-            new Opportunity(
-                DeclQualifiedName.FromString(
-                    "ElmSyntax.Concrete.Parser.FromString.canStartNamedPatternArgument"),
-                OpportunityCategory.BasicsEq,
-                "eq"));
-
-        opportunities.Should().Contain(
-            new Opportunity(
-                DeclQualifiedName.FromString(
                     "LanguageService.commonImplicitTopLevelImportsNew__lifted__lambda3"),
                 OpportunityCategory.RecordAccess,
                 "name"));
 
-        opportunities.Should().Contain(
-            new Opportunity(
-                DeclQualifiedName.FromString(
-                    "LanguageService.locationIsInComment__lifted__lambda1"),
-                OpportunityCategory.BasicsArithmetic,
-                "add"));
-
-        opportunities.Should().Contain(
-            new Opportunity(
-                DeclQualifiedName.FromString("LanguageService.commonImplicitTopLevelImports"),
-                OpportunityCategory.BasicsEq,
-                "eq"));
+        opportunities.Should().NotContain(
+            opportunity => opportunity.Category == OpportunityCategory.BasicsEq);
 
         opportunities.Should().Contain(
             new Opportunity(

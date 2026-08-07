@@ -261,10 +261,10 @@ public class ElmParserExpressionTests
 
         PerformanceCountersFormatting.FormatCounts(report).Should().Be(
             """
-            InvocationCount: 163
-            BuildListCount: 873
+            InvocationCount: 161
+            BuildListCount: 869
             LoopIterationCount: 0
-            InstructionCount: 4_956
+            InstructionCount: 4_931
             """);
     }
 
@@ -277,10 +277,10 @@ public class ElmParserExpressionTests
 
         PerformanceCountersFormatting.FormatCounts(report.VmCounters).Should().Be(
             """
-            InvocationCount: 111
-            BuildListCount: 761
+            InvocationCount: 107
+            BuildListCount: 753
             LoopIterationCount: 0
-            InstructionCount: 4_113
+            InstructionCount: 4_063
             """);
 
         // Snapshot of the Elm syntax interpreter's metrics for the same root expression.
@@ -292,8 +292,8 @@ public class ElmParserExpressionTests
         // optimization opportunities.
         ElmSyntaxInterpreterPerformanceCountersFormatting.FormatCounts(report.InterpreterCounters).Should().Be(
             """
-            InstructionLoopCount: 2_370
-            DirectFunctionApplicationCount: 417
+            InstructionLoopCount: 2_356
+            DirectFunctionApplicationCount: 415
             FunctionValueApplicationCount: 47
             PineBuiltinInvocationCount: 116
             """);
@@ -399,10 +399,10 @@ public class ElmParserExpressionTests
 
         PerformanceCountersFormatting.FormatCounts(report).Should().Be(
             """
-            InvocationCount: 1_010
-            BuildListCount: 6_715
+            InvocationCount: 1_008
+            BuildListCount: 6_711
             LoopIterationCount: 0
-            InstructionCount: 35_889
+            InstructionCount: 35_864
             """);
     }
 

@@ -894,6 +894,46 @@ public static class TypeInference
         };
     }
 
+    internal static IReadOnlyList<InferredType> SpecializeTypesFromArguments(
+        IReadOnlyList<InferredType> expectedTypes,
+        IReadOnlyList<InferredType> actualTypes)
+    {
+        var substitutions = new Dictionary<string, InferredType>();
+
+        for (var index = 0; index < expectedTypes.Count && index < actualTypes.Count; index++)
+        {
+            if (actualTypes[index] is not InferredType.UnknownType)
+            {
+                CollectTypeVariableSubstitutions(
+                    expectedTypes[index],
+                    actualTypes[index],
+                    substitutions);
+            }
+        }
+
+        return
+            [
+            .. expectedTypes.Select(
+                expectedType => ApplyTypeSubstitutions(expectedType, substitutions))
+            ];
+    }
+
+    internal static IReadOnlyList<InferredType> SpecializeTypesFromMatch(
+        InferredType expectedType,
+        InferredType actualType,
+        IReadOnlyList<InferredType> typesToSpecialize)
+    {
+        var substitutions = new Dictionary<string, InferredType>();
+        CollectTypeVariableSubstitutions(expectedType, actualType, substitutions);
+
+        return
+            [
+            .. typesToSpecialize.Select(
+                typeToSpecialize =>
+                ApplyTypeSubstitutions(typeToSpecialize, substitutions))
+            ];
+    }
+
     /// <summary>
     /// Substitutes inside an open record. Substituting on the extension variable itself is
     /// supported in two cases:
@@ -1513,7 +1553,9 @@ public static class TypeInference
 
             if (functionTypes.TryGetValue(qualifiedFuncName, out var functionTypeInfo))
             {
-                return functionTypeInfo.ReturnType;
+                return
+                    BuildFunctionTypeFromList(
+                        [.. functionTypeInfo.ParameterTypes, functionTypeInfo.ReturnType]);
             }
         }
 
@@ -1609,21 +1651,16 @@ public static class TypeInference
                 // After canonicalization, all references should be fully qualified
                 if (functionTypes is not null && functionTypes.TryGetValue(qualifiedName, out var functionTypeInfo))
                 {
-                    var funcType = functionTypeInfo.ReturnType;
-
                     // Build a substitution map from type variables to concrete types
                     var substitution = new Dictionary<string, InferredType>();
 
-                    // Compute the return type by "applying" arguments to the function type
-                    // For a function type A -> B -> C with 2 arguments, the return type is C
-                    // Also infer type variable substitutions from argument types
-                    var appliedArgCount = application.Arguments.Count; // Exclude the function itself
+                    var appliedArgCount =
+                        Math.Min(
+                            application.Arguments.Count,
+                            functionTypeInfo.ParameterTypes.Count);
 
-                    var resultType = funcType;
-
-                    for (var i = 0; i < appliedArgCount && resultType is InferredType.FunctionType ft; i++)
+                    for (var i = 0; i < appliedArgCount; i++)
                     {
-                        // Infer the actual argument type
                         var argExpr = application.Arguments[i];
 
                         var actualArgType =
@@ -1635,13 +1672,27 @@ public static class TypeInference
                                 currentModuleName,
                                 functionTypes);
 
-                        // Collect type variable substitutions from matching expected vs actual arg types
-                        CollectTypeVariableSubstitutions(ft.ArgumentType, actualArgType, substitution);
-
-                        resultType = ft.ReturnType;
+                        if (actualArgType is not InferredType.UnknownType)
+                        {
+                            CollectTypeVariableSubstitutions(
+                                functionTypeInfo.ParameterTypes[i],
+                                actualArgType,
+                                substitution);
+                        }
                     }
 
-                    // Apply substitutions to the result type
+                    var resultType = functionTypeInfo.ReturnType;
+
+                    for (var i = functionTypeInfo.ParameterTypes.Count - 1;
+                        i >= appliedArgCount;
+                        i--)
+                    {
+                        resultType =
+                            new InferredType.FunctionType(
+                                functionTypeInfo.ParameterTypes[i],
+                                resultType);
+                    }
+
                     return ApplyTypeSubstitutions(resultType, substitution);
                 }
             }
@@ -2804,6 +2855,38 @@ public static class TypeInference
 
                 return bindings;
 
+            case SyntaxTypes.Pattern.UnConsPattern unConsPattern:
+                bindings =
+                    ExtractPatternBindingTypesWithConstructorsInternal(
+                        unConsPattern.Head,
+                        constructorArgumentTypes,
+                        bindings);
+
+                return
+                    ExtractPatternBindingTypesWithConstructorsInternal(
+                        unConsPattern.Tail,
+                        constructorArgumentTypes,
+                        bindings);
+
+            case SyntaxTypes.Pattern.ListPattern listPattern:
+                foreach (var element in listPattern.Elements)
+                {
+                    bindings =
+                        ExtractPatternBindingTypesWithConstructorsInternal(
+                            element,
+                            constructorArgumentTypes,
+                            bindings);
+                }
+
+                return bindings;
+
+            case SyntaxTypes.Pattern.AsPattern asPattern:
+                return
+                    ExtractPatternBindingTypesWithConstructorsInternal(
+                        asPattern.Pattern,
+                        constructorArgumentTypes,
+                        bindings);
+
             default:
 
                 // Other patterns don't introduce type constraints from constructors without type annotation
@@ -2898,6 +2981,86 @@ public static class TypeInference
 
                 return bindings;
 
+            case SyntaxTypes.Pattern.UnConsPattern unConsPattern:
+                InferredType? elementType =
+                    inferredType switch
+                    {
+                        InferredType.ListType listType =>
+                        listType.ElementType,
+
+                        InferredType.ChoiceType
+                        {
+                            ModuleName: ["List"],
+                            TypeName: "List",
+                            TypeArguments: [var choiceElementType]
+                        } =>
+                        choiceElementType,
+
+                        _ =>
+                        null
+                    };
+
+                if (elementType is null)
+                    return bindings;
+
+                bindings =
+                    ExtractPatternBindingTypesFromInferredInternal(
+                        unConsPattern.Head,
+                        elementType,
+                        bindings,
+                        constructorArgumentTypes);
+
+                return
+                    ExtractPatternBindingTypesFromInferredInternal(
+                        unConsPattern.Tail,
+                        inferredType,
+                        bindings,
+                        constructorArgumentTypes);
+
+            case SyntaxTypes.Pattern.ListPattern listPattern:
+                InferredType? listElementType =
+                    inferredType switch
+                    {
+                        InferredType.ListType listType =>
+                        listType.ElementType,
+
+                        InferredType.ChoiceType
+                        {
+                            ModuleName: ["List"],
+                            TypeName: "List",
+                            TypeArguments: [var choiceElementType]
+                        } =>
+                        choiceElementType,
+
+                        _ =>
+                        null
+                    };
+
+                if (listElementType is null)
+                    return bindings;
+
+                foreach (var elementPattern in listPattern.Elements)
+                {
+                    bindings =
+                        ExtractPatternBindingTypesFromInferredInternal(
+                            elementPattern,
+                            listElementType,
+                            bindings,
+                            constructorArgumentTypes);
+                }
+
+                return bindings;
+
+            case SyntaxTypes.Pattern.AsPattern asPattern:
+                bindings = bindings.SetItem(asPattern.Name, inferredType);
+
+                return
+                    ExtractPatternBindingTypesFromInferredInternal(
+                        asPattern.Pattern,
+                        inferredType,
+                        bindings,
+                        constructorArgumentTypes);
+
             case SyntaxTypes.Pattern.AllPattern:
 
                 // Wildcard pattern - no bindings
@@ -2919,7 +3082,8 @@ public static class TypeInference
     /// <returns>A dictionary mapping qualified function names to their inferred types.</returns>
     public static ImmutableDictionary<string, InferredType> BuildFunctionSignaturesMap(
         SyntaxTypes.File file,
-        string moduleName)
+        string moduleName,
+        IReadOnlyDictionary<QualifiedNameRef, TypeAliasDefinition>? aliasDefinitions = null)
     {
         var builder = ImmutableDictionary.CreateBuilder<string, InferredType>();
 
@@ -2928,7 +3092,12 @@ public static class TypeInference
             CollectFunctionSignaturesFromDeclaration(declaration, moduleName, builder);
         }
 
-        return builder.ToImmutable();
+        aliasDefinitions ??= BuildTypeAliasDefinitions(file, moduleName);
+
+        return
+            builder.ToImmutableDictionary(
+                entry => entry.Key,
+                entry => ExpandTypeAliases(entry.Value, aliasDefinitions));
     }
 
     /// <summary>
@@ -2962,6 +3131,9 @@ public static class TypeInference
                 .Select(g => g)
                 .ToList();
 
+            var qualifiedTypeName =
+                QualifiedNameHelper.FromQualifiedNameString(moduleName + "." + typeName);
+
             // Build constructor types for each value constructor
             foreach (var constructorNode in choiceTypeDecl.TypeDeclaration.Constructors)
             {
@@ -2977,7 +3149,7 @@ public static class TypeInference
 
                 InferredType resultType =
                     new InferredType.ChoiceType(
-                        ModuleName: [],
+                        ModuleName: qualifiedTypeName.ModuleName,
                         TypeName: typeName,
                         TypeArguments: typeArguments);
 
@@ -3068,7 +3240,18 @@ public static class TypeInference
         var knownFunctionTypes =
             functionSignatures.ToDictionary(
                 kvp => QualifiedNameHelper.FromQualifiedNameString(kvp.Key),
-                kvp => new FunctionTypeInfo(kvp.Value, []));
+                kvp =>
+                {
+                    var returnType = kvp.Value;
+
+                    while (returnType is InferredType.FunctionType functionType)
+                        returnType = functionType.ReturnType;
+
+                    return
+                        new FunctionTypeInfo(
+                            returnType,
+                            ExtractArgumentTypesFromFunctionType(kvp.Value));
+                });
 
         var returnType =
             InferExpressionType(
@@ -3151,6 +3334,146 @@ public static class TypeInference
         }
 
         return result;
+    }
+
+    /// <summary>
+    /// Describes a type alias and the generic parameters that must be substituted when it is used.
+    /// </summary>
+    public sealed record TypeAliasDefinition(
+        IReadOnlyList<string> TypeParameters,
+        InferredType AliasedType);
+
+    /// <summary>
+    /// Builds the type alias definitions declared in a module.
+    /// </summary>
+    public static ImmutableDictionary<QualifiedNameRef, TypeAliasDefinition> BuildTypeAliasDefinitions(
+        SyntaxTypes.File file,
+        string moduleName)
+    {
+        var definitions = ImmutableDictionary.CreateBuilder<QualifiedNameRef, TypeAliasDefinition>();
+
+        foreach (var aliasDeclaration in file.Declarations.OfType<SyntaxTypes.Declaration.AliasDeclaration>())
+        {
+            definitions[QualifiedNameHelper.FromQualifiedNameString(moduleName + "." + aliasDeclaration.TypeAlias.Name)] =
+                new TypeAliasDefinition(
+                    aliasDeclaration.TypeAlias.Generics,
+                    TypeAnnotationToInferredType(aliasDeclaration.TypeAlias.TypeAnnotation));
+        }
+
+        return definitions.ToImmutable();
+    }
+
+    /// <summary>
+    /// Expands type alias references, applying generic arguments and stopping safely at alias cycles.
+    /// </summary>
+    public static InferredType ExpandTypeAliases(
+        InferredType inferredType,
+        IReadOnlyDictionary<QualifiedNameRef, TypeAliasDefinition> aliasDefinitions) =>
+        ExpandTypeAliases(inferredType, aliasDefinitions, ImmutableHashSet<QualifiedNameRef>.Empty);
+
+    private static InferredType ExpandTypeAliases(
+        InferredType inferredType,
+        IReadOnlyDictionary<QualifiedNameRef, TypeAliasDefinition> aliasDefinitions,
+        ImmutableHashSet<QualifiedNameRef> aliasesBeingExpanded)
+    {
+        switch (inferredType)
+        {
+            case InferredType.ChoiceType choiceType:
+                var expandedTypeArguments =
+                    choiceType.TypeArguments
+                    .Select(typeArgument => ExpandTypeAliases(typeArgument, aliasDefinitions, aliasesBeingExpanded))
+                    .ToList();
+
+                if (choiceType.ModuleName is ["List"] &&
+                    choiceType.TypeName is "List" &&
+                    expandedTypeArguments is [var elementType])
+                {
+                    return new InferredType.ListType(elementType);
+                }
+
+                var qualifiedName =
+                    QualifiedNameHelper.ToQualifiedNameRef(choiceType.ModuleName, choiceType.TypeName);
+
+                if (!aliasDefinitions.TryGetValue(qualifiedName, out var aliasDefinition) ||
+                    aliasDefinition.TypeParameters.Count != expandedTypeArguments.Count ||
+                    aliasesBeingExpanded.Contains(qualifiedName))
+                {
+                    return
+                        new InferredType.ChoiceType(
+                            choiceType.ModuleName,
+                            choiceType.TypeName,
+                            expandedTypeArguments);
+                }
+
+                var substitutions =
+                    aliasDefinition.TypeParameters
+                    .Zip(expandedTypeArguments)
+                    .ToDictionary(pair => pair.First, pair => pair.Second);
+
+                return
+                    ExpandTypeAliases(
+                        ApplyTypeSubstitutions(aliasDefinition.AliasedType, substitutions),
+                        aliasDefinitions,
+                        aliasesBeingExpanded.Add(qualifiedName));
+
+            case InferredType.ListType listType:
+                return
+                    new InferredType.ListType(
+                        ExpandTypeAliases(listType.ElementType, aliasDefinitions, aliasesBeingExpanded));
+
+            case InferredType.FunctionType functionType:
+                return
+                    new InferredType.FunctionType(
+                        ExpandTypeAliases(functionType.ArgumentType, aliasDefinitions, aliasesBeingExpanded),
+                        ExpandTypeAliases(functionType.ReturnType, aliasDefinitions, aliasesBeingExpanded));
+
+            case InferredType.TupleType tupleType:
+                return
+                    new InferredType.TupleType(
+                        [
+                        .. tupleType.ElementTypes.Select(
+                            elementType => ExpandTypeAliases(elementType, aliasDefinitions, aliasesBeingExpanded))
+                        ]);
+
+            case InferredType.RecordType recordType:
+                return
+                    new InferredType.RecordType(
+                        [
+                        .. recordType.Fields.Select(
+                            field =>
+                            (
+                                field.FieldName,
+                                ExpandTypeAliases(field.FieldType, aliasDefinitions, aliasesBeingExpanded)
+                            ))
+                        ]);
+
+            case InferredType.OpenRecordType openRecordType:
+                return
+                    new InferredType.OpenRecordType(
+                        openRecordType.ExtensionVariable,
+                        [
+                        .. openRecordType.KnownFields.Select(
+                            field =>
+                            (
+                                field.FieldName,
+                                ExpandTypeAliases(field.FieldType, aliasDefinitions, aliasesBeingExpanded)
+                            ))
+                        ]);
+
+            case InferredType.IntType:
+            case InferredType.FloatType:
+            case InferredType.StringType:
+            case InferredType.CharType:
+            case InferredType.BoolType:
+            case InferredType.NumberType:
+            case InferredType.TypeVariable:
+            case InferredType.UnknownType:
+                return inferredType;
+
+            default:
+                throw new NotImplementedException(
+                    "ExpandTypeAliases does not handle inferred type variant: " + inferredType.GetType().Name);
+        }
     }
 
     /// <summary>

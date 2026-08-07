@@ -147,6 +147,9 @@ public class AddInferredTypeAnnotations
 
         var canonicalizedFilesByModuleName = new Dictionary<string, AbstractSyntaxTypes.File>(StringComparer.Ordinal);
 
+        var allAliasDefinitions =
+            ImmutableDictionary<QualifiedNameRef, TypeInference.TypeAliasDefinition>.Empty;
+
         foreach (var (moduleName, (canonicalizedFile, _errors, _shadowings)) in canonicalizedModules)
         {
             // We ignore canonicalization errors (like undefined local variables) since they
@@ -157,10 +160,20 @@ public class AddInferredTypeAnnotations
 
             canonicalizedFilesByModuleName[moduleNameStr] = loweringFile;
 
+            var abstractFile = ElmSyntaxAbstractConversion.FromFile(loweringFile);
+
+            allAliasDefinitions =
+                allAliasDefinitions.SetItems(
+                    TypeInference.BuildTypeAliasDefinitions(abstractFile, moduleNameStr));
+        }
+
+        foreach (var (moduleNameStr, canonicalizedFile) in canonicalizedFilesByModuleName)
+        {
             var moduleSignatures =
                 TypeInference.BuildFunctionSignaturesMap(
-                    ElmSyntaxAbstractConversion.FromFile(loweringFile),
-                    moduleNameStr);
+                    ElmSyntaxAbstractConversion.FromFile(canonicalizedFile),
+                    moduleNameStr,
+                    allAliasDefinitions);
 
             allSignatures = allSignatures.SetItems(moduleSignatures);
         }
@@ -223,6 +236,11 @@ public class AddInferredTypeAnnotations
         // Use the combined signatures from all modules
         var functionSignatures = allModuleSignatures;
 
+        IReadOnlyList<string> SourceModuleName(
+            IReadOnlyList<string> typeModuleName,
+            string typeName) =>
+            SourceModuleNameForType(file, typeModuleName, typeName);
+
         foreach (var declaration in file.Declarations)
         {
             if (declaration.Value is AbstractSyntaxTypes.Declaration.FunctionDeclaration funcDecl)
@@ -251,6 +269,7 @@ public class AddInferredTypeAnnotations
                             abstractArguments,
                             moduleName,
                             functionSignatures,
+                            SourceModuleName,
                             includeDeclaration,
                             annotations);
 
@@ -275,7 +294,7 @@ public class AddInferredTypeAnnotations
                             returnType);
 
                     // Convert the inferred type to a type annotation
-                    var typeAnnotation = InferredTypeToTypeAnnotation(fullType);
+                    var typeAnnotation = InferredTypeToTypeAnnotation(fullType, SourceModuleName);
 
                     if (typeAnnotation is not null)
                     {
@@ -291,12 +310,91 @@ public class AddInferredTypeAnnotations
                         abstractArguments,
                         moduleName,
                         functionSignatures,
+                        SourceModuleName,
                         includeDeclaration,
                         annotations);
             }
         }
 
         return annotations;
+    }
+
+    private static IReadOnlyList<string> SourceModuleNameForType(
+        AbstractSyntaxTypes.File file,
+        IReadOnlyList<string> typeModuleName,
+        string typeName)
+    {
+        var currentModuleName =
+            AbstractSyntaxTypes.Module.GetModuleName(file.ModuleDefinition.Value).Value;
+
+        if (currentModuleName.SequenceEqual(typeModuleName))
+        {
+            return [];
+        }
+
+        IReadOnlyList<string>? importedModuleName = null;
+
+        foreach (var importNode in file.Imports)
+        {
+            var import = importNode.Value;
+
+            if (!import.ModuleName.Value.SequenceEqual(typeModuleName))
+            {
+                continue;
+            }
+
+            importedModuleName ??= import.ModuleAlias?.Value ?? import.ModuleName.Value;
+
+            if (import.ExposingList is { } exposingList &&
+                ExposingIncludesType(exposingList.Value, typeName))
+            {
+                return [];
+            }
+        }
+
+        return importedModuleName ?? typeModuleName;
+    }
+
+    private static bool ExposingIncludesType(
+        AbstractSyntaxTypes.Exposing exposing,
+        string typeName)
+    {
+        switch (exposing)
+        {
+            case AbstractSyntaxTypes.Exposing.All:
+                return true;
+
+            case AbstractSyntaxTypes.Exposing.Explicit explicitExposing:
+                return
+                    explicitExposing.Nodes.Any(
+                        exposeNode => TopLevelExposeIncludesType(exposeNode.Value, typeName));
+
+            default:
+                throw new NotImplementedException(
+                    "ExposingIncludesType does not handle exposing variant: " + exposing.GetType().Name);
+        }
+    }
+
+    private static bool TopLevelExposeIncludesType(
+        AbstractSyntaxTypes.TopLevelExpose expose,
+        string typeName)
+    {
+        switch (expose)
+        {
+            case AbstractSyntaxTypes.TopLevelExpose.TypeOrAliasExpose typeOrAliasExpose:
+                return typeOrAliasExpose.Name == typeName;
+
+            case AbstractSyntaxTypes.TopLevelExpose.TypeExpose typeExpose:
+                return typeExpose.ExposedType.Name == typeName;
+
+            case AbstractSyntaxTypes.TopLevelExpose.InfixExpose:
+            case AbstractSyntaxTypes.TopLevelExpose.FunctionExpose:
+                return false;
+
+            default:
+                throw new NotImplementedException(
+                    "TopLevelExposeIncludesType does not handle expose variant: " + expose.GetType().Name);
+        }
     }
 
     /// <summary>
@@ -309,6 +407,7 @@ public class AddInferredTypeAnnotations
         IReadOnlyList<Node<AbstractSyntaxTypes.Pattern>> parentArguments,
         string moduleName,
         IReadOnlyDictionary<string, TypeInference.InferredType> functionSignatures,
+        Func<IReadOnlyList<string>, string, IReadOnlyList<string>> sourceModuleName,
         Func<IReadOnlyList<string>, bool> includeDeclaration,
         ImmutableDictionary<IReadOnlyList<string>, TypeAnnotation> annotations)
     {
@@ -340,6 +439,7 @@ public class AddInferredTypeAnnotations
                                     letFunc.Function.Declaration.Value.Arguments,
                                     moduleName,
                                     functionSignatures,
+                                    sourceModuleName,
                                     includeDeclaration,
                                     annotations);
 
@@ -371,7 +471,7 @@ public class AddInferredTypeAnnotations
                                     returnType);
 
                             // Convert the inferred type to a type annotation
-                            var typeAnnotation = InferredTypeToTypeAnnotation(fullType);
+                            var typeAnnotation = InferredTypeToTypeAnnotation(fullType, sourceModuleName);
 
                             if (typeAnnotation is not null)
                             {
@@ -387,6 +487,7 @@ public class AddInferredTypeAnnotations
                                 letFunc.Function.Declaration.Value.Arguments,
                                 moduleName,
                                 functionSignatures,
+                                sourceModuleName,
                                 includeDeclaration,
                                 annotations);
                     }
@@ -400,6 +501,7 @@ public class AddInferredTypeAnnotations
                         parentArguments,
                         moduleName,
                         functionSignatures,
+                        sourceModuleName,
                         includeDeclaration,
                         annotations);
 
@@ -413,6 +515,7 @@ public class AddInferredTypeAnnotations
                         parentArguments,
                         moduleName,
                         functionSignatures,
+                        sourceModuleName,
                         includeDeclaration,
                         annotations);
 
@@ -423,6 +526,7 @@ public class AddInferredTypeAnnotations
                         parentArguments,
                         moduleName,
                         functionSignatures,
+                        sourceModuleName,
                         includeDeclaration,
                         annotations);
 
@@ -433,6 +537,7 @@ public class AddInferredTypeAnnotations
                         parentArguments,
                         moduleName,
                         functionSignatures,
+                        sourceModuleName,
                         includeDeclaration,
                         annotations);
 
@@ -446,6 +551,7 @@ public class AddInferredTypeAnnotations
                         parentArguments,
                         moduleName,
                         functionSignatures,
+                        sourceModuleName,
                         includeDeclaration,
                         annotations);
 
@@ -458,6 +564,7 @@ public class AddInferredTypeAnnotations
                             parentArguments,
                             moduleName,
                             functionSignatures,
+                            sourceModuleName,
                             includeDeclaration,
                             annotations);
                 }
@@ -472,6 +579,7 @@ public class AddInferredTypeAnnotations
                         lambda.Lambda.Arguments,
                         moduleName,
                         functionSignatures,
+                        sourceModuleName,
                         includeDeclaration,
                         annotations);
 
@@ -487,6 +595,7 @@ public class AddInferredTypeAnnotations
                             parentArguments,
                             moduleName,
                             functionSignatures,
+                            sourceModuleName,
                             includeDeclaration,
                             annotations);
                 }
@@ -501,6 +610,7 @@ public class AddInferredTypeAnnotations
                         parentArguments,
                         moduleName,
                         functionSignatures,
+                        sourceModuleName,
                         includeDeclaration,
                         annotations);
 
@@ -511,6 +621,7 @@ public class AddInferredTypeAnnotations
                         parentArguments,
                         moduleName,
                         functionSignatures,
+                        sourceModuleName,
                         includeDeclaration,
                         annotations);
 
@@ -524,6 +635,7 @@ public class AddInferredTypeAnnotations
                         parentArguments,
                         moduleName,
                         functionSignatures,
+                        sourceModuleName,
                         includeDeclaration,
                         annotations);
 
@@ -539,6 +651,7 @@ public class AddInferredTypeAnnotations
                             parentArguments,
                             moduleName,
                             functionSignatures,
+                            sourceModuleName,
                             includeDeclaration,
                             annotations);
                 }
@@ -555,6 +668,7 @@ public class AddInferredTypeAnnotations
                             parentArguments,
                             moduleName,
                             functionSignatures,
+                            sourceModuleName,
                             includeDeclaration,
                             annotations);
                 }
@@ -571,6 +685,7 @@ public class AddInferredTypeAnnotations
                             parentArguments,
                             moduleName,
                             functionSignatures,
+                            sourceModuleName,
                             includeDeclaration,
                             annotations);
                 }
@@ -584,7 +699,9 @@ public class AddInferredTypeAnnotations
     /// <summary>
     /// Converts an InferredType to a TypeAnnotation.
     /// </summary>
-    private static TypeAnnotation? InferredTypeToTypeAnnotation(TypeInference.InferredType inferredType)
+    private static TypeAnnotation? InferredTypeToTypeAnnotation(
+        TypeInference.InferredType inferredType,
+        Func<IReadOnlyList<string>, string, IReadOnlyList<string>> sourceModuleName)
     {
         return
             inferredType switch
@@ -623,19 +740,26 @@ public class AddInferredTypeAnnotations
                 new TypeAnnotation.GenericType(typeVar.Name),
 
                 TypeInference.InferredType.TupleType tupleType =>
-                CreateTupleTypeAnnotation(tupleType.ElementTypes),
+                CreateTupleTypeAnnotation(tupleType.ElementTypes, sourceModuleName),
 
                 TypeInference.InferredType.RecordType recordType =>
-                CreateRecordTypeAnnotation(recordType.Fields),
+                CreateRecordTypeAnnotation(recordType.Fields, sourceModuleName),
 
                 TypeInference.InferredType.FunctionType functionType =>
-                CreateFunctionTypeAnnotation(functionType.ArgumentType, functionType.ReturnType),
+                CreateFunctionTypeAnnotation(
+                    functionType.ArgumentType,
+                    functionType.ReturnType,
+                    sourceModuleName),
 
                 TypeInference.InferredType.ListType listType =>
-                CreateListTypeAnnotation(listType.ElementType),
+                CreateListTypeAnnotation(listType.ElementType, sourceModuleName),
 
                 TypeInference.InferredType.ChoiceType choiceType =>
-                CreateChoiceTypeAnnotation(choiceType.ModuleName, choiceType.TypeName, choiceType.TypeArguments),
+                CreateChoiceTypeAnnotation(
+                    sourceModuleName(choiceType.ModuleName, choiceType.TypeName),
+                    choiceType.TypeName,
+                    choiceType.TypeArguments,
+                    sourceModuleName),
 
                 _ =>
                 null
@@ -645,13 +769,15 @@ public class AddInferredTypeAnnotations
     /// <summary>
     /// Creates a tuple type annotation from element types.
     /// </summary>
-    private static TypeAnnotation? CreateTupleTypeAnnotation(IReadOnlyList<TypeInference.InferredType> elementTypes)
+    private static TypeAnnotation? CreateTupleTypeAnnotation(
+        IReadOnlyList<TypeInference.InferredType> elementTypes,
+        Func<IReadOnlyList<string>, string, IReadOnlyList<string>> sourceModuleName)
     {
         var typeAnnotations = new List<Node<TypeAnnotation>>();
 
         foreach (var elemType in elementTypes)
         {
-            if (InferredTypeToTypeAnnotation(elemType) is not { } typeAnnotation)
+            if (InferredTypeToTypeAnnotation(elemType, sourceModuleName) is not { } typeAnnotation)
             {
                 return null;
             }
@@ -680,7 +806,8 @@ public class AddInferredTypeAnnotations
     /// Creates a record type annotation from fields (name and type pairs).
     /// </summary>
     private static TypeAnnotation? CreateRecordTypeAnnotation(
-        IReadOnlyList<(string FieldName, TypeInference.InferredType FieldType)> fields)
+        IReadOnlyList<(string FieldName, TypeInference.InferredType FieldType)> fields,
+        Func<IReadOnlyList<string>, string, IReadOnlyList<string>> sourceModuleName)
     {
         if (fields.Count is 0)
         {
@@ -695,7 +822,7 @@ public class AddInferredTypeAnnotations
 
         foreach (var (fieldName, fieldType) in fields)
         {
-            var fieldTypeAnnotation = InferredTypeToTypeAnnotation(fieldType);
+            var fieldTypeAnnotation = InferredTypeToTypeAnnotation(fieldType, sourceModuleName);
 
             if (fieldTypeAnnotation is null)
             {
@@ -729,10 +856,11 @@ public class AddInferredTypeAnnotations
     /// </summary>
     private static TypeAnnotation? CreateFunctionTypeAnnotation(
         TypeInference.InferredType argumentType,
-        TypeInference.InferredType returnType)
+        TypeInference.InferredType returnType,
+        Func<IReadOnlyList<string>, string, IReadOnlyList<string>> sourceModuleName)
     {
-        var argAnnotation = InferredTypeToTypeAnnotation(argumentType);
-        var retAnnotation = InferredTypeToTypeAnnotation(returnType);
+        var argAnnotation = InferredTypeToTypeAnnotation(argumentType, sourceModuleName);
+        var retAnnotation = InferredTypeToTypeAnnotation(returnType, sourceModuleName);
 
         if (argAnnotation is null || retAnnotation is null)
         {
@@ -749,9 +877,11 @@ public class AddInferredTypeAnnotations
     /// <summary>
     /// Creates a List type annotation from an element type.
     /// </summary>
-    private static TypeAnnotation? CreateListTypeAnnotation(TypeInference.InferredType elementType)
+    private static TypeAnnotation? CreateListTypeAnnotation(
+        TypeInference.InferredType elementType,
+        Func<IReadOnlyList<string>, string, IReadOnlyList<string>> sourceModuleName)
     {
-        var elementAnnotation = InferredTypeToTypeAnnotation(elementType);
+        var elementAnnotation = InferredTypeToTypeAnnotation(elementType, sourceModuleName);
 
         if (elementAnnotation is null)
         {
@@ -770,13 +900,14 @@ public class AddInferredTypeAnnotations
     private static TypeAnnotation? CreateChoiceTypeAnnotation(
         IReadOnlyList<string> moduleName,
         string typeName,
-        IReadOnlyList<TypeInference.InferredType> typeArguments)
+        IReadOnlyList<TypeInference.InferredType> typeArguments,
+        Func<IReadOnlyList<string>, string, IReadOnlyList<string>> sourceModuleName)
     {
         var typeArgNodes = new List<Node<TypeAnnotation>>();
 
         foreach (var arg in typeArguments)
         {
-            var argAnnotation = InferredTypeToTypeAnnotation(arg);
+            var argAnnotation = InferredTypeToTypeAnnotation(arg, sourceModuleName);
 
             if (argAnnotation is null)
             {

@@ -48,8 +48,9 @@ public static class BuiltinOperatorLowering
         ImmutableDictionary<string, TypeInference.InferredType> ParameterTypes,
         ImmutableDictionary<string, TypeInference.InferredType> LocalBindingTypes,
         IReadOnlyDictionary<QualifiedNameRef, FunctionTypeInfo> FunctionTypes,
-        IReadOnlyDictionary<QualifiedNameRef, TypeInference.InferredType> AliasTypes,
+        IReadOnlyDictionary<QualifiedNameRef, TypeInference.TypeAliasDefinition> AliasTypes,
         IReadOnlyDictionary<QualifiedNameRef, TypeInference.ChoiceTypeDefinition> ChoiceTypeDefinitions,
+        IReadOnlyDictionary<QualifiedNameRef, IReadOnlyList<TypeInference.InferredType>> ConstructorArgumentTypes,
         ImmutableDictionary<string, TypeInference.InferredType> FunctionSignatures);
 
     /// <summary>
@@ -67,6 +68,9 @@ public static class BuiltinOperatorLowering
         var choiceTypeDefinitions =
             TypeInference.BuildChoiceTypeDefinitions(declarations);
 
+        var constructorArgumentTypes =
+            BuildConstructorArgumentTypes(choiceTypeDefinitions, aliasTypes);
+
         var functionSignatures = BuildFunctionSignatures(declarations);
 
         var resultBuilder =
@@ -83,6 +87,7 @@ public static class BuiltinOperatorLowering
                     functionTypes,
                     aliasTypes,
                     choiceTypeDefinitions,
+                    constructorArgumentTypes,
                     functionSignatures);
 
             resultBuilder[key] = rewritten;
@@ -95,8 +100,9 @@ public static class BuiltinOperatorLowering
         SyntaxTypes.Declaration declaration,
         string moduleName,
         IReadOnlyDictionary<QualifiedNameRef, FunctionTypeInfo> functionTypes,
-        IReadOnlyDictionary<QualifiedNameRef, TypeInference.InferredType> aliasTypes,
+        IReadOnlyDictionary<QualifiedNameRef, TypeInference.TypeAliasDefinition> aliasTypes,
         IReadOnlyDictionary<QualifiedNameRef, TypeInference.ChoiceTypeDefinition> choiceTypeDefinitions,
+        IReadOnlyDictionary<QualifiedNameRef, IReadOnlyList<TypeInference.InferredType>> constructorArgumentTypes,
         ImmutableDictionary<string, TypeInference.InferredType> functionSignatures)
     {
         if (declaration is not SyntaxTypes.Declaration.FunctionDeclaration functionDeclaration)
@@ -112,7 +118,9 @@ public static class BuiltinOperatorLowering
                 functionSignatures);
 
         var explicitParameterTypes =
-            BuildExplicitParameterTypes(functionDeclaration.Function);
+            ExpandAliasTypes(
+                BuildExplicitParameterTypes(functionDeclaration.Function),
+                aliasTypes);
 
         var context =
             new RewriteContext(
@@ -128,6 +136,7 @@ public static class BuiltinOperatorLowering
                 FunctionTypes: functionTypes,
                 AliasTypes: aliasTypes,
                 ChoiceTypeDefinitions: choiceTypeDefinitions,
+                ConstructorArgumentTypes: constructorArgumentTypes,
                 FunctionSignatures: functionSignatures);
 
         var expectedReturnType =
@@ -172,15 +181,7 @@ public static class BuiltinOperatorLowering
                     RewriteExpression(ifBlock.ElseBlock, context, expandedExpectedType)),
 
                 SyntaxTypes.Expression.CaseExpression caseExpression =>
-                new SyntaxTypes.Expression.CaseExpression(
-                    RewriteExpression(caseExpression.Expression, context),
-                    [
-                    .. caseExpression.Cases.Select(
-                        caseItem =>
-                        new SyntaxTypes.Case(
-                            caseItem.Pattern,
-                            RewriteExpression(caseItem.Expression, context, expandedExpectedType)))
-                    ]),
+                RewriteCaseExpression(caseExpression, context, expandedExpectedType),
 
                 SyntaxTypes.Expression.LetExpression letExpression =>
                 RewriteLetExpression(letExpression, context, expandedExpectedType),
@@ -261,14 +262,93 @@ public static class BuiltinOperatorLowering
             };
     }
 
+    private static SyntaxTypes.Expression.CaseExpression RewriteCaseExpression(
+        SyntaxTypes.Expression.CaseExpression caseExpression,
+        RewriteContext context,
+        TypeInference.InferredType? expectedType)
+    {
+        var scrutineeType =
+            InferExpressionType(caseExpression.Expression, context);
+
+        var rewrittenCases = new List<SyntaxTypes.Case>(caseExpression.Cases.Count);
+
+        foreach (var caseItem in caseExpression.Cases)
+        {
+            var constructorArgumentTypes = context.ConstructorArgumentTypes;
+
+            if (scrutineeType is not null &&
+                caseItem.Pattern is SyntaxTypes.Pattern.NamedPattern namedPattern)
+            {
+                var constructorName =
+                    new QualifiedNameRef(
+                        namedPattern.Name.ModuleName,
+                        namedPattern.Name.Name);
+
+                if (context.FunctionTypes.TryGetValue(constructorName, out var constructorType))
+                {
+                    constructorArgumentTypes =
+                        constructorArgumentTypes
+                        .ToImmutableDictionary()
+                        .SetItem(
+                            constructorName,
+                            TypeInference.SpecializeTypesFromMatch(
+                                constructorType.ReturnType,
+                                scrutineeType,
+                                constructorType.ParameterTypes));
+                }
+            }
+
+            var caseLocalBindingTypes =
+                TypeInference.ExtractPatternBindingTypesWithConstructors(
+                    caseItem.Pattern,
+                    constructorArgumentTypes,
+                    context.LocalBindingTypes);
+
+            if (scrutineeType is not null)
+            {
+                caseLocalBindingTypes =
+                    TypeInference.ExtractPatternBindingTypesFromInferred(
+                        caseItem.Pattern,
+                        scrutineeType,
+                        caseLocalBindingTypes,
+                        constructorArgumentTypes);
+            }
+
+            rewrittenCases.Add(
+                new SyntaxTypes.Case(
+                    caseItem.Pattern,
+                    RewriteExpression(
+                        caseItem.Expression,
+                        context with { LocalBindingTypes = caseLocalBindingTypes },
+                        expectedType)));
+        }
+
+        return
+            new SyntaxTypes.Expression.CaseExpression(
+                RewriteExpression(caseExpression.Expression, context),
+                rewrittenCases);
+    }
+
     private static SyntaxTypes.Expression RewriteApplication(
         SyntaxTypes.Expression.Application application,
         RewriteContext context,
         TypeInference.InferredType? expectedType)
     {
-        var rewrittenFunction = RewriteExpression(application.Function, context);
+        TypeInference.InferredType functionExpectedType =
+            expectedType ?? new TypeInference.InferredType.UnknownType();
 
-        var expectedArgumentTypes = GetExpectedArgumentTypes(application, context);
+        for (var argumentIndex = application.Arguments.Count - 1; argumentIndex >= 0; argumentIndex--)
+        {
+            functionExpectedType =
+                new TypeInference.InferredType.FunctionType(
+                    InferExpressionType(application.Arguments[argumentIndex], context),
+                    functionExpectedType);
+        }
+
+        var rewrittenFunction =
+            RewriteExpression(application.Function, context, functionExpectedType);
+
+        var expectedArgumentTypes = GetExpectedArgumentTypes(application, context, expectedType);
 
         var rewrittenArguments = new List<SyntaxTypes.Expression>(application.Arguments.Count);
 
@@ -288,26 +368,16 @@ public static class BuiltinOperatorLowering
             var right = rewrittenArguments[1];
 
             var leftType =
-                TypeInference.InferExpressionType(
-                    left,
-                    context.ParameterNames,
-                    context.ParameterTypes,
-                    context.LocalBindingTypes,
-                    context.CurrentModuleName,
-                    context.FunctionTypes);
+                InferExpressionType(left, context);
 
             var rightType =
-                TypeInference.InferExpressionType(
-                    right,
-                    context.ParameterNames,
-                    context.ParameterTypes,
-                    context.LocalBindingTypes,
-                    context.CurrentModuleName,
-                    context.FunctionTypes);
+                InferExpressionType(right, context);
 
             if (loweredOp is LoweredOperator.Equal)
             {
-                if (ProvesPrimitiveEqualityBuiltin(leftType, rightType, context))
+                if (IsEmptyList(left) ||
+                    IsEmptyList(right) ||
+                    ProvesPrimitiveEqualityBuiltin(leftType, rightType, context))
                 {
                     return
                         BuildBuiltinApplication(
@@ -315,10 +385,13 @@ public static class BuiltinOperatorLowering
                             left,
                             right);
                 }
+
             }
             else if (loweredOp is LoweredOperator.NotEqual)
             {
-                if (ProvesPrimitiveEqualityBuiltin(leftType, rightType, context))
+                if (IsEmptyList(left) ||
+                    IsEmptyList(right) ||
+                    ProvesPrimitiveEqualityBuiltin(leftType, rightType, context))
                 {
                     // Lower `a /= b` (and the equivalent `Basics.neq a b`) to
                     //   `if Pine_builtin.equal [ a, b ] then Basics.False else Basics.True`
@@ -341,6 +414,7 @@ public static class BuiltinOperatorLowering
                             BuildBasicsBoolReference(value: false),
                             BuildBasicsBoolReference(value: true));
                 }
+
             }
             else if (loweredOp is LoweredOperator.IntLt or LoweredOperator.IntGt or LoweredOperator.IntLe or LoweredOperator.IntGe)
             {
@@ -352,6 +426,7 @@ public static class BuiltinOperatorLowering
                             left,
                             right);
                 }
+
             }
             else if (loweredOp is LoweredOperator.BoolAnd)
             {
@@ -404,6 +479,9 @@ public static class BuiltinOperatorLowering
         return new SyntaxTypes.Expression.Application(rewrittenFunction, rewrittenArguments);
     }
 
+    private static bool IsEmptyList(SyntaxTypes.Expression expression) =>
+        expression is SyntaxTypes.Expression.ListExpr { Elements.Count: 0 };
+
     private static bool ProvesIntegerBuiltin(
         TypeInference.InferredType leftType,
         TypeInference.InferredType rightType) =>
@@ -435,14 +513,15 @@ public static class BuiltinOperatorLowering
         switch (type)
         {
             case TypeInference.InferredType.IntType:
+            case TypeInference.InferredType.FloatType:
             case TypeInference.InferredType.StringType:
             case TypeInference.InferredType.CharType:
             case TypeInference.InferredType.BoolType:
+            case TypeInference.InferredType.NumberType:
                 return true;
 
-            // FloatType and NumberType are NOT safe for primitive equality:
-            // different Pine representations (numerator/denominator pairs) can represent
-            // the same float value and must be treated as equal in Elm.
+            case TypeInference.InferredType.TypeVariable typeVariable:
+                return typeVariable.Constraint is not TypeVariableConstraint.None;
 
             case TypeInference.InferredType.TupleType tupleType:
                 return
@@ -452,15 +531,34 @@ public static class BuiltinOperatorLowering
             case TypeInference.InferredType.ListType listType:
                 return TypeSupportsPrimitiveEquality(listType.ElementType, context, visiting);
 
+            case TypeInference.InferredType.RecordType recordType:
+                return
+                    recordType.Fields.All(
+                        field => TypeSupportsPrimitiveEquality(field.FieldType, context, visiting));
+
             case TypeInference.InferredType.ChoiceType choiceType:
                 {
                     var qualifiedName =
                         QualifiedNameHelper.ToQualifiedNameRef(choiceType.ModuleName, choiceType.TypeName);
 
                     // First expand aliases — the ChoiceType might actually be an alias for a concrete type.
-                    if (context.AliasTypes.TryGetValue(qualifiedName, out var aliasType))
+                    if (context.AliasTypes.ContainsKey(qualifiedName))
                     {
-                        return TypeSupportsPrimitiveEquality(aliasType, context, visiting);
+                        if (!visiting.Add(qualifiedName))
+                            return true;
+
+                        try
+                        {
+                            return
+                                TypeSupportsPrimitiveEquality(
+                                    TypeInference.ExpandTypeAliases(choiceType, context.AliasTypes),
+                                    context,
+                                    visiting);
+                        }
+                        finally
+                        {
+                            visiting.Remove(qualifiedName);
+                        }
                     }
 
                     // Recognize List.List as a list type: safe if its element type is safe.
@@ -532,17 +630,27 @@ public static class BuiltinOperatorLowering
                         break;
                     }
 
-                case SyntaxTypes.LetDeclaration.LetDestructuring letDestructuring
-                when letDestructuring.Pattern is SyntaxTypes.Pattern.VarPattern varPattern:
-
-                    localBindingTypes[varPattern.Name] =
-                        TypeInference.InferExpressionType(
+                case SyntaxTypes.LetDeclaration.LetDestructuring letDestructuring:
+                    var bindingExpressionType =
+                        InferExpressionType(
                             letDestructuring.Expression,
-                            context.ParameterNames,
-                            context.ParameterTypes,
-                            localBindingTypes.ToImmutable(),
-                            context.CurrentModuleName,
-                            context.FunctionTypes);
+                            context with { LocalBindingTypes = localBindingTypes.ToImmutable() });
+
+                    var bindingsFromPattern =
+                        TypeInference.ExtractPatternBindingTypesWithConstructors(
+                            letDestructuring.Pattern,
+                            context.ConstructorArgumentTypes,
+                            localBindingTypes.ToImmutable());
+
+                    bindingsFromPattern =
+                        TypeInference.ExtractPatternBindingTypesFromInferred(
+                            letDestructuring.Pattern,
+                            bindingExpressionType,
+                            bindingsFromPattern,
+                            context.ConstructorArgumentTypes);
+
+                    localBindingTypes.Clear();
+                    localBindingTypes.AddRange(bindingsFromPattern);
 
                     break;
             }
@@ -596,6 +704,9 @@ public static class BuiltinOperatorLowering
 
         var explicitParameterTypes = BuildExplicitParameterTypes(letFunction.Function);
 
+        explicitParameterTypes =
+            ExpandAliasTypes(explicitParameterTypes, context.AliasTypes);
+
         var nestedContext =
             context with
             {
@@ -606,6 +717,10 @@ public static class BuiltinOperatorLowering
                 explicitParameterTypes
                 :
                 inferred.parameterTypes,
+                LocalBindingTypes =
+                BuildNestedLocalBindingTypes(
+                    context,
+                    SyntaxTypes.SyntaxAnalysis.CollectNamesBoundByPatterns(implementation.Arguments)),
             };
 
         var expectedReturnType =
@@ -648,7 +763,12 @@ public static class BuiltinOperatorLowering
                 MergeExpectedLambdaParameterTypes(
                     lambda.Arguments,
                     inferred.parameterTypes,
-                    expectedType),
+                    expectedType,
+                    context.ConstructorArgumentTypes),
+                LocalBindingTypes =
+                BuildNestedLocalBindingTypes(
+                    context,
+                    SyntaxTypes.SyntaxAnalysis.CollectNamesBoundByPatterns(lambda.Arguments)),
             };
 
         return
@@ -669,7 +789,8 @@ public static class BuiltinOperatorLowering
     private static ImmutableDictionary<string, TypeInference.InferredType> MergeExpectedLambdaParameterTypes(
         IReadOnlyList<SyntaxTypes.Pattern> arguments,
         ImmutableDictionary<string, TypeInference.InferredType> inferredParameterTypes,
-        TypeInference.InferredType? expectedType)
+        TypeInference.InferredType? expectedType,
+        IReadOnlyDictionary<QualifiedNameRef, IReadOnlyList<TypeInference.InferredType>> constructorArgumentTypes)
     {
         if (expectedType is not TypeInference.InferredType.FunctionType)
         {
@@ -681,16 +802,30 @@ public static class BuiltinOperatorLowering
 
         for (var index = 0; index < arguments.Count; index++)
         {
-            if (arguments[index] is not SyntaxTypes.Pattern.VarPattern varPattern ||
-                remainingExpectedType is not TypeInference.InferredType.FunctionType functionType)
+            if (remainingExpectedType is not TypeInference.InferredType.FunctionType functionType)
             {
                 break;
             }
 
-            mergedParameterTypes[varPattern.Name] =
-                ChooseLambdaParameterType(
-                    functionType.ArgumentType,
-                    mergedParameterTypes.GetValueOrDefault(varPattern.Name));
+            if (arguments[index] is SyntaxTypes.Pattern.VarPattern varPattern)
+            {
+                mergedParameterTypes[varPattern.Name] =
+                    ChooseLambdaParameterType(
+                        functionType.ArgumentType,
+                        mergedParameterTypes.GetValueOrDefault(varPattern.Name));
+            }
+            else
+            {
+                var bindings =
+                    TypeInference.ExtractPatternBindingTypesFromInferred(
+                        arguments[index],
+                        functionType.ArgumentType,
+                        mergedParameterTypes.ToImmutable(),
+                        constructorArgumentTypes);
+
+                mergedParameterTypes.Clear();
+                mergedParameterTypes.AddRange(bindings);
+            }
 
             remainingExpectedType = functionType.ReturnType;
         }
@@ -717,6 +852,21 @@ public static class BuiltinOperatorLowering
             _ =>
             expectedType
         };
+    }
+
+    private static ImmutableDictionary<string, TypeInference.InferredType> BuildNestedLocalBindingTypes(
+        RewriteContext context,
+        IReadOnlySet<string> nestedParameterNames)
+    {
+        var localBindings = context.LocalBindingTypes.ToBuilder();
+
+        foreach (var (name, type) in context.ParameterTypes)
+        {
+            if (!nestedParameterNames.Contains(name))
+                localBindings[name] = type;
+        }
+
+        return localBindings.ToImmutable();
     }
 
     private static LoweredOperator? TryMapBuiltinOperator(
@@ -1077,24 +1227,70 @@ public static class BuiltinOperatorLowering
             }
         }
 
+        var signatures = BuildFunctionSignatures(declarations);
+
+        foreach (var (qualifiedNameString, signatureType) in signatures)
+        {
+            var qualifiedName = QualifiedNameHelper.FromQualifiedNameString(qualifiedNameString);
+
+            if (result.ContainsKey(qualifiedName))
+                continue;
+
+            var parameterTypes = ExtractFunctionParameterTypes(signatureType);
+            var returnType = signatureType;
+
+            while (returnType is TypeInference.InferredType.FunctionType functionType)
+                returnType = functionType.ReturnType;
+
+            result[qualifiedName] = new FunctionTypeInfo(returnType, parameterTypes);
+        }
+
         return result.ToImmutableDictionary();
     }
 
-    private static ImmutableDictionary<QualifiedNameRef, TypeInference.InferredType> BuildAliasTypes(
+    private static ImmutableDictionary<QualifiedNameRef, TypeInference.TypeAliasDefinition> BuildAliasTypes(
         ImmutableDictionary<DeclQualifiedName, SyntaxTypes.Declaration> declarations)
     {
-        var result = new Dictionary<QualifiedNameRef, TypeInference.InferredType>();
+        var result = new Dictionary<QualifiedNameRef, TypeInference.TypeAliasDefinition>();
 
         foreach (var (key, decl) in declarations)
         {
             if (decl is SyntaxTypes.Declaration.AliasDeclaration declaration)
             {
                 result[QualifiedNameHelper.ToQualifiedNameRef(key.Namespaces, declaration.TypeAlias.Name)] =
-                    TypeInference.TypeAnnotationToInferredType(declaration.TypeAlias.TypeAnnotation);
+                    new TypeInference.TypeAliasDefinition(
+                        declaration.TypeAlias.Generics,
+                        TypeInference.TypeAnnotationToInferredType(declaration.TypeAlias.TypeAnnotation));
             }
         }
 
         return result.ToImmutableDictionary();
+    }
+
+    private static ImmutableDictionary<QualifiedNameRef, IReadOnlyList<TypeInference.InferredType>>
+        BuildConstructorArgumentTypes(
+        IReadOnlyDictionary<QualifiedNameRef, TypeInference.ChoiceTypeDefinition> choiceTypeDefinitions,
+        IReadOnlyDictionary<QualifiedNameRef, TypeInference.TypeAliasDefinition> aliasTypes)
+    {
+        var result =
+            ImmutableDictionary.CreateBuilder<QualifiedNameRef, IReadOnlyList<TypeInference.InferredType>>();
+
+        foreach (var (choiceTypeName, definition) in choiceTypeDefinitions)
+        {
+            foreach (var constructor in definition.Constructors)
+            {
+                result[
+                    QualifiedNameHelper.ToQualifiedNameRef(
+                        choiceTypeName.ModuleName,
+                        constructor.TagName)] =
+                    [
+                    .. constructor.ArgumentTypes.Select(
+                        argumentType => ExpandAliasType(argumentType, aliasTypes) ?? argumentType)
+                    ];
+            }
+        }
+
+        return result.ToImmutable();
     }
 
     private static ImmutableDictionary<string, TypeInference.InferredType> BuildFunctionSignatures(
@@ -1133,11 +1329,35 @@ public static class BuiltinOperatorLowering
 
     private static IReadOnlyList<TypeInference.InferredType?> GetExpectedArgumentTypes(
         SyntaxTypes.Expression.Application application,
-        RewriteContext context)
+        RewriteContext context,
+        TypeInference.InferredType? expectedType)
     {
         if (application.Function is not SyntaxTypes.Expression.Identifier functionOrValue)
         {
             return [];
+        }
+
+        if (functionOrValue.QualifiedName.Namespaces is ["Basics"] &&
+            application.Arguments.Count is 2 &&
+            functionOrValue.QualifiedName.DeclName is "apR" or "apL")
+        {
+            var valueArgumentIndex =
+                functionOrValue.QualifiedName.DeclName is "apR" ? 0 : 1;
+
+            var valueType =
+                InferExpressionType(application.Arguments[valueArgumentIndex], context);
+
+            var appliedFunctionType =
+                new TypeInference.InferredType.FunctionType(
+                    valueType,
+                    expectedType ?? new TypeInference.InferredType.UnknownType());
+
+            return
+                functionOrValue.QualifiedName.DeclName is "apR"
+                ?
+                [valueType, appliedFunctionType]
+                :
+                [appliedFunctionType, valueType];
         }
 
         var qualifiedName =
@@ -1150,6 +1370,9 @@ public static class BuiltinOperatorLowering
             QualifiedNameHelper.FromQualifiedNameString(
                 context.CurrentModuleName + "." + functionOrValue.QualifiedName.DeclName);
 
+        IReadOnlyList<TypeInference.InferredType> parameterTypes;
+        TypeInference.InferredType returnType;
+
         if (!context.FunctionTypes.TryGetValue(qualifiedName, out var functionTypeInfo))
         {
             var qualifiedNameString =
@@ -1160,17 +1383,57 @@ public static class BuiltinOperatorLowering
                 return [];
             }
 
-            return
-                [
-                .. ExtractFunctionParameterTypes(functionSignatureType)
-                .Select(parameterType => ExpandAliasType(parameterType, context.AliasTypes))
-                .Cast<TypeInference.InferredType?>()
-                ];
+            parameterTypes = ExtractFunctionParameterTypes(functionSignatureType);
+            returnType = GetFunctionReturnType(functionSignatureType);
+        }
+        else
+        {
+            parameterTypes = functionTypeInfo.ParameterTypes;
+            returnType = functionTypeInfo.ReturnType;
+        }
+
+        parameterTypes =
+            [
+            .. parameterTypes.Select(
+                parameterType => ExpandAliasType(parameterType, context.AliasTypes) ?? parameterType)
+            ];
+
+        returnType = ExpandAliasType(returnType, context.AliasTypes) ?? returnType;
+
+        var actualArgumentTypes =
+            application.Arguments
+            .Select(
+                argument =>
+                InferExpressionType(argument, context))
+            .ToList();
+
+        IReadOnlyList<TypeInference.InferredType> specializedParameterTypes =
+            TypeInference.SpecializeTypesFromArguments(
+                parameterTypes,
+                actualArgumentTypes);
+
+        if (expectedType is not null)
+        {
+            var partialResultType = returnType;
+
+            for (var index = parameterTypes.Count - 1; index >= application.Arguments.Count; index--)
+            {
+                partialResultType =
+                    new TypeInference.InferredType.FunctionType(
+                        parameterTypes[index],
+                        partialResultType);
+            }
+
+            specializedParameterTypes =
+                TypeInference.SpecializeTypesFromMatch(
+                    partialResultType,
+                    expectedType,
+                    specializedParameterTypes);
         }
 
         return
             [
-            .. functionTypeInfo.ParameterTypes
+            .. specializedParameterTypes
             .Select(parameterType => ExpandAliasType(parameterType, context.AliasTypes))
             .Cast<TypeInference.InferredType?>()
             ];
@@ -1191,39 +1454,76 @@ public static class BuiltinOperatorLowering
         return parameterTypes;
     }
 
+    private static TypeInference.InferredType GetFunctionReturnType(
+        TypeInference.InferredType functionType)
+    {
+        while (functionType is TypeInference.InferredType.FunctionType nextFunctionType)
+            functionType = nextFunctionType.ReturnType;
+
+        return functionType;
+    }
+
     private static TypeInference.InferredType? ExpandAliasType(
         TypeInference.InferredType? inferredType,
-        IReadOnlyDictionary<QualifiedNameRef, TypeInference.InferredType> aliasTypes)
+        IReadOnlyDictionary<QualifiedNameRef, TypeInference.TypeAliasDefinition> aliasTypes)
     {
-        return inferredType switch
-        {
-            null => null,
-
-            TypeInference.InferredType.ChoiceType choiceType when aliasTypes.TryGetValue(
-                QualifiedNameHelper.ToQualifiedNameRef(choiceType.ModuleName, choiceType.TypeName),
-                out var aliasType) =>
-            ExpandAliasType(aliasType, aliasTypes),
-
-            TypeInference.InferredType.RecordType recordType =>
-            new TypeInference.InferredType.RecordType(
-                [
-                ..recordType.Fields.Select(
-                    field => (field.FieldName, ExpandAliasType(field.FieldType, aliasTypes) ?? field.FieldType))
-                ]),
-
-            TypeInference.InferredType.ListType listType =>
-            new TypeInference.InferredType.ListType(
-                ExpandAliasType(listType.ElementType, aliasTypes) ?? listType.ElementType),
-
-            TypeInference.InferredType.FunctionType functionType =>
-            new TypeInference.InferredType.FunctionType(
-                ExpandAliasType(functionType.ArgumentType, aliasTypes) ?? functionType.ArgumentType,
-                ExpandAliasType(functionType.ReturnType, aliasTypes) ?? functionType.ReturnType),
-
-            _ =>
-            inferredType
-        };
+        return
+            inferredType is null
+            ?
+            null
+            :
+            TypeInference.ExpandTypeAliases(inferredType, aliasTypes);
     }
+
+    private static TypeInference.InferredType InferExpressionType(
+        SyntaxTypes.Expression expression,
+        RewriteContext context)
+    {
+        if (expression is SyntaxTypes.Expression.RecordAccess recordAccess)
+        {
+            var recordType = InferExpressionType(recordAccess.Record, context);
+
+            if (recordType is TypeInference.InferredType.RecordType closedRecord)
+            {
+                var fieldType =
+                    closedRecord.Fields
+                    .FirstOrDefault(field => field.FieldName == recordAccess.FieldName)
+                    .FieldType;
+
+                if (fieldType is not null)
+                    return ExpandAliasType(fieldType, context.AliasTypes) ?? fieldType;
+            }
+
+            if (recordType is TypeInference.InferredType.OpenRecordType openRecord)
+            {
+                var fieldType =
+                    openRecord.KnownFields
+                    .FirstOrDefault(field => field.FieldName == recordAccess.FieldName)
+                    .FieldType;
+
+                if (fieldType is not null)
+                    return ExpandAliasType(fieldType, context.AliasTypes) ?? fieldType;
+            }
+        }
+
+        var inferredType =
+            TypeInference.InferExpressionType(
+                expression,
+                context.ParameterNames,
+                context.ParameterTypes,
+                context.LocalBindingTypes,
+                context.CurrentModuleName,
+                context.FunctionTypes);
+
+        return ExpandAliasType(inferredType, context.AliasTypes) ?? inferredType;
+    }
+
+    private static ImmutableDictionary<string, TypeInference.InferredType> ExpandAliasTypes(
+        ImmutableDictionary<string, TypeInference.InferredType> inferredTypes,
+        IReadOnlyDictionary<QualifiedNameRef, TypeInference.TypeAliasDefinition> aliasTypes) =>
+        inferredTypes.ToImmutableDictionary(
+            entry => entry.Key,
+            entry => ExpandAliasType(entry.Value, aliasTypes) ?? entry.Value);
 
     private static TypeInference.InferredType BuildInferredFunctionType(
         SyntaxTypes.Expression expression,

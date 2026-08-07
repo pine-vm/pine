@@ -37,12 +37,15 @@ public class BasicsPrecompiledLeavesEffectivenessTests
         module BasicsPrecompiledLeavesTestModule exposing (..)
 
 
+        import Dict exposing (Dict)
+
+
         isLessThan : List Int -> List Int -> Bool
         isLessThan a b =
             a < b
 
 
-        isEqual : List Float -> List Float -> Bool
+        isEqual : List (Dict Int Int) -> List (Dict Int Int) -> Bool
         isEqual a b =
             a == b
 
@@ -83,7 +86,8 @@ public class BasicsPrecompiledLeavesEffectivenessTests
                         b =>
                         b.path[^1].Equals(
                             "BasicsPrecompiledLeavesTestModule.elm",
-                            StringComparison.OrdinalIgnoreCase))
+                            StringComparison.OrdinalIgnoreCase) ||
+                        b.path[^1].Equals("Dict.elm", StringComparison.OrdinalIgnoreCase))
                     .Select(b => (IReadOnlyList<string>)b.path)
                     .ToList();
 
@@ -102,6 +106,11 @@ public class BasicsPrecompiledLeavesEffectivenessTests
     private static PineValue GetTestFunction(string name) =>
         s_env.Value.Modules
         .First(m => m.moduleName is "BasicsPrecompiledLeavesTestModule")
+        .moduleContent.FunctionDeclarations[name];
+
+    private static PineValue GetDictFunction(string name) =>
+        s_env.Value.Modules
+        .First(m => m.moduleName is "Dict")
         .moduleContent.FunctionDeclarations[name];
 
     // ---------- VM construction ----------
@@ -129,17 +138,21 @@ public class BasicsPrecompiledLeavesEffectivenessTests
     private static ElmValue IntList(IEnumerable<long> items) =>
         ElmValue.ListInstance([.. items.Select(i => ElmValue.Integer(i))]);
 
-    /// <summary>
-    /// Builds a list of Elm <c>Float</c> values. Used (instead of <see cref="IntList"/>) for the
-    /// <c>Basics.eq</c> effectiveness test: the compiler lowers <c>==</c> directly to
-    /// <c>Pine_kernel.equal</c> (bypassing <c>Basics.eq</c> and its precompiled leaf entirely)
-    /// whenever the operand type statically proves primitive equality suffices, which is the
-    /// case for <c>List Int</c>. <c>Float</c> is excluded from that proof (different
-    /// numerator/denominator pairs can represent the same value), which is exactly what forces
-    /// the general recursive <c>eqDeep</c> path to be exercised.
-    /// </summary>
-    private static ElmValue FloatList(IEnumerable<double> items) =>
-        ElmValue.ListInstance([.. items.Select(i => (ElmValue)ElmValue.ElmFloat.Convert(i))]);
+    private static ElmValue IntDictList(
+        IEnumerable<long> items,
+        Core.Interpreter.IntermediateVM.PineVM vm) =>
+        ElmValue.ListInstance([.. items.Select(item => IntDict(item, vm))]);
+
+    private static ElmValue IntDict(
+        long value,
+        Core.Interpreter.IntermediateVM.PineVM vm) =>
+        CoreLibraryModule.CoreLibraryTestHelper.ApplyUnary(
+            GetDictFunction("fromList"),
+            ElmValue.ListInstance(
+                [
+                ElmValue.ListInstance([ElmValue.Integer(0), ElmValue.Integer(value)]),
+                ]),
+            vm);
 
     private static (ElmValue value, PerformanceCounters counters) Apply(
         PineValue functionValue,
@@ -264,20 +277,24 @@ public class BasicsPrecompiledLeavesEffectivenessTests
         var vmWithLeaves =
             CreateVM(DefaultPrecompiledLeaves);
 
+        var inputBuilderVM =
+            CreateVM(DefaultPrecompiledLeaves);
+
         // Simple inputs: lists differ at position 0, so the recursive
         // equality check terminates immediately.
-        var simpleA = FloatList([1.5]);
-        var simpleB = FloatList([2.5]);
+        var simpleA = IntDictList([1], inputBuilderVM);
+        var simpleB = IntDictList([2], inputBuilderVM);
 
         // Complex inputs: 30-element lists, equal everywhere except the last
         // position, forcing the recursive equality check to walk through 29
         // list cells before noticing the difference.
-        var complexA = FloatList(Enumerable.Range(0, 30).Select(i => i + 0.5));
+        var complexA = IntDictList(Enumerable.Range(0, 30).Select(i => (long)i), inputBuilderVM);
 
         var complexB =
-            FloatList(
+            IntDictList(
                 Enumerable.Range(0, 30)
-                .Select(i => i is 29 ? i + 1.5 : i + 0.5));
+                .Select(i => i is 29 ? (long)i + 1 : i),
+                inputBuilderVM);
 
         var simpleNoLeaves = Apply(functionValue, simpleA, simpleB, vmWithoutLeaves);
         var complexNoLeaves = Apply(functionValue, complexA, complexB, vmWithoutLeaves);
