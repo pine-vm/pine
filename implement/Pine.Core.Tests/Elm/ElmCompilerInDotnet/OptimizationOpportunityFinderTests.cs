@@ -1,6 +1,8 @@
 using AwesomeAssertions;
 using Pine.Core.CodeAnalysis;
 using Pine.Core.Elm.ElmCompilerInDotnet;
+using Pine.Core.Elm.ElmInElm;
+using Pine.Core.Files;
 using System.Collections.Immutable;
 using System.Linq;
 using Xunit;
@@ -64,6 +66,67 @@ public class OptimizationOpportunityFinderTests
             """
             Test.bumpAge: record-access: age
             Test.bumpAge: record-update: age
+            """.Trim());
+    }
+
+    [Fact]
+    public void Does_not_report_record_operations_on_closed_record()
+    {
+        var rendered =
+            FindAndRender(
+                """
+                module Test exposing (..)
+
+
+                rename : { name : String, age : Int } -> { name : String, age : Int }
+                rename person =
+                    { person | name = person.name }
+                """);
+
+        rendered.Should().Be("");
+    }
+
+    [Fact]
+    public void Reports_record_access_on_inferred_open_record()
+    {
+        var rendered =
+            FindAndRender(
+                """
+                module Test exposing (..)
+
+
+                showName record =
+                    record.name
+                """);
+
+        rendered.Should().Be(
+            """
+            Test.showName: record-access: name
+            """.Trim());
+    }
+
+    [Fact]
+    public void Reports_record_operations_on_let_bound_open_record()
+    {
+        var rendered =
+            FindAndRender(
+                """
+                module Test exposing (..)
+
+
+                copyName : { a | name : String } -> { a | name : String }
+                copyName record =
+                    let
+                        alias =
+                            record
+                    in
+                    { alias | name = alias.name }
+                """);
+
+        rendered.Should().Be(
+            """
+            Test.copyName: record-access: name
+            Test.copyName: record-update: name
             """.Trim());
     }
 
@@ -1730,6 +1793,142 @@ public class OptimizationOpportunityFinderTests
             Test.liftedLambda: higher-order-parameter-direct: parseB
             Test.liftedLambda: higher-order-parameter-direct: parseC
             """.Trim());
+    }
+
+    [Fact]
+    public void Reports_all_opportunities_remaining_in_language_service_and_concrete_parser()
+    {
+        var compilerSources = BundledFiles.CompilerSourceContainerFilesDefault.Value;
+        var sourceTree = BundledFiles.ElmKernelModulesDefault.Value;
+
+        foreach (var sourcePath in new[]
+        {
+            new[] { "pine-elm-syntax", "src" },
+            ["src"],
+            ["other-library-modules"],
+        })
+        {
+            if (compilerSources.GetNodeAtPath(sourcePath) is not { } subtree)
+                continue;
+
+            foreach (var (path, file) in subtree.EnumerateFilesTransitive())
+                sourceTree = sourceTree.SetNodeAtPathSorted(path, FileTree.File(file));
+        }
+
+        var rootFilePaths =
+            sourceTree
+            .EnumerateFilesTransitive()
+            .Where(
+                file =>
+                file.path.SequenceEqual(["LanguageService.elm"]) ||
+                file.path.SequenceEqual(["LanguageServiceAnalysis.elm"]) ||
+                file.path.Take(3).SequenceEqual(["ElmSyntax", "Concrete", "Parser"]))
+            .Select(file => (System.Collections.Generic.IReadOnlyList<string>)file.path)
+            .ToList();
+
+        var pipelineResults =
+            ElmCompiler.LowerToElmSyntaxForCompilation(
+                sourceTree,
+                rootFilePaths)
+            .Extract(error => throw new System.Exception("Failed lowering: " + error));
+
+        var opportunities =
+            OptimizationOpportunityFinder.FindOptimizationOpportunities(
+                pipelineResults.Lowered.FilteredDeclarations)
+            .Where(
+                opportunity =>
+                opportunity.ContainingDecl.Namespaces.SequenceEqual(["LanguageService"]) ||
+                opportunity.ContainingDecl.Namespaces.SequenceEqual(["LanguageServiceAnalysis"]) ||
+                opportunity.ContainingDecl.Namespaces.Take(3).SequenceEqual(["ElmSyntax", "Concrete", "Parser"]))
+            .ToImmutableHashSet();
+
+        var countsByModuleAndCategory =
+            opportunities
+            .GroupBy(
+                opportunity =>
+                (
+                    Module:
+                    opportunity.ContainingDecl.Namespaces.Take(3)
+                    .SequenceEqual(["ElmSyntax", "Concrete", "Parser"])
+                    ?
+                    "ElmSyntax.Concrete.Parser"
+                    :
+                    opportunity.ContainingDecl.Namespaces[0],
+                    opportunity.Category))
+            .OrderBy(group => group.Key.Module, System.StringComparer.Ordinal)
+            .ThenBy(group => group.Key.Category)
+            .Select(
+                group =>
+                group.Key.Module + ": " + group.Key.Category + ": " + group.Count());
+
+        var renderedCounts = string.Join("\n", countsByModuleAndCategory);
+
+        renderedCounts.Should().Be(
+            """
+            ElmSyntax.Concrete.Parser: BasicsArithmetic: 15
+            ElmSyntax.Concrete.Parser: BasicsCompare: 16
+            ElmSyntax.Concrete.Parser: BasicsEq: 68
+            ElmSyntax.Concrete.Parser: BasicsAppend: 39
+            ElmSyntax.Concrete.Parser: HigherOrderParameter_Direct: 1
+            ElmSyntax.Concrete.Parser: HigherOrderParameter_Indirect: 56
+            ElmSyntax.Concrete.Parser: RootLevelChoiceTagWrapper: 67
+            LanguageService: RecordAccess: 53
+            LanguageService: BasicsArithmetic: 1
+            LanguageService: BasicsCompare: 5
+            LanguageService: BasicsEq: 20
+            LanguageService: BasicsAppend: 1
+            LanguageService: PartialApplication: 63
+            LanguageService: HigherOrderParameter_Direct: 3
+            LanguageService: HigherOrderParameter_Indirect: 147
+            LanguageService: RootLevelChoiceTagWrapper: 28
+            LanguageServiceAnalysis: RecordAccess: 10
+            LanguageServiceAnalysis: RecordUpdate: 2
+            LanguageServiceAnalysis: BasicsEq: 3
+            LanguageServiceAnalysis: BasicsAppend: 5
+            LanguageServiceAnalysis: HigherOrderParameter_Indirect: 93
+            LanguageServiceAnalysis: RootLevelChoiceTagWrapper: 3
+            """.Trim());
+
+        opportunities.Should().Contain(
+            new Opportunity(
+                DeclQualifiedName.FromString(
+                    "ElmSyntax.Concrete.Parser.FromString.findAttachableDocumentationCommentToken"),
+                OpportunityCategory.BasicsArithmetic,
+                "add"));
+
+        opportunities.Should().Contain(
+            new Opportunity(
+                DeclQualifiedName.FromString(
+                    "ElmSyntax.Concrete.Parser.FromString.canStartNamedPatternArgument"),
+                OpportunityCategory.BasicsEq,
+                "eq"));
+
+        opportunities.Should().Contain(
+            new Opportunity(
+                DeclQualifiedName.FromString(
+                    "LanguageService.commonImplicitTopLevelImportsNew__lifted__lambda3"),
+                OpportunityCategory.RecordAccess,
+                "name"));
+
+        opportunities.Should().Contain(
+            new Opportunity(
+                DeclQualifiedName.FromString(
+                    "LanguageService.locationIsInComment__lifted__lambda1"),
+                OpportunityCategory.BasicsArithmetic,
+                "add"));
+
+        opportunities.Should().Contain(
+            new Opportunity(
+                DeclQualifiedName.FromString("LanguageService.commonImplicitTopLevelImports"),
+                OpportunityCategory.BasicsEq,
+                "eq"));
+
+        opportunities.Should().Contain(
+            new Opportunity(
+                DeclQualifiedName.FromString(
+                    "LanguageServiceAnalysis.analyzeFile__lifted__lambda1"),
+                OpportunityCategory.RecordUpdate,
+                "isExposed"));
     }
 
     private static string FindAndRender(

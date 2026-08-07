@@ -180,6 +180,13 @@ public record Opportunity(
 /// </summary>
 public static class OptimizationOpportunityFinder
 {
+    private sealed record ExpressionTypeContext(
+        string CurrentModuleName,
+        ImmutableDictionary<string, int> ParameterNames,
+        ImmutableDictionary<string, TypeInference.InferredType> ParameterTypes,
+        ImmutableDictionary<string, TypeInference.InferredType> LocalBindingTypes,
+        IReadOnlyDictionary<ElmSyntax.SyntaxModel.QualifiedNameRef, FunctionTypeInfo> FunctionTypes);
+
     /// <summary>
     /// Mapping from <c>Basics</c> function name (as used in
     /// <see cref="SyntaxTypes.Expression.Identifier"/>) to the
@@ -257,6 +264,36 @@ public static class OptimizationOpportunityFinder
             }
         }
 
+        var functionSignaturesBuilder =
+            ImmutableDictionary.CreateBuilder<string, TypeInference.InferredType>();
+
+        foreach (var (qualifiedName, declaration) in declarations)
+        {
+            TypeInference.CollectFunctionSignaturesFromDeclaration(
+                declaration,
+                string.Join(".", qualifiedName.Namespaces),
+                functionSignaturesBuilder);
+        }
+
+        var functionSignatures = functionSignaturesBuilder.ToImmutable();
+
+        var functionTypes =
+            declarations
+            .Where(entry => entry.Value is SyntaxTypes.Declaration.FunctionDeclaration)
+            .ToDictionary(
+                entry =>
+                QualifiedNameHelper.FromQualifiedNameString(entry.Key.FullName),
+                entry =>
+                {
+                    var functionDeclaration =
+                        (SyntaxTypes.Declaration.FunctionDeclaration)entry.Value;
+
+                    return
+                        new FunctionTypeInfo(
+                            TypeInference.GetFunctionReturnType(functionDeclaration),
+                            TypeInference.GetFunctionParameterTypes(functionDeclaration));
+                });
+
         // Build the single-tag custom-type registry once. Indexed by both
         // the type's qualified name and the (sole) constructor's qualified
         // name so detection sites can look up via either direction. Only
@@ -302,12 +339,59 @@ public static class OptimizationOpportunityFinder
             var topLevelParamNames =
                 SyntaxTypes.SyntaxAnalysis.CollectNamesBoundByPatterns(funcDecl.Function.Declaration.Arguments);
 
+            var parameterNamesBuilder = ImmutableDictionary.CreateBuilder<string, int>();
+
+            for (var argumentIndex = 0;
+                argumentIndex < funcDecl.Function.Declaration.Arguments.Count;
+                argumentIndex++)
+            {
+                foreach (var name in
+                    SyntaxTypes.SyntaxAnalysis.CollectNamesBoundByPattern(
+                        funcDecl.Function.Declaration.Arguments[argumentIndex]))
+                {
+                    parameterNamesBuilder[name] = argumentIndex;
+                }
+            }
+
+            var inferredFunctionType =
+                TypeInference.InferFunctionDeclarationType(
+                    funcDecl.Function.Declaration.Expression,
+                    funcDecl.Function.Declaration.Arguments,
+                    string.Join(".", qualifiedName.Namespaces),
+                    functionSignatures);
+
+            var parameterTypes = inferredFunctionType.parameterTypes;
+
+            var annotatedParameterTypes =
+                TypeInference.GetFunctionParameterTypes(funcDecl.Function);
+
+            for (var argumentIndex = 0;
+                argumentIndex < annotatedParameterTypes.Count &&
+                argumentIndex < funcDecl.Function.Declaration.Arguments.Count;
+                argumentIndex++)
+            {
+                parameterTypes =
+                    TypeInference.ExtractPatternBindingTypesFromInferred(
+                        funcDecl.Function.Declaration.Arguments[argumentIndex],
+                        annotatedParameterTypes[argumentIndex],
+                        parameterTypes);
+            }
+
+            var expressionTypeContext =
+                new ExpressionTypeContext(
+                    CurrentModuleName: string.Join(".", qualifiedName.Namespaces),
+                    ParameterNames: parameterNamesBuilder.ToImmutable(),
+                    ParameterTypes: parameterTypes,
+                    LocalBindingTypes: [],
+                    FunctionTypes: functionTypes);
+
             CollectFromExpression(
                 funcDecl.Function.Declaration.Expression,
                 qualifiedName,
                 topLevelArity,
                 [],
                 topLevelParamNames,
+                expressionTypeContext,
                 resultBuilder);
 
             // Higher-order parameter detection for the top-level function:
@@ -530,6 +614,7 @@ public static class OptimizationOpportunityFinder
         IReadOnlyDictionary<DeclQualifiedName, int> topLevelArity,
         ImmutableDictionary<string, int> letScope,
         ImmutableHashSet<string> functionTypedParameterNames,
+        ExpressionTypeContext expressionTypeContext,
         ImmutableHashSet<Opportunity>.Builder resultBuilder)
     {
         // The outer switch enumerates every Expression variant explicitly so
@@ -541,11 +626,14 @@ public static class OptimizationOpportunityFinder
         switch (expression)
         {
             case SyntaxTypes.Expression.RecordAccess recordAccess:
-                MaybeAdd(
-                    OpportunityCategory.RecordAccess,
-                    recordAccess.FieldName,
-                    containing,
-                    resultBuilder);
+                if (IsOpenRecordExpression(recordAccess.Record, expressionTypeContext))
+                {
+                    MaybeAdd(
+                        OpportunityCategory.RecordAccess,
+                        recordAccess.FieldName,
+                        containing,
+                        resultBuilder);
+                }
 
                 CollectFromExpression(
                     recordAccess.Record,
@@ -553,6 +641,7 @@ public static class OptimizationOpportunityFinder
                     topLevelArity,
                     letScope,
                     functionTypedParameterNames,
+                    expressionTypeContext,
                     resultBuilder);
 
                 break;
@@ -567,13 +656,23 @@ public static class OptimizationOpportunityFinder
                 break;
 
             case SyntaxTypes.Expression.RecordUpdateExpression recordUpdate:
+                var recordUpdateExpression =
+                    new SyntaxTypes.Expression.Identifier(
+                        DeclQualifiedName.Create([], recordUpdate.RecordName));
+
+                var isOpenRecordUpdate =
+                    IsOpenRecordExpression(recordUpdateExpression, expressionTypeContext);
+
                 foreach (var field in recordUpdate.Fields)
                 {
-                    MaybeAdd(
-                        OpportunityCategory.RecordUpdate,
-                        field.FieldName,
-                        containing,
-                        resultBuilder);
+                    if (isOpenRecordUpdate)
+                    {
+                        MaybeAdd(
+                            OpportunityCategory.RecordUpdate,
+                            field.FieldName,
+                            containing,
+                            resultBuilder);
+                    }
 
                     CollectFromExpression(
                         field.Value,
@@ -581,6 +680,7 @@ public static class OptimizationOpportunityFinder
                         topLevelArity,
                         letScope,
                         functionTypedParameterNames,
+                        expressionTypeContext,
                         resultBuilder);
                 }
 
@@ -616,6 +716,7 @@ public static class OptimizationOpportunityFinder
                     topLevelArity,
                     letScope,
                     functionTypedParameterNames,
+                    expressionTypeContext,
                     resultBuilder);
 
                 CollectFromExpression(
@@ -624,6 +725,7 @@ public static class OptimizationOpportunityFinder
                     topLevelArity,
                     letScope,
                     functionTypedParameterNames,
+                    expressionTypeContext,
                     resultBuilder);
 
                 break;
@@ -654,6 +756,7 @@ public static class OptimizationOpportunityFinder
                     topLevelArity,
                     letScope,
                     functionTypedParameterNames,
+                    expressionTypeContext,
                     resultBuilder);
 
                 foreach (var arg in app.Arguments)
@@ -664,6 +767,7 @@ public static class OptimizationOpportunityFinder
                         topLevelArity,
                         letScope,
                         functionTypedParameterNames,
+                        expressionTypeContext,
                         resultBuilder);
                 }
 
@@ -675,6 +779,19 @@ public static class OptimizationOpportunityFinder
                 // are visible inside the let body and inside sibling let
                 // bindings (Elm let-rec semantics).
                 var extendedLetScope = letScope;
+
+                var extendedTypeContext =
+                    expressionTypeContext with
+                    {
+                        LocalBindingTypes =
+                        TypeInference.InferLetExpressionLocalBindingTypes(
+                            letExpr,
+                            expressionTypeContext.ParameterNames,
+                            expressionTypeContext.ParameterTypes,
+                            expressionTypeContext.LocalBindingTypes,
+                            expressionTypeContext.CurrentModuleName,
+                            expressionTypeContext.FunctionTypes)
+                    };
 
                 foreach (var decl in letExpr.Declarations)
                 {
@@ -716,6 +833,7 @@ public static class OptimizationOpportunityFinder
                                 // false-positive rate stays low for the
                                 // current test corpus.
                                 functionTypedParameterNames,
+                                extendedTypeContext,
                                 resultBuilder);
 
                             CollectHigherOrderParameterFindings(
@@ -735,6 +853,7 @@ public static class OptimizationOpportunityFinder
                                 topLevelArity,
                                 extendedLetScope,
                                 functionTypedParameterNames,
+                                extendedTypeContext,
                                 resultBuilder);
 
                             break;
@@ -752,6 +871,7 @@ public static class OptimizationOpportunityFinder
                     topLevelArity,
                     extendedLetScope,
                     functionTypedParameterNames,
+                    extendedTypeContext,
                     resultBuilder);
 
                 break;
@@ -763,6 +883,7 @@ public static class OptimizationOpportunityFinder
                     topLevelArity,
                     letScope,
                     functionTypedParameterNames,
+                    expressionTypeContext,
                     resultBuilder);
 
                 break;
@@ -774,6 +895,7 @@ public static class OptimizationOpportunityFinder
                     topLevelArity,
                     letScope,
                     functionTypedParameterNames,
+                    expressionTypeContext,
                     resultBuilder);
 
                 CollectFromExpression(
@@ -782,6 +904,7 @@ public static class OptimizationOpportunityFinder
                     topLevelArity,
                     letScope,
                     functionTypedParameterNames,
+                    expressionTypeContext,
                     resultBuilder);
 
                 CollectFromExpression(
@@ -790,6 +913,7 @@ public static class OptimizationOpportunityFinder
                     topLevelArity,
                     letScope,
                     functionTypedParameterNames,
+                    expressionTypeContext,
                     resultBuilder);
 
                 break;
@@ -801,6 +925,7 @@ public static class OptimizationOpportunityFinder
                     topLevelArity,
                     letScope,
                     functionTypedParameterNames,
+                    expressionTypeContext,
                     resultBuilder);
 
                 foreach (var caseEntry in caseExpr.Cases)
@@ -811,6 +936,7 @@ public static class OptimizationOpportunityFinder
                         topLevelArity,
                         letScope,
                         functionTypedParameterNames,
+                        expressionTypeContext,
                         resultBuilder);
                 }
 
@@ -825,6 +951,7 @@ public static class OptimizationOpportunityFinder
                         topLevelArity,
                         letScope,
                         functionTypedParameterNames,
+                        expressionTypeContext,
                         resultBuilder);
                 }
 
@@ -839,6 +966,7 @@ public static class OptimizationOpportunityFinder
                         topLevelArity,
                         letScope,
                         functionTypedParameterNames,
+                        expressionTypeContext,
                         resultBuilder);
                 }
 
@@ -853,6 +981,7 @@ public static class OptimizationOpportunityFinder
                         topLevelArity,
                         letScope,
                         functionTypedParameterNames,
+                        expressionTypeContext,
                         resultBuilder);
                 }
 
@@ -865,6 +994,7 @@ public static class OptimizationOpportunityFinder
                     topLevelArity,
                     letScope,
                     functionTypedParameterNames,
+                    expressionTypeContext,
                     resultBuilder);
 
                 break;
@@ -884,6 +1014,17 @@ public static class OptimizationOpportunityFinder
                     expression.GetType().Name);
         }
     }
+
+    private static bool IsOpenRecordExpression(
+        SyntaxTypes.Expression expression,
+        ExpressionTypeContext context) =>
+        TypeInference.InferExpressionType(
+            expression,
+            context.ParameterNames,
+            context.ParameterTypes,
+            context.LocalBindingTypes,
+            context.CurrentModuleName,
+            context.FunctionTypes) is TypeInference.InferredType.OpenRecordType;
 
     /// <summary>
     /// Inspects an <see cref="SyntaxTypes.Expression.Application"/> node

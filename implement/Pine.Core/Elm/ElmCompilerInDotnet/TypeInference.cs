@@ -1230,6 +1230,17 @@ public static class TypeInference
             return new InferredType.RecordType(fields);
         }
 
+        if (typeAnnotation is SyntaxTypes.TypeAnnotation.GenericRecord genericRecordType)
+        {
+            var fields =
+                genericRecordType.RecordDefinition.Fields
+                .Select(f => (f.FieldName, TypeAnnotationToInferredType(f.FieldType)))
+                .OrderBy(f => f.FieldName, StringComparer.Ordinal)
+                .ToList();
+
+            return new InferredType.OpenRecordType(genericRecordType.GenericName, fields);
+        }
+
         // Handle function type annotations
         if (typeAnnotation is SyntaxTypes.TypeAnnotation.FunctionTypeAnnotation funcType)
         {
@@ -1706,49 +1717,14 @@ public static class TypeInference
         // Let expression - infer types for local bindings and then the body
         if (expression is SyntaxTypes.Expression.LetExpression letExpr)
         {
-            // Build local binding types from the let declarations
             var extendedLocalBindings =
-                localBindingTypes?.ToImmutableDictionary() ?? [];
-
-            foreach (var decl in letExpr.Declarations)
-            {
-                if (decl is SyntaxTypes.LetDeclaration.LetFunction letFunc)
-                {
-                    var funcName = letFunc.Function.Declaration.Name;
-
-                    var funcType =
-                        BuildFunctionTypeFromSignatureOrNull(letFunc.Function)
-                        ??
-                        InferExpressionType(
-                            letFunc.Function.Declaration.Expression,
-                            parameterNames,
-                            parameterTypes,
-                            extendedLocalBindings,
-                            currentModuleName,
-                            functionTypes);
-
-                    extendedLocalBindings = extendedLocalBindings.SetItem(funcName, funcType);
-                }
-                else if (decl is SyntaxTypes.LetDeclaration.LetDestructuring letDestr)
-                {
-                    // For destructuring, we would need pattern matching support
-                    // For now, just recurse into the expression
-                    var exprType =
-                        InferExpressionType(
-                            letDestr.Expression,
-                            parameterNames,
-                            parameterTypes,
-                            extendedLocalBindings,
-                            currentModuleName,
-                            functionTypes);
-
-                    // Try to extract binding names from the pattern
-                    foreach (var binding in ExtractBindingsFromPattern(letDestr.Pattern))
-                    {
-                        extendedLocalBindings = extendedLocalBindings.SetItem(binding, exprType);
-                    }
-                }
-            }
+                InferLetExpressionLocalBindingTypes(
+                    letExpr,
+                    parameterNames,
+                    parameterTypes,
+                    localBindingTypes,
+                    currentModuleName,
+                    functionTypes);
 
             // The type of the let expression is the type of its body
             return
@@ -1967,6 +1943,62 @@ public static class TypeInference
         }
 
         return null;
+    }
+
+    /// <summary>
+    /// Infers the bindings introduced by an Elm <c>let</c> expression.
+    /// </summary>
+    public static ImmutableDictionary<string, InferredType> InferLetExpressionLocalBindingTypes(
+        SyntaxTypes.Expression.LetExpression letExpression,
+        IReadOnlyDictionary<string, int> parameterNames,
+        IReadOnlyDictionary<string, InferredType> parameterTypes,
+        IReadOnlyDictionary<string, InferredType>? localBindingTypes,
+        string? currentModuleName,
+        IReadOnlyDictionary<QualifiedNameRef, FunctionTypeInfo>? functionTypes)
+    {
+        var extendedLocalBindings =
+            localBindingTypes?.ToImmutableDictionary() ?? [];
+
+        foreach (var declaration in letExpression.Declarations)
+        {
+            if (declaration is SyntaxTypes.LetDeclaration.LetFunction letFunction)
+            {
+                var functionType =
+                    BuildFunctionTypeFromSignatureOrNull(letFunction.Function)
+                    ??
+                    InferExpressionType(
+                        letFunction.Function.Declaration.Expression,
+                        parameterNames,
+                        parameterTypes,
+                        extendedLocalBindings,
+                        currentModuleName,
+                        functionTypes);
+
+                extendedLocalBindings =
+                    extendedLocalBindings.SetItem(
+                        letFunction.Function.Declaration.Name,
+                        functionType);
+            }
+            else if (declaration is SyntaxTypes.LetDeclaration.LetDestructuring letDestructuring)
+            {
+                var expressionType =
+                    InferExpressionType(
+                        letDestructuring.Expression,
+                        parameterNames,
+                        parameterTypes,
+                        extendedLocalBindings,
+                        currentModuleName,
+                        functionTypes);
+
+                extendedLocalBindings =
+                    ExtractPatternBindingTypesFromInferred(
+                        letDestructuring.Pattern,
+                        expressionType,
+                        extendedLocalBindings);
+            }
+        }
+
+        return extendedLocalBindings;
     }
 
     /// <summary>
