@@ -772,7 +772,7 @@ public class ShadowingReportTests
         var parsedModule = ParseModuleText(moduleText);
 
         var result =
-            Canonicalization.CanonicalizeAllowingErrors([parsedModule]);
+            Canonicalization.Canonicalize([parsedModule]);
 
         var modulesDict =
             result.Extract(err => throw new System.Exception("Unexpected error: " + err));

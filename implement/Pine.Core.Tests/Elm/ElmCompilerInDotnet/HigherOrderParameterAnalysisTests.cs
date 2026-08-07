@@ -6,7 +6,7 @@ using System.Collections.Immutable;
 using System.Linq;
 using Xunit;
 
-using SyntaxTypes = Pine.Core.Elm.ElmSyntax.Stil4mElmSyntax7;
+using SyntaxTypes = Pine.Core.Elm.ElmSyntax.ElmSyntaxAbstract;
 
 namespace Pine.Core.Tests.Elm.ElmCompilerInDotnet;
 
@@ -923,29 +923,9 @@ public class HigherOrderParameterAnalysisTests
             Core.Elm.ElmSyntax.ElmSyntaxParser.ParseModuleText(moduleText)
             .Extract(err => throw new System.Exception("Failed parsing: " + err));
 
-        var converted =
-            SyntaxTypes.FromFullSyntaxModel.Convert(parsed);
+        var converted = SyntaxTypes.ConvertFromConcrete.FromFile(parsed);
 
-        var moduleName =
-            SyntaxTypes.Module
-            .GetModuleName(converted.ModuleDefinition.Value).Value;
-
-        var builder = ImmutableDictionary.CreateBuilder<DeclQualifiedName, SyntaxTypes.Declaration>();
-
-        foreach (var declNode in converted.Declarations)
-        {
-            switch (declNode.Value)
-            {
-                case SyntaxTypes.Declaration.FunctionDeclaration funcDecl:
-                    {
-                        var name = funcDecl.Function.Declaration.Value.Name.Value;
-                        builder[DeclQualifiedName.Create(moduleName, name)] = funcDecl;
-                        break;
-                    }
-            }
-        }
-
-        return builder.ToImmutable();
+        return ElmCompiler.FlattenModulesToDeclarationDictionary([converted]);
     }
 
     private static DeclQualifiedName QName(string moduleName, string declName) =>

@@ -30,7 +30,7 @@ public class DeclarationSortOrderTests
             new[] { SyntaxTypes.FromFullSyntaxModel.Convert(parsedModule) };
 
         var canonicalizedModules =
-            Canonicalization.Canonicalize(parsedModules)
+            Canonicalization.CanonicalizeOrThrow(parsedModules)
             .Extract(err => throw new System.Exception("Failed canonicalization: " + err));
 
         var orderedModules =

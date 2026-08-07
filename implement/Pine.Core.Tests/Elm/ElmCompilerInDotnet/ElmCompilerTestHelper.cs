@@ -275,7 +275,7 @@ public class ElmCompilerTestHelper
         }
 
         var canonicalizationResult =
-            Canonicalization.Canonicalize(parsedModulesBeforeCanonicalize);
+            Canonicalization.CanonicalizeOrThrow(parsedModulesBeforeCanonicalize);
 
         if (canonicalizationResult.IsErrOrNull() is { } canonErr)
         {
@@ -721,7 +721,7 @@ public class ElmCompilerTestHelper
             .ToList();
 
         var canonicalizeResult =
-            Canonicalization.Canonicalize(parsedModules);
+            Canonicalization.CanonicalizeOrThrow(parsedModules);
 
         var beforeFormat =
             GetCanonicalizedModule(canonicalizeResult, [.. moduleName]);

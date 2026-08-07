@@ -20,14 +20,8 @@ internal static class ElmSyntaxAbstractConversion
     public static Abstract.Pattern FromPattern(Concrete.Pattern pattern) =>
         Abstract.ConvertFromConcrete.FromPattern(Concrete.ToFullSyntaxModel.Convert(pattern));
 
-    public static Abstract.TypeAnnotation FromTypeAnnotation(Concrete.TypeAnnotation typeAnnotation) =>
-        Abstract.ConvertFromConcrete.FromTypeAnnotation(Concrete.ToFullSyntaxModel.Convert(typeAnnotation));
-
     public static Abstract.Declaration FromDeclaration(Concrete.Declaration declaration) =>
         Abstract.ConvertFromConcrete.FromDeclaration(Concrete.ToFullSyntaxModel.Convert(declaration));
-
-    public static Abstract.FunctionStruct FromFunctionStruct(Concrete.FunctionStruct functionStruct) =>
-        Abstract.ConvertFromConcrete.FromFunctionStruct(Concrete.ToFullSyntaxModel.Convert(functionStruct));
 
     public static Concrete.Declaration ToDeclaration(Abstract.Declaration declaration) =>
         Concrete.FromFullSyntaxModel.Convert(Abstract.ConvertToConcrete.ToDeclaration(declaration));

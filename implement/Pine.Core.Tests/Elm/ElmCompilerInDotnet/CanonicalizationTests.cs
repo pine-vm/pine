@@ -41,7 +41,7 @@ public class CanonicalizationTests
             ParseModuleText(elmModuleText);
 
         var canonicalizeResult =
-            Canonicalization.Canonicalize([parsedModule]);
+            Canonicalization.CanonicalizeOrThrow([parsedModule]);
 
         var canonicalizedModule =
             ElmCompilerTestHelper.GetCanonicalizedModule(canonicalizeResult, ["Test"]);
@@ -215,7 +215,7 @@ public class CanonicalizationTests
         var parsedModule2 = ParseModuleText(module2Text);
 
         var canonicalizeResult =
-            Canonicalization.Canonicalize([parsedModule1, parsedModule2]);
+            Canonicalization.CanonicalizeOrThrow([parsedModule1, parsedModule2]);
 
         var mainModule =
             ElmCompilerTestHelper.GetCanonicalizedModule(canonicalizeResult, ["MainModule"]);
@@ -272,7 +272,7 @@ public class CanonicalizationTests
             ParseModuleText(elmModuleText);
 
         var canonicalizeResult =
-            Canonicalization.Canonicalize([parsedModule]);
+            Canonicalization.CanonicalizeOrThrow([parsedModule]);
 
         var canonicalizedModule =
             ElmCompilerTestHelper.GetCanonicalizedModule(canonicalizeResult, ["Test"]);
@@ -323,7 +323,7 @@ public class CanonicalizationTests
         var parsedModule = ParseModuleText(elmModuleText);
 
         var canonicalizeResult =
-            Canonicalization.Canonicalize([parsedModule]);
+            Canonicalization.CanonicalizeOrThrow([parsedModule]);
 
         var canonicalizedModule =
             ElmCompilerTestHelper.GetCanonicalizedModule(canonicalizeResult, ["Test"]);
@@ -387,7 +387,7 @@ public class CanonicalizationTests
         var parsedModule2 = ParseModuleText(module2Text);
 
         var canonicalizeResult =
-            Canonicalization.Canonicalize([parsedModule1, parsedModule2]);
+            Canonicalization.CanonicalizeOrThrow([parsedModule1, parsedModule2]);
 
         var mainModule =
             ElmCompilerTestHelper.GetCanonicalizedModule(canonicalizeResult, ["Main"]);
@@ -451,7 +451,7 @@ public class CanonicalizationTests
         var parsedModule2 = ParseModuleText(module2Text);
 
         var canonicalizeResult =
-            Canonicalization.Canonicalize([parsedModule1, parsedModule2]);
+            Canonicalization.CanonicalizeOrThrow([parsedModule1, parsedModule2]);
 
         var mainModule =
             ElmCompilerTestHelper.GetCanonicalizedModule(canonicalizeResult, ["Main"]);
@@ -511,7 +511,7 @@ public class CanonicalizationTests
         var parsedModule2 = ParseModuleText(module2Text);
 
         var canonicalizeResult =
-            Canonicalization.Canonicalize([parsedModule1, parsedModule2]);
+            Canonicalization.CanonicalizeOrThrow([parsedModule1, parsedModule2]);
 
         var modulesDict =
             canonicalizeResult
@@ -569,7 +569,7 @@ public class CanonicalizationTests
         var parsedModule3 = ParseModuleText(module3Text);
 
         var canonicalizeResult =
-            Canonicalization.Canonicalize([parsedModule1, parsedModule2, parsedModule3]);
+            Canonicalization.CanonicalizeOrThrow([parsedModule1, parsedModule2, parsedModule3]);
 
         // With per-module error reporting, canonicalization returns Ok with a dictionary
         var modulesDict =
@@ -623,7 +623,7 @@ public class CanonicalizationTests
         var parsedModule2 = ParseModuleText(module2Text);
 
         var canonicalizeResult =
-            Canonicalization.Canonicalize([parsedModule1, parsedModule2]);
+            Canonicalization.CanonicalizeOrThrow([parsedModule1, parsedModule2]);
 
         var mainModule =
             ElmCompilerTestHelper.GetCanonicalizedModule(canonicalizeResult, ["Main"]);
@@ -679,7 +679,7 @@ public class CanonicalizationTests
         var parsedModule2 = ParseModuleText(module2Text);
 
         var canonicalizeResult =
-            Canonicalization.Canonicalize([parsedModule1, parsedModule2]);
+            Canonicalization.CanonicalizeOrThrow([parsedModule1, parsedModule2]);
 
         var canonicalizedModules =
             canonicalizeResult
@@ -750,7 +750,7 @@ public class CanonicalizationTests
         var parsedModule = ParseModuleText(elmModuleText);
 
         var canonicalizeResult =
-            Canonicalization.Canonicalize([parsedModule]);
+            Canonicalization.CanonicalizeOrThrow([parsedModule]);
 
         var canonicalizedModule =
             ElmCompilerTestHelper.GetCanonicalizedModule(canonicalizeResult, ["Test"]);
@@ -813,7 +813,7 @@ public class CanonicalizationTests
         var parsedModule = ParseModuleText(elmModuleText);
 
         var canonicalizeResult =
-            Canonicalization.Canonicalize([parsedModule]);
+            Canonicalization.CanonicalizeOrThrow([parsedModule]);
 
         var canonicalizedModule =
             ElmCompilerTestHelper.GetCanonicalizedModule(canonicalizeResult, ["Test"]);
@@ -871,7 +871,7 @@ public class CanonicalizationTests
         var parsedModule = ParseModuleText(elmModuleText);
 
         var canonicalizeResult =
-            Canonicalization.Canonicalize([parsedModule]);
+            Canonicalization.CanonicalizeOrThrow([parsedModule]);
 
         var canonicalizedModule =
             ElmCompilerTestHelper.GetCanonicalizedModule(canonicalizeResult, ["Test"]);
@@ -941,7 +941,7 @@ public class CanonicalizationTests
         var parsedModule = ParseModuleText(elmModuleText);
 
         var canonicalizeResult =
-            Canonicalization.Canonicalize([parsedModule]);
+            Canonicalization.CanonicalizeOrThrow([parsedModule]);
 
         var canonicalizedModule =
             ElmCompilerTestHelper.GetCanonicalizedModule(canonicalizeResult, ["Test"]);
@@ -1056,7 +1056,7 @@ public class CanonicalizationTests
         var parsedModuleMain = ParseModuleText(moduleMainText);
 
         var canonicalizeResult =
-            Canonicalization.Canonicalize([parsedModuleTypes, parsedModuleMain]);
+            Canonicalization.CanonicalizeOrThrow([parsedModuleTypes, parsedModuleMain]);
 
         // Since the name 'MyOk' is not available in Main, canonicalization should return an error for module Main
 
@@ -1131,7 +1131,7 @@ public class CanonicalizationTests
         var parsedModule3 = ParseModuleText(module3Text);
 
         var canonicalizeResult =
-            Canonicalization.Canonicalize([parsedModule1, parsedModule2, parsedModule3]);
+            Canonicalization.CanonicalizeOrThrow([parsedModule1, parsedModule2, parsedModule3]);
 
         var modulesDict =
             canonicalizeResult
@@ -1471,7 +1471,7 @@ public class CanonicalizationTests
         var parsedTestModule = ParseModuleText(testModuleText);
 
         var canonicalizeResult =
-            Canonicalization.Canonicalize([parsedAlfaModule, parsedBetaModule, parsedTestModule]);
+            Canonicalization.CanonicalizeOrThrow([parsedAlfaModule, parsedBetaModule, parsedTestModule]);
 
         var modulesDict =
             canonicalizeResult
@@ -1961,7 +1961,7 @@ public class CanonicalizationTests
         var parsedModule2 = ParseModuleText(mainModuleText);
 
         var canonicalizeResult =
-            Canonicalization.Canonicalize([parsedModule1, parsedModule2]);
+            Canonicalization.CanonicalizeOrThrow([parsedModule1, parsedModule2]);
 
         var mainModule =
             ElmCompilerTestHelper.GetCanonicalizedModule(canonicalizeResult, ["Main"]);

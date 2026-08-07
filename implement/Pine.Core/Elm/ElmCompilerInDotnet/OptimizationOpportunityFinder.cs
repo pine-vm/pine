@@ -2,10 +2,8 @@ using Pine.Core.CodeAnalysis;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
-using System.Text;
 
-using SyntaxTypes = Pine.Core.Elm.ElmSyntax.Stil4mElmSyntax7;
-using SyntaxModel = Pine.Core.Elm.ElmSyntax.SyntaxModel;
+using SyntaxTypes = Pine.Core.Elm.ElmSyntax.ElmSyntaxAbstract;
 using ModuleName = System.Collections.Generic.IReadOnlyList<string>;
 
 namespace Pine.Core.Elm.ElmCompilerInDotnet;
@@ -15,9 +13,9 @@ namespace Pine.Core.Elm.ElmCompilerInDotnet;
 /// (or by the kind of unspecialized parameter usage) it represents. The
 /// category is rendered alongside the opportunity's
 /// <see cref="Opportunity.Description"/> in
-/// <see cref="OptimizationOpportunityFinder.RenderOpportunities(IEnumerable{Opportunity})"/>
+/// <see cref="OptimizationOpportunityRenderer.RenderOpportunities(IEnumerable{Opportunity})"/>
 /// and grouped on by
-/// <see cref="OptimizationOpportunityFinder.RenderOpportunitiesByCategory(IEnumerable{Opportunity})"/>.
+/// <see cref="OptimizationOpportunityRenderer.RenderOpportunitiesByCategory(IEnumerable{Opportunity})"/>.
 /// </summary>
 public enum OpportunityCategory
 {
@@ -122,38 +120,6 @@ public enum OpportunityCategory
 }
 
 /// <summary>
-/// Friendly, human-readable category names used for snapshot rendering.
-/// Kept stable across versions so test snapshots remain valid.
-/// </summary>
-public static class OpportunityCategoryFormatting
-{
-    /// <summary>
-    /// Returns the snapshot-stable name for the given category. Used by
-    /// <see cref="OptimizationOpportunityFinder.RenderOpportunities(IEnumerable{Opportunity})"/>
-    /// and friends.
-    /// </summary>
-    public static string ToDisplayName(OpportunityCategory category) =>
-        category switch
-        {
-            OpportunityCategory.RecordAccess => "record-access",
-            OpportunityCategory.RecordUpdate => "record-update",
-            OpportunityCategory.BasicsArithmetic => "Basics.arithmetic",
-            OpportunityCategory.BasicsCompare => "Basics.compare",
-            OpportunityCategory.BasicsEq => "Basics.eq",
-            OpportunityCategory.BasicsAppend => "Basics.append",
-            OpportunityCategory.PartialApplication => "partial-application",
-            OpportunityCategory.HigherOrderParameter_Direct => "higher-order-parameter-direct",
-            OpportunityCategory.HigherOrderParameter_Indirect => "higher-order-parameter-indirect",
-            OpportunityCategory.RootLevelChoiceTagWrapper => "root-level-choice-tag-wrapper",
-
-            _ =>
-            throw new System.NotImplementedException(
-                "OpportunityCategoryFormatting.ToDisplayName does not handle category: " +
-                category),
-        };
-}
-
-/// <summary>
 /// A single opportunity to improve runtime efficiency: a use of a generic
 /// operation in <see cref="ContainingDecl"/> that the Elm compiler is
 /// expected to specialize away (per the runtime-efficiency guide). The
@@ -216,7 +182,7 @@ public static class OptimizationOpportunityFinder
 {
     /// <summary>
     /// Mapping from <c>Basics</c> function name (as used in
-    /// <see cref="SyntaxTypes.Expression.FunctionOrValue"/>) to the
+    /// <see cref="SyntaxTypes.Expression.Identifier"/>) to the
     /// optimization category it belongs to.
     /// </summary>
     private static readonly ImmutableDictionary<string, OpportunityCategory> s_basicsFunctionToCategory =
@@ -287,7 +253,7 @@ public static class OptimizationOpportunityFinder
             if (declaration is SyntaxTypes.Declaration.FunctionDeclaration fd)
             {
                 topLevelArity[qualifiedName] =
-                    fd.Function.Declaration.Value.Arguments.Count;
+                    fd.Function.Declaration.Arguments.Count;
             }
         }
 
@@ -334,10 +300,10 @@ public static class OptimizationOpportunityFinder
             // may be applied as application heads inside the body. Collect
             // them up front so the body walker can flag every site.
             var topLevelParamNames =
-                ElmSyntaxTransformations.CollectNamesBoundByPatterns(funcDecl.Function.Declaration.Value.Arguments);
+                SyntaxTypes.SyntaxAnalysis.CollectNamesBoundByPatterns(funcDecl.Function.Declaration.Arguments);
 
             CollectFromExpression(
-                funcDecl.Function.Declaration.Value.Expression.Value,
+                funcDecl.Function.Declaration.Expression,
                 qualifiedName,
                 topLevelArity,
                 [],
@@ -348,7 +314,7 @@ public static class OptimizationOpportunityFinder
             // a parameter that is the head of an application anywhere in the
             // body is reported once per (decl, parameter name).
             CollectHigherOrderParameterFindings(
-                funcDecl.Function.Declaration.Value.Expression.Value,
+                funcDecl.Function.Declaration.Expression,
                 topLevelParamNames,
                 qualifiedName,
                 paramOwnerDescription: null,
@@ -380,7 +346,7 @@ public static class OptimizationOpportunityFinder
 
     /// <summary>
     /// Computes the set of <see cref="DeclQualifiedName"/> values reachable
-    /// (by syntactic <see cref="SyntaxTypes.Expression.FunctionOrValue"/>
+    /// (by syntactic <see cref="SyntaxTypes.Expression.Identifier"/>
     /// reference) from any entry point in <paramref name="entryPoints"/>.
     /// Used by the
     /// <c>restrictToReachableFromEntryPoints</c> overload of
@@ -441,7 +407,7 @@ public static class OptimizationOpportunityFinder
     /// <summary>
     /// Returns the set of declarations in <paramref name="declarations"/>
     /// whose body contains at least one syntactic
-    /// <see cref="SyntaxTypes.Expression.FunctionOrValue"/> reference that
+    /// <see cref="SyntaxTypes.Expression.Identifier"/> reference that
     /// resolves to <paramref name="target"/>.
     /// <para>
     /// Resolution rules match
@@ -472,9 +438,9 @@ public static class OptimizationOpportunityFinder
     /// <summary>
     /// Yields every syntactic <c>(caller, callee)</c> reference edge
     /// derivable from <paramref name="declarations"/>. Each
-    /// <see cref="SyntaxTypes.Expression.FunctionOrValue"/> reference in
+    /// <see cref="SyntaxTypes.Expression.Identifier"/> reference in
     /// the body of a function declaration is resolved against
-    /// <see cref="ElmSyntaxTransformations.BuildModuleKeyAndDeclNameIndex(IReadOnlyDictionary{DeclQualifiedName, SyntaxTypes.Declaration})"/>
+    /// <see cref="SyntaxTypes.SyntaxAnalysis.BuildModuleKeyAndDeclNameIndex(IReadOnlyDictionary{DeclQualifiedName, SyntaxTypes.Declaration})"/>
     /// — unqualified references resolve against the caller's enclosing
     /// module. References to declarations not present in
     /// <paramref name="declarations"/> are silently dropped.
@@ -488,7 +454,7 @@ public static class OptimizationOpportunityFinder
         IReadOnlyDictionary<DeclQualifiedName, SyntaxTypes.Declaration> declarations)
     {
         var byModuleAndName =
-            ElmSyntaxTransformations.BuildModuleKeyAndDeclNameIndex(declarations);
+            SyntaxTypes.SyntaxAnalysis.BuildModuleKeyAndDeclNameIndex(declarations);
 
         foreach (var (declKey, decl) in declarations)
         {
@@ -499,7 +465,7 @@ public static class OptimizationOpportunityFinder
             var edges = new List<DeclQualifiedName>();
 
             CollectReferencesFromExpression(
-                funcDecl.Function.Declaration.Value.Expression.Value,
+                funcDecl.Function.Declaration.Expression,
                 ownModuleKey,
                 byModuleAndName,
                 edges.Add);
@@ -515,26 +481,26 @@ public static class OptimizationOpportunityFinder
         IReadOnlyDictionary<(string moduleKey, string declName), DeclQualifiedName> byModuleAndName,
         System.Action<DeclQualifiedName> emit)
     {
-        // The reference collector emits at every FunctionOrValue regardless
+        // The reference collector emits at every Identifier regardless
         // of lexical scope: locally-bound names cannot appear as keys in
         // byModuleAndName (which only indexes top-level declarations), so
         // the resolution will silently fail for them anyway.
-        ElmSyntaxTransformations.WalkExpressionsWithScope(
+        SyntaxTypes.SyntaxAnalysis.WalkExpressionsWithScope(
             expression,
             [],
             (node, _) =>
             {
-                if (node is not SyntaxTypes.Expression.FunctionOrValue funcOrValue)
+                if (node is not SyntaxTypes.Expression.Identifier identifier)
                     return;
 
                 var moduleKey =
-                    funcOrValue.ModuleName.Count is 0
+                    identifier.QualifiedName.Namespaces.Count is 0
                     ?
                     ownModuleKey
                     :
-                    string.Join(".", funcOrValue.ModuleName);
+                    string.Join(".", identifier.QualifiedName.Namespaces);
 
-                if (byModuleAndName.TryGetValue((moduleKey, funcOrValue.Name), out var resolved))
+                if (byModuleAndName.TryGetValue((moduleKey, identifier.QualifiedName.DeclName), out var resolved))
                     emit(resolved);
             });
     }
@@ -558,91 +524,6 @@ public static class OptimizationOpportunityFinder
                 restrictToReachableFromEntryPoints);
     }
 
-    /// <summary>
-    /// Renders an unordered set of <see cref="Opportunity"/> values as a
-    /// deterministic, line-oriented string suitable for snapshot
-    /// assertions. Findings are sorted by containing declaration name,
-    /// then by category, then by description; each finding occupies one
-    /// line in the format
-    /// <c>"<![CDATA[<Module.decl>: <category>: <description>]]>"</c>.
-    /// </summary>
-    public static string RenderOpportunities(IEnumerable<Opportunity> opportunities)
-    {
-        var sorted =
-            opportunities
-            .Distinct()
-            .OrderBy(o => o)
-            .ToList();
-
-        var sb = new StringBuilder();
-
-        for (var i = 0; i < sorted.Count; i++)
-        {
-            if (i > 0)
-                sb.Append('\n');
-
-            sb.Append(sorted[i].ContainingDecl.FullName);
-            sb.Append(": ");
-            sb.Append(OpportunityCategoryFormatting.ToDisplayName(sorted[i].Category));
-            sb.Append(": ");
-            sb.Append(sorted[i].Description);
-        }
-
-        return sb.ToString();
-    }
-
-    /// <summary>
-    /// Renders an unordered set of <see cref="Opportunity"/> values grouped
-    /// by <see cref="Opportunity.Category"/>. Each group starts with a
-    /// header line of the form <c>"<![CDATA[<category>:]]>"</c> followed by
-    /// one indented line per finding in the form
-    /// <c>"<![CDATA[  <Module.decl>: <description>]]>"</c>. Groups are
-    /// emitted in the declared order of <see cref="OpportunityCategory"/>;
-    /// within a group findings are sorted by containing declaration then
-    /// by description. Categories with no findings are omitted entirely.
-    /// Groups are separated by a single blank line.
-    /// </summary>
-    public static string RenderOpportunitiesByCategory(IEnumerable<Opportunity> opportunities)
-    {
-        var distinct =
-            opportunities.Distinct().ToList();
-
-        var sb = new StringBuilder();
-        var firstGroup = true;
-
-        foreach (OpportunityCategory category in System.Enum.GetValues(typeof(OpportunityCategory)))
-        {
-            var inCategory =
-                distinct
-                .Where(o => o.Category == category)
-                .OrderBy(o => o.ContainingDecl)
-                .ThenBy(o => o.Description, System.StringComparer.Ordinal)
-                .ToList();
-
-            if (inCategory.Count is 0)
-                continue;
-
-            if (!firstGroup)
-                sb.Append("\n\n");
-
-            firstGroup = false;
-
-            sb.Append(OpportunityCategoryFormatting.ToDisplayName(category));
-            sb.Append(':');
-
-            foreach (var entry in inCategory)
-            {
-                sb.Append('\n');
-                sb.Append("  ");
-                sb.Append(entry.ContainingDecl.FullName);
-                sb.Append(": ");
-                sb.Append(entry.Description);
-            }
-        }
-
-        return sb.ToString();
-    }
-
     private static void CollectFromExpression(
         SyntaxTypes.Expression expression,
         DeclQualifiedName containing,
@@ -662,12 +543,12 @@ public static class OptimizationOpportunityFinder
             case SyntaxTypes.Expression.RecordAccess recordAccess:
                 MaybeAdd(
                     OpportunityCategory.RecordAccess,
-                    recordAccess.FieldName.Value,
+                    recordAccess.FieldName,
                     containing,
                     resultBuilder);
 
                 CollectFromExpression(
-                    recordAccess.Record.Value,
+                    recordAccess.Record,
                     containing,
                     topLevelArity,
                     letScope,
@@ -679,7 +560,7 @@ public static class OptimizationOpportunityFinder
             case SyntaxTypes.Expression.RecordAccessFunction recordAccessFunction:
                 MaybeAdd(
                     OpportunityCategory.RecordAccess,
-                    TrimLeadingDot(recordAccessFunction.FunctionName),
+                    recordAccessFunction.FieldName,
                     containing,
                     resultBuilder);
 
@@ -690,12 +571,12 @@ public static class OptimizationOpportunityFinder
                 {
                     MaybeAdd(
                         OpportunityCategory.RecordUpdate,
-                        field.Value.fieldName.Value,
+                        field.FieldName,
                         containing,
                         resultBuilder);
 
                     CollectFromExpression(
-                        field.Value.valueExpr.Value,
+                        field.Value,
                         containing,
                         topLevelArity,
                         letScope,
@@ -705,14 +586,14 @@ public static class OptimizationOpportunityFinder
 
                 break;
 
-            case SyntaxTypes.Expression.FunctionOrValue funcOrValue:
-                if (funcOrValue.ModuleName.Count is 1 &&
-                    funcOrValue.ModuleName[0] is "Basics" &&
-                    s_basicsFunctionToCategory.TryGetValue(funcOrValue.Name, out var funcCategory))
+            case SyntaxTypes.Expression.Identifier identifier:
+                if (identifier.QualifiedName.Namespaces.Count is 1 &&
+                    identifier.QualifiedName.Namespaces[0] is "Basics" &&
+                    s_basicsFunctionToCategory.TryGetValue(identifier.QualifiedName.DeclName, out var funcCategory))
                 {
                     MaybeAdd(
                         funcCategory,
-                        funcOrValue.Name,
+                        identifier.QualifiedName.DeclName,
                         containing,
                         resultBuilder);
                 }
@@ -730,7 +611,7 @@ public static class OptimizationOpportunityFinder
                 }
 
                 CollectFromExpression(
-                    opApp.Left.Value,
+                    opApp.Left,
                     containing,
                     topLevelArity,
                     letScope,
@@ -738,7 +619,7 @@ public static class OptimizationOpportunityFinder
                     resultBuilder);
 
                 CollectFromExpression(
-                    opApp.Right.Value,
+                    opApp.Right,
                     containing,
                     topLevelArity,
                     letScope,
@@ -767,10 +648,18 @@ public static class OptimizationOpportunityFinder
                     letScope,
                     resultBuilder);
 
+                CollectFromExpression(
+                    app.Function,
+                    containing,
+                    topLevelArity,
+                    letScope,
+                    functionTypedParameterNames,
+                    resultBuilder);
+
                 foreach (var arg in app.Arguments)
                 {
                     CollectFromExpression(
-                        arg.Value,
+                        arg,
                         containing,
                         topLevelArity,
                         letScope,
@@ -787,22 +676,22 @@ public static class OptimizationOpportunityFinder
                 // bindings (Elm let-rec semantics).
                 var extendedLetScope = letScope;
 
-                foreach (var declNode in letExpr.Value.Declarations)
+                foreach (var decl in letExpr.Declarations)
                 {
-                    if (declNode.Value is SyntaxTypes.Expression.LetDeclaration.LetFunction letFunc)
+                    if (decl is SyntaxTypes.LetDeclaration.LetFunction letFunc)
                     {
-                        var name = letFunc.Function.Declaration.Value.Name.Value;
-                        var arity = letFunc.Function.Declaration.Value.Arguments.Count;
+                        var name = letFunc.Function.Declaration.Name;
+                        var arity = letFunc.Function.Declaration.Arguments.Count;
 
                         extendedLetScope = extendedLetScope.SetItem(name, arity);
                     }
                 }
 
-                foreach (var declNode in letExpr.Value.Declarations)
+                foreach (var decl in letExpr.Declarations)
                 {
-                    switch (declNode.Value)
+                    switch (decl)
                     {
-                        case SyntaxTypes.Expression.LetDeclaration.LetFunction letFunc:
+                        case SyntaxTypes.LetDeclaration.LetFunction letFunc:
 
                             // Each let-bound function introduces its own
                             // parameter scope. Higher-order parameter
@@ -812,11 +701,11 @@ public static class OptimizationOpportunityFinder
                             // description so they do not collide with
                             // identically-named outer parameters.
                             var letParamNames =
-                                ElmSyntaxTransformations.CollectNamesBoundByPatterns(
-                                    letFunc.Function.Declaration.Value.Arguments);
+                                SyntaxTypes.SyntaxAnalysis.CollectNamesBoundByPatterns(
+                                    letFunc.Function.Declaration.Arguments);
 
                             CollectFromExpression(
-                                letFunc.Function.Declaration.Value.Expression.Value,
+                                letFunc.Function.Declaration.Expression,
                                 containing,
                                 topLevelArity,
                                 extendedLetScope,
@@ -830,18 +719,18 @@ public static class OptimizationOpportunityFinder
                                 resultBuilder);
 
                             CollectHigherOrderParameterFindings(
-                                letFunc.Function.Declaration.Value.Expression.Value,
+                                letFunc.Function.Declaration.Expression,
                                 letParamNames,
                                 containing,
                                 paramOwnerDescription:
-                                letFunc.Function.Declaration.Value.Name.Value,
+                                letFunc.Function.Declaration.Name,
                                 resultBuilder);
 
                             break;
 
-                        case SyntaxTypes.Expression.LetDeclaration.LetDestructuring letDestr:
+                        case SyntaxTypes.LetDeclaration.LetDestructuring letDestr:
                             CollectFromExpression(
-                                letDestr.Expression.Value,
+                                letDestr.Expression,
                                 containing,
                                 topLevelArity,
                                 extendedLetScope,
@@ -853,12 +742,12 @@ public static class OptimizationOpportunityFinder
                         default:
                             throw new System.NotImplementedException(
                                 "CollectFromExpression does not handle let declaration variant: " +
-                                declNode.Value.GetType().Name);
+                                decl.GetType().Name);
                     }
                 }
 
                 CollectFromExpression(
-                    letExpr.Value.Expression.Value,
+                    letExpr.Expression,
                     containing,
                     topLevelArity,
                     extendedLetScope,
@@ -869,18 +758,7 @@ public static class OptimizationOpportunityFinder
 
             case SyntaxTypes.Expression.LambdaExpression lambda:
                 CollectFromExpression(
-                    lambda.Lambda.Expression.Value,
-                    containing,
-                    topLevelArity,
-                    letScope,
-                    functionTypedParameterNames,
-                    resultBuilder);
-
-                break;
-
-            case SyntaxTypes.Expression.ParenthesizedExpression paren:
-                CollectFromExpression(
-                    paren.Expression.Value,
+                    lambda.Expression,
                     containing,
                     topLevelArity,
                     letScope,
@@ -891,7 +769,7 @@ public static class OptimizationOpportunityFinder
 
             case SyntaxTypes.Expression.IfBlock ifBlock:
                 CollectFromExpression(
-                    ifBlock.Condition.Value,
+                    ifBlock.Condition,
                     containing,
                     topLevelArity,
                     letScope,
@@ -899,7 +777,7 @@ public static class OptimizationOpportunityFinder
                     resultBuilder);
 
                 CollectFromExpression(
-                    ifBlock.ThenBlock.Value,
+                    ifBlock.ThenBlock,
                     containing,
                     topLevelArity,
                     letScope,
@@ -907,7 +785,7 @@ public static class OptimizationOpportunityFinder
                     resultBuilder);
 
                 CollectFromExpression(
-                    ifBlock.ElseBlock.Value,
+                    ifBlock.ElseBlock,
                     containing,
                     topLevelArity,
                     letScope,
@@ -918,17 +796,17 @@ public static class OptimizationOpportunityFinder
 
             case SyntaxTypes.Expression.CaseExpression caseExpr:
                 CollectFromExpression(
-                    caseExpr.CaseBlock.Expression.Value,
+                    caseExpr.Expression,
                     containing,
                     topLevelArity,
                     letScope,
                     functionTypedParameterNames,
                     resultBuilder);
 
-                foreach (var caseEntry in caseExpr.CaseBlock.Cases)
+                foreach (var caseEntry in caseExpr.Cases)
                 {
                     CollectFromExpression(
-                        caseEntry.Expression.Value,
+                        caseEntry.Expression,
                         containing,
                         topLevelArity,
                         letScope,
@@ -942,7 +820,7 @@ public static class OptimizationOpportunityFinder
                 foreach (var element in listExpr.Elements)
                 {
                     CollectFromExpression(
-                        element.Value,
+                        element,
                         containing,
                         topLevelArity,
                         letScope,
@@ -956,7 +834,7 @@ public static class OptimizationOpportunityFinder
                 foreach (var element in tupled.Elements)
                 {
                     CollectFromExpression(
-                        element.Value,
+                        element,
                         containing,
                         topLevelArity,
                         letScope,
@@ -970,7 +848,7 @@ public static class OptimizationOpportunityFinder
                 foreach (var field in recordExpr.Fields)
                 {
                     CollectFromExpression(
-                        field.Value.valueExpr.Value,
+                        field.Value,
                         containing,
                         topLevelArity,
                         letScope,
@@ -982,7 +860,7 @@ public static class OptimizationOpportunityFinder
 
             case SyntaxTypes.Expression.Negation negation:
                 CollectFromExpression(
-                    negation.Expression.Value,
+                    negation.Expression,
                     containing,
                     topLevelArity,
                     letScope,
@@ -993,11 +871,10 @@ public static class OptimizationOpportunityFinder
 
             // Leaf variants with no nested Expression children.
             case SyntaxTypes.Expression.UnitExpr:
-            case SyntaxTypes.Expression.Literal:
+            case SyntaxTypes.Expression.StringLiteral:
             case SyntaxTypes.Expression.CharLiteral:
-            case SyntaxTypes.Expression.Integer:
-            case SyntaxTypes.Expression.Hex:
-            case SyntaxTypes.Expression.Floatable:
+            case SyntaxTypes.Expression.IntegerLiteral:
+            case SyntaxTypes.Expression.FloatLiteral:
             case SyntaxTypes.Expression.GLSLExpression:
                 break;
 
@@ -1015,8 +892,8 @@ public static class OptimizationOpportunityFinder
     /// <see cref="OpportunityCategory.PartialApplication"/> opportunity describing the
     /// added-argument vs parameter-count mismatch.
     /// <para>
-    /// The head is "statically known" when it is a
-    /// <see cref="SyntaxTypes.Expression.FunctionOrValue"/> resolving to a
+    /// The head is "statically known" when it is an
+    /// <see cref="SyntaxTypes.Expression.Identifier"/> resolving to a
     /// top-level <see cref="SyntaxTypes.Declaration.FunctionDeclaration"/>
     /// in <paramref name="topLevelArity"/>, an in-scope let-bound function
     /// in <paramref name="letScope"/>, or a
@@ -1035,7 +912,7 @@ public static class OptimizationOpportunityFinder
         ImmutableDictionary<string, int> letScope,
         ImmutableHashSet<Opportunity>.Builder resultBuilder)
     {
-        if (app.Arguments.Count < 2)
+        if (app.Arguments.Count < 1)
         {
             // Not actually applying any arguments — just a head reference.
             // Such forms are normally already simplified away by
@@ -1043,21 +920,20 @@ public static class OptimizationOpportunityFinder
             return;
         }
 
-        var head = SyntaxTypes.SyntaxAnalysis.UnwrapParenthesized(app.Arguments[0].Value);
+        var head = app.Function;
 
-        var addedArguments = app.Arguments.Count - 1;
+        var addedArguments = app.Arguments.Count;
 
         switch (head)
         {
-            case SyntaxTypes.Expression.FunctionOrValue funcOrValue:
+            case SyntaxTypes.Expression.Identifier identifier:
                 {
                     int? arity = null;
                     string? displayName = null;
 
-                    if (funcOrValue.ModuleName.Count > 0)
+                    if (identifier.QualifiedName.Namespaces.Count > 0)
                     {
-                        var qualified =
-                            DeclQualifiedName.Create(funcOrValue.ModuleName, funcOrValue.Name);
+                        var qualified = identifier.QualifiedName;
 
                         if (topLevelArity.TryGetValue(qualified, out var topArity))
                         {
@@ -1065,10 +941,10 @@ public static class OptimizationOpportunityFinder
                             displayName = qualified.FullName;
                         }
                     }
-                    else if (letScope.TryGetValue(funcOrValue.Name, out var letArity))
+                    else if (letScope.TryGetValue(identifier.QualifiedName.DeclName, out var letArity))
                     {
                         arity = letArity;
-                        displayName = funcOrValue.Name;
+                        displayName = identifier.QualifiedName.DeclName;
                     }
 
                     if (arity is int arityValue &&
@@ -1215,15 +1091,14 @@ public static class OptimizationOpportunityFinder
         switch (expression)
         {
             case SyntaxTypes.Expression.Application app:
-                if (app.Arguments.Count >= 1)
                 {
-                    var head = SyntaxTypes.SyntaxAnalysis.UnwrapParenthesized(app.Arguments[0].Value);
+                    var head = app.Function;
 
-                    if (head is SyntaxTypes.Expression.FunctionOrValue funcOrValue &&
-                        funcOrValue.ModuleName.Count is 0 &&
-                        paramNames.Contains(funcOrValue.Name))
+                    if (head is SyntaxTypes.Expression.Identifier identifier &&
+                        identifier.QualifiedName.Namespaces.Count is 0 &&
+                        paramNames.Contains(identifier.QualifiedName.DeclName))
                     {
-                        found.Add(funcOrValue.Name);
+                        found.Add(identifier.QualifiedName.DeclName);
                     }
                     else if (head is SyntaxTypes.Expression.RecordAccess recordAccessHead &&
                         TryRenderRecordAccessChainRootedAtParam(
@@ -1233,14 +1108,16 @@ public static class OptimizationOpportunityFinder
                     }
                 }
 
+                FindAppliedParameterNames(app.Function, paramNames, found);
+
                 foreach (var arg in app.Arguments)
-                    FindAppliedParameterNames(arg.Value, paramNames, found);
+                    FindAppliedParameterNames(arg, paramNames, found);
 
                 break;
 
             case SyntaxTypes.Expression.OperatorApplication opApp:
-                FindAppliedParameterNames(opApp.Left.Value, paramNames, found);
-                FindAppliedParameterNames(opApp.Right.Value, paramNames, found);
+                FindAppliedParameterNames(opApp.Left, paramNames, found);
+                FindAppliedParameterNames(opApp.Right, paramNames, found);
                 break;
 
             case SyntaxTypes.Expression.LetExpression letExpr:
@@ -1252,33 +1129,33 @@ public static class OptimizationOpportunityFinder
                 // higher-order opportunity as a directly-named parameter.
                 var letDestructuredNames = ImmutableHashSet.CreateBuilder<string>();
 
-                foreach (var declNode in letExpr.Value.Declarations)
+                foreach (var decl in letExpr.Declarations)
                 {
-                    switch (declNode.Value)
+                    switch (decl)
                     {
-                        case SyntaxTypes.Expression.LetDeclaration.LetFunction letFunc:
+                        case SyntaxTypes.LetDeclaration.LetFunction letFunc:
 
                             // The let-bound function's own parameters
                             // shadow any outer parameters of the same name,
                             // so remove them from the set before descending.
                             var letParamNames =
-                                ElmSyntaxTransformations.CollectNamesBoundByPatterns(
-                                    letFunc.Function.Declaration.Value.Arguments);
+                                SyntaxTypes.SyntaxAnalysis.CollectNamesBoundByPatterns(
+                                    letFunc.Function.Declaration.Arguments);
 
                             var visibleHere =
                                 paramNames.Except(letParamNames);
 
                             FindAppliedParameterNames(
-                                letFunc.Function.Declaration.Value.Expression.Value,
+                                letFunc.Function.Declaration.Expression,
                                 visibleHere,
                                 found);
 
                             break;
 
-                        case SyntaxTypes.Expression.LetDeclaration.LetDestructuring letDestr:
-                            FindAppliedParameterNames(letDestr.Expression.Value, paramNames, found);
+                        case SyntaxTypes.LetDeclaration.LetDestructuring letDestr:
+                            FindAppliedParameterNames(letDestr.Expression, paramNames, found);
 
-                            foreach (var n in ElmSyntaxTransformations.CollectPatternNames(letDestr.Pattern.Value))
+                            foreach (var n in SyntaxTypes.SyntaxAnalysis.CollectNamesBoundByPattern(letDestr.Pattern))
                                 letDestructuredNames.Add(n);
 
                             break;
@@ -1286,12 +1163,12 @@ public static class OptimizationOpportunityFinder
                         default:
                             throw new System.NotImplementedException(
                                 "FindAppliedParameterNames does not handle let declaration variant: " +
-                                declNode.Value.GetType().Name);
+                                decl.GetType().Name);
                     }
                 }
 
                 FindAppliedParameterNames(
-                    letExpr.Value.Expression.Value,
+                    letExpr.Expression,
                     paramNames.Union(letDestructuredNames),
                     found);
 
@@ -1299,29 +1176,25 @@ public static class OptimizationOpportunityFinder
 
             case SyntaxTypes.Expression.LambdaExpression lambda:
                 var lambdaParams =
-                    ElmSyntaxTransformations.CollectNamesBoundByPatterns(lambda.Lambda.Arguments);
+                    SyntaxTypes.SyntaxAnalysis.CollectNamesBoundByPatterns(lambda.Arguments);
 
                 FindAppliedParameterNames(
-                    lambda.Lambda.Expression.Value,
+                    lambda.Expression,
                     paramNames.Except(lambdaParams),
                     found);
 
                 break;
 
-            case SyntaxTypes.Expression.ParenthesizedExpression paren:
-                FindAppliedParameterNames(paren.Expression.Value, paramNames, found);
-                break;
-
             case SyntaxTypes.Expression.IfBlock ifBlock:
-                FindAppliedParameterNames(ifBlock.Condition.Value, paramNames, found);
-                FindAppliedParameterNames(ifBlock.ThenBlock.Value, paramNames, found);
-                FindAppliedParameterNames(ifBlock.ElseBlock.Value, paramNames, found);
+                FindAppliedParameterNames(ifBlock.Condition, paramNames, found);
+                FindAppliedParameterNames(ifBlock.ThenBlock, paramNames, found);
+                FindAppliedParameterNames(ifBlock.ElseBlock, paramNames, found);
                 break;
 
             case SyntaxTypes.Expression.CaseExpression caseExpr:
-                FindAppliedParameterNames(caseExpr.CaseBlock.Expression.Value, paramNames, found);
+                FindAppliedParameterNames(caseExpr.Expression, paramNames, found);
 
-                foreach (var caseEntry in caseExpr.CaseBlock.Cases)
+                foreach (var caseEntry in caseExpr.Cases)
                 {
                     // Names bound by this branch's pattern extend the
                     // visible-parameter set for the branch body. The
@@ -1329,10 +1202,10 @@ public static class OptimizationOpportunityFinder
                     // unless the pattern shadows one (we conservatively
                     // keep both — Elm forbids shadowing in patterns).
                     var branchBound =
-                        SyntaxTypes.SyntaxAnalysis.CollectNamesBoundByPattern(caseEntry.Pattern.Value);
+                        SyntaxTypes.SyntaxAnalysis.CollectNamesBoundByPattern(caseEntry.Pattern);
 
                     FindAppliedParameterNames(
-                        caseEntry.Expression.Value,
+                        caseEntry.Expression,
                         paramNames.Union(branchBound),
                         found);
                 }
@@ -1341,45 +1214,44 @@ public static class OptimizationOpportunityFinder
 
             case SyntaxTypes.Expression.ListExpr listExpr:
                 foreach (var element in listExpr.Elements)
-                    FindAppliedParameterNames(element.Value, paramNames, found);
+                    FindAppliedParameterNames(element, paramNames, found);
 
                 break;
 
             case SyntaxTypes.Expression.TupledExpression tupled:
                 foreach (var element in tupled.Elements)
-                    FindAppliedParameterNames(element.Value, paramNames, found);
+                    FindAppliedParameterNames(element, paramNames, found);
 
                 break;
 
             case SyntaxTypes.Expression.RecordExpr recordExpr:
                 foreach (var field in recordExpr.Fields)
-                    FindAppliedParameterNames(field.Value.valueExpr.Value, paramNames, found);
+                    FindAppliedParameterNames(field.Value, paramNames, found);
 
                 break;
 
             case SyntaxTypes.Expression.RecordUpdateExpression recordUpdate:
                 foreach (var field in recordUpdate.Fields)
-                    FindAppliedParameterNames(field.Value.valueExpr.Value, paramNames, found);
+                    FindAppliedParameterNames(field.Value, paramNames, found);
 
                 break;
 
             case SyntaxTypes.Expression.RecordAccess recordAccess:
-                FindAppliedParameterNames(recordAccess.Record.Value, paramNames, found);
+                FindAppliedParameterNames(recordAccess.Record, paramNames, found);
                 break;
 
             case SyntaxTypes.Expression.Negation negation:
-                FindAppliedParameterNames(negation.Expression.Value, paramNames, found);
+                FindAppliedParameterNames(negation.Expression, paramNames, found);
                 break;
 
-            case SyntaxTypes.Expression.FunctionOrValue:
+            case SyntaxTypes.Expression.Identifier:
             case SyntaxTypes.Expression.RecordAccessFunction:
             case SyntaxTypes.Expression.PrefixOperator:
             case SyntaxTypes.Expression.UnitExpr:
-            case SyntaxTypes.Expression.Literal:
+            case SyntaxTypes.Expression.StringLiteral:
             case SyntaxTypes.Expression.CharLiteral:
-            case SyntaxTypes.Expression.Integer:
-            case SyntaxTypes.Expression.Hex:
-            case SyntaxTypes.Expression.Floatable:
+            case SyntaxTypes.Expression.IntegerLiteral:
+            case SyntaxTypes.Expression.FloatLiteral:
             case SyntaxTypes.Expression.GLSLExpression:
                 break;
 
@@ -1393,10 +1265,9 @@ public static class OptimizationOpportunityFinder
     /// <summary>
     /// If <paramref name="recordAccess"/> is a chain
     /// <c>p.f1.f2.…fn</c> whose innermost record expression is a bare
-    /// <see cref="SyntaxTypes.Expression.FunctionOrValue"/> with module
-    /// part empty and name in <paramref name="paramNames"/>, returns
-    /// <c>"p.f1.f2.…fn"</c>; otherwise returns <c>null</c>. Parentheses
-    /// around the record expression at any level are tolerated.
+    /// <see cref="SyntaxTypes.Expression.Identifier"/> with an empty
+    /// module part and name in <paramref name="paramNames"/>, returns
+    /// <c>"p.f1.f2.…fn"</c>; otherwise returns <c>null</c>.
     /// </summary>
     private static string? TryRenderRecordAccessChainRootedAtParam(
         SyntaxTypes.Expression.RecordAccess recordAccess,
@@ -1405,30 +1276,27 @@ public static class OptimizationOpportunityFinder
         var fields = new List<string>();
         SyntaxTypes.Expression current = recordAccess;
 
-        while (SyntaxTypes.SyntaxAnalysis.UnwrapParenthesized(current) is SyntaxTypes.Expression.RecordAccess ra)
+        while (current is SyntaxTypes.Expression.RecordAccess ra)
         {
-            fields.Add(ra.FieldName.Value);
-            current = ra.Record.Value;
+            fields.Add(ra.FieldName);
+            current = ra.Record;
         }
 
-        if (SyntaxTypes.SyntaxAnalysis.UnwrapParenthesized(current) is not SyntaxTypes.Expression.FunctionOrValue rootFov)
+        if (current is not SyntaxTypes.Expression.Identifier rootIdentifier)
             return null;
 
-        if (rootFov.ModuleName.Count is not 0)
+        if (rootIdentifier.QualifiedName.Namespaces.Count is not 0)
             return null;
 
-        if (!paramNames.Contains(rootFov.Name))
+        if (!paramNames.Contains(rootIdentifier.QualifiedName.DeclName))
             return null;
 
         // `fields` was built from outermost to innermost; reverse so the
         // rendered chain reads root-to-leaf.
         fields.Reverse();
 
-        return rootFov.Name + "." + string.Join(".", fields);
+        return rootIdentifier.QualifiedName.DeclName + "." + string.Join(".", fields);
     }
-
-    private static string TrimLeadingDot(string name) =>
-        name.Length > 0 && name[0] is '.' ? name[1..] : name;
 
     private static void MaybeAdd(
         OpportunityCategory category,
@@ -1440,9 +1308,36 @@ public static class OptimizationOpportunityFinder
     }
 
     private static IReadOnlyDictionary<DeclQualifiedName, SyntaxTypes.Declaration>
-        ParseAndCanonicalizeToFlatDict(ModuleName elmModulesTexts)
+        ParseAndCanonicalizeToFlatDict(IReadOnlyList<string> elmModulesTexts)
     {
-        throw new System.NotImplementedException();
+        var parsedModules =
+            elmModulesTexts
+            .Select(
+                moduleText =>
+                ElmSyntax.ElmSyntaxParser.ParseModuleText(moduleText)
+                .Extract(err => throw new System.Exception("Failed parsing: " + err)))
+            .ToList();
+
+        var canonicalized =
+            Canonicalization.CanonicalizeOrThrow(parsedModules)
+            .Extract(err => throw new System.Exception("Failed canonicalization: " + err));
+
+        var orderedModules =
+            parsedModules
+            .Select(
+                parsedModule =>
+                canonicalized[
+                    ElmSyntax.SyntaxModel.Module.GetModuleName(
+                        parsedModule.ModuleDefinition.Value).Value]
+                .Extract(err => throw new System.Exception("Module has errors: " + err)))
+            .ToList();
+
+        var orderedModulesAbstract =
+            orderedModules
+            .Select(SyntaxTypes.ConvertFromConcrete.FromFile)
+            .ToList();
+
+        return ElmCompiler.FlattenModulesToDeclarationDictionary(orderedModulesAbstract);
     }
 
     /// <summary>
@@ -1453,7 +1348,7 @@ public static class OptimizationOpportunityFinder
     /// rendering the unwrapped type from a type annotation that supplies
     /// concrete type arguments.
     /// </summary>
-    private sealed record SingleTagShapeInfo(
+    internal sealed record SingleTagShapeInfo(
         DeclQualifiedName TypeName,
         DeclQualifiedName ConstructorName,
         ModuleName TypeGenerics,
@@ -1467,7 +1362,7 @@ public static class OptimizationOpportunityFinder
     /// the same <see cref="SingleTagShapeInfo"/> so detection sites can
     /// resolve from either direction.
     /// </summary>
-    private static ImmutableDictionary<DeclQualifiedName, SingleTagShapeInfo>
+    internal static ImmutableDictionary<DeclQualifiedName, SingleTagShapeInfo>
         BuildSingleTagRegistry(
         IReadOnlyDictionary<DeclQualifiedName, SyntaxTypes.Declaration> declarations)
     {
@@ -1475,28 +1370,26 @@ public static class OptimizationOpportunityFinder
 
         foreach (var (declName, decl) in declarations)
         {
-            if (decl is not SyntaxTypes.Declaration.CustomTypeDeclaration ctd)
+            if (decl is not SyntaxTypes.Declaration.ChoiceTypeDeclaration ctd)
                 continue;
 
             if (ctd.TypeDeclaration.Constructors.Count is not 1)
                 continue;
 
-            var ctor = ctd.TypeDeclaration.Constructors[0].Value;
+            var ctor = ctd.TypeDeclaration.Constructors[0];
 
             var typeName =
-                DeclQualifiedName.Create(declName.Namespaces, ctd.TypeDeclaration.Name.Value);
+                DeclQualifiedName.Create(declName.Namespaces, ctd.TypeDeclaration.Name);
 
             var ctorName =
-                DeclQualifiedName.Create(declName.Namespaces, ctor.Name.Value);
+                DeclQualifiedName.Create(declName.Namespaces, ctor.Name);
 
             var generics =
                 ctd.TypeDeclaration.Generics
-                .Select(g => g.Value)
                 .ToList();
 
             var ctorArgs =
                 ctor.Arguments
-                .Select(a => a.Value)
                 .ToList();
 
             var info = new SingleTagShapeInfo(typeName, ctorName, generics, ctorArgs);
@@ -1553,7 +1446,7 @@ public static class OptimizationOpportunityFinder
 
         var ownModule = containing.Namespaces;
 
-        var implementation = function.Declaration.Value;
+        var implementation = function.Declaration;
 
         // Walk the type signature into a list of parameter type
         // annotations + a single return type annotation. A function
@@ -1562,10 +1455,10 @@ public static class OptimizationOpportunityFinder
         var sigParamTypes = new List<SyntaxTypes.TypeAnnotation?>();
         SyntaxTypes.TypeAnnotation? sigReturnType = null;
 
-        if (function.Signature is { } signatureNode)
+        if (function.Signature is { } signature)
         {
             DecomposeFunctionSignature(
-                signatureNode.Value.TypeAnnotation.Value,
+                signature.TypeAnnotation,
                 implementation.Arguments.Count,
                 sigParamTypes,
                 out sigReturnType);
@@ -1574,12 +1467,12 @@ public static class OptimizationOpportunityFinder
         // Per-parameter detection.
         for (var i = 0; i < implementation.Arguments.Count; i++)
         {
-            var paramPattern = implementation.Arguments[i].Value;
-            var paramName = ElmSyntaxTransformations.TryGetParameterDisplayName(paramPattern);
+            var paramPattern = implementation.Arguments[i];
+            var paramName = SyntaxTypes.SyntaxAnalysis.TryGetParameterDisplayName(paramPattern);
 
             // 1. Signature-based.
             SingleTagShapeInfo? matchedFromSig = null;
-            string? unwrappedFromSig = null;
+            IReadOnlyList<SyntaxTypes.TypeAnnotation>? unwrappedFromSig = null;
 
             if (i < sigParamTypes.Count && sigParamTypes[i] is { } sigParamType)
             {
@@ -1603,7 +1496,7 @@ public static class OptimizationOpportunityFinder
             {
                 matchedFromLet =
                     TryMatchSingleTagFromTopLevelLetDestructuring(
-                        implementation.Expression.Value,
+                        implementation.Expression,
                         paramName,
                         singleTagRegistry,
                         ownModule);
@@ -1614,16 +1507,12 @@ public static class OptimizationOpportunityFinder
             if (anyMatch is null)
                 continue;
 
-            // Prefer the signature-derived "unwrapped" rendering when
-            // available because it has the actual concrete type
-            // arguments substituted; otherwise fall back to the
-            // constructor's argument types as declared.
-            var unwrapped =
-                unwrappedFromSig ?? RenderUnwrappedFromShape(anyMatch);
-
             var description =
-                "parameter[" + i + "] " + (paramName ?? "_") + ": " +
-                anyMatch.ConstructorName.FullName + " -> " + ParenIfTopLevelArrow(unwrapped);
+                OptimizationOpportunityRenderer.RenderRootLevelWrapperParameterDescription(
+                    i,
+                    paramName,
+                    anyMatch,
+                    unwrappedFromSig);
 
             MaybeAdd(
                 OpportunityCategory.RootLevelChoiceTagWrapper,
@@ -1634,7 +1523,7 @@ public static class OptimizationOpportunityFinder
 
         // Return-value detection.
         SingleTagShapeInfo? returnMatched = null;
-        string? returnUnwrapped = null;
+        IReadOnlyList<SyntaxTypes.TypeAnnotation>? returnUnwrapped = null;
 
         if (sigReturnType is not null)
         {
@@ -1647,18 +1536,17 @@ public static class OptimizationOpportunityFinder
 
         returnMatched ??=
             TryMatchSingleTagFromAllReturnLeaves(
-                implementation.Expression.Value,
+                implementation.Expression,
                 singleTagRegistry,
                 ownModule);
 
         if (returnMatched is not null)
         {
-            var unwrappedReturn =
-                returnUnwrapped ?? RenderUnwrappedFromShape(returnMatched);
-
             MaybeAdd(
                 OpportunityCategory.RootLevelChoiceTagWrapper,
-                "return: " + returnMatched.ConstructorName.FullName + " -> " + ParenIfTopLevelArrow(unwrappedReturn),
+                OptimizationOpportunityRenderer.RenderRootLevelWrapperReturnDescription(
+                    returnMatched,
+                    returnUnwrapped),
                 containing,
                 resultBuilder);
         }
@@ -1674,7 +1562,7 @@ public static class OptimizationOpportunityFinder
     /// "missing" entries are recorded as <c>null</c> in
     /// <paramref name="sigParamTypes"/>.
     /// </summary>
-    private static void DecomposeFunctionSignature(
+    internal static void DecomposeFunctionSignature(
         SyntaxTypes.TypeAnnotation annotation,
         int parameterCount,
         List<SyntaxTypes.TypeAnnotation?> sigParamTypes,
@@ -1686,8 +1574,8 @@ public static class OptimizationOpportunityFinder
         {
             if (current is SyntaxTypes.TypeAnnotation.FunctionTypeAnnotation fta)
             {
-                sigParamTypes.Add(fta.ArgumentType.Value);
-                current = fta.ReturnType.Value;
+                sigParamTypes.Add(fta.ArgumentType);
+                current = fta.ReturnType;
             }
             else
             {
@@ -1700,13 +1588,13 @@ public static class OptimizationOpportunityFinder
 
     /// <summary>
     /// Returns the <see cref="SingleTagShapeInfo"/> for the supplied
-    /// type annotation when (after peeling parens) it is a
+    /// type annotation when it is a
     /// <see cref="SyntaxTypes.TypeAnnotation.Typed"/> reference to a
-    /// single-tag custom type, plus a textual rendering of the unwrapped
-    /// type with generic substitution applied. Returns
+    /// single-tag custom type, plus the unwrapped type annotations with
+    /// generic substitution applied. Returns
     /// <c>(null, null)</c> for any other annotation shape.
     /// </summary>
-    private static (SingleTagShapeInfo? Info, string? UnwrappedRendered)
+    internal static (SingleTagShapeInfo? Info, IReadOnlyList<SyntaxTypes.TypeAnnotation>? UnwrappedTypes)
         TryResolveSingleTagWrap(
         SyntaxTypes.TypeAnnotation annotation,
         ImmutableDictionary<DeclQualifiedName, SingleTagShapeInfo> singleTagRegistry,
@@ -1715,14 +1603,12 @@ public static class OptimizationOpportunityFinder
         if (annotation is not SyntaxTypes.TypeAnnotation.Typed typed)
             return (null, null);
 
-        var typeRef = typed.TypeName.Value;
-
         var qualified =
-            typeRef.ModuleName.Count > 0
+            typed.ModuleName.Count > 0
             ?
-            DeclQualifiedName.Create(typeRef.ModuleName, typeRef.Name)
+            DeclQualifiedName.Create(typed.ModuleName, typed.Name)
             :
-            DeclQualifiedName.Create(ownModule, typeRef.Name);
+            DeclQualifiedName.Create(ownModule, typed.Name);
 
         if (!singleTagRegistry.TryGetValue(qualified, out var info))
             return (null, null);
@@ -1740,7 +1626,7 @@ public static class OptimizationOpportunityFinder
         {
             if (i < typed.TypeArguments.Count)
             {
-                substitution[info.TypeGenerics[i]] = typed.TypeArguments[i].Value;
+                substitution[info.TypeGenerics[i]] = typed.TypeArguments[i];
             }
         }
 
@@ -1749,15 +1635,13 @@ public static class OptimizationOpportunityFinder
             .Select(a => SubstituteGenerics(a, substitution))
             .ToList();
 
-        var unwrapped = RenderUnwrappedTypeAnnotations(substitutedArgs);
-
-        return (info, unwrapped);
+        return (info, substitutedArgs);
     }
 
     /// <summary>
     /// Returns the <see cref="SingleTagShapeInfo"/> implied by a
-    /// parameter or destructuring pattern when (after peeling parens
-    /// and as-patterns) the pattern is a
+    /// parameter or destructuring pattern when (after peeling
+    /// as-patterns) the pattern is a
     /// <see cref="SyntaxTypes.Pattern.NamedPattern"/> whose constructor
     /// resolves to a single-tag constructor; otherwise <c>null</c>.
     /// </summary>
@@ -1766,7 +1650,7 @@ public static class OptimizationOpportunityFinder
         ImmutableDictionary<DeclQualifiedName, SingleTagShapeInfo> singleTagRegistry,
         ModuleName ownModule)
     {
-        var peeled = ElmSyntaxTransformations.PeelPatternParenthesesAndAsBinder(pattern);
+        var peeled = SyntaxTypes.SyntaxAnalysis.PeelPatternAsBinder(pattern);
 
         if (peeled is not SyntaxTypes.Pattern.NamedPattern named)
             return null;
@@ -1793,7 +1677,7 @@ public static class OptimizationOpportunityFinder
     /// Walks <paramref name="body"/>'s leading let chain (only the let
     /// blocks at the very top of the body, not nested ones) and returns
     /// the single-tag <see cref="SingleTagShapeInfo"/> implied by any
-    /// <see cref="SyntaxTypes.Expression.LetDeclaration.LetDestructuring"/>
+    /// <see cref="SyntaxTypes.LetDeclaration.LetDestructuring"/>
     /// that matches a <see cref="SyntaxTypes.Pattern.NamedPattern"/>
     /// applied to the bare parameter named
     /// <paramref name="paramName"/>; <c>null</c> when no such
@@ -1805,26 +1689,26 @@ public static class OptimizationOpportunityFinder
         ImmutableDictionary<DeclQualifiedName, SingleTagShapeInfo> singleTagRegistry,
         ModuleName ownModule)
     {
-        var current = SyntaxTypes.SyntaxAnalysis.UnwrapParenthesized(body);
+        var current = body;
 
         while (current is SyntaxTypes.Expression.LetExpression letExpr)
         {
-            foreach (var declNode in letExpr.Value.Declarations)
+            foreach (var decl in letExpr.Declarations)
             {
-                if (declNode.Value is not SyntaxTypes.Expression.LetDeclaration.LetDestructuring letDestr)
+                if (decl is not SyntaxTypes.LetDeclaration.LetDestructuring letDestr)
                     continue;
 
-                var rhs = SyntaxTypes.SyntaxAnalysis.UnwrapParenthesized(letDestr.Expression.Value);
+                var rhs = letDestr.Expression;
 
-                if (rhs is not SyntaxTypes.Expression.FunctionOrValue rhsRef)
+                if (rhs is not SyntaxTypes.Expression.Identifier rhsRef)
                     continue;
 
-                if (rhsRef.ModuleName.Count is not 0 || rhsRef.Name != paramName)
+                if (rhsRef.QualifiedName.Namespaces.Count is not 0 || rhsRef.QualifiedName.DeclName != paramName)
                     continue;
 
                 var match =
                     TryMatchSingleTagFromPattern(
-                        letDestr.Pattern.Value,
+                        letDestr.Pattern,
                         singleTagRegistry,
                         ownModule);
 
@@ -1832,7 +1716,7 @@ public static class OptimizationOpportunityFinder
                     return match;
             }
 
-            current = SyntaxTypes.SyntaxAnalysis.UnwrapParenthesized(letExpr.Value.Expression.Value);
+            current = letExpr.Expression;
         }
 
         return null;
@@ -1844,9 +1728,8 @@ public static class OptimizationOpportunityFinder
     /// the root, when this is consistent across every leaf; otherwise
     /// <c>null</c>. Return leaves are followed across
     /// <see cref="SyntaxTypes.Expression.LetExpression"/>,
-    /// <see cref="SyntaxTypes.Expression.IfBlock"/>,
-    /// <see cref="SyntaxTypes.Expression.CaseExpression"/>, and
-    /// <see cref="SyntaxTypes.Expression.ParenthesizedExpression"/>.
+    /// <see cref="SyntaxTypes.Expression.IfBlock"/>, and
+    /// <see cref="SyntaxTypes.Expression.CaseExpression"/>.
     /// </summary>
     private static SingleTagShapeInfo? TryMatchSingleTagFromAllReturnLeaves(
         SyntaxTypes.Expression body,
@@ -1876,20 +1759,20 @@ public static class OptimizationOpportunityFinder
             if (leaf is not SyntaxTypes.Expression.Application app)
                 return false;
 
-            if (app.Arguments.Count < 2)
+            if (app.Arguments.Count < 1)
                 return false;
 
-            var head = SyntaxTypes.SyntaxAnalysis.UnwrapParenthesized(app.Arguments[0].Value);
+            var head = app.Function;
 
-            if (head is not SyntaxTypes.Expression.FunctionOrValue funcOrValue)
+            if (head is not SyntaxTypes.Expression.Identifier identifier)
                 return false;
 
             var qualified =
-                funcOrValue.ModuleName.Count > 0
+                identifier.QualifiedName.Namespaces.Count > 0
                 ?
-                DeclQualifiedName.Create(funcOrValue.ModuleName, funcOrValue.Name)
+                identifier.QualifiedName
                 :
-                DeclQualifiedName.Create(ownModule, funcOrValue.Name);
+                DeclQualifiedName.Create(ownModule, identifier.QualifiedName.DeclName);
 
             if (!singleTagRegistry.TryGetValue(qualified, out var info))
                 return false;
@@ -1900,7 +1783,7 @@ public static class OptimizationOpportunityFinder
             // The application must supply exactly one positional
             // argument per constructor field (Elm constructors are
             // applied uncurried at the source level).
-            var suppliedArgCount = app.Arguments.Count - 1;
+            var suppliedArgCount = app.Arguments.Count;
 
             if (suppliedArgCount != info.ConstructorArgumentTypes.Count)
                 return false;
@@ -1942,14 +1825,10 @@ public static class OptimizationOpportunityFinder
                 {
                     var newArgs =
                         t.TypeArguments
-                        .Select(
-                            arg =>
-                            new SyntaxModel.Node<SyntaxTypes.TypeAnnotation>(
-                                arg.Range,
-                                SubstituteGenerics(arg.Value, substitution)))
+                        .Select(arg => SubstituteGenerics(arg, substitution))
                         .ToList();
 
-                    return new SyntaxTypes.TypeAnnotation.Typed(t.TypeName, newArgs);
+                    return new SyntaxTypes.TypeAnnotation.Typed(t.ModuleName, t.Name, newArgs);
                 }
 
             case SyntaxTypes.TypeAnnotation.Unit:
@@ -1959,11 +1838,7 @@ public static class OptimizationOpportunityFinder
                 {
                     var newAnnots =
                         tupled.TypeAnnotations
-                        .Select(
-                            a =>
-                            new SyntaxModel.Node<SyntaxTypes.TypeAnnotation>(
-                                a.Range,
-                                SubstituteGenerics(a.Value, substitution)))
+                        .Select(a => SubstituteGenerics(a, substitution))
                         .ToList();
 
                     return new SyntaxTypes.TypeAnnotation.Tupled(newAnnots);
@@ -1975,13 +1850,9 @@ public static class OptimizationOpportunityFinder
                         record.RecordDefinition.Fields
                         .Select(
                             f =>
-                            new SyntaxModel.Node<SyntaxTypes.RecordField>(
-                                f.Range,
-                                new SyntaxTypes.RecordField(
-                                    f.Value.FieldName,
-                                    new SyntaxModel.Node<SyntaxTypes.TypeAnnotation>(
-                                        f.Value.FieldType.Range,
-                                        SubstituteGenerics(f.Value.FieldType.Value, substitution)))))
+                            SyntaxTypes.RecordField.Create(
+                                f.FieldName,
+                                SubstituteGenerics(f.FieldType, substitution)))
                         .ToList();
 
                     return
@@ -1992,345 +1863,30 @@ public static class OptimizationOpportunityFinder
             case SyntaxTypes.TypeAnnotation.GenericRecord gr:
                 {
                     var newFields =
-                        gr.RecordDefinition.Value.Fields
+                        gr.RecordDefinition.Fields
                         .Select(
                             f =>
-                            new SyntaxModel.Node<SyntaxTypes.RecordField>(
-                                f.Range,
-                                new SyntaxTypes.RecordField(
-                                    f.Value.FieldName,
-                                    new SyntaxModel.Node<SyntaxTypes.TypeAnnotation>(
-                                        f.Value.FieldType.Range,
-                                        SubstituteGenerics(f.Value.FieldType.Value, substitution)))))
+                            SyntaxTypes.RecordField.Create(
+                                f.FieldName,
+                                SubstituteGenerics(f.FieldType, substitution)))
                         .ToList();
 
                     return
                         new SyntaxTypes.TypeAnnotation.GenericRecord(
                             gr.GenericName,
-                            new SyntaxModel.Node<SyntaxTypes.RecordDefinition>(
-                                gr.RecordDefinition.Range,
-                                new SyntaxTypes.RecordDefinition(newFields)));
+                            new SyntaxTypes.RecordDefinition(newFields));
                 }
 
             case SyntaxTypes.TypeAnnotation.FunctionTypeAnnotation fta:
                 return
                     new SyntaxTypes.TypeAnnotation.FunctionTypeAnnotation(
-                        new SyntaxModel.Node<SyntaxTypes.TypeAnnotation>(
-                            fta.ArgumentType.Range,
-                            SubstituteGenerics(fta.ArgumentType.Value, substitution)),
-                        new SyntaxModel.Node<SyntaxTypes.TypeAnnotation>(
-                            fta.ReturnType.Range,
-                            SubstituteGenerics(fta.ReturnType.Value, substitution)));
+                        SubstituteGenerics(fta.ArgumentType, substitution),
+                        SubstituteGenerics(fta.ReturnType, substitution));
 
             default:
                 throw new System.NotImplementedException(
                     "SubstituteGenerics does not handle TypeAnnotation variant: " +
                     annotation.GetType().Name);
         }
-    }
-
-    /// <summary>
-    /// Renders the unwrapped type for a single-tag constructor based on
-    /// its constructor-argument types in the order they were declared.
-    /// 1-arg constructors render as the inner type; N-arg constructors
-    /// render as a tuple of the argument types — at this stage of the
-    /// compilation tuples of any arity are permissible.
-    /// </summary>
-    private static string RenderUnwrappedFromShape(SingleTagShapeInfo info) =>
-        RenderUnwrappedTypeAnnotations(info.ConstructorArgumentTypes);
-
-    private static string RenderUnwrappedTypeAnnotations(
-        IReadOnlyList<SyntaxTypes.TypeAnnotation> annotations)
-    {
-        if (annotations.Count is 0)
-            return "()";
-
-        if (annotations.Count is 1)
-            return RenderTypeAnnotation(annotations[0]);
-
-        var sb = new StringBuilder();
-        sb.Append('(');
-
-        for (var i = 0; i < annotations.Count; i++)
-        {
-            if (i > 0)
-                sb.Append(", ");
-
-            sb.Append(RenderTypeAnnotation(annotations[i]));
-        }
-
-        sb.Append(')');
-        return sb.ToString();
-    }
-
-    /// <summary>
-    /// Returns <paramref name="rendered"/> wrapped in parens when it
-    /// itself contains a function arrow at the top level — used by
-    /// description and signature rendering so that an unwrapped
-    /// function-typed inner does not run into surrounding arrows.
-    /// </summary>
-    private static string ParenIfTopLevelArrow(string rendered)
-    {
-        // Cheap top-level scan: the rendered string is well-formed and
-        // never contains comments. A " -> " outside any parens means
-        // the rendered type is a function arrow at the outer level.
-        var depth = 0;
-
-        for (var i = 0; i < rendered.Length; i++)
-        {
-            var c = rendered[i];
-
-            if (c is '(' or '{')
-            {
-                depth++;
-            }
-            else if (c is ')' or '}')
-            {
-                depth--;
-            }
-            else if (depth is 0 &&
-                c is '-' &&
-                i + 1 < rendered.Length &&
-                rendered[i + 1] is '>')
-            {
-                return "(" + rendered + ")";
-            }
-        }
-
-        return rendered;
-    }
-
-    /// <summary>
-    /// Stable, snapshot-friendly textual rendering of a type annotation
-    /// covering every <see cref="SyntaxTypes.TypeAnnotation"/> variant.
-    /// Function arrows, tuple commas and record braces are reproduced
-    /// in their canonical surface syntax; nested function arrows on the
-    /// left of an outer arrow are parenthesised so that the rendered
-    /// form unambiguously matches the source-level grouping.
-    /// </summary>
-    private static string RenderTypeAnnotation(SyntaxTypes.TypeAnnotation annotation)
-    {
-        switch (annotation)
-        {
-            case SyntaxTypes.TypeAnnotation.GenericType g:
-                return g.Name;
-
-            case SyntaxTypes.TypeAnnotation.Unit:
-                return "()";
-
-            case SyntaxTypes.TypeAnnotation.Typed t:
-                {
-                    var nameSb = new StringBuilder();
-
-                    foreach (var ns in t.TypeName.Value.ModuleName)
-                    {
-                        nameSb.Append(ns);
-                        nameSb.Append('.');
-                    }
-
-                    nameSb.Append(t.TypeName.Value.Name);
-
-                    if (t.TypeArguments.Count is 0)
-                        return nameSb.ToString();
-
-                    var sb = new StringBuilder();
-                    sb.Append(nameSb);
-
-                    foreach (var arg in t.TypeArguments)
-                    {
-                        sb.Append(' ');
-                        sb.Append(RenderTypeAnnotationParenIfComposite(arg.Value));
-                    }
-
-                    return sb.ToString();
-                }
-
-            case SyntaxTypes.TypeAnnotation.Tupled tupled:
-                {
-                    var sb = new StringBuilder();
-                    sb.Append('(');
-
-                    for (var i = 0; i < tupled.TypeAnnotations.Count; i++)
-                    {
-                        if (i > 0)
-                            sb.Append(", ");
-
-                        sb.Append(RenderTypeAnnotation(tupled.TypeAnnotations[i].Value));
-                    }
-
-                    sb.Append(')');
-                    return sb.ToString();
-                }
-
-            case SyntaxTypes.TypeAnnotation.Record record:
-                return RenderRecordDefinition(record.RecordDefinition);
-
-            case SyntaxTypes.TypeAnnotation.GenericRecord gr:
-                {
-                    var sb = new StringBuilder();
-                    sb.Append("{ ");
-                    sb.Append(gr.GenericName.Value);
-                    sb.Append(" | ");
-                    AppendRecordFields(sb, gr.RecordDefinition.Value);
-                    sb.Append(" }");
-                    return sb.ToString();
-                }
-
-            case SyntaxTypes.TypeAnnotation.FunctionTypeAnnotation fta:
-                {
-                    var left = RenderTypeAnnotation(fta.ArgumentType.Value);
-
-                    if (fta.ArgumentType.Value is SyntaxTypes.TypeAnnotation.FunctionTypeAnnotation)
-                        left = "(" + left + ")";
-
-                    var right = RenderTypeAnnotation(fta.ReturnType.Value);
-
-                    return left + " -> " + right;
-                }
-
-            default:
-                throw new System.NotImplementedException(
-                    "RenderTypeAnnotation does not handle TypeAnnotation variant: " +
-                    annotation.GetType().Name);
-        }
-    }
-
-    private static string RenderRecordDefinition(SyntaxTypes.RecordDefinition def)
-    {
-        if (def.Fields.Count is 0)
-            return "{}";
-
-        var sb = new StringBuilder();
-        sb.Append("{ ");
-        AppendRecordFields(sb, def);
-        sb.Append(" }");
-        return sb.ToString();
-    }
-
-    private static void AppendRecordFields(StringBuilder sb, SyntaxTypes.RecordDefinition def)
-    {
-        for (var i = 0; i < def.Fields.Count; i++)
-        {
-            if (i > 0)
-                sb.Append(", ");
-
-            sb.Append(def.Fields[i].Value.FieldName.Value);
-            sb.Append(" : ");
-            sb.Append(RenderTypeAnnotation(def.Fields[i].Value.FieldType.Value));
-        }
-    }
-
-    /// <summary>
-    /// Renders <paramref name="annotation"/> wrapping it in parens when
-    /// it is composite enough that printing it bare next to neighbouring
-    /// type-application arguments would be ambiguous.
-    /// </summary>
-    private static string RenderTypeAnnotationParenIfComposite(SyntaxTypes.TypeAnnotation annotation)
-    {
-        return annotation switch
-        {
-            SyntaxTypes.TypeAnnotation.GenericType or SyntaxTypes.TypeAnnotation.Unit or SyntaxTypes.TypeAnnotation.Tupled or SyntaxTypes.TypeAnnotation.Record =>
-            RenderTypeAnnotation(annotation),
-
-            SyntaxTypes.TypeAnnotation.Typed t when t.TypeArguments.Count is 0 => RenderTypeAnnotation(t),
-
-            _ =>
-            "(" + RenderTypeAnnotation(annotation) + ")",
-        };
-    }
-
-    /// <summary>
-    /// Produces a transformed function type annotation in which every
-    /// root-level wrapping by a single-tag constructor (parameter or
-    /// return) has been replaced by the constructor's unwrapped type
-    /// (a tuple of constructor-argument types when there is more than
-    /// one). Used by tests to assert that a function's signature is
-    /// transformed accordingly to the unwrapped type.
-    /// <para>
-    /// Returns <c>null</c> when no transformation applies — either the
-    /// declaration is not a function declaration, the function has no
-    /// signature, or no root-level wrapping is detected.
-    /// </para>
-    /// </summary>
-    public static string? TryRenderTransformedSignature(
-        IReadOnlyDictionary<DeclQualifiedName, SyntaxTypes.Declaration> declarations,
-        DeclQualifiedName functionName)
-    {
-        if (!declarations.TryGetValue(functionName, out var decl))
-            return null;
-
-        if (decl is not SyntaxTypes.Declaration.FunctionDeclaration funcDecl)
-            return null;
-
-        if (funcDecl.Function.Signature is not { } signatureNode)
-            return null;
-
-        var singleTagRegistry = BuildSingleTagRegistry(declarations);
-
-        if (singleTagRegistry.IsEmpty)
-            return RenderTypeAnnotation(signatureNode.Value.TypeAnnotation.Value);
-
-        var ownModule = functionName.Namespaces;
-        var implementation = funcDecl.Function.Declaration.Value;
-        var paramCount = implementation.Arguments.Count;
-
-        var sigParamTypes = new List<SyntaxTypes.TypeAnnotation?>();
-
-        DecomposeFunctionSignature(
-            signatureNode.Value.TypeAnnotation.Value,
-            paramCount,
-            sigParamTypes,
-            out var sigReturnType);
-
-        var transformedParts = new List<string>();
-
-        for (var i = 0; i < paramCount; i++)
-        {
-            var paramType = i < sigParamTypes.Count ? sigParamTypes[i] : null;
-
-            transformedParts.Add(
-                paramType is null
-                ?
-                "?"
-                :
-                RenderTransformedTypeAnnotationAtRoot(
-                    paramType,
-                    singleTagRegistry,
-                    ownModule));
-        }
-
-        var renderedReturn =
-            sigReturnType is null
-            ?
-            "?"
-            :
-            RenderTransformedTypeAnnotationAtRoot(
-                sigReturnType,
-                singleTagRegistry,
-                ownModule);
-
-        var sb = new StringBuilder();
-
-        for (var i = 0; i < transformedParts.Count; i++)
-        {
-            sb.Append(ParenIfTopLevelArrow(transformedParts[i]));
-            sb.Append(" -> ");
-        }
-
-        sb.Append(renderedReturn);
-        return sb.ToString();
-    }
-
-    private static string RenderTransformedTypeAnnotationAtRoot(
-        SyntaxTypes.TypeAnnotation annotation,
-        ImmutableDictionary<DeclQualifiedName, SingleTagShapeInfo> singleTagRegistry,
-        ModuleName ownModule)
-    {
-        var (info, unwrapped) = TryResolveSingleTagWrap(annotation, singleTagRegistry, ownModule);
-
-        if (info is not null && unwrapped is not null)
-            return unwrapped;
-
-        return RenderTypeAnnotation(annotation);
     }
 }

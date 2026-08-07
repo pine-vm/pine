@@ -5,7 +5,7 @@ using System.Collections.Generic;
 using System.Collections.Immutable;
 
 using ModuleName = System.Collections.Generic.IReadOnlyList<string>;
-using SyntaxTypes = Pine.Core.Elm.ElmSyntax.Stil4mElmSyntax7;
+using Stil4mElmSyntax7 = Pine.Core.Elm.ElmSyntax.Stil4mElmSyntax7;
 
 // Alias to avoid ambiguity with System.Range
 using Range = Pine.Core.Elm.ElmSyntax.SyntaxModel.Range;
@@ -78,15 +78,15 @@ internal static class WrapUnwrapCancellation
     /// To also enable Shapes A' / B' (sibling-aware cancellation that
     /// rewrites <c>let (Wrap p) = f args in body</c> to
     /// <c>let p = f__stripped args in body</c>), use the overload
-    /// <see cref="RewriteDeclarationDictionary(ImmutableDictionary{DeclQualifiedName, SyntaxTypes.Declaration}, ImmutableDictionary{DeclQualifiedName, GeneratedSiblingDecl})"/>
+    /// <see cref="RewriteDeclarationDictionary(ImmutableDictionary{DeclQualifiedName, Stil4mElmSyntax7.Declaration}, ImmutableDictionary{DeclQualifiedName, GeneratedSiblingDecl})"/>
     /// and supply a sibling registry whose
     /// <see cref="GeneratedSiblingDecl.SiblingDeclName"/>s are
     /// guaranteed to resolve in the output dictionary.
     /// </para>
     /// </summary>
-    public static ImmutableDictionary<DeclQualifiedName, SyntaxTypes.Declaration>
+    public static ImmutableDictionary<DeclQualifiedName, Stil4mElmSyntax7.Declaration>
         RewriteDeclarationDictionary(
-        ImmutableDictionary<DeclQualifiedName, SyntaxTypes.Declaration> declarations) =>
+        ImmutableDictionary<DeclQualifiedName, Stil4mElmSyntax7.Declaration> declarations) =>
         RewriteDeclarationDictionary(
             declarations,
             siblingsByOriginal: []);
@@ -106,7 +106,7 @@ internal static class WrapUnwrapCancellation
     /// </summary>
     /// <summary>
     /// <see cref="OptimizedElmSyntaxDeclarations"/>-flavoured overload of
-    /// <see cref="RewriteDeclarationDictionary(ImmutableDictionary{DeclQualifiedName, SyntaxTypes.Declaration}, ImmutableDictionary{DeclQualifiedName, GeneratedSiblingDecl})"/>.
+    /// <see cref="RewriteDeclarationDictionary(ImmutableDictionary{DeclQualifiedName, Stil4mElmSyntax7.Declaration}, ImmutableDictionary{DeclQualifiedName, GeneratedSiblingDecl})"/>.
     /// </summary>
     public static OptimizedElmSyntaxDeclarations
         RewriteDeclarationDictionary(
@@ -121,7 +121,7 @@ internal static class WrapUnwrapCancellation
 
     /// <summary>
     /// <see cref="OptimizedElmSyntaxDeclarations"/>-flavoured overload of
-    /// <see cref="RewriteDeclarationDictionary(ImmutableDictionary{DeclQualifiedName, SyntaxTypes.Declaration})"/>
+    /// <see cref="RewriteDeclarationDictionary(ImmutableDictionary{DeclQualifiedName, Stil4mElmSyntax7.Declaration})"/>
     /// — literal-cancellation only (no sibling-aware shapes). Callers do
     /// not need to flatten and re-lift the structured declaration model.
     /// </summary>
@@ -132,9 +132,9 @@ internal static class WrapUnwrapCancellation
             declarations,
             siblingsByOriginal: []);
 
-    public static ImmutableDictionary<DeclQualifiedName, SyntaxTypes.Declaration>
+    public static ImmutableDictionary<DeclQualifiedName, Stil4mElmSyntax7.Declaration>
         RewriteDeclarationDictionary(
-        ImmutableDictionary<DeclQualifiedName, SyntaxTypes.Declaration> declarations,
+        ImmutableDictionary<DeclQualifiedName, Stil4mElmSyntax7.Declaration> declarations,
         ImmutableDictionary<DeclQualifiedName, GeneratedSiblingDecl> siblingsByOriginal)
     {
         var registry = NewtypeWrapperAnalysis.BuildNewtypeRegistry(declarations);
@@ -142,7 +142,7 @@ internal static class WrapUnwrapCancellation
         if (registry.IsEmpty)
             return declarations;
 
-        var builder = ImmutableDictionary.CreateBuilder<DeclQualifiedName, SyntaxTypes.Declaration>();
+        var builder = ImmutableDictionary.CreateBuilder<DeclQualifiedName, Stil4mElmSyntax7.Declaration>();
 
         foreach (var (declName, decl) in declarations)
         {
@@ -158,15 +158,15 @@ internal static class WrapUnwrapCancellation
     /// Non-function declarations (custom types, aliases, ports, infixes)
     /// pass through unchanged.
     /// </summary>
-    private static SyntaxTypes.Declaration RewriteDeclaration(
-        SyntaxTypes.Declaration decl,
+    private static Stil4mElmSyntax7.Declaration RewriteDeclaration(
+        Stil4mElmSyntax7.Declaration decl,
         ImmutableDictionary<DeclQualifiedName, NewtypeWrapperAnalysis.NewtypeShapeInfo> registry,
         ImmutableDictionary<DeclQualifiedName, GeneratedSiblingDecl> siblingsByOriginal,
         ModuleName currentModuleName)
     {
         switch (decl)
         {
-            case SyntaxTypes.Declaration.FunctionDeclaration funcDecl:
+            case Stil4mElmSyntax7.Declaration.FunctionDeclaration funcDecl:
                 {
                     var impl = funcDecl.Function.Declaration.Value;
 
@@ -179,25 +179,25 @@ internal static class WrapUnwrapCancellation
                     var newImpl =
                         impl with
                         {
-                            Expression = new Node<SyntaxTypes.Expression>(impl.Expression.Range, newBody),
+                            Expression = new Node<Stil4mElmSyntax7.Expression>(impl.Expression.Range, newBody),
                         };
 
                     var newFunc =
                         funcDecl.Function with
                         {
                             Declaration =
-                            new Node<SyntaxTypes.FunctionImplementation>(
+                            new Node<Stil4mElmSyntax7.FunctionImplementation>(
                                 funcDecl.Function.Declaration.Range,
                                 newImpl),
                         };
 
-                    return new SyntaxTypes.Declaration.FunctionDeclaration(newFunc);
+                    return new Stil4mElmSyntax7.Declaration.FunctionDeclaration(newFunc);
                 }
 
-            case SyntaxTypes.Declaration.CustomTypeDeclaration:
-            case SyntaxTypes.Declaration.AliasDeclaration:
-            case SyntaxTypes.Declaration.PortDeclaration:
-            case SyntaxTypes.Declaration.InfixDeclaration:
+            case Stil4mElmSyntax7.Declaration.CustomTypeDeclaration:
+            case Stil4mElmSyntax7.Declaration.AliasDeclaration:
+            case Stil4mElmSyntax7.Declaration.PortDeclaration:
+            case Stil4mElmSyntax7.Declaration.InfixDeclaration:
                 return decl;
 
             default:
@@ -215,8 +215,8 @@ internal static class WrapUnwrapCancellation
     /// to allow cascading cancellations (e.g. removing one wrap exposes
     /// an adjacent unwrap).
     /// </summary>
-    public static SyntaxTypes.Expression RewriteExpression(
-        SyntaxTypes.Expression expr,
+    public static Stil4mElmSyntax7.Expression RewriteExpression(
+        Stil4mElmSyntax7.Expression expr,
         ImmutableDictionary<DeclQualifiedName, NewtypeWrapperAnalysis.NewtypeShapeInfo> registry,
         ImmutableDictionary<DeclQualifiedName, GeneratedSiblingDecl> siblingsByOriginal,
         ModuleName currentModuleName)
@@ -230,7 +230,7 @@ internal static class WrapUnwrapCancellation
         // <see cref="Inlining"/> helpers that walk every body).
         var anyChildChanged = false;
 
-        Node<SyntaxTypes.Expression> RecurseNode(Node<SyntaxTypes.Expression> child)
+        Node<Stil4mElmSyntax7.Expression> RecurseNode(Node<Stil4mElmSyntax7.Expression> child)
         {
             var rewrittenChild =
                 RewriteExpression(child.Value, registry, siblingsByOriginal, currentModuleName);
@@ -239,7 +239,7 @@ internal static class WrapUnwrapCancellation
                 return child;
 
             anyChildChanged = true;
-            return new Node<SyntaxTypes.Expression>(child.Range, rewrittenChild);
+            return new Node<Stil4mElmSyntax7.Expression>(child.Range, rewrittenChild);
         }
 
         var withChildrenRewritten = ElmSyntaxTransformations.MapChildExpressions(expr, RecurseNode);
@@ -270,18 +270,18 @@ internal static class WrapUnwrapCancellation
     /// Returns null otherwise. Does NOT recurse into children — call
     /// <see cref="RewriteExpression"/> for the full bottom-up walk.
     /// </summary>
-    public static SyntaxTypes.Expression? TryCancelLocalWrapUnwrap(
-        SyntaxTypes.Expression expr,
+    public static Stil4mElmSyntax7.Expression? TryCancelLocalWrapUnwrap(
+        Stil4mElmSyntax7.Expression expr,
         ImmutableDictionary<DeclQualifiedName, NewtypeWrapperAnalysis.NewtypeShapeInfo> registry,
         ImmutableDictionary<DeclQualifiedName, GeneratedSiblingDecl> siblingsByOriginal,
         ModuleName currentModuleName)
     {
         return expr switch
         {
-            SyntaxTypes.Expression.LetExpression letExpr =>
+            Stil4mElmSyntax7.Expression.LetExpression letExpr =>
             TryCancelInLet(letExpr, registry, siblingsByOriginal, currentModuleName),
 
-            SyntaxTypes.Expression.CaseExpression caseExpr =>
+            Stil4mElmSyntax7.Expression.CaseExpression caseExpr =>
             TryCancelCaseOf(caseExpr, registry, siblingsByOriginal, currentModuleName),
 
             _ =>
@@ -294,8 +294,8 @@ internal static class WrapUnwrapCancellation
     // a sibling call's WrapWithConstructor result transform).
     // ------------------------------------------------------------------
 
-    private static SyntaxTypes.Expression? TryCancelInLet(
-        SyntaxTypes.Expression.LetExpression letExpr,
+    private static Stil4mElmSyntax7.Expression? TryCancelInLet(
+        Stil4mElmSyntax7.Expression.LetExpression letExpr,
         ImmutableDictionary<DeclQualifiedName, NewtypeWrapperAnalysis.NewtypeShapeInfo> registry,
         ImmutableDictionary<DeclQualifiedName, GeneratedSiblingDecl> siblingsByOriginal,
         ModuleName currentModuleName)
@@ -303,7 +303,7 @@ internal static class WrapUnwrapCancellation
         var letBlock = letExpr.Value;
 
         var newDeclarations =
-            new List<Node<SyntaxTypes.Expression.LetDeclaration>>(letBlock.Declarations.Count);
+            new List<Node<Stil4mElmSyntax7.Expression.LetDeclaration>>(letBlock.Declarations.Count);
 
         var cancelledIndices = new HashSet<int>();
 
@@ -313,13 +313,13 @@ internal static class WrapUnwrapCancellation
         {
             var declNode = letBlock.Declarations[i];
 
-            if (declNode.Value is SyntaxTypes.Expression.LetDeclaration.LetDestructuring letDestr &&
+            if (declNode.Value is Stil4mElmSyntax7.Expression.LetDeclaration.LetDestructuring letDestr &&
                 TryCancelLetDestructuring(letDestr, registry, siblingsByOriginal, currentModuleName) is { } cancelled)
             {
                 anyChanged = true;
 
                 newDeclarations.Add(
-                    new Node<SyntaxTypes.Expression.LetDeclaration>(declNode.Range, cancelled));
+                    new Node<Stil4mElmSyntax7.Expression.LetDeclaration>(declNode.Range, cancelled));
 
                 cancelledIndices.Add(i);
             }
@@ -353,19 +353,19 @@ internal static class WrapUnwrapCancellation
         // detection).
         // </para>
         var substitutions =
-            new Dictionary<string, Node<SyntaxTypes.Expression>>(StringComparer.Ordinal);
+            new Dictionary<string, Node<Stil4mElmSyntax7.Expression>>(StringComparer.Ordinal);
 
         var remainingAfterSubst =
-            new List<Node<SyntaxTypes.Expression.LetDeclaration>>(newDeclarations.Count);
+            new List<Node<Stil4mElmSyntax7.Expression.LetDeclaration>>(newDeclarations.Count);
 
         for (var i = 0; i < newDeclarations.Count; i++)
         {
             var declNode = newDeclarations[i];
 
             if (cancelledIndices.Contains(i) &&
-                declNode.Value is SyntaxTypes.Expression.LetDeclaration.LetDestructuring destr &&
-                SyntaxTypes.SyntaxAnalysis.UnwrapParenthesized(destr.Pattern.Value)
-                    is SyntaxTypes.Pattern.VarPattern varPat &&
+                declNode.Value is Stil4mElmSyntax7.Expression.LetDeclaration.LetDestructuring destr &&
+                Stil4mElmSyntax7.SyntaxAnalysis.UnwrapParenthesized(destr.Pattern.Value)
+                    is Stil4mElmSyntax7.Pattern.VarPattern varPat &&
                 IsSafeToSubstituteEverywhere(destr.Expression, varPat.Name, letBlock, newDeclarations))
             {
                 substitutions[varPat.Name] = destr.Expression;
@@ -391,8 +391,8 @@ internal static class WrapUnwrapCancellation
                 return bodyAfterSubst.Value;
 
             return
-                new SyntaxTypes.Expression.LetExpression(
-                    new SyntaxTypes.Expression.LetBlock(
+                new Stil4mElmSyntax7.Expression.LetExpression(
+                    new Stil4mElmSyntax7.Expression.LetBlock(
                         Declarations: remainingAfterSubst,
                         Expression: bodyAfterSubst));
         }
@@ -403,15 +403,15 @@ internal static class WrapUnwrapCancellation
         // elide the let-binding entirely. See
         // <see cref="TrySubstituteSingleVarBinding"/> for the rationale.
         if (newDeclarations.Count is 1 &&
-            newDeclarations[0].Value is SyntaxTypes.Expression.LetDeclaration.LetDestructuring singleDestr &&
+            newDeclarations[0].Value is Stil4mElmSyntax7.Expression.LetDeclaration.LetDestructuring singleDestr &&
             TrySubstituteSingleVarBinding(singleDestr.Pattern, singleDestr.Expression, letBlock.Expression) is { } substituted)
         {
             return substituted.Value;
         }
 
         return
-            new SyntaxTypes.Expression.LetExpression(
-                new SyntaxTypes.Expression.LetBlock(
+            new Stil4mElmSyntax7.Expression.LetExpression(
+                new Stil4mElmSyntax7.Expression.LetBlock(
                     Declarations: newDeclarations,
                     Expression: letBlock.Expression));
     }
@@ -427,20 +427,20 @@ internal static class WrapUnwrapCancellation
     /// declarations' RHSes is at most one.
     /// </summary>
     private static bool IsSafeToSubstituteEverywhere(
-        Node<SyntaxTypes.Expression> rhs,
+        Node<Stil4mElmSyntax7.Expression> rhs,
         string varName,
-        SyntaxTypes.Expression.LetBlock letBlock,
-        IReadOnlyList<Node<SyntaxTypes.Expression.LetDeclaration>> currentDeclarations)
+        Stil4mElmSyntax7.Expression.LetBlock letBlock,
+        IReadOnlyList<Node<Stil4mElmSyntax7.Expression.LetDeclaration>> currentDeclarations)
     {
         // A qualified function reference is always safe to duplicate.
         var rhsExpr = rhs.Value;
 
-        while (rhsExpr is SyntaxTypes.Expression.ParenthesizedExpression paren)
+        while (rhsExpr is Stil4mElmSyntax7.Expression.ParenthesizedExpression paren)
         {
             rhsExpr = paren.Expression.Value;
         }
 
-        if (rhsExpr is SyntaxTypes.Expression.FunctionOrValue fov && fov.ModuleName.Count > 0)
+        if (rhsExpr is Stil4mElmSyntax7.Expression.FunctionOrValue fov && fov.ModuleName.Count > 0)
             return true;
 
         var totalRefs =
@@ -453,9 +453,9 @@ internal static class WrapUnwrapCancellation
         {
             // Don't count references inside the binding itself (it shadows
             // nothing relevant).
-            if (declNode.Value is SyntaxTypes.Expression.LetDeclaration.LetDestructuring d &&
-                SyntaxTypes.SyntaxAnalysis.UnwrapParenthesized(d.Pattern.Value)
-                    is SyntaxTypes.Pattern.VarPattern vp && vp.Name == varName)
+            if (declNode.Value is Stil4mElmSyntax7.Expression.LetDeclaration.LetDestructuring d &&
+                Stil4mElmSyntax7.SyntaxAnalysis.UnwrapParenthesized(d.Pattern.Value)
+                    is Stil4mElmSyntax7.Pattern.VarPattern vp && vp.Name == varName)
             {
                 continue;
             }
@@ -463,8 +463,10 @@ internal static class WrapUnwrapCancellation
             var rhsToCount =
                 declNode.Value switch
                 {
-                    SyntaxTypes.Expression.LetDeclaration.LetDestructuring d2 => d2.Expression,
-                    SyntaxTypes.Expression.LetDeclaration.LetFunction lf => lf.Function.Declaration.Value.Expression,
+                    Stil4mElmSyntax7.Expression.LetDeclaration.LetDestructuring d2 => d2.Expression,
+
+                    Stil4mElmSyntax7.Expression.LetDeclaration.LetFunction lf =>
+                    lf.Function.Declaration.Value.Expression,
 
                     _ =>
                     null,
@@ -489,17 +491,17 @@ internal static class WrapUnwrapCancellation
     /// the constructor pattern on the LHS. Returns the new destructuring
     /// on success, null on no-match.
     /// </summary>
-    private static SyntaxTypes.Expression.LetDeclaration.LetDestructuring? TryCancelLetDestructuring(
-        SyntaxTypes.Expression.LetDeclaration.LetDestructuring letDestr,
+    private static Stil4mElmSyntax7.Expression.LetDeclaration.LetDestructuring? TryCancelLetDestructuring(
+        Stil4mElmSyntax7.Expression.LetDeclaration.LetDestructuring letDestr,
         ImmutableDictionary<DeclQualifiedName, NewtypeWrapperAnalysis.NewtypeShapeInfo> registry,
         ImmutableDictionary<DeclQualifiedName, GeneratedSiblingDecl> siblingsByOriginal,
         ModuleName currentModuleName)
     {
         // Pattern must be NamedPattern(Wrap, [innerPattern]) for a
         // registered newtype-shaped constructor.
-        var pattern = SyntaxTypes.SyntaxAnalysis.UnwrapParenthesized(letDestr.Pattern.Value);
+        var pattern = Stil4mElmSyntax7.SyntaxAnalysis.UnwrapParenthesized(letDestr.Pattern.Value);
 
-        if (pattern is not SyntaxTypes.Pattern.NamedPattern namedPat)
+        if (pattern is not Stil4mElmSyntax7.Pattern.NamedPattern namedPat)
             return null;
 
         if (namedPat.Arguments.Count is not 1)
@@ -524,7 +526,7 @@ internal static class WrapUnwrapCancellation
             return null;
 
         return
-            new SyntaxTypes.Expression.LetDeclaration.LetDestructuring(
+            new Stil4mElmSyntax7.Expression.LetDeclaration.LetDestructuring(
                 Pattern: namedPat.Arguments[0],
                 Expression: wrapped);
     }
@@ -534,8 +536,8 @@ internal static class WrapUnwrapCancellation
     // a sibling call's WrapWithConstructor result transform).
     // ------------------------------------------------------------------
 
-    private static SyntaxTypes.Expression? TryCancelCaseOf(
-        SyntaxTypes.Expression.CaseExpression caseExpr,
+    private static Stil4mElmSyntax7.Expression? TryCancelCaseOf(
+        Stil4mElmSyntax7.Expression.CaseExpression caseExpr,
         ImmutableDictionary<DeclQualifiedName, NewtypeWrapperAnalysis.NewtypeShapeInfo> registry,
         ImmutableDictionary<DeclQualifiedName, GeneratedSiblingDecl> siblingsByOriginal,
         ModuleName currentModuleName)
@@ -547,9 +549,9 @@ internal static class WrapUnwrapCancellation
 
         var onlyCase = caseBlock.Cases[0];
 
-        var pattern = SyntaxTypes.SyntaxAnalysis.UnwrapParenthesized(onlyCase.Pattern.Value);
+        var pattern = Stil4mElmSyntax7.SyntaxAnalysis.UnwrapParenthesized(onlyCase.Pattern.Value);
 
-        if (pattern is not SyntaxTypes.Pattern.NamedPattern namedPat)
+        if (pattern is not Stil4mElmSyntax7.Pattern.NamedPattern namedPat)
             return null;
 
         if (namedPat.Arguments.Count is not 1)
@@ -585,22 +587,22 @@ internal static class WrapUnwrapCancellation
 
         // Fallback: emit `let innerPattern = wrapped in branchBody`.
         var letDestr =
-            new SyntaxTypes.Expression.LetDeclaration.LetDestructuring(
+            new Stil4mElmSyntax7.Expression.LetDeclaration.LetDestructuring(
                 Pattern: innerPatternNode,
                 Expression: wrapped);
 
         return
-            new SyntaxTypes.Expression.LetExpression(
-                new SyntaxTypes.Expression.LetBlock(
+            new Stil4mElmSyntax7.Expression.LetExpression(
+                new Stil4mElmSyntax7.Expression.LetBlock(
                     Declarations:
                     [
-                    new Node<SyntaxTypes.Expression.LetDeclaration>(s_zeroRange, letDestr),
+                    new Node<Stil4mElmSyntax7.Expression.LetDeclaration>(s_zeroRange, letDestr),
                     ],
                     Expression: onlyCase.Expression));
     }
 
     /// <summary>
-    /// If <paramref name="patternNode"/> is a <see cref="SyntaxTypes.Pattern.VarPattern"/>
+    /// If <paramref name="patternNode"/> is a <see cref="Stil4mElmSyntax7.Pattern.VarPattern"/>
     /// and <paramref name="bodyExpr"/> references that variable at most
     /// once (counting only unshadowed occurrences), returns
     /// <paramref name="bodyExpr"/> with that variable substituted by
@@ -615,14 +617,14 @@ internal static class WrapUnwrapCancellation
     /// dead and gets discarded along with its RHS.
     /// </para>
     /// </summary>
-    private static Node<SyntaxTypes.Expression>? TrySubstituteSingleVarBinding(
-        Node<SyntaxTypes.Pattern> patternNode,
-        Node<SyntaxTypes.Expression> rhsNode,
-        Node<SyntaxTypes.Expression> bodyExpr)
+    private static Node<Stil4mElmSyntax7.Expression>? TrySubstituteSingleVarBinding(
+        Node<Stil4mElmSyntax7.Pattern> patternNode,
+        Node<Stil4mElmSyntax7.Expression> rhsNode,
+        Node<Stil4mElmSyntax7.Expression> bodyExpr)
     {
-        var pattern = SyntaxTypes.SyntaxAnalysis.UnwrapParenthesized(patternNode.Value);
+        var pattern = Stil4mElmSyntax7.SyntaxAnalysis.UnwrapParenthesized(patternNode.Value);
 
-        if (pattern is not SyntaxTypes.Pattern.VarPattern varPat)
+        if (pattern is not Stil4mElmSyntax7.Pattern.VarPattern varPat)
             return null;
 
         var refCount =
@@ -635,7 +637,7 @@ internal static class WrapUnwrapCancellation
             return bodyExpr;
 
         var substitutions =
-            new Dictionary<string, Node<SyntaxTypes.Expression>>(StringComparer.Ordinal)
+            new Dictionary<string, Node<Stil4mElmSyntax7.Expression>>(StringComparer.Ordinal)
             {
                 [varPat.Name] = rhsNode,
             };
@@ -659,8 +661,8 @@ internal static class WrapUnwrapCancellation
     /// inner expression with the wrap removed: <c>inner</c> in the
     /// literal case, <c>Sibling args</c> in the sibling-aware case.
     /// </summary>
-    private static Node<SyntaxTypes.Expression>? TryGetWrappedInnerExpression(
-        Node<SyntaxTypes.Expression> rhsExpr,
+    private static Node<Stil4mElmSyntax7.Expression>? TryGetWrappedInnerExpression(
+        Node<Stil4mElmSyntax7.Expression> rhsExpr,
         DeclQualifiedName expectedCtor,
         ImmutableDictionary<DeclQualifiedName, GeneratedSiblingDecl> siblingsByOriginal,
         ModuleName currentModuleName)
@@ -671,9 +673,9 @@ internal static class WrapUnwrapCancellation
         //    The let-bindings remain in scope around the new body, so any
         //    names they introduce stay resolvable. See Fix A of
         //    explore/internal-analysis/2026-05-17-wrapper-then-intermediate-failing-test-analysis.md.
-        var rhsValuePeeled = SyntaxTypes.SyntaxAnalysis.UnwrapParenthesized(rhsExpr.Value);
+        var rhsValuePeeled = Stil4mElmSyntax7.SyntaxAnalysis.UnwrapParenthesized(rhsExpr.Value);
 
-        if (rhsValuePeeled is SyntaxTypes.Expression.LetExpression outerLet)
+        if (rhsValuePeeled is Stil4mElmSyntax7.Expression.LetExpression outerLet)
         {
             var innerStripped =
                 TryGetWrappedInnerExpression(
@@ -685,12 +687,12 @@ internal static class WrapUnwrapCancellation
             if (innerStripped is not null)
             {
                 var rebuiltLet =
-                    new SyntaxTypes.Expression.LetExpression(
-                        new SyntaxTypes.Expression.LetBlock(
+                    new Stil4mElmSyntax7.Expression.LetExpression(
+                        new Stil4mElmSyntax7.Expression.LetBlock(
                             Declarations: outerLet.Value.Declarations,
                             Expression: innerStripped));
 
-                return new Node<SyntaxTypes.Expression>(rhsExpr.Range, rebuiltLet);
+                return new Node<Stil4mElmSyntax7.Expression>(rhsExpr.Range, rebuiltLet);
             }
         }
 
@@ -710,13 +712,13 @@ internal static class WrapUnwrapCancellation
         //    us the result is `Wrap (f__stripped args)`. We rewrite
         //    this call to point at the stripped sibling directly,
         //    discarding the would-be wrap.
-        var rhsPeeled = SyntaxTypes.SyntaxAnalysis.UnwrapParenthesized(rhsExpr.Value);
+        var rhsPeeled = Stil4mElmSyntax7.SyntaxAnalysis.UnwrapParenthesized(rhsExpr.Value);
 
-        if (rhsPeeled is SyntaxTypes.Expression.Application app && app.Arguments.Count >= 2)
+        if (rhsPeeled is Stil4mElmSyntax7.Expression.Application app && app.Arguments.Count >= 2)
         {
-            var headPeeled = SyntaxTypes.SyntaxAnalysis.UnwrapParenthesized(app.Arguments[0].Value);
+            var headPeeled = Stil4mElmSyntax7.SyntaxAnalysis.UnwrapParenthesized(app.Arguments[0].Value);
 
-            if (headPeeled is SyntaxTypes.Expression.FunctionOrValue head)
+            if (headPeeled is Stil4mElmSyntax7.Expression.FunctionOrValue head)
             {
                 var calleeQName = ElmSyntaxTransformations.ResolveReference(head, currentModuleName);
 
@@ -731,12 +733,12 @@ internal static class WrapUnwrapCancellation
                     {
                         // Build: Sibling args
                         var newHead =
-                            new SyntaxTypes.Expression.FunctionOrValue(
+                            new Stil4mElmSyntax7.Expression.FunctionOrValue(
                                 siblingDecl.SiblingDeclName.Namespaces,
                                 siblingDecl.SiblingDeclName.DeclName);
 
                         var newArgs =
-                            new List<Node<SyntaxTypes.Expression>>(app.Arguments.Count)
+                            new List<Node<Stil4mElmSyntax7.Expression>>(app.Arguments.Count)
                             {
                                 new(s_zeroRange, newHead),
                             };
@@ -744,9 +746,9 @@ internal static class WrapUnwrapCancellation
                         for (var i = 1; i < app.Arguments.Count; i++)
                             newArgs.Add(app.Arguments[i]);
 
-                        var siblingApp = new SyntaxTypes.Expression.Application(newArgs);
+                        var siblingApp = new Stil4mElmSyntax7.Expression.Application(newArgs);
 
-                        return new Node<SyntaxTypes.Expression>(rhsExpr.Range, siblingApp);
+                        return new Node<Stil4mElmSyntax7.Expression>(rhsExpr.Range, siblingApp);
                     }
                 }
             }

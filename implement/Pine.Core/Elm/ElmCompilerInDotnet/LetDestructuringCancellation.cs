@@ -49,9 +49,9 @@ namespace Pine.Core.Elm.ElmCompilerInDotnet;
 ///   disappear).</item>
 ///   <item>The RHS expression deconstructs as a constructor
 ///   application via
-///   <see cref="ElmSyntaxAbstractTransformations.TryDeconstructConstructorApplication(SyntaxTypes.Expression)"/>.</item>
+///   <see cref="SyntaxTypes.SyntaxAnalysis.TryDeconstructConstructorApplication(SyntaxTypes.Expression)"/>.</item>
 ///   <item>The constructor names are equivalent
-///   (<see cref="ElmSyntaxAbstractTransformations.AreEquivalentConstructorNames(SyntaxTypes.QualifiedNameRef, DeclQualifiedName)"/>)
+///   (<see cref="SyntaxTypes.SyntaxAnalysis.AreEquivalentConstructorNames(SyntaxTypes.QualifiedNameRef, DeclQualifiedName)"/>)
 ///   and the argument arities match.</item>
 /// </list>
 ///
@@ -185,12 +185,12 @@ internal static class LetDestructuringCancellation
             return null;
 
         var ctorApp =
-            ElmSyntaxAbstractTransformations.TryDeconstructConstructorApplication(letDestr.Expression);
+            SyntaxTypes.SyntaxAnalysis.TryDeconstructConstructorApplication(letDestr.Expression);
 
         if (ctorApp is null)
             return null;
 
-        if (!ElmSyntaxAbstractTransformations.AreEquivalentConstructorNames(namedPattern.Name, ctorApp.ConstructorName))
+        if (!SyntaxTypes.SyntaxAnalysis.AreEquivalentConstructorNames(namedPattern.Name, ctorApp.ConstructorName))
             return null;
 
         if (namedPattern.Arguments.Count != ctorApp.FieldExpressions.Count)

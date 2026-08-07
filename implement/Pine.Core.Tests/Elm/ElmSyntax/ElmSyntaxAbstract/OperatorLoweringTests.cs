@@ -631,7 +631,7 @@ public class OperatorLoweringTests
             new[] { Core.Elm.ElmSyntax.Stil4mElmSyntax7.FromFullSyntaxModel.Convert(parsedModule) };
 
         var canonicalizedModulesStil4mElmSyntax7 =
-            Canonicalization.Canonicalize(parsedModulesStil4mElmSyntax7)
+            Canonicalization.CanonicalizeOrThrow(parsedModulesStil4mElmSyntax7)
             .Extract(err => throw new Exception("Failed canonicalization: " + err));
 
         var canonicalizedModuleStil4mElmSyntax7 =

@@ -15,7 +15,7 @@ namespace Pine.Core.Elm.ElmCompilerInDotnet;
 /// are expressed in a form that later compilation stages can map directly to Pine builtins.
 /// <para>
 /// This stage operates exclusively on the abstract Elm syntax model
-/// (<see cref="Pine.Core.Elm.ElmSyntax.ElmSyntaxAbstract"/>): there is no source-location
+/// (<see cref="ElmSyntax.ElmSyntaxAbstract"/>): there is no source-location
 /// tracking, no concrete-syntax <c>Node&lt;T&gt;</c> wrapper, and no bridging/conversion to or
 /// from the concrete <c>Stil4mElmSyntax7</c> model. Callers are expected to supply and receive
 /// declarations already expressed in the abstract model.

@@ -9,7 +9,7 @@ namespace Pine.Core.Tests.Elm.ElmCompilerInDotnet;
 
 public class OptimizationOpportunityFinderTests
 {
-    [Fact(Skip = "TODO: Reimplement Elm syntax optimization")]
+    [Fact]
     public void Reports_no_opportunities_for_fully_monomorphic_module()
     {
         var rendered =
@@ -26,7 +26,7 @@ public class OptimizationOpportunityFinderTests
         rendered.Should().Be("");
     }
 
-    [Fact(Skip = "TODO: Reimplement Elm syntax optimization")]
+    [Fact]
     public void Reports_record_access_on_open_record_helper()
     {
         var rendered =
@@ -46,7 +46,7 @@ public class OptimizationOpportunityFinderTests
             """.Trim());
     }
 
-    [Fact(Skip = "TODO: Reimplement Elm syntax optimization")]
+    [Fact]
     public void Reports_record_update_on_open_record_helper()
     {
         var rendered =
@@ -67,7 +67,7 @@ public class OptimizationOpportunityFinderTests
             """.Trim());
     }
 
-    [Fact(Skip = "TODO: Reimplement Elm syntax optimization")]
+    [Fact]
     public void Reports_generic_arithmetic_via_canonicalized_operator()
     {
         var rendered =
@@ -87,7 +87,7 @@ public class OptimizationOpportunityFinderTests
             """.Trim());
     }
 
-    [Fact(Skip = "TODO: Reimplement Elm syntax optimization")]
+    [Fact]
     public void Reports_generic_compare_and_equality_in_same_function()
     {
         var rendered =
@@ -112,7 +112,7 @@ public class OptimizationOpportunityFinderTests
             """.Trim());
     }
 
-    [Fact(Skip = "TODO: Reimplement Elm syntax optimization")]
+    [Fact]
     public void Reports_generic_append()
     {
         var rendered =
@@ -132,7 +132,7 @@ public class OptimizationOpportunityFinderTests
             """.Trim());
     }
 
-    [Fact(Skip = "TODO: Reimplement Elm syntax optimization")]
+    [Fact]
     public void Reports_explicit_basics_function_reference_used_as_value()
     {
         // `Basics.compare` passed as an argument to another function still
@@ -154,7 +154,7 @@ public class OptimizationOpportunityFinderTests
             """.Trim());
     }
 
-    [Fact(Skip = "TODO: Reimplement Elm syntax optimization")]
+    [Fact]
     public void Reports_findings_inside_nested_let_and_lambda()
     {
         var rendered =
@@ -179,7 +179,7 @@ public class OptimizationOpportunityFinderTests
             """.Trim());
     }
 
-    [Fact(Skip = "TODO: Reimplement Elm syntax optimization")]
+    [Fact]
     public void Whitelist_with_exact_decl_name_suppresses_only_matching_findings()
     {
         var rendered =
@@ -243,7 +243,7 @@ public class OptimizationOpportunityFinderTests
                   o.ContainingDecl.FullName.StartsWith("Test.hot", System.StringComparison.Ordinal)))
             .ToImmutableHashSet();
 
-        var rendered = OptimizationOpportunityFinder.RenderOpportunities(opportunities);
+        var rendered = OptimizationOpportunityRenderer.RenderOpportunities(opportunities);
 
         rendered.Should().Be(
             """
@@ -251,7 +251,7 @@ public class OptimizationOpportunityFinderTests
             """.Trim());
     }
 
-    [Fact(Skip = "TODO: Reimplement Elm syntax optimization")]
+    [Fact]
     public void Whitelist_is_per_category_so_other_categories_still_report()
     {
         var rendered =
@@ -277,7 +277,7 @@ public class OptimizationOpportunityFinderTests
             """.Trim());
     }
 
-    [Fact(Skip = "TODO: Reimplement Elm syntax optimization")]
+    [Fact]
     public void Reports_partial_application_of_top_level_function()
     {
         // `addThree` has arity 3 but is called with only 2 arguments.
@@ -303,7 +303,7 @@ public class OptimizationOpportunityFinderTests
             """.Trim());
     }
 
-    [Fact(Skip = "TODO: Reimplement Elm syntax optimization")]
+    [Fact]
     public void Reports_no_finding_for_fully_applied_top_level_function()
     {
         var rendered =
@@ -325,7 +325,7 @@ public class OptimizationOpportunityFinderTests
         rendered.Should().Be("");
     }
 
-    [Fact(Skip = "TODO: Reimplement Elm syntax optimization")]
+    [Fact]
     public void Reports_partial_application_of_let_bound_function()
     {
         var rendered =
@@ -361,7 +361,7 @@ public class OptimizationOpportunityFinderTests
             """.Trim());
     }
 
-    [Fact(Skip = "TODO: Reimplement Elm syntax optimization")]
+    [Fact]
     public void Reports_partial_application_of_prefix_operator()
     {
         // `(+) x` supplies one argument to a binary operator.
@@ -385,7 +385,7 @@ public class OptimizationOpportunityFinderTests
             """.Trim());
     }
 
-    [Fact(Skip = "TODO: Reimplement Elm syntax optimization")]
+    [Fact]
     public void Whitelist_for_partial_application_suppresses_only_that_category()
     {
         var rendered =
@@ -416,7 +416,7 @@ public class OptimizationOpportunityFinderTests
             """.Trim());
     }
 
-    [Fact(Skip = "TODO: Reimplement Elm syntax optimization")]
+    [Fact]
     public void Description_format_uses_added_over_total_arity()
     {
         // Calling a 4-arity function with just 1 argument reports "1/4".
@@ -445,7 +445,7 @@ public class OptimizationOpportunityFinderTests
             """.Trim());
     }
 
-    [Fact(Skip = "TODO: Reimplement Elm syntax optimization")]
+    [Fact]
     public void Reports_higher_order_parameter_applied_in_top_level_function()
     {
         // Detection of higher-order parameters is purely structural:
@@ -467,7 +467,7 @@ public class OptimizationOpportunityFinderTests
             """.Trim());
     }
 
-    [Fact(Skip = "TODO: Reimplement Elm syntax optimization")]
+    [Fact]
     public void Reports_higher_order_parameter_only_once_per_param_even_if_applied_multiple_times()
     {
         var rendered =
@@ -487,7 +487,7 @@ public class OptimizationOpportunityFinderTests
             """.Trim());
     }
 
-    [Fact(Skip = "TODO: Reimplement Elm syntax optimization")]
+    [Fact]
     public void Reports_no_higher_order_parameter_when_param_is_only_passed_through()
     {
         // `g` is referenced as data but never applied, so it does not
@@ -506,7 +506,7 @@ public class OptimizationOpportunityFinderTests
         rendered.Should().Be("");
     }
 
-    [Fact(Skip = "TODO: Reimplement Elm syntax optimization")]
+    [Fact]
     public void Reports_higher_order_parameter_inside_lambda_body()
     {
         var rendered =
@@ -525,7 +525,7 @@ public class OptimizationOpportunityFinderTests
             """.Trim());
     }
 
-    [Fact(Skip = "TODO: Reimplement Elm syntax optimization")]
+    [Fact]
     public void Reports_higher_order_parameter_for_let_bound_function_parameter()
     {
         // `helper` is a let-bound function whose own parameter `g` is
@@ -553,7 +553,7 @@ public class OptimizationOpportunityFinderTests
             """.Trim());
     }
 
-    [Fact(Skip = "TODO: Reimplement Elm syntax optimization")]
+    [Fact]
     public void Higher_order_parameter_does_not_report_when_param_is_shadowed_by_let_binding()
     {
         // `f` is the outer param. Inside `helper`, the let-bound function
@@ -582,7 +582,7 @@ public class OptimizationOpportunityFinderTests
             """.Trim());
     }
 
-    [Fact(Skip = "TODO: Reimplement Elm syntax optimization")]
+    [Fact]
     public void Whitelist_for_higher_order_parameter_suppresses_only_that_category()
     {
         var rendered =
@@ -608,7 +608,7 @@ public class OptimizationOpportunityFinderTests
             """.Trim());
     }
 
-    [Fact(Skip = "TODO: Reimplement Elm syntax optimization")]
+    [Fact]
     public void Higher_order_parameter_reports_function_from_record_field_on_parameter()
     {
         // The parameter `r` itself isn't a function, but contains a
@@ -630,7 +630,7 @@ public class OptimizationOpportunityFinderTests
             """.Trim());
     }
 
-    [Fact(Skip = "TODO: Reimplement Elm syntax optimization")]
+    [Fact]
     public void Higher_order_parameter_reports_function_from_nested_record_field_on_parameter()
     {
         var rendered =
@@ -650,7 +650,7 @@ public class OptimizationOpportunityFinderTests
             """.Trim());
     }
 
-    [Fact(Skip = "TODO: Reimplement Elm syntax optimization")]
+    [Fact]
     public void Higher_order_parameter_reports_function_extracted_by_tag_pattern_in_parameter()
     {
         // `(Wrap inner)` only type-checks because `Wrap` is the single
@@ -676,7 +676,7 @@ public class OptimizationOpportunityFinderTests
             """.Trim());
     }
 
-    [Fact(Skip = "TODO: Reimplement Elm syntax optimization")]
+    [Fact]
     public void Higher_order_parameter_reports_function_extracted_by_tag_pattern_in_let_destructuring()
     {
         // Destructuring `p` in a `let` block via `(Wrap inner) = p` is
@@ -706,7 +706,7 @@ public class OptimizationOpportunityFinderTests
             """.Trim());
     }
 
-    [Fact(Skip = "TODO: Reimplement Elm syntax optimization")]
+    [Fact]
     public void Higher_order_parameter_reports_function_extracted_by_tag_pattern_in_case_of()
     {
         // The user-supplied example: `alfa` is a multi-tag value; in
@@ -734,7 +734,7 @@ public class OptimizationOpportunityFinderTests
             """.Trim());
     }
 
-    [Fact(Skip = "TODO: Reimplement Elm syntax optimization")]
+    [Fact]
     public void Higher_order_parameter_reports_each_function_extracted_by_multi_arg_tag_pattern_in_case_of()
     {
         // A multi-argument constructor binds multiple function-typed
@@ -760,7 +760,7 @@ public class OptimizationOpportunityFinderTests
             """.Trim());
     }
 
-    [Fact(Skip = "TODO: Reimplement Elm syntax optimization")]
+    [Fact]
     public void Higher_order_parameter_reports_functions_extracted_by_tuple_parameter_pattern()
     {
         var rendered =
@@ -780,7 +780,7 @@ public class OptimizationOpportunityFinderTests
             """.Trim());
     }
 
-    [Fact(Skip = "TODO: Reimplement Elm syntax optimization")]
+    [Fact]
     public void Higher_order_parameter_reports_function_extracted_by_record_parameter_pattern()
     {
         // A record pattern `{go}` binds the field name as a local; if
@@ -801,7 +801,7 @@ public class OptimizationOpportunityFinderTests
             """.Trim());
     }
 
-    [Fact(Skip = "TODO: Reimplement Elm syntax optimization")]
+    [Fact]
     public void Higher_order_parameter_reports_function_extracted_by_as_over_named_parameter_pattern()
     {
         // The `as` pattern binds the alias `whole`; the inner named
@@ -827,7 +827,7 @@ public class OptimizationOpportunityFinderTests
             """.Trim());
     }
 
-    [Fact(Skip = "TODO: Reimplement Elm syntax optimization")]
+    [Fact]
     public void Higher_order_parameter_does_not_report_for_pattern_extracted_name_when_never_applied()
     {
         // `inner` is bound by destructuring but never appears as the
@@ -850,7 +850,7 @@ public class OptimizationOpportunityFinderTests
         rendered.Should().Be("");
     }
 
-    [Fact(Skip = "TODO: Reimplement Elm syntax optimization")]
+    [Fact]
     public void Higher_order_parameter_reports_function_extracted_in_let_destructuring_inside_let_body()
     {
         // The let-bound destructured `inner` is in scope only within
@@ -880,7 +880,7 @@ public class OptimizationOpportunityFinderTests
             """.Trim());
     }
 
-    [Fact(Skip = "TODO: Reimplement Elm syntax optimization")]
+    [Fact]
     public void RenderOpportunitiesByCategory_groups_findings_under_category_headers()
     {
         var opportunities =
@@ -920,7 +920,7 @@ public class OptimizationOpportunityFinderTests
                 ]);
 
         var rendered =
-            OptimizationOpportunityFinder.RenderOpportunitiesByCategory(opportunities);
+            OptimizationOpportunityRenderer.RenderOpportunitiesByCategory(opportunities);
 
         // Categories appear in the declared OpportunityCategory order
         // (RecordAccess, ..., HigherOrderParameter); empty categories are
@@ -945,12 +945,12 @@ public class OptimizationOpportunityFinderTests
     [Fact]
     public void RenderOpportunitiesByCategory_returns_empty_for_no_findings()
     {
-        OptimizationOpportunityFinder
+        OptimizationOpportunityRenderer
             .RenderOpportunitiesByCategory([])
             .Should().Be(string.Empty);
     }
 
-    [Fact(Skip = "TODO: Reimplement Elm syntax optimization")]
+    [Fact]
     public void RenderOpportunitiesByCategory_emits_single_group_when_only_one_category_has_findings()
     {
         var opportunities =
@@ -972,7 +972,7 @@ public class OptimizationOpportunityFinderTests
                 ]);
 
         var rendered =
-            OptimizationOpportunityFinder.RenderOpportunitiesByCategory(opportunities);
+            OptimizationOpportunityRenderer.RenderOpportunitiesByCategory(opportunities);
 
         rendered.Should().Be(
             """
@@ -982,7 +982,7 @@ public class OptimizationOpportunityFinderTests
             """.Trim());
     }
 
-    [Fact(Skip = "TODO: Reimplement Elm syntax optimization")]
+    [Fact]
     public void RootLevelChoiceTagWrapper_detected_via_signature_when_pattern_is_bare_var()
     {
         // Evidence source: type annotation alone. The parameter pattern
@@ -1010,7 +1010,7 @@ public class OptimizationOpportunityFinderTests
             """.Trim());
     }
 
-    [Fact(Skip = "TODO: Reimplement Elm syntax optimization")]
+    [Fact]
     public void RootLevelChoiceTagWrapper_detected_via_parameter_pattern_destructuring()
     {
         // Evidence source: the parameter pattern destructures the
@@ -1036,7 +1036,7 @@ public class OptimizationOpportunityFinderTests
             """.Trim());
     }
 
-    [Fact(Skip = "TODO: Reimplement Elm syntax optimization")]
+    [Fact]
     public void RootLevelChoiceTagWrapper_detected_via_let_block_destructuring_of_parameter()
     {
         // Evidence source: a top-level let block destructures the
@@ -1063,7 +1063,7 @@ public class OptimizationOpportunityFinderTests
             """.Trim());
     }
 
-    [Fact(Skip = "TODO: Reimplement Elm syntax optimization")]
+    [Fact]
     public void RootLevelChoiceTagWrapper_detected_when_all_return_leaves_use_the_same_constructor()
     {
         // Evidence source: every leaf of the body's return position
@@ -1092,7 +1092,7 @@ public class OptimizationOpportunityFinderTests
             """.Trim());
     }
 
-    [Fact(Skip = "TODO: Reimplement Elm syntax optimization")]
+    [Fact]
     public void RootLevelChoiceTagWrapper_detected_via_return_type_annotation()
     {
         // Evidence source: the function's signature names a single-tag
@@ -1122,7 +1122,7 @@ public class OptimizationOpportunityFinderTests
             """.Trim());
     }
 
-    [Fact(Skip = "TODO: Reimplement Elm syntax optimization")]
+    [Fact]
     public void RootLevelChoiceTagWrapper_detects_parameter_and_return_in_canonical_parser_example()
     {
         // The user-supplied example: a Parser-shaped wrapper over a
@@ -1160,7 +1160,7 @@ public class OptimizationOpportunityFinderTests
             """.Trim());
     }
 
-    [Fact(Skip = "TODO: Reimplement Elm syntax optimization")]
+    [Fact]
     public void RootLevelChoiceTagWrapper_renders_two_argument_constructor_as_pair_tuple()
     {
         // A single-tag constructor with two arguments is rendered as
@@ -1186,7 +1186,7 @@ public class OptimizationOpportunityFinderTests
             """.Trim());
     }
 
-    [Fact(Skip = "TODO: Reimplement Elm syntax optimization")]
+    [Fact]
     public void RootLevelChoiceTagWrapper_renders_three_argument_constructor_as_triple_tuple()
     {
         // A single-tag constructor with three arguments is rendered
@@ -1213,7 +1213,7 @@ public class OptimizationOpportunityFinderTests
             """.Trim());
     }
 
-    [Fact(Skip = "TODO: Reimplement Elm syntax optimization")]
+    [Fact]
     public void RootLevelChoiceTagWrapper_does_not_report_for_multi_constructor_type()
     {
         // A custom type with more than one constructor is intentionally
@@ -1237,7 +1237,7 @@ public class OptimizationOpportunityFinderTests
         rendered.Should().Be("");
     }
 
-    [Fact(Skip = "TODO: Reimplement Elm syntax optimization")]
+    [Fact]
     public void RootLevelChoiceTagWrapper_does_not_report_for_nested_wrapping()
     {
         // The single-tag constructor appears only inside another type
@@ -1260,7 +1260,7 @@ public class OptimizationOpportunityFinderTests
         rendered.Should().Be("");
     }
 
-    [Fact(Skip = "TODO: Reimplement Elm syntax optimization")]
+    [Fact]
     public void RootLevelChoiceTagWrapper_does_not_report_when_return_leaves_use_different_constructors()
     {
         // Two different single-tag constructors at distinct return
@@ -1289,7 +1289,7 @@ public class OptimizationOpportunityFinderTests
         rendered.Should().Be("");
     }
 
-    [Fact(Skip = "TODO: Reimplement Elm syntax optimization")]
+    [Fact]
     public void RootLevelChoiceTagWrapper_can_be_whitelisted_per_decl_prefix()
     {
         // The ignore list suppresses findings for matching containing
@@ -1345,7 +1345,7 @@ public class OptimizationOpportunityFinderTests
                 """);
 
         var transformed =
-            OptimizationOpportunityFinder.TryRenderTransformedSignature(
+            OptimizationOpportunityRenderer.TryRenderTransformedSignature(
                 declarations,
                 DeclQualifiedName.Create(["Test"], "skipWhileWhitespaceFollowedBy"));
 
@@ -1371,7 +1371,7 @@ public class OptimizationOpportunityFinderTests
                 """);
 
         var transformed =
-            OptimizationOpportunityFinder.TryRenderTransformedSignature(
+            OptimizationOpportunityRenderer.TryRenderTransformedSignature(
                 declarations,
                 DeclQualifiedName.Create(["Test"], "mk"));
 
@@ -1396,14 +1396,14 @@ public class OptimizationOpportunityFinderTests
                 """);
 
         var transformed =
-            OptimizationOpportunityFinder.TryRenderTransformedSignature(
+            OptimizationOpportunityRenderer.TryRenderTransformedSignature(
                 declarations,
                 DeclQualifiedName.Create(["Test"], "unwrap"));
 
         transformed.Should().BeNull();
     }
 
-    [Fact(Skip = "TODO: Reimplement Elm syntax optimization")]
+    [Fact]
     public void Higher_order_parameter_indirect_distance_1_reported_for_pure_forwarder()
     {
         // `indirect` only forwards `f` to `direct`; `direct` is the
@@ -1433,7 +1433,7 @@ public class OptimizationOpportunityFinderTests
             """.Trim());
     }
 
-    [Fact(Skip = "TODO: Reimplement Elm syntax optimization")]
+    [Fact]
     public void Higher_order_parameter_indirect_distance_2_reported_for_two_forwarders()
     {
         // Two hops of forwarding to a `direct` callee. The middle decl
@@ -1467,7 +1467,7 @@ public class OptimizationOpportunityFinderTests
             """.Trim());
     }
 
-    [Fact(Skip = "TODO: Reimplement Elm syntax optimization")]
+    [Fact]
     public void Higher_order_parameter_indirect_distance_3_reported_for_three_forwarders()
     {
         var rendered =
@@ -1505,7 +1505,7 @@ public class OptimizationOpportunityFinderTests
             """.Trim());
     }
 
-    [Fact(Skip = "TODO: Reimplement Elm syntax optimization")]
+    [Fact]
     public void Higher_order_parameter_indirect_takes_min_distance_across_paths()
     {
         // `mixed` forwards `f` twice: once directly to `direct` (distance 1)
@@ -1539,7 +1539,7 @@ public class OptimizationOpportunityFinderTests
             """.Trim());
     }
 
-    [Fact(Skip = "TODO: Reimplement Elm syntax optimization")]
+    [Fact]
     public void Higher_order_parameter_indirect_not_reported_when_decl_also_applies_param_directly()
     {
         // A function that both forwards `f` to a `_Direct` callee and
@@ -1569,7 +1569,7 @@ public class OptimizationOpportunityFinderTests
             """.Trim());
     }
 
-    [Fact(Skip = "TODO: Reimplement Elm syntax optimization")]
+    [Fact]
     public void Higher_order_parameter_indirect_does_not_propagate_for_non_function_argument_position()
     {
         // `outer` passes its plain Int param `n` to `direct` at the
@@ -1597,7 +1597,7 @@ public class OptimizationOpportunityFinderTests
             """.Trim());
     }
 
-    [Fact(Skip = "TODO: Reimplement Elm syntax optimization")]
+    [Fact]
     public void Higher_order_parameter_full_listing_snapshot_with_direct_and_indirect()
     {
         // End-to-end snapshot exercising direct + indirect at multiple
@@ -1637,7 +1637,7 @@ public class OptimizationOpportunityFinderTests
             """.Trim());
     }
 
-    [Fact(Skip = "TODO: Reimplement Elm syntax optimization")]
+    [Fact]
     public void Higher_order_parameter_indirect_through_record_pattern_parameter_and_record_argument()
     {
         // Analog of HigherOrderParameterAnalysisTests
@@ -1671,7 +1671,7 @@ public class OptimizationOpportunityFinderTests
             """.Trim());
     }
 
-    [Fact(Skip = "TODO: Reimplement Elm syntax optimization")]
+    [Fact]
     public void Higher_order_parameter_indirect_distance_1_for_let_destructured_bindings_forwarded_through_tuple_to_tuple_pattern_parameter()
     {
         // Analog of HigherOrderParameterAnalysisTests
@@ -1770,7 +1770,7 @@ public class OptimizationOpportunityFinderTests
                     OpportunityCategory.RootLevelChoiceTagWrapper))
             .ToImmutableHashSet();
 
-        return OptimizationOpportunityFinder.RenderOpportunities(filtered);
+        return OptimizationOpportunityRenderer.RenderOpportunities(filtered);
     }
 
     private static bool MatchesAnyPrefix(
@@ -1795,37 +1795,28 @@ public class OptimizationOpportunityFinderTests
         return false;
     }
 
-    private static System.Collections.Generic.IReadOnlyDictionary<DeclQualifiedName, Core.Elm.ElmSyntax.Stil4mElmSyntax7.Declaration>
+    private static System.Collections.Generic.IReadOnlyDictionary<DeclQualifiedName, Core.Elm.ElmSyntax.ElmSyntaxAbstract.Declaration>
         ParseAndCanonicalize(string elmModuleText)
     {
         var parsed =
             Core.Elm.ElmSyntax.ElmSyntaxParser.ParseModuleText(elmModuleText)
             .Extract(err => throw new System.Exception("Failed parsing: " + err));
 
-        var converted =
-            new[] { Core.Elm.ElmSyntax.Stil4mElmSyntax7.FromFullSyntaxModel.Convert(parsed) };
-
         var canonicalized =
-            Canonicalization.Canonicalize([parsed])
+            Canonicalization.CanonicalizeOrThrow([parsed])
             .Extract(err => throw new System.Exception("Failed canonicalization: " + err));
 
         var orderedModules =
-            Enumerable.ToList(
-                Enumerable.Select(
-                    converted,
-                    module =>
-                    canonicalized[
-                        Core.Elm.ElmSyntax.Stil4mElmSyntax7.Module.GetModuleName(
-                            module.ModuleDefinition.Value).Value]
-                    .Extract(err => throw new System.Exception("Module has errors: " + err))));
+            canonicalized[
+                Core.Elm.ElmSyntax.SyntaxModel.Module.GetModuleName(
+                    parsed.ModuleDefinition.Value).Value]
+            .Extract(err => throw new System.Exception("Module has errors: " + err));
 
         var orderedModulesAbstract =
-            orderedModules
+            new[] { orderedModules }
             .Select(Core.Elm.ElmSyntax.ElmSyntaxAbstract.ConvertFromConcrete.FromFile)
             .ToList();
 
-        return
-            ElmSyntaxAbstractConversion.ToDeclarationDictionary(
-                ElmCompiler.FlattenModulesToDeclarationDictionary(orderedModulesAbstract));
+        return ElmCompiler.FlattenModulesToDeclarationDictionary(orderedModulesAbstract);
     }
 }

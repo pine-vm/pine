@@ -137,7 +137,7 @@ public class ConcreteCanonicalizationTests
         .Extract(error => throw new System.Exception("Failed parsing: " + error));
 
     private static SyntaxModel.File Canonicalize(SyntaxModel.File file) =>
-        Canonicalization.Canonicalize([file])
+        Canonicalization.CanonicalizeOrThrow([file])
         .Extract(error => throw new System.Exception("Failed canonicalization: " + error))
         [["Test"]]
         .Extract(error => throw new System.Exception("Module canonicalization failed: " + error));

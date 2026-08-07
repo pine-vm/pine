@@ -7,7 +7,7 @@ using System.Linq;
 using ModuleName = System.Collections.Generic.IReadOnlyList<string>;
 
 using SyntaxTypes = Pine.Core.Elm.ElmSyntax.SyntaxModel;
-using CompatibilityTypes = Pine.Core.Elm.ElmSyntax.Stil4mElmSyntax7;
+using Stil4mElmSyntax7 = Pine.Core.Elm.ElmSyntax.Stil4mElmSyntax7;
 
 // Alias to avoid ambiguity with System.Range
 using Range = Pine.Core.Elm.ElmSyntax.SyntaxModel.Range;
@@ -34,13 +34,6 @@ public class Canonicalization
     /// <summary>
     /// Encapsulates the context required for canonicalization, including imports, aliases, and declaration scopes.
     /// </summary>
-    /// <param name="CurrentModuleName">The name of the module being canonicalized.</param>
-    /// <param name="TypeImportMap">Map of imported type names to their source modules.</param>
-    /// <param name="ValueImportMap">Map of imported value names (functions, constructors) to their source modules.</param>
-    /// <param name="AliasMap">Map of module aliases to their actual module names.</param>
-    /// <param name="ModuleLevelDeclarations">Top-level declarations in the current module (functions, types, constructors).</param>
-    /// <param name="LocalDeclarations">Local variable bindings from patterns, function parameters, let expressions, etc.</param>
-    /// <param name="OperatorToFunction">Map of infix operators to their underlying function (module name and function name).</param>
     private record CanonicalizationContext(
         ModuleName CurrentModuleName,
         ImmutableDictionary<string, ImmutableList<ModuleName>> TypeImportMap,
@@ -196,11 +189,11 @@ public class Canonicalization
     /// On success, returns a dictionary mapping module names to their canonicalized files (which may contain errors).
     /// On failure (e.g., duplicate module names), returns an error message.
     /// </returns>
-    public static Result<string, IReadOnlyDictionary<ModuleName, Result<string, File>>> Canonicalize(
+    public static Result<string, IReadOnlyDictionary<ModuleName, Result<string, File>>> CanonicalizeOrThrow(
         IReadOnlyList<File> modules)
     {
         // Use CanonicalizeAllowingErrors and convert results to error format when there are errors
-        var allowingErrorsResult = CanonicalizeAllowingErrors(modules);
+        var allowingErrorsResult = Canonicalize(modules);
 
         if (allowingErrorsResult.IsErrOrNull() is { } err)
         {
@@ -235,14 +228,12 @@ public class Canonicalization
     /// Compatibility adapter for callers that explicitly use the stil4m/elm-syntax 7 model.
     /// Canonicalization itself runs on the concrete syntax model.
     /// </summary>
-    public static Result<string, IReadOnlyDictionary<ModuleName, Result<string, CompatibilityTypes.File>>> Canonicalize(
-        IReadOnlyList<CompatibilityTypes.File> modules)
+    public static Result<string, IReadOnlyDictionary<ModuleName, Result<string, Stil4mElmSyntax7.File>>> CanonicalizeOrThrow(
+        IReadOnlyList<Stil4mElmSyntax7.File> modules)
     {
         var concreteResult =
-            Canonicalize(
-                modules
-                .Select(CompatibilityTypes.ToFullSyntaxModel.Convert)
-                .ToList());
+            CanonicalizeOrThrow(
+                [.. modules.Select(Stil4mElmSyntax7.ToFullSyntaxModel.Convert)]);
 
         if (concreteResult.IsErrOrNull() is { } error)
             return error;
@@ -253,7 +244,7 @@ public class Canonicalization
                 "Unexpected result type from concrete Canonicalize");
 
         var compatibilityModules =
-            new Dictionary<ModuleName, Result<string, CompatibilityTypes.File>>(
+            new Dictionary<ModuleName, Result<string, Stil4mElmSyntax7.File>>(
                 EnumerableExtensions.EqualityComparer<ModuleName>());
 
         foreach (var (moduleName, moduleResult) in concreteModules)
@@ -270,7 +261,7 @@ public class Canonicalization
                     "Unexpected module result type from concrete Canonicalize");
 
             compatibilityModules[moduleName] =
-                CompatibilityTypes.FromFullSyntaxModel.Convert(
+                Stil4mElmSyntax7.FromFullSyntaxModel.Convert(
                     concreteFile with { Imports = [] });
         }
 
@@ -289,7 +280,7 @@ public class Canonicalization
     public static Result<string, CanonicalizationResultWithErrors> CanonicalizeWithErrors(
         IReadOnlyList<File> modules)
     {
-        var allowingErrorsResult = CanonicalizeAllowingErrors(modules);
+        var allowingErrorsResult = Canonicalize(modules);
 
         if (allowingErrorsResult.IsErrOrNull() is { } err)
         {
@@ -306,82 +297,28 @@ public class Canonicalization
 
     /// <summary>
     /// Canonicalizes a list of Elm modules, resolving all references to their fully qualified forms.
-    /// Unlike <see cref="Canonicalize"/>, this method always returns the canonicalized files even when
-    /// there are errors (such as undefined references). This is useful for type inference where
-    /// partial canonicalization (resolving cross-module references) is still valuable even if
-    /// some local references cannot be resolved.
     /// </summary>
-    /// <param name="modules">
-    /// The modules to canonicalize.
-    /// </param>
     /// <returns>
     /// On success, returns a dictionary mapping module names to tuples of (canonicalized file, errors).
     /// On failure (e.g., duplicate module names), returns an error message.
     /// </returns>
-    public static Result<string, IReadOnlyDictionary<ModuleName, ModuleCanonicalizationResult>> CanonicalizeAllowingErrors(
+    public static Result<string, IReadOnlyDictionary<ModuleName, ModuleCanonicalizationResult>> Canonicalize(
         IReadOnlyList<File> modules)
     {
         return
-            CanonicalizeAllowingErrors(
+            Canonicalize(
                 modules,
                 ImplicitImportConfig.Default);
     }
 
     /// <summary>
-    /// Compatibility adapter for callers that explicitly use the stil4m/elm-syntax 7 model.
-    /// Canonicalization itself runs on the concrete syntax model.
-    /// </summary>
-    public static Result<string, IReadOnlyDictionary<ModuleName, (CompatibilityTypes.File File, IReadOnlyList<CanonicalizationError> Errors, ImmutableDictionary<string, ShadowingLocation> Shadowings)>> CanonicalizeAllowingErrors(
-        IReadOnlyList<CompatibilityTypes.File> modules)
-    {
-        var concreteResult =
-            CanonicalizeAllowingErrors(
-                modules
-                .Select(CompatibilityTypes.ToFullSyntaxModel.Convert)
-                .ToList());
-
-        if (concreteResult.IsErrOrNull() is { } error)
-            return error;
-
-        var concreteModules =
-            concreteResult.IsOkOrNull() ??
-            throw new NotImplementedException(
-                "Unexpected result type from concrete CanonicalizeAllowingErrors");
-
-        var compatibilityModules =
-            new Dictionary<ModuleName, (CompatibilityTypes.File, IReadOnlyList<CanonicalizationError>, ImmutableDictionary<string, ShadowingLocation>)>(
-                EnumerableExtensions.EqualityComparer<ModuleName>());
-
-        foreach (var (moduleName, moduleResult) in concreteModules)
-        {
-            compatibilityModules[moduleName] =
-                (CompatibilityTypes.FromFullSyntaxModel.Convert(
-                    moduleResult.File with { Imports = [] }),
-                moduleResult.Errors,
-                moduleResult.Shadowings);
-        }
-
-        return compatibilityModules;
-    }
-
-    /// <summary>
     /// Canonicalizes a list of Elm modules, resolving all references to their fully qualified forms.
-    /// Unlike <see cref="Canonicalize"/>, this method always returns the canonicalized files even when
-    /// there are errors (such as undefined references). This is useful for type inference where
-    /// partial canonicalization (resolving cross-module references) is still valuable even if
-    /// some local references cannot be resolved.
     /// </summary>
-    /// <param name="modules">
-    /// The modules to canonicalize.
-    /// </param>
-    /// <param name="implicitImportConfig">
-    /// Configuration for implicit imports to be added to each module.
-    /// </param>
     /// <returns>
     /// On success, returns a dictionary mapping module names to tuples of (canonicalized file, errors, shadowings).
     /// On failure (e.g., duplicate module names), returns an error message.
     /// </returns>
-    public static Result<string, IReadOnlyDictionary<ModuleName, ModuleCanonicalizationResult>> CanonicalizeAllowingErrors(
+    public static Result<string, IReadOnlyDictionary<ModuleName, ModuleCanonicalizationResult>> Canonicalize(
         IReadOnlyList<File> modules,
         ImplicitImportConfig implicitImportConfig)
     {
@@ -389,7 +326,7 @@ public class Canonicalization
         var moduleNameGroups =
             modules
             .GroupBy(
-                m => SyntaxTypes.Module.GetModuleName(m.ModuleDefinition.Value).Value,
+                m => Module.GetModuleName(m.ModuleDefinition.Value).Value,
                 EnumerableExtensions.EqualityComparer<ModuleName>())
             .ToList();
 
@@ -405,9 +342,7 @@ public class Canonicalization
                 .Select(g => string.Join(".", g.Key))
                 .ToList();
 
-            return
-                Result<string, IReadOnlyDictionary<ModuleName, ModuleCanonicalizationResult>>.err(
-                    $"Duplicate module names: {string.Join(", ", duplicateNames)}");
+            return $"Duplicate module names: {string.Join(", ", duplicateNames)}";
         }
 
         // Build module exports map for resolving exposing (..)
@@ -423,7 +358,7 @@ public class Canonicalization
         foreach (var module in modules)
         {
             var currentModuleName =
-                SyntaxTypes.Module.GetModuleName(module.ModuleDefinition.Value).Value;
+                Module.GetModuleName(module.ModuleDefinition.Value).Value;
 
             // Build import maps and alias map for this module
             var (typeImportMap, valueImportMap, aliasMap) =
@@ -637,7 +572,7 @@ public class Canonicalization
                         break;
                     }
 
-                case SyntaxTypes.Declaration.InfixDeclaration:
+                case Declaration.InfixDeclaration:
                     break;
 
                 default:
@@ -658,7 +593,7 @@ public class Canonicalization
         foreach (var module in modules)
         {
             var moduleName =
-                string.Join(".", SyntaxTypes.Module.GetModuleName(module.ModuleDefinition.Value).Value);
+                string.Join(".", Module.GetModuleName(module.ModuleDefinition.Value).Value);
 
             var typeExportsBuilder = ImmutableHashSet.CreateBuilder<string>();
             var valueExportsBuilder = ImmutableHashSet.CreateBuilder<string>();
@@ -1088,7 +1023,7 @@ public class Canonicalization
                     break;
                 }
 
-            case SyntaxTypes.Declaration.InfixDeclaration:
+            case Declaration.InfixDeclaration:
                 canonicalizedDecl = decl; // No canonicalization needed for infix declarations
                 errors = [];
                 shadowings = [];
@@ -1221,7 +1156,7 @@ public class Canonicalization
     {
         switch (pattern)
         {
-            case SyntaxTypes.Pattern.AllPattern:
+            case Pattern.AllPattern:
 
                 // Matches anything, no variables to collect
                 return variables;
@@ -1229,32 +1164,32 @@ public class Canonicalization
             case Pattern.VarPattern varPattern:
                 return variables.Add(varPattern.Name);
 
-            case SyntaxTypes.Pattern.UnitPattern:
+            case Pattern.UnitPattern:
 
                 // Unit pattern, no variables to collect
                 return variables;
 
-            case SyntaxTypes.Pattern.CharPattern:
+            case Pattern.CharPattern:
 
                 // Character literal, no variables to collect
                 return variables;
 
-            case SyntaxTypes.Pattern.StringPattern:
+            case Pattern.StringPattern:
 
                 // String literal, no variables to collect
                 return variables;
 
-            case SyntaxTypes.Pattern.IntPattern:
+            case Pattern.IntPattern:
 
                 // Integer literal, no variables to collect
                 return variables;
 
-            case SyntaxTypes.Pattern.HexPattern:
+            case Pattern.HexPattern:
 
                 // Hex literal, no variables to collect
                 return variables;
 
-            case SyntaxTypes.Pattern.FloatPattern:
+            case Pattern.FloatPattern:
 
                 // Float literal, no variables to collect
                 return variables;
@@ -1345,13 +1280,13 @@ public class Canonicalization
 
         switch (pattern)
         {
-            case SyntaxTypes.Pattern.AllPattern:
-            case SyntaxTypes.Pattern.UnitPattern:
-            case SyntaxTypes.Pattern.CharPattern:
-            case SyntaxTypes.Pattern.StringPattern:
-            case SyntaxTypes.Pattern.IntPattern:
-            case SyntaxTypes.Pattern.HexPattern:
-            case SyntaxTypes.Pattern.FloatPattern:
+            case Pattern.AllPattern:
+            case Pattern.UnitPattern:
+            case Pattern.CharPattern:
+            case Pattern.StringPattern:
+            case Pattern.IntPattern:
+            case Pattern.HexPattern:
+            case Pattern.FloatPattern:
                 return (collectedVariables, errors, shadowings);
 
             case Pattern.VarPattern varPattern:
@@ -1786,7 +1721,7 @@ public class Canonicalization
                 TypeImportMap: [],
                 ValueImportMap: [],
                 AliasMap: [],
-                ModuleLevelDeclarations: ImmutableHashSet<string>.Empty,
+                ModuleLevelDeclarations: [],
                 LocalDeclarations: [],
                 OperatorToFunction: ImmutableDictionary<string, (ModuleName ModuleName, string FunctionName)>.Empty,
                 DeclarationPath: [])
@@ -2547,7 +2482,7 @@ public class Canonicalization
         foreach (var module in modules)
         {
             var moduleName =
-                string.Join(".", SyntaxTypes.Module.GetModuleName(module.ModuleDefinition.Value).Value);
+                string.Join(".", Module.GetModuleName(module.ModuleDefinition.Value).Value);
 
             var infixDecls = ImmutableList.CreateBuilder<(string, string)>();
 

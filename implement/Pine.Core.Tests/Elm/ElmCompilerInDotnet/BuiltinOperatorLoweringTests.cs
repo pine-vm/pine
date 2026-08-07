@@ -955,7 +955,7 @@ public class BuiltinOperatorLoweringTests
             new[] { SyntaxTypes.FromFullSyntaxModel.Convert(parsedModule) };
 
         var canonicalizedModules =
-            Canonicalization.Canonicalize([parsedModule])
+            Canonicalization.CanonicalizeOrThrow([parsedModule])
             .Extract(err => throw new Exception("Failed canonicalization: " + err));
 
         var orderedCanonicalizedModules =

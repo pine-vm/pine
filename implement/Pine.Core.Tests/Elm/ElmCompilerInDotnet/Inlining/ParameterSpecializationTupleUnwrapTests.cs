@@ -7,8 +7,7 @@ namespace Pine.Core.Tests.Elm.ElmCompilerInDotnet.Inlining;
 
 using Core.Elm.ElmCompilerInDotnet;
 
-using SyntaxTypes = Core.Elm.ElmSyntax.Stil4mElmSyntax7;
-using SyntaxModel = Core.Elm.ElmSyntax.SyntaxModel;
+using SyntaxTypes = Core.Elm.ElmSyntax.ElmSyntaxAbstract;
 using ModuleName = System.Collections.Generic.IReadOnlyList<string>;
 
 /// <summary>
@@ -25,12 +24,6 @@ using ModuleName = System.Collections.Generic.IReadOnlyList<string>;
 /// </summary>
 public class ParameterSpecializationTupleUnwrapTests
 {
-    private static readonly SyntaxModel.Range s_zeroRange =
-        new(new SyntaxModel.Location(1, 1), new SyntaxModel.Location(1, 1));
-
-    private static SyntaxModel.Node<T> Node<T>(T value) =>
-        new(s_zeroRange, value);
-
     [Fact]
     public void TupleUnwrap_value_equality_with_identical_concrete_function_value_elements()
     {
@@ -181,8 +174,8 @@ public class ParameterSpecializationTupleUnwrapTests
         SyntaxTypes.Expression argument =
             new SyntaxTypes.Expression.TupledExpression(
                 [
-                Node<SyntaxTypes.Expression>(new SyntaxTypes.Expression.FunctionOrValue(moduleName, "double")),
-                Node<SyntaxTypes.Expression>(new SyntaxTypes.Expression.FunctionOrValue(moduleName, "triple")),
+                SyntaxTypes.Expression.Identifier.Create(moduleName, "double"),
+                SyntaxTypes.Expression.Identifier.Create(moduleName, "triple"),
                 ]);
 
         ParameterSpecialization.ArgumentMatchesSpecialization(argument, spec).Should().BeTrue();
@@ -205,7 +198,7 @@ public class ParameterSpecializationTupleUnwrapTests
         SyntaxTypes.Expression argument =
             new SyntaxTypes.Expression.TupledExpression(
                 [
-                Node<SyntaxTypes.Expression>(new SyntaxTypes.Expression.FunctionOrValue(moduleName, "double")),
+                SyntaxTypes.Expression.Identifier.Create(moduleName, "double"),
                 ]);
 
         ParameterSpecialization.ArgumentMatchesSpecialization(argument, spec).Should().BeFalse();
@@ -224,37 +217,9 @@ public class ParameterSpecializationTupleUnwrapTests
                 ]);
 
         SyntaxTypes.Expression argument =
-            new SyntaxTypes.Expression.FunctionOrValue(moduleName, "double");
+            SyntaxTypes.Expression.Identifier.Create(moduleName, "double");
 
         ParameterSpecialization.ArgumentMatchesSpecialization(argument, spec).Should().BeFalse();
-    }
-
-    [Fact]
-    public void ArgumentMatchesSpecialization_peels_parens_around_TupledExpression()
-    {
-        ModuleName moduleName = ["App"];
-
-        var spec =
-            new ParameterSpecialization.TupleUnwrap(
-                [
-                new ParameterSpecialization.ConcreteFunctionValue(
-                    DeclQualifiedName.Create(moduleName, "double")),
-                new ParameterSpecialization.ConcreteFunctionValue(
-                    DeclQualifiedName.Create(moduleName, "triple")),
-                ]);
-
-        var inner =
-            new SyntaxTypes.Expression.TupledExpression(
-                [
-                Node<SyntaxTypes.Expression>(new SyntaxTypes.Expression.FunctionOrValue(moduleName, "double")),
-                Node<SyntaxTypes.Expression>(new SyntaxTypes.Expression.FunctionOrValue(moduleName, "triple")),
-                ]);
-
-        SyntaxTypes.Expression argument =
-            new SyntaxTypes.Expression.ParenthesizedExpression(
-                Node<SyntaxTypes.Expression>(inner));
-
-        ParameterSpecialization.ArgumentMatchesSpecialization(argument, spec).Should().BeTrue();
     }
 
     [Fact]
@@ -280,30 +245,30 @@ public class ParameterSpecializationTupleUnwrapTests
             var pattern =
                 new SyntaxTypes.Pattern.NamedPattern(
                     new SyntaxTypes.QualifiedNameRef(parserModule, "Parser"),
-                    [Node<SyntaxTypes.Pattern>(new SyntaxTypes.Pattern.VarPattern(bindName))]);
+                    [new SyntaxTypes.Pattern.VarPattern(bindName)]);
 
             var rhs =
-                Node<SyntaxTypes.Expression>(new SyntaxTypes.Expression.FunctionOrValue(moduleName, declName));
+                SyntaxTypes.Expression.Identifier.Create(moduleName, declName);
 
             var letDecl =
-                Node<SyntaxTypes.Expression.LetDeclaration>(
-                    new SyntaxTypes.Expression.LetDeclaration.LetDestructuring(
-                        Node<SyntaxTypes.Pattern>(pattern),
-                        rhs));
+                new SyntaxTypes.LetDeclaration.LetDestructuring(
+                    pattern,
+                    rhs);
 
             var letBody =
-                Node<SyntaxTypes.Expression>(new SyntaxTypes.Expression.FunctionOrValue([], bindName));
+                SyntaxTypes.Expression.Identifier.Create([], bindName);
 
             return
                 new SyntaxTypes.Expression.LetExpression(
-                    new SyntaxTypes.Expression.LetBlock([letDecl], letBody));
+                    [letDecl],
+                    letBody);
         }
 
         SyntaxTypes.Expression argument =
             new SyntaxTypes.Expression.TupledExpression(
                 [
-                Node(BuildWrappedRef("parseDouble", "pA")),
-                Node(BuildWrappedRef("parseTriple", "pB")),
+                BuildWrappedRef("parseDouble", "pA"),
+                BuildWrappedRef("parseTriple", "pB"),
                 ]);
 
         ParameterSpecialization.ArgumentMatchesSpecialization(argument, spec).Should().BeTrue();

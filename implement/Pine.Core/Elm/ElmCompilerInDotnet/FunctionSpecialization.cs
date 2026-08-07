@@ -1,8 +1,7 @@
-using Pine.Core.Elm.ElmSyntax.SyntaxModel;
 using System.Collections.Immutable;
 using System.Linq;
 
-using SyntaxTypes = Pine.Core.Elm.ElmSyntax.Stil4mElmSyntax7;
+using SyntaxTypes = Pine.Core.Elm.ElmSyntax.ElmSyntaxAbstract;
 
 namespace Pine.Core.Elm.ElmCompilerInDotnet;
 
@@ -176,29 +175,23 @@ public sealed record FunctionSpecialization(
     /// different argument patterns or different list-shaped sub-trees
     /// inside the body would collide on a shallow <c>ToString</c>-based
     /// key. We wrap the lambda in a synthetic value declaration and
-    /// reuse <see cref="DeclarationDeduplication.GetStructuralFingerprint"/>,
+    /// reuse the declaration-deduplication structural fingerprint,
     /// which delegates to the snapshot formatter — a deep, purely
     /// structural walk.
     /// </summary>
-    private static string LambdaStructuralFingerprint(SyntaxTypes.LambdaStruct lambda)
+    private static string LambdaStructuralFingerprint(
+        SyntaxTypes.Expression.LambdaExpression lambda)
     {
-        var range = ElmSyntaxTransformations.s_zeroRange;
-
         var fn =
             new SyntaxTypes.Declaration.FunctionDeclaration(
                 new SyntaxTypes.FunctionStruct(
-                    Documentation: null,
                     Signature: null,
-                    Declaration: new Node<SyntaxTypes.FunctionImplementation>(
-                        range,
-                        new SyntaxTypes.FunctionImplementation(
-                            Name: new Node<string>(range, "__lambda__"),
-                            Arguments: [],
-                            Expression: new Node<SyntaxTypes.Expression>(
-                                range,
-                                new SyntaxTypes.Expression.LambdaExpression(lambda))))));
+                    Declaration:
+                    new SyntaxTypes.FunctionImplementation(
+                        Name: "__lambda__",
+                        Arguments: [],
+                        Expression: lambda)));
 
         return DeclarationDeduplication.GetStructuralFingerprint(fn, ["__LambdaSortKey__"]);
     }
 }
-

@@ -7,7 +7,7 @@ namespace Pine.Core.Tests.Elm.ElmCompilerInDotnet.Inlining;
 
 using Core.Elm.ElmCompilerInDotnet;
 
-using SyntaxTypes = Core.Elm.ElmSyntax.Stil4mElmSyntax7;
+using SyntaxTypes = Core.Elm.ElmSyntax.ElmSyntaxAbstract;
 using ModuleName = System.Collections.Generic.IReadOnlyList<string>;
 
 public class InliningFunctionSpecializationTests
@@ -33,26 +33,21 @@ public class InliningFunctionSpecializationTests
     [Fact]
     public void ParameterSpecialization_ConcreteLambdaValue_value_equality()
     {
-        var range =
-            new Core.Elm.ElmSyntax.SyntaxModel.Range(
-                new Core.Elm.ElmSyntax.SyntaxModel.Location(1, 1),
-                new Core.Elm.ElmSyntax.SyntaxModel.Location(1, 10));
-
         ParameterSpecialization left =
             new ParameterSpecialization.ConcreteLambdaValue(
-                new SyntaxTypes.LambdaStruct(
+                new SyntaxTypes.Expression.LambdaExpression(
                     [
-                    new Core.Elm.ElmSyntax.SyntaxModel.Node<SyntaxTypes.Pattern>(range, new SyntaxTypes.Pattern.VarPattern("x"))
+                    new SyntaxTypes.Pattern.VarPattern("x")
                     ],
-                    new Core.Elm.ElmSyntax.SyntaxModel.Node<SyntaxTypes.Expression>(range, new SyntaxTypes.Expression.Integer(42))));
+                    SyntaxTypes.Expression.Identifier.Create([], "x")));
 
         ParameterSpecialization right =
             new ParameterSpecialization.ConcreteLambdaValue(
-                new SyntaxTypes.LambdaStruct(
+                new SyntaxTypes.Expression.LambdaExpression(
                     [
-                    new Core.Elm.ElmSyntax.SyntaxModel.Node<SyntaxTypes.Pattern>(range, new SyntaxTypes.Pattern.VarPattern("x"))
+                    new SyntaxTypes.Pattern.VarPattern("x")
                     ],
-                    new Core.Elm.ElmSyntax.SyntaxModel.Node<SyntaxTypes.Expression>(range, new SyntaxTypes.Expression.Integer(42))));
+                    SyntaxTypes.Expression.Identifier.Create([], "x")));
 
         left.Equals(right).Should().BeTrue();
         left.GetHashCode().Should().Be(right.GetHashCode());

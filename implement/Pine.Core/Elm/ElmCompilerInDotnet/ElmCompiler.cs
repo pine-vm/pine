@@ -476,7 +476,7 @@ public class ElmCompiler
             .ToList();
 
         var canonicalizationResult =
-            Canonicalization.CanonicalizeAllowingErrors(modulesForCanonicalization);
+            Canonicalization.Canonicalize(modulesForCanonicalization);
 
         if (canonicalizationResult.IsErrOrNull() is { } canonErr)
         {

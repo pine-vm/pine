@@ -197,7 +197,7 @@ public partial class ElmSyntaxInterpreter
                 "(the synthetic root module containing 'pine_root_expression').";
         }
 
-        var canonicalizeResult = Canonicalization.CanonicalizeAllowingErrors(modules);
+        var canonicalizeResult = Canonicalization.Canonicalize(modules);
 
         if (canonicalizeResult.IsErrOrNull() is { } canonErr)
         {

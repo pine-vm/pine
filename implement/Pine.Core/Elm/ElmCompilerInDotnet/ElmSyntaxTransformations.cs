@@ -40,35 +40,6 @@ internal static class ElmSyntaxTransformations
         SyntaxTypes.QualifiedNameRef ConstructorName,
         IReadOnlyList<Node<SyntaxTypes.Expression>> FieldExpressions);
 
-    internal static Node<SyntaxTypes.Declaration> ParenthesizeDeclaration(
-        Node<SyntaxTypes.Declaration> declNode)
-    {
-        if (declNode.Value is not SyntaxTypes.Declaration.FunctionDeclaration funcDecl)
-        {
-            return declNode;
-        }
-
-        var impl = funcDecl.Function.Declaration.Value;
-
-        var parenthesizedExpr = ParenthesizeApplicationArgumentsRecursive(impl.Expression);
-
-        var newImpl = impl with { Expression = parenthesizedExpr };
-
-        var newFunc =
-            funcDecl.Function with
-            {
-                Declaration =
-                new Node<SyntaxTypes.FunctionImplementation>(
-                    funcDecl.Function.Declaration.Range,
-                    newImpl)
-            };
-
-        return
-            new Node<SyntaxTypes.Declaration>(
-                declNode.Range,
-                new SyntaxTypes.Declaration.FunctionDeclaration(newFunc));
-    }
-
     internal static bool TryCollapseSingleChoiceWrapperPassThroughLet(
         IReadOnlyList<Node<SyntaxTypes.Expression.LetDeclaration>> declarations,
         Node<SyntaxTypes.Expression> body,

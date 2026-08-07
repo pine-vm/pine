@@ -130,7 +130,7 @@ public class AddInferredTypeAnnotations
         // Use CanonicalizeAllowingErrors to continue even with undefined local variable references
         // This enables IDE functionality (like "add inferred type annotation") even when
         // the file contains some invalid references
-        var canonicalizeResult = Canonicalization.CanonicalizeAllowingErrors(concreteFiles);
+        var canonicalizeResult = Canonicalization.Canonicalize(concreteFiles);
 
         if (canonicalizeResult.IsErrOrNull() is { } canonErr)
         {

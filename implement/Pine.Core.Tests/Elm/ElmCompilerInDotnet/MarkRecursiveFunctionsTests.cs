@@ -3,178 +3,159 @@ using Pine.Core.CodeAnalysis;
 using Pine.Core.Elm.ElmCompilerInDotnet;
 using System.Collections.Generic;
 using System.Collections.Immutable;
+using System.Linq;
 using Xunit;
 
-using SyntaxTypes = Pine.Core.Elm.ElmSyntax.Stil4mElmSyntax7;
-using SyntaxModel = Pine.Core.Elm.ElmSyntax.SyntaxModel;
+using SyntaxTypes = Pine.Core.Elm.ElmSyntax.ElmSyntaxAbstract;
 
 namespace Pine.Core.Tests.Elm.ElmCompilerInDotnet;
 
 /// <summary>
 /// Unit tests for <see cref="ElmSyntaxOptimization.MarkRecursiveFunctions"/>.
-///
-/// These exercise the call-graph recursion classification directly on
-/// synthetically constructed function declarations, so they execute in
-/// milliseconds and serve as a regression net for the SCC-based rewrite
-/// of the previous quadratic <c>IsRecursiveFunction</c> implementation.
 /// </summary>
 public class MarkRecursiveFunctionsTests
 {
-    private static readonly SyntaxModel.Location s_zeroLoc = new(Row: 0, Column: 0);
-
-    private static readonly SyntaxModel.Range s_zeroRange = new(Start: s_zeroLoc, End: s_zeroLoc);
-
-    private static SyntaxModel.Node<T> N<T>(T value) => new(s_zeroRange, value);
-
     private static readonly IReadOnlyList<string> s_module = ["M"];
 
-    private static SyntaxTypes.Expression FunctionOrValue(IReadOnlyList<string> moduleName, string name) =>
-        new SyntaxTypes.Expression.FunctionOrValue(moduleName, name);
+    private static SyntaxTypes.Expression Identifier(
+        IReadOnlyList<string> moduleName,
+        string name) =>
+        SyntaxTypes.Expression.Identifier.Create(moduleName, name);
 
-    private static SyntaxTypes.Expression.Application App(params SyntaxTypes.Expression[] parts)
-    {
-        var nodes = new List<SyntaxModel.Node<SyntaxTypes.Expression>>(parts.Length);
+    private static SyntaxTypes.Expression.Application App(
+        SyntaxTypes.Expression function,
+        params SyntaxTypes.Expression[] arguments) =>
+        new(function, arguments);
 
-        foreach (var p in parts)
-            nodes.Add(N(p));
-
-        return new SyntaxTypes.Expression.Application(nodes);
-    }
-
-    private static SyntaxTypes.Declaration.FunctionDeclaration FuncDecl(
+    private static SyntaxTypes.FunctionStruct Func(
         string name,
-        IReadOnlyList<string> argNames,
-        SyntaxTypes.Expression body)
+        IReadOnlyList<string> argumentNames,
+        SyntaxTypes.Expression body) =>
+        new(
+            Signature: null,
+            Declaration:
+            new(
+                Name: name,
+                Arguments:
+                [..
+                argumentNames.Select(
+                    argumentName =>
+                    new SyntaxTypes.Pattern.VarPattern(argumentName))
+                ],
+                Expression: body));
+
+    private static ImmutableDictionary<DeclQualifiedName, SyntaxTypes.FunctionStruct> Functions(
+        params (string Name, SyntaxTypes.FunctionStruct Function)[] items)
     {
-        var argPatterns = new List<SyntaxModel.Node<SyntaxTypes.Pattern>>(argNames.Count);
+        var builder =
+            ImmutableDictionary.CreateBuilder<DeclQualifiedName, SyntaxTypes.FunctionStruct>();
 
-        foreach (var argName in argNames)
-            argPatterns.Add(N<SyntaxTypes.Pattern>(new SyntaxTypes.Pattern.VarPattern(argName)));
+        foreach (var (name, function) in items)
+            builder[DeclQualifiedName.Create(s_module, name)] = function;
 
-        var impl =
-            new SyntaxTypes.FunctionImplementation(
-                Name: N(name),
-                Arguments: argPatterns,
-                Expression: N(body));
-
-        var func =
-            new SyntaxTypes.FunctionStruct(
-                Documentation: null,
-                Signature: null,
-                Declaration: N(impl));
-
-        return new SyntaxTypes.Declaration.FunctionDeclaration(func);
-    }
-
-    private static ImmutableDictionary<DeclQualifiedName, SyntaxTypes.Declaration> Decls(
-        params (string name, SyntaxTypes.Declaration decl)[] items)
-    {
-        var b = ImmutableDictionary.CreateBuilder<DeclQualifiedName, SyntaxTypes.Declaration>();
-
-        foreach (var (n, d) in items)
-            b[DeclQualifiedName.Create(s_module, n)] = d;
-
-        return b.ToImmutable();
+        return builder.ToImmutable();
     }
 
     private static bool IsMarkedRecursive(
-        ImmutableDictionary<DeclQualifiedName, SyntaxTypes.Declaration> decls,
+        ImmutableDictionary<DeclQualifiedName, SyntaxTypes.FunctionStruct> functions,
         string name)
     {
-        var marked =
-            ElmSyntaxOptimization.MarkRecursiveFunctions(
-                ElmSyntaxOptimization.BuildFunctionDictionary(decls));
+        var marked = ElmSyntaxOptimization.MarkRecursiveFunctions(functions);
 
-        return marked[DeclQualifiedName.Create(s_module, name)].IsRecursive;
+        return marked.Contains(DeclQualifiedName.Create(s_module, name));
     }
 
     [Fact]
     public void Plain_non_recursive_function_is_not_marked_recursive()
     {
-        // f x = x
-        var f = FuncDecl("f", ["x"], FunctionOrValue([], "x"));
-        var decls = Decls(("f", f));
+        var f = Func("f", ["x"], Identifier([], "x"));
+        var functions = Functions(("f", f));
 
-        IsMarkedRecursive(decls, "f").Should().BeFalse();
+        IsMarkedRecursive(functions, "f").Should().BeFalse();
     }
 
     [Fact]
     public void Direct_self_call_is_marked_recursive()
     {
-        // f x = f x
-        var f = FuncDecl("f", ["x"], App(FunctionOrValue(s_module, "f"), FunctionOrValue([], "x")));
-        var decls = Decls(("f", f));
+        var f = Func("f", ["x"], App(Identifier(s_module, "f"), Identifier([], "x")));
+        var functions = Functions(("f", f));
 
-        IsMarkedRecursive(decls, "f").Should().BeTrue();
+        IsMarkedRecursive(functions, "f").Should().BeTrue();
     }
 
     [Fact]
     public void Indirect_two_step_cycle_marks_both_functions_recursive()
     {
-        // a x = b x
-        // b x = a x
-        var a = FuncDecl("a", ["x"], App(FunctionOrValue(s_module, "b"), FunctionOrValue([], "x")));
-        var b = FuncDecl("b", ["x"], App(FunctionOrValue(s_module, "a"), FunctionOrValue([], "x")));
-        var decls = Decls(("a", a), ("b", b));
+        var a = Func("a", ["x"], App(Identifier(s_module, "b"), Identifier([], "x")));
+        var b = Func("b", ["x"], App(Identifier(s_module, "a"), Identifier([], "x")));
+        var functions = Functions(("a", a), ("b", b));
 
-        IsMarkedRecursive(decls, "a").Should().BeTrue();
-        IsMarkedRecursive(decls, "b").Should().BeTrue();
+        IsMarkedRecursive(functions, "a").Should().BeTrue();
+        IsMarkedRecursive(functions, "b").Should().BeTrue();
     }
 
     [Fact]
     public void Indirect_three_step_cycle_marks_all_three_recursive()
     {
-        // a x = b x ; b x = c x ; c x = a x
-        var a = FuncDecl("a", ["x"], App(FunctionOrValue(s_module, "b"), FunctionOrValue([], "x")));
-        var b = FuncDecl("b", ["x"], App(FunctionOrValue(s_module, "c"), FunctionOrValue([], "x")));
-        var c = FuncDecl("c", ["x"], App(FunctionOrValue(s_module, "a"), FunctionOrValue([], "x")));
-        var decls = Decls(("a", a), ("b", b), ("c", c));
+        var a = Func("a", ["x"], App(Identifier(s_module, "b"), Identifier([], "x")));
+        var b = Func("b", ["x"], App(Identifier(s_module, "c"), Identifier([], "x")));
+        var c = Func("c", ["x"], App(Identifier(s_module, "a"), Identifier([], "x")));
+        var functions = Functions(("a", a), ("b", b), ("c", c));
 
-        IsMarkedRecursive(decls, "a").Should().BeTrue();
-        IsMarkedRecursive(decls, "b").Should().BeTrue();
-        IsMarkedRecursive(decls, "c").Should().BeTrue();
+        IsMarkedRecursive(functions, "a").Should().BeTrue();
+        IsMarkedRecursive(functions, "b").Should().BeTrue();
+        IsMarkedRecursive(functions, "c").Should().BeTrue();
     }
 
     [Fact]
     public void Caller_of_recursive_function_is_not_itself_marked_recursive()
     {
-        // r x = r x      -- recursive
-        // c x = r x      -- only calls into the cycle, not in it
-        var r = FuncDecl("r", ["x"], App(FunctionOrValue(s_module, "r"), FunctionOrValue([], "x")));
-        var c = FuncDecl("c", ["x"], App(FunctionOrValue(s_module, "r"), FunctionOrValue([], "x")));
-        var decls = Decls(("r", r), ("c", c));
+        var recursiveFunction =
+            Func(
+                "recursive",
+                ["x"],
+                App(Identifier(s_module, "recursive"), Identifier([], "x")));
 
-        IsMarkedRecursive(decls, "r").Should().BeTrue();
-        IsMarkedRecursive(decls, "c").Should().BeFalse();
+        var caller =
+            Func(
+                "caller",
+                ["x"],
+                App(Identifier(s_module, "recursive"), Identifier([], "x")));
+
+        var functions =
+            Functions(
+                ("recursive", recursiveFunction),
+                ("caller", caller));
+
+        IsMarkedRecursive(functions, "recursive").Should().BeTrue();
+        IsMarkedRecursive(functions, "caller").Should().BeFalse();
     }
 
     [Fact]
     public void Long_acyclic_chain_marks_no_function_recursive()
     {
-        // a x = b x ; b x = c x ; c x = d x ; d x = x
-        var a = FuncDecl("a", ["x"], App(FunctionOrValue(s_module, "b"), FunctionOrValue([], "x")));
-        var b = FuncDecl("b", ["x"], App(FunctionOrValue(s_module, "c"), FunctionOrValue([], "x")));
-        var c = FuncDecl("c", ["x"], App(FunctionOrValue(s_module, "d"), FunctionOrValue([], "x")));
-        var d = FuncDecl("d", ["x"], FunctionOrValue([], "x"));
-        var decls = Decls(("a", a), ("b", b), ("c", c), ("d", d));
+        var a = Func("a", ["x"], App(Identifier(s_module, "b"), Identifier([], "x")));
+        var b = Func("b", ["x"], App(Identifier(s_module, "c"), Identifier([], "x")));
+        var c = Func("c", ["x"], App(Identifier(s_module, "d"), Identifier([], "x")));
+        var d = Func("d", ["x"], Identifier([], "x"));
+        var functions = Functions(("a", a), ("b", b), ("c", c), ("d", d));
 
-        IsMarkedRecursive(decls, "a").Should().BeFalse();
-        IsMarkedRecursive(decls, "b").Should().BeFalse();
-        IsMarkedRecursive(decls, "c").Should().BeFalse();
-        IsMarkedRecursive(decls, "d").Should().BeFalse();
+        IsMarkedRecursive(functions, "a").Should().BeFalse();
+        IsMarkedRecursive(functions, "b").Should().BeFalse();
+        IsMarkedRecursive(functions, "c").Should().BeFalse();
+        IsMarkedRecursive(functions, "d").Should().BeFalse();
     }
 
     [Fact]
     public void Disjoint_cycle_and_independent_function_classified_independently()
     {
-        // a x = b x ; b x = a x ; c x = x
-        var a = FuncDecl("a", ["x"], App(FunctionOrValue(s_module, "b"), FunctionOrValue([], "x")));
-        var b = FuncDecl("b", ["x"], App(FunctionOrValue(s_module, "a"), FunctionOrValue([], "x")));
-        var c = FuncDecl("c", ["x"], FunctionOrValue([], "x"));
-        var decls = Decls(("a", a), ("b", b), ("c", c));
+        var a = Func("a", ["x"], App(Identifier(s_module, "b"), Identifier([], "x")));
+        var b = Func("b", ["x"], App(Identifier(s_module, "a"), Identifier([], "x")));
+        var c = Func("c", ["x"], Identifier([], "x"));
+        var functions = Functions(("a", a), ("b", b), ("c", c));
 
-        IsMarkedRecursive(decls, "a").Should().BeTrue();
-        IsMarkedRecursive(decls, "b").Should().BeTrue();
-        IsMarkedRecursive(decls, "c").Should().BeFalse();
+        IsMarkedRecursive(functions, "a").Should().BeTrue();
+        IsMarkedRecursive(functions, "b").Should().BeTrue();
+        IsMarkedRecursive(functions, "c").Should().BeFalse();
     }
 }

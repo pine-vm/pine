@@ -2,7 +2,7 @@ using Pine.Core.CodeAnalysis;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 
-using SyntaxTypes = Pine.Core.Elm.ElmSyntax.Stil4mElmSyntax7;
+using SyntaxTypes = Pine.Core.Elm.ElmSyntax.ElmSyntaxAbstract;
 
 namespace Pine.Core.Elm.ElmCompilerInDotnet;
 

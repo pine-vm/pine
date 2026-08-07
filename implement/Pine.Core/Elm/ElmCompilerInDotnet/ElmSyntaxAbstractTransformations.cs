@@ -1,4 +1,3 @@
-using Pine.Core.CodeAnalysis;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -8,18 +7,7 @@ using SyntaxTypes = Pine.Core.Elm.ElmSyntax.ElmSyntaxAbstract;
 namespace Pine.Core.Elm.ElmCompilerInDotnet;
 
 /// <summary>
-/// Pure syntax transformations that operate on the <see cref="ElmSyntax.ElmSyntaxAbstract"/>
-/// model. This is the abstract-syntax counterpart of the concrete-model
-/// <see cref="ElmSyntaxTransformations"/>: as the lowering pipeline that feeds
-/// <see cref="OptimizedElmSyntaxDeclarations"/> migrates from the concrete
-/// <see cref="ElmSyntax.Stil4mElmSyntax7"/> model to the abstract model, each transformation
-/// module reaches for the helpers here instead of round-tripping through the concrete model.
-/// <para>
-/// The abstract model carries no source ranges, no trivia (comments/documentation) and no
-/// redundant parentheses, so the abstract helpers are typically simpler than their concrete
-/// analogues: there are no <c>Node&lt;T&gt;</c> wrappers to thread and no
-/// <c>ParenthesizedExpression</c> layers to peel.
-/// </para>
+/// Syntax transformations that operate on the <see cref="ElmSyntax.ElmSyntaxAbstract"/> model.
 /// </summary>
 internal static class ElmSyntaxAbstractTransformations
 {
@@ -160,12 +148,7 @@ internal static class ElmSyntaxAbstractTransformations
     /// (<see cref="SyntaxTypes.Expression.Application.Function"/>) is itself an
     /// <see cref="SyntaxTypes.Expression.Application"/> with the equivalent flat form.
     /// <para>
-    /// This is the abstract-model counterpart of the (former) concrete-model
-    /// <c>FlattenAllNestedApplicationHeads</c>. In the concrete
-    /// model an <c>Application</c> is a single flat argument list whose head is element 0; in
-    /// the abstract model the head is a dedicated <see cref="SyntaxTypes.Expression.Application.Function"/>
-    /// field, so a "nested head" is an <c>Application</c> whose <c>Function</c> is another
-    /// <c>Application</c>. Flattening lets
+    /// Flattening lets
     /// <see cref="ExpressionCompiler.CompileApplication"/> take the direct-call fast path
     /// instead of allocating a closure for a partial application.
     /// </para>
@@ -191,88 +174,4 @@ internal static class ElmSyntaxAbstractTransformations
 
         return withChildrenFlattened;
     }
-
-    /// <summary>
-    /// A constructor (tag) application deconstructed into its qualified constructor
-    /// name and argument (field) expressions. Abstract-model counterpart of the
-    /// concrete <c>ElmSyntaxTransformations.ConstructorApplication</c>. The constructor
-    /// name is a <see cref="DeclQualifiedName"/> (as carried by
-    /// <see cref="SyntaxTypes.Expression.Identifier.QualifiedName"/>).
-    /// </summary>
-    internal sealed record ConstructorApplication(
-        DeclQualifiedName ConstructorName,
-        IReadOnlyList<SyntaxTypes.Expression> FieldExpressions);
-
-    /// <summary>
-    /// Attempts to view an expression as a constructor (tag) application: either a bare
-    /// <see cref="SyntaxTypes.Expression.Identifier"/> (zero-arity constructor) or an
-    /// <see cref="SyntaxTypes.Expression.Application"/> whose head function is a
-    /// <see cref="SyntaxTypes.Expression.Identifier"/>. Returns <see langword="null"/>
-    /// for any other shape. Abstract-model counterpart of the concrete
-    /// <c>ElmSyntaxTransformations.TryDeconstructConstructorApplication</c>; the abstract
-    /// model has no parentheses to unwrap and already separates the application head from
-    /// its arguments.
-    /// </summary>
-    public static ConstructorApplication? TryDeconstructConstructorApplication(
-        SyntaxTypes.Expression expr)
-    {
-        switch (expr)
-        {
-            case SyntaxTypes.Expression.Identifier funcOrValue:
-                return new ConstructorApplication(funcOrValue.QualifiedName, []);
-
-            case SyntaxTypes.Expression.Application app
-            when app.Function is SyntaxTypes.Expression.Identifier constructorRef:
-                return new ConstructorApplication(constructorRef.QualifiedName, app.Arguments);
-
-            default:
-                return null;
-        }
-    }
-
-    /// <summary>
-    /// Determines whether a constructor reference in a pattern
-    /// (<see cref="SyntaxTypes.QualifiedNameRef"/>) is equivalent to a constructor name
-    /// carried by a value expression (<see cref="DeclQualifiedName"/>). Two names are
-    /// equivalent when the local declaration names match and either the pattern reference is
-    /// unqualified or the module paths are identical. Abstract-model counterpart of the
-    /// concrete <c>ElmSyntaxTransformations.AreEquivalentConstructorNames</c> overload.
-    /// </summary>
-    public static bool AreEquivalentConstructorNames(
-        SyntaxTypes.QualifiedNameRef left,
-        DeclQualifiedName right) =>
-        left.Name == right.DeclName &&
-        (left.ModuleName.Count is 0 || left.ModuleName.SequenceEqual(right.Namespaces));
-
-    /// <summary>
-    /// Resolves a <see cref="SyntaxTypes.Expression.Identifier"/> reference into a
-    /// fully-qualified name. References without an explicit module qualifier (empty
-    /// <see cref="DeclQualifiedName.Namespaces"/>) are interpreted as belonging to the
-    /// declaring module <paramref name="currentModuleName"/>. Abstract-model counterpart of
-    /// the concrete <c>ElmSyntaxTransformations.ResolveReference</c>.
-    /// </summary>
-    public static DeclQualifiedName ResolveReference(
-        SyntaxTypes.Expression.Identifier reference,
-        IReadOnlyList<string> currentModuleName) =>
-        reference.QualifiedName.Namespaces.Count is 0
-        ?
-        DeclQualifiedName.Create(currentModuleName, reference.QualifiedName.DeclName)
-        :
-        reference.QualifiedName;
-
-    /// <summary>
-    /// Resolves a <see cref="SyntaxTypes.QualifiedNameRef"/> (e.g. a constructor name
-    /// appearing in a pattern or constructor application) into a fully-qualified name.
-    /// References without an explicit module qualifier are interpreted as belonging to the
-    /// declaring module <paramref name="currentModuleName"/>. Abstract-model counterpart of
-    /// the concrete <c>ElmSyntaxTransformations.ResolveReference</c> overload.
-    /// </summary>
-    public static DeclQualifiedName ResolveReference(
-        SyntaxTypes.QualifiedNameRef qname,
-        IReadOnlyList<string> currentModuleName) =>
-        qname.ModuleName.Count is 0
-        ?
-        DeclQualifiedName.Create(currentModuleName, qname.Name)
-        :
-        DeclQualifiedName.Create(qname.ModuleName, qname.Name);
 }
