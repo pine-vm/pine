@@ -1599,6 +1599,25 @@ public static class TypeInference
             // Check if the first argument is a FunctionOrValue
             if (application.Function is SyntaxTypes.Expression.Identifier funcRef)
             {
+                if (funcRef.QualifiedName.Namespaces is ["Pine_builtin"])
+                {
+                    InferredType? builtinResultType =
+                        funcRef.QualifiedName.DeclName switch
+                        {
+                            "int_add" or "int_mul" =>
+                            s_intType,
+
+                            "equal" or "int_is_sorted_asc" =>
+                            s_boolType,
+
+                            _ =>
+                            null
+                        };
+
+                    if (builtinResultType is not null)
+                        return builtinResultType;
+                }
+
                 // Check if this is a qualified Basics module function with known return type
                 // Only use core library type info for qualified references (e.g., Basics.modBy)
                 // Unqualified references could be shadowed by local parameters, so canonicalization

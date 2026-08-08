@@ -398,6 +398,72 @@ public class BuiltinOperatorLoweringTests
     }
 
     [Fact]
+    public void Lowers_nested_arithmetic_using_int_from_function_result_tuple_destructuring()
+    {
+        var loweredModule =
+            LowerOperators(
+                """
+                module Test exposing (..)
+
+
+                type RunEnd
+                    = EndOfInput
+
+
+                findRunEnd : String -> Int -> ( Int, RunEnd )
+                findRunEnd source offset =
+                    ( offset, EndOfInput )
+
+
+                advanceColumn : String -> Int -> Int -> Int
+                advanceColumn source offset column =
+                    let
+                        ( runEndOffset, _ ) =
+                            findRunEnd source offset
+
+                        columnAfterRun =
+                            column + (runEndOffset - offset)
+                    in
+                    columnAfterRun + 2
+                """);
+
+        var rendered = RenderCanonicalized(loweredModule);
+
+        rendered.Should().Be(
+            """
+            type Test.RunEnd
+                = EndOfInput
+
+
+            Test.advanceColumn : String -> Int -> Int -> Int
+            Test.advanceColumn source offset column =
+                let
+                    ( runEndOffset, _ ) =
+                        Test.findRunEnd
+                            source
+                            offset
+
+                    columnAfterRun =
+                        Pine_builtin.int_add
+                            [ column
+                            , Pine_builtin.int_add
+                                [ runEndOffset
+                                , Pine_builtin.int_mul
+                                    [ -1, offset ]
+                                ]
+                            ]
+                in
+                Pine_builtin.int_add
+                    [ columnAfterRun, 2 ]
+
+
+            Test.findRunEnd : String -> Int -> ( Int, Test.RunEnd )
+            Test.findRunEnd source offset =
+                ( offset, Test.EndOfInput )
+            """.Trim());
+    }
+
+    [Fact]
     public void Lowers_int_le_operator_application()
     {
         var loweredModule =

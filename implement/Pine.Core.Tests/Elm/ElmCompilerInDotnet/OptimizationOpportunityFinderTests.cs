@@ -1891,10 +1891,8 @@ public class OptimizationOpportunityFinderTests
 
         renderedCounts.Should().Be(
             """
-            ElmSyntax.Concrete.Parser: BasicsArithmetic: 5
-            ElmSyntax.Concrete.Parser: BasicsCompare: 4
             ElmSyntax.Concrete.Parser: RootLevelChoiceTagWrapper: 69
-            LanguageService: BasicsCompare: 4
+            LanguageService: BasicsCompare: 3
             LanguageService: RootLevelChoiceTagWrapper: 32
             LanguageServiceAnalysis: RootLevelChoiceTagWrapper: 7
             """.Trim());

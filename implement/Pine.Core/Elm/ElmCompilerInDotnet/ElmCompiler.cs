@@ -552,10 +552,13 @@ public class ElmCompiler
         {
             var loweredBeforeLambdaLifting =
                 BuiltinOperatorLowering.Apply(
-                    FlattenModulesToDeclarationDictionary(canonicalizedModules));
+                    FlattenModulesToDeclarationDictionary(canonicalizedModules),
+                    new BuiltinOperatorLowering.Configuration(
+                        LowerBuiltinOperators: true,
+                        LowerElmCoreBasics: true));
 
-            if (loweredBeforeLambdaLifting.IsErrOrNull() is { } lowerErr)
-                return "Operator lowering before lambda lifting failed: " + lowerErr;
+            if (loweredBeforeLambdaLifting.IsErrOrNull() is { } builtinLowerErr)
+                return "Operator lowering before lambda lifting failed: " + builtinLowerErr;
 
             canonicalizedModules =
                 ReconstructModulesFromFlatDict(
@@ -1860,10 +1863,13 @@ public class ElmCompiler
         {
             var result =
                 BuiltinOperatorLowering.Apply(
-                    currentDecls.RenderAsFlatDictionary());
+                    currentDecls.RenderAsFlatDictionary(),
+                    new BuiltinOperatorLowering.Configuration(
+                        LowerBuiltinOperators: true,
+                        LowerElmCoreBasics: true));
 
-            if (result.IsErrOrNull() is { } lowerErr)
-                return "Operator lowering failed: " + lowerErr;
+            if (result.IsErrOrNull() is { } builtinLowerErr)
+                return "Operator lowering failed: " + builtinLowerErr;
 
             if (result.IsOkOrNull() is not { } lowerDict)
                 throw new NotImplementedException("Unexpected result type");

@@ -23,6 +23,10 @@ namespace Pine.Core.Elm.ElmCompilerInDotnet;
 /// </summary>
 public static class BuiltinOperatorLowering
 {
+    internal sealed record Configuration(
+        bool LowerBuiltinOperators,
+        bool LowerElmCoreBasics);
+
     /// <summary>
     /// Enumerates the Elm operators recognized by the lowering stage.
     /// Each member represents a distinct lowering strategy, not a Pine builtin name.
@@ -44,6 +48,7 @@ public static class BuiltinOperatorLowering
     }
 
     private record RewriteContext(
+        Configuration Configuration,
         string CurrentModuleName,
         ImmutableDictionary<string, int> ParameterNames,
         ImmutableDictionary<string, TypeInference.InferredType> ParameterTypes,
@@ -61,8 +66,31 @@ public static class BuiltinOperatorLowering
     /// <param name="declarations">The flat declaration dictionary to rewrite.</param>
     /// <returns>The rewritten declarations, or an error message.</returns>
     public static Result<string, ImmutableDictionary<DeclQualifiedName, SyntaxTypes.Declaration>> Apply(
-        ImmutableDictionary<DeclQualifiedName, SyntaxTypes.Declaration> declarations)
+        ImmutableDictionary<DeclQualifiedName, SyntaxTypes.Declaration> declarations) =>
+        Apply(
+            declarations,
+            new Configuration(
+                LowerBuiltinOperators: true,
+                LowerElmCoreBasics: false));
+
+    internal static Result<string, ImmutableDictionary<DeclQualifiedName, SyntaxTypes.Declaration>> ApplyElmCoreBasics(
+        ImmutableDictionary<DeclQualifiedName, SyntaxTypes.Declaration> declarations) =>
+        Apply(
+            declarations,
+            new Configuration(
+                LowerBuiltinOperators: false,
+                LowerElmCoreBasics: true));
+
+    internal static Result<string, ImmutableDictionary<DeclQualifiedName, SyntaxTypes.Declaration>> Apply(
+        ImmutableDictionary<DeclQualifiedName, SyntaxTypes.Declaration> declarations,
+        Configuration configuration)
     {
+        if (!configuration.LowerBuiltinOperators &&
+            !configuration.LowerElmCoreBasics)
+        {
+            return declarations;
+        }
+
         var functionTypes = BuildFunctionTypes(declarations);
         var aliasTypes = BuildAliasTypes(declarations);
 
@@ -84,6 +112,7 @@ public static class BuiltinOperatorLowering
             var rewritten =
                 RewriteDeclaration(
                     decl,
+                    configuration,
                     moduleNameString,
                     functionTypes,
                     aliasTypes,
@@ -99,6 +128,7 @@ public static class BuiltinOperatorLowering
 
     private static SyntaxTypes.Declaration RewriteDeclaration(
         SyntaxTypes.Declaration declaration,
+        Configuration configuration,
         string moduleName,
         IReadOnlyDictionary<QualifiedNameRef, FunctionTypeInfo> functionTypes,
         IReadOnlyDictionary<QualifiedNameRef, TypeInference.TypeAliasDefinition> aliasTypes,
@@ -125,6 +155,7 @@ public static class BuiltinOperatorLowering
 
         var context =
             new RewriteContext(
+                Configuration: configuration,
                 CurrentModuleName: moduleName,
                 ParameterNames: BuildParameterNames(implementation.Arguments),
                 ParameterTypes:
@@ -365,14 +396,37 @@ public static class BuiltinOperatorLowering
         var rewrittenApplication =
             new SyntaxTypes.Expression.Application(rewrittenFunction, rewrittenArguments);
 
-        while (TryLowerPipe(rewrittenApplication) is { } loweredPipe)
-            rewrittenApplication = loweredPipe;
+        if (context.Configuration.LowerBuiltinOperators)
+        {
+            while (TryLowerPipe(rewrittenApplication) is { } loweredPipe)
+                rewrittenApplication = loweredPipe;
+        }
 
         rewrittenFunction = rewrittenApplication.Function;
         rewrittenArguments = [.. rewrittenApplication.Arguments];
 
-        if (rewrittenArguments.Count is 2 &&
-            TryMapBuiltinOperator(rewrittenFunction) is { } loweredOp)
+        if (context.Configuration.LowerElmCoreBasics &&
+            rewrittenApplication.Function is SyntaxTypes.Expression.Identifier
+            {
+                QualifiedName.Namespaces: ["Basics"],
+                QualifiedName.DeclName: "min" or "max" or "negate" or "abs" or "clamp"
+            })
+        {
+            var argumentTypes =
+                rewrittenArguments
+                .Select(argument => InferExpressionType(argument, context))
+                .ToList();
+
+            if (ElmCoreBasicsLowering.TryLowerApplication(
+                rewrittenApplication,
+                argumentTypes,
+                expectedType) is { } loweredCoreBasics)
+            {
+                return loweredCoreBasics;
+            }
+        }
+
+        if (rewrittenArguments.Count is 2)
         {
             var left = rewrittenArguments[0];
             var right = rewrittenArguments[1];
@@ -382,6 +436,12 @@ public static class BuiltinOperatorLowering
 
             var rightType =
                 InferExpressionType(right, context);
+
+            if (!context.Configuration.LowerBuiltinOperators ||
+                TryMapBuiltinOperator(rewrittenFunction) is not { } loweredOp)
+            {
+                return rewrittenApplication;
+            }
 
             if (loweredOp is LoweredOperator.Append)
             {

@@ -442,8 +442,8 @@ public static class OptimizationOpportunityFinder
 
             var expressionTypeContext =
                 new ExpressionTypeContext(
-                CurrentFunctionName: qualifiedNameRef,
-                CurrentModuleName: string.Join(".", qualifiedName.Namespaces),
+                    CurrentFunctionName: qualifiedNameRef,
+                    CurrentModuleName: string.Join(".", qualifiedName.Namespaces),
                     ParameterNames: parameterNamesBuilder.ToImmutable(),
                     ParameterTypes: parameterTypes,
                     LocalBindingTypes: [],
@@ -619,6 +619,7 @@ public static class OptimizationOpportunityFinder
         for (var iteration = 0; iteration < declarationsByName.Count; iteration++)
         {
             var snapshot = functionTypes.ToImmutable();
+
             var constructorArgumentTypes =
                 BuildConstructorArgumentTypes(snapshot);
 
@@ -766,6 +767,7 @@ public static class OptimizationOpportunityFinder
         TypeInference.InferredType right)
     {
         switch (left, right)
+
         {
             case (TypeInference.InferredType.ListType leftList,
                 TypeInference.InferredType.ListType rightList):
