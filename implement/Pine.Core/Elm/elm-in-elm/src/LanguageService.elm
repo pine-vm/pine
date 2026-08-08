@@ -675,19 +675,26 @@ hoverItemsAtLocation fileLocation location languageServiceState =
                             Just resolved
 
                         Nothing ->
-                            declarationTargetAtLocation parsedModule fileLocation location
-                                |> Maybe.andThen
-                                    (\target ->
-                                        targetDeclarationRange target
-                                            |> Maybe.andThen
-                                                (\(DeclarationRange _ nameRanges) ->
+                            case declarationTargetAtLocation parsedModule fileLocation location of
+                                Nothing ->
+                                    Nothing
+
+                                Just target ->
+                                    case targetDeclarationRange target of
+                                        Nothing ->
+                                            Nothing
+
+                                        Just (DeclarationRange _ nameRanges) ->
+                                            case
+                                                Common.listFind
+                                                    (rangeContainsLocation location)
                                                     nameRanges
-                                                        |> Common.listFind
-                                                            (rangeContainsLocation location)
-                                                        |> Maybe.map
-                                                            (\nameRange -> ( nameRange, target ))
-                                                )
-                                    )
+                                            of
+                                                Nothing ->
+                                                    Nothing
+
+                                                Just nameRange ->
+                                                    Just ( nameRange, target )
             in
             case resolvedAtLocation of
                 Nothing ->
@@ -715,8 +722,12 @@ parsedModuleAtFileLocation :
 parsedModuleAtFileLocation fileLocation languageServiceState =
     case fileLocation of
         LanguageServiceInterface.WorkspaceFileLocation filePath ->
-            Dict.get filePath languageServiceState.documentCache
-                |> Maybe.andThen .parsedFileLastSuccess
+            case Dict.get filePath languageServiceState.documentCache of
+                Nothing ->
+                    Nothing
+
+                Just currentFileCacheItem ->
+                    currentFileCacheItem.parsedFileLastSuccess
 
         LanguageServiceInterface.ElmPackageFileLocation packageVersionIdentifer modulePath ->
             languageServiceState.elmPackages
@@ -1261,8 +1272,12 @@ documentSymbolFromOccurrence parsedModule allOccurrences occurrence =
             let
                 selectionRange : Range
                 selectionRange =
-                    rangeAtPathInModule parsedModule occurrence.declarationPath SelectName
-                        |> Maybe.withDefault wholeRange
+                    case rangeAtPathInModule parsedModule occurrence.declarationPath SelectName of
+                        Nothing ->
+                            wholeRange
+
+                        Just range ->
+                            range
 
                 children : List LanguageServiceInterface.DocumentSymbol
                 children =

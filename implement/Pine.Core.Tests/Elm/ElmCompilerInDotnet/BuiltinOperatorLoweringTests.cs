@@ -1141,6 +1141,144 @@ public class BuiltinOperatorLoweringTests
             """.Trim());
     }
 
+    [Fact]
+    public void Lowers_forward_pipe_to_application()
+    {
+        var loweredModule =
+            LowerOperators(
+                """
+                module Test exposing (..)
+
+
+                apply value =
+                    value |> Other.apply
+                """);
+
+        RenderCanonicalized(loweredModule).Should().Be(
+            """
+            Test.apply value =
+                Other.apply
+                    value
+            """.Trim());
+    }
+
+    [Fact]
+    public void Lowers_backward_pipe_to_application()
+    {
+        var loweredModule =
+            LowerOperators(
+                """
+                module Test exposing (..)
+
+
+                apply value =
+                    Other.apply <| value
+                """);
+
+        RenderCanonicalized(loweredModule).Should().Be(
+            """
+            Test.apply value =
+                Other.apply
+                    value
+            """.Trim());
+    }
+
+    [Fact]
+    public void Lowers_forward_pipe_into_partially_applied_function()
+    {
+        var loweredModule =
+            LowerOperators(
+                """
+                module Test exposing (..)
+
+
+                combine first second third =
+                    first
+
+
+                apply first second third =
+                    third |> combine first second
+                """);
+
+        RenderCanonicalized(loweredModule).Should().Be(
+            """
+            Test.apply first second third =
+                Test.combine
+                    first
+                    second
+                    third
+
+
+            Test.combine first second third =
+                first
+            """.Trim());
+    }
+
+    [Fact]
+    public void Lowers_nested_forward_pipeline()
+    {
+        var loweredModule =
+            LowerOperators(
+                """
+                module Test exposing (..)
+
+
+                first value =
+                    value
+
+
+                second prefix value =
+                    value
+
+
+                apply prefix value =
+                    value
+                        |> first
+                        |> second prefix
+                """);
+
+        RenderCanonicalized(loweredModule).Should().Be(
+            """
+            Test.apply prefix value =
+                Test.second
+                    prefix
+                    (Test.first
+                        value
+                    )
+
+
+            Test.first value =
+                value
+
+
+            Test.second prefix value =
+                value
+            """.Trim());
+    }
+
+    [Fact]
+    public void Lowers_builtin_operator_exposed_by_pipeline_lowering()
+    {
+        var loweredModule =
+            LowerOperators(
+                """
+                module Test exposing (..)
+
+
+                addOne : Int -> Int
+                addOne value =
+                    value |> (+) 1
+                """);
+
+        RenderCanonicalized(loweredModule).Should().Be(
+            """
+            Test.addOne : Int -> Int
+            Test.addOne value =
+                Pine_builtin.int_add
+                    [ 1, value ]
+            """.Trim());
+    }
+
     private static SyntaxTypes.File LowerOperators(string moduleText)
     {
         var parsedModule =

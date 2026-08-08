@@ -602,6 +602,12 @@ public class CoreBasics
             "apR" =>
             ApR_FunctionValue(),
 
+            "composeR" =>
+            ComposeR_FunctionValue(),
+
+            "composeL" =>
+            ComposeL_FunctionValue(),
+
             _ =>
             null
         };
@@ -633,6 +639,7 @@ public class CoreBasics
             "always",
             "append",
             "apL", "apR",
+            "composeR", "composeL",
         ];
 
     /// <summary>
@@ -1498,6 +1505,11 @@ public class CoreBasics
                 leadingArgExpressions: [f, g]);
     }
 
+    public static PineValue ComposeR_FunctionValue()
+    {
+        return BinaryFunctionValue(Generic_ComposeR);
+    }
+
     /// <summary>
     /// (&lt;&lt;) : (b -> c) -> (a -> b) -> (a -> c)
     /// <para>
@@ -1539,6 +1551,11 @@ public class CoreBasics
                 parameterCount: 3,
                 envFunctions: [],
                 leadingArgExpressions: [g, f]);
+    }
+
+    public static PineValue ComposeL_FunctionValue()
+    {
+        return BinaryFunctionValue(Generic_ComposeL);
     }
 
     private static Expression Internal_Int_div(

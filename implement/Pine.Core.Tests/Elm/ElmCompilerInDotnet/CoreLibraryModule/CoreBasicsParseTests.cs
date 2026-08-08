@@ -2334,8 +2334,12 @@ public class CoreBasicsParseTests
                 x + 1
 
 
+            composeAfterDouble =
+                (>>) double
+
+
             doubleAndAdd =
-                double >> addOne
+                composeAfterDouble addOne
 
 
             alfa x =
@@ -2405,8 +2409,12 @@ public class CoreBasicsParseTests
                 x + 1
 
 
+            composeBeforeDouble =
+                (<<) double
+
+
             addOneAndDouble =
-                double << addOne
+                composeBeforeDouble addOne
 
 
             alfa x =

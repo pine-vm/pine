@@ -362,6 +362,15 @@ public static class BuiltinOperatorLowering
                     expectedArgumentTypes.ElementAtOrDefault(i)));
         }
 
+        var rewrittenApplication =
+            new SyntaxTypes.Expression.Application(rewrittenFunction, rewrittenArguments);
+
+        while (TryLowerPipe(rewrittenApplication) is { } loweredPipe)
+            rewrittenApplication = loweredPipe;
+
+        rewrittenFunction = rewrittenApplication.Function;
+        rewrittenArguments = [.. rewrittenApplication.Arguments];
+
         if (rewrittenArguments.Count is 2 &&
             TryMapBuiltinOperator(rewrittenFunction) is { } loweredOp)
         {
@@ -486,12 +495,58 @@ public static class BuiltinOperatorLowering
                     BuildBuiltinApplication("int_mul", left, right),
 
                     _ =>
-                    new SyntaxTypes.Expression.Application(rewrittenFunction, rewrittenArguments)
+                    rewrittenApplication
                 };
             }
         }
 
-        return new SyntaxTypes.Expression.Application(rewrittenFunction, rewrittenArguments);
+        return rewrittenApplication;
+    }
+
+    /// <summary>
+    /// Lowers saturated pipe operators to plain applications, appending the piped value to any
+    /// arguments already applied to the function.
+    /// </summary>
+    private static SyntaxTypes.Expression.Application? TryLowerPipe(
+        SyntaxTypes.Expression.Application application)
+    {
+        if (application.Function is not SyntaxTypes.Expression.Identifier
+            {
+                QualifiedName.Namespaces: ["Basics"],
+                QualifiedName.DeclName: "apR" or "apL"
+            } pipeIdentifier ||
+            application.Arguments.Count < 2)
+        {
+            return null;
+        }
+
+        if (pipeIdentifier.QualifiedName.DeclName is "apR")
+        {
+            return
+                ApplyPipeArguments(
+                    application.Arguments[1],
+                    [application.Arguments[0], .. application.Arguments.Skip(2)]);
+        }
+
+        return
+            ApplyPipeArguments(
+                application.Arguments[0],
+                [.. application.Arguments.Skip(1)]);
+    }
+
+    private static SyntaxTypes.Expression.Application ApplyPipeArguments(
+        SyntaxTypes.Expression function,
+        IReadOnlyList<SyntaxTypes.Expression> arguments)
+    {
+        if (function is SyntaxTypes.Expression.Application existingApplication)
+        {
+            return
+                new SyntaxTypes.Expression.Application(
+                    existingApplication.Function,
+                    [.. existingApplication.Arguments, .. arguments]);
+        }
+
+        return new SyntaxTypes.Expression.Application(function, arguments);
     }
 
     private static bool IsEmptyList(SyntaxTypes.Expression expression) =>
