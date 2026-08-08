@@ -1893,16 +1893,10 @@ public class OptimizationOpportunityFinderTests
             """
             ElmSyntax.Concrete.Parser: BasicsArithmetic: 5
             ElmSyntax.Concrete.Parser: BasicsCompare: 4
-            ElmSyntax.Concrete.Parser: HigherOrderParameter_Direct: 1
-            ElmSyntax.Concrete.Parser: HigherOrderParameter_Indirect: 56
-            ElmSyntax.Concrete.Parser: RootLevelChoiceTagWrapper: 67
-            LanguageService: BasicsCompare: 2
-            LanguageService: PartialApplication: 5
-            LanguageService: HigherOrderParameter_Direct: 3
-            LanguageService: HigherOrderParameter_Indirect: 143
-            LanguageService: RootLevelChoiceTagWrapper: 27
-            LanguageServiceAnalysis: HigherOrderParameter_Indirect: 93
-            LanguageServiceAnalysis: RootLevelChoiceTagWrapper: 3
+            ElmSyntax.Concrete.Parser: RootLevelChoiceTagWrapper: 69
+            LanguageService: BasicsCompare: 4
+            LanguageService: RootLevelChoiceTagWrapper: 32
+            LanguageServiceAnalysis: RootLevelChoiceTagWrapper: 7
             """.Trim());
 
         opportunities.Should().NotContain(

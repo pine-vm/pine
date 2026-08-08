@@ -141,34 +141,6 @@ skipNewline source offset row consumedLength tokensRev =
 
 tokenizeSymbol : String -> String -> Int -> Int -> Int -> List Token.Token -> Result String (List Token.Token)
 tokenizeSymbol first source offset row column tokensRev =
-    let
-        addToken : Token.TokenType -> String -> Int -> Result String (List Token.Token)
-        addToken tokenType lexeme consumedLength =
-            let
-                nextOffset =
-                    offset + consumedLength
-
-                nextColumn =
-                    column + consumedLength
-            in
-            tokenizeHelp
-                source
-                nextOffset
-                row
-                nextColumn
-                (makeToken
-                    tokenType
-                    lexeme
-                    (makeLocation row column)
-                    (makeLocation row nextColumn)
-                    Nothing
-                    :: tokensRev
-                )
-
-        addSingle : Token.TokenType -> Result String (List Token.Token)
-        addSingle tokenType =
-            addToken tokenType first 1
-    in
     case first of
         "-" ->
             case String.slice (offset + 1) (offset + 2) source of
@@ -197,14 +169,14 @@ tokenizeSymbol first source offset row column tokensRev =
                         )
 
                 ">" ->
-                    addToken Token.Arrow "->" 2
+                    addToken source offset row column tokensRev Token.Arrow "->" 2
 
                 _ ->
                     if minusIsOperator source offset row column tokensRev then
-                        addSingle Token.Operator
+                        addToken source offset row column tokensRev Token.Operator first 1
 
                     else
-                        addSingle Token.Negation
+                        addToken source offset row column tokensRev Token.Negation first 1
 
         "{" ->
             case String.slice (offset + 1) (offset + 2) source of
@@ -212,7 +184,7 @@ tokenizeSymbol first source offset row column tokensRev =
                     tokenizeMultilineComment source (offset + 2) row (column + 2) row column tokensRev 1 [ "{-" ]
 
                 _ ->
-                    addSingle Token.OpenBrace
+                    addToken source offset row column tokensRev Token.OpenBrace first 1
 
         "\"" ->
             if String.slice offset (offset + 3) source == "\"\"\"" then
@@ -246,58 +218,58 @@ tokenizeSymbol first source offset row column tokensRev =
                 tokensRev
 
         "\\" ->
-            addSingle Token.Lambda
+            addToken source offset row column tokensRev Token.Lambda first 1
 
         "(" ->
-            addSingle Token.OpenParen
+            addToken source offset row column tokensRev Token.OpenParen first 1
 
         ")" ->
-            addSingle Token.CloseParen
+            addToken source offset row column tokensRev Token.CloseParen first 1
 
         "}" ->
-            addSingle Token.CloseBrace
+            addToken source offset row column tokensRev Token.CloseBrace first 1
 
         "[" ->
-            addSingle Token.OpenBracket
+            addToken source offset row column tokensRev Token.OpenBracket first 1
 
         "]" ->
-            addSingle Token.CloseBracket
+            addToken source offset row column tokensRev Token.CloseBracket first 1
 
         "," ->
-            addSingle Token.Comma
+            addToken source offset row column tokensRev Token.Comma first 1
 
         "." ->
             case String.slice (offset + 1) (offset + 2) source of
                 "." ->
-                    addToken Token.DotDot ".." 2
+                    addToken source offset row column tokensRev Token.DotDot ".." 2
 
                 next ->
                     if isOperatorChar next then
-                        addToken Token.Operator (String.slice offset (offset + 2) source) 2
+                        addToken source offset row column tokensRev Token.Operator (String.slice offset (offset + 2) source) 2
 
                     else
-                        addSingle Token.Dot
+                        addToken source offset row column tokensRev Token.Dot first 1
 
         "=" ->
             if isOperatorChar (String.slice (offset + 1) (offset + 2) source) then
-                addToken Token.Operator (String.slice offset (offset + 2) source) 2
+                addToken source offset row column tokensRev Token.Operator (String.slice offset (offset + 2) source) 2
 
             else
-                addSingle Token.Equal
+                addToken source offset row column tokensRev Token.Equal first 1
 
         "|" ->
             if isOperatorChar (String.slice (offset + 1) (offset + 2) source) then
-                addToken Token.Operator (String.slice offset (offset + 2) source) 2
+                addToken source offset row column tokensRev Token.Operator (String.slice offset (offset + 2) source) 2
 
             else
-                addSingle Token.Pipe
+                addToken source offset row column tokensRev Token.Pipe first 1
 
         ":" ->
             if isOperatorChar (String.slice (offset + 1) (offset + 2) source) then
-                addToken Token.Operator (String.slice offset (offset + 2) source) 2
+                addToken source offset row column tokensRev Token.Operator (String.slice offset (offset + 2) source) 2
 
             else
-                addSingle Token.Colon
+                addToken source offset row column tokensRev Token.Colon first 1
 
         symbol ->
             if isOperatorChar symbol then
@@ -308,10 +280,43 @@ tokenizeSymbol first source offset row column tokensRev =
                     lexeme =
                         String.slice offset endOffset source
                 in
-                addToken Token.Operator lexeme (endOffset - offset)
+                addToken source offset row column tokensRev Token.Operator lexeme (endOffset - offset)
 
             else
-                addSingle Token.Unknown
+                addToken source offset row column tokensRev Token.Unknown first 1
+
+
+addToken :
+    String
+    -> Int
+    -> Int
+    -> Int
+    -> List Token.Token
+    -> Token.TokenType
+    -> String
+    -> Int
+    -> Result String (List Token.Token)
+addToken source offset row column tokensRev tokenType lexeme consumedLength =
+    let
+        nextOffset =
+            offset + consumedLength
+
+        nextColumn =
+            column + consumedLength
+    in
+    tokenizeHelp
+        source
+        nextOffset
+        row
+        nextColumn
+        (makeToken
+            tokenType
+            lexeme
+            (makeLocation row column)
+            (makeLocation row nextColumn)
+            Nothing
+            :: tokensRev
+        )
 
 
 {-| Finds the offset where a line comment's content ends: right before the first LF, CR, or

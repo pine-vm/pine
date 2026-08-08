@@ -110,7 +110,7 @@ rangeOfNode node =
         FileNode file ->
             Range.combine
                 (Node.range file.moduleDefinition
-                    :: List.map Node.range file.declarations
+                    :: declarationRanges file.declarations
                 )
 
         ModuleNode (Node range _) ->
@@ -171,6 +171,16 @@ rangeOfNode node =
             range
 
 
+declarationRanges : List (Node Declaration) -> List Range
+declarationRanges declarations =
+    case declarations of
+        declaration :: rest ->
+            Node.range declaration :: declarationRanges rest
+
+        [] ->
+            []
+
+
 {-| Projects the requested part of a node to a source range.
 
 Returns `Nothing` when the selection does not apply to the node, for example
@@ -225,10 +235,20 @@ childAtStep step node =
                     Just (ModuleNode file.moduleDefinition)
 
                 StepImport index ->
-                    Maybe.map ImportNode (listItemAt index file.imports)
+                    case listItemAt index file.imports of
+                        Nothing ->
+                            Nothing
+
+                        Just item ->
+                            Just (ImportNode item)
 
                 StepDeclaration index ->
-                    Maybe.map DeclarationNode (listItemAt index file.declarations)
+                    case listItemAt index file.declarations of
+                        Nothing ->
+                            Nothing
+
+                        Just item ->
+                            Just (DeclarationNode item)
 
                 _ ->
                     Nothing
@@ -248,7 +268,12 @@ childAtStep step node =
                     Just (ModuleNameNode moduleName)
 
                 StepExposingEntry index ->
-                    Maybe.map ExposeNode (exposingEntryAt index (Node.value exposingList))
+                    case exposingEntryAt index (Node.value exposingList) of
+                        Nothing ->
+                            Nothing
+
+                        Just item ->
+                            Just (ExposeNode item)
 
                 _ ->
                     Nothing
@@ -269,7 +294,12 @@ childAtStep step node =
                 StepExposingEntry index ->
                     case importValue.exposingList of
                         Just ( _, exposingNode ) ->
-                            Maybe.map ExposeNode (exposingEntryAt index (Node.value exposingNode))
+                            case exposingEntryAt index (Node.value exposingNode) of
+                                Nothing ->
+                                    Nothing
+
+                                Just item ->
+                                    Just (ExposeNode item)
 
                         Nothing ->
                             Nothing
@@ -291,7 +321,12 @@ childAtStep step node =
         FunctionImplementationNode (Node _ implementation) ->
             case step of
                 StepArgument index ->
-                    Maybe.map (unwrapPattern >> PatternNode) (listItemAt index implementation.arguments)
+                    case listItemAt index implementation.arguments of
+                        Nothing ->
+                            Nothing
+
+                        Just item ->
+                            Just (PatternNode (unwrapPattern item))
 
                 StepBody ->
                     Just (ExpressionNode (unwrapExpression implementation.expression))
@@ -302,7 +337,12 @@ childAtStep step node =
         ConstructorNode (Node _ constructor) ->
             case step of
                 StepArgument index ->
-                    Maybe.map TypeAnnotationNode (listItemAt index constructor.arguments)
+                    case listItemAt index constructor.arguments of
+                        Nothing ->
+                            Nothing
+
+                        Just item ->
+                            Just (TypeAnnotationNode item)
 
                 _ ->
                     Nothing
@@ -378,8 +418,12 @@ childOfDeclaration step declaration =
         Declaration.ChoiceTypeDeclaration choiceStruct ->
             case step of
                 StepConstructor index ->
-                    Maybe.map ConstructorNode
-                        (listItemAt index (separatedToList choiceStruct.constructors))
+                    case listItemAt index (separatedToList choiceStruct.constructors) of
+                        Nothing ->
+                            Nothing
+
+                        Just item ->
+                            Just (ConstructorNode item)
 
                 _ ->
                     Nothing
@@ -455,7 +499,12 @@ childOfExpression step expression =
         Expression.LambdaExpression lambda ->
             case step of
                 StepArgument index ->
-                    Maybe.map (unwrapPattern >> PatternNode) (listItemAt index lambda.arguments)
+                    case listItemAt index lambda.arguments of
+                        Nothing ->
+                            Nothing
+
+                        Just item ->
+                            Just (PatternNode (unwrapPattern item))
 
                 StepBody ->
                     Just (ExpressionNode (unwrapExpression lambda.expression))
@@ -469,7 +518,12 @@ childOfExpression step expression =
                     Just (ExpressionNode (unwrapExpression caseBlock.expression))
 
                 StepCaseBranch index ->
-                    Maybe.map CaseBranchNode (listItemAt index caseBlock.cases)
+                    case listItemAt index caseBlock.cases of
+                        Nothing ->
+                            Nothing
+
+                        Just item ->
+                            Just (CaseBranchNode item)
 
                 _ ->
                     Nothing
@@ -477,7 +531,12 @@ childOfExpression step expression =
         Expression.LetExpression letBlock ->
             case step of
                 StepLetDeclaration index ->
-                    Maybe.map LetDeclarationNode (listItemAt index letBlock.declarations)
+                    case listItemAt index letBlock.declarations of
+                        Nothing ->
+                            Nothing
+
+                        Just item ->
+                            Just (LetDeclarationNode item)
 
                 StepBody ->
                     Just (ExpressionNode (unwrapExpression letBlock.expression))
@@ -499,7 +558,12 @@ expressionChildAtList : Step -> List (Node Expression) -> Maybe SyntaxNode
 expressionChildAtList step items =
     case step of
         StepChild index ->
-            Maybe.map (unwrapExpression >> ExpressionNode) (listItemAt index items)
+            case listItemAt index items of
+                Nothing ->
+                    Nothing
+
+                Just item ->
+                    Just (ExpressionNode (unwrapExpression item))
 
         _ ->
             Nothing
@@ -509,15 +573,36 @@ recordSetterAtStep : Step -> List Expression.RecordExprField -> Maybe SyntaxNode
 recordSetterAtStep step fields =
     case step of
         StepRecordField fieldName occurrence ->
-            Maybe.map RecordSetterNode
-                (listItemAt occurrence
-                    (List.filter
-                        (\field -> Node.value field.fieldName == fieldName)
-                        fields
-                    )
-                )
+            case recordSetterWithNameAt fieldName occurrence fields of
+                Nothing ->
+                    Nothing
+
+                Just item ->
+                    Just (RecordSetterNode item)
 
         _ ->
+            Nothing
+
+
+recordSetterWithNameAt :
+    String
+    -> Int
+    -> List Expression.RecordExprField
+    -> Maybe Expression.RecordExprField
+recordSetterWithNameAt fieldName occurrence fields =
+    case fields of
+        field :: rest ->
+            if Node.value field.fieldName == fieldName then
+                if occurrence == 0 then
+                    Just field
+
+                else
+                    recordSetterWithNameAt fieldName (occurrence - 1) rest
+
+            else
+                recordSetterWithNameAt fieldName occurrence rest
+
+        [] ->
             Nothing
 
 
@@ -545,7 +630,12 @@ childOfPattern step pattern =
         Pattern.RecordPattern fields ->
             case step of
                 StepChild index ->
-                    Maybe.map NameNode (listItemAt index (separatedToList fields))
+                    case listItemAt index (separatedToList fields) of
+                        Nothing ->
+                            Nothing
+
+                        Just item ->
+                            Just (NameNode item)
 
                 _ ->
                     Nothing
@@ -558,7 +648,12 @@ patternChildAtList : Step -> List (Node Pattern) -> Maybe SyntaxNode
 patternChildAtList step items =
     case step of
         StepChild index ->
-            Maybe.map (unwrapPattern >> PatternNode) (listItemAt index items)
+            case listItemAt index items of
+                Nothing ->
+                    Nothing
+
+                Just item ->
+                    Just (PatternNode (unwrapPattern item))
 
         _ ->
             Nothing
@@ -590,7 +685,12 @@ typeAnnotationChildAtList : Step -> List (Node TypeAnnotation) -> Maybe SyntaxNo
 typeAnnotationChildAtList step items =
     case step of
         StepChild index ->
-            Maybe.map TypeAnnotationNode (listItemAt index items)
+            case listItemAt index items of
+                Nothing ->
+                    Nothing
+
+                Just item ->
+                    Just (TypeAnnotationNode item)
 
         _ ->
             Nothing
@@ -600,15 +700,36 @@ recordTypeFieldAtStep : Step -> List (Node TypeAnnotation.RecordField) -> Maybe 
 recordTypeFieldAtStep step fields =
     case step of
         StepRecordField fieldName occurrence ->
-            Maybe.map RecordTypeFieldNode
-                (listItemAt occurrence
-                    (List.filter
-                        (\(Node _ field) -> Node.value field.fieldName == fieldName)
-                        fields
-                    )
-                )
+            case recordTypeFieldWithNameAt fieldName occurrence fields of
+                Nothing ->
+                    Nothing
+
+                Just item ->
+                    Just (RecordTypeFieldNode item)
 
         _ ->
+            Nothing
+
+
+recordTypeFieldWithNameAt :
+    String
+    -> Int
+    -> List (Node TypeAnnotation.RecordField)
+    -> Maybe (Node TypeAnnotation.RecordField)
+recordTypeFieldWithNameAt fieldName occurrence fields =
+    case fields of
+        ((Node _ field) as fieldNode) :: rest ->
+            if Node.value field.fieldName == fieldName then
+                if occurrence == 0 then
+                    Just fieldNode
+
+                else
+                    recordTypeFieldWithNameAt fieldName (occurrence - 1) rest
+
+            else
+                recordTypeFieldWithNameAt fieldName occurrence rest
+
+        [] ->
             Nothing
 
 
@@ -956,13 +1077,13 @@ childStepsOfNode node =
         FileNode file ->
             StepModuleDefinition
                 :: List.append
-                    (List.indexedMap (\index _ -> StepImport index) file.imports)
-                    (List.indexedMap (\index _ -> StepDeclaration index) file.declarations)
+                    (importSteps 0 file.imports)
+                    (declarationSteps 0 file.declarations)
 
         ModuleNode (Node _ moduleValue) ->
             StepModuleName
-                :: List.indexedMap
-                    (\index _ -> StepExposingEntry index)
+                :: exposingEntrySteps
+                    0
                     (exposingEntries (Node.value (exposingNodeOfModule moduleValue)))
 
         ImportNode (Node _ importValue) ->
@@ -970,8 +1091,8 @@ childStepsOfNode node =
                 :: StepModuleAlias
                 :: (case importValue.exposingList of
                         Just ( _, exposingNode ) ->
-                            List.indexedMap
-                                (\index _ -> StepExposingEntry index)
+                            exposingEntrySteps
+                                0
                                 (exposingEntries (Node.value exposingNode))
 
                         Nothing ->
@@ -984,8 +1105,8 @@ childStepsOfNode node =
                     [ StepSignature, StepImplementation ]
 
                 Declaration.ChoiceTypeDeclaration choiceStruct ->
-                    List.indexedMap
-                        (\index _ -> StepConstructor index)
+                    constructorSteps
+                        0
                         (separatedToList choiceStruct.constructors)
 
                 Declaration.AliasDeclaration _ ->
@@ -1002,11 +1123,11 @@ childStepsOfNode node =
 
         FunctionImplementationNode (Node _ implementation) ->
             List.append
-                (List.indexedMap (\index _ -> StepArgument index) implementation.arguments)
+                (argumentSteps 0 implementation.arguments)
                 [ StepBody ]
 
         ConstructorNode (Node _ constructor) ->
-            List.indexedMap (\index _ -> StepArgument index) constructor.arguments
+            argumentSteps 0 constructor.arguments
 
         LetDeclarationNode (Node _ letDeclaration) ->
             case letDeclaration of
@@ -1073,23 +1194,23 @@ expressionChildSteps expression =
 
         Expression.LambdaExpression lambda ->
             List.append
-                (List.indexedMap (\index _ -> StepArgument index) lambda.arguments)
+                (argumentSteps 0 lambda.arguments)
                 [ StepBody ]
 
         Expression.CaseExpression caseBlock ->
             StepChild 0
-                :: List.indexedMap (\index _ -> StepCaseBranch index) caseBlock.cases
+                :: caseBranchSteps 0 caseBlock.cases
 
         Expression.LetExpression letBlock ->
             List.append
-                (List.indexedMap (\index _ -> StepLetDeclaration index) letBlock.declarations)
+                (letDeclarationSteps 0 letBlock.declarations)
                 [ StepBody ]
 
         Expression.RecordExpr fields ->
-            recordFieldSteps (List.map (\field -> Node.value field.fieldName) (separatedToList fields))
+            recordExpressionFieldSteps (separatedToList fields)
 
         Expression.RecordUpdateExpression _ _ fields ->
-            recordFieldSteps (List.map (\field -> Node.value field.fieldName) (separatedToList fields))
+            recordExpressionFieldSteps (separatedToList fields)
 
         _ ->
             []
@@ -1136,15 +1257,10 @@ typeAnnotationChildSteps typeAnnotation =
             [ StepChild 0, StepChild 1 ]
 
         TypeAnnotation.Record fields ->
-            recordFieldSteps
-                (List.map (\(Node _ field) -> Node.value field.fieldName) (separatedToList fields))
+            recordTypeFieldSteps (separatedToList fields)
 
         TypeAnnotation.GenericRecord _ _ fields ->
-            recordFieldSteps
-                (List.map
-                    (\(Node _ field) -> Node.value field.fieldName)
-                    (separatedToList (Node.value fields))
-                )
+            recordTypeFieldSteps (separatedToList (Node.value fields))
 
         _ ->
             []
@@ -1152,28 +1268,149 @@ typeAnnotationChildSteps typeAnnotation =
 
 indexSteps : List a -> List Step
 indexSteps items =
-    List.indexedMap (\index _ -> StepChild index) items
+    indexStepsFrom 0 items
 
 
-recordFieldSteps : List String -> List Step
-recordFieldSteps fieldNames =
-    recordFieldStepsHelp fieldNames []
+indexStepsFrom : Int -> List a -> List Step
+indexStepsFrom index items =
+    case items of
+        _ :: rest ->
+            StepChild index :: indexStepsFrom (index + 1) rest
+
+        [] ->
+            []
 
 
-recordFieldStepsHelp : List String -> List String -> List Step
-recordFieldStepsHelp remaining seen =
+importSteps : Int -> List a -> List Step
+importSteps index items =
+    case items of
+        _ :: rest ->
+            StepImport index :: importSteps (index + 1) rest
+
+        [] ->
+            []
+
+
+declarationSteps : Int -> List a -> List Step
+declarationSteps index items =
+    case items of
+        _ :: rest ->
+            StepDeclaration index :: declarationSteps (index + 1) rest
+
+        [] ->
+            []
+
+
+exposingEntrySteps : Int -> List a -> List Step
+exposingEntrySteps index items =
+    case items of
+        _ :: rest ->
+            StepExposingEntry index :: exposingEntrySteps (index + 1) rest
+
+        [] ->
+            []
+
+
+constructorSteps : Int -> List a -> List Step
+constructorSteps index items =
+    case items of
+        _ :: rest ->
+            StepConstructor index :: constructorSteps (index + 1) rest
+
+        [] ->
+            []
+
+
+argumentSteps : Int -> List a -> List Step
+argumentSteps index items =
+    case items of
+        _ :: rest ->
+            StepArgument index :: argumentSteps (index + 1) rest
+
+        [] ->
+            []
+
+
+caseBranchSteps : Int -> List a -> List Step
+caseBranchSteps index items =
+    case items of
+        _ :: rest ->
+            StepCaseBranch index :: caseBranchSteps (index + 1) rest
+
+        [] ->
+            []
+
+
+letDeclarationSteps : Int -> List a -> List Step
+letDeclarationSteps index items =
+    case items of
+        _ :: rest ->
+            StepLetDeclaration index :: letDeclarationSteps (index + 1) rest
+
+        [] ->
+            []
+
+
+recordExpressionFieldSteps : List Expression.RecordExprField -> List Step
+recordExpressionFieldSteps fields =
+    recordExpressionFieldStepsHelp fields []
+
+
+recordExpressionFieldStepsHelp :
+    List Expression.RecordExprField
+    -> List String
+    -> List Step
+recordExpressionFieldStepsHelp remaining seen =
     case remaining of
         [] ->
             []
 
-        fieldName :: rest ->
+        field :: rest ->
             let
-                occurrence : Int
-                occurrence =
-                    List.length (List.filter (\earlier -> earlier == fieldName) seen)
+                fieldName : String
+                fieldName =
+                    Node.value field.fieldName
             in
-            StepRecordField fieldName occurrence
-                :: recordFieldStepsHelp rest (fieldName :: seen)
+            StepRecordField fieldName (countString fieldName seen)
+                :: recordExpressionFieldStepsHelp rest (fieldName :: seen)
+
+
+recordTypeFieldSteps : List (Node TypeAnnotation.RecordField) -> List Step
+recordTypeFieldSteps fields =
+    recordTypeFieldStepsHelp fields []
+
+
+recordTypeFieldStepsHelp :
+    List (Node TypeAnnotation.RecordField)
+    -> List String
+    -> List Step
+recordTypeFieldStepsHelp remaining seen =
+    case remaining of
+        [] ->
+            []
+
+        (Node _ field) :: rest ->
+            let
+                fieldName : String
+                fieldName =
+                    Node.value field.fieldName
+            in
+            StepRecordField fieldName (countString fieldName seen)
+                :: recordTypeFieldStepsHelp rest (fieldName :: seen)
+
+
+countString : String -> List String -> Int
+countString searched items =
+    case items of
+        item :: rest ->
+            if item == searched then
+                1 + countString searched rest
+
+            else
+                countString searched rest
+
+        [] ->
+            0
 
 
 
@@ -1220,7 +1457,17 @@ separatedToList separated =
             []
 
         SeparatedSyntaxList.NonEmpty first rest ->
-            first :: List.map (\( _, item ) -> item) rest
+            first :: separatedRestToList rest
+
+
+separatedRestToList : List ( a, b ) -> List b
+separatedRestToList rest =
+    case rest of
+        ( _, item ) :: remaining ->
+            item :: separatedRestToList remaining
+
+        [] ->
+            []
 
 
 unwrapExpression : Node Expression -> Node Expression

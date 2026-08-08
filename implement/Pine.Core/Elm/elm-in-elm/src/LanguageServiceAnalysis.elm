@@ -102,37 +102,67 @@ analyzeFile file =
             exposingListOfModule file.moduleDefinition
     in
     { moduleName = ElmSyntax.Abstract.Module.moduleName file.moduleDefinition
-    , imports = List.indexedMap importOccurrence file.imports
+    , imports = importOccurrences 0 file.imports
     , declarations =
-        List.map
-            (\occurrence ->
-                {- Names bound by patterns are not visible in the module
-                   exposing list at the point they are collected, so exposure of
-                   top level value declarations is decided here.
-                -}
-                case occurrence.scope of
-                    LocalScope _ ->
-                        occurrence
-
-                    TopLevelScope ->
-                        case occurrence.kind of
-                            FunctionOrValueDeclarationKind ->
-                                { occurrence
-                                    | isExposed = exposesFunction occurrence.name exposingList
-                                }
-
-                            _ ->
-                                occurrence
-            )
-            (List.concat
-                (List.indexedMap
-                    (\index declaration ->
-                        declarationOccurrencesInDeclaration exposingList index declaration
-                    )
-                    file.declarations
-                )
-            )
+        declarationOccurrencesInFile exposingList 0 file.declarations
+            |> markTopLevelValuesExposed exposingList
     }
+
+
+importOccurrences : Int -> List ElmSyntax.Abstract.Import.Import -> List ImportOccurrence
+importOccurrences index imports =
+    case imports of
+        importValue :: rest ->
+            importOccurrence index importValue :: importOccurrences (index + 1) rest
+
+        [] ->
+            []
+
+
+declarationOccurrencesInFile :
+    ElmSyntax.Abstract.Exposing.Exposing
+    -> Int
+    -> List ElmSyntax.Abstract.Declaration.Declaration
+    -> List DeclarationOccurrence
+declarationOccurrencesInFile exposingList index declarations =
+    case declarations of
+        declaration :: rest ->
+            declarationOccurrencesInDeclaration exposingList index declaration
+                ++ declarationOccurrencesInFile exposingList (index + 1) rest
+
+        [] ->
+            []
+
+
+markTopLevelValuesExposed :
+    ElmSyntax.Abstract.Exposing.Exposing
+    -> List DeclarationOccurrence
+    -> List DeclarationOccurrence
+markTopLevelValuesExposed exposingList occurrences =
+    case occurrences of
+        occurrence :: rest ->
+            {- Names bound by patterns are not visible in the module
+               exposing list at the point they are collected, so exposure of
+               top level value declarations is decided here.
+            -}
+            (case occurrence.scope of
+                LocalScope _ ->
+                    occurrence
+
+                TopLevelScope ->
+                    case occurrence.kind of
+                        FunctionOrValueDeclarationKind ->
+                            { occurrence
+                                | isExposed = exposesFunction occurrence.name exposingList
+                            }
+
+                        _ ->
+                            occurrence
+            )
+                :: markTopLevelValuesExposed exposingList rest
+
+        [] ->
+            []
 
 
 exposingListOfModule : ElmSyntax.Abstract.Module.Module -> ElmSyntax.Abstract.Exposing.Exposing
@@ -206,26 +236,11 @@ declarationOccurrencesInDeclaration exposingList declarationIndex declaration =
 
                 tags : List DeclarationOccurrence
                 tags =
-                    List.indexedMap
-                        (\constructorIndex constructor ->
-                            { name = constructor.name
-                            , kind = ChoiceTypeTagDeclarationKind
-                            , scope = TopLevelScope
-                            , isExposed = isExposed
-                            , declarationPath =
-                                ElmSyntax.Path.appendStep
-                                    declarationPath
-                                    (StepConstructor constructorIndex)
-                            , declarationSelection = SelectWhole
-                            , namePaths =
-                                [ ElmSyntax.Path.appendStep
-                                    declarationPath
-                                    (StepConstructor constructorIndex)
-                                ]
-                            , documentation =
-                                ChoiceTypeTagDocumentation choiceType.name declarationPath
-                            }
-                        )
+                    declarationOccurrencesForChoiceTags
+                        declarationPath
+                        choiceType.name
+                        isExposed
+                        0
                         choiceType.constructors
             in
             { name = choiceType.name
@@ -285,28 +300,18 @@ declarationOccurrencesForFunction exposingList declarationSelection declarationP
 
         arguments : List DeclarationOccurrence
         arguments =
-            List.concat
-                (List.indexedMap
-                    (\argumentIndex argument ->
-                        declarationOccurrencesInPattern
-                            (annotationPathForArgument argumentIndex
-                                annotationPath
-                                (case functionStruct.signature of
-                                    Nothing ->
-                                        Nothing
+            declarationOccurrencesForArguments
+                annotationPath
+                (case functionStruct.signature of
+                    Nothing ->
+                        Nothing
 
-                                    Just signature ->
-                                        Just signature.typeAnnotation
-                                )
-                            )
-                            (ElmSyntax.Path.appendStep
-                                implementationPath
-                                (StepArgument argumentIndex)
-                            )
-                            argument
-                    )
-                    implementation.arguments
+                    Just signature ->
+                        Just signature.typeAnnotation
                 )
+                implementationPath
+                0
+                implementation.arguments
     in
     List.concat
         [ [ { name = implementation.name
@@ -329,6 +334,72 @@ declarationOccurrencesForFunction exposingList declarationSelection declarationP
 {-| Path of the type annotation describing the argument at the given index,
 mirroring how a function type annotation is consumed from left to right.
 -}
+declarationOccurrencesForChoiceTags :
+    Path
+    -> String
+    -> Bool
+    -> Int
+    -> List ElmSyntax.Abstract.Declaration.ValueConstructor
+    -> List DeclarationOccurrence
+declarationOccurrencesForChoiceTags declarationPath choiceTypeName isExposed constructorIndex constructors =
+    case constructors of
+        constructor :: rest ->
+            { name = constructor.name
+            , kind = ChoiceTypeTagDeclarationKind
+            , scope = TopLevelScope
+            , isExposed = isExposed
+            , declarationPath =
+                ElmSyntax.Path.appendStep
+                    declarationPath
+                    (StepConstructor constructorIndex)
+            , declarationSelection = SelectWhole
+            , namePaths =
+                [ ElmSyntax.Path.appendStep
+                    declarationPath
+                    (StepConstructor constructorIndex)
+                ]
+            , documentation =
+                ChoiceTypeTagDocumentation choiceTypeName declarationPath
+            }
+                :: declarationOccurrencesForChoiceTags
+                    declarationPath
+                    choiceTypeName
+                    isExposed
+                    (constructorIndex + 1)
+                    rest
+
+        [] ->
+            []
+
+
+declarationOccurrencesForArguments :
+    Maybe Path
+    -> Maybe ElmSyntax.Abstract.TypeAnnotation.TypeAnnotation
+    -> Path
+    -> Int
+    -> List ElmSyntax.Abstract.Pattern.Pattern
+    -> List DeclarationOccurrence
+declarationOccurrencesForArguments annotationPath maybeTypeAnnotation implementationPath argumentIndex arguments =
+    case arguments of
+        argument :: rest ->
+            declarationOccurrencesInPattern
+                (annotationPathForArgument argumentIndex annotationPath maybeTypeAnnotation)
+                (ElmSyntax.Path.appendStep
+                    implementationPath
+                    (StepArgument argumentIndex)
+                )
+                argument
+                ++ declarationOccurrencesForArguments
+                    annotationPath
+                    maybeTypeAnnotation
+                    implementationPath
+                    (argumentIndex + 1)
+                    rest
+
+        [] ->
+            []
+
+
 annotationPathForArgument :
     Int
     -> Maybe Path
@@ -399,16 +470,25 @@ declarationOccurrencesInPatternList :
     -> List ElmSyntax.Abstract.Pattern.Pattern
     -> List DeclarationOccurrence
 declarationOccurrencesInPatternList path items =
-    List.concat
-        (List.indexedMap
-            (\index item ->
-                declarationOccurrencesInPattern
-                    Nothing
-                    (ElmSyntax.Path.appendStep path (StepChild index))
-                    item
-            )
-            items
-        )
+    declarationOccurrencesInPatternListHelp path 0 items
+
+
+declarationOccurrencesInPatternListHelp :
+    Path
+    -> Int
+    -> List ElmSyntax.Abstract.Pattern.Pattern
+    -> List DeclarationOccurrence
+declarationOccurrencesInPatternListHelp path index items =
+    case items of
+        item :: rest ->
+            declarationOccurrencesInPattern
+                Nothing
+                (ElmSyntax.Path.appendStep path (StepChild index))
+                item
+                ++ declarationOccurrencesInPatternListHelp path (index + 1) rest
+
+        [] ->
+            []
 
 
 declarationOccurrencesInExpression :
@@ -441,41 +521,18 @@ declarationOccurrencesInExpression path expression =
                enclosing block, matching the behavior before the migration to
                structural scopes.
             -}
-            List.map
-                (\occurrence ->
-                    { occurrence | scope = LocalScope path }
-                )
-                (List.concat
-                    [ List.concat
-                        (List.indexedMap
-                            (\index letDeclaration ->
-                                declarationOccurrencesInLetDeclaration
-                                    (ElmSyntax.Path.appendStep path (StepLetDeclaration index))
-                                    letDeclaration
-                            )
-                            declarations
-                        )
-                    , declarationOccurrencesInExpression
+            localizeDeclarationOccurrences path
+                (declarationOccurrencesInLetDeclarations path 0 declarations
+                    ++ declarationOccurrencesInExpression
                         (ElmSyntax.Path.appendStep path StepBody)
                         letBody
-                    ]
                 )
 
         ElmSyntax.Abstract.Expression.CaseExpression subject cases ->
-            List.concat
-                [ declarationOccurrencesInExpression
-                    (ElmSyntax.Path.appendStep path (StepChild 0))
-                    subject
-                , List.concat
-                    (List.indexedMap
-                        (\index caseBranch ->
-                            declarationOccurrencesInExpression
-                                (path ++ [ StepCaseBranch index, StepBody ])
-                                caseBranch.expression
-                        )
-                        cases
-                    )
-                ]
+            declarationOccurrencesInExpression
+                (ElmSyntax.Path.appendStep path (StepChild 0))
+                subject
+                ++ declarationOccurrencesInCaseBranches path 0 cases
 
         ElmSyntax.Abstract.Expression.LambdaExpression _ lambdaBody ->
             declarationOccurrencesInExpression
@@ -495,20 +552,74 @@ declarationOccurrencesInExpression path expression =
             []
 
 
+localizeDeclarationOccurrences : Path -> List DeclarationOccurrence -> List DeclarationOccurrence
+localizeDeclarationOccurrences path occurrences =
+    case occurrences of
+        occurrence :: rest ->
+            { occurrence | scope = LocalScope path }
+                :: localizeDeclarationOccurrences path rest
+
+        [] ->
+            []
+
+
+declarationOccurrencesInLetDeclarations :
+    Path
+    -> Int
+    -> List ElmSyntax.Abstract.Expression.LetDeclaration
+    -> List DeclarationOccurrence
+declarationOccurrencesInLetDeclarations path index declarations =
+    case declarations of
+        declaration :: rest ->
+            declarationOccurrencesInLetDeclaration
+                (ElmSyntax.Path.appendStep path (StepLetDeclaration index))
+                declaration
+                ++ declarationOccurrencesInLetDeclarations path (index + 1) rest
+
+        [] ->
+            []
+
+
+declarationOccurrencesInCaseBranches :
+    Path
+    -> Int
+    -> List ElmSyntax.Abstract.Expression.Case
+    -> List DeclarationOccurrence
+declarationOccurrencesInCaseBranches path index cases =
+    case cases of
+        caseBranch :: rest ->
+            declarationOccurrencesInExpression
+                (path ++ [ StepCaseBranch index, StepBody ])
+                caseBranch.expression
+                ++ declarationOccurrencesInCaseBranches path (index + 1) rest
+
+        [] ->
+            []
+
+
 declarationOccurrencesInExpressionList :
     Path
     -> List ElmSyntax.Abstract.Expression.Expression
     -> List DeclarationOccurrence
 declarationOccurrencesInExpressionList path items =
-    List.concat
-        (List.indexedMap
-            (\index item ->
-                declarationOccurrencesInExpression
-                    (ElmSyntax.Path.appendStep path (StepChild index))
-                    item
-            )
-            items
-        )
+    declarationOccurrencesInExpressionListHelp path 0 items
+
+
+declarationOccurrencesInExpressionListHelp :
+    Path
+    -> Int
+    -> List ElmSyntax.Abstract.Expression.Expression
+    -> List DeclarationOccurrence
+declarationOccurrencesInExpressionListHelp path index items =
+    case items of
+        item :: rest ->
+            declarationOccurrencesInExpression
+                (ElmSyntax.Path.appendStep path (StepChild index))
+                item
+                ++ declarationOccurrencesInExpressionListHelp path (index + 1) rest
+
+        [] ->
+            []
 
 
 declarationOccurrencesInRecordSetters :
@@ -516,15 +627,22 @@ declarationOccurrencesInRecordSetters :
     -> List ElmSyntax.Abstract.Expression.RecordSetter
     -> List DeclarationOccurrence
 declarationOccurrencesInRecordSetters path setters =
-    List.concat
-        (List.map
-            (\( setter, setterPath ) ->
-                declarationOccurrencesInExpression
-                    (ElmSyntax.Path.appendStep setterPath (StepChild 0))
-                    setter.value
-            )
-            (recordSettersWithPaths path setters)
-        )
+    declarationOccurrencesInRecordSettersHelp (recordSettersWithPaths path setters)
+
+
+declarationOccurrencesInRecordSettersHelp :
+    List ( ElmSyntax.Abstract.Expression.RecordSetter, Path )
+    -> List DeclarationOccurrence
+declarationOccurrencesInRecordSettersHelp settersWithPaths =
+    case settersWithPaths of
+        ( setter, setterPath ) :: rest ->
+            declarationOccurrencesInExpression
+                (ElmSyntax.Path.appendStep setterPath (StepChild 0))
+                setter.value
+                ++ declarationOccurrencesInRecordSettersHelp rest
+
+        [] ->
+            []
 
 
 declarationOccurrencesInLetDeclaration :
@@ -552,16 +670,22 @@ declarationOccurrencesInLetDeclaration path letDeclaration =
 
 listReferencesInFile : ElmSyntax.Abstract.File.File -> List ReferenceOccurrence
 listReferencesInFile file =
-    List.concat
-        [ referencesInModuleExposing (exposingListOfModule file.moduleDefinition)
-        , List.concat
-            (List.indexedMap
-                (\index declaration ->
-                    referencesInDeclaration [ StepDeclaration index ] declaration
-                )
-                file.declarations
-            )
-        ]
+    referencesInModuleExposing (exposingListOfModule file.moduleDefinition)
+        ++ referencesInDeclarations 0 file.declarations
+
+
+referencesInDeclarations :
+    Int
+    -> List ElmSyntax.Abstract.Declaration.Declaration
+    -> List ReferenceOccurrence
+referencesInDeclarations index declarations =
+    case declarations of
+        declaration :: rest ->
+            referencesInDeclaration [ StepDeclaration index ] declaration
+                ++ referencesInDeclarations (index + 1) rest
+
+        [] ->
+            []
 
 
 referencesInModuleExposing : ElmSyntax.Abstract.Exposing.Exposing -> List ReferenceOccurrence
@@ -571,33 +695,43 @@ referencesInModuleExposing exposingList =
             []
 
         ElmSyntax.Abstract.Exposing.Explicit entries ->
-            List.concat
-                (List.indexedMap
-                    (\index entry ->
-                        let
-                            entryPath : Path
-                            entryPath =
-                                [ StepModuleDefinition, StepExposingEntry index ]
-                        in
-                        case entry of
-                            ElmSyntax.Abstract.Exposing.InfixExpose _ ->
-                                []
+            referencesInModuleExposingEntries 0 entries
 
-                            ElmSyntax.Abstract.Exposing.FunctionExpose name ->
-                                [ { moduleName = [], name = name, path = entryPath } ]
 
-                            ElmSyntax.Abstract.Exposing.TypeOrAliasExpose name ->
-                                [ { moduleName = [], name = name, path = entryPath } ]
+referencesInModuleExposingEntries :
+    Int
+    -> List ElmSyntax.Abstract.Exposing.TopLevelExpose
+    -> List ReferenceOccurrence
+referencesInModuleExposingEntries index entries =
+    case entries of
+        entry :: rest ->
+            let
+                entryPath : Path
+                entryPath =
+                    [ StepModuleDefinition, StepExposingEntry index ]
 
-                            ElmSyntax.Abstract.Exposing.TypeExpose exposedType ->
-                                [ { moduleName = []
-                                  , name = exposedType.name
-                                  , path = entryPath
-                                  }
-                                ]
-                    )
-                    entries
-                )
+                referencesForEntry =
+                    case entry of
+                        ElmSyntax.Abstract.Exposing.InfixExpose _ ->
+                            []
+
+                        ElmSyntax.Abstract.Exposing.FunctionExpose name ->
+                            [ { moduleName = [], name = name, path = entryPath } ]
+
+                        ElmSyntax.Abstract.Exposing.TypeOrAliasExpose name ->
+                            [ { moduleName = [], name = name, path = entryPath } ]
+
+                        ElmSyntax.Abstract.Exposing.TypeExpose exposedType ->
+                            [ { moduleName = []
+                              , name = exposedType.name
+                              , path = entryPath
+                              }
+                            ]
+            in
+            referencesForEntry ++ referencesInModuleExposingEntries (index + 1) rest
+
+        [] ->
+            []
 
 
 referencesInDeclaration :
@@ -615,25 +749,7 @@ referencesInDeclaration declarationPath declaration =
                 typeAlias.typeAnnotation
 
         ElmSyntax.Abstract.Declaration.ChoiceTypeDeclaration choiceType ->
-            List.concat
-                (List.indexedMap
-                    (\constructorIndex constructor ->
-                        List.concat
-                            (List.indexedMap
-                                (\argumentIndex argument ->
-                                    referencesInTypeAnnotation
-                                        (declarationPath
-                                            ++ [ StepConstructor constructorIndex
-                                               , StepArgument argumentIndex
-                                               ]
-                                        )
-                                        argument
-                                )
-                                constructor.arguments
-                            )
-                    )
-                    choiceType.constructors
-                )
+            referencesInChoiceTypeConstructors declarationPath 0 choiceType.constructors
 
         ElmSyntax.Abstract.Declaration.PortDeclaration _ ->
             []
@@ -665,18 +781,10 @@ referencesInFunction declarationPath functionStruct =
 
         argumentReferences : List ReferenceOccurrence
         argumentReferences =
-            List.concat
-                (List.indexedMap
-                    (\argumentIndex argument ->
-                        referencesInPattern
-                            (ElmSyntax.Path.appendStep
-                                implementationPath
-                                (StepArgument argumentIndex)
-                            )
-                            argument
-                    )
-                    functionStruct.declaration.arguments
-                )
+            referencesInFunctionArguments
+                implementationPath
+                0
+                functionStruct.declaration.arguments
     in
     List.concat
         [ signatureReferences
@@ -685,6 +793,74 @@ referencesInFunction declarationPath functionStruct =
             (ElmSyntax.Path.appendStep implementationPath StepBody)
             functionStruct.declaration.expression
         ]
+
+
+referencesInChoiceTypeConstructors :
+    Path
+    -> Int
+    -> List ElmSyntax.Abstract.Declaration.ValueConstructor
+    -> List ReferenceOccurrence
+referencesInChoiceTypeConstructors declarationPath constructorIndex constructors =
+    case constructors of
+        constructor :: rest ->
+            referencesInChoiceTypeArguments
+                declarationPath
+                constructorIndex
+                0
+                constructor.arguments
+                ++ referencesInChoiceTypeConstructors
+                    declarationPath
+                    (constructorIndex + 1)
+                    rest
+
+        [] ->
+            []
+
+
+referencesInChoiceTypeArguments :
+    Path
+    -> Int
+    -> Int
+    -> List ElmSyntax.Abstract.TypeAnnotation.TypeAnnotation
+    -> List ReferenceOccurrence
+referencesInChoiceTypeArguments declarationPath constructorIndex argumentIndex arguments =
+    case arguments of
+        argument :: rest ->
+            referencesInTypeAnnotation
+                (declarationPath
+                    ++ [ StepConstructor constructorIndex
+                       , StepArgument argumentIndex
+                       ]
+                )
+                argument
+                ++ referencesInChoiceTypeArguments
+                    declarationPath
+                    constructorIndex
+                    (argumentIndex + 1)
+                    rest
+
+        [] ->
+            []
+
+
+referencesInFunctionArguments :
+    Path
+    -> Int
+    -> List ElmSyntax.Abstract.Pattern.Pattern
+    -> List ReferenceOccurrence
+referencesInFunctionArguments implementationPath argumentIndex arguments =
+    case arguments of
+        argument :: rest ->
+            referencesInPattern
+                (ElmSyntax.Path.appendStep
+                    implementationPath
+                    (StepArgument argumentIndex)
+                )
+                argument
+                ++ referencesInFunctionArguments implementationPath (argumentIndex + 1) rest
+
+        [] ->
+            []
 
 
 referencesInTypeAnnotation :
@@ -721,15 +897,24 @@ referencesInTypeAnnotationList :
     -> List ElmSyntax.Abstract.TypeAnnotation.TypeAnnotation
     -> List ReferenceOccurrence
 referencesInTypeAnnotationList path items =
-    List.concat
-        (List.indexedMap
-            (\index item ->
-                referencesInTypeAnnotation
-                    (ElmSyntax.Path.appendStep path (StepChild index))
-                    item
-            )
-            items
-        )
+    referencesInTypeAnnotationListHelp path 0 items
+
+
+referencesInTypeAnnotationListHelp :
+    Path
+    -> Int
+    -> List ElmSyntax.Abstract.TypeAnnotation.TypeAnnotation
+    -> List ReferenceOccurrence
+referencesInTypeAnnotationListHelp path index items =
+    case items of
+        item :: rest ->
+            referencesInTypeAnnotation
+                (ElmSyntax.Path.appendStep path (StepChild index))
+                item
+                ++ referencesInTypeAnnotationListHelp path (index + 1) rest
+
+        [] ->
+            []
 
 
 referencesInRecordFields :
@@ -737,15 +922,22 @@ referencesInRecordFields :
     -> List ElmSyntax.Abstract.TypeAnnotation.RecordField
     -> List ReferenceOccurrence
 referencesInRecordFields path fields =
-    List.concat
-        (List.map
-            (\( field, fieldPath ) ->
-                referencesInTypeAnnotation
-                    (ElmSyntax.Path.appendStep fieldPath (StepChild 0))
-                    field.fieldType
-            )
-            (recordFieldsWithPaths path fields)
-        )
+    referencesInRecordFieldsHelp (recordFieldsWithPaths path fields)
+
+
+referencesInRecordFieldsHelp :
+    List ( ElmSyntax.Abstract.TypeAnnotation.RecordField, Path )
+    -> List ReferenceOccurrence
+referencesInRecordFieldsHelp fieldsWithPaths =
+    case fieldsWithPaths of
+        ( field, fieldPath ) :: rest ->
+            referencesInTypeAnnotation
+                (ElmSyntax.Path.appendStep fieldPath (StepChild 0))
+                field.fieldType
+                ++ referencesInRecordFieldsHelp rest
+
+        [] ->
+            []
 
 
 referencesInPattern :
@@ -779,15 +971,24 @@ referencesInPatternList :
     -> List ElmSyntax.Abstract.Pattern.Pattern
     -> List ReferenceOccurrence
 referencesInPatternList path items =
-    List.concat
-        (List.indexedMap
-            (\index item ->
-                referencesInPattern
-                    (ElmSyntax.Path.appendStep path (StepChild index))
-                    item
-            )
-            items
-        )
+    referencesInPatternListHelp path 0 items
+
+
+referencesInPatternListHelp :
+    Path
+    -> Int
+    -> List ElmSyntax.Abstract.Pattern.Pattern
+    -> List ReferenceOccurrence
+referencesInPatternListHelp path index items =
+    case items of
+        item :: rest ->
+            referencesInPattern
+                (ElmSyntax.Path.appendStep path (StepChild index))
+                item
+                ++ referencesInPatternListHelp path (index + 1) rest
+
+        [] ->
+            []
 
 
 referencesInExpression :
@@ -818,41 +1019,16 @@ referencesInExpression path expression =
             referencesInExpressionList path items
 
         ElmSyntax.Abstract.Expression.LetExpression declarations letBody ->
-            List.concat
-                [ List.concat
-                    (List.indexedMap
-                        (\index letDeclaration ->
-                            referencesInLetDeclaration
-                                (ElmSyntax.Path.appendStep path (StepLetDeclaration index))
-                                letDeclaration
-                        )
-                        declarations
-                    )
-                , referencesInExpression
+            referencesInLetDeclarations path 0 declarations
+                ++ referencesInExpression
                     (ElmSyntax.Path.appendStep path StepBody)
                     letBody
-                ]
 
         ElmSyntax.Abstract.Expression.CaseExpression subject cases ->
-            List.concat
-                [ referencesInExpression
-                    (ElmSyntax.Path.appendStep path (StepChild 0))
-                    subject
-                , List.concat
-                    (List.indexedMap
-                        (\index caseBranch ->
-                            List.concat
-                                [ referencesInPattern
-                                    (path ++ [ StepCaseBranch index, StepPattern ])
-                                    caseBranch.pattern
-                                , referencesInExpression
-                                    (path ++ [ StepCaseBranch index, StepBody ])
-                                    caseBranch.expression
-                                ]
-                        )
-                        cases
-                    )
-                ]
+            referencesInExpression
+                (ElmSyntax.Path.appendStep path (StepChild 0))
+                subject
+                ++ referencesInCaseBranches path 0 cases
 
         ElmSyntax.Abstract.Expression.LambdaExpression _ lambdaBody ->
             referencesInExpression
@@ -873,20 +1049,66 @@ referencesInExpression path expression =
             []
 
 
+referencesInLetDeclarations :
+    Path
+    -> Int
+    -> List ElmSyntax.Abstract.Expression.LetDeclaration
+    -> List ReferenceOccurrence
+referencesInLetDeclarations path index declarations =
+    case declarations of
+        declaration :: rest ->
+            referencesInLetDeclaration
+                (ElmSyntax.Path.appendStep path (StepLetDeclaration index))
+                declaration
+                ++ referencesInLetDeclarations path (index + 1) rest
+
+        [] ->
+            []
+
+
+referencesInCaseBranches :
+    Path
+    -> Int
+    -> List ElmSyntax.Abstract.Expression.Case
+    -> List ReferenceOccurrence
+referencesInCaseBranches path index cases =
+    case cases of
+        caseBranch :: rest ->
+            referencesInPattern
+                (path ++ [ StepCaseBranch index, StepPattern ])
+                caseBranch.pattern
+                ++ referencesInExpression
+                    (path ++ [ StepCaseBranch index, StepBody ])
+                    caseBranch.expression
+                ++ referencesInCaseBranches path (index + 1) rest
+
+        [] ->
+            []
+
+
 referencesInExpressionList :
     Path
     -> List ElmSyntax.Abstract.Expression.Expression
     -> List ReferenceOccurrence
 referencesInExpressionList path items =
-    List.concat
-        (List.indexedMap
-            (\index item ->
-                referencesInExpression
-                    (ElmSyntax.Path.appendStep path (StepChild index))
-                    item
-            )
-            items
-        )
+    referencesInExpressionListHelp path 0 items
+
+
+referencesInExpressionListHelp :
+    Path
+    -> Int
+    -> List ElmSyntax.Abstract.Expression.Expression
+    -> List ReferenceOccurrence
+referencesInExpressionListHelp path index items =
+    case items of
+        item :: rest ->
+            referencesInExpression
+                (ElmSyntax.Path.appendStep path (StepChild index))
+                item
+                ++ referencesInExpressionListHelp path (index + 1) rest
+
+        [] ->
+            []
 
 
 referencesInRecordSetters :
@@ -894,15 +1116,22 @@ referencesInRecordSetters :
     -> List ElmSyntax.Abstract.Expression.RecordSetter
     -> List ReferenceOccurrence
 referencesInRecordSetters path setters =
-    List.concat
-        (List.map
-            (\( setter, setterPath ) ->
-                referencesInExpression
-                    (ElmSyntax.Path.appendStep setterPath (StepChild 0))
-                    setter.value
-            )
-            (recordSettersWithPaths path setters)
-        )
+    referencesInRecordSettersHelp (recordSettersWithPaths path setters)
+
+
+referencesInRecordSettersHelp :
+    List ( ElmSyntax.Abstract.Expression.RecordSetter, Path )
+    -> List ReferenceOccurrence
+referencesInRecordSettersHelp settersWithPaths =
+    case settersWithPaths of
+        ( setter, setterPath ) :: rest ->
+            referencesInExpression
+                (ElmSyntax.Path.appendStep setterPath (StepChild 0))
+                setter.value
+                ++ referencesInRecordSettersHelp rest
+
+        [] ->
+            []
 
 
 referencesInLetDeclaration :
@@ -932,10 +1161,29 @@ recordSettersWithPaths :
     -> List ElmSyntax.Abstract.Expression.RecordSetter
     -> List ( ElmSyntax.Abstract.Expression.RecordSetter, Path )
 recordSettersWithPaths path setters =
-    List.map2
-        (\setter step -> ( setter, ElmSyntax.Path.appendStep path step ))
-        setters
-        (recordFieldSteps (List.map .fieldName setters))
+    recordSettersWithPathsHelp path [] setters
+
+
+recordSettersWithPathsHelp :
+    Path
+    -> List String
+    -> List ElmSyntax.Abstract.Expression.RecordSetter
+    -> List ( ElmSyntax.Abstract.Expression.RecordSetter, Path )
+recordSettersWithPathsHelp path seen setters =
+    case setters of
+        setter :: rest ->
+            ( setter
+            , ElmSyntax.Path.appendStep
+                path
+                (StepRecordField
+                    setter.fieldName
+                    (countMatchingNames setter.fieldName seen)
+                )
+            )
+                :: recordSettersWithPathsHelp path (setter.fieldName :: seen) rest
+
+        [] ->
+            []
 
 
 recordFieldsWithPaths :
@@ -943,28 +1191,45 @@ recordFieldsWithPaths :
     -> List ElmSyntax.Abstract.TypeAnnotation.RecordField
     -> List ( ElmSyntax.Abstract.TypeAnnotation.RecordField, Path )
 recordFieldsWithPaths path fields =
-    List.map2
-        (\field step -> ( field, ElmSyntax.Path.appendStep path step ))
-        fields
-        (recordFieldSteps (List.map .fieldName fields))
+    recordFieldsWithPathsHelp path [] fields
 
 
-recordFieldSteps : List String -> List Step
-recordFieldSteps fieldNames =
-    recordFieldStepsHelp fieldNames []
+recordFieldsWithPathsHelp :
+    Path
+    -> List String
+    -> List ElmSyntax.Abstract.TypeAnnotation.RecordField
+    -> List ( ElmSyntax.Abstract.TypeAnnotation.RecordField, Path )
+recordFieldsWithPathsHelp path seen fields =
+    case fields of
+        field :: rest ->
+            ( field
+            , ElmSyntax.Path.appendStep
+                path
+                (StepRecordField
+                    field.fieldName
+                    (countMatchingNames field.fieldName seen)
+                )
+            )
+                :: recordFieldsWithPathsHelp path (field.fieldName :: seen) rest
 
-
-recordFieldStepsHelp : List String -> List String -> List Step
-recordFieldStepsHelp remaining seen =
-    case remaining of
         [] ->
             []
 
-        fieldName :: rest ->
-            StepRecordField
-                fieldName
-                (List.length (List.filter (\earlier -> earlier == fieldName) seen))
-                :: recordFieldStepsHelp rest (fieldName :: seen)
+
+countMatchingNames : String -> List String -> Int
+countMatchingNames name names =
+    case names of
+        earlier :: rest ->
+            (if earlier == name then
+                1
+
+             else
+                0
+            )
+                + countMatchingNames name rest
+
+        [] ->
+            0
 
 
 
@@ -978,16 +1243,22 @@ exposesFunction name exposingList =
             True
 
         ElmSyntax.Abstract.Exposing.Explicit entries ->
-            List.any
-                (\entry ->
-                    case entry of
-                        ElmSyntax.Abstract.Exposing.FunctionExpose exposedName ->
-                            exposedName == name
+            exposesFunctionInEntries name entries
 
-                        _ ->
-                            False
-                )
-                entries
+
+exposesFunctionInEntries : String -> List ElmSyntax.Abstract.Exposing.TopLevelExpose -> Bool
+exposesFunctionInEntries name entries =
+    case entries of
+        entry :: rest ->
+            case entry of
+                ElmSyntax.Abstract.Exposing.FunctionExpose exposedName ->
+                    exposedName == name || exposesFunctionInEntries name rest
+
+                _ ->
+                    exposesFunctionInEntries name rest
+
+        [] ->
+            False
 
 
 exposesTypeOrAlias : String -> ElmSyntax.Abstract.Exposing.Exposing -> Bool
@@ -997,22 +1268,30 @@ exposesTypeOrAlias name exposingList =
             True
 
         ElmSyntax.Abstract.Exposing.Explicit entries ->
-            List.any
-                (\entry ->
-                    case entry of
-                        ElmSyntax.Abstract.Exposing.TypeOrAliasExpose exposedName ->
-                            exposedName == name
+            exposesTypeOrAliasInEntries name entries
 
-                        ElmSyntax.Abstract.Exposing.TypeExpose exposedType ->
-                            exposedType.name == name
 
-                        ElmSyntax.Abstract.Exposing.InfixExpose _ ->
-                            False
+exposesTypeOrAliasInEntries : String -> List ElmSyntax.Abstract.Exposing.TopLevelExpose -> Bool
+exposesTypeOrAliasInEntries name entries =
+    case entries of
+        entry :: rest ->
+            (case entry of
+                ElmSyntax.Abstract.Exposing.TypeOrAliasExpose exposedName ->
+                    exposedName == name
 
-                        ElmSyntax.Abstract.Exposing.FunctionExpose exposedName ->
-                            exposedName == name
-                )
-                entries
+                ElmSyntax.Abstract.Exposing.TypeExpose exposedType ->
+                    exposedType.name == name
+
+                ElmSyntax.Abstract.Exposing.InfixExpose _ ->
+                    False
+
+                ElmSyntax.Abstract.Exposing.FunctionExpose exposedName ->
+                    exposedName == name
+            )
+                || exposesTypeOrAliasInEntries name rest
+
+        [] ->
+            False
 
 
 nameOfTopLevelExpose : ElmSyntax.Abstract.Exposing.TopLevelExpose -> String
