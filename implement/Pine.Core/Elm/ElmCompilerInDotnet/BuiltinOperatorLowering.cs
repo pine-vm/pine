@@ -40,6 +40,7 @@ public static class BuiltinOperatorLowering
         IntGe,
         BoolAnd,
         BoolOr,
+        Append,
     }
 
     private record RewriteContext(
@@ -373,7 +374,21 @@ public static class BuiltinOperatorLowering
             var rightType =
                 InferExpressionType(right, context);
 
-            if (loweredOp is LoweredOperator.Equal)
+            if (loweredOp is LoweredOperator.Append)
+            {
+                if (leftType is TypeInference.InferredType.StringType ||
+                    rightType is TypeInference.InferredType.StringType)
+                {
+                    return BuildStringAppendApplication(left, right);
+                }
+
+                if (leftType is TypeInference.InferredType.ListType ||
+                    rightType is TypeInference.InferredType.ListType)
+                {
+                    return BuildBuiltinApplication("concat", left, right);
+                }
+            }
+            else if (loweredOp is LoweredOperator.Equal)
             {
                 if (IsEmptyList(left) ||
                     IsEmptyList(right) ||
@@ -889,6 +904,7 @@ public static class BuiltinOperatorLowering
                 "ge" => LoweredOperator.IntGe,
                 "and" => LoweredOperator.BoolAnd,
                 "or" => LoweredOperator.BoolOr,
+                "append" => LoweredOperator.Append,
 
                 _ =>
                 null
@@ -910,6 +926,7 @@ public static class BuiltinOperatorLowering
                 ">=" => LoweredOperator.IntGe,
                 "&&" => LoweredOperator.BoolAnd,
                 "||" => LoweredOperator.BoolOr,
+                "++" => LoweredOperator.Append,
 
                 _ =>
                 null
@@ -926,6 +943,36 @@ public static class BuiltinOperatorLowering
         new SyntaxTypes.Expression.Application(
             SyntaxTypes.Expression.Identifier.Create(["Pine_builtin"], builtinName),
             [new SyntaxTypes.Expression.ListExpr([left, right])]);
+
+    private static SyntaxTypes.Expression BuildStringAppendApplication(
+        SyntaxTypes.Expression left,
+        SyntaxTypes.Expression right) =>
+        new SyntaxTypes.Expression.Application(
+            SyntaxTypes.Expression.Identifier.Create(["String"], "String"),
+            [
+            BuildBuiltinApplication(
+                "concat",
+                BuildStringContentAccess(left),
+                BuildStringContentAccess(right)),
+            ]);
+
+    private static SyntaxTypes.Expression BuildStringContentAccess(
+        SyntaxTypes.Expression stringExpression) =>
+        BuildBuiltinUnaryApplication(
+            "head",
+            BuildBuiltinUnaryApplication(
+                "head",
+                BuildBuiltinApplication(
+                    "skip",
+                    BuildIntegerLiteral(1),
+                    stringExpression)));
+
+    private static SyntaxTypes.Expression BuildBuiltinUnaryApplication(
+        string builtinName,
+        SyntaxTypes.Expression argument) =>
+        new SyntaxTypes.Expression.Application(
+            SyntaxTypes.Expression.Identifier.Create(["Pine_builtin"], builtinName),
+            [argument]);
 
     /// <summary>
     /// Builds a reference to <c>Basics.True</c> or <c>Basics.False</c>, used by the

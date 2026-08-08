@@ -261,10 +261,10 @@ public class ElmParserExpressionTests
 
         PerformanceCountersFormatting.FormatCounts(report).Should().Be(
             """
-            InvocationCount: 161
-            BuildListCount: 869
+            InvocationCount: 157
+            BuildListCount: 860
             LoopIterationCount: 0
-            InstructionCount: 4_931
+            InstructionCount: 4_881
             """);
     }
 
@@ -399,10 +399,10 @@ public class ElmParserExpressionTests
 
         PerformanceCountersFormatting.FormatCounts(report).Should().Be(
             """
-            InvocationCount: 1_008
-            BuildListCount: 6_711
+            InvocationCount: 1_004
+            BuildListCount: 6_702
             LoopIterationCount: 0
-            InstructionCount: 35_864
+            InstructionCount: 35_814
             """);
     }
 

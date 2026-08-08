@@ -85,6 +85,127 @@ public class BuiltinOperatorLoweringTests
     }
 
     [Fact]
+    public void Lowers_string_append_operator_application()
+    {
+        var loweredModule =
+            LowerOperators(
+                """
+                module Test exposing (..)
+
+
+                append : String -> String -> String
+                append left right =
+                    left ++ right
+                """);
+
+        RenderCanonicalized(loweredModule).Should().Be(
+            """
+            Test.append : String -> String -> String
+            Test.append left right =
+                String.String
+                    (Pine_builtin.concat
+                        [ Pine_builtin.head
+                            (Pine_builtin.head
+                                (Pine_builtin.skip
+                                    [ 1, left ]
+                                )
+                            )
+                        , Pine_builtin.head
+                            (Pine_builtin.head
+                                (Pine_builtin.skip
+                                    [ 1, right ]
+                                )
+                            )
+                        ]
+                    )
+            """.Trim());
+    }
+
+    [Fact]
+    public void Lowers_list_append_operator_application()
+    {
+        var loweredModule =
+            LowerOperators(
+                """
+                module Test exposing (..)
+
+
+                append : List Int -> List Int -> List Int
+                append left right =
+                    left ++ right
+                """);
+
+        RenderCanonicalized(loweredModule).Should().Be(
+            """
+            Test.append : List.List Int -> List.List Int -> List.List Int
+            Test.append left right =
+                Pine_builtin.concat
+                    [ left, right ]
+            """.Trim());
+    }
+
+    [Fact]
+    public void Lowers_append_from_type_inferred_from_string_literal()
+    {
+        var loweredModule =
+            LowerOperators(
+                """
+                module Test exposing (..)
+
+
+                appendSuffix value =
+                    value ++ "!"
+                """);
+
+        var rendered = RenderCanonicalized(loweredModule);
+
+        rendered.Should().Be(
+            """
+            Test.appendSuffix value =
+                String.String
+                    (Pine_builtin.concat
+                        [ Pine_builtin.head
+                            (Pine_builtin.head
+                                (Pine_builtin.skip
+                                    [ 1, value ]
+                                )
+                            )
+                        , Pine_builtin.head
+                            (Pine_builtin.head
+                                (Pine_builtin.skip
+                                    [ 1, "!" ]
+                                )
+                            )
+                        ]
+                    )
+            """.Trim());
+    }
+
+    [Fact]
+    public void Keeps_generic_append_when_operands_could_be_strings_or_lists()
+    {
+        var loweredModule =
+            LowerOperators(
+                """
+                module Test exposing (..)
+
+
+                append left right =
+                    left ++ right
+                """);
+
+        var rendered = RenderCanonicalized(loweredModule);
+
+        rendered.Should().Be(
+            """
+            Test.append left right =
+                Basics.append
+                    left
+                    right
+            """.Trim());
+    }
+
+    [Fact]
     public void Lowers_eq_operator_application_for_Int_arguments()
     {
         var loweredModule =

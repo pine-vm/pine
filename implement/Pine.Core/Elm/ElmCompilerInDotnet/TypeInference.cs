@@ -3371,6 +3371,130 @@ public static class TypeInference
         IReadOnlyDictionary<QualifiedNameRef, TypeAliasDefinition> aliasDefinitions) =>
         ExpandTypeAliases(inferredType, aliasDefinitions, ImmutableHashSet<QualifiedNameRef>.Empty);
 
+    /// <summary>
+    /// Expands type aliases while resolving unqualified alias references against the current module.
+    /// </summary>
+    public static InferredType ExpandTypeAliases(
+        InferredType inferredType,
+        IReadOnlyDictionary<QualifiedNameRef, TypeAliasDefinition> aliasDefinitions,
+        IReadOnlyList<string> currentModuleName) =>
+        ExpandTypeAliases(
+            QualifyLocalTypeAliases(inferredType, aliasDefinitions, currentModuleName),
+            aliasDefinitions);
+
+    private static InferredType QualifyLocalTypeAliases(
+        InferredType inferredType,
+        IReadOnlyDictionary<QualifiedNameRef, TypeAliasDefinition> aliasDefinitions,
+        IReadOnlyList<string> currentModuleName)
+    {
+        switch (inferredType)
+        {
+            case InferredType.ChoiceType choiceType:
+                var qualifiedTypeArguments =
+                    choiceType.TypeArguments
+                    .Select(
+                        typeArgument =>
+                        QualifyLocalTypeAliases(
+                            typeArgument,
+                            aliasDefinitions,
+                            currentModuleName))
+                    .ToList();
+
+                var localQualifiedName =
+                    QualifiedNameHelper.ToQualifiedNameRef(
+                        currentModuleName,
+                        choiceType.TypeName);
+
+                return
+                    choiceType.ModuleName.Count is 0 &&
+                    aliasDefinitions.ContainsKey(localQualifiedName)
+                    ?
+                    new InferredType.ChoiceType(
+                        currentModuleName,
+                        choiceType.TypeName,
+                        qualifiedTypeArguments)
+                    :
+                    new InferredType.ChoiceType(
+                        choiceType.ModuleName,
+                        choiceType.TypeName,
+                        qualifiedTypeArguments);
+
+            case InferredType.ListType listType:
+                return
+                    new InferredType.ListType(
+                        QualifyLocalTypeAliases(
+                            listType.ElementType,
+                            aliasDefinitions,
+                            currentModuleName));
+
+            case InferredType.FunctionType functionType:
+                return
+                    new InferredType.FunctionType(
+                        QualifyLocalTypeAliases(
+                            functionType.ArgumentType,
+                            aliasDefinitions,
+                            currentModuleName),
+                        QualifyLocalTypeAliases(
+                            functionType.ReturnType,
+                            aliasDefinitions,
+                            currentModuleName));
+
+            case InferredType.TupleType tupleType:
+                return
+                    new InferredType.TupleType(
+                        [
+                        .. tupleType.ElementTypes.Select(
+                            elementType =>
+                            QualifyLocalTypeAliases(
+                                elementType,
+                                aliasDefinitions,
+                                currentModuleName))
+                        ]);
+
+            case InferredType.RecordType recordType:
+                return
+                    new InferredType.RecordType(
+                        [
+                        .. recordType.Fields.Select(
+                            field =>
+                            (field.FieldName,
+                            QualifyLocalTypeAliases(
+                                field.FieldType,
+                                aliasDefinitions,
+                                currentModuleName)))
+                        ]);
+
+            case InferredType.OpenRecordType openRecordType:
+                return
+                    new InferredType.OpenRecordType(
+                        openRecordType.ExtensionVariable,
+                        [
+                        .. openRecordType.KnownFields.Select(
+                            field =>
+                            (field.FieldName,
+                            QualifyLocalTypeAliases(
+                                field.FieldType,
+                                aliasDefinitions,
+                                currentModuleName)))
+                        ]);
+
+            case InferredType.IntType:
+            case InferredType.FloatType:
+            case InferredType.StringType:
+            case InferredType.CharType:
+            case InferredType.BoolType:
+            case InferredType.NumberType:
+            case InferredType.TypeVariable:
+            case InferredType.UnknownType:
+                return inferredType;
+
+            default:
+                throw new NotImplementedException(
+                    "QualifyLocalTypeAliases does not handle inferred type variant: " +
+                    inferredType.GetType().Name);
+        }
+    }
+
     private static InferredType ExpandTypeAliases(
         InferredType inferredType,
         IReadOnlyDictionary<QualifiedNameRef, TypeAliasDefinition> aliasDefinitions,
@@ -3441,10 +3565,8 @@ public static class TypeInference
                         [
                         .. recordType.Fields.Select(
                             field =>
-                            (
-                                field.FieldName,
-                                ExpandTypeAliases(field.FieldType, aliasDefinitions, aliasesBeingExpanded)
-                            ))
+                            (field.FieldName,
+                            ExpandTypeAliases(field.FieldType, aliasDefinitions, aliasesBeingExpanded)))
                         ]);
 
             case InferredType.OpenRecordType openRecordType:
@@ -3454,10 +3576,8 @@ public static class TypeInference
                         [
                         .. openRecordType.KnownFields.Select(
                             field =>
-                            (
-                                field.FieldName,
-                                ExpandTypeAliases(field.FieldType, aliasDefinitions, aliasesBeingExpanded)
-                            ))
+                            (field.FieldName,
+                            ExpandTypeAliases(field.FieldType, aliasDefinitions, aliasesBeingExpanded)))
                         ]);
 
             case InferredType.IntType:
@@ -3854,6 +3974,43 @@ public static class TypeInference
                         functionSignatures,
                         parameterTypes,
                         localBindingDefinitions);
+
+                if (opApp.Operator is "++")
+                {
+                    var leftType =
+                        InferExpressionType(
+                            opApp.Left,
+                            parameterNames,
+                            parameterTypes);
+
+                    var rightType =
+                        InferExpressionType(
+                            opApp.Right,
+                            parameterNames,
+                            parameterTypes);
+
+                    if (leftType is InferredType.StringType or InferredType.ListType)
+                    {
+                        parameterTypes =
+                            ExtractTypeConstraintFromExpression(
+                                opApp.Right,
+                                leftType,
+                                parameterNames,
+                                parameterTypes,
+                                localBindingDefinitions);
+                    }
+
+                    if (rightType is InferredType.StringType or InferredType.ListType)
+                    {
+                        parameterTypes =
+                            ExtractTypeConstraintFromExpression(
+                                opApp.Left,
+                                rightType,
+                                parameterNames,
+                                parameterTypes,
+                                localBindingDefinitions);
+                    }
+                }
 
                 break;
 

@@ -146,15 +146,7 @@ public class TypeInferenceAppendableTests
 
         parameterTypes["b"].Should().BeOfType<TypeInference.InferredType.StringType>();
 
-        // 'a' is appendable at minimum; with full propagation it becomes String.
-        var typeOfA = parameterTypes["a"];
-
-        var aIsStringOrAppendable =
-            typeOfA is TypeInference.InferredType.StringType ||
-            (typeOfA is TypeInference.InferredType.TypeVariable tv &&
-            tv.Constraint == TypeVariableConstraint.Appendable);
-
-        aIsStringOrAppendable.Should().BeTrue("'a' should be String or appendable, was " + typeOfA);
+        parameterTypes["a"].Should().BeOfType<TypeInference.InferredType.StringType>();
     }
 
     [Fact]
@@ -214,4 +206,3 @@ public class TypeInferenceAppendableTests
             .Should().Be(TypeVariableConstraint.Appendable);
     }
 }
-

@@ -255,7 +255,7 @@ public class ElmParserNewExpressionTests
             InvocationCount: 173
             BuildListCount: 287
             LoopIterationCount: 0
-            InstructionCount: 3_809
+            InstructionCount: 3_806
             """);
 
         // Snapshot of the Elm syntax interpreter's metrics for the same root expression.

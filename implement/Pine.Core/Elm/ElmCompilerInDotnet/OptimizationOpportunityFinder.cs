@@ -212,11 +212,24 @@ public sealed record OpportunityTypeEvidence(
 public static class OptimizationOpportunityFinder
 {
     private sealed record ExpressionTypeContext(
+        ElmSyntax.SyntaxModel.QualifiedNameRef CurrentFunctionName,
         string CurrentModuleName,
         ImmutableDictionary<string, int> ParameterNames,
         ImmutableDictionary<string, TypeInference.InferredType> ParameterTypes,
         ImmutableDictionary<string, TypeInference.InferredType> LocalBindingTypes,
-        IReadOnlyDictionary<ElmSyntax.SyntaxModel.QualifiedNameRef, FunctionTypeInfo> FunctionTypes);
+        ImmutableDictionary<string, SyntaxTypes.Expression> LocalBindingExpressions,
+        IReadOnlyDictionary<ElmSyntax.SyntaxModel.QualifiedNameRef, FunctionTypeInfo> FunctionTypes,
+        IReadOnlyDictionary<
+            ElmSyntax.SyntaxModel.QualifiedNameRef,
+            IReadOnlyList<TypeInference.InferredType>> ConstructorArgumentTypes,
+        IReadOnlyDictionary<
+            ElmSyntax.SyntaxModel.QualifiedNameRef,
+            TypeInference.TypeAliasDefinition> AliasTypes,
+        ISet<SyntaxTypes.Expression.RecordAccessFunction> ClosedRecordAccessFunctions);
+
+    private sealed record WholeProgramTypeInference(
+        ImmutableDictionary<ElmSyntax.SyntaxModel.QualifiedNameRef, FunctionTypeInfo> FunctionTypes,
+        ISet<SyntaxTypes.Expression.RecordAccessFunction> ClosedRecordAccessFunctions);
 
     /// <summary>
     /// Mapping from <c>Basics</c> function name (as used in
@@ -306,24 +319,35 @@ public static class OptimizationOpportunityFinder
                 functionSignaturesBuilder);
         }
 
-        var functionSignatures = functionSignaturesBuilder.ToImmutable();
+        var aliasTypes = BuildAliasTypes(declarations);
 
-        var functionTypes =
-            declarations
-            .Where(entry => entry.Value is SyntaxTypes.Declaration.FunctionDeclaration)
-            .ToDictionary(
-                entry =>
-                QualifiedNameHelper.FromQualifiedNameString(entry.Key.FullName),
+        var functionSignatures =
+            functionSignaturesBuilder
+            .ToImmutable()
+            .ToImmutableDictionary(
+                entry => entry.Key,
                 entry =>
                 {
-                    var functionDeclaration =
-                        (SyntaxTypes.Declaration.FunctionDeclaration)entry.Value;
+                    var qualifiedName =
+                        QualifiedNameHelper.FromQualifiedNameString(entry.Key);
 
                     return
-                        new FunctionTypeInfo(
-                            TypeInference.GetFunctionReturnType(functionDeclaration),
-                            TypeInference.GetFunctionParameterTypes(functionDeclaration));
+                        TypeInference.ExpandTypeAliases(
+                            entry.Value,
+                            aliasTypes,
+                            qualifiedName.ModuleName);
                 });
+
+        var wholeProgramTypeInference =
+            InferFunctionTypesFromApplications(
+                declarations,
+                functionSignatures,
+                aliasTypes);
+
+        var functionTypes = wholeProgramTypeInference.FunctionTypes;
+
+        var constructorArgumentTypes =
+            BuildConstructorArgumentTypes(functionTypes);
 
         // Build the single-tag custom-type registry once. Indexed by both
         // the type's qualified name and the (sole) constructor's qualified
@@ -393,28 +417,42 @@ public static class OptimizationOpportunityFinder
 
             var parameterTypes = inferredFunctionType.parameterTypes;
 
-            var annotatedParameterTypes =
-                TypeInference.GetFunctionParameterTypes(funcDecl.Function);
+            var qualifiedNameRef =
+                QualifiedNameHelper.FromQualifiedNameString(qualifiedName.FullName);
+
+            var inferredParameterTypes =
+                functionTypes.TryGetValue(qualifiedNameRef, out var functionTypeInfo)
+                ?
+                functionTypeInfo.ParameterTypes
+                :
+                [];
 
             for (var argumentIndex = 0;
-                argumentIndex < annotatedParameterTypes.Count &&
+                argumentIndex < inferredParameterTypes.Count &&
                 argumentIndex < funcDecl.Function.Declaration.Arguments.Count;
                 argumentIndex++)
             {
                 parameterTypes =
                     TypeInference.ExtractPatternBindingTypesFromInferred(
                         funcDecl.Function.Declaration.Arguments[argumentIndex],
-                        annotatedParameterTypes[argumentIndex],
-                        parameterTypes);
+                        inferredParameterTypes[argumentIndex],
+                        parameterTypes,
+                        constructorArgumentTypes);
             }
 
             var expressionTypeContext =
                 new ExpressionTypeContext(
-                    CurrentModuleName: string.Join(".", qualifiedName.Namespaces),
+                CurrentFunctionName: qualifiedNameRef,
+                CurrentModuleName: string.Join(".", qualifiedName.Namespaces),
                     ParameterNames: parameterNamesBuilder.ToImmutable(),
                     ParameterTypes: parameterTypes,
                     LocalBindingTypes: [],
-                    FunctionTypes: functionTypes);
+                    LocalBindingExpressions: [],
+                    FunctionTypes: functionTypes,
+                    ConstructorArgumentTypes: constructorArgumentTypes,
+                    AliasTypes: aliasTypes,
+                    ClosedRecordAccessFunctions:
+                    wholeProgramTypeInference.ClosedRecordAccessFunctions);
 
             CollectFromExpression(
                 funcDecl.Function.Declaration.Expression,
@@ -457,6 +495,1012 @@ public static class OptimizationOpportunityFinder
             resultBuilder);
 
         return resultBuilder.ToImmutable();
+    }
+
+    private static ImmutableDictionary<ElmSyntax.SyntaxModel.QualifiedNameRef, TypeInference.TypeAliasDefinition>
+        BuildAliasTypes(
+        IReadOnlyDictionary<DeclQualifiedName, SyntaxTypes.Declaration> declarations)
+    {
+        var result =
+            ImmutableDictionary.CreateBuilder<
+                ElmSyntax.SyntaxModel.QualifiedNameRef,
+                TypeInference.TypeAliasDefinition>();
+
+        foreach (var (qualifiedName, declaration) in declarations)
+        {
+            if (declaration is SyntaxTypes.Declaration.AliasDeclaration aliasDeclaration)
+            {
+                result[
+                    QualifiedNameHelper.ToQualifiedNameRef(
+                        qualifiedName.Namespaces,
+                        aliasDeclaration.TypeAlias.Name)] =
+                    new TypeInference.TypeAliasDefinition(
+                        aliasDeclaration.TypeAlias.Generics,
+                        TypeInference.TypeAnnotationToInferredType(
+                            aliasDeclaration.TypeAlias.TypeAnnotation));
+            }
+        }
+
+        return result.ToImmutable();
+    }
+
+    private static WholeProgramTypeInference
+        InferFunctionTypesFromApplications(
+        IReadOnlyDictionary<DeclQualifiedName, SyntaxTypes.Declaration> declarations,
+        IReadOnlyDictionary<string, TypeInference.InferredType> functionSignatures,
+        IReadOnlyDictionary<
+            ElmSyntax.SyntaxModel.QualifiedNameRef,
+            TypeInference.TypeAliasDefinition> aliasTypes)
+    {
+        var closedRecordAccessFunctions =
+            new HashSet<SyntaxTypes.Expression.RecordAccessFunction>(
+                System.Collections.Generic.ReferenceEqualityComparer.Instance);
+
+        var functionTypes =
+            ImmutableDictionary.CreateBuilder<
+                ElmSyntax.SyntaxModel.QualifiedNameRef,
+                FunctionTypeInfo>();
+
+        var declarationsByName =
+            declarations
+            .Where(entry => entry.Value is SyntaxTypes.Declaration.FunctionDeclaration)
+            .ToImmutableDictionary(
+                entry => QualifiedNameHelper.FromQualifiedNameString(entry.Key.FullName),
+                entry => (SyntaxTypes.Declaration.FunctionDeclaration)entry.Value);
+
+        foreach (var (qualifiedName, declaration) in declarationsByName)
+        {
+            if (functionSignatures.TryGetValue(
+                QualifiedNameFullName(qualifiedName),
+                out var annotatedFunctionType))
+            {
+                functionTypes[qualifiedName] =
+                    new FunctionTypeInfo(
+                        GetFunctionReturnType(annotatedFunctionType),
+                        TypeInference.ExtractArgumentTypesFromFunctionType(annotatedFunctionType));
+
+                continue;
+            }
+
+            var inferred =
+                TypeInference.InferFunctionDeclarationType(
+                    declaration.Function.Declaration.Expression,
+                    declaration.Function.Declaration.Arguments,
+                    string.Join(".", qualifiedName.ModuleName),
+                    functionSignatures);
+
+            var parameterTypes = new List<TypeInference.InferredType>();
+
+            foreach (var argument in declaration.Function.Declaration.Arguments)
+            {
+                if (argument is SyntaxTypes.Pattern.VarPattern varPattern &&
+                    inferred.parameterTypes.TryGetValue(varPattern.Name, out var parameterType))
+                {
+                    parameterTypes.Add(
+                        TypeInference.ExpandTypeAliases(
+                            parameterType,
+                            aliasTypes,
+                            qualifiedName.ModuleName));
+                }
+                else
+                {
+                    parameterTypes.Add(new TypeInference.InferredType.UnknownType());
+                }
+            }
+
+            functionTypes[qualifiedName] =
+                new FunctionTypeInfo(
+                    TypeInference.ExpandTypeAliases(
+                        inferred.returnType,
+                        aliasTypes,
+                        qualifiedName.ModuleName),
+                    parameterTypes);
+        }
+
+        foreach (var (qualifiedNameString, functionSignature) in functionSignatures)
+        {
+            var qualifiedName =
+                QualifiedNameHelper.FromQualifiedNameString(qualifiedNameString);
+
+            if (!functionTypes.ContainsKey(qualifiedName))
+            {
+                functionTypes[qualifiedName] =
+                    new FunctionTypeInfo(
+                        GetFunctionReturnType(functionSignature),
+                        TypeInference.ExtractArgumentTypesFromFunctionType(functionSignature));
+            }
+        }
+
+        var inferredFunctionNames =
+            declarationsByName.Keys
+            .Where(qualifiedName => !functionSignatures.ContainsKey(QualifiedNameFullName(qualifiedName)))
+            .ToImmutableHashSet();
+
+        for (var iteration = 0; iteration < declarationsByName.Count; iteration++)
+        {
+            var snapshot = functionTypes.ToImmutable();
+            var constructorArgumentTypes =
+                BuildConstructorArgumentTypes(snapshot);
+
+            var suggestions =
+                new Dictionary<
+                    (ElmSyntax.SyntaxModel.QualifiedNameRef FunctionName, int ParameterIndex),
+                    TypeInference.InferredType>();
+
+            foreach (var (qualifiedName, declaration) in declarationsByName)
+            {
+                var implementation = declaration.Function.Declaration;
+                var parameterNames = ImmutableDictionary.CreateBuilder<string, int>();
+                var parameterTypes = ImmutableDictionary<string, TypeInference.InferredType>.Empty;
+
+                for (var argumentIndex = 0;
+                    argumentIndex < implementation.Arguments.Count;
+                    argumentIndex++)
+                {
+                    foreach (var parameterName in
+                        SyntaxTypes.SyntaxAnalysis.CollectNamesBoundByPattern(
+                            implementation.Arguments[argumentIndex]))
+                    {
+                        parameterNames[parameterName] = argumentIndex;
+                    }
+
+                    if (snapshot.TryGetValue(qualifiedName, out var containingFunctionType) &&
+                        argumentIndex < containingFunctionType.ParameterTypes.Count)
+                    {
+                        parameterTypes =
+                            TypeInference.ExtractPatternBindingTypesFromInferred(
+                                implementation.Arguments[argumentIndex],
+                                containingFunctionType.ParameterTypes[argumentIndex],
+                                parameterTypes,
+                                constructorArgumentTypes);
+                    }
+                }
+
+                var context =
+                    new ExpressionTypeContext(
+                        CurrentFunctionName: qualifiedName,
+                        CurrentModuleName: string.Join(".", qualifiedName.ModuleName),
+                        ParameterNames: parameterNames.ToImmutable(),
+                        ParameterTypes: parameterTypes,
+                        LocalBindingTypes: [],
+                        LocalBindingExpressions: [],
+                        FunctionTypes: snapshot,
+                        ConstructorArgumentTypes: constructorArgumentTypes,
+                        AliasTypes: aliasTypes,
+                        ClosedRecordAccessFunctions: closedRecordAccessFunctions);
+
+                CollectFunctionTypeSuggestions(
+                    implementation.Expression,
+                    context,
+                    inferredFunctionNames,
+                    suggestions);
+
+                if (inferredFunctionNames.Contains(qualifiedName))
+                {
+                    var inferredReturnType =
+                        InferExpressionType(implementation.Expression, context);
+
+                    if (inferredReturnType is not TypeInference.InferredType.UnknownType)
+                        suggestions[(qualifiedName, -1)] = inferredReturnType;
+                }
+            }
+
+            var changed = false;
+
+            foreach (var ((functionName, parameterIndex), suggestedType) in suggestions)
+            {
+                if (!functionTypes.TryGetValue(functionName, out var functionType))
+                {
+                    continue;
+                }
+
+                var currentType =
+                    parameterIndex is -1
+                    ?
+                    functionType.ReturnType
+                    :
+                    parameterIndex < functionType.ParameterTypes.Count
+                    ?
+                    functionType.ParameterTypes[parameterIndex]
+                    :
+                    null;
+
+                if (currentType is null ||
+                    TypeInference.TryUnify(currentType, suggestedType) is not
+                    Result<string, TypeInference.InferredType>.Ok unified ||
+                    InferredTypesEquivalent(unified.Value, currentType))
+                {
+                    continue;
+                }
+
+                if (parameterIndex is -1)
+                {
+                    functionTypes[functionName] =
+                        functionType with
+                        {
+                            ReturnType = unified.Value
+                        };
+
+                    changed = true;
+                    continue;
+                }
+
+                var updatedParameterTypes = functionType.ParameterTypes.ToArray();
+                updatedParameterTypes[parameterIndex] = unified.Value;
+
+                functionTypes[functionName] =
+                    functionType with
+                    {
+                        ParameterTypes = updatedParameterTypes
+                    };
+
+                changed = true;
+            }
+
+            if (!changed)
+                break;
+        }
+
+        return
+            new WholeProgramTypeInference(
+                functionTypes.ToImmutable(),
+                closedRecordAccessFunctions);
+    }
+
+    private static string QualifiedNameFullName(
+        ElmSyntax.SyntaxModel.QualifiedNameRef qualifiedName) =>
+        string.Join(".", qualifiedName.ModuleName.Append(qualifiedName.Name));
+
+    private static ImmutableDictionary<
+        ElmSyntax.SyntaxModel.QualifiedNameRef,
+        IReadOnlyList<TypeInference.InferredType>> BuildConstructorArgumentTypes(
+        IReadOnlyDictionary<ElmSyntax.SyntaxModel.QualifiedNameRef, FunctionTypeInfo> functionTypes) =>
+        functionTypes
+        .Where(entry => ElmValueEncoding.StringIsValidTagName(entry.Key.Name))
+        .ToImmutableDictionary(
+            entry => entry.Key,
+            entry => entry.Value.ParameterTypes);
+
+    private static bool InferredTypesEquivalent(
+        TypeInference.InferredType left,
+        TypeInference.InferredType right)
+    {
+        switch (left, right)
+        {
+            case (TypeInference.InferredType.ListType leftList,
+                TypeInference.InferredType.ListType rightList):
+                return InferredTypesEquivalent(leftList.ElementType, rightList.ElementType);
+
+            case (TypeInference.InferredType.TupleType leftTuple,
+                TypeInference.InferredType.TupleType rightTuple):
+                return
+                    leftTuple.ElementTypes.Count == rightTuple.ElementTypes.Count &&
+                    leftTuple.ElementTypes
+                    .Zip(rightTuple.ElementTypes)
+                    .All(pair => InferredTypesEquivalent(pair.First, pair.Second));
+
+            case (TypeInference.InferredType.FunctionType leftFunction,
+                TypeInference.InferredType.FunctionType rightFunction):
+                return
+                    InferredTypesEquivalent(leftFunction.ArgumentType, rightFunction.ArgumentType) &&
+                    InferredTypesEquivalent(leftFunction.ReturnType, rightFunction.ReturnType);
+
+            case (TypeInference.InferredType.ChoiceType leftChoice,
+                TypeInference.InferredType.ChoiceType rightChoice):
+                return
+                    leftChoice.ModuleName.SequenceEqual(rightChoice.ModuleName) &&
+                    leftChoice.TypeName == rightChoice.TypeName &&
+                    leftChoice.TypeArguments.Count == rightChoice.TypeArguments.Count &&
+                    leftChoice.TypeArguments
+                    .Zip(rightChoice.TypeArguments)
+                    .All(pair => InferredTypesEquivalent(pair.First, pair.Second));
+
+            case (TypeInference.InferredType.RecordType leftRecord,
+                TypeInference.InferredType.RecordType rightRecord):
+                return
+                    leftRecord.Fields.Count == rightRecord.Fields.Count &&
+                    leftRecord.Fields
+                    .Zip(rightRecord.Fields)
+                    .All(
+                        pair =>
+                        pair.First.FieldName == pair.Second.FieldName &&
+                        InferredTypesEquivalent(
+                            pair.First.FieldType,
+                            pair.Second.FieldType));
+
+            case (TypeInference.InferredType.OpenRecordType leftRecord,
+                TypeInference.InferredType.OpenRecordType rightRecord):
+                return
+                    leftRecord.ExtensionVariable == rightRecord.ExtensionVariable &&
+                    leftRecord.KnownFields.Count == rightRecord.KnownFields.Count &&
+                    leftRecord.KnownFields
+                    .Zip(rightRecord.KnownFields)
+                    .All(
+                        pair =>
+                        pair.First.FieldName == pair.Second.FieldName &&
+                        InferredTypesEquivalent(
+                            pair.First.FieldType,
+                            pair.Second.FieldType));
+
+            case (TypeInference.InferredType.IntType, TypeInference.InferredType.IntType):
+            case (TypeInference.InferredType.FloatType, TypeInference.InferredType.FloatType):
+            case (TypeInference.InferredType.StringType, TypeInference.InferredType.StringType):
+            case (TypeInference.InferredType.CharType, TypeInference.InferredType.CharType):
+            case (TypeInference.InferredType.BoolType, TypeInference.InferredType.BoolType):
+            case (TypeInference.InferredType.NumberType, TypeInference.InferredType.NumberType):
+            case (TypeInference.InferredType.UnknownType, TypeInference.InferredType.UnknownType):
+                return true;
+
+            case (TypeInference.InferredType.TypeVariable leftVariable,
+                TypeInference.InferredType.TypeVariable rightVariable):
+                return
+                    leftVariable.Name == rightVariable.Name &&
+                    leftVariable.Constraint == rightVariable.Constraint;
+
+            case (TypeInference.InferredType.IntType, _):
+            case (TypeInference.InferredType.FloatType, _):
+            case (TypeInference.InferredType.StringType, _):
+            case (TypeInference.InferredType.CharType, _):
+            case (TypeInference.InferredType.BoolType, _):
+            case (TypeInference.InferredType.NumberType, _):
+            case (TypeInference.InferredType.TupleType, _):
+            case (TypeInference.InferredType.RecordType, _):
+            case (TypeInference.InferredType.OpenRecordType, _):
+            case (TypeInference.InferredType.FunctionType, _):
+            case (TypeInference.InferredType.ListType, _):
+            case (TypeInference.InferredType.ChoiceType, _):
+            case (TypeInference.InferredType.TypeVariable, _):
+            case (TypeInference.InferredType.UnknownType, _):
+                return false;
+
+            default:
+                throw new System.NotImplementedException(
+                    "InferredTypesEquivalent does not handle inferred type variants: " +
+                    left.GetType().Name + " and " + right.GetType().Name);
+        }
+    }
+
+    private static TypeInference.InferredType GetFunctionReturnType(
+        TypeInference.InferredType functionType)
+    {
+        while (functionType is TypeInference.InferredType.FunctionType next)
+            functionType = next.ReturnType;
+
+        return functionType;
+    }
+
+    private static void CollectFunctionTypeSuggestions(
+        SyntaxTypes.Expression expression,
+        ExpressionTypeContext context,
+        IReadOnlySet<ElmSyntax.SyntaxModel.QualifiedNameRef> inferredFunctionNames,
+        Dictionary<
+            (ElmSyntax.SyntaxModel.QualifiedNameRef FunctionName, int ParameterIndex),
+            TypeInference.InferredType> suggestions)
+    {
+        switch (expression)
+        {
+            case SyntaxTypes.Expression.Application application:
+                var actualArgumentTypes =
+                    application.Arguments
+                    .Select(argument => InferExpressionType(argument, context))
+                    .ToList();
+
+                if (application.Function is SyntaxTypes.Expression.Identifier
+                    {
+                        QualifiedName.Namespaces.Count: 0
+                    } parameterIdentifier &&
+                    context.ParameterNames.TryGetValue(
+                        parameterIdentifier.QualifiedName.DeclName,
+                        out var parameterIndex))
+                {
+                    context.ParameterTypes.TryGetValue(
+                        parameterIdentifier.QualifiedName.DeclName,
+                        out var existingParameterType);
+
+                    SuggestFunctionParameterType(
+                        context.CurrentFunctionName,
+                        parameterIndex,
+                        ConstrainFunctionArguments(
+                            existingParameterType ??
+                            new TypeInference.InferredType.UnknownType(),
+                            actualArgumentTypes),
+                        inferredFunctionNames,
+                        suggestions);
+                }
+
+                if (application.Function is SyntaxTypes.Expression.Identifier
+                    {
+                        QualifiedName.Namespaces: ["Basics"],
+                        QualifiedName.DeclName: "apR" or "apL"
+                    } pipeIdentifier &&
+                    application.Arguments.Count is 2)
+                {
+                    var valueArgumentIndex =
+                        pipeIdentifier.QualifiedName.DeclName is "apR" ? 0 : 1;
+
+                    var functionArgumentIndex = 1 - valueArgumentIndex;
+
+                    SuggestExpectedFunctionType(
+                        application.Arguments[functionArgumentIndex],
+                        new TypeInference.InferredType.FunctionType(
+                            actualArgumentTypes[valueArgumentIndex],
+                            new TypeInference.InferredType.UnknownType()),
+                        context,
+                        inferredFunctionNames,
+                        suggestions);
+                }
+
+                if (application.Function is SyntaxTypes.Expression.Identifier appliedIdentifier &&
+                    TryResolveFunction(
+                        appliedIdentifier,
+                        context,
+                        out var appliedFunctionName,
+                        out var appliedFunctionType))
+                {
+                    for (var argumentIndex = 0;
+                        argumentIndex < actualArgumentTypes.Count &&
+                        argumentIndex < appliedFunctionType.ParameterTypes.Count;
+                        argumentIndex++)
+                    {
+                        SuggestFunctionParameterType(
+                            appliedFunctionName,
+                            argumentIndex,
+                            actualArgumentTypes[argumentIndex],
+                            inferredFunctionNames,
+                            suggestions);
+                    }
+
+                    var specializedParameterTypes =
+                        TypeInference.SpecializeTypesFromArguments(
+                            appliedFunctionType.ParameterTypes,
+                            actualArgumentTypes);
+
+                    for (var argumentIndex = 0;
+                        argumentIndex < application.Arguments.Count &&
+                        argumentIndex < specializedParameterTypes.Count;
+                        argumentIndex++)
+                    {
+                        SuggestExpectedFunctionType(
+                            application.Arguments[argumentIndex],
+                            specializedParameterTypes[argumentIndex],
+                            context,
+                            inferredFunctionNames,
+                            suggestions);
+                    }
+                }
+
+                CollectFunctionTypeSuggestions(
+                    application.Function,
+                    context,
+                    inferredFunctionNames,
+                    suggestions);
+
+                foreach (var argument in application.Arguments)
+                {
+                    CollectFunctionTypeSuggestions(
+                        argument,
+                        context,
+                        inferredFunctionNames,
+                        suggestions);
+                }
+
+                break;
+
+            case SyntaxTypes.Expression.LetExpression letExpression:
+                var extendedContext =
+                    context with
+                    {
+                        LocalBindingTypes =
+                        InferLetExpressionLocalBindingTypes(
+                            letExpression,
+                            context),
+                        LocalBindingExpressions =
+                        ExtendLocalBindingExpressions(
+                            letExpression,
+                            context.LocalBindingExpressions)
+                    };
+
+                foreach (var declaration in letExpression.Declarations)
+                {
+                    switch (declaration)
+                    {
+                        case SyntaxTypes.LetDeclaration.LetFunction letFunction:
+                            CollectFunctionTypeSuggestions(
+                                letFunction.Function.Declaration.Expression,
+                                extendedContext,
+                                inferredFunctionNames,
+                                suggestions);
+
+                            break;
+
+                        case SyntaxTypes.LetDeclaration.LetDestructuring letDestructuring:
+                            CollectFunctionTypeSuggestions(
+                                letDestructuring.Expression,
+                                extendedContext,
+                                inferredFunctionNames,
+                                suggestions);
+
+                            break;
+
+                        default:
+                            throw new System.NotImplementedException(
+                                "CollectFunctionTypeSuggestions does not handle let declaration variant: " +
+                                declaration.GetType().Name);
+                    }
+                }
+
+                CollectFunctionTypeSuggestions(
+                    letExpression.Expression,
+                    extendedContext,
+                    inferredFunctionNames,
+                    suggestions);
+
+                break;
+
+            case SyntaxTypes.Expression.OperatorApplication operatorApplication:
+                CollectFunctionTypeSuggestions(
+                    operatorApplication.Left,
+                    context,
+                    inferredFunctionNames,
+                    suggestions);
+
+                CollectFunctionTypeSuggestions(
+                    operatorApplication.Right,
+                    context,
+                    inferredFunctionNames,
+                    suggestions);
+
+                break;
+
+            case SyntaxTypes.Expression.IfBlock ifBlock:
+                CollectFunctionTypeSuggestions(
+                    ifBlock.Condition,
+                    context,
+                    inferredFunctionNames,
+                    suggestions);
+
+                CollectFunctionTypeSuggestions(
+                    ifBlock.ThenBlock,
+                    context,
+                    inferredFunctionNames,
+                    suggestions);
+
+                CollectFunctionTypeSuggestions(
+                    ifBlock.ElseBlock,
+                    context,
+                    inferredFunctionNames,
+                    suggestions);
+
+                break;
+
+            case SyntaxTypes.Expression.CaseExpression caseExpression:
+                var scrutineeType =
+                    InferExpressionType(caseExpression.Expression, context);
+
+                CollectFunctionTypeSuggestions(
+                    caseExpression.Expression,
+                    context,
+                    inferredFunctionNames,
+                    suggestions);
+
+                foreach (var caseItem in caseExpression.Cases)
+                {
+                    var caseContext =
+                        context with
+                        {
+                            LocalBindingTypes =
+                            ExtractCasePatternBindingTypes(
+                                caseItem.Pattern,
+                                scrutineeType,
+                                context.LocalBindingTypes,
+                                context)
+                        };
+
+                    CollectFunctionTypeSuggestions(
+                        caseItem.Expression,
+                        caseContext,
+                        inferredFunctionNames,
+                        suggestions);
+                }
+
+                break;
+
+            case SyntaxTypes.Expression.LambdaExpression lambdaExpression:
+                CollectFunctionTypeSuggestions(
+                    lambdaExpression.Expression,
+                    context,
+                    inferredFunctionNames,
+                    suggestions);
+
+                break;
+
+            case SyntaxTypes.Expression.ListExpr listExpression:
+                foreach (var element in listExpression.Elements)
+                {
+                    CollectFunctionTypeSuggestions(
+                        element,
+                        context,
+                        inferredFunctionNames,
+                        suggestions);
+                }
+
+                break;
+
+            case SyntaxTypes.Expression.TupledExpression tupleExpression:
+                foreach (var element in tupleExpression.Elements)
+                {
+                    CollectFunctionTypeSuggestions(
+                        element,
+                        context,
+                        inferredFunctionNames,
+                        suggestions);
+                }
+
+                break;
+
+            case SyntaxTypes.Expression.RecordExpr recordExpression:
+                foreach (var field in recordExpression.Fields)
+                {
+                    CollectFunctionTypeSuggestions(
+                        field.Value,
+                        context,
+                        inferredFunctionNames,
+                        suggestions);
+                }
+
+                break;
+
+            case SyntaxTypes.Expression.RecordAccess recordAccess:
+                CollectFunctionTypeSuggestions(
+                    recordAccess.Record,
+                    context,
+                    inferredFunctionNames,
+                    suggestions);
+
+                break;
+
+            case SyntaxTypes.Expression.RecordUpdateExpression recordUpdate:
+                foreach (var field in recordUpdate.Fields)
+                {
+                    CollectFunctionTypeSuggestions(
+                        field.Value,
+                        context,
+                        inferredFunctionNames,
+                        suggestions);
+                }
+
+                break;
+
+            case SyntaxTypes.Expression.Negation negation:
+                CollectFunctionTypeSuggestions(
+                    negation.Expression,
+                    context,
+                    inferredFunctionNames,
+                    suggestions);
+
+                break;
+
+            case SyntaxTypes.Expression.Identifier:
+            case SyntaxTypes.Expression.RecordAccessFunction:
+            case SyntaxTypes.Expression.PrefixOperator:
+            case SyntaxTypes.Expression.UnitExpr:
+            case SyntaxTypes.Expression.StringLiteral:
+            case SyntaxTypes.Expression.CharLiteral:
+            case SyntaxTypes.Expression.IntegerLiteral:
+            case SyntaxTypes.Expression.FloatLiteral:
+            case SyntaxTypes.Expression.GLSLExpression:
+                break;
+
+            default:
+                throw new System.NotImplementedException(
+                    "CollectFunctionTypeSuggestions does not handle expression variant: " +
+                    expression.GetType().Name);
+        }
+    }
+
+    private static TypeInference.InferredType ConstrainFunctionArguments(
+        TypeInference.InferredType functionType,
+        IReadOnlyList<TypeInference.InferredType> argumentTypes)
+    {
+        TypeInference.InferredType ConstrainAt(
+            TypeInference.InferredType remainingType,
+            int argumentIndex)
+        {
+            if (argumentIndex >= argumentTypes.Count)
+                return remainingType;
+
+            var existingFunctionType =
+                remainingType as TypeInference.InferredType.FunctionType;
+
+            var existingArgumentType =
+                existingFunctionType?.ArgumentType ??
+                new TypeInference.InferredType.UnknownType();
+
+            var constrainedArgumentType =
+                TypeInference.TryUnify(
+                    existingArgumentType,
+                    argumentTypes[argumentIndex]) is
+                    Result<string, TypeInference.InferredType>.Ok unified
+                ?
+                unified.Value
+                :
+                existingArgumentType;
+
+            var returnType =
+                existingFunctionType?.ReturnType ??
+                new TypeInference.InferredType.UnknownType();
+
+            return
+                new TypeInference.InferredType.FunctionType(
+                    constrainedArgumentType,
+                    ConstrainAt(returnType, argumentIndex + 1));
+        }
+
+        return ConstrainAt(functionType, 0);
+    }
+
+    private static void SuggestExpectedFunctionType(
+        SyntaxTypes.Expression expression,
+        TypeInference.InferredType expectedType,
+        ExpressionTypeContext context,
+        IReadOnlySet<ElmSyntax.SyntaxModel.QualifiedNameRef> inferredFunctionNames,
+        Dictionary<
+            (ElmSyntax.SyntaxModel.QualifiedNameRef FunctionName, int ParameterIndex),
+            TypeInference.InferredType> suggestions)
+    {
+        if (expression is SyntaxTypes.Expression.Identifier
+            {
+                QualifiedName.Namespaces.Count: 0
+            } localIdentifier &&
+            context.LocalBindingExpressions.TryGetValue(
+                localIdentifier.QualifiedName.DeclName,
+                out var localBindingExpression) &&
+            !ReferenceEquals(expression, localBindingExpression))
+        {
+            SuggestExpectedFunctionType(
+                localBindingExpression,
+                expectedType,
+                context,
+                inferredFunctionNames,
+                suggestions);
+
+            return;
+        }
+
+        if (expression is SyntaxTypes.Expression.RecordAccessFunction recordAccessFunction &&
+            expectedType is TypeInference.InferredType.FunctionType
+            {
+                ArgumentType: TypeInference.InferredType.RecordType
+            })
+        {
+            context.ClosedRecordAccessFunctions.Add(recordAccessFunction);
+            return;
+        }
+
+        var functionExpression = expression;
+        var alreadyAppliedCount = 0;
+        IReadOnlyList<SyntaxTypes.Expression> alreadyAppliedArguments = [];
+
+        if (expression is SyntaxTypes.Expression.Application application)
+        {
+            functionExpression = application.Function;
+            alreadyAppliedCount = application.Arguments.Count;
+            alreadyAppliedArguments = application.Arguments;
+        }
+
+        if (functionExpression is not SyntaxTypes.Expression.Identifier identifier ||
+            !TryResolveFunction(
+                identifier,
+                context,
+                out var functionName,
+                out var functionType))
+        {
+            return;
+        }
+
+        var partialResultType = functionType.ReturnType;
+
+        for (var parameterIndex = functionType.ParameterTypes.Count - 1;
+            parameterIndex >= alreadyAppliedCount;
+            parameterIndex--)
+        {
+            partialResultType =
+                new TypeInference.InferredType.FunctionType(
+                    functionType.ParameterTypes[parameterIndex],
+                    partialResultType);
+        }
+
+        var specializedParameterTypes =
+            TypeInference.SpecializeTypesFromMatch(
+                partialResultType,
+                expectedType,
+                functionType.ParameterTypes);
+
+        for (var argumentIndex = 0;
+            argumentIndex < alreadyAppliedArguments.Count &&
+            argumentIndex < specializedParameterTypes.Count;
+            argumentIndex++)
+        {
+            SuggestExpectedFunctionType(
+                alreadyAppliedArguments[argumentIndex],
+                specializedParameterTypes[argumentIndex],
+                context,
+                inferredFunctionNames,
+                suggestions);
+        }
+
+        var remainingExpectedType = expectedType;
+
+        for (var parameterIndex = alreadyAppliedCount;
+            parameterIndex < specializedParameterTypes.Count &&
+            remainingExpectedType is TypeInference.InferredType.FunctionType expectedFunctionType;
+            parameterIndex++)
+        {
+            SuggestFunctionParameterType(
+                functionName,
+                parameterIndex,
+                expectedFunctionType.ArgumentType,
+                inferredFunctionNames,
+                suggestions);
+
+            remainingExpectedType = expectedFunctionType.ReturnType;
+        }
+    }
+
+    private static bool TryResolveFunction(
+        SyntaxTypes.Expression.Identifier identifier,
+        ExpressionTypeContext context,
+        out ElmSyntax.SyntaxModel.QualifiedNameRef qualifiedName,
+        out FunctionTypeInfo functionType)
+    {
+        qualifiedName =
+            identifier.QualifiedName.Namespaces.Count > 0
+            ?
+            QualifiedNameHelper.ToQualifiedNameRef(
+                identifier.QualifiedName.Namespaces,
+                identifier.QualifiedName.DeclName)
+            :
+            QualifiedNameHelper.FromQualifiedNameString(
+                context.CurrentModuleName + "." + identifier.QualifiedName.DeclName);
+
+        return context.FunctionTypes.TryGetValue(qualifiedName, out functionType!);
+    }
+
+    private static ImmutableDictionary<string, TypeInference.InferredType>
+        ExtractCasePatternBindingTypes(
+        SyntaxTypes.Pattern pattern,
+        TypeInference.InferredType scrutineeType,
+        ImmutableDictionary<string, TypeInference.InferredType> existingBindings,
+        ExpressionTypeContext context)
+    {
+        var constructorArgumentTypes =
+            context.ConstructorArgumentTypes.ToImmutableDictionary();
+
+        if (pattern is SyntaxTypes.Pattern.NamedPattern namedPattern)
+        {
+            var constructorName =
+                QualifiedNameHelper.ToQualifiedNameRef(
+                    namedPattern.Name.ModuleName,
+                    namedPattern.Name.Name);
+
+            if (context.FunctionTypes.TryGetValue(constructorName, out var constructorType))
+            {
+                constructorArgumentTypes =
+                    constructorArgumentTypes.SetItem(
+                        constructorName,
+                        TypeInference.SpecializeTypesFromMatch(
+                            constructorType.ReturnType,
+                            scrutineeType,
+                            constructorType.ParameterTypes));
+            }
+        }
+
+        return
+            TypeInference.ExtractPatternBindingTypesFromInferred(
+                pattern,
+                scrutineeType,
+                existingBindings,
+                constructorArgumentTypes);
+    }
+
+    private static ImmutableDictionary<string, TypeInference.InferredType>
+        InferLetExpressionLocalBindingTypes(
+        SyntaxTypes.Expression.LetExpression letExpression,
+        ExpressionTypeContext context)
+    {
+        var localBindingTypes =
+            TypeInference.InferLetExpressionLocalBindingTypes(
+                letExpression,
+                context.ParameterNames,
+                context.ParameterTypes,
+                context.LocalBindingTypes,
+                context.CurrentModuleName,
+                context.FunctionTypes);
+
+        foreach (var declaration in letExpression.Declarations)
+        {
+            switch (declaration)
+            {
+                case SyntaxTypes.LetDeclaration.LetDestructuring letDestructuring:
+                    var expressionType =
+                        InferExpressionType(
+                            letDestructuring.Expression,
+                            context with
+                            {
+                                LocalBindingTypes = localBindingTypes
+                            });
+
+                    localBindingTypes =
+                        ExtractCasePatternBindingTypes(
+                            letDestructuring.Pattern,
+                            expressionType,
+                            localBindingTypes,
+                            context);
+
+                    break;
+
+                case SyntaxTypes.LetDeclaration.LetFunction:
+                    break;
+
+                default:
+                    throw new System.NotImplementedException(
+                        "InferLetExpressionLocalBindingTypes does not handle let declaration variant: " +
+                        declaration.GetType().Name);
+            }
+        }
+
+        return localBindingTypes;
+    }
+
+    private static ImmutableDictionary<string, SyntaxTypes.Expression>
+        ExtendLocalBindingExpressions(
+        SyntaxTypes.Expression.LetExpression letExpression,
+        ImmutableDictionary<string, SyntaxTypes.Expression> localBindingExpressions)
+    {
+        foreach (var declaration in letExpression.Declarations)
+        {
+            if (declaration is SyntaxTypes.LetDeclaration.LetFunction letFunction &&
+                letFunction.Function.Declaration.Arguments.Count is 0)
+            {
+                localBindingExpressions =
+                    localBindingExpressions.SetItem(
+                        letFunction.Function.Declaration.Name,
+                        letFunction.Function.Declaration.Expression);
+            }
+        }
+
+        return localBindingExpressions;
+    }
+
+    private static void SuggestFunctionParameterType(
+        ElmSyntax.SyntaxModel.QualifiedNameRef functionName,
+        int parameterIndex,
+        TypeInference.InferredType suggestedType,
+        IReadOnlySet<ElmSyntax.SyntaxModel.QualifiedNameRef> inferredFunctionNames,
+        Dictionary<
+            (ElmSyntax.SyntaxModel.QualifiedNameRef FunctionName, int ParameterIndex),
+            TypeInference.InferredType> suggestions)
+    {
+        if (!inferredFunctionNames.Contains(functionName) ||
+            suggestedType is TypeInference.InferredType.UnknownType)
+        {
+            return;
+        }
+
+        var key = (functionName, parameterIndex);
+
+        if (suggestions.TryGetValue(key, out var existingSuggestion))
+        {
+            if (TypeInference.TryUnify(existingSuggestion, suggestedType) is
+                Result<string, TypeInference.InferredType>.Ok unified)
+            {
+                suggestions[key] = unified.Value;
+            }
+
+            return;
+        }
+
+        suggestions[key] = suggestedType;
     }
 
     /// <summary>
@@ -657,7 +1701,7 @@ public static class OptimizationOpportunityFinder
         switch (expression)
         {
             case SyntaxTypes.Expression.RecordAccess recordAccess:
-                if (IsOpenRecordExpression(recordAccess.Record, expressionTypeContext))
+                if (RequiresGenericRecordOperation(recordAccess.Record, expressionTypeContext))
                 {
                     MaybeAdd(
                         OpportunityCategory.RecordAccess,
@@ -681,11 +1725,14 @@ public static class OptimizationOpportunityFinder
                 break;
 
             case SyntaxTypes.Expression.RecordAccessFunction recordAccessFunction:
-                MaybeAdd(
-                    OpportunityCategory.RecordAccess,
-                    recordAccessFunction.FieldName,
-                    containing,
-                    resultBuilder);
+                if (!expressionTypeContext.ClosedRecordAccessFunctions.Contains(recordAccessFunction))
+                {
+                    MaybeAdd(
+                        OpportunityCategory.RecordAccess,
+                        recordAccessFunction.FieldName,
+                        containing,
+                        resultBuilder);
+                }
 
                 break;
 
@@ -695,7 +1742,7 @@ public static class OptimizationOpportunityFinder
                         DeclQualifiedName.Create([], recordUpdate.RecordName));
 
                 var isOpenRecordUpdate =
-                    IsOpenRecordExpression(recordUpdateExpression, expressionTypeContext);
+                    RequiresGenericRecordOperation(recordUpdateExpression, expressionTypeContext);
 
                 foreach (var field in recordUpdate.Fields)
                 {
@@ -846,13 +1893,13 @@ public static class OptimizationOpportunityFinder
                     expressionTypeContext with
                     {
                         LocalBindingTypes =
-                        TypeInference.InferLetExpressionLocalBindingTypes(
+                        InferLetExpressionLocalBindingTypes(
                             letExpr,
-                            expressionTypeContext.ParameterNames,
-                            expressionTypeContext.ParameterTypes,
-                            expressionTypeContext.LocalBindingTypes,
-                            expressionTypeContext.CurrentModuleName,
-                            expressionTypeContext.FunctionTypes)
+                            expressionTypeContext),
+                        LocalBindingExpressions =
+                        ExtendLocalBindingExpressions(
+                            letExpr,
+                            expressionTypeContext.LocalBindingExpressions)
                     };
 
                 foreach (var decl in letExpr.Declarations)
@@ -981,6 +2028,9 @@ public static class OptimizationOpportunityFinder
                 break;
 
             case SyntaxTypes.Expression.CaseExpression caseExpr:
+                var caseScrutineeType =
+                    InferExpressionType(caseExpr.Expression, expressionTypeContext);
+
                 CollectFromExpression(
                     caseExpr.Expression,
                     containing,
@@ -992,13 +2042,24 @@ public static class OptimizationOpportunityFinder
 
                 foreach (var caseEntry in caseExpr.Cases)
                 {
+                    var caseExpressionTypeContext =
+                        expressionTypeContext with
+                        {
+                            LocalBindingTypes =
+                            ExtractCasePatternBindingTypes(
+                                caseEntry.Pattern,
+                                caseScrutineeType,
+                                expressionTypeContext.LocalBindingTypes,
+                                expressionTypeContext)
+                        };
+
                     CollectFromExpression(
                         caseEntry.Expression,
                         containing,
                         topLevelArity,
                         letScope,
                         functionTypedParameterNames,
-                        expressionTypeContext,
+                        caseExpressionTypeContext,
                         resultBuilder);
                 }
 
@@ -1077,21 +2138,113 @@ public static class OptimizationOpportunityFinder
         }
     }
 
-    private static bool IsOpenRecordExpression(
+    private static bool RequiresGenericRecordOperation(
         SyntaxTypes.Expression expression,
         ExpressionTypeContext context) =>
-        InferExpressionType(expression, context) is TypeInference.InferredType.OpenRecordType;
+        InferExpressionType(expression, context) is not TypeInference.InferredType.RecordType;
 
     private static TypeInference.InferredType InferExpressionType(
         SyntaxTypes.Expression expression,
-        ExpressionTypeContext context) =>
-        TypeInference.InferExpressionType(
-            expression,
-            context.ParameterNames,
-            context.ParameterTypes,
-            context.LocalBindingTypes,
-            context.CurrentModuleName,
-            context.FunctionTypes);
+        ExpressionTypeContext context)
+    {
+        if (expression is SyntaxTypes.Expression.RecordAccess recordAccess)
+        {
+            var recordType = InferExpressionType(recordAccess.Record, context);
+
+            var fieldType =
+                recordType switch
+                {
+                    TypeInference.InferredType.RecordType closedRecord =>
+                    closedRecord.Fields
+                    .FirstOrDefault(field => field.FieldName == recordAccess.FieldName)
+                    .FieldType,
+
+                    TypeInference.InferredType.OpenRecordType openRecord =>
+                    openRecord.KnownFields
+                    .FirstOrDefault(field => field.FieldName == recordAccess.FieldName)
+                    .FieldType,
+
+                    TypeInference.InferredType.IntType => null,
+                    TypeInference.InferredType.FloatType => null,
+                    TypeInference.InferredType.StringType => null,
+                    TypeInference.InferredType.CharType => null,
+                    TypeInference.InferredType.BoolType => null,
+                    TypeInference.InferredType.NumberType => null,
+                    TypeInference.InferredType.TupleType => null,
+                    TypeInference.InferredType.FunctionType => null,
+                    TypeInference.InferredType.ListType => null,
+                    TypeInference.InferredType.ChoiceType => null,
+                    TypeInference.InferredType.TypeVariable => null,
+                    TypeInference.InferredType.UnknownType => null,
+
+                    _ =>
+                    throw new System.NotImplementedException(
+                        "InferExpressionType does not handle inferred type variant: " +
+                        recordType.GetType().Name)
+                };
+
+            if (fieldType is not null)
+            {
+                return
+                    TypeInference.ExpandTypeAliases(
+                        fieldType,
+                        context.AliasTypes,
+                        context.CurrentModuleName.Split('.'));
+            }
+        }
+
+        if (expression is SyntaxTypes.Expression.Application
+            {
+                Function: SyntaxTypes.Expression.Identifier
+                {
+                    QualifiedName.Namespaces: ["Basics"],
+                    QualifiedName.DeclName: "apR" or "apL"
+                } pipeIdentifier,
+                Arguments: [var firstArgument, var secondArgument]
+            })
+        {
+            var valueExpression =
+                pipeIdentifier.QualifiedName.DeclName is "apR"
+                ?
+                firstArgument
+                :
+                secondArgument;
+
+            var functionExpression =
+                pipeIdentifier.QualifiedName.DeclName is "apR"
+                ?
+                secondArgument
+                :
+                firstArgument;
+
+            var valueType = InferExpressionType(valueExpression, context);
+            var functionType = InferExpressionType(functionExpression, context);
+
+            if (functionType is TypeInference.InferredType.FunctionType inferredFunctionType)
+            {
+                return
+                    TypeInference.SpecializeTypesFromMatch(
+                        inferredFunctionType.ArgumentType,
+                        valueType,
+                        [inferredFunctionType.ReturnType])[0];
+            }
+        }
+
+        var inferredType =
+            TypeInference.InferExpressionType(
+                expression,
+                context.ParameterNames,
+                context.ParameterTypes,
+                context.LocalBindingTypes,
+                context.CurrentModuleName,
+                context.FunctionTypes);
+
+        return
+            TypeInference.ExpandTypeAliases(
+                inferredType,
+                context.AliasTypes,
+                context.CurrentModuleName.Split('.'));
+    }
 
     /// <summary>
     /// Inspects an <see cref="SyntaxTypes.Expression.Application"/> node

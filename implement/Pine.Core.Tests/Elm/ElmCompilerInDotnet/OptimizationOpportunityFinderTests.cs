@@ -1893,40 +1893,26 @@ public class OptimizationOpportunityFinderTests
             """
             ElmSyntax.Concrete.Parser: BasicsArithmetic: 5
             ElmSyntax.Concrete.Parser: BasicsCompare: 4
-            ElmSyntax.Concrete.Parser: BasicsAppend: 39
             ElmSyntax.Concrete.Parser: HigherOrderParameter_Direct: 1
             ElmSyntax.Concrete.Parser: HigherOrderParameter_Indirect: 56
             ElmSyntax.Concrete.Parser: RootLevelChoiceTagWrapper: 67
-            LanguageService: RecordAccess: 53
             LanguageService: BasicsCompare: 2
-            LanguageService: BasicsAppend: 1
             LanguageService: PartialApplication: 63
             LanguageService: HigherOrderParameter_Direct: 3
             LanguageService: HigherOrderParameter_Indirect: 147
             LanguageService: RootLevelChoiceTagWrapper: 28
-            LanguageServiceAnalysis: RecordAccess: 10
-            LanguageServiceAnalysis: RecordUpdate: 2
-            LanguageServiceAnalysis: BasicsAppend: 5
             LanguageServiceAnalysis: HigherOrderParameter_Indirect: 93
             LanguageServiceAnalysis: RootLevelChoiceTagWrapper: 3
             """.Trim());
 
-        opportunities.Should().Contain(
-            new Opportunity(
-                DeclQualifiedName.FromString(
-                    "LanguageService.commonImplicitTopLevelImportsNew__lifted__lambda3"),
-                OpportunityCategory.RecordAccess,
-                "name"));
+        opportunities.Should().NotContain(
+            opportunity => opportunity.Category == OpportunityCategory.RecordAccess);
 
         opportunities.Should().NotContain(
             opportunity => opportunity.Category == OpportunityCategory.BasicsEq);
 
-        opportunities.Should().Contain(
-            new Opportunity(
-                DeclQualifiedName.FromString(
-                    "LanguageServiceAnalysis.analyzeFile__lifted__lambda1"),
-                OpportunityCategory.RecordUpdate,
-                "isExposed"));
+        opportunities.Should().NotContain(
+            opportunity => opportunity.Category == OpportunityCategory.BasicsAppend);
     }
 
     private static string FindAndRender(
