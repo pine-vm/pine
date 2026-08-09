@@ -118,6 +118,13 @@ public class PineValueInProcess
         }
 
         {
+            if (evaluated == PineValue.EmptyBlob && EmptyBlob is { } reusedInst)
+            {
+                return reusedInst;
+            }
+        }
+
+        {
             if (evaluated == PineKernelValues.TrueValue && KernelTrueValue is { } reusedInst)
             {
                 return reusedInst;
@@ -705,14 +712,42 @@ public class PineValueInProcess
     {
         if (source._sliceBuilder is { } sliceBuilder)
         {
+            var taken = sliceBuilder.TakeLast(takeCount);
+
+            if (ReferenceEquals(taken, sliceBuilder))
+            {
+                return source;
+            }
+
             return
                 new PineValueInProcess
                 {
-                    _sliceBuilder = sliceBuilder.TakeLast(takeCount),
+                    _sliceBuilder = taken,
                 };
         }
 
+        if (source._list is { } list && list.Count <= takeCount)
+        {
+            return source;
+        }
+
+        if (source._tagged is not null && 2 <= takeCount)
+        {
+            return source;
+        }
+
+        if (source._concatBuilder is { } concatBuilder &&
+            concatBuilder.PredictLength() <= takeCount)
+        {
+            return source;
+        }
+
         var evaluated = source.Evaluate();
+
+        if (BuiltinFunctionSpecialized.length_as_int(evaluated) <= takeCount)
+        {
+            return source;
+        }
 
         if (evaluated is PineValue.BlobValue blobValue)
         {
@@ -779,6 +814,12 @@ public class PineValueInProcess
             return CreateList(reversed);
         }
 
+        if (input.EvaluatedOrNull is PineValue.BlobValue blobValue &&
+            blobValue.Bytes.Length <= 1)
+        {
+            return input;
+        }
+
         // Blob (or other concrete) path: no specialized children can be embedded.
         return Create(BuiltinFunction.reverse(input.Evaluate()));
     }
@@ -799,6 +840,12 @@ public class PineValueInProcess
                 return EmptyList;
 
             return input.GetElementAt(0);
+        }
+
+        if (input.EvaluatedOrNull is PineValue.BlobValue blobValue &&
+            blobValue.Bytes.Length <= 1)
+        {
+            return input;
         }
 
         // Blob (or other concrete) path.
@@ -861,6 +908,22 @@ public class PineValueInProcess
         var head = input.GetElementAt(firstNonEmptyIndex);
 
         if (firstNonEmptyIndex == length - 1)
+            return head;
+
+        var onlyEmptyListsRemain = true;
+
+        for (var i = firstNonEmptyIndex + 1; i < length; ++i)
+        {
+            var part = input.GetElementAt(i);
+
+            if (!part.IsList() || part.GetLength() is not 0)
+            {
+                onlyEmptyListsRemain = false;
+                break;
+            }
+        }
+
+        if (onlyEmptyListsRemain)
             return head;
 
         if (head.IsList())
@@ -936,6 +999,18 @@ public class PineValueInProcess
         PineValueInProcess left,
         PineValueInProcess right)
     {
+        if (left._integer is null && left.GetLength() is 0 &&
+            (left.IsList() || right.IsBlob()))
+        {
+            return right;
+        }
+
+        if (right._integer is null && right.GetLength() is 0 &&
+            (right.IsList() || left.IsBlob()))
+        {
+            return left;
+        }
+
         if (left._concatBuilder is { } leftConcatBuilder &&
             right._concatBuilder is { } rightConcatBuilder)
         {

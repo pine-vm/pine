@@ -27,6 +27,14 @@ public class PineValueInProcessTests
     }
 
     [Fact]
+    public void Create_reuses_empty_blob()
+    {
+        var result = PineValueInProcess.Create(PineValue.EmptyBlob);
+
+        result.Should().BeSameAs(PineValueInProcess.EmptyBlob);
+    }
+
+    [Fact]
     public void CreateList_initializes_without_immediate_evaluation()
     {
         var items =
@@ -435,6 +443,32 @@ public class PineValueInProcessTests
     }
 
     [Fact]
+    public void TakeLast_with_full_blob_length_returns_same_value()
+    {
+        var original = PineValueInProcess.Create(PineValue.Blob([1, 2, 3, 4, 5, 6, 7, 8, 9]));
+
+        var result = PineValueInProcess.TakeLast(9, original);
+
+        result.Should().BeSameAs(original);
+    }
+
+    [Fact]
+    public void TakeLast_with_full_structural_list_length_returns_same_value()
+    {
+        var original =
+            PineValueInProcess.CreateList(
+                [
+                PineValueInProcess.Create(PineValue.Blob([1])),
+                PineValueInProcess.Create(PineValue.Blob([2])),
+                ]);
+
+        var result = PineValueInProcess.TakeLast(2, original);
+
+        result.Should().BeSameAs(original);
+        result.EvaluatedOrNull.Should().BeNull();
+    }
+
+    [Fact]
     public void Take_with_zero_produces_empty()
     {
         var originalValue = PineValue.List([PineValue.Blob([1]), PineValue.Blob([2])]);
@@ -543,6 +577,22 @@ public class PineValueInProcessTests
     }
 
     [Fact]
+    public void Concat_with_only_trailing_empty_lists_returns_nonempty_part()
+    {
+        var nonempty =
+            PineValueInProcess.CreateList(
+                [PineValueInProcess.Create(PineValue.Blob([1]))]);
+
+        var input =
+            PineValueInProcess.CreateList(
+                [nonempty, PineValueInProcess.EmptyList, PineValueInProcess.EmptyList]);
+
+        var result = PineValueInProcess.Concat(input);
+
+        result.Should().BeSameAs(nonempty);
+    }
+
+    [Fact]
     public void ConcatBinary_chaining_multiple_operations()
     {
         var value1 = PineValueInProcess.Create(PineValue.Blob([1, 2]));
@@ -579,7 +629,40 @@ public class PineValueInProcessTests
             BuiltinFunction.concat(
                 PineValue.List([PineValue.EmptyBlob, PineValue.Blob([1, 2])]));
 
+        result.Should().BeSameAs(right);
         evaluated.Should().Be(expected);
+    }
+
+    [Fact]
+    public void ConcatBinary_with_trailing_empty_blob_returns_left()
+    {
+        var left = PineValueInProcess.Create(PineValue.Blob([1, 2]));
+
+        var result = PineValueInProcess.ConcatBinary(left, PineValueInProcess.EmptyBlob);
+
+        result.Should().BeSameAs(left);
+    }
+
+    [Fact]
+    public void Reverse_reuses_blobs_with_at_most_one_byte()
+    {
+        var singleByte = PineValueInProcess.Create(PineValue.BlobSingleByte(1));
+
+        PineValueInProcess.Reverse(PineValueInProcess.EmptyBlob)
+            .Should().BeSameAs(PineValueInProcess.EmptyBlob);
+
+        PineValueInProcess.Reverse(singleByte).Should().BeSameAs(singleByte);
+    }
+
+    [Fact]
+    public void Head_reuses_blobs_with_at_most_one_byte()
+    {
+        var singleByte = PineValueInProcess.Create(PineValue.BlobSingleByte(1));
+
+        PineValueInProcess.Head(PineValueInProcess.EmptyBlob)
+            .Should().BeSameAs(PineValueInProcess.EmptyBlob);
+
+        PineValueInProcess.Head(singleByte).Should().BeSameAs(singleByte);
     }
 
     [Fact]
