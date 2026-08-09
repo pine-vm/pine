@@ -538,9 +538,78 @@ public class ElmLanguageServiceTests
         """TextDocumentReferencesResponse [ { fileLocation = WorkspaceFileLocation "src/ModuleA.elm", range = { endColumn = 32, endLineNumber = 1, startColumn = 26, startLineNumber = 1 } }, { fileLocation = WorkspaceFileLocation "src/ModuleB.elm", range = { endColumn = 19, endLineNumber = 7, startColumn = 13, startLineNumber = 7 } }, { fileLocation = WorkspaceFileLocation "src/ModuleB.elm", range = { endColumn = 38, endLineNumber = 7, startColumn = 32, startLineNumber = 7 } } ]""";
 
     [Fact]
+    public void AddWorkspaceFile_updates_hover_to_use_the_latest_valid_document()
+    {
+        const string FilePath = "src/Main.elm";
+
+        const string OriginalContent =
+            """
+            module Main exposing (init, name)
+
+
+            name = init
+
+
+            init : Int
+            init =
+                0
+
+            """;
+
+        PineValue UpdateDocument(PineValue state, string content)
+        {
+            var (result, _) =
+                ApplyWithProfiling(
+                    "addWorkspaceFile",
+                    [
+                    ElmValueEncoding.ElmValueAsPineValue(ElmString(FilePath)),
+                    ElmValueEncoding.ElmValueAsPineValue(ElmString(content)),
+                    state,
+                    ]);
+
+            return ((PineValue.ListValue)result).Items.Span[1];
+        }
+
+        string HoverAtLine(PineValue state, long lineNumber)
+        {
+            var (result, _) =
+                ApplyWithProfiling(
+                    "provideHoverWorkspace",
+                    [
+                    ElmValueEncoding.ElmValueAsPineValue(ElmString(FilePath)),
+                    ElmValueEncoding.ElmValueAsPineValue(Integer(lineNumber)),
+                    ElmValueEncoding.ElmValueAsPineValue(Integer(9)),
+                    state,
+                    ]);
+
+            return RenderResponseFromResult(result);
+        }
+
+        var state = EvaluateZeroArgTestDeclaration("initState");
+
+        state = UpdateDocument(state, OriginalContent);
+
+        HoverAtLine(state, lineNumber: 4).Should().Be(
+            """ProvideHoverResponse [ "    init : Int" ]""");
+
+        HoverAtLine(state, lineNumber: 5).Should().Be(
+            """ProvideHoverResponse []""");
+
+        var changedContent = "\n" + OriginalContent;
+
+        state = UpdateDocument(state, changedContent);
+
+        HoverAtLine(state, lineNumber: 5).Should().Be(
+            """ProvideHoverResponse [ "    init : Int" ]""");
+
+        HoverAtLine(state, lineNumber: 4).Should().Be(
+            """ProvideHoverResponse []""");
+    }
+
+    [Fact]
     public void Hover_completion_definition_and_document_symbols_use_migrated_syntax()
     {
-        const string packageModuleText =
+        const string PackageModuleText =
             """
             module PackageModule exposing (Choice(..), packageValue)
 
@@ -555,7 +624,7 @@ public class ElmLanguageServiceTests
 
             """;
 
-        const string workspaceModuleText =
+        const string WorkspaceModuleText =
             """
             module Main exposing (mainValue, LocalChoice(..))
 
@@ -576,7 +645,7 @@ public class ElmLanguageServiceTests
             ApplyWithProfiling(
                 "addPackageModule",
                 [
-                ElmValueEncoding.ElmValueAsPineValue(ElmString(packageModuleText)),
+                ElmValueEncoding.ElmValueAsPineValue(ElmString(PackageModuleText)),
                 initialState,
                 ]);
 
@@ -588,7 +657,7 @@ public class ElmLanguageServiceTests
                 "addWorkspaceFile",
                 [
                 ElmValueEncoding.ElmValueAsPineValue(ElmString("src/Main.elm")),
-                ElmValueEncoding.ElmValueAsPineValue(ElmString(workspaceModuleText)),
+                ElmValueEncoding.ElmValueAsPineValue(ElmString(WorkspaceModuleText)),
                 stateAfterPackage,
                 ]);
 
