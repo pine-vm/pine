@@ -32,15 +32,16 @@ public class DefaultPrecompiledLeavesContentTests
             IntermediateVM.SetupVM.DefaultPrecompiledLeaves;
 
         aggregate.Count.Should().Be(
-            36,
+            39,
             because:
             "the Pine.Core aggregate contributes the Basics.compare, Basics.eq, Basics.idiv " +
             "and Basics.gcd leaves, six Dict kernel leaves, the Json.Decode.parseValue leaf, " +
-            "eight String kernel leaves, the LanguageService comment-unwrapping leaf, " +
+            "eight String kernel leaves, three LanguageService leaves, " +
             "two Bytes kernel leaves, the two record runtime leaves " +
             "(record access and record update), " +
             "the two Base64 conversion leaves (Base64.Encode.toBytes and " +
-            "Base64.Decode.fromBytes), plus ten ElmSyntax.Concrete.Parser leaves");
+            "Base64.Decode.fromBytes), ten ElmSyntax.Concrete.Parser leaves, plus the " +
+            "ElmSyntax.Abstract.ConvertFromConcrete record-setter merge leaf");
 
         aggregate.Keys.Should().Contain(
             CoreBasicsPrecompiledLeaves.CompareLeafKey,
@@ -86,8 +87,12 @@ public class DefaultPrecompiledLeavesContentTests
             because: "the aggregate must expose all optimized String leaves");
 
         aggregate.Keys.Should().Contain(
+            [
             LanguageServicePrecompiledLeaves.RemoveWrappingFromMultilineCommentLeafKey,
-            because: "the aggregate must expose the LanguageService comment-unwrapping leaf");
+            LanguageServicePrecompiledLeaves.DropWhileEmptyLeafKey,
+            LanguageServicePrecompiledLeaves.SliceRangeFromTextLinesLeafKey,
+            ],
+            because: "the aggregate must expose all optimized LanguageService leaves");
 
         aggregate.Keys.Should().Contain(
             [
@@ -111,6 +116,10 @@ public class DefaultPrecompiledLeavesContentTests
         aggregate.Keys.Should().Contain(
             IntermediateVM.SetupVM.ConcreteParserPrecompiledLeaves.Keys,
             because: "the aggregate must expose the concrete-parser leaves");
+
+        aggregate.Keys.Should().Contain(
+            ElmSyntaxAbstractConvertFromConcretePrecompiledLeaves.MergeRecordSettersLeafKey,
+            because: "the aggregate must expose the ConvertFromConcrete record-setter merge leaf");
     }
 
     [Fact]
@@ -129,7 +138,8 @@ public class DefaultPrecompiledLeavesContentTests
                 .Concat(IntermediateVM.SetupVM.BytesPrecompiledLeaves.Keys)
                 .Concat(IntermediateVM.SetupVM.RecordAccessAndUpdatePrecompiledLeaves.Keys)
                 .Concat(IntermediateVM.SetupVM.Base64ConversionPrecompiledLeaves.Keys)
-                .Concat(IntermediateVM.SetupVM.ConcreteParserPrecompiledLeaves.Keys));
+                .Concat(IntermediateVM.SetupVM.ConcreteParserPrecompiledLeaves.Keys)
+                .Concat(IntermediateVM.SetupVM.ConvertFromConcretePrecompiledLeaves.Keys));
 
         aggregate.Keys.Should().BeEquivalentTo(
             perAreaKeys,
@@ -161,8 +171,8 @@ public class DefaultPrecompiledLeavesContentTests
 
         IntermediateVM.SetupVM.LanguageServicePrecompiledLeaves.Count
             .Should().Be(
-            1,
-            because: "the LanguageService area exposes the comment-unwrapping leaf");
+            3,
+            because: "the LanguageService area exposes three optimized text-processing leaves");
 
         IntermediateVM.SetupVM.BytesPrecompiledLeaves.Count
             .Should().Be(
@@ -187,5 +197,10 @@ public class DefaultPrecompiledLeavesContentTests
             .Should().Be(
             10,
             because: "the concrete-parser area exposes all requested recursive helpers");
+
+        IntermediateVM.SetupVM.ConvertFromConcretePrecompiledLeaves.Count
+            .Should().Be(
+            1,
+            because: "the ConvertFromConcrete area exposes the recursive record-setter merge");
     }
 }

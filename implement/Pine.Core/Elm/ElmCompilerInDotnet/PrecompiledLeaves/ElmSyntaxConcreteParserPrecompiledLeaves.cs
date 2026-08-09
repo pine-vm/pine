@@ -176,14 +176,18 @@ public static class ElmSyntaxConcreteParserPrecompiledLeaves
     public static PineValue? SkipOperatorCharsLeafDelegate(PineValue environment)
     {
         if (!EnvironmentMatches(environment, TokensFromStringModuleName, "skipOperatorChars") ||
-            !TryGetStringCodePoints(environment.ValueFromPathOrEmptyList([1]), out var source) ||
+            !TryGetStringBytes(environment.ValueFromPathOrEmptyList([1]), out var source) ||
             !TryParseNonnegativeInteger(environment.ValueFromPathOrEmptyList([2]), out var offset) ||
             !TryParseNonnegativeInteger(environment.ValueFromPathOrEmptyList([3]), out var offsetMax))
         {
             return null;
         }
 
-        while (offset < offsetMax && offset < source.Length && IsOperatorChar(source[(int)offset]))
+        var sourceCodePointCount = source.Length / 4;
+
+        while (offset < offsetMax &&
+            offset < sourceCodePointCount &&
+            IsOperatorChar(ReadStringCodePoint(source, (int)offset)))
         {
             offset++;
         }
@@ -195,13 +199,16 @@ public static class ElmSyntaxConcreteParserPrecompiledLeaves
     public static PineValue? ScanUnicodeEscapeDigitsLeafDelegate(PineValue environment)
     {
         if (!EnvironmentMatches(environment, TokensFromStringModuleName, "scanUnicodeEscapeDigits") ||
-            !TryGetStringCodePoints(environment.ValueFromPathOrEmptyList([1]), out var source) ||
+            !TryGetStringBytes(environment.ValueFromPathOrEmptyList([1]), out var source) ||
             !TryParseNonnegativeInteger(environment.ValueFromPathOrEmptyList([2]), out var offset))
         {
             return null;
         }
 
-        if (offset >= source.Length || !TryHexDigitValue(source[(int)offset], out var firstDigit))
+        var sourceCodePointCount = source.Length / 4;
+
+        if (offset >= sourceCodePointCount ||
+            !TryHexDigitValue(ReadStringCodePoint(source, (int)offset), out var firstDigit))
         {
             return s_nothing;
         }
@@ -209,7 +216,8 @@ public static class ElmSyntaxConcreteParserPrecompiledLeaves
         BigInteger value = firstDigit;
         offset++;
 
-        while (offset < source.Length && TryHexDigitValue(source[(int)offset], out var digit))
+        while (offset < sourceCodePointCount &&
+            TryHexDigitValue(ReadStringCodePoint(source, (int)offset), out var digit))
         {
             value = value * 16 + digit;
             offset++;
@@ -225,24 +233,26 @@ public static class ElmSyntaxConcreteParserPrecompiledLeaves
             !TryParseLiteralTermination(
                 environment.ValueFromPathOrEmptyList([1]),
                 out var termination) ||
-            !TryGetStringCodePoints(environment.ValueFromPathOrEmptyList([2]), out var source) ||
+            !TryGetStringBytes(environment.ValueFromPathOrEmptyList([2]), out var source) ||
             !TryParseNonnegativeInteger(environment.ValueFromPathOrEmptyList([3]), out var offset))
         {
             return null;
         }
 
-        while (offset < source.Length)
+        var sourceCodePointCount = source.Length / 4;
+
+        while (offset < sourceCodePointCount)
         {
             var index = (int)offset;
-            var codePoint = source[index];
+            var codePoint = ReadStringCodePoint(source, index);
 
             if ((termination is LiteralTermination.SingleQuote && codePoint is '\'') ||
                 (termination is LiteralTermination.DoubleQuote && codePoint is '"') ||
                 (termination is LiteralTermination.TripleQuote &&
                 codePoint is '"' &&
-                index + 2 < source.Length &&
-                source[index + 1] is '"' &&
-                source[index + 2] is '"'))
+                index + 2 < sourceCodePointCount &&
+                ReadStringCodePoint(source, index + 1) is '"' &&
+                ReadStringCodePoint(source, index + 2) is '"'))
             {
                 return LiteralRunResult(offset, "LiteralRunTermination");
             }
@@ -262,7 +272,8 @@ public static class ElmSyntaxConcreteParserPrecompiledLeaves
                 return
                     LiteralRunResult(
                         offset,
-                        index + 1 < source.Length && source[index + 1] is '\n'
+                        index + 1 < sourceCodePointCount &&
+                        ReadStringCodePoint(source, index + 1) is '\n'
                         ?
                         "LiteralRunNewlineCRLF"
                         :
@@ -301,6 +312,11 @@ public static class ElmSyntaxConcreteParserPrecompiledLeaves
             firstNonTrivia++;
         }
 
+        if (firstNonTrivia is 0)
+        {
+            return tokens;
+        }
+
         return PineValue.List(tokens.Items[firstNonTrivia..]);
     }
 
@@ -330,26 +346,28 @@ public static class ElmSyntaxConcreteParserPrecompiledLeaves
     public static PineValue? HexStringToIntLeafDelegate(PineValue environment)
     {
         if (!EnvironmentMatches(environment, FromStringModuleName, "hexStringToInt") ||
-            !TryGetStringCodePoints(environment.ValueFromPathOrEmptyList([1]), out var digits))
+            !TryGetStringBytes(environment.ValueFromPathOrEmptyList([1]), out var digits))
         {
             return null;
         }
 
-        if (digits.Length is 0)
+        var digitCount = digits.Length / 4;
+
+        if (digitCount is 0)
         {
             return s_nothing;
         }
 
-        if (digits[0] is '0')
+        if (ReadStringCodePoint(digits, 0) is '0')
         {
             return Just(IntegerValue(0));
         }
 
         BigInteger value = 0;
 
-        foreach (var codePoint in digits)
+        for (var index = 0; index < digitCount; ++index)
         {
-            if (!TryHexDigitValue(codePoint, out var digit))
+            if (!TryHexDigitValue(ReadStringCodePoint(digits, index), out var digit))
             {
                 return s_nothing;
             }
@@ -366,13 +384,16 @@ public static class ElmSyntaxConcreteParserPrecompiledLeaves
         Func<uint, bool> continuePredicate)
     {
         if (!EnvironmentMatches(environment, TokensFromStringModuleName, functionName) ||
-            !TryGetStringCodePoints(environment.ValueFromPathOrEmptyList([1]), out var source) ||
+            !TryGetStringBytes(environment.ValueFromPathOrEmptyList([1]), out var source) ||
             !TryParseNonnegativeInteger(environment.ValueFromPathOrEmptyList([2]), out var offset))
         {
             return null;
         }
 
-        while (offset < source.Length && continuePredicate(source[(int)offset]))
+        var sourceCodePointCount = source.Length / 4;
+
+        while (offset < sourceCodePointCount &&
+            continuePredicate(ReadStringCodePoint(source, (int)offset)))
         {
             offset++;
         }
@@ -380,7 +401,7 @@ public static class ElmSyntaxConcreteParserPrecompiledLeaves
         return IntegerValue(offset);
     }
 
-    private static bool TryGetStringCodePoints(PineValue value, out uint[] codePoints)
+    private static bool TryGetStringBytes(PineValue value, out ReadOnlyMemory<byte> bytes)
     {
         if (value is PineValue.ListValue stringValue &&
             stringValue.Items.Length is 2 &&
@@ -390,19 +411,16 @@ public static class ElmSyntaxConcreteParserPrecompiledLeaves
             arguments.Items.Span[0] is PineValue.BlobValue chars &&
             chars.Bytes.Length % 4 is 0)
         {
-            codePoints = new uint[chars.Bytes.Length / 4];
-
-            for (var index = 0; index < codePoints.Length; ++index)
-            {
-                codePoints[index] = BinaryPrimitives.ReadUInt32BigEndian(chars.Bytes.Span[(index * 4)..]);
-            }
-
+            bytes = chars.Bytes;
             return true;
         }
 
-        codePoints = [];
+        bytes = ReadOnlyMemory<byte>.Empty;
         return false;
     }
+
+    private static uint ReadStringCodePoint(ReadOnlyMemory<byte> bytes, int index) =>
+        BinaryPrimitives.ReadUInt32BigEndian(bytes.Span.Slice(index * 4, 4));
 
     private static bool TryParseNonnegativeInteger(PineValue value, out BigInteger integer)
     {

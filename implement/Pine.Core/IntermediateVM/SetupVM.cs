@@ -14,57 +14,106 @@ public static class SetupVM
     public const string PrecompiledLeafValueNamePrefix = "precompiled-leaf/";
 
     private const string BasicsCompareName = PrecompiledLeafValueNamePrefix + "Basics/compare";
+
     private const string BasicsEqName = PrecompiledLeafValueNamePrefix + "Basics/eq";
+
     private const string BasicsIdivName = PrecompiledLeafValueNamePrefix + "Basics/idiv";
+
     private const string BasicsGcdName = PrecompiledLeafValueNamePrefix + "Basics/gcd";
+
     private const string DictGetName = PrecompiledLeafValueNamePrefix + "Dict/get";
+
     private const string DictToListName = PrecompiledLeafValueNamePrefix + "Dict/toList";
+
     private const string DictSizeName = PrecompiledLeafValueNamePrefix + "Dict/size";
+
     private const string DictKeysName = PrecompiledLeafValueNamePrefix + "Dict/keys";
+
     private const string DictValuesName = PrecompiledLeafValueNamePrefix + "Dict/values";
+
     private const string DictInsertName = PrecompiledLeafValueNamePrefix + "Dict/insert";
+
     private const string JsonDecodeParseValueName = PrecompiledLeafValueNamePrefix + "Json.Decode/parseValue";
+
     private const string StringToListRecursiveName = PrecompiledLeafValueNamePrefix + "String/toListRecursive";
+
     private const string StringSplitHelperOnBlobName = PrecompiledLeafValueNamePrefix + "String/splitHelperOnBlob";
+
     private const string StringLinesHelperName = PrecompiledLeafValueNamePrefix + "String/linesHelper";
+
     private const string StringToFloatName = PrecompiledLeafValueNamePrefix + "String/toFloat";
+
     private const string StringToIntName = PrecompiledLeafValueNamePrefix + "String/toInt";
+
     private const string StringFromIntName = PrecompiledLeafValueNamePrefix + "String/fromInt";
+
     private const string StringTrimLeftCountBytesTrimmedName =
         PrecompiledLeafValueNamePrefix + "String/trimLeftCountBytesTrimmed";
+
     private const string StringTrimRightCountBytesRemainingName =
         PrecompiledLeafValueNamePrefix + "String/trimRightCountBytesRemaining";
+
     private const string LanguageServiceRemoveWrappingFromMultilineCommentName =
         PrecompiledLeafValueNamePrefix + "LanguageService/removeWrappingFromMultilineComment";
+
+    private const string LanguageServiceDropWhileEmptyName =
+        PrecompiledLeafValueNamePrefix + "LanguageService/dropWhileEmpty";
+
+    private const string LanguageServiceSliceRangeFromTextLinesName =
+        PrecompiledLeafValueNamePrefix + "LanguageService/sliceRangeFromTextLines";
+
     private const string BytesDecodeBlobAsCharsRecName =
         PrecompiledLeafValueNamePrefix + "Bytes.Decode/decodeBlobAsCharsRec";
+
     private const string BytesEncodeCharsAsBlobHelpName =
         PrecompiledLeafValueNamePrefix + "Bytes.Encode/encodeCharsAsBlobHelp";
+
     private const string RecordAccessName = PrecompiledLeafValueNamePrefix + "Record/access";
+
     private const string RecordUpdateName = PrecompiledLeafValueNamePrefix + "Record/update";
+
     private const string Base64EncodeToBytesName = PrecompiledLeafValueNamePrefix + "Base64.Encode/toBytes";
+
     private const string Base64DecodeFromBytesName = PrecompiledLeafValueNamePrefix + "Base64.Decode/fromBytes";
+
     private const string ConcreteParserTokensFromStringPrefix =
         PrecompiledLeafValueNamePrefix + "ElmSyntax.Concrete.Parser.TokensFromString/";
+
     private const string ConcreteParserFromStringPrefix =
         PrecompiledLeafValueNamePrefix + "ElmSyntax.Concrete.Parser.FromString/";
+
     private const string ConcreteParserSkipInlineWhitespaceName =
         ConcreteParserTokensFromStringPrefix + "skipInlineWhitespace";
+
     private const string ConcreteParserSkipToIdentifierEndName =
         ConcreteParserTokensFromStringPrefix + "skipToIdentifierEnd";
+
     private const string ConcreteParserSkipToAsciiDecimalDigitEndName =
         ConcreteParserTokensFromStringPrefix + "skipToAsciiDecimalDigitEnd";
+
     private const string ConcreteParserSkipToAsciiHexDigitEndName =
         ConcreteParserTokensFromStringPrefix + "skipToAsciiHexDigitEnd";
+
     private const string ConcreteParserScanUnicodeEscapeDigitsName =
         ConcreteParserTokensFromStringPrefix + "scanUnicodeEscapeDigits";
+
     private const string ConcreteParserFindLiteralRunEndName =
         ConcreteParserTokensFromStringPrefix + "findLiteralRunEnd";
+
     private const string ConcreteParserSkipOperatorCharsName =
         ConcreteParserTokensFromStringPrefix + "skipOperatorChars";
+
     private const string ConcreteParserDropTriviaName = ConcreteParserFromStringPrefix + "dropTrivia";
+
     private const string ConcreteParserTokenLexemesName = ConcreteParserFromStringPrefix + "tokenLexemes";
+
     private const string ConcreteParserHexStringToIntName = ConcreteParserFromStringPrefix + "hexStringToInt";
+
+    private const string AbstractConvertFromConcretePrefix =
+        PrecompiledLeafValueNamePrefix + "ElmSyntax.Abstract.ConvertFromConcrete/";
+
+    private const string AbstractConvertFromConcreteMergeRecordSettersName =
+        AbstractConvertFromConcretePrefix + "mergeRecordSetters";
 
     /// <summary>
     /// Stable names mapped to the C# implementations of all default precompiled leaves.
@@ -90,12 +139,18 @@ public static class SetupVM
             [StringToIntName] = CoreStringPrecompiledLeaves.ToIntLeafDelegate,
             [StringFromIntName] = CoreStringPrecompiledLeaves.FromIntLeafDelegate,
             [StringTrimLeftCountBytesTrimmedName] =
-                CoreStringPrecompiledLeaves.TrimLeftCountBytesTrimmedLeafDelegate,
+            CoreStringPrecompiledLeaves.TrimLeftCountBytesTrimmedLeafDelegate,
             [StringTrimRightCountBytesRemainingName] =
-                CoreStringPrecompiledLeaves.TrimRightCountBytesRemainingLeafDelegate,
+            CoreStringPrecompiledLeaves.TrimRightCountBytesRemainingLeafDelegate,
             [LanguageServiceRemoveWrappingFromMultilineCommentName] =
-                Elm.ElmCompilerInDotnet.PrecompiledLeaves.LanguageServicePrecompiledLeaves
-                .RemoveWrappingFromMultilineCommentLeafDelegate,
+            Elm.ElmCompilerInDotnet.PrecompiledLeaves.LanguageServicePrecompiledLeaves
+            .RemoveWrappingFromMultilineCommentLeafDelegate,
+            [LanguageServiceDropWhileEmptyName] =
+            Elm.ElmCompilerInDotnet.PrecompiledLeaves.LanguageServicePrecompiledLeaves
+            .DropWhileEmptyLeafDelegate,
+            [LanguageServiceSliceRangeFromTextLinesName] =
+            Elm.ElmCompilerInDotnet.PrecompiledLeaves.LanguageServicePrecompiledLeaves
+            .SliceRangeFromTextLinesLeafDelegate,
             [BytesDecodeBlobAsCharsRecName] = KernelBytesPrecompiledLeaves.DecodeBlobAsCharsRecLeafDelegate,
             [BytesEncodeCharsAsBlobHelpName] = KernelBytesPrecompiledLeaves.EncodeCharsAsBlobHelpLeafDelegate,
             [RecordAccessName] = CoreRecordPrecompiledLeaves.RecordAccessLeafDelegate,
@@ -103,22 +158,24 @@ public static class SetupVM
             [Base64EncodeToBytesName] = Base64PrecompiledLeaves.EncodeToBytesLeafDelegate,
             [Base64DecodeFromBytesName] = Base64PrecompiledLeaves.DecodeFromBytesLeafDelegate,
             [ConcreteParserSkipInlineWhitespaceName] =
-                ElmSyntaxConcreteParserPrecompiledLeaves.SkipInlineWhitespaceLeafDelegate,
+            ElmSyntaxConcreteParserPrecompiledLeaves.SkipInlineWhitespaceLeafDelegate,
             [ConcreteParserSkipToIdentifierEndName] =
-                ElmSyntaxConcreteParserPrecompiledLeaves.SkipToIdentifierEndLeafDelegate,
+            ElmSyntaxConcreteParserPrecompiledLeaves.SkipToIdentifierEndLeafDelegate,
             [ConcreteParserSkipToAsciiDecimalDigitEndName] =
-                ElmSyntaxConcreteParserPrecompiledLeaves.SkipToAsciiDecimalDigitEndLeafDelegate,
+            ElmSyntaxConcreteParserPrecompiledLeaves.SkipToAsciiDecimalDigitEndLeafDelegate,
             [ConcreteParserSkipToAsciiHexDigitEndName] =
-                ElmSyntaxConcreteParserPrecompiledLeaves.SkipToAsciiHexDigitEndLeafDelegate,
+            ElmSyntaxConcreteParserPrecompiledLeaves.SkipToAsciiHexDigitEndLeafDelegate,
             [ConcreteParserScanUnicodeEscapeDigitsName] =
-                ElmSyntaxConcreteParserPrecompiledLeaves.ScanUnicodeEscapeDigitsLeafDelegate,
+            ElmSyntaxConcreteParserPrecompiledLeaves.ScanUnicodeEscapeDigitsLeafDelegate,
             [ConcreteParserFindLiteralRunEndName] =
-                ElmSyntaxConcreteParserPrecompiledLeaves.FindLiteralRunEndLeafDelegate,
+            ElmSyntaxConcreteParserPrecompiledLeaves.FindLiteralRunEndLeafDelegate,
             [ConcreteParserSkipOperatorCharsName] =
-                ElmSyntaxConcreteParserPrecompiledLeaves.SkipOperatorCharsLeafDelegate,
+            ElmSyntaxConcreteParserPrecompiledLeaves.SkipOperatorCharsLeafDelegate,
             [ConcreteParserDropTriviaName] = ElmSyntaxConcreteParserPrecompiledLeaves.DropTriviaLeafDelegate,
             [ConcreteParserTokenLexemesName] = ElmSyntaxConcreteParserPrecompiledLeaves.TokenLexemesLeafDelegate,
             [ConcreteParserHexStringToIntName] = ElmSyntaxConcreteParserPrecompiledLeaves.HexStringToIntLeafDelegate,
+            [AbstractConvertFromConcreteMergeRecordSettersName] =
+            ElmSyntaxAbstractConvertFromConcretePrecompiledLeaves.MergeRecordSettersLeafDelegate,
         };
 
     /// <summary>
@@ -146,12 +203,18 @@ public static class SetupVM
             [StringToIntName] = CoreStringPrecompiledLeaves.ToIntLeafKey,
             [StringFromIntName] = CoreStringPrecompiledLeaves.FromIntLeafKey,
             [StringTrimLeftCountBytesTrimmedName] =
-                CoreStringPrecompiledLeaves.TrimLeftCountBytesTrimmedLeafKey,
+            CoreStringPrecompiledLeaves.TrimLeftCountBytesTrimmedLeafKey,
             [StringTrimRightCountBytesRemainingName] =
-                CoreStringPrecompiledLeaves.TrimRightCountBytesRemainingLeafKey,
+            CoreStringPrecompiledLeaves.TrimRightCountBytesRemainingLeafKey,
             [LanguageServiceRemoveWrappingFromMultilineCommentName] =
-                Elm.ElmCompilerInDotnet.PrecompiledLeaves.LanguageServicePrecompiledLeaves
-                .RemoveWrappingFromMultilineCommentLeafKey,
+            Elm.ElmCompilerInDotnet.PrecompiledLeaves.LanguageServicePrecompiledLeaves
+            .RemoveWrappingFromMultilineCommentLeafKey,
+            [LanguageServiceDropWhileEmptyName] =
+            Elm.ElmCompilerInDotnet.PrecompiledLeaves.LanguageServicePrecompiledLeaves
+            .DropWhileEmptyLeafKey,
+            [LanguageServiceSliceRangeFromTextLinesName] =
+            Elm.ElmCompilerInDotnet.PrecompiledLeaves.LanguageServicePrecompiledLeaves
+            .SliceRangeFromTextLinesLeafKey,
             [BytesDecodeBlobAsCharsRecName] = KernelBytesPrecompiledLeaves.DecodeBlobAsCharsRecLeafKey,
             [BytesEncodeCharsAsBlobHelpName] = KernelBytesPrecompiledLeaves.EncodeCharsAsBlobHelpLeafKey,
             [RecordAccessName] = CoreRecordPrecompiledLeaves.RecordAccessLeafKey,
@@ -159,22 +222,24 @@ public static class SetupVM
             [Base64EncodeToBytesName] = Base64PrecompiledLeaves.EncodeToBytesLeafKey,
             [Base64DecodeFromBytesName] = Base64PrecompiledLeaves.DecodeFromBytesLeafKey,
             [ConcreteParserSkipInlineWhitespaceName] =
-                ElmSyntaxConcreteParserPrecompiledLeaves.SkipInlineWhitespaceLeafKey,
+            ElmSyntaxConcreteParserPrecompiledLeaves.SkipInlineWhitespaceLeafKey,
             [ConcreteParserSkipToIdentifierEndName] =
-                ElmSyntaxConcreteParserPrecompiledLeaves.SkipToIdentifierEndLeafKey,
+            ElmSyntaxConcreteParserPrecompiledLeaves.SkipToIdentifierEndLeafKey,
             [ConcreteParserSkipToAsciiDecimalDigitEndName] =
-                ElmSyntaxConcreteParserPrecompiledLeaves.SkipToAsciiDecimalDigitEndLeafKey,
+            ElmSyntaxConcreteParserPrecompiledLeaves.SkipToAsciiDecimalDigitEndLeafKey,
             [ConcreteParserSkipToAsciiHexDigitEndName] =
-                ElmSyntaxConcreteParserPrecompiledLeaves.SkipToAsciiHexDigitEndLeafKey,
+            ElmSyntaxConcreteParserPrecompiledLeaves.SkipToAsciiHexDigitEndLeafKey,
             [ConcreteParserScanUnicodeEscapeDigitsName] =
-                ElmSyntaxConcreteParserPrecompiledLeaves.ScanUnicodeEscapeDigitsLeafKey,
+            ElmSyntaxConcreteParserPrecompiledLeaves.ScanUnicodeEscapeDigitsLeafKey,
             [ConcreteParserFindLiteralRunEndName] =
-                ElmSyntaxConcreteParserPrecompiledLeaves.FindLiteralRunEndLeafKey,
+            ElmSyntaxConcreteParserPrecompiledLeaves.FindLiteralRunEndLeafKey,
             [ConcreteParserSkipOperatorCharsName] =
-                ElmSyntaxConcreteParserPrecompiledLeaves.SkipOperatorCharsLeafKey,
+            ElmSyntaxConcreteParserPrecompiledLeaves.SkipOperatorCharsLeafKey,
             [ConcreteParserDropTriviaName] = ElmSyntaxConcreteParserPrecompiledLeaves.DropTriviaLeafKey,
             [ConcreteParserTokenLexemesName] = ElmSyntaxConcreteParserPrecompiledLeaves.TokenLexemesLeafKey,
             [ConcreteParserHexStringToIntName] = ElmSyntaxConcreteParserPrecompiledLeaves.HexStringToIntLeafKey,
+            [AbstractConvertFromConcreteMergeRecordSettersName] =
+            ElmSyntaxAbstractConvertFromConcretePrecompiledLeaves.MergeRecordSettersLeafKey,
         };
 
     /// <summary>
@@ -254,6 +319,9 @@ public static class SetupVM
     public static IReadOnlyDictionary<PineValue, Func<PineValue, PineValue?>> ConcreteParserPrecompiledLeaves =>
         s_concreteParserPrecompiledLeaves.Value;
 
+    public static IReadOnlyDictionary<PineValue, Func<PineValue, PineValue?>> ConvertFromConcretePrecompiledLeaves =>
+        s_convertFromConcretePrecompiledLeaves.Value;
+
     public static IReadOnlyDictionary<PineValue, Func<PineValue, PineValue?>> DefaultPrecompiledLeaves =>
         s_defaultPrecompiledLeaves.Value;
 
@@ -313,7 +381,9 @@ public static class SetupVM
         new(
             () =>
             BuildPrecompiledLeavesForNames(
-                LanguageServiceRemoveWrappingFromMultilineCommentName));
+                LanguageServiceRemoveWrappingFromMultilineCommentName,
+                LanguageServiceDropWhileEmptyName,
+                LanguageServiceSliceRangeFromTextLinesName));
 
     private static readonly Lazy<IReadOnlyDictionary<PineValue, Func<PineValue, PineValue?>>> s_bytesPrecompiledLeaves =
         new(
@@ -343,6 +413,13 @@ public static class SetupVM
                 ConcreteParserDropTriviaName,
                 ConcreteParserTokenLexemesName,
                 ConcreteParserHexStringToIntName));
+
+    private static readonly Lazy<IReadOnlyDictionary<PineValue, Func<PineValue, PineValue?>>>
+        s_convertFromConcretePrecompiledLeaves =
+        new(
+            () =>
+            BuildPrecompiledLeavesForNames(
+                AbstractConvertFromConcreteMergeRecordSettersName));
 
     private static IReadOnlyDictionary<PineValue, Func<PineValue, PineValue?>> BuildPrecompiledLeavesForNames(
         params string[] names)

@@ -2,6 +2,7 @@ using AwesomeAssertions;
 using Pine.Core.CodeAnalysis;
 using Pine.Core.Elm;
 using Pine.Core.Elm.ElmCompilerInDotnet;
+using Pine.Core.Elm.ElmCompilerInDotnet.PrecompiledLeaves;
 using Pine.Core.Elm.ElmInElm;
 using Pine.Core.Files;
 using Pine.Core.Interpreter.IntermediateVM;
@@ -38,6 +39,16 @@ public class LanguageServicePrecompiledLeavesEffectivenessTests
         removeWrappingFromMultilineComment : String -> String
         removeWrappingFromMultilineComment =
             LanguageService.removeWrappingFromMultilineComment
+
+
+        dropWhileEmpty : List String -> List String
+        dropWhileEmpty =
+            LanguageService.dropWhileEmpty
+
+
+        sliceRangeFromTextLines : List String -> ( Int, Int ) -> ( Int, Int ) -> List String
+        sliceRangeFromTextLines textLines start end =
+            LanguageService.sliceRangeFromTextLines textLines (LanguageService.Range start end)
         """"
         ;
 
@@ -73,6 +84,111 @@ public class LanguageServicePrecompiledLeavesEffectivenessTests
             "{-|" + new string(' ', 32) + "🙂comment" + new string('\u00A0', 32) + "-}",
             "a",
             "🙂comment");
+    }
+
+    [Fact]
+    public void LanguageService_dropWhileEmpty_leaf_short_circuits_recursion()
+    {
+        AssertWorkShortCircuited(
+            "dropWhileEmpty",
+            [StringList(["", "line"])],
+            [StringList([.. Enumerable.Repeat("", 32), "line"])],
+            StringList(["line"]),
+            StringList(["line"]));
+    }
+
+    [Fact]
+    public void LanguageService_sliceRangeFromTextLines_leaf_short_circuits_single_line_work()
+    {
+        AssertWorkReduced(
+            "sliceRangeFromTextLines",
+            [
+            StringList(["prefix", "selected text"]),
+            Position(2, 2),
+            Position(2, 10),
+            ],
+            [
+            StringList([.. Enumerable.Repeat("prefix", 32), "selected text"]),
+            Position(33, 2),
+            Position(33, 10),
+            ],
+            StringList(["elected "]),
+            StringList(["elected "]));
+    }
+
+    [Fact]
+    public void LanguageService_sliceRangeFromTextLines_leaf_short_circuits_multiline_work()
+    {
+        AssertWorkReduced(
+            "sliceRangeFromTextLines",
+            [
+            StringList(["prefix", "first line", "middle line", "last line"]),
+            Position(2, 2),
+            Position(4, 5),
+            ],
+            [
+            StringList(
+                [
+                .. Enumerable.Repeat("prefix", 32),
+                "first line",
+                "middle line",
+                "last line",
+                ]),
+            Position(33, 2),
+            Position(35, 5),
+            ],
+            StringList(["irst line", "middle line", "last"]),
+            StringList(["irst line", "middle line", "last"]));
+    }
+
+    [Fact]
+    public void LanguageService_leaves_do_not_allocate_proportional_to_skipped_prefixes()
+    {
+        var enteredLeafEnvironments = new Dictionary<PineValue, PineValue>();
+
+        var vm =
+            CreateVM(
+                IntermediateVM.SetupVM.DefaultPrecompiledLeaves,
+                (leaf, environment) => enteredLeafEnvironments.TryAdd(leaf, environment));
+
+        _ =
+            Apply(
+                GetTestFunction("dropWhileEmpty"),
+                [StringList(["", "line"])],
+                vm);
+
+        _ =
+            Apply(
+                GetTestFunction("sliceRangeFromTextLines"),
+                [StringList(["prefix", "selected"]), Position(2, 1), Position(2, 9)],
+                vm);
+
+        var dropEnvironment =
+            (PineValue.ListValue)enteredLeafEnvironments[
+                LanguageServicePrecompiledLeaves.DropWhileEmptyLeafKey];
+
+        AssertAllocationDoesNotGrowWithPrefix(
+            LanguageServicePrecompiledLeaves.DropWhileEmptyLeafDelegate,
+            EnvironmentWithArgument(dropEnvironment, 1, StringList(["", "line"])),
+            EnvironmentWithArgument(
+                dropEnvironment,
+                1,
+                StringList([.. Enumerable.Repeat("", 10_000), "line"])));
+
+        var sliceEnvironment =
+            (PineValue.ListValue)enteredLeafEnvironments[
+                LanguageServicePrecompiledLeaves.SliceRangeFromTextLinesLeafKey];
+
+        AssertAllocationDoesNotGrowWithPrefix(
+            LanguageServicePrecompiledLeaves.SliceRangeFromTextLinesLeafDelegate,
+            EnvironmentWithArguments(
+                sliceEnvironment,
+                (1, StringList(["prefix", "selected"])),
+                (2, Range(Position(2, 1), Position(2, 9)))),
+            EnvironmentWithArguments(
+                sliceEnvironment,
+                (1, StringList([.. Enumerable.Repeat("prefix", 10_000), "selected"])),
+                (2, Range(Position(10_001, 1), Position(10_001, 9)))));
     }
 
     private static ElmInteractiveEnvironment.ParsedInteractiveEnvironment BuildEnvironment()
@@ -131,7 +247,8 @@ public class LanguageServicePrecompiledLeavesEffectivenessTests
         .moduleContent.FunctionDeclarations[name];
 
     private static Core.Interpreter.IntermediateVM.PineVM CreateVM(
-        IReadOnlyDictionary<PineValue, Func<PineValue, PineValue?>> precompiledLeaves) =>
+        IReadOnlyDictionary<PineValue, Func<PineValue, PineValue?>> precompiledLeaves,
+        Action<PineValue, PineValue>? reportEnterPrecompiledLeaf = null) =>
         Core.Interpreter.IntermediateVM.PineVM.CreateCustom(
             evalCache: null,
             evaluationConfigDefault: null,
@@ -143,7 +260,7 @@ public class LanguageServicePrecompiledLeavesEffectivenessTests
             enableTailRecursionOptimization: false,
             parseCache: null,
             precompiledLeaves: precompiledLeaves,
-            reportEnterPrecompiledLeaf: null,
+            reportEnterPrecompiledLeaf,
             reportExitPrecompiledLeaf: null,
             optimizationParametersSerial: null,
             cacheFileStore: null);
@@ -162,6 +279,21 @@ public class LanguageServicePrecompiledLeavesEffectivenessTests
         string expectedSimple,
         string expectedComplex)
     {
+        AssertWorkShortCircuited(
+            functionName,
+            [ElmValue.StringInstance(simple)],
+            [ElmValue.StringInstance(complex)],
+            ElmValue.StringInstance(expectedSimple),
+            ElmValue.StringInstance(expectedComplex));
+    }
+
+    private static void AssertWorkShortCircuited(
+        string functionName,
+        ElmValue[] simple,
+        ElmValue[] complex,
+        ElmValue expectedSimple,
+        ElmValue expectedComplex)
+    {
         var function = GetTestFunction(functionName);
 
         var vmWithoutLeaves =
@@ -169,15 +301,15 @@ public class LanguageServicePrecompiledLeavesEffectivenessTests
 
         var vmWithLeaves = CreateVM(IntermediateVM.SetupVM.DefaultPrecompiledLeaves);
 
-        var simpleNoLeaves = ApplyUnary(function, simple, vmWithoutLeaves);
-        var complexNoLeaves = ApplyUnary(function, complex, vmWithoutLeaves);
-        var simpleWithLeaves = ApplyUnary(function, simple, vmWithLeaves);
-        var complexWithLeaves = ApplyUnary(function, complex, vmWithLeaves);
+        var simpleNoLeaves = Apply(function, simple, vmWithoutLeaves);
+        var complexNoLeaves = Apply(function, complex, vmWithoutLeaves);
+        var simpleWithLeaves = Apply(function, simple, vmWithLeaves);
+        var complexWithLeaves = Apply(function, complex, vmWithLeaves);
 
-        simpleNoLeaves.value.Should().Be(ElmValue.StringInstance(expectedSimple));
-        complexNoLeaves.value.Should().Be(ElmValue.StringInstance(expectedComplex));
-        simpleWithLeaves.value.Should().Be(ElmValue.StringInstance(expectedSimple));
-        complexWithLeaves.value.Should().Be(ElmValue.StringInstance(expectedComplex));
+        simpleNoLeaves.value.Should().Be(expectedSimple);
+        complexNoLeaves.value.Should().Be(expectedComplex);
+        simpleWithLeaves.value.Should().Be(expectedSimple);
+        complexWithLeaves.value.Should().Be(expectedComplex);
 
         (complexNoLeaves.counters.InvocationCount + complexNoLeaves.counters.LoopIterationCount)
             .Should().BeGreaterThan(
@@ -196,12 +328,104 @@ public class LanguageServicePrecompiledLeavesEffectivenessTests
             .Should().Be(simpleWithLeaves.counters.InstructionCount);
     }
 
-    private static (ElmValue value, PerformanceCounters counters) ApplyUnary(
+    private static void AssertWorkReduced(
+        string functionName,
+        ElmValue[] simple,
+        ElmValue[] complex,
+        ElmValue expectedSimple,
+        ElmValue expectedComplex)
+    {
+        var function = GetTestFunction(functionName);
+
+        var vmWithoutLeaves =
+            CreateVM(ImmutableDictionary<PineValue, Func<PineValue, PineValue?>>.Empty);
+
+        var vmWithLeaves = CreateVM(IntermediateVM.SetupVM.DefaultPrecompiledLeaves);
+
+        var simpleNoLeaves = Apply(function, simple, vmWithoutLeaves);
+        var complexNoLeaves = Apply(function, complex, vmWithoutLeaves);
+        var simpleWithLeaves = Apply(function, simple, vmWithLeaves);
+        var complexWithLeaves = Apply(function, complex, vmWithLeaves);
+
+        simpleNoLeaves.value.Should().Be(expectedSimple);
+        complexNoLeaves.value.Should().Be(expectedComplex);
+        simpleWithLeaves.value.Should().Be(expectedSimple);
+        complexWithLeaves.value.Should().Be(expectedComplex);
+
+        simpleWithLeaves.counters.InstructionCount
+            .Should().BeLessThan(simpleNoLeaves.counters.InstructionCount);
+
+        complexWithLeaves.counters.InstructionCount
+            .Should().BeLessThan(complexNoLeaves.counters.InstructionCount);
+    }
+
+    private static (ElmValue value, PerformanceCounters counters) Apply(
         PineValue function,
-        string argument,
+        ElmValue[] arguments,
         Core.Interpreter.IntermediateVM.PineVM vm) =>
-        CoreLibraryModule.CoreLibraryTestHelper.ApplyAndProfileUnary(
+        CoreLibraryModule.CoreLibraryTestHelper.ApplyGenericWithProfiling(
             function,
-            ElmValue.StringInstance(argument),
+            arguments,
             vm);
+
+    private static ElmValue StringList(IEnumerable<string> strings) =>
+        ElmValue.ListInstance([.. strings.Select(ElmValue.StringInstance)]);
+
+    private static ElmValue Position(int row, int column) =>
+        ElmValue.TupleInstance(ElmValue.Integer(row), ElmValue.Integer(column));
+
+    private static ElmValue Range(ElmValue start, ElmValue end) =>
+        ElmValue.TagInstance("Range", [start, end]);
+
+    private static PineValue EnvironmentWithArgument(
+        PineValue.ListValue environment,
+        int index,
+        ElmValue argument) =>
+        EnvironmentWithArguments(environment, (index, argument));
+
+    private static PineValue EnvironmentWithArguments(
+        PineValue.ListValue environment,
+        params (int index, ElmValue argument)[] replacements)
+    {
+        var items = environment.Items.ToArray();
+
+        foreach (var (index, argument) in replacements)
+        {
+            items[index] = ElmValueEncoding.ElmValueAsPineValue(argument);
+        }
+
+        return PineValue.List(items);
+    }
+
+    private static void AssertAllocationDoesNotGrowWithPrefix(
+        Func<PineValue, PineValue?> leaf,
+        PineValue shortEnvironment,
+        PineValue longEnvironment)
+    {
+        leaf(shortEnvironment).Should().Be(leaf(longEnvironment));
+
+        const int invocationCount = 100;
+
+        var shortAllocatedBefore = GC.GetAllocatedBytesForCurrentThread();
+
+        for (var invocation = 0; invocation < invocationCount; ++invocation)
+        {
+            _ = leaf(shortEnvironment);
+        }
+
+        var shortAllocatedBytes =
+            GC.GetAllocatedBytesForCurrentThread() - shortAllocatedBefore;
+
+        var longAllocatedBefore = GC.GetAllocatedBytesForCurrentThread();
+
+        for (var invocation = 0; invocation < invocationCount; ++invocation)
+        {
+            _ = leaf(longEnvironment);
+        }
+
+        var longAllocatedBytes =
+            GC.GetAllocatedBytesForCurrentThread() - longAllocatedBefore;
+
+        longAllocatedBytes.Should().BeLessThanOrEqualTo(shortAllocatedBytes + 1_024);
+    }
 }

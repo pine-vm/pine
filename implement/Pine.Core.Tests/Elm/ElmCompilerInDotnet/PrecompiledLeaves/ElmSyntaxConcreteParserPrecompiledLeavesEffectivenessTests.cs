@@ -97,6 +97,79 @@ public class ElmSyntaxConcreteParserPrecompiledLeavesEffectivenessTests
             ]);
     }
 
+    [Fact]
+    public void String_scanner_leaves_do_not_allocate_proportional_to_source_length()
+    {
+        var enteredLeafEnvironments = new Dictionary<PineValue, PineValue>();
+
+        var vm =
+            CreateVM(
+                IntermediateVM.SetupVM.DefaultPrecompiledLeaves,
+                (leaf, environment) => enteredLeafEnvironments.TryAdd(leaf, environment));
+
+        _ = Apply(vm);
+
+        var scanners =
+            new (PineValue leafKey, Func<PineValue, PineValue?> scanner)[]
+            {
+                (ElmSyntaxConcreteParserPrecompiledLeaves.SkipInlineWhitespaceLeafKey,
+                ElmSyntaxConcreteParserPrecompiledLeaves.SkipInlineWhitespaceLeafDelegate),
+                (ElmSyntaxConcreteParserPrecompiledLeaves.SkipToIdentifierEndLeafKey,
+                ElmSyntaxConcreteParserPrecompiledLeaves.SkipToIdentifierEndLeafDelegate),
+            };
+
+        foreach (var (leafKey, scanner) in scanners)
+        {
+            var environment = (PineValue.ListValue)enteredLeafEnvironments[leafKey];
+
+            var shortEnvironment = EnvironmentWithSource(environment, "!");
+            var longEnvironment = EnvironmentWithSource(environment, "!" + new string('a', 100_000));
+
+            scanner(shortEnvironment).Should().Be(scanner(longEnvironment));
+
+            const int invocationCount = 100;
+
+            var shortAllocatedBefore = GC.GetAllocatedBytesForCurrentThread();
+
+            for (var invocation = 0; invocation < invocationCount; ++invocation)
+            {
+                _ = scanner(shortEnvironment);
+            }
+
+            var shortAllocatedBytes =
+                GC.GetAllocatedBytesForCurrentThread() - shortAllocatedBefore;
+
+            var longAllocatedBefore = GC.GetAllocatedBytesForCurrentThread();
+
+            for (var invocation = 0; invocation < invocationCount; ++invocation)
+            {
+                _ = scanner(longEnvironment);
+            }
+
+            var longAllocatedBytes =
+                GC.GetAllocatedBytesForCurrentThread() - longAllocatedBefore;
+
+            longAllocatedBytes.Should().BeLessThanOrEqualTo(shortAllocatedBytes + 1_024);
+        }
+    }
+
+    private static PineValue EnvironmentWithSource(
+        PineValue.ListValue environment,
+        string source)
+    {
+        var items = environment.Items.ToArray();
+
+        items[1] =
+            ElmValueEncoding.ElmValueAsPineValue(
+                ElmValue.StringInstance(source));
+
+        items[2] =
+            ElmValueEncoding.ElmValueAsPineValue(
+                ElmValue.Integer(0));
+
+        return PineValue.List(items);
+    }
+
     private static PineValue BuildExerciseFunction()
     {
         var mergedTree = BundledFiles.ElmKernelModulesDefault.Value;
