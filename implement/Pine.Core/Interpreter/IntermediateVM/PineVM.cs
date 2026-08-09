@@ -17,6 +17,10 @@ public class PineVM : IPineVM
 {
     private IDictionary<EvalCacheEntryKey, PineValue>? EvalCache { init; get; }
 
+    private readonly HashSet<PineValue> _expressionsWithEvalCacheEntries;
+
+    private int _indexedEvalCacheEntryCount;
+
     private readonly EvaluationConfig? _evaluationConfigDefault;
 
     private readonly Action<EvaluationReport>? _reportFunctionApplication;
@@ -146,6 +150,15 @@ public class PineVM : IPineVM
     {
         EvalCache = evalCache;
 
+        _expressionsWithEvalCacheEntries =
+            evalCache is null
+            ?
+            []
+            :
+            [.. evalCache.Keys.Select(key => key.ExprValue)];
+
+        _indexedEvalCacheEntryCount = evalCache?.Count ?? 0;
+
         _evaluationConfigDefault = evaluationConfigDefault;
 
         _reportFunctionApplication = reportFunctionApplication;
@@ -226,6 +239,43 @@ public class PineVM : IPineVM
         OptimizationParametersSerial.ExpressionConfig? OptimizationConfig);
 
     readonly static ConcurrentPineValueHashCache s_mutableCacheValueHash = new();
+
+    private bool EvalCacheMayContainExpression(
+        IDictionary<EvalCacheEntryKey, PineValue> evalCache,
+        PineValue expressionValue)
+    {
+        if (_indexedEvalCacheEntryCount != evalCache.Count)
+        {
+            _expressionsWithEvalCacheEntries.Clear();
+
+            foreach (var key in evalCache.Keys)
+            {
+                _expressionsWithEvalCacheEntries.Add(key.ExprValue);
+            }
+
+            _indexedEvalCacheEntryCount = evalCache.Count;
+        }
+
+        return
+            evalCache.Count is not 0 &&
+            _expressionsWithEvalCacheEntries.Contains(expressionValue);
+    }
+
+    private bool TryAddEvalCacheEntry(
+        IDictionary<EvalCacheEntryKey, PineValue> evalCache,
+        EvalCacheEntryKey key,
+        PineValue value)
+    {
+        if (_indexedEvalCacheEntryCount != evalCache.Count)
+            EvalCacheMayContainExpression(evalCache, key.ExprValue);
+
+        var added = evalCache.TryAdd(key, value);
+
+        _expressionsWithEvalCacheEntries.Add(key.ExprValue);
+        _indexedEvalCacheEntryCount = evalCache.Count;
+
+        return added;
+    }
 
     static StackFrame BuildStackFrame(
         PineValue? expressionValue,
@@ -1220,7 +1270,9 @@ public class PineVM : IPineVM
 
                 if (currentFrame.StackValues.Length > 0)
                 {
-                    if (expressionValue is not null && EvalCache is { } evalCache)
+                    if (expressionValue is not null &&
+                        EvalCache is { } evalCache &&
+                        EvalCacheMayContainExpression(evalCache, expressionValue))
                     {
                         var cacheKey = new EvalCacheEntryKey(expressionValue, stackFrameInput);
 
@@ -1266,7 +1318,7 @@ public class PineVM : IPineVM
                                 {
                                     var cacheKey = new EvalCacheEntryKey(expressionValue, stackFrameInput);
 
-                                    evalCache.TryAdd(cacheKey, cachedValue);
+                                    TryAddEvalCacheEntry(evalCache, cacheKey, cachedValue);
                                 }
 
                                 return null;
@@ -1449,7 +1501,8 @@ public class PineVM : IPineVM
 
                     if (instructionCountSinceLastCacheEntry + evalCountSinceLastCacheEntry * 100 > 700)
                     {
-                        if (evalCache.TryAdd(
+                        if (TryAddEvalCacheEntry(
+                            evalCache,
                             new EvalCacheEntryKey(currentFrameExprValue, currentFrame.InputValues),
                             frameReturnValue.Evaluate()))
                         {
