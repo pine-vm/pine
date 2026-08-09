@@ -101,7 +101,7 @@ public class PineVMInstructionTraceTests
             trace.First(item => item.FrameExpression.Equals(Expression.EnvironmentInstance));
 
         nestedFrameTrace.FrameExpression.Should().Be(Expression.EnvironmentInstance);
-        nestedFrameTrace.FrameInput.EvaluatedArguments.Should().Equal([nestedEnvironment]);
+        nestedFrameTrace.LoadFrameInput().EvaluatedArguments.Should().Equal([nestedEnvironment]);
         nestedFrameTrace.Instruction.Should().Be(StackInstruction.Local_Get(0));
     }
 
@@ -169,7 +169,7 @@ public class PineVMInstructionTraceTests
         enteredFrames[1].FrameIndex.Should().Be(1);
         enteredFrames[1].StackFrameDepth.Should().Be(1);
         enteredFrames[1].FrameExpression.Should().Be(Expression.EnvironmentInstance);
-        enteredFrames[1].FrameInput.EvaluatedArguments.Should().Equal([nestedEnvironment]);
+        enteredFrames[1].LoadFrameInput().EvaluatedArguments.Should().Equal([nestedEnvironment]);
         enteredFrames[1].Instructions.Should().NotBeNull();
         enteredFrames[1].Instructions.Instructions.Should().NotBeEmpty();
     }

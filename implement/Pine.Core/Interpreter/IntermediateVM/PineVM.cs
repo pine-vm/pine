@@ -1456,7 +1456,7 @@ public class PineVM : IPineVM
                         StackFrameDepth: stack.Count,
                         Instructions: frameInstructions,
                         FrameExpression: newFrame.Expression,
-                        FrameInput: newFrame.InputValues);
+                        LoadFrameInput: () => newFrame.InputValues);
 
                 reportEnteredStackFrameLocal(in enteredStackFrame);
             }
@@ -1674,7 +1674,7 @@ public class PineVM : IPineVM
                             EvaluationStackDepth: currentFrame.StackPointer,
                             Instruction: currentInstruction,
                             FrameExpression: currentFrame.Expression,
-                            FrameInput: currentFrame.InputValues);
+                            LoadFrameInput: () => currentFrame.InputValues);
 
                     reportExecutedStackInstruction(in executedStackInstruction);
                 }

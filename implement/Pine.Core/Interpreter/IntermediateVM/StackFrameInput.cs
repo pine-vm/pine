@@ -22,14 +22,14 @@ public record StackFrameInput
     /// </summary>
     public IReadOnlyList<PineValueInProcess> Arguments { get; }
 
-    private readonly PineValue[] _evaluatedArguments;
+    private PineValue[]? _evaluatedArguments;
 
     /// <summary>
     /// The argument values after evaluation, corresponding to <see cref="Arguments"/>.
     /// </summary>
-    public IReadOnlyList<PineValue> EvaluatedArguments => _evaluatedArguments;
+    public IReadOnlyList<PineValue> EvaluatedArguments => GetEvaluatedArguments();
 
-    private readonly int _hashCode;
+    private int? _hashCode;
 
     private StackFrameInput(
         StaticFunctionInterface parameters,
@@ -37,27 +37,39 @@ public record StackFrameInput
     {
         Parameters = parameters;
         Arguments = arguments;
+    }
 
-        var evaluatedArguments = new PineValue[arguments.Count];
+    private PineValue[] GetEvaluatedArguments()
+    {
+        if (_evaluatedArguments is { } evaluatedArguments)
+            return evaluatedArguments;
 
-        for (var i = 0; i < arguments.Count; i++)
+        evaluatedArguments = new PineValue[Arguments.Count];
+
+        for (var i = 0; i < Arguments.Count; i++)
         {
-            evaluatedArguments[i] = arguments[i].Evaluate();
+            evaluatedArguments[i] = Arguments[i].Evaluate();
         }
 
         _evaluatedArguments = evaluatedArguments;
 
-        // Pre-compute hash code.
+        return evaluatedArguments;
+    }
+
+    private int ComputeHashCode()
+    {
         var hashCode = new HashCode();
 
         hashCode.Add(Parameters);
+
+        var evaluatedArguments = GetEvaluatedArguments();
 
         for (var i = 0; i < evaluatedArguments.Length; i++)
         {
             hashCode.Add(evaluatedArguments[i]);
         }
 
-        _hashCode = hashCode.ToHashCode();
+        return hashCode.ToHashCode();
     }
 
     /// <summary>
@@ -156,7 +168,7 @@ public record StackFrameInput
     /// <inheritdoc/>
     public override int GetHashCode()
     {
-        return _hashCode;
+        return _hashCode ??= ComputeHashCode();
     }
 
     /// <inheritdoc/>
@@ -168,18 +180,21 @@ public record StackFrameInput
         if (ReferenceEquals(this, other))
             return true;
 
-        if (_hashCode != other._hashCode)
+        if (GetHashCode() != other.GetHashCode())
             return false;
 
         if (!Parameters.Equals(other.Parameters))
             return false;
 
-        if (_evaluatedArguments.Length != other._evaluatedArguments.Length)
+        var evaluatedArguments = GetEvaluatedArguments();
+        var otherEvaluatedArguments = other.GetEvaluatedArguments();
+
+        if (evaluatedArguments.Length != otherEvaluatedArguments.Length)
             return false;
 
-        for (var i = 0; i < _evaluatedArguments.Length; i++)
+        for (var i = 0; i < evaluatedArguments.Length; i++)
         {
-            if (!_evaluatedArguments[i].Equals(other._evaluatedArguments[i]))
+            if (!evaluatedArguments[i].Equals(otherEvaluatedArguments[i]))
                 return false;
         }
 
@@ -195,7 +210,7 @@ public record StackFrameInput
             ", Args[" +
             string.Join(
                 ", ",
-                _evaluatedArguments.Select(a => a.ToString())) +
+                GetEvaluatedArguments().Select(a => a.ToString())) +
             "])";
     }
 
@@ -205,6 +220,8 @@ public record StackFrameInput
     /// </summary>
     public PineValueClass ToValueClass()
     {
+        var evaluatedArguments = GetEvaluatedArguments();
+
         IReadOnlyList<KeyValuePair<IReadOnlyList<int>, PineValue>> parsedItems =
             [
             ..Parameters.ParamsPaths
@@ -212,7 +229,7 @@ public record StackFrameInput
                 (envPath, index) =>
                 new KeyValuePair<IReadOnlyList<int>, PineValue>(
                     envPath,
-                    _evaluatedArguments[index]))
+                    evaluatedArguments[index]))
             ];
 
         return PineValueClass.Create(parsedItems);

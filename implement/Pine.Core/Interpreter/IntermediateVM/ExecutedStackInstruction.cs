@@ -18,7 +18,7 @@ public delegate void ReportExecutedStackInstruction(
 /// <param name="EvaluationStackDepth">Depth of the current frame's evaluation stack before executing the instruction.</param>
 /// <param name="Instruction">The instruction being executed.</param>
 /// <param name="FrameExpression">The expression associated with the current stack frame.</param>
-/// <param name="FrameInput">The current stack frame input.</param>
+/// <param name="LoadFrameInput">A function to load the input arguments for the entered frame.</param>
 public readonly record struct ExecutedStackInstruction(
     long InstructionIndex,
     int StackFrameDepth,
@@ -26,7 +26,7 @@ public readonly record struct ExecutedStackInstruction(
     int EvaluationStackDepth,
     StackInstruction Instruction,
     Expression FrameExpression,
-    StackFrameInput FrameInput);
+    System.Func<StackFrameInput> LoadFrameInput);
 
 /// <summary>
 /// Delegate for observing each time a new stack frame is pushed by <see cref="PineVM"/>.
@@ -44,10 +44,10 @@ public delegate void ReportEnteredStackFrame(
 /// <param name="StackFrameDepth">Number of active stack frames after pushing this frame.</param>
 /// <param name="Instructions">The compiled instructions for the entered frame.</param>
 /// <param name="FrameExpression">The expression associated with the entered frame.</param>
-/// <param name="FrameInput">The input arguments for the entered frame.</param>
+/// <param name="LoadFrameInput">A function to load the input arguments for the entered frame.</param>
 public readonly record struct EnteredStackFrame(
     long FrameIndex,
     int StackFrameDepth,
     StackFrameInstructions Instructions,
     Expression FrameExpression,
-    StackFrameInput FrameInput);
+    System.Func<StackFrameInput> LoadFrameInput);

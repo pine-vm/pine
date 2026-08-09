@@ -23,7 +23,7 @@ public class StackInstructionTraceRendererTests
                     EvaluationStackDepth: 0,
                     Instruction: StackInstruction.Build_List_Tagged_Const(StringEncoding.ValueFromString("Literal"), 1),
                     FrameExpression: Expression.EnvironmentInstance,
-                    FrameInput: StackFrameInput.GenericFromEnvironmentValue(PineValue.EmptyBlob)),
+                    LoadFrameInput: () => StackFrameInput.GenericFromEnvironmentValue(PineValue.EmptyBlob)),
                 new(
                     InstructionIndex: 12,
                     StackFrameDepth: 2,
@@ -31,7 +31,7 @@ public class StackInstructionTraceRendererTests
                     EvaluationStackDepth: 0,
                     Instruction: StackInstruction.Push_Literal(IntegerEncoding.EncodeSignedInteger(3)),
                     FrameExpression: Expression.EnvironmentInstance,
-                    FrameInput: StackFrameInput.GenericFromEnvironmentValue(PineValue.EmptyBlob))
+                    LoadFrameInput: () => StackFrameInput.GenericFromEnvironmentValue(PineValue.EmptyBlob))
             };
 
         var rendered =
@@ -61,7 +61,7 @@ public class StackInstructionTraceRendererTests
                     EvaluationStackDepth: 0,
                     Instruction: StackInstruction.Push_Literal(PineValue.Blob([0, 1, 2, 3])),
                     FrameExpression: Expression.EnvironmentInstance,
-                    FrameInput: StackFrameInput.GenericFromEnvironmentValue(PineValue.EmptyBlob))
+                    LoadFrameInput: () => StackFrameInput.GenericFromEnvironmentValue(PineValue.EmptyBlob))
             };
 
         var rendered =
@@ -94,7 +94,7 @@ public class StackInstructionTraceRendererTests
                     EvaluationStackDepth: 0,
                     Instruction: StackInstruction.Push_Literal(IntegerEncoding.EncodeSignedInteger(3)),
                     FrameExpression: Expression.EnvironmentInstance,
-                    FrameInput: StackFrameInput.GenericFromEnvironmentValue(PineValue.EmptyBlob))
+                    LoadFrameInput: () => StackFrameInput.GenericFromEnvironmentValue(PineValue.EmptyBlob))
                 ],
                 blobRepresentations: [blobRepresentation]);
 
@@ -119,7 +119,7 @@ public class StackInstructionTraceRendererTests
                     EvaluationStackDepth: 0,
                     Instruction: StackInstruction.Push_Literal(StringEncoding.ValueFromString("Literal")),
                     FrameExpression: Expression.EnvironmentInstance,
-                    FrameInput: StackFrameInput.GenericFromEnvironmentValue(PineValue.EmptyBlob))
+                    LoadFrameInput: () => StackFrameInput.GenericFromEnvironmentValue(PineValue.EmptyBlob))
                 ],
                 blobRepresentations: [blobRepresentation]);
 
@@ -140,7 +140,7 @@ public class StackInstructionTraceRendererTests
                     EvaluationStackDepth: 0,
                     Instruction: StackInstruction.Build_List_Tagged_Const(StringEncoding.ValueFromString("Literal"), 1),
                     FrameExpression: Expression.EnvironmentInstance,
-                    FrameInput: StackFrameInput.GenericFromEnvironmentValue(PineValue.EmptyBlob))
+                    LoadFrameInput: () => StackFrameInput.GenericFromEnvironmentValue(PineValue.EmptyBlob))
                 ],
                 maxBase16ByteCount: 32,
                 maxUtf32StringCharCount: 32,
@@ -185,7 +185,7 @@ public class StackInstructionTraceRendererTests
                     EvaluationStackDepth: 1,
                     Instruction: invokeInstruction,
                     FrameExpression: Expression.EnvironmentInstance,
-                    FrameInput: StackFrameInput.GenericFromEnvironmentValue(PineValue.EmptyBlob))
+                    LoadFrameInput: () => StackFrameInput.GenericFromEnvironmentValue(PineValue.EmptyBlob))
                 ]);
 
         rendered.Should().Be(
