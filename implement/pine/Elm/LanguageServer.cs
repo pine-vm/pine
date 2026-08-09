@@ -21,21 +21,27 @@ public class LanguageServer(
 
     private readonly ConcurrentDictionary<string, string> _clientTextDocumentContents = new();
 
-    private IReadOnlyList<WorkspaceFolder> workspaceFolders = [];
+    private readonly ConcurrentDictionary<string, int> _clientTextDocumentVersions = new();
 
-    private InitializeParams? initializeParams;
+    private readonly ConcurrentDictionary<string, byte> _closedTextDocuments = new();
 
-    private readonly System.Action<string>? logDelegate = logDelegate;
+    private readonly System.Threading.Lock _documentStateLock = new();
+
+    private IReadOnlyList<WorkspaceFolder> _workspaceFolders = [];
+
+    private InitializeParams? _initializeParams;
+
+    private readonly System.Action<string>? _logDelegate = logDelegate;
 
     private System.Threading.Tasks.Task<Result<string, WorkspaceState>>? _languageServiceStateTask;
 
     /*
      * TODO: Use the version identifier from elm.json as scope.
      * */
-    private readonly ConcurrentDictionary<Interface.ElmPackageVersion019Identifer, string> elmJsonDirectDependencies =
+    private readonly ConcurrentDictionary<Interface.ElmPackageVersion019Identifer, string> _elmJsonDirectDependencies =
         new();
 
-    private readonly ConcurrentDictionary<Interface.ElmPackageVersion019Identifer, string> elmJsonDirectDependenciesLoaded =
+    private readonly ConcurrentDictionary<Interface.ElmPackageVersion019Identifer, string> _elmJsonDirectDependenciesLoaded =
         new();
 
     private class WorkspaceState(
@@ -92,7 +98,7 @@ public class LanguageServer(
 
     private void Log(string message)
     {
-        logDelegate?.Invoke(message);
+        _logDelegate?.Invoke(message);
     }
 
     public (InitializeResult, IReadOnlyList<KeyValuePair<string, object>>) Initialize(
@@ -100,9 +106,9 @@ public class LanguageServer(
     {
         Log("Initialize: " + System.Text.Json.JsonSerializer.Serialize(initializeParams));
 
-        this.initializeParams = initializeParams;
+        this._initializeParams = initializeParams;
 
-        workspaceFolders = initializeParams.WorkspaceFolders ?? [];
+        _workspaceFolders = initializeParams.WorkspaceFolders ?? [];
 
         var requests = new List<KeyValuePair<string, object>>();
 
@@ -150,7 +156,8 @@ public class LanguageServer(
                     Name: "Pine language server",
                     Version: ElmTime.Program.AppVersionId));
 
-        System.Threading.Tasks.Task.Run(() => InitializeWorkspaceState(initializeParams));
+        _languageServiceStateTask =
+            System.Threading.Tasks.Task.Run(() => InitializeWorkspaceState(initializeParams));
 
         return (response, requests);
     }
@@ -181,7 +188,7 @@ public class LanguageServer(
             ];
     }
 
-    void InitializeWorkspaceState(InitializeParams initializeParams)
+    Result<string, WorkspaceState> InitializeWorkspaceState(InitializeParams initializeParams)
     {
         IEnumerable<string> ComposeDirectories()
         {
@@ -216,33 +223,22 @@ public class LanguageServer(
             }
         }
 
-        _languageServiceStateTask =
-            System.Threading.Tasks.Task.Run(
-                () =>
-                {
-                    var initResult = WorkspaceState.Init(workspaceFolders);
+        var initResult = WorkspaceState.Init(_workspaceFolders);
 
-                    if (initResult.IsErrOrNull() is { } err)
-                    {
-                        Log("Failed initializing language service state: " + err);
-                    }
-
-                    return initResult;
-                });
-
-        var taskResult = _languageServiceStateTask.Result;
-
-        if (taskResult.IsErrOrNull() is { } err)
+        if (initResult.IsErrOrNull() is { } err)
         {
             Log("Failed initializing language service state: " + err);
-            return;
+            return err;
         }
 
-        if (taskResult.IsOkOrNull() is not { } languageServiceState)
+        if (initResult.IsOkOrNull() is not { } languageServiceState)
         {
             throw new System.NotImplementedException(
-                "Unexpected language service state result type: " + taskResult.GetType());
+                "Unexpected language service state result type: " + initResult.GetType());
         }
+
+        _elmJsonDirectDependencies.Clear();
+        _elmJsonDirectDependenciesLoaded.Clear();
 
         IReadOnlyList<string> sourceDirectories = [.. ComposeDirectories().Distinct()];
 
@@ -333,6 +329,13 @@ public class LanguageServer(
             CommandLineInterface.FormatIntegerForDisplay((int)aggregateClock.Elapsed.TotalMilliseconds) + " ms");
 
         LoadDirectDependenciesFromElmJsonFiles(languageServiceState);
+
+        foreach (var (documentUri, content) in _clientTextDocumentContents)
+        {
+            languageServiceState.AddFile(documentUri, content);
+        }
+
+        return languageServiceState;
     }
 
     public void Workspace_didChangeWorkspaceFolders(WorkspaceFoldersChangeEvent workspaceFoldersChangeEvent)
@@ -346,7 +349,7 @@ public class LanguageServer(
 
         IReadOnlyList<WorkspaceFolder> newWorkspaceFolders =
             [
-            ..workspaceFolders
+            .._workspaceFolders
             .Where(
                 prevFolder =>
                 !workspaceFoldersChangeEvent.Removed.Any(removedFolder => removedFolder.Uri == prevFolder.Uri)),
@@ -358,23 +361,96 @@ public class LanguageServer(
             newWorkspaceFolders.Count + " (" +
             string.Join(", ", newWorkspaceFolders.Select(wf => wf.Uri)));
 
-        workspaceFolders = newWorkspaceFolders;
+        _workspaceFolders = newWorkspaceFolders;
 
-        System.Threading.Tasks.Task.Run(() => InitializeWorkspaceState(initializeParams));
+        if (_initializeParams is not { } previousInitializeParams)
+        {
+            Log("Cannot reinitialize workspace state before initialization");
+            return;
+        }
+
+        var currentInitializeParams =
+            previousInitializeParams with
+            {
+                RootPath = null,
+                RootUri = null,
+                WorkspaceFolders = newWorkspaceFolders,
+            };
+
+        _initializeParams = currentInitializeParams;
+
+        var previousLanguageServiceStateTask = _languageServiceStateTask;
+
+        _languageServiceStateTask =
+            System.Threading.Tasks.Task.Run(
+                () =>
+                {
+                    _ = previousLanguageServiceStateTask?.Result;
+
+                    return InitializeWorkspaceState(currentInitializeParams);
+                });
     }
 
     public void TextDocument_didOpen(TextDocumentItem textDocument)
+    {
+        lock (_documentStateLock)
+        {
+            TextDocument_didOpenSynchronized(textDocument);
+        }
+    }
+
+    private void TextDocument_didOpenSynchronized(TextDocumentItem textDocument)
     {
         var decodedUri = DocumentUriCleaned(textDocument.Uri);
 
         Log("TextDocument_didOpen: " + decodedUri);
 
-        _clientTextDocumentContents[decodedUri] = textDocument.Text;
-
         _allSeenDocumentUris[decodedUri] = decodedUri;
+        _closedTextDocuments.TryRemove(decodedUri, out var _);
+
+        lock (_documentStateLock)
+        {
+            if (_clientTextDocumentVersions.TryGetValue(decodedUri, out var currentVersion) &&
+                currentVersion > textDocument.Version)
+            {
+                Log(
+                    "Ignoring stale open document version " + textDocument.Version +
+                    " because current version is " + currentVersion);
+                return;
+            }
+
+            _clientTextDocumentContents[decodedUri] = textDocument.Text;
+            _clientTextDocumentVersions[decodedUri] = textDocument.Version;
+        }
+
+        if (GetLanguageServiceState("opening document") is not { } languageServiceState)
+        {
+            return;
+        }
+
+        lock (_documentStateLock)
+        {
+            if (_clientTextDocumentVersions.TryGetValue(decodedUri, out var currentVersion) &&
+                currentVersion == textDocument.Version &&
+                _clientTextDocumentContents.TryGetValue(decodedUri, out var currentContent) &&
+                currentContent == textDocument.Text)
+            {
+                languageServiceState.AddFile(decodedUri, textDocument.Text);
+            }
+        }
     }
 
     public void TextDocument_didChange(
+        VersionedTextDocumentIdentifier textDocument,
+        IReadOnlyList<TextDocumentContentChangeEvent> contentChanges)
+    {
+        lock (_documentStateLock)
+        {
+            TextDocument_didChangeSynchronized(textDocument, contentChanges);
+        }
+    }
+
+    private void TextDocument_didChangeSynchronized(
         VersionedTextDocumentIdentifier textDocument,
         IReadOnlyList<TextDocumentContentChangeEvent> contentChanges)
     {
@@ -386,42 +462,115 @@ public class LanguageServer(
             "TextDocument_didChange: " + textDocumentUri +
             " (" + contentChanges.Count + " content changes)");
 
+        if (contentChanges.Count is 0)
+        {
+            return;
+        }
+
+        if (_closedTextDocuments.ContainsKey(textDocumentUri))
+        {
+            Log("Ignoring change for closed document " + textDocumentUri);
+            return;
+        }
+
         for (var i = 0; i < contentChanges.Count; ++i)
         {
-            var contentChange = contentChanges[i];
+            Log("Content change " + i + ".range: " + contentChanges[i].Range?.ToString() ?? "null");
 
-            Log("Content change " + i + ".range: " + contentChange.Range?.ToString() ?? "null");
-
-            if (contentChange.Range is null)
+            if (contentChanges[i].Range is not null)
             {
-                _clientTextDocumentContents[textDocumentUri] = contentChange.Text;
-
-                var linesCount = ElmModule.ModuleLines(contentChange.Text).Count();
-
-                Log(
-                    "Replaced all of " + textDocumentUri + " with " +
-                    CommandLineInterface.FormatIntegerForDisplay(contentChange.Text.Length) +
-                    " chars distributed over " +
-                    CommandLineInterface.FormatIntegerForDisplay(linesCount) + " lines");
-            }
-            else
-            {
-                // TODO
-
                 Log("Failed to apply changes: not implemented");
+                return;
+            }
+        }
+
+        var newContent = contentChanges[^1].Text;
+
+        lock (_documentStateLock)
+        {
+            if (_clientTextDocumentVersions.TryGetValue(textDocumentUri, out var currentVersion) &&
+                textDocument.Version <= currentVersion)
+            {
+                Log(
+                    "Ignoring stale document version " + textDocument.Version +
+                    " because current version is " + currentVersion);
+                return;
+            }
+
+            _clientTextDocumentContents[textDocumentUri] = newContent;
+            _clientTextDocumentVersions[textDocumentUri] = textDocument.Version;
+        }
+
+        var linesCount = ElmModule.ModuleLines(newContent).Count();
+
+        Log(
+            "Replaced all of " + textDocumentUri + " with " +
+            CommandLineInterface.FormatIntegerForDisplay(newContent.Length) +
+            " chars distributed over " +
+            CommandLineInterface.FormatIntegerForDisplay(linesCount) + " lines");
+
+        if (GetLanguageServiceState("changing document") is not { } languageServiceState)
+        {
+            return;
+        }
+
+        lock (_documentStateLock)
+        {
+            if (_clientTextDocumentVersions.TryGetValue(textDocumentUri, out var currentVersion) &&
+                currentVersion == textDocument.Version)
+            {
+                languageServiceState.AddFile(textDocumentUri, newContent);
             }
         }
     }
 
     public void TextDocument_didClose(TextDocumentIdentifier textDocument)
     {
+        lock (_documentStateLock)
+        {
+            TextDocument_didCloseSynchronized(textDocument);
+        }
+    }
+
+    private void TextDocument_didCloseSynchronized(TextDocumentIdentifier textDocument)
+    {
         var decodedUri = DocumentUriCleaned(textDocument.Uri);
 
-        _clientTextDocumentContents.TryRemove(decodedUri, out var _);
+        lock (_documentStateLock)
+        {
+            _clientTextDocumentContents.TryRemove(decodedUri, out var _);
+            _clientTextDocumentVersions.TryRemove(decodedUri, out var _);
+            _closedTextDocuments[decodedUri] = 0;
+        }
 
         Log(
             "TextDocument_didClose: " + decodedUri +
             " (" + _clientTextDocumentContents.Count + " open remaining)");
+
+        if (GetLanguageServiceState("closing document") is not { } languageServiceState)
+        {
+            return;
+        }
+
+        lock (_documentStateLock)
+        {
+            if (_clientTextDocumentContents.ContainsKey(decodedUri))
+            {
+                return;
+            }
+
+            var localPathResult = DocumentUriAsLocalPath(decodedUri);
+
+            if (localPathResult.IsOkOrNull() is { } localPath &&
+                System.IO.File.Exists(localPath))
+            {
+                languageServiceState.AddFile(decodedUri, System.IO.File.ReadAllText(localPath));
+            }
+            else
+            {
+                languageServiceState.DeleteFile(decodedUri);
+            }
+        }
     }
 
     public void Workspace_didChangeWatchedFiles(IReadOnlyList<FileEvent> changesBeforeDecode)
@@ -440,11 +589,10 @@ public class LanguageServer(
             "Workspace_didChangeWatchedFiles: " + changes.Count + " changes: " +
             string.Join(", ", changes.Select(change => change.Uri)));
 
-        // Process file changes asynchronously to avoid blocking the RPC thread
-        System.Threading.Tasks.Task.Run(() => ProcessFileChangesAsync(changes));
+        ProcessFileChanges(changes);
     }
 
-    private void ProcessFileChangesAsync(IReadOnlyList<FileEvent> changes)
+    private void ProcessFileChanges(IReadOnlyList<FileEvent> changes)
     {
         if (_languageServiceStateTask is not { } languageServiceStateTask)
         {
@@ -468,6 +616,15 @@ public class LanguageServer(
 
         foreach (var change in changes)
         {
+            lock (_documentStateLock)
+            {
+                if (_clientTextDocumentContents.TryGetValue(change.Uri, out var openDocumentContent))
+                {
+                    languageServiceState.AddFile(change.Uri, openDocumentContent);
+                    continue;
+                }
+            }
+
             var localPathResult = DocumentUriAsLocalPath(change.Uri);
 
             if (localPathResult.IsErrOrNull() is { } err)
@@ -484,7 +641,18 @@ public class LanguageServer(
 
             if (change.Type is FileChangeType.Deleted)
             {
-                languageServiceState.DeleteFile(change.Uri);
+                lock (_documentStateLock)
+                {
+                    if (_clientTextDocumentContents.TryGetValue(change.Uri, out var openDocumentContent))
+                    {
+                        languageServiceState.AddFile(change.Uri, openDocumentContent);
+                    }
+                    else
+                    {
+                        languageServiceState.DeleteFile(change.Uri);
+                    }
+                }
+
                 continue;
             }
 
@@ -511,9 +679,17 @@ public class LanguageServer(
 
                 clock.Restart();
 
-                languageServiceState.AddFile(
-                    change.Uri,
-                    fileContent);
+                lock (_documentStateLock)
+                {
+                    if (_clientTextDocumentContents.TryGetValue(change.Uri, out var openDocumentContent))
+                    {
+                        languageServiceState.AddFile(change.Uri, openDocumentContent);
+                    }
+                    else
+                    {
+                        languageServiceState.AddFile(change.Uri, fileContent);
+                    }
+                }
 
                 Log(
                     "Processed file " + change.Uri + " in language service in " +
@@ -558,12 +734,12 @@ public class LanguageServer(
                             PackageName: packageName,
                             VersionTag: packageVersion);
 
-                    if (elmJsonDirectDependencies.ContainsKey(packageVersionId))
+                    if (_elmJsonDirectDependencies.ContainsKey(packageVersionId))
                     {
                         continue;
                     }
 
-                    elmJsonDirectDependencies[packageVersionId] = packageVersion;
+                    _elmJsonDirectDependencies[packageVersionId] = packageVersion;
 
                     Log("Registered direct dependency: " + packageName + " " + packageVersion);
                 }
@@ -578,7 +754,7 @@ public class LanguageServer(
     private void LoadDirectDependenciesFromElmJsonFiles(
         WorkspaceState workspaceState)
     {
-        int? searchAndLoadPackage(Interface.ElmPackageVersion019Identifer packageVersionIdentifer)
+        int? SearchAndLoadPackage(Interface.ElmPackageVersion019Identifer packageVersionIdentifer)
         {
             var packageName = packageVersionIdentifer.PackageName;
             var packageVersion = packageVersionIdentifer.VersionTag;
@@ -725,7 +901,7 @@ public class LanguageServer(
                     ": Added " + elmModulesToAdd.Count + " exposed Elm modules in " +
                     CommandLineInterface.FormatIntegerForDisplay((int)clock.Elapsed.TotalMilliseconds) + " ms");
 
-                elmJsonDirectDependenciesLoaded[packageVersionIdentifer] = packageVersionDirectory;
+                _elmJsonDirectDependenciesLoaded[packageVersionIdentifer] = packageVersionDirectory;
 
                 return elmModulesToAdd.Count;
             }
@@ -733,16 +909,16 @@ public class LanguageServer(
             return null;
         }
 
-        foreach (var dependency in elmJsonDirectDependencies)
+        foreach (var dependency in _elmJsonDirectDependencies)
         {
-            if (elmJsonDirectDependenciesLoaded.ContainsKey(dependency.Key))
+            if (_elmJsonDirectDependenciesLoaded.ContainsKey(dependency.Key))
             {
                 continue;
             }
 
             var clock = System.Diagnostics.Stopwatch.StartNew();
 
-            if (searchAndLoadPackage(dependency.Key) is { } packageElmModuleCount)
+            if (SearchAndLoadPackage(dependency.Key) is { } packageElmModuleCount)
             {
                 Log(
                     "Loaded package: " + dependency.Key + " " + dependency.Value +
@@ -1128,51 +1304,6 @@ public class LanguageServer(
 
         Log("textDocument/documentSymbol: " + textDocumentUri);
 
-        var localPathResult = DocumentUriAsLocalPath(textDocumentUri);
-
-        {
-            if (localPathResult.IsErrOrNull() is { } err)
-            {
-                Log("Ignoring URI: " + err + ": " + textDocumentUri);
-                return [];
-            }
-        }
-
-        if (localPathResult.IsOkOrNull() is not { } localPath)
-        {
-            throw new System.NotImplementedException(
-                "Unexpected result type: " + localPathResult.GetType());
-        }
-
-        var fileContent = System.IO.File.ReadAllText(localPath);
-
-        Log(
-            "Read file " + textDocumentUri + " with " +
-            CommandLineInterface.FormatIntegerForDisplay(fileContent.Length) +
-            " chars in " +
-            CommandLineInterface.FormatIntegerForDisplay((int)clock.Elapsed.TotalMilliseconds) +
-            " ms");
-
-        clock.Restart();
-
-        {
-            if (_languageServiceStateTask?.Result.IsErrOrNull() is { } err)
-            {
-                throw new System.NotImplementedException(
-                    "Failed initializing language service: " + err);
-            }
-        }
-
-        if (_languageServiceStateTask?.Result.IsOkOrNull() is not { } languageServiceState)
-        {
-            throw new System.NotImplementedException(
-                "Unexpected language service state result type: " + _languageServiceStateTask?.Result.GetType());
-        }
-
-        languageServiceState.AddFile(
-            textDocumentUri,
-            fileContent);
-
         var documentSymbols =
             TextDocumentSymbolRequest(textDocumentUri);
 
@@ -1394,7 +1525,22 @@ public class LanguageServer(
 
         if (didSaveParams.Text is { } text)
         {
-            _clientTextDocumentContents[textDocumentUri] = text;
+            lock (_documentStateLock)
+            {
+                _clientTextDocumentContents[textDocumentUri] = text;
+            }
+
+            if (GetLanguageServiceState("saving document") is { } languageServiceState)
+            {
+                lock (_documentStateLock)
+                {
+                    if (_clientTextDocumentContents.TryGetValue(textDocumentUri, out var currentContent) &&
+                        currentContent == text)
+                    {
+                        languageServiceState.AddFile(textDocumentUri, text);
+                    }
+                }
+            }
         }
 
         var localPathResult = DocumentUriAsLocalPath(textDocumentUri);
@@ -1458,7 +1604,7 @@ public class LanguageServer(
         }
 
         var elmJsonFilePath =
-            FindElmJsonFile(localPath) ?? initializeParams?.RootPath;
+            FindElmJsonFile(localPath) ?? _initializeParams?.RootPath;
 
         if (elmJsonFilePath is null)
         {
@@ -1939,6 +2085,31 @@ public class LanguageServer(
             languageServiceState.HandleRequest(request);
     }
 
+    private WorkspaceState? GetLanguageServiceState(string operation)
+    {
+        if (_languageServiceStateTask is not { } languageServiceStateTask)
+        {
+            Log("Cannot update language service while " + operation + ": state not initialized");
+            return null;
+        }
+
+        var taskResult = languageServiceStateTask.Result;
+
+        if (taskResult.IsErrOrNull() is { } err)
+        {
+            Log("Cannot update language service while " + operation + ": " + err);
+            return null;
+        }
+
+        if (taskResult.IsOkOrNull() is not { } languageServiceState)
+        {
+            throw new System.NotImplementedException(
+                "Unexpected language service state result type: " + taskResult.GetType());
+        }
+
+        return languageServiceState;
+    }
+
     public IEnumerable<Location> MapLocations(
         IEnumerable<Interface.LocationInFile> locations,
         System.Func<Interface.FileLocation, IEnumerable<Location>> noMatchingUri)
@@ -1974,7 +2145,7 @@ public class LanguageServer(
     {
         var documentUriNormalized = DocumentUriCleaned(documentUri);
 
-        foreach (var (elmPackageVersionIdentifer, packageDirectory) in elmJsonDirectDependenciesLoaded)
+        foreach (var (elmPackageVersionIdentifer, packageDirectory) in _elmJsonDirectDependenciesLoaded)
         {
             var packageDirectoryNormalized = DocumentUriCleaned(packageDirectory);
 
@@ -2003,7 +2174,7 @@ public class LanguageServer(
 
         if (fileLocation is Interface.FileLocation.ElmPackageFileLocation elmPackageFileLocation)
         {
-            if (elmJsonDirectDependenciesLoaded.TryGetValue(
+            if (_elmJsonDirectDependenciesLoaded.TryGetValue(
                 elmPackageFileLocation.ElmPackageVersionIdentifer,
                 out var packageDirectory))
             {
