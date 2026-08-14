@@ -1,9 +1,7 @@
-using Pine.Core;
-using Pine.Core.Elm;
 using System.Collections.Generic;
 using System.Linq;
 
-namespace Pine.Elm.LanguageServiceInterface;
+namespace Pine.Core.Elm.LanguageServer.LanguageServiceInterface;
 
 
 /*
@@ -20,31 +18,55 @@ type Response
 
  * */
 
+/// <summary>
+/// Represents a response from the Elm language service.
+/// </summary>
 public abstract record Response
 {
+    /// <summary>
+    /// Reports the current workspace summary.
+    /// </summary>
     public record WorkspaceSummaryResponse
         : Response;
 
+    /// <summary>
+    /// Contains hover information.
+    /// </summary>
     public record ProvideHoverResponse(
         IReadOnlyList<string> Strings)
         : Response;
 
+    /// <summary>
+    /// Contains completion items.
+    /// </summary>
     public record ProvideCompletionItemsResponse(
         IReadOnlyList<MonacoEditor.MonacoCompletionItem> CompletionItems)
         : Response;
 
+    /// <summary>
+    /// Contains definition locations.
+    /// </summary>
     public record ProvideDefinitionResponse(
         IReadOnlyList<LocationInFile> Locations)
         : Response;
 
+    /// <summary>
+    /// Contains document symbols.
+    /// </summary>
     public record TextDocumentSymbolResponse(
         IReadOnlyList<DocumentSymbol> Symbols)
         : Response;
 
+    /// <summary>
+    /// Contains document reference locations.
+    /// </summary>
     public record TextDocumentReferencesResponse(
         IReadOnlyList<LocationInFile> Locations)
         : Response;
 
+    /// <summary>
+    /// Contains edits for a symbol rename.
+    /// </summary>
     public record TextDocumentRenameResponse(
         WorkspaceEdit WorkspaceEdit)
         : Response;
@@ -72,24 +94,42 @@ type ElmPackageVersionIdentifer
 
  * */
 
+/// <summary>
+/// Identifies a range within a file.
+/// </summary>
 public record LocationInFile(
     FileLocation FileLocation,
     MonacoEditor.MonacoRange Range);
 
+/// <summary>
+/// Identifies a file known to the language service.
+/// </summary>
 public abstract record FileLocation
 {
+    /// <summary>
+    /// Identifies a workspace file.
+    /// </summary>
     public record WorkspaceFileLocation(string FilePath)
         : FileLocation
     {
+        /// <summary>
+        /// Formats the workspace file location.
+        /// </summary>
         override public string ToString() =>
             "Workspace: " + FilePath;
     }
 
+    /// <summary>
+    /// Identifies a file in an Elm package.
+    /// </summary>
     public record ElmPackageFileLocation(
         ElmPackageVersion019Identifer ElmPackageVersionIdentifer,
         IReadOnlyList<string> ModulePath)
         : FileLocation
     {
+        /// <summary>
+        /// Formats the Elm package file location.
+        /// </summary>
         override public string ToString() =>
             "Elm package: " +
             ElmPackageVersionIdentifer.PackageName + "@" +
@@ -98,6 +138,9 @@ public abstract record FileLocation
     }
 }
 
+/// <summary>
+/// Identifies an Elm 0.19 package version.
+/// </summary>
 public record ElmPackageVersion019Identifer(
     string PackageName,
     string VersionTag);
@@ -137,9 +180,15 @@ type SymbolKind
 
  * */
 
+/// <summary>
+/// Represents a symbol in a document.
+/// </summary>
 public record DocumentSymbol(
     DocumentSymbolStruct Struct);
 
+/// <summary>
+/// Contains document symbol details.
+/// </summary>
 public record DocumentSymbolStruct(
     string Name,
     SymbolKind Kind,
@@ -147,22 +196,84 @@ public record DocumentSymbolStruct(
     MonacoEditor.MonacoRange SelectionRange,
     IReadOnlyList<DocumentSymbol> Children);
 
+/// <summary>
+/// Identifies the kind of a document symbol.
+/// </summary>
 public enum SymbolKind
 {
+    /// <summary>
+    /// Identifies a file.
+    /// </summary>
     File = 1,
+
+    /// <summary>
+    /// Identifies a module.
+    /// </summary>
     Module = 2,
+
+    /// <summary>
+    /// Identifies a namespace.
+    /// </summary>
     Namespace = 3,
+
+    /// <summary>
+    /// Identifies a package.
+    /// </summary>
     Package = 4,
+
+    /// <summary>
+    /// Identifies a class.
+    /// </summary>
     Class = 5,
+
+    /// <summary>
+    /// Identifies an enum.
+    /// </summary>
     Enum = 10,
+
+    /// <summary>
+    /// Identifies an interface.
+    /// </summary>
     Interface = 11,
+
+    /// <summary>
+    /// Identifies a function.
+    /// </summary>
     Function = 12,
+
+    /// <summary>
+    /// Identifies a constant.
+    /// </summary>
     Constant = 14,
+
+    /// <summary>
+    /// Identifies a string.
+    /// </summary>
     String = 15,
+
+    /// <summary>
+    /// Identifies a number.
+    /// </summary>
     Number = 16,
+
+    /// <summary>
+    /// Identifies a Boolean value.
+    /// </summary>
     Boolean = 17,
+
+    /// <summary>
+    /// Identifies an array.
+    /// </summary>
     Array = 18,
+
+    /// <summary>
+    /// Identifies an enum member.
+    /// </summary>
     EnumMember = 22,
+
+    /// <summary>
+    /// Identifies a struct.
+    /// </summary>
     Struct = 23
 }
 
@@ -185,20 +296,35 @@ type alias TextEdit =
 
  * */
 
+/// <summary>
+/// Contains edits across workspace documents.
+/// </summary>
 public record WorkspaceEdit(
     IReadOnlyList<TextDocumentEdit> Edits);
 
+/// <summary>
+/// Contains edits for a text document.
+/// </summary>
 public record TextDocumentEdit(
     string FilePath,
     IReadOnlyList<TextEdit> Edits);
 
+/// <summary>
+/// Describes a text replacement.
+/// </summary>
 public record TextEdit(
     MonacoEditor.MonacoRange Range,
     string NewText);
 
 
+/// <summary>
+/// Decodes language service responses.
+/// </summary>
 public static class ResponseEncoding
 {
+    /// <summary>
+    /// Decodes a language service response from a Pine value.
+    /// </summary>
     public static Result<string, Response> Decode(PineValue pineValue)
     {
         var elmValueResult =
@@ -434,6 +560,9 @@ public static class ResponseEncoding
             responseTag.TagName;
     }
 
+    /// <summary>
+    /// Decodes a list of file locations.
+    /// </summary>
     public static Result<string, IReadOnlyList<LocationInFile>> DecodeLocationInFileList(
         ElmValue elmValue)
     {
@@ -468,8 +597,14 @@ public static class ResponseEncoding
     }
 }
 
+/// <summary>
+/// Decodes locations in files.
+/// </summary>
 public static class LocationInFileEncoding
 {
+    /// <summary>
+    /// Decodes a file location from a Pine value.
+    /// </summary>
     public static Result<string, LocationInFile> Decode(PineValue pineValue)
     {
         var decodeElmValueResult = ElmValueEncoding.PineValueAsElmValue(pineValue, null, null);
@@ -489,6 +624,9 @@ public static class LocationInFileEncoding
         return Decode(elmValue);
     }
 
+    /// <summary>
+    /// Decodes a file location from an Elm value.
+    /// </summary>
     public static Result<string, LocationInFile> Decode(ElmValue elmValue)
     {
         if (elmValue is not ElmValue.ElmRecord record)
@@ -546,8 +684,14 @@ public static class LocationInFileEncoding
     }
 }
 
+/// <summary>
+/// Decodes document symbols.
+/// </summary>
 public static class DocumentSymbolEncoding
 {
+    /// <summary>
+    /// Decodes a document symbol from an Elm value.
+    /// </summary>
     public static Result<string, DocumentSymbol> Decode(ElmValue elmValue)
     {
         if (elmValue is not ElmValue.ElmTag tag)
@@ -577,6 +721,9 @@ public static class DocumentSymbolEncoding
         return "Unexpected tag name: " + tag.TagName;
     }
 
+    /// <summary>
+    /// Decodes document symbol details from an Elm value.
+    /// </summary>
     public static Result<string, DocumentSymbol> DecodeDocumentSymbolStruct(ElmValue elmValue)
     {
         if (elmValue is not ElmValue.ElmRecord record)
@@ -710,8 +857,14 @@ public static class DocumentSymbolEncoding
     }
 }
 
+/// <summary>
+/// Decodes document symbol kinds.
+/// </summary>
 public static class SymbolKindEncoding
 {
+    /// <summary>
+    /// Decodes a symbol kind from an Elm value.
+    /// </summary>
     public static Result<string, SymbolKind> Decode(ElmValue elmValue)
     {
         if (elmValue is not ElmValue.ElmTag tag)
@@ -903,8 +1056,14 @@ public static class SymbolKindEncoding
     }
 }
 
+/// <summary>
+/// Decodes workspace edits.
+/// </summary>
 public static class WorkspaceEditEncoding
 {
+    /// <summary>
+    /// Decodes a workspace edit from an Elm value.
+    /// </summary>
     public static Result<string, WorkspaceEdit> Decode(ElmValue elmValue)
     {
         if (elmValue is not ElmValue.ElmList list)
@@ -938,8 +1097,14 @@ public static class WorkspaceEditEncoding
     }
 }
 
+/// <summary>
+/// Decodes text document edits.
+/// </summary>
 public static class TextDocumentEditEncoding
 {
+    /// <summary>
+    /// Decodes a text document edit from an Elm value.
+    /// </summary>
     public static Result<string, TextDocumentEdit> Decode(ElmValue elmValue)
     {
         if (elmValue is not ElmValue.ElmRecord record)
@@ -1001,8 +1166,14 @@ public static class TextDocumentEditEncoding
     }
 }
 
+/// <summary>
+/// Decodes text edits.
+/// </summary>
 public static class TextEditEncoding
 {
+    /// <summary>
+    /// Decodes a text edit from an Elm value.
+    /// </summary>
     public static Result<string, TextEdit> Decode(ElmValue elmValue)
     {
         if (elmValue is not ElmValue.ElmRecord record)
@@ -1053,8 +1224,14 @@ public static class TextEditEncoding
     }
 }
 
+/// <summary>
+/// Encodes and decodes file locations.
+/// </summary>
 public static class FileLocationEncoding
 {
+    /// <summary>
+    /// Encodes a file location as an Elm value.
+    /// </summary>
     public static ElmValue EncodeAsElmValue(FileLocation fileLocation)
     {
         return fileLocation switch
@@ -1077,6 +1254,9 @@ public static class FileLocationEncoding
         };
     }
 
+    /// <summary>
+    /// Decodes a file location from an Elm value.
+    /// </summary>
     public static Result<string, FileLocation> Decode(ElmValue elmValue)
     {
         if (elmValue is not ElmValue.ElmTag tag)
@@ -1155,8 +1335,14 @@ public static class FileLocationEncoding
     }
 }
 
+/// <summary>
+/// Encodes and decodes Elm package version identifiers.
+/// </summary>
 public static class ElmPackageVersionIdentiferEncoding
 {
+    /// <summary>
+    /// Encodes an Elm package version identifier.
+    /// </summary>
     public static ElmValue Encode(ElmPackageVersion019Identifer elmPackageVersionIdentifer)
     {
         return
@@ -1168,6 +1354,9 @@ public static class ElmPackageVersionIdentiferEncoding
                 ]);
     }
 
+    /// <summary>
+    /// Decodes an Elm package version identifier.
+    /// </summary>
     public static Result<string, ElmPackageVersion019Identifer> Decode(ElmValue elmValue)
     {
         if (elmValue is not ElmValue.ElmTag tag)

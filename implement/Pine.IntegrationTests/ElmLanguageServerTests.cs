@@ -13,7 +13,7 @@ using System.Text.Json;
 using System.Threading.Tasks;
 using Xunit;
 
-using ElmLanguageServer = Pine.Elm.LanguageServer;
+using ElmLanguageServer = Pine.Core.Elm.LanguageServer.LanguageServer;
 
 namespace Pine.IntegrationTests;
 

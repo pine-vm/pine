@@ -16,8 +16,9 @@ public interface IFileStoreReader
     ReadOnlyMemory<byte>? GetFileContent(IImmutableList<string> path);
 
     /// <summary>
-    /// Lists files under <paramref name="directoryPath"/> (non-recursive path prefix),
+    /// Recursively lists all descendant files under <paramref name="directoryPath"/>,
     /// returning each file's path relative to <paramref name="directoryPath"/>.
+    /// Implementations do not guarantee enumeration order or duplicate elimination.
     /// </summary>
     IEnumerable<IImmutableList<string>> ListFilesInDirectory(IImmutableList<string> directoryPath);
 }
@@ -156,4 +157,3 @@ public class FileStoreFromWriterAndReader(
     public IEnumerable<IImmutableList<string>> ListFilesInDirectory(IImmutableList<string> directoryPath) =>
         reader.ListFilesInDirectory(directoryPath);
 }
-

@@ -1,6 +1,7 @@
 using Pine.Core;
 using Pine.Core.CommonEncodings;
 using Pine.Core.Elm;
+using Pine.Core.Elm.LanguageServer;
 using Pine.Core.Files;
 using System;
 using System.Collections.Concurrent;
@@ -91,10 +92,6 @@ public class ElmCompilerInElm
     public FunctionRecord? ParseInteractiveSubmission { get; }
 
     public LanguageServiceInterfaceStruct? LanguageServiceInterface { get; }
-
-    public record LanguageServiceInterfaceStruct(
-        FunctionRecord InitState,
-        FunctionRecord HandleRequestInCurrentWorkspace);
 
     private static readonly Core.CodeAnalysis.PineVMParseCache s_parseCache = new();
 

@@ -69,11 +69,17 @@ public record TextDocumentSyncOptions(
     TextDocumentSyncKind? Change,
     bool? WillSave,
     bool? WillSaveWaitUntil,
-    SaveOptions? Save);
+    SaveOptions? Save)
+{
+    /// <summary>
+    /// Open and close notifications are sent to the server.
+    /// If omitted open close notifications should not be sent.
+    /// </summary>
+    public bool? OpenClose { get; init; }
+}
 
 /// <summary>
 /// https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#saveOptions
 /// </summary>
 public record SaveOptions(
     bool? IncludeText);
-

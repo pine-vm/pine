@@ -1,4 +1,3 @@
-using Pine.Core;
 using Pine.Core.Addressing;
 using Pine.Core.CommonEncodings;
 using Pine.Core.Elm.ElmInElm;
@@ -9,20 +8,20 @@ using System.Collections.Immutable;
 using System.IO;
 using System.Linq;
 
-namespace Pine.Elm;
+namespace Pine.Core.Elm.LanguageServer;
 
 /// <summary>
 /// Builds the Elm source tree containing the language service implementation
 /// (<c>LanguageService.elm</c> and its dependencies from the bundled
 /// elm-in-elm sources) and compiles it via
-/// <see cref="Pine.Core.Elm.ElmCompilerInDotnet.ElmCompiler.CompileInteractiveEnvironment"/>.
+/// <see cref="ElmCompilerInDotnet.ElmCompiler.CompileInteractiveEnvironment"/>.
 /// <para>
 /// Compiling the language service from scratch is expensive (hundreds of
 /// modules through the full optimization pipeline). To recover the
 /// performance previously provided by the precompiled environment shipped
-/// in <see cref="Pine.Core.Elm.BundledElmEnvironments"/>, the result is
-/// cached on disk, keyed by a hash of the input file tree, scoped to the
-/// Pine application version id.
+/// in <see cref="BundledElmEnvironments"/>, the result is
+/// optionally cached through a caller-supplied file store, keyed by a hash of
+/// the input file tree.
 /// </para>
 /// </summary>
 internal static class LanguageServiceCompilation
@@ -32,7 +31,7 @@ internal static class LanguageServiceCompilation
     /// language service implementation, its <c>pine-elm-syntax</c> dependency,
     /// the bundled kernel modules, and the bundled "other library" modules.
     /// This is the exact tree that is fed to
-    /// <see cref="Pine.Core.Elm.ElmCompilerInDotnet.ElmCompiler.CompileInteractiveEnvironment"/>.
+    /// <see cref="ElmCompilerInDotnet.ElmCompiler.CompileInteractiveEnvironment"/>.
     /// </summary>
     public static FileTree BuildLanguageServiceSourceTree()
     {
@@ -95,21 +94,6 @@ internal static class LanguageServiceCompilation
         var hash = PineValueHashTree.ComputeHash(encoded);
 
         return Convert.ToHexStringLower(hash.Span);
-    }
-
-    /// <summary>
-    /// Returns the default persistent cache for compiled language service
-    /// environments, scoped to the Pine application version id.
-    /// </summary>
-    public static IFileStore DefaultPersistentCache(string pineAppVersionId)
-    {
-        var directory =
-            Path.Combine(
-                Filesystem.CacheDirectory,
-                "lang-service-compile",
-                pineAppVersionId);
-
-        return new FileStoreFromSystemIOFile(directory);
     }
 
     /// <summary>

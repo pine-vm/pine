@@ -1,39 +1,49 @@
-using Pine.Core;
 using Pine.Core.CodeAnalysis;
 using Pine.Core.CommonEncodings;
-using Pine.Core.Elm;
+using Pine.Core.Elm.LanguageServer.LanguageServiceInterface;
+using Pine.Core.Elm.LanguageServer.MonacoEditor;
 using Pine.Core.Files;
+using Pine.Core.IO;
 using Pine.Core.PineVM;
 using System.Collections.Generic;
 using System.Linq;
 
-using Interface = Pine.Elm.LanguageServiceInterface;
+namespace Pine.Core.Elm.LanguageServer;
 
-namespace Pine.Elm;
-
+/// <summary>
+/// Session of the Elm language service, backed by the language service program running in a Pine VM.
+/// </summary>
 public class LanguageServiceState(
-    ElmCompilerInElm.LanguageServiceInterfaceStruct languageServiceInterface,
+    LanguageServiceInterfaceStruct languageServiceInterface,
     PineValue initState,
     IPineVM pineVM)
+    : ILanguageServiceSession
 {
     private static readonly PineVMParseCache s_parseCache = new();
 
     private PineValue _state = initState;
 
+    /// <summary>
+    /// Compiles the language service program and initializes a new session on the given VM.
+    /// </summary>
+    /// <param name="pineVM">VM used to run the language service program.</param>
+    /// <param name="compilationCache">
+    /// Optional store to cache the compiled environment between sessions and processes.
+    /// </param>
+    /// <param name="logDelegate">Optional delegate receiving progress reports from compilation.</param>
     public static Result<string, LanguageServiceState> InitLanguageServiceState(
-        IPineVM pineVM)
+        IPineVM pineVM,
+        IFileStore? compilationCache,
+        System.Action<string>? logDelegate = null)
     {
         var sourceTree =
             LanguageServiceCompilation.BuildLanguageServiceSourceTree();
 
-        var cache =
-            LanguageServiceCompilation.DefaultPersistentCache(ElmTime.Program.AppVersionId);
-
         var compileResult =
             LanguageServiceCompilation.CompileLanguageServiceEnv(
                 sourceTree,
-                cache: cache,
-                logDelegate: null);
+                cache: compilationCache,
+                logDelegate: logDelegate);
 
         {
             if (compileResult.IsErrOrNull() is { } err)
@@ -93,7 +103,7 @@ public class LanguageServiceState(
         }
 
         var languageServiceInterface =
-            new ElmCompilerInElm.LanguageServiceInterfaceStruct(
+            new LanguageServiceInterfaceStruct(
                 parseInitOk.functionRecord,
                 parseHandleRequestOk.functionRecord);
 
@@ -126,23 +136,15 @@ public class LanguageServiceState(
                 pineVM);
     }
 
-    public static Result<string, LanguageServiceState> InitLanguageServiceState()
-    {
-        // TODO: Use overlap and warmup to reduce response delays.
-
-        var pineVM =
-            PineVM.PineVMResettingCache.Create(
-                resetCacheEntriesThresholdDefault: 10_000);
-
-        return InitLanguageServiceState(pineVM);
-    }
-
-    public Result<string, Interface.Response.WorkspaceSummaryResponse>
+    /// <summary>
+    /// Removes a file from the language service workspace.
+    /// </summary>
+    public Result<string, Response.WorkspaceSummaryResponse>
         DeleteFile(
         string fileUri)
     {
         var genericRequestResult =
-            HandleRequest(new Interface.Request.DeleteWorkspaceFileRequest(fileUri));
+            HandleRequest(new Request.DeleteWorkspaceFileRequest(fileUri));
 
         if (genericRequestResult.IsErrOrNull() is { } err)
         {
@@ -155,7 +157,7 @@ public class LanguageServiceState(
                 "Unexpected request result type: " + genericRequestResult.GetType());
         }
 
-        if (requestOk is not Interface.Response.WorkspaceSummaryResponse workspaceSummary)
+        if (requestOk is not Response.WorkspaceSummaryResponse workspaceSummary)
         {
             throw new System.NotImplementedException(
                 "Unexpected request result type: " + requestOk.GetType());
@@ -164,7 +166,10 @@ public class LanguageServiceState(
         return workspaceSummary;
     }
 
-    public Result<string, Interface.Response.WorkspaceSummaryResponse>
+    /// <summary>
+    /// Adds or replaces a file in the language service workspace.
+    /// </summary>
+    public Result<string, Response.WorkspaceSummaryResponse>
         AddFile(
         string fileUri,
         string fileContentAsText)
@@ -175,9 +180,9 @@ public class LanguageServiceState(
 
         var genericRequestResult =
             HandleRequest(
-                new Interface.Request.AddWorkspaceFileRequest(
+                new Request.AddWorkspaceFileRequest(
                     fileUri,
-                    new Interface.FileTreeBlobNode(AsBase64: asBase64, AsText: fileContentAsText)));
+                    new FileTreeBlobNode(AsBase64: asBase64, AsText: fileContentAsText)));
 
         if (genericRequestResult.IsErrOrNull() is { } err)
         {
@@ -190,7 +195,7 @@ public class LanguageServiceState(
                 "Unexpected request result type: " + genericRequestResult.GetType());
         }
 
-        if (requestOk is not Interface.Response.WorkspaceSummaryResponse workspaceSummary)
+        if (requestOk is not Response.WorkspaceSummaryResponse workspaceSummary)
         {
             throw new System.NotImplementedException(
                 "Unexpected request result type: " + requestOk.GetType());
@@ -199,20 +204,23 @@ public class LanguageServiceState(
         return workspaceSummary;
     }
 
-    public Result<string, Interface.Response.WorkspaceSummaryResponse>
+    /// <summary>
+    /// Adds an Elm package to the language service workspace.
+    /// </summary>
+    public Result<string, Response.WorkspaceSummaryResponse>
         AddElmPackage(
-        Interface.ElmPackageVersion019Identifer packageVersionId,
+        ElmPackageVersion019Identifer packageVersionId,
         IReadOnlyList<KeyValuePair<IReadOnlyList<string>, string>> filesContentsAsText)
     {
         var genericRequestResult =
             HandleRequest(
-                new Interface.Request.AddElmPackageVersionRequest(
+                new Request.AddElmPackageVersionRequest(
                     packageVersionId,
                     [
                     .. filesContentsAsText.Select(
                         e =>
                         (e.Key,
-                        new Interface.FileTreeBlobNode(
+                        new FileTreeBlobNode(
                             AsBase64: System.Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(e.Value)),
                             AsText: e.Value)))
                     ]));
@@ -228,7 +236,7 @@ public class LanguageServiceState(
                 "Unexpected request result type: " + genericRequestResult.GetType());
         }
 
-        if (requestOk is not Interface.Response.WorkspaceSummaryResponse workspaceSummary)
+        if (requestOk is not Response.WorkspaceSummaryResponse workspaceSummary)
         {
             throw new System.NotImplementedException(
                 "Unexpected request result type: " + requestOk.GetType());
@@ -237,12 +245,15 @@ public class LanguageServiceState(
         return workspaceSummary;
     }
 
+    /// <summary>
+    /// Provides hover information for a source position.
+    /// </summary>
     public Result<string, IReadOnlyList<string>> ProvideHover(
-        Interface.ProvideHoverRequestStruct provideHoverRequest)
+        ProvideHoverRequestStruct provideHoverRequest)
     {
         var genericRequestResult =
             HandleRequest(
-                new Interface.Request.ProvideHoverRequest(provideHoverRequest));
+                new Request.ProvideHoverRequest(provideHoverRequest));
 
         if (genericRequestResult.IsErrOrNull() is { } err)
         {
@@ -255,7 +266,7 @@ public class LanguageServiceState(
                 "Unexpected request result type: " + genericRequestResult.GetType());
         }
 
-        if (requestOk is not Interface.Response.ProvideHoverResponse provideHoverResponse)
+        if (requestOk is not Response.ProvideHoverResponse provideHoverResponse)
         {
             throw new System.NotImplementedException(
                 "Unexpected request result type: " + requestOk.GetType());
@@ -264,13 +275,16 @@ public class LanguageServiceState(
         return Result<string, IReadOnlyList<string>>.ok(provideHoverResponse.Strings);
     }
 
-    public Result<string, IReadOnlyList<MonacoEditor.MonacoCompletionItem>>
+    /// <summary>
+    /// Provides completion items for a source position.
+    /// </summary>
+    public Result<string, IReadOnlyList<MonacoCompletionItem>>
         ProvideCompletionItems(
-        Interface.ProvideCompletionItemsRequestStruct provideCompletionItemsRequest)
+        ProvideCompletionItemsRequestStruct provideCompletionItemsRequest)
     {
         var genericRequestResult =
             HandleRequest(
-                new Interface.Request.ProvideCompletionItemsRequest(provideCompletionItemsRequest));
+                new Request.ProvideCompletionItemsRequest(provideCompletionItemsRequest));
 
         if (genericRequestResult.IsErrOrNull() is { } err)
         {
@@ -283,22 +297,25 @@ public class LanguageServiceState(
                 "Unexpected request result type: " + genericRequestResult.GetType());
         }
 
-        if (requestOk is not Interface.Response.ProvideCompletionItemsResponse provideCompletionItemsResponse)
+        if (requestOk is not Response.ProvideCompletionItemsResponse provideCompletionItemsResponse)
         {
             throw new System.NotImplementedException(
                 "Unexpected request result type: " + requestOk.GetType());
         }
 
         return
-            Result<string, IReadOnlyList<MonacoEditor.MonacoCompletionItem>>.ok(
+            Result<string, IReadOnlyList<MonacoCompletionItem>>.ok(
                 provideCompletionItemsResponse.CompletionItems);
     }
 
-    public Result<string, Interface.Response> HandleRequest(
-        Interface.Request request)
+    /// <summary>
+    /// Handles a request in the current language service workspace.
+    /// </summary>
+    public Result<string, Response> HandleRequest(
+        Request request)
     {
         var requestEncoded =
-            Interface.RequestEncoding.Encode(request);
+            RequestEncoding.Encode(request);
 
         lock (pineVM)
         {
@@ -368,7 +385,7 @@ public class LanguageServiceState(
             }
 
             var decodeResponseResult =
-                Interface.ResponseEncoding.Decode(langServiceResponseOk);
+                ResponseEncoding.Decode(langServiceResponseOk);
 
             {
                 if (decodeResponseResult.IsErrOrNull() is { } err)
@@ -388,8 +405,11 @@ public class LanguageServiceState(
         }
     }
 
+    /// <summary>
+    /// Encodes a language service file tree as a Pine value.
+    /// </summary>
     public static PineValue EncodeFileTreeNodeAsPineValue(
-        Interface.FileTreeNode<Interface.FileTreeBlobNode> node)
+        FileTreeNode<FileTreeBlobNode> node)
     {
         return
             EncodeFileTreeNodeAsPineValue(
@@ -408,11 +428,14 @@ public class LanguageServiceState(
                         ])));
     }
 
+    /// <summary>
+    /// Encodes a file tree as a Pine value.
+    /// </summary>
     public static PineValue EncodeFileTreeNodeAsPineValue<BlobT>(
-        Interface.FileTreeNode<BlobT> node,
+        FileTreeNode<BlobT> node,
         System.Func<BlobT, PineValue> encodeBlob)
     {
-        if (node is Interface.FileTreeNode<BlobT>.BlobNode blobNode)
+        if (node is FileTreeNode<BlobT>.BlobNode blobNode)
         {
             return
                 PineValue.List(
@@ -425,7 +448,7 @@ public class LanguageServiceState(
                     ]);
         }
 
-        if (node is Interface.FileTreeNode<BlobT>.TreeNode treeNode)
+        if (node is FileTreeNode<BlobT>.TreeNode treeNode)
         {
             return
                 PineValue.List(
@@ -452,7 +475,10 @@ public class LanguageServiceState(
             "Unexpected node type: " + node.GetType());
     }
 
-    public static Interface.FileTreeNode<Interface.FileTreeBlobNode>
+    /// <summary>
+    /// Converts a file tree to the language service representation.
+    /// </summary>
+    public static FileTreeNode<FileTreeBlobNode>
         Workspace(FileTree workspace)
     {
         if (workspace is FileTree.FileNode blobNode)
@@ -469,8 +495,8 @@ public class LanguageServiceState(
             }
 
             return
-                new Interface.FileTreeNode<Interface.FileTreeBlobNode>.BlobNode(
-                    new Interface.FileTreeBlobNode(
+                new FileTreeNode<FileTreeBlobNode>.BlobNode(
+                    new FileTreeBlobNode(
                         AsBase64: System.Convert.ToBase64String(blobNode.Bytes.Span),
                         AsText: asText));
         }
@@ -478,7 +504,7 @@ public class LanguageServiceState(
         if (workspace is FileTree.DirectoryNode treeNode)
         {
             return
-                new Interface.FileTreeNode<Interface.FileTreeBlobNode>.TreeNode(
+                new FileTreeNode<FileTreeBlobNode>.TreeNode(
                     [
                     ..treeNode.Items.Select(
                         e =>
@@ -489,7 +515,4 @@ public class LanguageServiceState(
         throw new System.NotImplementedException(
             "Unexpected node type: " + workspace.GetType());
     }
-
-
-    readonly ElmCompilerCache inspectionElmCompilerCache = new();
 }

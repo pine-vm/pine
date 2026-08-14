@@ -1,21 +1,51 @@
-using Pine.Core;
 using Pine.Core.Elm.Elm019;
 using Pine.Core.Elm.ElmSyntax;
+using Pine.Core.Elm.LanguageServer.LanguageServiceInterface;
+using Pine.Core.Elm.LanguageServer.MonacoEditor;
 using Pine.Core.Files;
 using Pine.Core.LanguageServerProtocol;
-using Pine.Elm019;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
 
-using Interface = Pine.Elm.LanguageServiceInterface;
+using Interface = Pine.Core.Elm.LanguageServer.LanguageServiceInterface;
+using Protocol = Pine.Core.LanguageServerProtocol;
 
-namespace Pine.Elm;
+namespace Pine.Core.Elm.LanguageServer;
 
+/// <summary>
+/// Implementation-neutral part of the Elm language server: maintains the documents seen from the
+/// client, forwards requests to a language-service session and publishes diagnostics.
+/// <para>
+/// All access to sources outside the client-managed documents goes through
+/// <see cref="ILanguageServerWorkspace"/> and <see cref="IElmPackageSource"/>; diagnostics and
+/// formatting go through <see cref="IDiagnosticsProvider"/> and <see cref="IDocumentFormatter"/>.
+/// </para>
+/// </summary>
+/// <param name="sessionFactory">Creates the language-service session backing this server.</param>
+/// <param name="workspace">Read access to the sources referenced by document URIs.</param>
+/// <param name="elmPackageSource">Source for the Elm packages referenced from <c>elm.json</c> files.</param>
+/// <param name="diagnosticsProvider">Computes diagnostics after a document was saved.</param>
+/// <param name="documentFormatter">Formats documents.</param>
+/// <param name="options">Host-independent settings.</param>
+/// <param name="logDelegate">Optional delegate receiving log messages.</param>
+/// <param name="formattingDiagnosticsProvider">
+/// Optional provider used after formatting a document. Production composition uses the syntax-only
+/// provider here to avoid running a compiler on every formatting request.
+/// </param>
 public class LanguageServer(
-    System.Action<string>? logDelegate,
-    IReadOnlyList<string> elmPackagesSearchDirectories)
+    ILanguageServiceSessionFactory sessionFactory,
+    ILanguageServerWorkspace workspace,
+    IElmPackageSource elmPackageSource,
+    IDiagnosticsProvider diagnosticsProvider,
+    IDocumentFormatter documentFormatter,
+    LanguageServerOptions options,
+    System.Action<string>? logDelegate = null,
+    IDiagnosticsProvider? formattingDiagnosticsProvider = null)
+    : IDocumentTextSource
 {
     private readonly ConcurrentDictionary<string, string> _allSeenDocumentUris = new();
 
@@ -25,7 +55,7 @@ public class LanguageServer(
 
     private readonly ConcurrentDictionary<string, byte> _closedTextDocuments = new();
 
-    private readonly System.Threading.Lock _documentStateLock = new();
+    private readonly Lock _documentStateLock = new();
 
     private IReadOnlyList<WorkspaceFolder> _workspaceFolders = [];
 
@@ -33,74 +63,87 @@ public class LanguageServer(
 
     private readonly System.Action<string>? _logDelegate = logDelegate;
 
-    private System.Threading.Tasks.Task<Result<string, WorkspaceState>>? _languageServiceStateTask;
+    private Task<Result<string, ILanguageServiceSession>>? _languageServiceStateTask;
 
     /*
      * TODO: Use the version identifier from elm.json as scope.
      * */
-    private readonly ConcurrentDictionary<Interface.ElmPackageVersion019Identifer, string> _elmJsonDirectDependencies =
+    private readonly ConcurrentDictionary<ElmPackageVersion019Identifer, string> _elmJsonDirectDependencies =
         new();
 
-    private readonly ConcurrentDictionary<Interface.ElmPackageVersion019Identifer, string> _elmJsonDirectDependenciesLoaded =
+    private readonly ConcurrentDictionary<ElmPackageVersion019Identifer, string> _elmJsonDirectDependenciesLoaded =
         new();
 
-    private class WorkspaceState(
-        IReadOnlyList<WorkspaceFolder> workspaceFolders,
-        LanguageServiceState languageServiceState)
-    {
-        public static Result<string, WorkspaceState> Init(
-            IReadOnlyList<WorkspaceFolder> workspaceFolders)
-        {
-            var initServiceStateResult =
-                LanguageServiceState.InitLanguageServiceState();
+    private readonly Lock _diagnosticsLock = new();
 
-            if (initServiceStateResult.IsErrOrNull() is { } err)
-            {
-                return err;
-            }
+    /// <summary>
+    /// Last diagnostics reported by a provider, keyed by the entry-point document URI which
+    /// caused them. Publication aggregates the contributions of all entry points.
+    /// </summary>
+    private readonly Dictionary<string, IReadOnlyList<DocumentDiagnostics>> _diagnosticsByEntryPoint =
+        new(System.StringComparer.Ordinal);
 
-            if (initServiceStateResult.IsOkOrNull() is not { } languageServiceState)
-            {
-                throw new System.NotImplementedException(
-                    "Unexpected language service state result type: " + initServiceStateResult.GetType());
-            }
+    /// <summary>
+    /// Per-entry-point counter to discard results of superseded diagnostics runs.
+    /// </summary>
+    private readonly Dictionary<string, long> _diagnosticsGenerations =
+        new(System.StringComparer.Ordinal);
 
-            return new WorkspaceState(workspaceFolders, languageServiceState);
-        }
+    /// <summary>
+    /// Incremented whenever a document content changes, to discard diagnostics computed from
+    /// sources which have been replaced in the meantime.
+    /// </summary>
+    private long _sourceRevision;
 
-        public Result<string, Interface.Response.WorkspaceSummaryResponse> AddFile(
-            string fileUri,
-            string fileContent)
-        {
-            return languageServiceState.AddFile(fileUri, fileContent);
-        }
-
-        public Result<string, Interface.Response.WorkspaceSummaryResponse> DeleteFile(
-            string fileUri)
-        {
-            return languageServiceState.DeleteFile(fileUri);
-        }
-
-        public Result<string, Interface.Response.WorkspaceSummaryResponse>
-            AddElmPackage(
-            Interface.ElmPackageVersion019Identifer packageVersionId,
-            IReadOnlyList<KeyValuePair<IReadOnlyList<string>, string>> filesContentsAsText)
-        {
-            return languageServiceState.AddElmPackage(packageVersionId, filesContentsAsText);
-        }
-
-        public Result<string, Interface.Response> HandleRequest(
-            Interface.Request request)
-        {
-            return languageServiceState.HandleRequest(request);
-        }
-    }
+    private System.Action<PublishDiagnosticsParams>? _publishDiagnostics;
 
     private void Log(string message)
     {
         _logDelegate?.Invoke(message);
     }
 
+    /// <summary>
+    /// Task tracking the workspace initialization started by <see cref="Initialize"/>, or
+    /// <see langword="null"/> before initialization started. Requests from the client wait for
+    /// this task to complete before using the language-service session.
+    /// </summary>
+    public Task? WorkspaceInitializationTask => _languageServiceStateTask;
+
+    /// <summary>
+    /// Sets the channel used to publish diagnostics to the client.
+    /// </summary>
+    public void SetDiagnosticsPublisher(System.Action<PublishDiagnosticsParams>? publishDiagnostics)
+    {
+        _publishDiagnostics = publishDiagnostics;
+    }
+
+    /// <summary>
+    /// Returns the text currently known for a document: the client-managed content when the
+    /// document is open, otherwise the content from the workspace.
+    /// </summary>
+    public string? TryGetDocumentText(string documentUri)
+    {
+        var documentUriCleaned = DocumentUriCleaned(documentUri);
+
+        if (_clientTextDocumentContents.TryGetValue(documentUriCleaned, out var openContent))
+        {
+            return openContent;
+        }
+
+        var readResult = workspace.ReadFile(documentUriCleaned);
+
+        if (readResult.IsErrOrNull() is { } err)
+        {
+            Log("Failed reading " + documentUriCleaned + " from workspace: " + err.Kind + ": " + err.Message);
+            return null;
+        }
+
+        return OkFileOrNull(readResult)?.Text;
+    }
+
+    /// <summary>
+    /// Initializes the language server.
+    /// </summary>
     public (InitializeResult, IReadOnlyList<KeyValuePair<string, object>>) Initialize(
         InitializeParams initializeParams)
     {
@@ -126,7 +169,10 @@ public class LanguageServer(
                         Change: TextDocumentSyncKind.Full,
                         WillSave: null,
                         WillSaveWaitUntil: null,
-                        Save: new SaveOptions(IncludeText: true)),
+                        Save: new SaveOptions(IncludeText: true))
+                    {
+                        OpenClose = true,
+                    },
 
                     DocumentFormattingProvider = true,
                     HoverProvider = true,
@@ -154,10 +200,10 @@ public class LanguageServer(
                 },
                 ServerInfo: new ParticipentInfo(
                     Name: "Pine language server",
-                    Version: ElmTime.Program.AppVersionId));
+                    Version: options.ServerVersion));
 
         _languageServiceStateTask =
-            System.Threading.Tasks.Task.Run(() => InitializeWorkspaceState(initializeParams));
+            Task.Run(() => InitializeWorkspaceState(initializeParams));
 
         return (response, requests);
     }
@@ -188,42 +234,83 @@ public class LanguageServer(
             ];
     }
 
-    Result<string, WorkspaceState> InitializeWorkspaceState(InitializeParams initializeParams)
+    /// <summary>
+    /// Composes the workspace root URIs from the initialize params, in order of precedence and
+    /// without duplicates: <c>rootUri</c>, the deprecated <c>rootPath</c> and the workspace folders.
+    /// </summary>
+    public static IReadOnlyList<string> ComposeWorkspaceRootUris(
+        InitializeParams initializeParams,
+        System.Action<string>? logDelegate = null)
     {
-        IEnumerable<string> ComposeDirectories()
+        var roots = new List<string>();
+        var seen = new HashSet<string>(System.StringComparer.Ordinal);
+
+        void AddRootUri(string? rootUri, string origin)
         {
-            if (initializeParams.RootPath is { } rootPath)
+            if (rootUri is null)
             {
-                yield return rootPath;
+                return;
             }
 
-            if (initializeParams.WorkspaceFolders is { } workspaceFolders)
+            var cleaned = DocumentUriCleaned(rootUri);
+
+            if (!System.Uri.TryCreate(cleaned, System.UriKind.Absolute, out var parsed))
             {
-                foreach (var workspaceFolder in workspaceFolders)
-                {
-                    if (workspaceFolder.Uri is { } uri)
-                    {
-                        var localPathResult = DocumentUriAsLocalPath(uri);
+                logDelegate?.Invoke("Ignoring " + origin + " which is not an absolute URI: " + rootUri);
+                return;
+            }
 
-                        if (localPathResult.IsErrOrNull() is { } err)
-                        {
-                            Log("Ignoring URI: " + err + ": " + uri);
-                            continue;
-                        }
+            var normalized =
+                parsed.AbsoluteUri.EndsWith('/')
+                ?
+                parsed.AbsoluteUri
+                :
+                parsed.AbsoluteUri + "/";
 
-                        if (localPathResult.IsOkOrNull() is not { } localPath)
-                        {
-                            throw new System.NotImplementedException(
-                                "Unexpected result type: " + localPathResult.GetType());
-                        }
-
-                        yield return localPath;
-                    }
-                }
+            if (seen.Add(normalized))
+            {
+                roots.Add(normalized);
             }
         }
 
-        var initResult = WorkspaceState.Init(_workspaceFolders);
+        AddRootUri(initializeParams.RootUri, "rootUri");
+
+        if (initializeParams.RootPath is { } rootPath)
+        {
+            if (System.Uri.TryCreate(rootPath, System.UriKind.Absolute, out var rootPathUri) &&
+                rootPathUri.Scheme is "file")
+            {
+                AddRootUri(rootPathUri.AbsoluteUri, "rootPath");
+            }
+            else
+            {
+                logDelegate?.Invoke("Ignoring rootPath which is not an absolute local path: " + rootPath);
+            }
+        }
+
+        if (initializeParams.WorkspaceFolders is { } workspaceFolders)
+        {
+            foreach (var workspaceFolder in workspaceFolders)
+            {
+                AddRootUri(workspaceFolder.Uri, "workspace folder");
+            }
+        }
+
+        return roots;
+    }
+
+    /// <summary>
+    /// File names loaded into the language service when enumerating a workspace root.
+    /// </summary>
+    public static bool IsRelevantWorkspaceFileName(string fileName) =>
+        fileName.EndsWith(".elm", System.StringComparison.OrdinalIgnoreCase) ||
+        string.Equals(fileName, "elm.json", System.StringComparison.OrdinalIgnoreCase);
+
+    private async Task<Result<string, ILanguageServiceSession>> InitializeWorkspaceState(
+        InitializeParams initializeParams)
+    {
+        var initResult =
+            await sessionFactory.CreateSessionAsync(CancellationToken.None);
 
         if (initResult.IsErrOrNull() is { } err)
         {
@@ -240,84 +327,73 @@ public class LanguageServer(
         _elmJsonDirectDependencies.Clear();
         _elmJsonDirectDependenciesLoaded.Clear();
 
-        IReadOnlyList<string> sourceDirectories = [.. ComposeDirectories().Distinct()];
+        var rootUris = ComposeWorkspaceRootUris(initializeParams, Log);
 
-        Log("Starting to initialize files contents for " + sourceDirectories.Count + " directories");
+        Log("Starting to initialize files contents for " + rootUris.Count + " roots");
 
         var aggregateClock = System.Diagnostics.Stopwatch.StartNew();
 
-        var aggregateElmModuleFiles = new HashSet<string>();
-        var aggregateElmJsonFiles = new HashSet<string>();
+        var aggregateElmModuleFiles = new HashSet<string>(System.StringComparer.Ordinal);
+        var aggregateElmJsonFiles = new HashSet<string>(System.StringComparer.Ordinal);
 
-        foreach (var sourceDirectory in sourceDirectories)
+        foreach (var rootUri in rootUris)
         {
-            try
+            var enumerateResult =
+                workspace.EnumerateFiles(rootUri, IsRelevantWorkspaceFileName);
+
+            if (enumerateResult.IsErrOrNull() is { } enumerateError)
             {
-                var elmModuleFiles =
-                    System.IO.Directory.GetFiles(sourceDirectory, "*.elm", System.IO.SearchOption.AllDirectories);
+                Log(
+                    "Failed enumerating files in " + rootUri + ": " +
+                    enumerateError.Kind + ": " + enumerateError.Message);
 
-                Log("Found " + elmModuleFiles.Length + " Elm module files in " + sourceDirectory);
-
-                var elmJsonFiles =
-                    System.IO.Directory.GetFiles(sourceDirectory, "elm.json", System.IO.SearchOption.AllDirectories);
-
-                Log("Found " + elmJsonFiles.Length + " elm.json files in " + sourceDirectory);
-
-                foreach (var filePath in elmJsonFiles.Concat(elmModuleFiles))
-                {
-                    try
-                    {
-                        var fileName = System.IO.Path.GetFileName(filePath);
-
-                        var fileClock = System.Diagnostics.Stopwatch.StartNew();
-
-                        var fileContent = System.IO.File.ReadAllText(filePath);
-
-                        Log(
-                            "Read file " + filePath + " with " +
-                            CommandLineInterface.FormatIntegerForDisplay(fileContent.Length) +
-                            " chars in " +
-                            CommandLineInterface.FormatIntegerForDisplay((int)fileClock.Elapsed.TotalMilliseconds) +
-                            " ms");
-
-                        fileClock.Restart();
-
-                        if (System.Uri.TryCreate(filePath, System.UriKind.Absolute, out var uri) is false)
-                        {
-                            Log("Failed to create URI: " + filePath);
-                            continue;
-                        }
-
-                        languageServiceState.AddFile(
-                            uri.AbsoluteUri,
-                            fileContent);
-
-                        Log(
-                            "Processed file " + filePath + " in language service in " +
-                            CommandLineInterface.FormatIntegerForDisplay((int)fileClock.Elapsed.TotalMilliseconds) +
-                            " ms");
-
-                        if (fileName.EndsWith(".elm", System.StringComparison.InvariantCultureIgnoreCase))
-                        {
-                            aggregateElmModuleFiles.Add(filePath);
-                        }
-
-                        if (string.Equals(fileName, "elm.json", System.StringComparison.InvariantCultureIgnoreCase))
-                        {
-                            aggregateElmJsonFiles.Add(filePath);
-
-                            CollectDirectDependenciesFromElmJsonFile(fileContent);
-                        }
-                    }
-                    catch (System.Exception e)
-                    {
-                        Log("Failed reading file: " + e);
-                    }
-                }
+                continue;
             }
-            catch (System.Exception e)
+
+            if (enumerateResult.IsOkOrNull() is not { } files)
             {
-                Log("Failed reading directory: " + e);
+                throw new System.NotImplementedException(
+                    "Unexpected enumeration result type: " + enumerateResult.GetType());
+            }
+
+            var elmJsonFiles =
+                files
+                .Where(file => IsElmJsonDocumentUri(file.DocumentUri))
+                .ToList();
+
+            var elmModuleFiles =
+                files
+                .Where(file => IsElmModuleDocumentUri(file.DocumentUri))
+                .ToList();
+
+            Log(
+                "Found " + elmModuleFiles.Count + " Elm module files and " +
+                elmJsonFiles.Count + " elm.json files in " + rootUri);
+
+            foreach (var file in elmJsonFiles.Concat(elmModuleFiles))
+            {
+                var fileClock = System.Diagnostics.Stopwatch.StartNew();
+
+                languageServiceState.AddFile(file.DocumentUri, file.Text);
+
+                Log(
+                    "Processed file " + file.DocumentUri + " with " +
+                    CommandLineInterface.FormatIntegerForDisplay(file.Text.Length) +
+                    " chars in language service in " +
+                    CommandLineInterface.FormatIntegerForDisplay((int)fileClock.Elapsed.TotalMilliseconds) +
+                    " ms");
+
+                if (IsElmModuleDocumentUri(file.DocumentUri))
+                {
+                    aggregateElmModuleFiles.Add(file.DocumentUri);
+                }
+
+                if (IsElmJsonDocumentUri(file.DocumentUri))
+                {
+                    aggregateElmJsonFiles.Add(file.DocumentUri);
+
+                    CollectDirectDependenciesFromElmJsonFile(file.Text);
+                }
             }
         }
 
@@ -330,14 +406,22 @@ public class LanguageServer(
 
         LoadDirectDependenciesFromElmJsonFiles(languageServiceState);
 
-        foreach (var (documentUri, content) in _clientTextDocumentContents)
+        /*
+         * Do not take the document-state lock here: notification handlers hold that lock while
+         * waiting for this task to complete, so taking it here would deadlock. Enumerating the
+         * concurrent dictionary is safe without the lock.
+         * */
+        foreach (var (documentUri, content) in _clientTextDocumentContents.ToArray())
         {
             languageServiceState.AddFile(documentUri, content);
         }
 
-        return languageServiceState;
+        return Result<string, ILanguageServiceSession>.ok(languageServiceState);
     }
 
+    /// <summary>
+    /// Applies a workspace folder change notification.
+    /// </summary>
     public void Workspace_didChangeWorkspaceFolders(WorkspaceFoldersChangeEvent workspaceFoldersChangeEvent)
     {
         Log(
@@ -382,15 +466,21 @@ public class LanguageServer(
         var previousLanguageServiceStateTask = _languageServiceStateTask;
 
         _languageServiceStateTask =
-            System.Threading.Tasks.Task.Run(
-                () =>
+            Task.Run(
+                async () =>
                 {
-                    _ = previousLanguageServiceStateTask?.Result;
+                    if (previousLanguageServiceStateTask is not null)
+                    {
+                        _ = await previousLanguageServiceStateTask;
+                    }
 
-                    return InitializeWorkspaceState(currentInitializeParams);
+                    return await InitializeWorkspaceState(currentInitializeParams);
                 });
     }
 
+    /// <summary>
+    /// Applies a text document open notification.
+    /// </summary>
     public void TextDocument_didOpen(TextDocumentItem textDocument)
     {
         lock (_documentStateLock)
@@ -416,12 +506,15 @@ public class LanguageServer(
                 Log(
                     "Ignoring stale open document version " + textDocument.Version +
                     " because current version is " + currentVersion);
+
                 return;
             }
 
             _clientTextDocumentContents[decodedUri] = textDocument.Text;
             _clientTextDocumentVersions[decodedUri] = textDocument.Version;
         }
+
+        BumpSourceRevision();
 
         if (GetLanguageServiceState("opening document") is not { } languageServiceState)
         {
@@ -440,6 +533,9 @@ public class LanguageServer(
         }
     }
 
+    /// <summary>
+    /// Applies a text document change notification.
+    /// </summary>
     public void TextDocument_didChange(
         VersionedTextDocumentIdentifier textDocument,
         IReadOnlyList<TextDocumentContentChangeEvent> contentChanges)
@@ -494,12 +590,15 @@ public class LanguageServer(
                 Log(
                     "Ignoring stale document version " + textDocument.Version +
                     " because current version is " + currentVersion);
+
                 return;
             }
 
             _clientTextDocumentContents[textDocumentUri] = newContent;
             _clientTextDocumentVersions[textDocumentUri] = textDocument.Version;
         }
+
+        BumpSourceRevision();
 
         var linesCount = ElmModule.ModuleLines(newContent).Count();
 
@@ -524,6 +623,9 @@ public class LanguageServer(
         }
     }
 
+    /// <summary>
+    /// Applies a text document close notification.
+    /// </summary>
     public void TextDocument_didClose(TextDocumentIdentifier textDocument)
     {
         lock (_documentStateLock)
@@ -543,6 +645,8 @@ public class LanguageServer(
             _closedTextDocuments[decodedUri] = 0;
         }
 
+        BumpSourceRevision();
+
         Log(
             "TextDocument_didClose: " + decodedUri +
             " (" + _clientTextDocumentContents.Count + " open remaining)");
@@ -552,6 +656,25 @@ public class LanguageServer(
             return;
         }
 
+        /*
+         * Read the backing content outside the document-state lock: reading can be slow and the
+         * lock only protects the client-managed overlay.
+         * */
+        var readResult = workspace.ReadFile(decodedUri);
+
+        string? backingContent = null;
+
+        if (readResult.IsErrOrNull() is { } readError)
+        {
+            Log(
+                "Failed reading " + decodedUri + " while closing document: " +
+                readError.Kind + ": " + readError.Message);
+        }
+        else
+        {
+            backingContent = OkFileOrNull(readResult)?.Text;
+        }
+
         lock (_documentStateLock)
         {
             if (_clientTextDocumentContents.ContainsKey(decodedUri))
@@ -559,20 +682,25 @@ public class LanguageServer(
                 return;
             }
 
-            var localPathResult = DocumentUriAsLocalPath(decodedUri);
-
-            if (localPathResult.IsOkOrNull() is { } localPath &&
-                System.IO.File.Exists(localPath))
+            if (backingContent is not null)
             {
-                languageServiceState.AddFile(decodedUri, System.IO.File.ReadAllText(localPath));
+                languageServiceState.AddFile(decodedUri, backingContent);
             }
             else
             {
                 languageServiceState.DeleteFile(decodedUri);
             }
         }
+
+        if (backingContent is null)
+        {
+            RemoveDiagnosticsEntryPoint(decodedUri);
+        }
     }
 
+    /// <summary>
+    /// Applies watched workspace file changes.
+    /// </summary>
     public void Workspace_didChangeWatchedFiles(IReadOnlyList<FileEvent> changesBeforeDecode)
     {
         var changes =
@@ -594,28 +722,19 @@ public class LanguageServer(
 
     private void ProcessFileChanges(IReadOnlyList<FileEvent> changes)
     {
-        if (_languageServiceStateTask is not { } languageServiceStateTask)
+        if (GetLanguageServiceState("processing file changes") is not { } languageServiceState)
         {
-            Log("Error processing file changes: language service state not initialized");
             return;
         }
 
-        {
-            if (languageServiceStateTask.Result.IsErrOrNull() is { } err)
-            {
-                Log("Error processing file changes: language service state not initialized: " + err);
-                return;
-            }
-        }
-
-        if (languageServiceStateTask.Result.IsOkOrNull() is not { } languageServiceState)
-        {
-            throw new System.NotImplementedException(
-                "Unexpected language service state result type: " + languageServiceStateTask.Result.GetType());
-        }
+        var anyChangeApplied = false;
 
         foreach (var change in changes)
         {
+            /*
+             * Contents managed by the client take precedence over the contents seen on the
+             * backing store: the client may have unsaved changes for that document.
+             * */
             lock (_documentStateLock)
             {
                 if (_clientTextDocumentContents.TryGetValue(change.Uri, out var openDocumentContent))
@@ -625,20 +744,6 @@ public class LanguageServer(
                 }
             }
 
-            var localPathResult = DocumentUriAsLocalPath(change.Uri);
-
-            if (localPathResult.IsErrOrNull() is { } err)
-            {
-                Log("Ignoring URI: " + err + ": " + change.Uri);
-                continue;
-            }
-
-            if (localPathResult.IsOkOrNull() is not { } localPath)
-            {
-                throw new System.NotImplementedException(
-                    "Unexpected result type: " + localPathResult.GetType());
-            }
-
             if (change.Type is FileChangeType.Deleted)
             {
                 lock (_documentStateLock)
@@ -646,12 +751,15 @@ public class LanguageServer(
                     if (_clientTextDocumentContents.TryGetValue(change.Uri, out var openDocumentContent))
                     {
                         languageServiceState.AddFile(change.Uri, openDocumentContent);
+                        continue;
                     }
-                    else
-                    {
-                        languageServiceState.DeleteFile(change.Uri);
-                    }
+
+                    languageServiceState.DeleteFile(change.Uri);
                 }
+
+                anyChangeApplied = true;
+
+                RemoveDiagnosticsEntryPoint(change.Uri);
 
                 continue;
             }
@@ -662,49 +770,61 @@ public class LanguageServer(
                 continue;
             }
 
-            try
+            var clock = System.Diagnostics.Stopwatch.StartNew();
+
+            var readResult = workspace.ReadFile(change.Uri);
+
+            if (readResult.IsErrOrNull() is { } readError)
             {
-                var clock = System.Diagnostics.Stopwatch.StartNew();
-
-                var fileContent = System.IO.File.ReadAllText(localPath);
-
-                var fileName = System.IO.Path.GetFileName(localPath);
-
                 Log(
-                    "Read file " + change.Uri + " with " +
-                    CommandLineInterface.FormatIntegerForDisplay(fileContent.Length) +
-                    " chars in " +
-                    CommandLineInterface.FormatIntegerForDisplay((int)clock.Elapsed.TotalMilliseconds) +
-                    " ms");
+                    "Failed reading " + change.Uri + ": " +
+                    readError.Kind + ": " + readError.Message);
 
-                clock.Restart();
+                continue;
+            }
 
-                lock (_documentStateLock)
+            if (OkFileOrNull(readResult) is not { } file)
+            {
+                Log("File reported as " + change.Type + " does not exist: " + change.Uri);
+                continue;
+            }
+
+            Log(
+                "Read file " + change.Uri + " with " +
+                CommandLineInterface.FormatIntegerForDisplay(file.Text.Length) +
+                " chars in " +
+                CommandLineInterface.FormatIntegerForDisplay((int)clock.Elapsed.TotalMilliseconds) +
+                " ms");
+
+            clock.Restart();
+
+            lock (_documentStateLock)
+            {
+                if (_clientTextDocumentContents.TryGetValue(change.Uri, out var openDocumentContent))
                 {
-                    if (_clientTextDocumentContents.TryGetValue(change.Uri, out var openDocumentContent))
-                    {
-                        languageServiceState.AddFile(change.Uri, openDocumentContent);
-                    }
-                    else
-                    {
-                        languageServiceState.AddFile(change.Uri, fileContent);
-                    }
+                    languageServiceState.AddFile(change.Uri, openDocumentContent);
                 }
-
-                Log(
-                    "Processed file " + change.Uri + " in language service in " +
-                    CommandLineInterface.FormatIntegerForDisplay((int)clock.Elapsed.TotalMilliseconds) +
-                    " ms");
-
-                if (string.Equals(fileName, "elm.json", System.StringComparison.InvariantCultureIgnoreCase))
+                else
                 {
-                    CollectDirectDependenciesFromElmJsonFile(fileContent);
+                    languageServiceState.AddFile(change.Uri, file.Text);
+                    anyChangeApplied = true;
                 }
             }
-            catch (System.Exception e)
+
+            Log(
+                "Processed file " + change.Uri + " in language service in " +
+                CommandLineInterface.FormatIntegerForDisplay((int)clock.Elapsed.TotalMilliseconds) +
+                " ms");
+
+            if (IsElmJsonDocumentUri(change.Uri))
             {
-                Log("Failed reading file: " + e);
+                CollectDirectDependenciesFromElmJsonFile(file.Text);
             }
+        }
+
+        if (anyChangeApplied)
+        {
+            BumpSourceRevision();
         }
 
         LoadDirectDependenciesFromElmJsonFiles(languageServiceState);
@@ -730,7 +850,7 @@ public class LanguageServer(
                     }
 
                     var packageVersionId =
-                        new Interface.ElmPackageVersion019Identifer(
+                        new ElmPackageVersion019Identifer(
                             PackageName: packageName,
                             VersionTag: packageVersion);
 
@@ -752,163 +872,8 @@ public class LanguageServer(
     }
 
     private void LoadDirectDependenciesFromElmJsonFiles(
-        WorkspaceState workspaceState)
+        ILanguageServiceSession session)
     {
-        int? SearchAndLoadPackage(Interface.ElmPackageVersion019Identifer packageVersionIdentifer)
-        {
-            var packageName = packageVersionIdentifer.PackageName;
-            var packageVersion = packageVersionIdentifer.VersionTag;
-
-            foreach (var searchDirectory in elmPackagesSearchDirectories)
-            {
-                var packageDirectory = System.IO.Path.Combine(searchDirectory, packageName);
-
-                var packageVersionDirectory =
-                    System.IO.Path.Combine(packageDirectory, packageVersion)
-                    .Replace('\\', '/');
-
-                if (!System.IO.Directory.Exists(packageVersionDirectory))
-                {
-                    continue;
-                }
-
-                var elmModuleFiles =
-                    System.IO.Directory.GetFiles(
-                        packageVersionDirectory,
-                        "*.elm",
-                        System.IO.SearchOption.AllDirectories);
-
-                var elmJsonFiles =
-                    System.IO.Directory.GetFiles(
-                        packageVersionDirectory,
-                        "elm.json",
-                        System.IO.SearchOption.AllDirectories);
-
-                Log(
-                    "Package: " + packageName + " version " + packageVersion +
-                    ": Found " + elmModuleFiles.Length +
-                    " Elm module files and " +
-                    elmJsonFiles.Length +
-                    " elm.json file(s) in " + packageVersionDirectory);
-
-                var exposedModuleNames = new HashSet<string>();
-
-                foreach (var elmJsonFile in elmJsonFiles)
-                {
-                    try
-                    {
-                        var fileContent = System.IO.File.ReadAllText(elmJsonFile);
-
-                        var elmJsonFileParsed =
-                            System.Text.Json.JsonSerializer.Deserialize<ElmJsonStructure>(fileContent);
-
-                        if (elmJsonFileParsed is null)
-                        {
-                            Log("Failed parsing elm.json file: " + elmJsonFile);
-                            continue;
-                        }
-
-                        foreach (var exposedModuleName in elmJsonFileParsed.ExposedModules)
-                        {
-                            exposedModuleNames.Add(exposedModuleName);
-                        }
-                    }
-                    catch (System.Exception e)
-                    {
-                        Log("Failed reading elm.json file: " + e);
-                    }
-                }
-
-                var elmModulesToAdd =
-                    new Dictionary<IReadOnlyList<string>, string>(
-                        comparer: EnumerableExtensions.EqualityComparer<IReadOnlyList<string>>());
-
-                foreach (var filePath in elmModuleFiles)
-                {
-                    try
-                    {
-                        var fileName = System.IO.Path.GetFileName(filePath);
-                        var fileContent = System.IO.File.ReadAllText(filePath);
-
-                        var filePathRelative =
-                            filePath[(packageVersionDirectory.Length + 1)..]
-                            .Replace('\\', '/');
-
-                        var filePathRelativeItems = filePathRelative.Split('/');
-
-                        Log(
-                            "Read file " + filePath + " with " +
-                            CommandLineInterface.FormatIntegerForDisplay(fileContent.Length) +
-                            " chars");
-
-                        var parseModuleNameResult = ElmModule.ParseModuleName(fileContent);
-
-                        if (parseModuleNameResult.IsErrOrNull() is { } err)
-                        {
-                            Log("Failed parsing module name: " + err);
-                            continue;
-                        }
-
-                        if (parseModuleNameResult.IsOkOrNull() is not { } moduleName)
-                        {
-                            throw new System.NotImplementedException(
-                                "Unexpected result type: " + parseModuleNameResult.GetType());
-                        }
-
-                        var moduleNameFlat = string.Join('.', moduleName);
-
-                        if (0 < exposedModuleNames.Count && !exposedModuleNames.Contains(moduleNameFlat))
-                        {
-                            Log("Ignoring non-exposed module: " + moduleNameFlat);
-                            continue;
-                        }
-
-                        if (System.Uri.TryCreate(filePath, System.UriKind.Absolute, out var uri) is false)
-                        {
-                            Log("Failed to create URI: " + filePath);
-                            continue;
-                        }
-
-                        elmModulesToAdd.TryAdd(filePathRelativeItems, fileContent);
-                    }
-                    catch (System.Exception e)
-                    {
-                        Log("Failed reading file: " + e);
-                    }
-                }
-
-                Log(
-                    "Package: " + packageName + " version " + packageVersion +
-                    ": Found " + elmModulesToAdd.Count + " Elm modules to add");
-
-                var clock = System.Diagnostics.Stopwatch.StartNew();
-
-                var addPackageResponse =
-                    workspaceState.AddElmPackage(
-                        packageVersionIdentifer,
-                        [.. elmModulesToAdd]);
-
-                {
-                    if (addPackageResponse.IsErrOrNull() is { } err)
-                    {
-                        Log("Failed adding package: " + err);
-                        return null;
-                    }
-                }
-
-                Log(
-                    "Loaded package: " + packageName + " " + packageVersion +
-                    ": Added " + elmModulesToAdd.Count + " exposed Elm modules in " +
-                    CommandLineInterface.FormatIntegerForDisplay((int)clock.Elapsed.TotalMilliseconds) + " ms");
-
-                _elmJsonDirectDependenciesLoaded[packageVersionIdentifer] = packageVersionDirectory;
-
-                return elmModulesToAdd.Count;
-            }
-
-            return null;
-        }
-
         foreach (var dependency in _elmJsonDirectDependencies)
         {
             if (_elmJsonDirectDependenciesLoaded.ContainsKey(dependency.Key))
@@ -918,46 +883,62 @@ public class LanguageServer(
 
             var clock = System.Diagnostics.Stopwatch.StartNew();
 
-            if (SearchAndLoadPackage(dependency.Key) is { } packageElmModuleCount)
+            var loadResult = elmPackageSource.LoadPackage(dependency.Key);
+
+            if (loadResult.IsErrOrNull() is { } loadError)
             {
                 Log(
-                    "Loaded package: " + dependency.Key + " " + dependency.Value +
-                    " in " +
-                    CommandLineInterface.FormatIntegerForDisplay((int)clock.Elapsed.TotalMilliseconds) +
-                    " ms");
+                    "Failed loading package " + dependency.Key.PackageName + " " +
+                    dependency.Key.VersionTag + ": " + loadError.Kind + ": " + loadError.Message);
+
+                continue;
             }
-            else
+
+            if (OkPackageOrNull(loadResult) is not { } packageContent)
             {
                 Log("Did not find package: " + dependency.Key + " " + dependency.Value);
+                continue;
             }
+
+            var addPackageResponse =
+                session.AddElmPackage(
+                    dependency.Key,
+                    packageContent.Modules);
+
+            if (addPackageResponse.IsErrOrNull() is { } addErr)
+            {
+                Log("Failed adding package: " + addErr);
+                continue;
+            }
+
+            _elmJsonDirectDependenciesLoaded[dependency.Key] =
+                NormalizeDirectoryUri(packageContent.RootUri);
+
+            Log(
+                "Loaded package: " + dependency.Key.PackageName + " " + dependency.Key.VersionTag +
+                ": Added " + packageContent.Modules.Count + " Elm modules in " +
+                CommandLineInterface.FormatIntegerForDisplay((int)clock.Elapsed.TotalMilliseconds) + " ms");
         }
     }
 
-    public IReadOnlyList<TextEdit> TextDocument_formatting(
+    /// <summary>
+    /// Formats a document using the configured <see cref="IDocumentFormatter"/> and returns the
+    /// text edits transforming the current content into the formatted content.
+    /// </summary>
+    public async Task<IReadOnlyList<Protocol.TextEdit>> TextDocument_formattingAsync(
         TextDocumentIdentifier textDocument,
         FormattingOptions options,
-        System.Action<TextDocumentIdentifier, IReadOnlyList<Diagnostic>> publishDiagnostics)
+        CancellationToken cancellationToken = default)
     {
         var textDocumentUri = DocumentUriCleaned(textDocument.Uri);
 
         Log("TextDocument_formatting: " + textDocumentUri);
 
-        _clientTextDocumentContents.TryGetValue(textDocumentUri, out var textDocumentContentBefore);
+        string? textDocumentContentBefore;
 
-        var localPathResult = DocumentUriAsLocalPath(textDocumentUri);
-
+        lock (_documentStateLock)
         {
-            if (localPathResult.IsErrOrNull() is { } err)
-            {
-                Log("Ignoring URI: " + err + ": " + textDocumentUri);
-                return [];
-            }
-        }
-
-        if (localPathResult.IsOkOrNull() is not { } localPath)
-        {
-            throw new System.NotImplementedException(
-                "Unexpected result type: " + localPathResult.GetType());
+            _clientTextDocumentContents.TryGetValue(textDocumentUri, out textDocumentContentBefore);
         }
 
         if (textDocumentContentBefore is not null)
@@ -966,13 +947,17 @@ public class LanguageServer(
         }
         else
         {
-            try
+            var readResult = workspace.ReadFile(textDocumentUri);
+
+            if (readResult.IsErrOrNull() is { } readError)
             {
-                textDocumentContentBefore ??= System.IO.File.ReadAllText(localPath);
+                Log(
+                    "Failed reading " + textDocumentUri + " for formatting: " +
+                    readError.Kind + ": " + readError.Message);
             }
-            catch (System.Exception e)
+            else
             {
-                Log("Failed reading file: " + e);
+                textDocumentContentBefore = OkFileOrNull(readResult)?.Text;
             }
         }
 
@@ -991,32 +976,64 @@ public class LanguageServer(
             CommandLineInterface.FormatIntegerForDisplay(textDocumentContentBefore.Length) +
             " chars before");
 
-        var newContent =
-            TextDocument_formatting_lessStore(
-                textDocument,
-                textDocumentContentBefore);
+        var formatClock = System.Diagnostics.Stopwatch.StartNew();
 
-        if (newContent is null)
+        Result<DocumentFormattingError, string> formatResult;
+
+        try
         {
-            Log("Exiting because new content for document " + textDocumentUri + " is null");
-
-            // Even when formatting could not produce new content (for example because of
-            // syntax errors), publish diagnostics for any syntax errors so the user can see
-            // them right away. Locations refer to the unchanged document content.
-            if (textDocument.Uri.EndsWith(".elm"))
-            {
-                PublishSyntaxErrorDiagnostics(
-                    textDocument,
+            formatResult =
+                await documentFormatter.FormatAsync(
+                    textDocumentUri,
                     textDocumentContentBefore,
-                    publishDiagnostics);
-            }
+                    options,
+                    cancellationToken);
+        }
+        catch (System.OperationCanceledException)
+        {
+            Log("Formatting " + textDocumentUri + " was canceled");
+            return [];
+        }
+        catch (System.Exception e)
+        {
+            Log("Error: Failed formatting document " + textDocumentUri + ": " + e);
+            return [];
+        }
+
+        if (formatResult.IsErrOrNull() is { } formatError)
+        {
+            Log(
+                "Exiting because formatting " + textDocumentUri + " failed: " +
+                formatError.Kind + ": " + formatError.Message);
+
+            /*
+             * Even when formatting could not produce new content (for example because of
+             * syntax errors), publish diagnostics so the user can see them right away.
+             * Locations refer to the unchanged document content.
+             * */
+            await PublishFormattingDiagnosticsAsync(textDocumentUri, cancellationToken);
 
             return [];
         }
 
-        if (_clientTextDocumentContents.ContainsKey(textDocumentUri))
+        if (formatResult.IsOkOrNull() is not { } newContent)
         {
-            _clientTextDocumentContents[textDocumentUri] = newContent;
+            throw new System.NotImplementedException(
+                "Unexpected formatting result type: " + formatResult.GetType());
+        }
+
+        Log(
+            "Completed formatting " + textDocumentUri + " in " +
+            CommandLineInterface.FormatIntegerForDisplay((int)formatClock.Elapsed.TotalMilliseconds) +
+            " ms");
+
+        lock (_documentStateLock)
+        {
+            if (_clientTextDocumentContents.TryGetValue(textDocumentUri, out var currentContent) &&
+                currentContent == textDocumentContentBefore)
+            {
+                _clientTextDocumentContents[textDocumentUri] = newContent;
+            }
         }
 
         var textEdits =
@@ -1027,112 +1044,35 @@ public class LanguageServer(
             textEdits.Count + " text edits with " +
             textEdits.Sum(te => te.NewText.Length) + " aggregate chars replaced or added");
 
-        // Publish diagnostics for syntax errors in the formatted document. The client will
-        // apply the returned edits, so locations refer to the formatted content. Publishing
-        // (even an empty list) ensures stale diagnostics are removed on formatting.
-        if (textDocument.Uri.EndsWith(".elm"))
-        {
-            PublishSyntaxErrorDiagnostics(
-                textDocument,
-                newContent,
-                publishDiagnostics);
-        }
+        /*
+         * Publish diagnostics for the formatted document. The client will apply the returned
+         * edits, so locations refer to the formatted content. Publishing (even an empty list)
+         * ensures stale diagnostics are removed on formatting.
+         * */
+        await PublishFormattingDiagnosticsAsync(textDocumentUri, cancellationToken);
 
         return textEdits;
     }
 
-    /// <summary>
-    /// Computes syntax-error diagnostics for the given Elm module content and publishes them
-    /// for the document. Publishing an empty list removes stale diagnostics from the client.
-    /// </summary>
-    private void PublishSyntaxErrorDiagnostics(
-        TextDocumentIdentifier textDocument,
-        string moduleContent,
-        System.Action<TextDocumentIdentifier, IReadOnlyList<Diagnostic>> publishDiagnostics)
+    private ValueTask PublishFormattingDiagnosticsAsync(
+        string textDocumentUri,
+        CancellationToken cancellationToken)
     {
-        var diagnostics = ComputeSyntaxErrorDiagnostics(moduleContent);
-
-        Log(
-            "Publishing " + diagnostics.Count + " syntax-error diagnostics for " +
-            textDocument.Uri);
-
-        publishDiagnostics(
-            new TextDocumentIdentifier(textDocument.Uri),
-            diagnostics);
-    }
-
-
-    public string? TextDocument_formatting_lessStore(
-        TextDocumentIdentifier textDocument,
-        string textDocumentContentBefore)
-    {
-        if (textDocument.Uri.EndsWith(".elm"))
+        if (formattingDiagnosticsProvider is not { } provider)
         {
-            // Check if the environment variable is set to use the old AVH4 binary approach
-            var useAvh4Binary = System.Environment.GetEnvironmentVariable("ELM_LS_FORMAT_VIA_AVH4");
-
-            if (!string.IsNullOrEmpty(useAvh4Binary))
-            {
-                try
-                {
-                    var binaryClock = System.Diagnostics.Stopwatch.StartNew();
-
-                    var elmFormatted =
-                        CommonBinaries.AVH4ElmFormatBinaries.RunElmFormat(textDocumentContentBefore);
-
-                    binaryClock.Stop();
-
-                    Log(
-                        "Completed elm-format (via AVH4 binary) on " + textDocument.Uri + " in " +
-                        CommandLineInterface.FormatIntegerForDisplay((int)binaryClock.Elapsed.TotalMilliseconds)
-                        + " ms");
-
-                    return elmFormatted;
-                }
-                catch (System.Exception e)
-                {
-                    Log("Error: Failed running elm-format via AVH4 binary: " + e);
-                }
-            }
-            else
-            {
-                try
-                {
-                    var formatClock = System.Diagnostics.Stopwatch.StartNew();
-
-                    var formatResult = ElmFormat.FormatModuleText(textDocumentContentBefore);
-
-                    if (formatResult.IsErrOrNullable() is { } formatErr)
-                    {
-                        Log("Error: Failed formatting Elm module: " + formatErr);
-                        return null;
-                    }
-
-                    if (formatResult.IsOkOrNull() is not { } formatOk)
-                    {
-                        throw new System.NotImplementedException(
-                            "Unexpected ElmFormat.FormatModuleTextReportingSyntaxErrors result: " + formatResult.GetType());
-                    }
-
-                    formatClock.Stop();
-
-                    Log(
-                        "Completed elm-format on " + textDocument.Uri + " in " +
-                        CommandLineInterface.FormatIntegerForDisplay((int)formatClock.Elapsed.TotalMilliseconds)
-                        + " ms");
-
-                    return formatOk;
-                }
-                catch (System.Exception e)
-                {
-                    Log("Error: Failed formatting Elm module: " + e);
-                }
-            }
+            return ValueTask.CompletedTask;
         }
 
-        return null;
+        return
+            RunDiagnosticsAsync(
+                provider,
+                textDocumentUri,
+                cancellationToken);
     }
 
+    /// <summary>
+    /// Provides hover information for a text document position.
+    /// </summary>
     public Hover? TextDocument_hover(
         TextDocumentPositionParams positionParams)
     {
@@ -1144,7 +1084,7 @@ public class LanguageServer(
 
         var hoverStrings =
             ProvideHover(
-                new Interface.ProvideHoverRequestStruct(
+                new ProvideHoverRequestStruct(
                     InterfaceFileLocationFromUri(textDocumentUri),
                     /*
                      * The language service currently uses the 1-based line and column numbers
@@ -1178,6 +1118,9 @@ public class LanguageServer(
                 Range: null);
     }
 
+    /// <summary>
+    /// Provides completion items for a text document position.
+    /// </summary>
     public CompletionItem[] TextDocument_completion(
         TextDocumentPositionParams positionParams)
     {
@@ -1189,7 +1132,7 @@ public class LanguageServer(
 
         var completionItems =
             ProvideCompletionItems(
-                new Interface.ProvideCompletionItemsRequestStruct(
+                new ProvideCompletionItemsRequestStruct(
                     textDocumentUri,
                     /*
                      * The language service currently uses the 1-based line and column numbers
@@ -1238,6 +1181,9 @@ public class LanguageServer(
             ];
     }
 
+    /// <summary>
+    /// Provides definition locations for a text document position.
+    /// </summary>
     public IReadOnlyList<Location> TextDocument_definition(
         TextDocumentPositionParams positionParams)
     {
@@ -1249,7 +1195,7 @@ public class LanguageServer(
 
         var provideDefinitionResult =
             ProvideDefinition(
-                new Interface.ProvideHoverRequestStruct(
+                new ProvideHoverRequestStruct(
                     InterfaceFileLocationFromUri(textDocumentUri),
                     PositionLineNumber: (int)positionParams.Position.Line + 1,
                     PositionColumn: (int)positionParams.Position.Character + 1));
@@ -1295,7 +1241,10 @@ public class LanguageServer(
         return locations;
     }
 
-    public IReadOnlyList<DocumentSymbol> TextDocument_documentSymbol(
+    /// <summary>
+    /// Provides symbols for a text document.
+    /// </summary>
+    public IReadOnlyList<Protocol.DocumentSymbol> TextDocument_documentSymbol(
         TextDocumentIdentifier textDocument)
     {
         var textDocumentUri = DocumentUriCleaned(textDocument.Uri);
@@ -1326,35 +1275,35 @@ public class LanguageServer(
             CommandLineInterface.FormatIntegerForDisplay(clock.ElapsedMilliseconds) + " ms, returning " +
             documentSymbolsOk.Count + " items");
 
-        static SymbolKind MapSymbolKind(Interface.SymbolKind symbolKind)
+        static Protocol.SymbolKind MapSymbolKind(Interface.SymbolKind symbolKind)
         {
             return symbolKind switch
             {
-                Interface.SymbolKind.File => SymbolKind.File,
-                Interface.SymbolKind.Module => SymbolKind.Module,
-                Interface.SymbolKind.Namespace => SymbolKind.Namespace,
-                Interface.SymbolKind.Package => SymbolKind.Package,
-                Interface.SymbolKind.Class => SymbolKind.Class,
-                Interface.SymbolKind.Enum => SymbolKind.Enum,
-                Interface.SymbolKind.Interface => SymbolKind.Interface,
-                Interface.SymbolKind.Function => SymbolKind.Function,
-                Interface.SymbolKind.Constant => SymbolKind.Constant,
-                Interface.SymbolKind.String => SymbolKind.String,
-                Interface.SymbolKind.Number => SymbolKind.Number,
-                Interface.SymbolKind.Boolean => SymbolKind.Boolean,
-                Interface.SymbolKind.Array => SymbolKind.Array,
-                Interface.SymbolKind.EnumMember => SymbolKind.EnumMember,
-                Interface.SymbolKind.Struct => SymbolKind.Struct,
+                Interface.SymbolKind.File => Protocol.SymbolKind.File,
+                Interface.SymbolKind.Module => Protocol.SymbolKind.Module,
+                Interface.SymbolKind.Namespace => Protocol.SymbolKind.Namespace,
+                Interface.SymbolKind.Package => Protocol.SymbolKind.Package,
+                Interface.SymbolKind.Class => Protocol.SymbolKind.Class,
+                Interface.SymbolKind.Enum => Protocol.SymbolKind.Enum,
+                Interface.SymbolKind.Interface => Protocol.SymbolKind.Interface,
+                Interface.SymbolKind.Function => Protocol.SymbolKind.Function,
+                Interface.SymbolKind.Constant => Protocol.SymbolKind.Constant,
+                Interface.SymbolKind.String => Protocol.SymbolKind.String,
+                Interface.SymbolKind.Number => Protocol.SymbolKind.Number,
+                Interface.SymbolKind.Boolean => Protocol.SymbolKind.Boolean,
+                Interface.SymbolKind.Array => Protocol.SymbolKind.Array,
+                Interface.SymbolKind.EnumMember => Protocol.SymbolKind.EnumMember,
+                Interface.SymbolKind.Struct => Protocol.SymbolKind.Struct,
 
                 _ =>
                 throw new System.NotImplementedException("Unexpected symbol kind: " + symbolKind)
             };
         }
 
-        static DocumentSymbol MapDocumentSymbol(Interface.DocumentSymbolStruct documentSymbol)
+        static Protocol.DocumentSymbol MapDocumentSymbol(DocumentSymbolStruct documentSymbol)
         {
             return
-                new DocumentSymbol(
+                new Protocol.DocumentSymbol(
                     Name: documentSymbol.Name,
                     Detail: null,
                     Kind: MapSymbolKind(documentSymbol.Kind),
@@ -1386,6 +1335,9 @@ public class LanguageServer(
             ];
     }
 
+    /// <summary>
+    /// Provides reference locations for a text document position.
+    /// </summary>
     public IReadOnlyList<Location> TextDocument_references(
         TextDocumentPositionParams positionParams)
     {
@@ -1397,7 +1349,7 @@ public class LanguageServer(
 
         var provideReferenceResult =
             TextDocumentReferencesRequest(
-                new Interface.ProvideHoverRequestStruct(
+                new ProvideHoverRequestStruct(
                     InterfaceFileLocationFromUri(textDocumentUri),
                     PositionLineNumber: (int)positionParams.Position.Line + 1,
                     PositionColumn: (int)positionParams.Position.Character + 1));
@@ -1442,8 +1394,11 @@ public class LanguageServer(
         return locations;
     }
 
-    public Result<string, WorkspaceEdit?> TextDocument_rename(
-        RenameParams renameParams)
+    /// <summary>
+    /// Provides edits to rename a symbol.
+    /// </summary>
+    public Result<string, Protocol.WorkspaceEdit?> TextDocument_rename(
+        Protocol.RenameParams renameParams)
     {
         var textDocumentUri = DocumentUriCleaned(renameParams.TextDocument.Uri);
 
@@ -1493,7 +1448,7 @@ public class LanguageServer(
                         documentEdit.Edits
                         .Select(
                             edit =>
-                            new TextEdit(
+                            new Protocol.TextEdit(
                                 Range: new Range(
                                     Start: new Position(
                                         Line: (uint)edit.Range.StartLineNumber - 1,
@@ -1504,18 +1459,21 @@ public class LanguageServer(
                                 NewText: edit.NewText));
 
                     return
-                        new TextDocumentEdit(
+                        new Protocol.TextDocumentEdit(
                             new OptionalVersionedTextDocumentIdentifier(documentEdit.FilePath, Version: null),
                             [.. editsInDocument]);
                 })
             .ToImmutableArray();
 
-        return new WorkspaceEdit(documentChanges);
+        return new Protocol.WorkspaceEdit(documentChanges);
     }
 
-    public void TextDocument_didSave(
+    /// <summary>
+    /// Applies the saved document content and refreshes the diagnostics owned by that document.
+    /// </summary>
+    public async Task TextDocument_didSaveAsync(
         DidSaveTextDocumentParams didSaveParams,
-        System.Action<TextDocumentIdentifier, IReadOnlyList<Diagnostic>> publishDiagnostics)
+        CancellationToken cancellationToken = default)
     {
         var textDocumentUri = DocumentUriCleaned(didSaveParams.TextDocument.Uri);
 
@@ -1525,215 +1483,362 @@ public class LanguageServer(
 
         if (didSaveParams.Text is { } text)
         {
+            var appliedToOpenDocument = false;
+
             lock (_documentStateLock)
             {
-                _clientTextDocumentContents[textDocumentUri] = text;
+                /*
+                 * Only update the client-managed contents for documents which are open: adding an
+                 * entry for a document which is not open would shadow the contents from the
+                 * workspace for the remaining lifetime of the server.
+                 * */
+                if (_clientTextDocumentContents.ContainsKey(textDocumentUri))
+                {
+                    _clientTextDocumentContents[textDocumentUri] = text;
+                    appliedToOpenDocument = true;
+                }
             }
 
-            if (GetLanguageServiceState("saving document") is { } languageServiceState)
+            if (appliedToOpenDocument)
             {
-                lock (_documentStateLock)
+                if (GetLanguageServiceState("saving document") is { } languageServiceState)
                 {
-                    if (_clientTextDocumentContents.TryGetValue(textDocumentUri, out var currentContent) &&
-                        currentContent == text)
+                    lock (_documentStateLock)
                     {
-                        languageServiceState.AddFile(textDocumentUri, text);
+                        if (_clientTextDocumentContents.TryGetValue(textDocumentUri, out var currentContent) &&
+                            currentContent == text)
+                        {
+                            languageServiceState.AddFile(textDocumentUri, text);
+                        }
                     }
                 }
+
+                BumpSourceRevision();
+            }
+            else
+            {
+                Log(
+                    "Ignoring text from save notification for document which is not open: " +
+                    textDocumentUri);
             }
         }
 
-        var localPathResult = DocumentUriAsLocalPath(textDocumentUri);
+        await RunDiagnosticsAsync(diagnosticsProvider, textDocumentUri, cancellationToken);
+    }
 
+    /// <summary>
+    /// Runs a diagnostics provider for an entry-point document and publishes the aggregate
+    /// diagnostics of all entry points for each affected document.
+    /// </summary>
+    private async ValueTask RunDiagnosticsAsync(
+        IDiagnosticsProvider provider,
+        string entryPointDocumentUri,
+        CancellationToken cancellationToken)
+    {
+        long generation;
+
+        lock (_diagnosticsLock)
         {
-            if (localPathResult.IsErrOrNull() is { } err)
-            {
-                Log("Ignoring URI: " + err + ": " + textDocumentUri);
-                return;
-            }
+            _diagnosticsGenerations.TryGetValue(entryPointDocumentUri, out var previousGeneration);
+
+            generation = previousGeneration + 1;
+
+            _diagnosticsGenerations[entryPointDocumentUri] = generation;
         }
 
-        if (localPathResult.IsOkOrNull() is not { } localPath)
-        {
-            throw new System.NotImplementedException(
-                "Unexpected result type: " + localPathResult.GetType());
-        }
-
-        // First check for syntax errors using the Elm syntax parser. As long as the module
-        // contains any syntax errors, publish those as diagnostics and skip elm make: while
-        // the module is not even parseable, an elm make report would not add value, and the
-        // syntax-error locations come straight from the Elm syntax parser.
-        if (textDocumentUri.EndsWith(".elm"))
-        {
-            var savedContent = didSaveParams.Text;
-
-            if (savedContent is null)
-            {
-                _clientTextDocumentContents.TryGetValue(textDocumentUri, out savedContent);
-            }
-
-            if (savedContent is null)
-            {
-                try
-                {
-                    savedContent = System.IO.File.ReadAllText(localPath);
-                }
-                catch (System.Exception e)
-                {
-                    Log("Failed reading file for syntax check: " + e);
-                }
-            }
-
-            if (savedContent is not null)
-            {
-                var syntaxDiagnostics = ComputeSyntaxErrorDiagnostics(savedContent);
-
-                if (syntaxDiagnostics.Count is not 0)
-                {
-                    Log(
-                        "Found " + syntaxDiagnostics.Count + " syntax error(s) in " +
-                        textDocumentUri + "; skipping elm make");
-
-                    publishDiagnostics(
-                        new TextDocumentIdentifier(didSaveParams.TextDocument.Uri),
-                        syntaxDiagnostics);
-
-                    return;
-                }
-            }
-        }
-
-        var elmJsonFilePath =
-            FindElmJsonFile(localPath) ?? _initializeParams?.RootPath;
-
-        if (elmJsonFilePath is null)
-        {
-            Log("Failed to find elm.json file for " + textDocumentUri);
-
-            // The module parsed cleanly (otherwise we would have returned above), so clear
-            // any stale syntax-error diagnostics even though elm make cannot run here.
-            if (textDocumentUri.EndsWith(".elm"))
-            {
-                publishDiagnostics(
-                    new TextDocumentIdentifier(didSaveParams.TextDocument.Uri),
-                    []);
-            }
-
-            return;
-        }
-
-        var workingDirectoryAbsolute =
-            System.IO.Path.GetDirectoryName(elmJsonFilePath);
-
-        if (workingDirectoryAbsolute is null)
-        {
-            Log("Failed to get elm.json directory for " + textDocumentUri);
-
-            if (textDocumentUri.EndsWith(".elm"))
-            {
-                publishDiagnostics(
-                    new TextDocumentIdentifier(didSaveParams.TextDocument.Uri),
-                    []);
-            }
-
-            return;
-        }
+        var revision = Interlocked.Read(ref _sourceRevision);
 
         var clock = System.Diagnostics.Stopwatch.StartNew();
 
-        Log("Begin elm make for " + textDocumentUri);
+        Result<DiagnosticsProviderError, IReadOnlyList<DocumentDiagnostics>> providerResult;
 
-        var elmMakeOutput =
-            ElmMakeRunner.ElmMakeAsync(
-                workingDirectoryAbsolute: workingDirectoryAbsolute,
-                pathToFileWithElmEntryPoint: localPath)
-            .Result;
-
-        Log(
-            "Completed elm make for " + textDocumentUri + " in " +
-            CommandLineInterface.FormatIntegerForDisplay(clock.ElapsedMilliseconds) + " ms");
-
-        Log("elm make exit code: " + elmMakeOutput.ExitCode);
-        Log("elm make output: " + elmMakeOutput.StandardOutput);
-        Log("elm make error: " + elmMakeOutput.StandardError);
-
-        if (elmMakeOutput.ExitCode is 0)
+        try
         {
-            publishDiagnostics(
-                new TextDocumentIdentifier(didSaveParams.TextDocument.Uri),
-                []);
+            providerResult =
+                await provider.GetDiagnosticsAsync(entryPointDocumentUri, cancellationToken);
+        }
+        catch (System.OperationCanceledException)
+        {
+            Log("Diagnostics for " + entryPointDocumentUri + " were canceled");
+            return;
+        }
+        catch (System.Exception e)
+        {
+            Log("Diagnostics provider failed for " + entryPointDocumentUri + ": " + e);
+            return;
+        }
+
+        if (cancellationToken.IsCancellationRequested)
+        {
+            Log("Discarding canceled diagnostics for " + entryPointDocumentUri);
+            return;
+        }
+
+        if (providerResult.IsErrOrNull() is { } providerError)
+        {
+            /*
+             * Keep the diagnostics from the last successful run: a failure to compute new
+             * diagnostics is not evidence that the previous ones disappeared.
+             * */
+            Log(
+                "Diagnostics provider reported a failure for " + entryPointDocumentUri + ": " +
+                providerError.Kind + ": " + providerError.Message);
 
             return;
         }
 
-        var parseReportResult =
-            ParseReportFromElmMake(elmMakeOutput.StandardError);
-
-        {
-            if (parseReportResult.IsErrOrNull() is { } err)
-            {
-                Log("Failed to parse elm make report: " + err);
-                return;
-            }
-        }
-
-        if (parseReportResult.IsOkOrNull() is not { } parseReportOk)
+        if (providerResult.IsOkOrNull() is not { } providerDiagnostics)
         {
             throw new System.NotImplementedException(
-                "Unexpected result type: " + parseReportResult.GetType());
+                "Unexpected diagnostics result type: " + providerResult.GetType());
         }
 
-        if (parseReportOk is ElmMakeReport.ElmMakeReportError generalError)
+        Log(
+            "Completed diagnostics for " + entryPointDocumentUri + " in " +
+            CommandLineInterface.FormatIntegerForDisplay((int)clock.Elapsed.TotalMilliseconds) +
+            " ms, reporting on " + providerDiagnostics.Count + " documents");
+
+        IReadOnlyList<PublishDiagnosticsParams> toPublish;
+
+        lock (_diagnosticsLock)
         {
-            Log("Elm make general error: " + generalError.Message);
+            if (_diagnosticsGenerations.TryGetValue(entryPointDocumentUri, out var currentGeneration) &&
+                currentGeneration != generation)
+            {
+                Log(
+                    "Discarding superseded diagnostics for " + entryPointDocumentUri +
+                    " (generation " + generation + " of " + currentGeneration + ")");
+
+                return;
+            }
+
+            if (Interlocked.Read(ref _sourceRevision) != revision)
+            {
+                Log(
+                    "Discarding diagnostics for " + entryPointDocumentUri +
+                    " computed from outdated sources");
+
+                return;
+            }
+
+            var affectedUris =
+                new HashSet<string>(System.StringComparer.Ordinal)
+                {
+                    entryPointDocumentUri
+                };
+
+            if (_diagnosticsByEntryPoint.TryGetValue(entryPointDocumentUri, out var previousDiagnostics))
+            {
+                foreach (var previous in previousDiagnostics)
+                {
+                    affectedUris.Add(previous.DocumentUri);
+                }
+            }
+
+            IReadOnlyList<DocumentDiagnostics> normalized =
+                [
+                .. providerDiagnostics
+                .Select(
+                    documentDiagnostics =>
+                    new DocumentDiagnostics(
+                        DocumentUriCleaned(documentDiagnostics.DocumentUri),
+                        documentDiagnostics.Diagnostics))
+                ];
+
+            foreach (var documentDiagnostics in normalized)
+            {
+                affectedUris.Add(documentDiagnostics.DocumentUri);
+            }
+
+            _diagnosticsByEntryPoint[entryPointDocumentUri] = normalized;
+
+            toPublish = AggregateDiagnostics(affectedUris);
+        }
+
+        PublishDiagnostics(toPublish);
+    }
+
+    /// <summary>
+    /// Drops the diagnostics owned by an entry-point document and publishes the aggregates for
+    /// the documents which were covered by it.
+    /// </summary>
+    private void RemoveDiagnosticsEntryPoint(string entryPointDocumentUri)
+    {
+        IReadOnlyList<PublishDiagnosticsParams> toPublish;
+
+        lock (_diagnosticsLock)
+        {
+            if (!_diagnosticsByEntryPoint.TryGetValue(entryPointDocumentUri, out var previousDiagnostics))
+            {
+                return;
+            }
+
+            _diagnosticsByEntryPoint.Remove(entryPointDocumentUri);
+
+            /*
+             * Invalidate diagnostics runs in flight for the removed entry point.
+             * */
+            _diagnosticsGenerations.TryGetValue(entryPointDocumentUri, out var generation);
+            _diagnosticsGenerations[entryPointDocumentUri] = generation + 1;
+
+            var affectedUris =
+                new HashSet<string>(System.StringComparer.Ordinal)
+                {
+                    entryPointDocumentUri
+                };
+
+            foreach (var previous in previousDiagnostics)
+            {
+                affectedUris.Add(previous.DocumentUri);
+            }
+
+            toPublish = AggregateDiagnostics(affectedUris);
+        }
+
+        PublishDiagnostics(toPublish);
+    }
+
+    /// <summary>
+    /// Aggregates the contributions of all entry points for the given documents.
+    /// Must be called while holding the diagnostics lock.
+    /// </summary>
+    private IReadOnlyList<PublishDiagnosticsParams> AggregateDiagnostics(
+        IReadOnlyCollection<string> documentUris)
+    {
+        var aggregate = new List<PublishDiagnosticsParams>(documentUris.Count);
+
+        foreach (var documentUri in documentUris.OrderBy(uri => uri, System.StringComparer.Ordinal))
+        {
+            var diagnostics = new List<Diagnostic>();
+            var seen = new HashSet<string>(System.StringComparer.Ordinal);
+
+            foreach (var entryPoint in
+                _diagnosticsByEntryPoint.OrderBy(entry => entry.Key, System.StringComparer.Ordinal))
+            {
+                foreach (var documentDiagnostics in entryPoint.Value)
+                {
+                    if (!string.Equals(documentDiagnostics.DocumentUri, documentUri, System.StringComparison.Ordinal))
+                    {
+                        continue;
+                    }
+
+                    foreach (var diagnostic in documentDiagnostics.Diagnostics)
+                    {
+                        if (seen.Add(DiagnosticIdentity(diagnostic)))
+                        {
+                            diagnostics.Add(diagnostic);
+                        }
+                    }
+                }
+            }
+
+            int? version = null;
+
+            /*
+             * Read the version without taking the document-state lock: handlers holding that lock
+             * can end up here via entry-point removal, so taking it here would invert the lock
+             * order between the document state and the diagnostics state.
+             * */
+            if (_clientTextDocumentVersions.TryGetValue(documentUri, out var documentVersion))
+            {
+                version = documentVersion;
+            }
+
+            aggregate.Add(
+                new PublishDiagnosticsParams(
+                    documentUri,
+                    [
+                    .. diagnostics
+                    .OrderBy(DiagnosticIdentity, System.StringComparer.Ordinal)
+                    ],
+                    version));
+        }
+
+        return aggregate;
+    }
+
+    private void PublishDiagnostics(IReadOnlyList<PublishDiagnosticsParams> toPublish)
+    {
+        if (_publishDiagnostics is not { } publish)
+        {
+            if (0 < toPublish.Count)
+            {
+                Log("Cannot publish diagnostics: no publisher configured");
+            }
 
             return;
         }
 
-        if (parseReportOk is ElmMakeReport.ElmMakeReportCompileErrors compileErrors)
+        foreach (var publishParams in toPublish)
         {
-            var errorsByPath =
-                compileErrors.Errors
-                .GroupBy(error => error.Path)
-                .ToDictionary(group => group.Key, group => group.ToList());
+            Log(
+                "Publishing " + publishParams.Diagnostics.Count + " diagnostics for " +
+                publishParams.Uri);
 
-            foreach (var (path, errors) in errorsByPath)
-            {
-                var pathErrors =
-                    errors
-                    .SelectMany(error => error.Problems)
-                    .ToImmutableArray();
-
-                Log("Elm make errors for " + path + ": " + pathErrors.Length);
-
-                IReadOnlyList<Diagnostic> diagnostics =
-                    [
-                    ..pathErrors
-                    .Select(
-                        problem =>
-                        new Diagnostic(
-                            Range: new Range(
-                                Start: new Position(
-                                    Line: (uint)problem.Region.Start.Line - 1,
-                                    Character: (uint)problem.Region.Start.Column - 1),
-                                End: new Position(
-                                    Line: (uint)problem.Region.End.Line - 1,
-                                    Character: (uint)problem.Region.End.Column - 1)),
-                            Severity: DiagnosticSeverity.Error,
-                            Code: null,
-                            Source: "elm make",
-                            Message: string.Join("", problem.Message.Select(MessageItemToString)),
-                            CodeDescription: null,
-                            Tags: null,
-                            RelatedInformation: null))
-                    ];
-
-                publishDiagnostics(
-                    new TextDocumentIdentifier(didSaveParams.TextDocument.Uri),
-                    diagnostics);
-            }
+            publish(publishParams);
         }
     }
+
+    /// <summary>
+    /// Text used to order and deduplicate diagnostics from multiple entry points.
+    /// </summary>
+    private static string DiagnosticIdentity(Diagnostic diagnostic) =>
+        string.Join(
+            "\u0000",
+            diagnostic.Range.Start.Line.ToString("D9"),
+            diagnostic.Range.Start.Character.ToString("D9"),
+            diagnostic.Range.End.Line.ToString("D9"),
+            diagnostic.Range.End.Character.ToString("D9"),
+            ((int?)diagnostic.Severity)?.ToString() ?? "",
+            diagnostic.Source ?? "",
+            diagnostic.Code ?? "",
+            diagnostic.Message);
+
+    private void BumpSourceRevision()
+    {
+        Interlocked.Increment(ref _sourceRevision);
+    }
+
+    /// <summary>
+    /// Returns the last path component of a document URI, unescaped.
+    /// </summary>
+    public static string? DocumentUriFileName(string documentUri)
+    {
+        var withoutQuery = documentUri.Split('?', '#')[0];
+
+        var lastSlashIndex = withoutQuery.LastIndexOf('/');
+
+        var lastComponent =
+            lastSlashIndex < 0
+            ?
+            withoutQuery
+            :
+            withoutQuery[(lastSlashIndex + 1)..];
+
+        if (lastComponent.Length is 0)
+        {
+            return null;
+        }
+
+        return System.Uri.UnescapeDataString(lastComponent);
+    }
+
+    private static bool IsElmModuleDocumentUri(string documentUri) =>
+        DocumentUriFileName(documentUri) is { } fileName &&
+        fileName.EndsWith(".elm", System.StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsElmJsonDocumentUri(string documentUri) =>
+        string.Equals(
+            DocumentUriFileName(documentUri),
+            "elm.json",
+            System.StringComparison.OrdinalIgnoreCase);
+
+    private static string NormalizeDirectoryUri(string directoryUri) =>
+        directoryUri.EndsWith('/')
+        ?
+        directoryUri
+        :
+        directoryUri + "/";
 
     /// <summary>
     /// Computes language-server diagnostics for syntax errors in an Elm module, reusing the
@@ -1820,56 +1925,9 @@ public class LanguageServer(
             ];
     }
 
-    public static string MessageItemToString(MessageItem messageItem)
-    {
-        if (messageItem is MessageItem.StringMessage stringMessage)
-        {
-            return stringMessage.Value;
-        }
-
-        if (messageItem is MessageItem.StyledMessage styledMessage)
-        {
-            return styledMessage.String;
-        }
-
-        throw new System.NotImplementedException(
-            "Unexpected message item type: " + messageItem.GetType());
-    }
-
-    public static Result<string, ElmMakeReport> ParseReportFromElmMake(string elmMakeOutput)
-    {
-        try
-        {
-            var elmMakeReport =
-                ElmMakeReportConverter.Deserialize(elmMakeOutput);
-
-            return elmMakeReport;
-        }
-        catch (System.Exception e)
-        {
-            return "Failed to parse elm make report: " + e;
-        }
-    }
-
-    public static string? FindElmJsonFile(string elmModuleFilePath)
-    {
-        var directoryName = System.IO.Path.GetDirectoryName(elmModuleFilePath);
-
-        while (directoryName is not null)
-        {
-            var elmJsonFilePath = System.IO.Path.Combine(directoryName, "elm.json");
-
-            if (System.IO.File.Exists(elmJsonFilePath))
-            {
-                return elmJsonFilePath;
-            }
-
-            directoryName = System.IO.Path.GetDirectoryName(directoryName);
-        }
-
-        return null;
-    }
-
+    /// <summary>
+    /// Merges files into a file tree.
+    /// </summary>
     public static FileTree MergeIntoFileTree(
         FileTree seed,
         IReadOnlyDictionary<IReadOnlyList<string>, System.ReadOnlyMemory<byte>> dictionary)
@@ -1888,12 +1946,15 @@ public class LanguageServer(
                 });
     }
 
+    /// <summary>
+    /// Requests hover information from the language service.
+    /// </summary>
     public Result<string, IReadOnlyList<string>> ProvideHover(
-        Interface.ProvideHoverRequestStruct provideHoverRequest)
+        ProvideHoverRequestStruct provideHoverRequest)
     {
         var genericRequestResult =
             HandleRequest(
-                new Interface.Request.ProvideHoverRequest(provideHoverRequest));
+                new Request.ProvideHoverRequest(provideHoverRequest));
 
         if (genericRequestResult.IsErrOrNull() is { } err)
         {
@@ -1906,7 +1967,7 @@ public class LanguageServer(
                 "Unexpected request result type: " + genericRequestResult.GetType());
         }
 
-        if (requestOk is not Interface.Response.ProvideHoverResponse provideHoverResponse)
+        if (requestOk is not Response.ProvideHoverResponse provideHoverResponse)
         {
             throw new System.NotImplementedException(
                 "Unexpected request result type: " + requestOk.GetType());
@@ -1915,13 +1976,16 @@ public class LanguageServer(
         return Result<string, IReadOnlyList<string>>.ok(provideHoverResponse.Strings);
     }
 
-    public Result<string, IReadOnlyList<MonacoEditor.MonacoCompletionItem>>
+    /// <summary>
+    /// Requests completion items from the language service.
+    /// </summary>
+    public Result<string, IReadOnlyList<MonacoCompletionItem>>
         ProvideCompletionItems(
-        Interface.ProvideCompletionItemsRequestStruct provideCompletionItemsRequest)
+        ProvideCompletionItemsRequestStruct provideCompletionItemsRequest)
     {
         var genericRequestResult =
             HandleRequest(
-                new Interface.Request.ProvideCompletionItemsRequest(provideCompletionItemsRequest));
+                new Request.ProvideCompletionItemsRequest(provideCompletionItemsRequest));
 
         if (genericRequestResult.IsErrOrNull() is { } err)
         {
@@ -1934,24 +1998,27 @@ public class LanguageServer(
                 "Unexpected request result type: " + genericRequestResult.GetType());
         }
 
-        if (requestOk is not Interface.Response.ProvideCompletionItemsResponse provideCompletionItemsResponse)
+        if (requestOk is not Response.ProvideCompletionItemsResponse provideCompletionItemsResponse)
         {
             throw new System.NotImplementedException(
                 "Unexpected request result type: " + requestOk.GetType());
         }
 
         return
-            Result<string, IReadOnlyList<MonacoEditor.MonacoCompletionItem>>.ok(
+            Result<string, IReadOnlyList<MonacoCompletionItem>>.ok(
                 provideCompletionItemsResponse.CompletionItems);
     }
 
-    public Result<string, IReadOnlyList<Interface.LocationInFile>>
+    /// <summary>
+    /// Requests definition locations from the language service.
+    /// </summary>
+    public Result<string, IReadOnlyList<LocationInFile>>
         ProvideDefinition(
-        Interface.ProvideHoverRequestStruct provideDefinitionRequest)
+        ProvideHoverRequestStruct provideDefinitionRequest)
     {
         var genericRequestResult =
             HandleRequest(
-                new Interface.Request.ProvideDefinitionRequest(provideDefinitionRequest));
+                new Request.ProvideDefinitionRequest(provideDefinitionRequest));
 
         if (genericRequestResult.IsErrOrNull() is { } err)
         {
@@ -1964,23 +2031,26 @@ public class LanguageServer(
                 "Unexpected request result type: " + genericRequestResult.GetType());
         }
 
-        if (requestOk is not Interface.Response.ProvideDefinitionResponse provideDefinitionResponse)
+        if (requestOk is not Response.ProvideDefinitionResponse provideDefinitionResponse)
         {
             throw new System.NotImplementedException(
                 "Unexpected request result type: " + requestOk.GetType());
         }
 
         return
-            Result<string, IReadOnlyList<Interface.LocationInFile>>.ok(
+            Result<string, IReadOnlyList<LocationInFile>>.ok(
                 provideDefinitionResponse.Locations);
     }
 
+    /// <summary>
+    /// Requests document symbols from the language service.
+    /// </summary>
     public Result<string, IReadOnlyList<Interface.DocumentSymbol>> TextDocumentSymbolRequest(
         string fileUri)
     {
         var genericRequestResult =
             HandleRequest(
-                new Interface.Request.TextDocumentSymbolRequest(fileUri));
+                new Request.TextDocumentSymbolRequest(fileUri));
 
         if (genericRequestResult.IsErrOrNull() is { } err)
         {
@@ -1993,7 +2063,7 @@ public class LanguageServer(
                 "Unexpected request result type: " + genericRequestResult.GetType());
         }
 
-        if (requestOk is not Interface.Response.TextDocumentSymbolResponse documentSymbolResponse)
+        if (requestOk is not Response.TextDocumentSymbolResponse documentSymbolResponse)
         {
             throw new System.NotImplementedException(
                 "Unexpected request result type: " + requestOk.GetType());
@@ -2004,12 +2074,15 @@ public class LanguageServer(
                 documentSymbolResponse.Symbols);
     }
 
-    public Result<string, IReadOnlyList<Interface.LocationInFile>> TextDocumentReferencesRequest(
-        Interface.ProvideHoverRequestStruct referenceRequest)
+    /// <summary>
+    /// Requests reference locations from the language service.
+    /// </summary>
+    public Result<string, IReadOnlyList<LocationInFile>> TextDocumentReferencesRequest(
+        ProvideHoverRequestStruct referenceRequest)
     {
         var genericRequestResult =
             HandleRequest(
-                new Interface.Request.TextDocumentReferencesRequest(referenceRequest));
+                new Request.TextDocumentReferencesRequest(referenceRequest));
 
         if (genericRequestResult.IsErrOrNull() is { } err)
         {
@@ -2022,23 +2095,26 @@ public class LanguageServer(
                 "Unexpected request result type: " + genericRequestResult.GetType());
         }
 
-        if (requestOk is not Interface.Response.TextDocumentReferencesResponse provideReferenceResponse)
+        if (requestOk is not Response.TextDocumentReferencesResponse provideReferenceResponse)
         {
             throw new System.NotImplementedException(
                 "Unexpected request result type: " + requestOk.GetType());
         }
 
         return
-            Result<string, IReadOnlyList<Interface.LocationInFile>>.ok(
+            Result<string, IReadOnlyList<LocationInFile>>.ok(
                 provideReferenceResponse.Locations);
     }
 
+    /// <summary>
+    /// Requests symbol rename edits from the language service.
+    /// </summary>
     public Result<string, Interface.WorkspaceEdit> TextDocumentRenameRequest(
         Interface.RenameParams renameParams)
     {
         var genericRequestResult =
             HandleRequest(
-                new Interface.Request.TextDocumentRenameRequest(renameParams));
+                new Request.TextDocumentRenameRequest(renameParams));
 
         if (genericRequestResult.IsErrOrNull() is { } err)
         {
@@ -2051,7 +2127,7 @@ public class LanguageServer(
                 "Unexpected request result type: " + genericRequestResult.GetType());
         }
 
-        if (requestOk is not Interface.Response.TextDocumentRenameResponse renameResponse)
+        if (requestOk is not Response.TextDocumentRenameResponse renameResponse)
         {
             throw new System.NotImplementedException(
                 "Unexpected request result type: " + requestOk.GetType());
@@ -2062,8 +2138,11 @@ public class LanguageServer(
                 renameResponse.WorkspaceEdit);
     }
 
-    public Result<string, Interface.Response> HandleRequest(
-        Interface.Request request)
+    /// <summary>
+    /// Handles a request in the current language service workspace.
+    /// </summary>
+    public Result<string, Response> HandleRequest(
+        Request request)
     {
         if (_languageServiceStateTask is not { } languageServiceStateTask)
         {
@@ -2085,7 +2164,7 @@ public class LanguageServer(
             languageServiceState.HandleRequest(request);
     }
 
-    private WorkspaceState? GetLanguageServiceState(string operation)
+    private ILanguageServiceSession? GetLanguageServiceState(string operation)
     {
         if (_languageServiceStateTask is not { } languageServiceStateTask)
         {
@@ -2110,9 +2189,12 @@ public class LanguageServer(
         return languageServiceState;
     }
 
+    /// <summary>
+    /// Maps language service locations to protocol locations.
+    /// </summary>
     public IEnumerable<Location> MapLocations(
-        IEnumerable<Interface.LocationInFile> locations,
-        System.Func<Interface.FileLocation, IEnumerable<Location>> noMatchingUri)
+        IEnumerable<LocationInFile> locations,
+        System.Func<FileLocation, IEnumerable<Location>> noMatchingUri)
     {
         return
             locations
@@ -2141,60 +2223,91 @@ public class LanguageServer(
                 });
     }
 
-    public Interface.FileLocation InterfaceFileLocationFromUri(string documentUri)
+    /// <summary>
+    /// Maps a document URI to a language-service file location, recognizing documents from
+    /// loaded Elm packages.
+    /// </summary>
+    public FileLocation InterfaceFileLocationFromUri(string documentUri)
     {
         var documentUriNormalized = DocumentUriCleaned(documentUri);
 
-        foreach (var (elmPackageVersionIdentifer, packageDirectory) in _elmJsonDirectDependenciesLoaded)
+        ElmPackageVersion019Identifer? bestMatchPackage = null;
+        var bestMatchRootUri = "";
+
+        foreach (var (elmPackageVersionIdentifer, packageRootUri) in _elmJsonDirectDependenciesLoaded)
         {
-            var packageDirectoryNormalized = DocumentUriCleaned(packageDirectory);
+            /*
+             * The package root URI ends with a slash, so this comparison cannot match a sibling
+             * directory sharing a name prefix with the package directory.
+             * */
+            var packageRootUriNormalized = NormalizeDirectoryUri(DocumentUriCleaned(packageRootUri));
 
-            if (documentUriNormalized.StartsWith(packageDirectoryNormalized))
+            if (!documentUriNormalized.StartsWith(packageRootUriNormalized, System.StringComparison.Ordinal))
             {
-                var modulePathFlat = documentUriNormalized[packageDirectoryNormalized.Length..];
+                continue;
+            }
 
-                var modulePathItems = modulePathFlat.Split('/');
-
-                return
-                    new Interface.FileLocation.ElmPackageFileLocation(
-                        elmPackageVersionIdentifer,
-                        ModulePath: modulePathItems);
+            if (bestMatchRootUri.Length < packageRootUriNormalized.Length)
+            {
+                bestMatchPackage = elmPackageVersionIdentifer;
+                bestMatchRootUri = packageRootUriNormalized;
             }
         }
 
-        return new Interface.FileLocation.WorkspaceFileLocation(documentUriNormalized);
+        if (bestMatchPackage is not null)
+        {
+            var modulePathFlat = documentUriNormalized[bestMatchRootUri.Length..];
+
+            IReadOnlyList<string> modulePathItems =
+                [.. modulePathFlat.Split('/').Select(System.Uri.UnescapeDataString)];
+
+            return
+                new FileLocation.ElmPackageFileLocation(
+                    bestMatchPackage,
+                    ModulePath: modulePathItems);
+        }
+
+        return new FileLocation.WorkspaceFileLocation(documentUriNormalized);
     }
 
-    public string? FindMatchingUri(Interface.FileLocation fileLocation)
+    /// <summary>
+    /// Maps a language-service file location back to a document URI.
+    /// </summary>
+    public string? FindMatchingUri(FileLocation fileLocation)
     {
-        if (fileLocation is Interface.FileLocation.WorkspaceFileLocation workspaceFileLocation)
+        if (fileLocation is FileLocation.WorkspaceFileLocation workspaceFileLocation)
         {
             return workspaceFileLocation.FilePath;
         }
 
-        if (fileLocation is Interface.FileLocation.ElmPackageFileLocation elmPackageFileLocation)
+        if (fileLocation is FileLocation.ElmPackageFileLocation elmPackageFileLocation)
         {
             if (_elmJsonDirectDependenciesLoaded.TryGetValue(
                 elmPackageFileLocation.ElmPackageVersionIdentifer,
-                out var packageDirectory))
+                out var packageRootUri))
             {
-                var filePath =
-                    System.IO.Path.Combine([packageDirectory, .. elmPackageFileLocation.ModulePath])
-                    .Replace('\\', '/');
-
-                if (System.Uri.TryCreate(filePath, System.UriKind.Absolute, out var uri) is false)
-                {
-                    Log("Failed to create URI: " + filePath);
-                    return null;
-                }
-
-                return uri.AbsoluteUri;
+                return
+                    NormalizeDirectoryUri(packageRootUri) +
+                    string.Join(
+                        "/",
+                        elmPackageFileLocation.ModulePath.Select(System.Uri.EscapeDataString));
             }
         }
 
         return null;
     }
 
+    private static WorkspaceFile? OkFileOrNull(
+        Result<WorkspaceAccessError, WorkspaceFile?> result) =>
+        result is Result<WorkspaceAccessError, WorkspaceFile?>.Ok ok ? ok.Value : null;
+
+    private static ElmPackageContent? OkPackageOrNull(
+        Result<PackageLoadError, ElmPackageContent?> result) =>
+        result is Result<PackageLoadError, ElmPackageContent?>.Ok ok ? ok.Value : null;
+
+    /// <summary>
+    /// Normalizes an escaped document URI.
+    /// </summary>
     public static string DocumentUriCleaned(string documentUri)
     {
         /*
@@ -2208,6 +2321,9 @@ public class LanguageServer(
         return unescaped.Replace("\\", "/");
     }
 
+    /// <summary>
+    /// Converts a document URI to a local file path.
+    /// </summary>
     public static Result<string, string> DocumentUriAsLocalPath(string documentUri)
     {
         /*
@@ -2235,7 +2351,7 @@ public class LanguageServer(
     /// Apply a list of text edits following the specification from
     /// https://microsoft.github.io/language-server-protocol/specifications/lsp/3.18/specification/#textEditArray
     /// </summary>
-    public static string ApplyTextEdits(string originalText, IReadOnlyList<TextEdit> edits)
+    public static string ApplyTextEdits(string originalText, IReadOnlyList<Protocol.TextEdit> edits)
     {
         if (edits.Count is 0)
             return originalText;
@@ -2318,7 +2434,7 @@ public class LanguageServer(
     /// Compute text edits to transform original text to new text using a line-based algorithm.
     /// Finds common prefix and suffix, then creates a single edit for the middle differences.
     /// </summary>
-    public static IReadOnlyList<TextEdit> ComputeTextEditsForDocumentFormat(
+    public static IReadOnlyList<Protocol.TextEdit> ComputeTextEditsForDocumentFormat(
         string originalText, string newText)
     {
         if (originalText == newText)
@@ -2386,7 +2502,7 @@ public class LanguageServer(
 
             var replacementText = "\n" + string.Join("\n", replacementLines);
 
-            return [new TextEdit(Range: range, NewText: replacementText)];
+            return [new Protocol.TextEdit(Range: range, NewText: replacementText)];
         }
 
         if (newLines.Count < originalLines.Count && firstChangedLine >= newLines.Count)
@@ -2402,7 +2518,7 @@ public class LanguageServer(
                     Start: new Position(Line: (uint)lastKeptLine, Character: (uint)lastKeptLineLength),
                     End: new Position(Line: (uint)lastDeletedLine, Character: (uint)lastDeletedLineLength));
 
-            return [new TextEdit(Range: range, NewText: "")];
+            return [new Protocol.TextEdit(Range: range, NewText: "")];
         }
 
         // Handle edge case where lastChangedLineInOriginal might be invalid
@@ -2424,7 +2540,7 @@ public class LanguageServer(
 
                 var replacementText = "\n" + string.Join("\n", replacementLines);
 
-                return [new TextEdit(Range: range, NewText: replacementText)];
+                return [new Protocol.TextEdit(Range: range, NewText: replacementText)];
             }
             else if (firstChangedLine == 0 && replacementLines.Count > 0)
             {
@@ -2436,7 +2552,7 @@ public class LanguageServer(
 
                 var replacementText = string.Join("\n", replacementLines) + "\n";
 
-                return [new TextEdit(Range: range, NewText: replacementText)];
+                return [new Protocol.TextEdit(Range: range, NewText: replacementText)];
             }
 
             // If no replacement lines, this might be a degenerate case - return no edits
@@ -2460,7 +2576,7 @@ public class LanguageServer(
 
             var replacementText = string.Join("\n", replacementLines);
 
-            return [new TextEdit(Range: range, NewText: replacementText)];
+            return [new Protocol.TextEdit(Range: range, NewText: replacementText)];
         }
 
         {
@@ -2474,7 +2590,7 @@ public class LanguageServer(
 
             var replacementText = string.Join("\n", replacementLines);
 
-            return [new TextEdit(Range: range, NewText: replacementText)];
+            return [new Protocol.TextEdit(Range: range, NewText: replacementText)];
         }
     }
 }

@@ -8,10 +8,27 @@ using System.Threading.Tasks;
 namespace Pine.Elm;
 
 public record LanguageServerRpcTarget(
-    LanguageServer Server,
+    Core.Elm.LanguageServer.LanguageServer Server,
     Action<string>? LogDelegate)
 {
-    public JsonRpc? JsonRpc { get; set; } = null;
+    private JsonRpc? _jsonRpc;
+
+    /// <summary>
+    /// Connection used to send notifications and requests to the client.
+    /// Setting this also connects the diagnostics channel of the language server.
+    /// </summary>
+    public JsonRpc? JsonRpc
+    {
+        get => _jsonRpc;
+
+        set
+        {
+            _jsonRpc = value;
+
+            Server.SetDiagnosticsPublisher(
+                value is null ? null : PublishDiagnostics);
+        }
+    }
 
     private bool shutdown;
 
@@ -128,16 +145,14 @@ public record LanguageServerRpcTarget(
     /// https://microsoft.github.io/language-server-protocol/specifications/lsp/3.18/specification/#textDocument_formatting
     /// </summary>
     [JsonRpcMethod("textDocument/formatting")]
-    public IReadOnlyList<TextEdit> TextDocument_formatting(
+    public Task<IReadOnlyList<TextEdit>> TextDocument_formatting(
         TextDocumentIdentifier textDocument,
         FormattingOptions options)
     {
         return
-            Server.TextDocument_formatting(
+            Server.TextDocument_formattingAsync(
                 textDocument,
-                options,
-                publishDiagnostics:
-                (documentId, diagnostics) => PublishDiagnosticsAsync(documentId.Uri, diagnostics));
+                options);
     }
 
     /// <summary>
@@ -215,15 +230,25 @@ public record LanguageServerRpcTarget(
     /// https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#textDocument_didSave
     /// </summary>
     [JsonRpcMethod("textDocument/didSave", UseSingleObjectParameterDeserialization = true)]
-    public void TextDocument_didSave(DidSaveTextDocumentParams didSaveParams)
+    public Task TextDocument_didSave(DidSaveTextDocumentParams didSaveParams)
     {
-        Server.TextDocument_didSave(
-            didSaveParams,
-            publishDiagnostics:
-            (documentId, diagnostics) => PublishDiagnosticsAsync(documentId.Uri, diagnostics));
+        return Server.TextDocument_didSaveAsync(didSaveParams);
     }
 
-    public async Task PublishDiagnosticsAsync(string documentUri, IReadOnlyList<Diagnostic> diagnostics)
+    /// <summary>
+    /// Sends a <c>textDocument/publishDiagnostics</c> notification to the client.
+    /// </summary>
+    public Task PublishDiagnosticsAsync(string documentUri, IReadOnlyList<Diagnostic> diagnostics) =>
+        PublishDiagnosticsAsync(
+            new PublishDiagnosticsParams(
+                Uri: documentUri,
+                Diagnostics: diagnostics,
+                Version: null));
+
+    /// <summary>
+    /// Sends a <c>textDocument/publishDiagnostics</c> notification to the client.
+    /// </summary>
+    public async Task PublishDiagnosticsAsync(PublishDiagnosticsParams parameters)
     {
         if (JsonRpc is not { } jsonRpc)
         {
@@ -231,15 +256,24 @@ public record LanguageServerRpcTarget(
             return;
         }
 
-        var parameters =
-            new PublishDiagnosticsParams(
-                Uri: documentUri,
-                Diagnostics: diagnostics,
-                Version: null);
-
-        Log($"Publishing {diagnostics.Count} diagnostics for {documentUri}");
+        Log($"Publishing {parameters.Diagnostics.Count} diagnostics for {parameters.Uri}");
 
         await jsonRpc.NotifyAsync("textDocument/publishDiagnostics", parameters);
+    }
+
+    private void PublishDiagnostics(PublishDiagnosticsParams parameters)
+    {
+        _ =
+            PublishDiagnosticsAsync(parameters)
+            .ContinueWith(
+                task =>
+                {
+                    if (task.Exception is { } exception)
+                    {
+                        Log("Failed publishing diagnostics: " + exception.Message);
+                    }
+                },
+                TaskScheduler.Default);
     }
 
     /// <summary>

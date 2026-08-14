@@ -1,9 +1,11 @@
 using AwesomeAssertions;
 using Pine.Core;
+using Pine.Core.Elm.LanguageServer;
+using Pine.Core.Elm.LanguageServer.MonacoEditor;
 using Pine.Core.Files;
 using Pine.Core.Interpreter.IntermediateVM;
 using Pine.Elm;
-using Pine.Elm.MonacoEditor;
+using Pine.Elm.LanguageServerAdapters;
 using Pine.IntermediateVM;
 using System;
 using System.Collections.Generic;
@@ -12,7 +14,7 @@ using System.Linq;
 using System.Text;
 using Xunit;
 
-using LanguageServiceInterface = Pine.Elm.LanguageServiceInterface;
+using LanguageServiceInterface = Pine.Core.Elm.LanguageServer.LanguageServiceInterface;
 
 namespace Pine.IntegrationTests;
 
@@ -180,7 +182,8 @@ public class ElmLanguageServiceTests
                 new FileTree.FileNode(Encoding.UTF8.GetBytes(elmModuleText)));
 
         var languageService =
-            LanguageServiceState.InitLanguageServiceState()
+            LanguageServerComposition.InitLanguageServiceState(
+                ElmTime.Program.AppVersionId)
             .Extract(err => throw new Exception(err));
 
         MutateServiceAddingFiles(mergedWorkspace, languageService);
@@ -242,7 +245,8 @@ public class ElmLanguageServiceTests
         var (beforeCursor, afterCursor) = (split[0], split[1]);
 
         var languageService =
-            LanguageServiceState.InitLanguageServiceState()
+            LanguageServerComposition.InitLanguageServiceState(
+                ElmTime.Program.AppVersionId)
             .Extract(err => throw new Exception(err));
 
         var mergedWorkspaceBefore =

@@ -1053,10 +1053,9 @@ public class Program
             Log("Pine version " + AppVersionId + " starting language server...");
 
             var languageServer =
-            new LanguageServer(
-                logDelegate: Log,
-                elmPackagesSearchDirectories:
-                [Path.Combine(Elm019Binaries.GetElmHomeDirectory(), "0.19.1", "packages")]);
+            Pine.Elm.LanguageServerAdapters.LanguageServerComposition.CreateLanguageServer(
+                pineAppVersionId: AppVersionId,
+                logDelegate: Log);
 
             var rpcHandler =
                 new StreamJsonRpc.HeaderDelimitedMessageHandler(

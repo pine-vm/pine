@@ -1,16 +1,20 @@
-using Pine.Core;
 using Pine.Core.CommonEncodings;
-using Pine.Core.Elm;
 using System.Collections.Generic;
 using System.Linq;
 
-namespace Pine.Elm.LanguageServiceInterface;
+namespace Pine.Core.Elm.LanguageServer.LanguageServiceInterface;
 
+/// <summary>
+/// Combines a language service request with its workspace.
+/// </summary>
 public record RequestInWorkspace(
     FileTreeNode<FileTreeBlobNode> Workspace,
     Request Request);
 
 
+/// <summary>
+/// Contains the encoded content of a file tree blob.
+/// </summary>
 public record FileTreeBlobNode(
     string AsBase64,
     string? AsText);
@@ -31,36 +35,66 @@ type Request
 
  * */
 
+/// <summary>
+/// Represents a request to the Elm language service.
+/// </summary>
 public abstract record Request
 {
+    /// <summary>
+    /// Requests adding or replacing a workspace file.
+    /// </summary>
     public record AddWorkspaceFileRequest(
         string FilePath,
         FileTreeBlobNode Blob)
         : Request;
 
+    /// <summary>
+    /// Requests deleting a workspace file.
+    /// </summary>
     public record DeleteWorkspaceFileRequest(string FilePath)
         : Request;
 
+    /// <summary>
+    /// Requests adding an Elm package version.
+    /// </summary>
     public record AddElmPackageVersionRequest(
         ElmPackageVersion019Identifer ElmPackageVersionIdentifer,
         List<(IReadOnlyList<string> ModulePath, FileTreeBlobNode Blob)> ModulePathsAndBlobs)
         : Request;
 
+    /// <summary>
+    /// Requests hover information.
+    /// </summary>
     public record ProvideHoverRequest(ProvideHoverRequestStruct Request)
         : Request;
 
+    /// <summary>
+    /// Requests completion items.
+    /// </summary>
     public record ProvideCompletionItemsRequest(ProvideCompletionItemsRequestStruct Request)
         : Request;
 
+    /// <summary>
+    /// Requests definition locations.
+    /// </summary>
     public record ProvideDefinitionRequest(ProvideHoverRequestStruct Request)
         : Request;
 
+    /// <summary>
+    /// Requests document symbols.
+    /// </summary>
     public record TextDocumentSymbolRequest(string FilePath)
         : Request;
 
+    /// <summary>
+    /// Requests document references.
+    /// </summary>
     public record TextDocumentReferencesRequest(ProvideHoverRequestStruct Request)
         : Request;
 
+    /// <summary>
+    /// Requests renaming a document symbol.
+    /// </summary>
     public record TextDocumentRenameRequest(RenameParams Request)
         : Request;
 }
@@ -76,6 +110,9 @@ type alias ProvideHoverRequestStruct =
  * */
 
 
+/// <summary>
+/// Identifies a source position for a hover request.
+/// </summary>
 public record ProvideHoverRequestStruct(
     FileLocation FileLocation,
     int PositionLineNumber,
@@ -91,6 +128,9 @@ type alias ProvideCompletionItemsRequestStruct =
 
  * */
 
+/// <summary>
+/// Identifies a source position for a completion request.
+/// </summary>
 public record ProvideCompletionItemsRequestStruct(
     string FilePathOpenedInEditor,
     int CursorLineNumber,
@@ -106,14 +146,23 @@ type alias RenameParams =
 
 */
 
+/// <summary>
+/// Describes a symbol rename request.
+/// </summary>
 public record RenameParams(
     string FilePath,
     int PositionLineNumber,
     int PositionColumn,
     string NewName);
 
+/// <summary>
+/// Encodes language service requests as Pine values.
+/// </summary>
 public static class RequestEncoding
 {
+    /// <summary>
+    /// Encodes a language service request.
+    /// </summary>
     public static PineValue Encode(Request request)
     {
         return request switch
@@ -201,6 +250,9 @@ public static class RequestEncoding
         };
     }
 
+    /// <summary>
+    /// Encodes a file tree blob.
+    /// </summary>
     public static PineValue Encode(FileTreeBlobNode fileTreeBlobNode)
     {
         return
@@ -218,6 +270,9 @@ public static class RequestEncoding
                     ]));
     }
 
+    /// <summary>
+    /// Encodes a hover request.
+    /// </summary>
     public static PineValue Encode(ProvideHoverRequestStruct provideHoverRequest)
     {
         return
@@ -233,6 +288,9 @@ public static class RequestEncoding
                 ]);
     }
 
+    /// <summary>
+    /// Encodes a completion request.
+    /// </summary>
     public static PineValue Encode(ProvideCompletionItemsRequestStruct provideCompletionItemsRequest)
     {
         return
@@ -247,6 +305,9 @@ public static class RequestEncoding
                 ]);
     }
 
+    /// <summary>
+    /// Encodes a rename request.
+    /// </summary>
     public static PineValue Encode(RenameParams renameParams)
     {
         return

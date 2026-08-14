@@ -1,8 +1,6 @@
-using Pine.Core;
-using Pine.Core.Elm;
 using System.Linq;
 
-namespace Pine.Elm.MonacoEditor;
+namespace Pine.Core.Elm.LanguageServer.MonacoEditor;
 
 
 /*
@@ -17,6 +15,9 @@ type alias MonacoCompletionItem =
     }
 
  * */
+/// <summary>
+/// Represents a completion item for the Monaco editor.
+/// </summary>
 public record MonacoCompletionItem(
     string Label,
     CompletionItemKind Kind,
@@ -37,18 +38,39 @@ type CompletionItemKind
 
  * */
 
+/// <summary>
+/// Identifies a Monaco completion item kind.
+/// </summary>
 public abstract record CompletionItemKind
 {
+    /// <summary>
+    /// Identifies a constructor completion item.
+    /// </summary>
     public record ConstructorCompletionItemKind : CompletionItemKind;
 
+    /// <summary>
+    /// Identifies an enum completion item.
+    /// </summary>
     public record EnumCompletionItemKind : CompletionItemKind;
 
+    /// <summary>
+    /// Identifies an enum member completion item.
+    /// </summary>
     public record EnumMemberCompletionItemKind : CompletionItemKind;
 
+    /// <summary>
+    /// Identifies a function completion item.
+    /// </summary>
     public record FunctionCompletionItemKind : CompletionItemKind;
 
+    /// <summary>
+    /// Identifies a module completion item.
+    /// </summary>
     public record ModuleCompletionItemKind : CompletionItemKind;
 
+    /// <summary>
+    /// Identifies a struct completion item.
+    /// </summary>
     public record StructCompletionItemKind : CompletionItemKind;
 }
 
@@ -65,14 +87,23 @@ type alias MonacoRange =
     }
 
  * */
+/// <summary>
+/// Represents a range in a Monaco editor document.
+/// </summary>
 public record MonacoRange(
     int StartLineNumber,
     int StartColumn,
     int EndLineNumber,
     int EndColumn);
 
+/// <summary>
+/// Decodes Monaco completion items from Elm values.
+/// </summary>
 public static class CompletionItemEncoding
 {
+    /// <summary>
+    /// Decodes a Monaco completion item from a Pine value.
+    /// </summary>
     public static Result<string, MonacoCompletionItem> Decode(PineValue pineValue)
     {
 
@@ -94,6 +125,9 @@ public static class CompletionItemEncoding
         return Decode(elmValue);
     }
 
+    /// <summary>
+    /// Decodes a Monaco completion item from an Elm value.
+    /// </summary>
     public static Result<string, MonacoCompletionItem> Decode(ElmValue elmValue)
     {
         if (elmValue is not ElmValue.ElmRecord record)
@@ -171,6 +205,9 @@ public static class CompletionItemEncoding
                 insertTextString.Value);
     }
 
+    /// <summary>
+    /// Decodes a completion item kind from an Elm value.
+    /// </summary>
     public static Result<string, CompletionItemKind> DecodeCompletionItemKind(ElmValue elmValue)
     {
         if (elmValue is not ElmValue.ElmTag tag)
@@ -212,8 +249,14 @@ public static class CompletionItemEncoding
     }
 }
 
+/// <summary>
+/// Decodes Monaco ranges from Elm values.
+/// </summary>
 public static class MonacoRangeEncoding
 {
+    /// <summary>
+    /// Decodes a Monaco range from a Pine value.
+    /// </summary>
     public static Result<string, MonacoRange> Decode(PineValue pineValue)
     {
         var decodeElmValueResult = ElmValueEncoding.PineValueAsElmValue(pineValue, null, null);
@@ -231,6 +274,9 @@ public static class MonacoRangeEncoding
         return Decode(elmValue);
     }
 
+    /// <summary>
+    /// Decodes a Monaco range from an Elm value.
+    /// </summary>
     public static Result<string, MonacoRange> Decode(ElmValue elmValue)
     {
         if (elmValue is not ElmValue.ElmRecord record)
