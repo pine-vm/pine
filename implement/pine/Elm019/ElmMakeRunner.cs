@@ -1,6 +1,7 @@
 using System;
 using System.Runtime.InteropServices;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace Pine.Elm019;
@@ -34,14 +35,17 @@ public static class ElmMakeRunner
 
     public static async Task<ExecutableFile.ProcessOutput> ElmMakeAsync(
         string workingDirectoryAbsolute,
-        string pathToFileWithElmEntryPoint)
+        string pathToFileWithElmEntryPoint,
+        CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
+
         var arguments =
             string.Join(" ", ["make", pathToFileWithElmEntryPoint, "--report=json  --output=/dev/null"]);
 
         var executableFilePath = s_executableFilePathCached.Value;
 
-        var process =
+        using var process =
             new System.Diagnostics.Process
             {
                 StartInfo =
@@ -131,14 +135,32 @@ public static class ElmMakeRunner
         process.BeginErrorReadLine();
 
         // Wait for the process to exit, then for all output to be collected
-        await process.WaitForExitAsync();
+        try
+        {
+            await process.WaitForExitAsync(cancellationToken);
 
-        // At this point, the process has exited, but we need to ensure we collected all output lines.
-        // The event handlers complete when they receive a null Data line.
-        await Task.WhenAll(stdoutTcs.Task, stderrTcs.Task);
+            // At this point, the process has exited, but we need to ensure we collected all output lines.
+            // The event handlers complete when they receive a null Data line.
+            await Task.WhenAll(stdoutTcs.Task, stderrTcs.Task);
+        }
+        catch (OperationCanceledException)
+        {
+            try
+            {
+                if (!process.HasExited)
+                    process.Kill(entireProcessTree: true);
+            }
+            catch (InvalidOperationException)
+            {
+            }
+
+            await process.WaitForExitAsync(CancellationToken.None);
+            await Task.WhenAll(stdoutTcs.Task, stderrTcs.Task);
+
+            throw;
+        }
 
         var exitCode = process.ExitCode;
-        process.Close();
 
         return
             new ExecutableFile.ProcessOutput(

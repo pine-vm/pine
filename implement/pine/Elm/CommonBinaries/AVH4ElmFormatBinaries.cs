@@ -4,6 +4,8 @@ using System.Collections.Immutable;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Text;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace Pine.Elm.CommonBinaries;
 
@@ -51,9 +53,18 @@ public class AVH4ElmFormatBinaries
 
     public static string RunElmFormat(string moduleTextBefore)
     {
+        return RunElmFormatAsync(moduleTextBefore, CancellationToken.None).GetAwaiter().GetResult();
+    }
+
+    public static async Task<string> RunElmFormatAsync(
+        string moduleTextBefore,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+
         var executableFilePath = s_executableFilePathCached.Value;
 
-        var process =
+        using var process =
             new Process
             {
                 StartInfo =
@@ -73,39 +84,57 @@ public class AVH4ElmFormatBinaries
 
         process.Start();
 
-        using (var writer = new System.IO.StreamWriter(
-            process.StandardInput.BaseStream,
-            new UTF8Encoding(false),
-            1024,
-            leaveOpen: false))
+        try
         {
-            // Ensure input ends with newline
             if (!moduleTextBefore.EndsWith('\n'))
-            {
                 moduleTextBefore += "\n";
+
+            var outputTask = process.StandardOutput.ReadToEndAsync(cancellationToken);
+            var errorTask = process.StandardError.ReadToEndAsync(cancellationToken);
+
+            await using (var writer = new System.IO.StreamWriter(
+                process.StandardInput.BaseStream,
+                new UTF8Encoding(false),
+                1024,
+                leaveOpen: false))
+            {
+                await writer.WriteAsync(moduleTextBefore.AsMemory(), cancellationToken);
+                await writer.FlushAsync(cancellationToken);
             }
 
-            writer.Write(moduleTextBefore);
-            writer.Flush();
+            await process.WaitForExitAsync(cancellationToken);
+
+            var output = await outputTask;
+            var error = await errorTask;
+
+            if (process.ExitCode is not 0)
+            {
+                throw new Exception(
+                    string.Join(
+                        "\n",
+                        "Exit code " + process.ExitCode + " indicates failure.",
+                        "Standard Output:",
+                        output,
+                        "Standard Error:",
+                        error));
+            }
+
+            return output;
         }
-
-        var output = process.StandardOutput.ReadToEnd();
-        var error = process.StandardError.ReadToEnd();
-
-        process.WaitForExit();
-
-        if (process.ExitCode is not 0)
+        catch (OperationCanceledException)
         {
-            throw new Exception(
-                string.Join(
-                    "\n",
-                    "Exit code " + process.ExitCode + " indicates failure.",
-                    "Standard Output:",
-                    output,
-                    "Standard Error:",
-                    error));
-        }
+            try
+            {
+                if (!process.HasExited)
+                    process.Kill(entireProcessTree: true);
+            }
+            catch (InvalidOperationException)
+            {
+            }
 
-        return output;
+            await process.WaitForExitAsync(CancellationToken.None);
+
+            throw;
+        }
     }
 }
