@@ -95,7 +95,7 @@ public static class FormatCommandShared
         new("--color")
         {
             Description =
-                "Color output: auto, always, or never. Overrides PINE_TERM_COLOR.",
+            "Color output: auto, always, or never. Overrides PINE_TERM_COLOR.",
             Arity = ArgumentArity.ExactlyOne,
         };
 
@@ -429,7 +429,9 @@ public static class FormatCommandShared
             FormatCommandColorMode.Auto => AnsiSupport.Detect,
             FormatCommandColorMode.Always => AnsiSupport.Yes,
             FormatCommandColorMode.Never => AnsiSupport.No,
-            _ => throw new ArgumentOutOfRangeException(nameof(colorMode)),
+
+            _ =>
+            throw new ArgumentOutOfRangeException(nameof(colorMode)),
         };
 
 
@@ -440,7 +442,9 @@ public static class FormatCommandShared
             FormatCommandColorMode.Auto => ColorSystemSupport.Detect,
             FormatCommandColorMode.Always => ColorSystemSupport.Standard,
             FormatCommandColorMode.Never => ColorSystemSupport.NoColors,
-            _ => throw new ArgumentOutOfRangeException(nameof(colorMode)),
+
+            _ =>
+            throw new ArgumentOutOfRangeException(nameof(colorMode)),
         };
 
 

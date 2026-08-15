@@ -253,6 +253,7 @@ public sealed class WebBrowserPage : IAsyncDisposable
     {
         ThrowIfDisposed();
         options ??= new WebBrowserScreenshotOptions();
+        Validate(options);
 
         return
             await _page.ScreenshotAsync(
@@ -260,7 +261,19 @@ public sealed class WebBrowserPage : IAsyncDisposable
                 {
                     FullPage = options.FullPage,
                     OmitBackground = options.OmitBackground,
-                    Type = ScreenshotType.Png,
+                    Type =
+                    options.ImageFormat switch
+                    {
+                        WebBrowserScreenshotImageFormat.Png => ScreenshotType.Png,
+                        WebBrowserScreenshotImageFormat.Jpeg => ScreenshotType.Jpeg,
+
+                        _ =>
+                        throw new ArgumentOutOfRangeException(
+                            nameof(options.ImageFormat),
+                            options.ImageFormat,
+                            "Unknown screenshot image format."),
+                    },
+                    Quality = options.Quality,
                     Timeout = (float)_operationTimeout.TotalMilliseconds,
                 })
             .WaitForPlaywrightAsync(
@@ -439,6 +452,20 @@ public sealed class WebBrowserPage : IAsyncDisposable
 
         if (options.StatusCode is < 100 or > 599)
             throw new ArgumentOutOfRangeException(nameof(options.StatusCode));
+    }
+
+    private static void Validate(WebBrowserScreenshotOptions options)
+    {
+        if (options.Quality is < 0 or > 100)
+            throw new ArgumentOutOfRangeException(nameof(options.Quality));
+
+        if (options.ImageFormat is WebBrowserScreenshotImageFormat.Png &&
+            options.Quality is not null)
+        {
+            throw new ArgumentException(
+                "Screenshot quality can only be specified for JPEG encoding.",
+                nameof(options));
+        }
     }
 
     private void ThrowIfDisposed() => ObjectDisposedException.ThrowIf(_disposed, this);

@@ -95,6 +95,7 @@ public class Program
         rootCommand.Add(CreateCompileCommand());
         rootCommand.Add(CreateElmTestRsCommand());
         rootCommand.Add(CreateMakeCommand());
+        rootCommand.Add(Pine.CLI.ScreenshotCommand.Create());
         rootCommand.Add(ElmFormatCommand.CreateElmFormatCommand());
         rootCommand.Add(Pine.CSharp.CLI.CSharpFormatCommand.CreateCSharpFormatCommand());
         rootCommand.Add(CreateDescribeCommand());
@@ -228,6 +229,7 @@ public class Program
                 ["compile"] = "Compile app source code.",
                 ["elm-test-rs"] = "Compile and run tests.",
                 ["make"] = "Compile Elm code.",
+                ["screenshot"] = "Render an HTML, SVG, or Elm entry point to an image.",
                 ["elm-format"] = "Format Elm module files.",
                 ["dotnet"] = ".NET and C# development tools.",
                 ["describe"] = "Describe a composition.",
@@ -272,6 +274,7 @@ public class Program
             "compile",
             "elm-test-rs",
             "make",
+            "screenshot",
             "elm-format",
             "dotnet",
             "describe",

@@ -100,7 +100,17 @@ public enum WebBrowserMouseButton
 
 public sealed record WebBrowserScreenshotOptions
 {
+    public WebBrowserScreenshotImageFormat ImageFormat { get; init; } = WebBrowserScreenshotImageFormat.Png;
+
+    public int? Quality { get; init; }
+
     public bool FullPage { get; init; }
 
     public bool OmitBackground { get; init; }
+}
+
+public enum WebBrowserScreenshotImageFormat
+{
+    Png,
+    Jpeg,
 }

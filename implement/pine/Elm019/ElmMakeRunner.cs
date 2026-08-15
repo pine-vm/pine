@@ -36,29 +36,43 @@ public static class ElmMakeRunner
     public static async Task<ExecutableFile.ProcessOutput> ElmMakeAsync(
         string workingDirectoryAbsolute,
         string pathToFileWithElmEntryPoint,
+        CancellationToken cancellationToken = default) =>
+        await ElmMakeAsync(
+            workingDirectoryAbsolute,
+            pathToFileWithElmEntryPoint,
+            "/dev/null",
+            cancellationToken);
+
+    public static async Task<ExecutableFile.ProcessOutput> ElmMakeAsync(
+        string workingDirectoryAbsolute,
+        string pathToFileWithElmEntryPoint,
+        string outputFilePath,
         CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
 
-        var arguments =
-            string.Join(" ", ["make", pathToFileWithElmEntryPoint, "--report=json  --output=/dev/null"]);
-
         var executableFilePath = s_executableFilePathCached.Value;
+
+        var processStartInfo =
+            new System.Diagnostics.ProcessStartInfo
+            {
+                WorkingDirectory = workingDirectoryAbsolute,
+                FileName = executableFilePath,
+                UseShellExecute = false,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                CreateNoWindow = true,
+            };
+
+        processStartInfo.ArgumentList.Add("make");
+        processStartInfo.ArgumentList.Add(pathToFileWithElmEntryPoint);
+        processStartInfo.ArgumentList.Add("--report=json");
+        processStartInfo.ArgumentList.Add("--output=" + outputFilePath);
 
         using var process =
             new System.Diagnostics.Process
             {
-                StartInfo =
-                new System.Diagnostics.ProcessStartInfo
-                {
-                    WorkingDirectory = workingDirectoryAbsolute,
-                    FileName = executableFilePath,
-                    Arguments = arguments,
-                    UseShellExecute = false,
-                    RedirectStandardOutput = true,
-                    RedirectStandardError = true,
-                    CreateNoWindow = true,
-                },
+                StartInfo = processStartInfo,
             };
 
 
