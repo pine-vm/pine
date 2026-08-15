@@ -37,6 +37,7 @@
   <ItemGroup>
     <ProjectReference Include="..\pine\pine.csproj" />
     <ProjectReference Include="..\Pine.Core.Tests\Pine.Core.Tests.csproj" />
+    <ProjectReference Include="..\Pine.WebBrowserTesting\Pine.WebBrowserTesting.csproj" />
   </ItemGroup>
 
   <ItemGroup>
